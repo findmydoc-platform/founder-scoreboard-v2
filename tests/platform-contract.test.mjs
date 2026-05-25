@@ -1,6 +1,19 @@
 ﻿import { readFile } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
+
+async function listFiles(dir, extension) {
+  const entries = await readdir(dir);
+  const nested = await Promise.all(entries.map(async (entry) => {
+    const fullPath = `${dir}/${entry}`;
+    const info = await stat(fullPath);
+    if (info.isDirectory()) return listFiles(fullPath, extension);
+    return fullPath.endsWith(extension) ? [fullPath] : [];
+  }));
+
+  return nested.flat();
+}
 
 test("platform migration contains the role, decision, score and sync contracts", async () => {
   const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
@@ -34,7 +47,8 @@ test("github issue export includes structure review blockers and comments", asyn
 
   assert.match(github, /taskIssueTitle/);
   assert.match(github, /taskIssueLabels/);
-  assert.match(github, /type:\$\{task\.taskType\}/);
+  assert.match(github, /task\.taskType === "deliverable" \? "deliverable"/);
+  assert.match(github, /review:ready/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Intended Outcome/);
   assert.match(github, /Acceptance Criteria/);
@@ -79,6 +93,19 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.match(ui, /GitHub User-Token/);
   assert.match(rules, /provider_token/);
   assert.match(rules, /Never persist or log provider tokens/);
+});
+
+test("strict auth gates planning data until a valid session is present", async () => {
+  const page = await readFile("src/app/page.tsx", "utf8");
+  const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(page, /requiresSupabaseAuth\(\)/);
+  assert.match(page, /emptyPlanningData/);
+  assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(ui, /Du bist abgemeldet/);
+  assert.match(ui, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
+  assert.match(ui, /\/api\/planning-data/);
 });
 
 test("task review uses operational lead route and keeps rework non-final", async () => {
@@ -305,7 +332,42 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(page, /Meilenstein/);
   assert.match(page, /Relationships/);
   assert.match(page, /updateTask/);
-  assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a planned core workflow/);
+  assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a core workflow/);
+});
+
+test("planning hierarchy treats sprint as time container and packages as group commitments", async () => {
+  const migration = await readFile("supabase/0013_epic_group_commitment_hierarchy.sql", "utf8");
+  const docs = await readFile("docs/planning-hierarchy.md", "utf8");
+  const skill = await readFile("skills/fmd-planning-structure/SKILL.md", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const pkg = await readFile("package.json", "utf8");
+
+  assert.match(migration, /packages add column if not exists milestone_id/);
+  assert.match(docs, /Epic \/ Meilenstein[\s\S]*Group Commitment[\s\S]*Deliverable[\s\S]*Sub-Issue/);
+  assert.match(docs, /Sprint ist ein Zeitcontainer/);
+  assert.match(skill, /Sprint is a time container/);
+  assert.match(github, /Epic \/ Milestone/);
+  assert.match(github, /Group Commitment/);
+  assert.match(ui, /Epic \/ Meilenstein/);
+  assert.match(ui, /Group Commitment/);
+  assert.match(pkg, /verify:hierarchy/);
+});
+
+test("management repo cleanup plan protects legacy templates from deletion without approval", async () => {
+  const plan = await readFile("docs/management-repo-v2-plan.md", "utf8");
+  const deliverableTemplate = await readFile("docs/management-templates-v2/deliverable.yml", "utf8");
+  const groupTemplate = await readFile("docs/management-templates-v2/group-commitment.yml", "utf8");
+  const subIssueTemplate = await readFile("docs/management-templates-v2/sub-issue.yml", "utf8");
+
+  assert.match(plan, /Keine Datei im Management-Repo löschen/);
+  assert.match(plan, /Erst archivieren statt endgültig löschen/);
+  assert.match(plan, /auto-triage\.yml/);
+  assert.match(plan, /sprint-title-sync\.yml/);
+  assert.match(deliverableTemplate, /GitHub ist Backup, nicht Quelle der Wahrheit/);
+  assert.match(deliverableTemplate, /Acceptance Criteria/);
+  assert.match(groupTemplate, /Epic \/ Meilenstein/);
+  assert.match(subIssueTemplate, /nicht score-relevant/);
 });
 
 test("google chat delivery is outbox based and webhook gated", async () => {
@@ -381,6 +443,28 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
   assert.match(ui, /Triftiger Grund/);
   assert.match(ui, /max\. 4 Punkte/);
   assert.match(types, /MeetingAttendanceStatus/);
+});
+
+test("app choice controls use custom components instead of browser-native pickers", async () => {
+  const files = (await listFiles("src", ".tsx")).filter((file) => ![
+    "src/components/custom-select.tsx",
+    "src/components/custom-date-picker.tsx",
+  ].includes(file));
+  const violations = [];
+
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    if (
+      source.includes("<select")
+      || source.includes("<option")
+      || source.includes('type="date"')
+      || source.includes('type="datetime-local"')
+    ) {
+      violations.push(file);
+    }
+  }
+
+  assert.deepEqual(violations, []);
 });
 
 

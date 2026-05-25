@@ -4,7 +4,8 @@ create table if not exists profiles (
   name text not null,
   role text not null check (role in ('admin', 'member', 'viewer')),
   focus text,
-  weekly_capacity integer not null default 6
+  weekly_capacity integer not null default 6,
+  profile_color text not null default '#64748b' check (profile_color ~ '^#[0-9A-Fa-f]{6}$')
 );
 
 create table if not exists projects (

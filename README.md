@@ -62,6 +62,7 @@ Als Vorlage für die Zuordnung gibt es `supabase/profile-auth-map.example.sql`.
 ## Founder Scoreboard v2 Module
 
 - Rollenmodell: `CEO`, `Founder`, `Deputy`, `Viewer` über `profiles.platform_role` und `profiles.github_login`.
+- Planungshierarchie: Epic / Meilenstein -> Group Commitment -> Deliverable -> Sub-Issue. Sprints sind Zeitcontainer für Deliverables.
 - Sprint/Scoring: Aufgaben haben `sprint_id`, Review-Status, Punkte und Score-Lock-Felder.
 - GitHub Sync: One-way App zu `findmydoc-platform/management` mit `GITHUB_SYNC_TOKEN`.
 - Decision Log: CEO erstellt/ändert, Founder bestätigen, vollständige Bestätigung lockt den Eintrag.
@@ -75,6 +76,12 @@ Nach dem Eintragen der `.env.local` prüft dieser Befehl, ob die wichtigsten Tab
 npm run verify:supabase
 ```
 
+Die Hierarchie aus Epic / Meilenstein, Group Commitment, Deliverable und Sub-Issue prüft:
+
+```bash
+npm run verify:hierarchy
+```
+
 Erwartet werden aktuell 5 Profile, 5 Packages und 53 Tasks.
 
 Die Auth-Zuordnung prüft dieser Befehl:
@@ -85,7 +92,7 @@ npm run verify:auth
 
 Er meldet fehlende GitHub-Logins, fehlende Rollen oder veraltete `auth_user_id`-Verknüpfungen, bevor `REQUIRE_SUPABASE_AUTH=true` aktiviert wird.
 
-Der operative Smoke-Test prueft Supabase, Health, Server-Render und Kernmarker der UI:
+Der operative Smoke-Test prüft Supabase, Health, Server-Render und Kernmarker der UI:
 
 ```bash
 npm run verify:operational

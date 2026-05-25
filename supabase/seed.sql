@@ -4,7 +4,8 @@ create table if not exists profiles (
   name text not null,
   role text not null check (role in ('admin', 'member', 'viewer')),
   focus text,
-  weekly_capacity integer not null default 6
+  weekly_capacity integer not null default 6,
+  profile_color text not null default '#64748b' check (profile_color ~ '^#[0-9A-Fa-f]{6}$')
 );
 
 create table if not exists projects (
@@ -173,15 +174,15 @@ with check (public.current_profile_role() in ('admin', 'member'));
 
 insert into projects (id, name, range_label) values ('findmydoc-founder-execution', 'findmydoc Founder Execution', 'Sprint 1 / operative Planungsphase') on conflict (id) do update set name = excluded.name, range_label = excluded.range_label;
 
-insert into profiles (id, name, role, focus, weekly_capacity) values ('volkan', 'Volkan', 'admin', 'Klinikpartnerschaften, Investor, Standort, Entscheidungen', 10) on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity;
+insert into profiles (id, name, role, focus, weekly_capacity, profile_color) values ('volkan', 'Volkan', 'admin', 'Klinikpartnerschaften, Investor, Standort, Entscheidungen', 10, '#22c55e') on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity, profile_color = excluded.profile_color;
 
-insert into profiles (id, name, role, focus, weekly_capacity) values ('sebastian', 'Sebastian', 'member', 'Produkt, Bookimed-Crawler-Daten, MVP, Datenmodell', 8) on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity;
+insert into profiles (id, name, role, focus, weekly_capacity, profile_color) values ('sebastian', 'Sebastian', 'member', 'Produkt, Bookimed-Crawler-Daten, MVP, Datenmodell', 8, '#3b82f6') on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity, profile_color = excluded.profile_color;
 
-insert into profiles (id, name, role, focus, weekly_capacity) values ('anil', 'Anil', 'member', 'Notion/CRM, Klinik-Onboarding, Prozesspflege', 6) on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity;
+insert into profiles (id, name, role, focus, weekly_capacity, profile_color) values ('anil', 'Anil', 'member', 'Notion/CRM, Klinik-Onboarding, Prozesspflege', 6, '#f59e0b') on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity, profile_color = excluded.profile_color;
 
-insert into profiles (id, name, role, focus, weekly_capacity) values ('ozen', 'Özen', 'member', 'Legal, Compliance, LOI, Founder Agreement, Standortfragen', 6) on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity;
+insert into profiles (id, name, role, focus, weekly_capacity, profile_color) values ('ozen', 'Özen', 'member', 'Legal, Compliance, LOI, Founder Agreement, Standortfragen', 6, '#8b5cf6') on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity, profile_color = excluded.profile_color;
 
-insert into profiles (id, name, role, focus, weekly_capacity) values ('youssef', 'Youssef', 'member', 'Outreach-Kampagnen, Content, Social, Landingpages', 6) on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity;
+insert into profiles (id, name, role, focus, weekly_capacity, profile_color) values ('youssef', 'Youssef', 'member', 'Outreach-Kampagnen, Content, Social, Landingpages', 6, '#ec4899') on conflict (id) do update set name = excluded.name, role = excluded.role, focus = excluded.focus, weekly_capacity = excluded.weekly_capacity, profile_color = excluded.profile_color;
 
 insert into packages (id, project_id, title, goal, priority, sort_order) values ('GC1', 'findmydoc-founder-execution', 'Go-Live: MVP & Legal Ready', 'Website, Formulare, Trust-/Legal-Basis und echte Klinik-Onboarding-Fähigkeit herstellen.', 'P0', 1) on conflict (id) do update set title = excluded.title, goal = excluded.goal, priority = excluded.priority, sort_order = excluded.sort_order;
 

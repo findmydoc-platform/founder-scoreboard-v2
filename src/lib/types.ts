@@ -19,6 +19,7 @@ export type Profile = {
   deputyActiveUntil?: string;
   focus?: string;
   weeklyCapacity: number;
+  color?: string;
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
@@ -32,6 +33,7 @@ export type Project = {
 
 export type Package = {
   id: string;
+  milestoneId?: string;
   title: string;
   goal: string;
   priority: string;

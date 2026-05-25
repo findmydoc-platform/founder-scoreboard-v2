@@ -33,6 +33,7 @@ function mapTask(row: TaskRow, profileNameById: Map<string, string>): Task {
     startDate: String(row.start_date || ""),
     endDate: String(row.end_date || ""),
     sprintId: String(row.sprint_id || ""),
+    milestoneId: String(row.milestone_id || ""),
     reviewStatus: (row.review_status as Task["reviewStatus"]) || "not_requested",
     scorePoints: Number(row.score_points || 0),
     scoreFinal: Boolean(row.score_final),
@@ -66,8 +67,9 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
   addProfileId(row.owner);
   addProfileId(row.assignee);
 
-  const [packageResult, sprintResult, parentResult, commentsResult, blockersResult] = await Promise.all([
-    row.package_id ? supabase.from("packages").select("title,goal").eq("id", row.package_id).maybeSingle() : Promise.resolve({ data: null }),
+  const [packageResult, milestoneResult, sprintResult, parentResult, commentsResult, blockersResult] = await Promise.all([
+    row.package_id ? supabase.from("packages").select("title,goal,milestone_id").eq("id", row.package_id).maybeSingle() : Promise.resolve({ data: null }),
+    row.milestone_id ? supabase.from("milestones").select("title,target_date").eq("id", row.milestone_id).maybeSingle() : Promise.resolve({ data: null }),
     row.sprint_id ? supabase.from("sprints").select("name,start_date,end_date,review_due_at").eq("id", row.sprint_id).maybeSingle() : Promise.resolve({ data: null }),
     row.parent_task_id ? supabase.from("tasks").select("title,github_issue_url").eq("id", row.parent_task_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("task_comments").select("profile_id,comment,created_at").eq("task_id", row.id).order("created_at", { ascending: false }).limit(10),
@@ -82,13 +84,16 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
     : { data: [] };
   const profileNameById = new Map((profilesResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 
-  const packageData = packageResult.data as { title?: string | null; goal?: string | null } | null;
+  const packageData = packageResult.data as { title?: string | null; goal?: string | null; milestone_id?: string | null } | null;
+  const milestoneData = milestoneResult.data as { title?: string | null; target_date?: string | null } | null;
   const sprintData = sprintResult.data as { name?: string | null; start_date?: string | null; end_date?: string | null; review_due_at?: string | null } | null;
   const parentData = parentResult.data as { title?: string | null; github_issue_url?: string | null } | null;
 
   return {
     packageTitle: packageData?.title || "",
     packageGoal: packageData?.goal || "",
+    milestoneTitle: milestoneData?.title || "",
+    milestoneTargetDate: milestoneData?.target_date || "",
     sprintName: sprintData?.name || "",
     sprintRange: sprintData ? formatDateRange(sprintData.start_date, sprintData.end_date) : "",
     sprintReviewDueAt: sprintData?.review_due_at || "",

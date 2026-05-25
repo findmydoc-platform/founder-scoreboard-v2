@@ -110,7 +110,7 @@ Check:
 
 Erwartung:
 - Issue wird im Management-Repo erstellt oder aktualisiert.
-- Body enthaelt Sprint, Paket, Review, Score, Blocker und Kommentare.
+- Body enthält Epic / Meilenstein, Group Commitment, Sprint, Review, Score, Blocker und Kommentare.
 - GitHub bleibt one-way Backup, nicht fuehrendes System.
 
 ## Google Chat

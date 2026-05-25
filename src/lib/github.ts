@@ -6,6 +6,8 @@ const repo = process.env.GITHUB_SYNC_REPO || "management";
 export type GitHubTaskSyncContext = {
   packageTitle?: string;
   packageGoal?: string;
+  milestoneTitle?: string;
+  milestoneTargetDate?: string;
   sprintName?: string;
   sprintRange?: string;
   sprintReviewDueAt?: string;
@@ -19,12 +21,14 @@ export function hasGitHubSyncEnv() {
   return Boolean(process.env.GITHUB_SYNC_TOKEN);
 }
 
-function normalizeLabelPart(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9:_-]/g, "");
-}
-
 function taskTypeLabel(task: Task) {
   if (task.taskType === "proposal") return "Vorschlag";
+  if (task.taskType === "sub_issue") return "Sub-Issue";
+  return "Deliverable";
+}
+
+function githubTypeLabel(task: Task) {
+  if (task.taskType === "proposal") return "Proposal";
   if (task.taskType === "sub_issue") return "Sub-Issue";
   return "Deliverable";
 }
@@ -49,14 +53,17 @@ export function taskIssueTitle(task: Task) {
 
 export function taskIssueLabels(task: Task) {
   return [
-    "founder-scoreboard-v2",
-    "template:v2",
-    `type:${task.taskType}`,
-    `status:${normalizeLabelPart(task.status)}`,
-    `priority:${normalizeLabelPart(task.priority)}`,
-    task.scoreRelevant ? "score:relevant" : "score:not-relevant",
-    task.sprintId ? `sprint:${normalizeLabelPart(task.sprintId)}` : "sprint:unassigned",
-  ];
+    "task",
+    task.taskType === "deliverable" ? "deliverable" : "",
+    task.taskType === "proposal" ? "follow-up" : "",
+    task.status === "Review" ? "review:ready" : "",
+    task.status === "Nacharbeit" ? "changes-requested" : "",
+    task.status === "Blockiert" ? "blocked" : "",
+    task.priority === "P0" ? "P0-Urgent" : "",
+    task.priority === "P1" ? "P1-High" : "",
+    task.priority === "P2" ? "P2-Medium" : "",
+    task.priority === "P3" || task.priority === "P4" ? "P3-Low" : "",
+  ].filter(Boolean);
 }
 
 export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
@@ -84,9 +91,11 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
     ...compactSection("Definition of Done", lines(task.definitionOfDone)),
     "",
     ...compactSection("Struktur", [
-      `- Typ: ${taskTypeLabel(task)}`,
-      `- Paket: ${context.packageTitle || task.packageId || "ohne Paket"}`,
-      context.packageGoal ? `- Paket-Ziel: ${context.packageGoal}` : "",
+      `- Typ: ${githubTypeLabel(task)}`,
+      `- Epic / Milestone: ${context.milestoneTitle || task.milestoneId || "ohne Epic"}`,
+      context.milestoneTargetDate ? `- Epic-Zieltermin: ${context.milestoneTargetDate}` : "",
+      `- Group Commitment: ${context.packageTitle || task.packageId || "ohne Group Commitment"}`,
+      context.packageGoal ? `- Group-Commitment-Ziel: ${context.packageGoal}` : "",
       `- Sprint: ${context.sprintName || task.sprintId || "nicht zugewiesen"}`,
       context.sprintRange ? `- Sprint-Zeitraum: ${context.sprintRange}` : "",
       context.sprintReviewDueAt ? `- Review fällig bis: ${context.sprintReviewDueAt}` : "",

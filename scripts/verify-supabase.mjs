@@ -50,6 +50,7 @@ const schemaChecks = [
   { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },
   { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
   { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
+  { name: "packages.group_commitment", table: "packages", select: "id,milestone_id,title,goal,priority" },
   { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
   { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
 ];

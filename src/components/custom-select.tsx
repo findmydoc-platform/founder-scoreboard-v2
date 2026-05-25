@@ -1,0 +1,96 @@
+"use client";
+
+import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+
+export type CustomSelectOption = {
+  value: string;
+  label: string;
+};
+
+type CustomSelectProps = {
+  value: string | number;
+  options: CustomSelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  "aria-label"?: string;
+  className?: string;
+  menuClassName?: string;
+};
+
+export function CustomSelect({
+  value,
+  options,
+  onChange,
+  disabled = false,
+  "aria-label": ariaLabel,
+  className = "",
+  menuClassName = "",
+}: CustomSelectProps) {
+  const id = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const stringValue = String(value);
+  const selectedOption = options.find((option) => option.value === stringValue) || options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+
+    window.addEventListener("pointerdown", closeOnOutside);
+    return () => window.removeEventListener("pointerdown", closeOnOutside);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+        }}
+        className="flex h-full min-h-8 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-left font-normal text-slate-800 shadow-sm outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-70"
+      >
+        <span className="truncate">{selectedOption?.label || ""}</span>
+        <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          id={id}
+          role="listbox"
+          className={`absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
+        >
+          {options.map((option) => {
+            const active = option.value === stringValue;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                className={`flex min-h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition ${
+                  active ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <span className="min-w-0 truncate">{option.label}</span>
+                {active && <Check size={14} className="shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

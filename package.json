@@ -12,6 +12,7 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
+    "verify:hierarchy": "node scripts/verify-hierarchy.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"
   },
   "dependencies": {

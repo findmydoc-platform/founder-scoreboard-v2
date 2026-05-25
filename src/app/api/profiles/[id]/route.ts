@@ -12,6 +12,7 @@ type UpdatePayload = {
   deputyActiveUntil?: string;
   focus?: string;
   weeklyCapacity?: number;
+  color?: string;
 };
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
@@ -25,6 +26,11 @@ function cleanText(value: unknown, maxLength: number) {
 function cleanDate(value: unknown) {
   if (typeof value !== "string" || !value) return null;
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+function cleanColor(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : undefined;
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -55,6 +61,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.orgRole !== undefined) update.org_role = cleanText(payload.orgRole, 80) || null;
   if (payload.focus !== undefined) update.focus = cleanText(payload.focus, 240) || null;
+
+  if (payload.color !== undefined) {
+    const color = cleanColor(payload.color);
+    if (!color) return NextResponse.json({ error: "Ungültige Profilfarbe." }, { status: 400 });
+    update.profile_color = color;
+  }
 
   if (payload.weeklyCapacity !== undefined) {
     const capacity = Number(payload.weeklyCapacity);
@@ -115,7 +127,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .from("profiles")
     .update(update)
     .eq("id", id)
-    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity")
+    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color")
     .single();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -143,6 +155,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       deputyActiveUntil: updated.deputy_active_until || "",
       focus: updated.focus || "",
       weeklyCapacity: updated.weekly_capacity,
+      color: updated.profile_color || "#64748b",
     },
   });
 }

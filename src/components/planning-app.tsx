@@ -18,13 +18,16 @@ import {
   Plus,
   Search,
   Settings,
+  ShieldCheck,
   Table2,
   Users,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { CustomDatePicker } from "@/components/custom-date-picker";
+import { CustomSelect } from "@/components/custom-select";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { founderScore, reviewLabel, roleLabel, syncLabel } from "@/lib/platform";
@@ -34,6 +37,7 @@ import type { CommitmentLevel, Meeting, MeetingAttendance, Package, PlanningData
 type Props = {
   initialData: PlanningData;
   source: "seed" | "supabase";
+  authRequired: boolean;
 };
 
 type Filters = {
@@ -57,6 +61,7 @@ type NewTaskDraft = {
   evidenceRequired: string;
   taskType: "deliverable" | "proposal" | "sub_issue";
   parentTaskId: string;
+  milestoneId: string;
   packageId: string;
   sprintId: string;
   owner: string;
@@ -67,6 +72,13 @@ type NewTaskDraft = {
   endDate: string;
   hours: number;
   definitionOfDone: string;
+};
+
+type SprintPlanningOptions = {
+  namePattern: string;
+  rhythmWeeks: number;
+  horizonWeeks: number;
+  targetSprintNumber: number;
 };
 
 const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
@@ -136,6 +148,30 @@ const quickFilters = [
 
 const localStateKey = "fmd-planning-local-state-v1";
 const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
+const profileColorOptions = [
+  { value: "#22c55e", label: "Mint" },
+  { value: "#3b82f6", label: "Blau" },
+  { value: "#f59e0b", label: "Gelb" },
+  { value: "#8b5cf6", label: "Lila" },
+  { value: "#ec4899", label: "Pink" },
+  { value: "#14b8a6", label: "Türkis" },
+  { value: "#ef4444", label: "Rot" },
+  { value: "#64748b", label: "Schiefer" },
+];
+
+function hexToRgba(hex: string, alpha: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return `rgba(100, 116, 139, ${alpha})`;
+  const value = match[1];
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function profileColor(profile?: Pick<Profile, "color"> | null) {
+  return profile?.color || "#64748b";
+}
 
 function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
@@ -150,6 +186,57 @@ function dateRange(task: Task) {
   if (!task.startDate && !task.endDate) return task.deadline || "ohne Datum";
   if (task.startDate === task.endDate) return formatDate(task.startDate);
   return `${formatDate(task.startDate)} - ${formatDate(task.endDate)}`;
+}
+
+function sprintNumber(value: string) {
+  const match = value.match(/sprint\D*(\d+)/i) || value.match(/(\d+)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function sprintNameFromPattern(pattern: string, number: number) {
+  const trimmed = pattern.trim() || "Sprint #";
+  if (trimmed.includes("#")) return trimmed.replace(/#+/g, String(number));
+  return `${trimmed} ${number}`;
+}
+
+function addDaysIso(value: string, days: number) {
+  const date = value ? new Date(`${value}T00:00:00`) : new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions) {
+  const rhythmWeeks = Math.min(Math.max(Number(options.rhythmWeeks) || 2, 1), 12);
+  const horizonWeeks = Math.min(Math.max(Number(options.horizonWeeks) || 6, 1), 52);
+  const targetSprintNumber = Math.max(Number(options.targetSprintNumber) || 0, 0);
+  const sorted = [...sprints].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
+  const latest = sorted[sorted.length - 1];
+  const existingIds = new Set(sprints.map((sprint) => sprint.id));
+  const lastNumber = Math.max(0, ...sprints.map((sprint) => Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id))));
+  const horizonEnd = addDaysIso(new Date().toISOString().slice(0, 10), horizonWeeks * 7);
+  let nextNumber = lastNumber + 1;
+  let nextStart = latest?.endDate ? addDaysIso(latest.endDate, 1) : new Date().toISOString().slice(0, 10);
+  const drafts: Sprint[] = [];
+
+  while (nextStart <= horizonEnd || (targetSprintNumber > 0 && nextNumber <= targetSprintNumber)) {
+    const endDate = addDaysIso(nextStart, rhythmWeeks * 7 - 1);
+    const baseId = `sprint-${nextNumber}`;
+    const id = existingIds.has(baseId) ? `${baseId}-${nextStart.replaceAll("-", "")}` : baseId;
+    existingIds.add(id);
+    drafts.push({
+      id,
+      name: sprintNameFromPattern(options.namePattern, nextNumber),
+      status: "planning",
+      startDate: nextStart,
+      endDate,
+      reviewDueAt: `${addDaysIso(endDate, -2)}T12:00`,
+      scoreLocked: false,
+    });
+    nextNumber += 1;
+    nextStart = addDaysIso(endDate, 1);
+  }
+
+  return drafts;
 }
 
 function taskText(task: Task) {
@@ -203,6 +290,7 @@ function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked
 function TaskCard({
   task,
   pack,
+  ownerProfile,
   onOpen,
   onStatusChange,
   onDragStart,
@@ -211,6 +299,7 @@ function TaskCard({
 }: {
   task: Task;
   pack?: Package;
+  ownerProfile?: Profile;
   onOpen: (task: Task) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -218,6 +307,7 @@ function TaskCard({
   isDragging?: boolean;
 }) {
   const normalized = normalizeStatus(task.status);
+  const ownerColor = profileColor(ownerProfile);
 
   return (
     <article
@@ -225,6 +315,11 @@ function TaskCard({
       onDragStart={(event) => onDragStart?.(task, event)}
       onDragEnd={onDragEnd}
       className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${isDragging ? "opacity-50 ring-2 ring-blue-300" : "cursor-grab active:cursor-grabbing"}`}
+      style={{
+        borderLeftColor: ownerColor,
+        boxShadow: `inset 4px 0 0 ${ownerColor}, 0 1px 3px ${hexToRgba(ownerColor, 0.18)}`,
+        background: `linear-gradient(90deg, ${hexToRgba(ownerColor, 0.13)}, #ffffff 34%)`,
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <button
@@ -256,20 +351,20 @@ function TaskCard({
       </div>
       <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{task.description}</p>
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
-        <span className="truncate">{pack?.id || "ohne Paket"} · {task.owner}</span>
+        <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
+          <span className="truncate">{pack?.id || "ohne Group Commitment"} · {task.owner}</span>
+        </span>
         <span className="shrink-0">{dateRange(task)}</span>
       </div>
       <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2">
-        <select
+        <CustomSelect
           value={normalized}
-          onChange={(event) => onStatusChange(task, event.target.value as TaskStatus)}
-          className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+          onChange={(value) => onStatusChange(task, value as TaskStatus)}
+          options={taskStatuses.map((status) => ({ value: status, label: status }))}
+          className="h-8 w-32 text-xs"
           aria-label="Status ändern"
-        >
-          {taskStatuses.map((status) => (
-            <option key={status}>{status}</option>
-          ))}
-        </select>
+        />
         <div className="flex items-center gap-2 text-slate-400">
           <MessageSquare size={14} />
           <FileText size={14} />
@@ -293,7 +388,8 @@ function EmptyColumn() {
   );
 }
 
-export function PlanningApp({ initialData, source }: Props) {
+export function PlanningApp({ initialData, source, authRequired }: Props) {
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const [data, setData] = useState(initialData);
   const [localStateLoaded, setLocalStateLoaded] = useState(source === "supabase");
   const [workspace, setWorkspace] = useState<Workspace>("planning");
@@ -305,12 +401,21 @@ export function PlanningApp({ initialData, source }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(!authRequired);
+  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired);
   const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
   const [sprintLockMessage, setSprintLockMessage] = useState("");
+  const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
+    namePattern: "Sprint #",
+    rhythmWeeks: 2,
+    horizonWeeks: 6,
+    targetSprintNumber: 0,
+  });
   const [filters, setFilters] = useState<Filters>({
     query: "",
     owner: "Alle",
@@ -352,7 +457,10 @@ export function PlanningApp({ initialData, source }: Props) {
 
   useEffect(() => {
     const supabase = getBrowserSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      queueMicrotask(() => setAuthChecked(true));
+      return;
+    }
 
     let active = true;
 
@@ -360,19 +468,64 @@ export function PlanningApp({ initialData, source }: Props) {
       if (!active) return;
       setAuthUser(sessionData.session?.user || null);
       setGithubProviderTokenAvailable(Boolean(sessionData.session?.provider_token));
+      setAuthChecked(true);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user || null);
       setGithubProviderTokenAvailable(Boolean(session?.provider_token));
+      setAuthChecked(true);
       setAuthError("");
+      if (event === "SIGNED_IN") setAuthNotice("");
+      if (event === "SIGNED_OUT") {
+        setData(initialData);
+        setProtectedDataLoaded(false);
+        setSelectedTaskId(null);
+        setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
+      }
     });
 
     return () => {
       active = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [initialData]);
+
+  useEffect(() => {
+    if (!authRequired || source !== "supabase" || !authUser) return;
+
+    let active = true;
+
+    async function loadProtectedPlanningData() {
+      setProtectedDataLoaded(false);
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      if (!token) return;
+
+      const response = await fetch("/api/planning-data", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
+
+      if (!active) return;
+      if (!response.ok || !payload?.data) {
+        setData(initialData);
+        setProtectedDataLoaded(false);
+        setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
+        return;
+      }
+
+      setData(payload.data);
+      setProtectedDataLoaded(true);
+      setAuthError("");
+    }
+
+    loadProtectedPlanningData();
+
+    return () => {
+      active = false;
+    };
+  }, [authRequired, authUser, initialData, source]);
 
   const signIn = async () => {
     const supabase = getBrowserSupabase();
@@ -380,6 +533,7 @@ export function PlanningApp({ initialData, source }: Props) {
 
     setAuthBusy(true);
     setAuthError("");
+    setAuthNotice("");
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
@@ -402,7 +556,21 @@ export function PlanningApp({ initialData, source }: Props) {
 
     setAuthBusy(true);
     setAuthError("");
-    await supabase.auth.signOut();
+    setAuthNotice("");
+
+    const { error } = await supabase.auth.signOut({ scope: "global" });
+    if (error) {
+      setAuthError("Abmeldung konnte nicht abgeschlossen werden.");
+      setAuthBusy(false);
+      return;
+    }
+
+    setAuthUser(null);
+    setGithubProviderTokenAvailable(false);
+    setData(initialData);
+    setProtectedDataLoaded(false);
+    setSelectedTaskId(null);
+    setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
     setAuthBusy(false);
   };
 
@@ -550,6 +718,7 @@ export function PlanningApp({ initialData, source }: Props) {
       assignee: owner,
       workstream: draft.workstream,
       packageId: draft.packageId,
+      milestoneId: draft.milestoneId,
       deadline: draft.sprintId,
       definitionOfDone: draft.definitionOfDone,
       dependsOn: "",
@@ -686,6 +855,70 @@ export function PlanningApp({ initialData, source }: Props) {
     });
   };
 
+  const createSprintPlanAsync = async (options: SprintPlanningOptions, silent = false) => {
+    const drafts = futureSprintDrafts(data.sprints, options);
+    if (!drafts.length) {
+      if (!silent) setSprintLockMessage("Der Sprint-Plan deckt den gewünschten Zeitraum bereits ab.");
+      return 0;
+    }
+
+    const draftIds = new Set(drafts.map((sprint) => sprint.id));
+    setData((current) => ({
+      ...current,
+      sprints: [...current.sprints, ...drafts].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
+    }));
+
+    if (source !== "supabase") {
+      if (!silent) setSprintLockMessage(`${drafts.length} Sprint${drafts.length === 1 ? "" : "s"} lokal angelegt.`);
+      return drafts.length;
+    }
+
+    const session = await getBrowserSupabase()?.auth.getSession();
+    const token = session?.data.session?.access_token;
+
+    try {
+      const response = await fetch("/api/sprints", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(options),
+      });
+
+      const body = (await response.json().catch(() => null)) as { error?: string; sprints?: Sprint[] } | null;
+      if (!response.ok) throw new Error(body?.error || "Sprints konnten nicht angelegt werden.");
+
+      if (body?.sprints) {
+        setData((current) => ({
+          ...current,
+          sprints: [
+            ...current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
+            ...body.sprints!,
+          ].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
+        }));
+      }
+
+      if (!silent) setSprintLockMessage(`${body?.sprints?.length || drafts.length} Sprint${(body?.sprints?.length || drafts.length) === 1 ? "" : "s"} angelegt.`);
+      return body?.sprints?.length || drafts.length;
+    } catch (error) {
+      setData((current) => ({
+        ...current,
+        sprints: current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
+      }));
+      setSaveError(error instanceof Error ? error.message : "Sprints konnten nicht angelegt werden.");
+      return 0;
+    }
+  };
+
+  const createSprintPlan = (options: SprintPlanningOptions) => {
+    setSaveError("");
+    setSprintLockMessage("");
+    startTransition(async () => {
+      await createSprintPlanAsync(options);
+    });
+  };
+
   const updateSprintCommitment = (commitment: SprintCommitment) => {
     setSaveError("");
 
@@ -766,6 +999,7 @@ export function PlanningApp({ initialData, source }: Props) {
             deputyActiveUntil: patch.deputyActiveUntil,
             focus: patch.focus,
             weeklyCapacity: patch.weeklyCapacity,
+            color: patch.color,
           }),
         });
 
@@ -1291,6 +1525,7 @@ export function PlanningApp({ initialData, source }: Props) {
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt.`);
         }
+        await createSprintPlanAsync(sprintPlanningOptions, true);
       } catch (error) {
         setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Sprint konnte nicht gelockt werden.");
@@ -1305,13 +1540,91 @@ export function PlanningApp({ initialData, source }: Props) {
     done: visibleTasks.filter((task) => normalizeStatus(task.status) === "Erledigt").length,
   };
 
+  const releaseSidebarFocus = () => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && sidebarRef.current?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  };
+
+  if (authRequired && (!authChecked || !authUser)) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
+        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="flex items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+              <ShieldCheck size={22} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Geschützter Teamzugriff</div>
+              <h1 className="mt-1 text-xl font-semibold text-slate-950">findmydoc Founder Execution</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Bitte melde dich mit GitHub an. Ohne gültige Supabase-Session werden keine Planungsdaten geladen.
+              </p>
+            </div>
+          </div>
+          {authNotice && <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{authNotice}</p>}
+          {authError && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
+          <div className="mt-5">
+            {authChecked ? (
+              <AuthControl
+                user={authUser}
+                error={authError}
+                busy={authBusy}
+                onSignIn={signIn}
+                onSignOut={signOut}
+              />
+            ) : (
+              <div className="h-9 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">Session wird geprüft...</div>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (authRequired && authUser && !protectedDataLoaded) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
+        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="flex items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+              <ShieldCheck size={22} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Session aktiv</div>
+              <h1 className="mt-1 text-xl font-semibold text-slate-950">Planungsdaten werden geladen</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen.
+              </p>
+            </div>
+          </div>
+          {authError && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
+          <div className="mt-5">
+            <AuthControl
+              user={authUser}
+              error={authError}
+              busy={authBusy}
+              onSignIn={signIn}
+              onSignOut={signOut}
+            />
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-200 bg-white lg:block">
-        <div className="border-b border-slate-100 px-5 py-5">
+      <aside
+        ref={sidebarRef}
+        onMouseLeave={releaseSidebarFocus}
+        className="group fixed inset-y-0 left-0 z-30 hidden w-16 overflow-hidden border-r border-slate-200 bg-white shadow-none transition-[width,box-shadow] duration-200 ease-out hover:w-64 hover:shadow-xl focus-within:w-64 focus-within:shadow-xl lg:block"
+      >
+        <div className="border-b border-slate-100 px-3 py-5">
           <div className="flex items-center gap-3">
-            <Image src="/assets/icon-mark.svg" alt="" width={40} height={40} className="h-10 w-10 rounded-lg bg-slate-950 p-1.5" aria-hidden="true" />
-            <div className="min-w-0">
+            <Image src="/assets/icon-mark.svg" alt="" width={40} height={40} className="h-10 w-10 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
               <Image src="/assets/logo.svg" alt="findmydoc" width={140} height={26} className="h-5 w-auto max-w-36" priority />
               <div className="mt-1 text-sm font-semibold text-slate-700">Founder Planning</div>
             </div>
@@ -1325,17 +1638,18 @@ export function PlanningApp({ initialData, source }: Props) {
                 key={item.label}
                 type="button"
                 onClick={() => setWorkspace(item.id)}
-                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium ${
+                title={item.label}
+                className={`flex h-10 w-full items-center justify-center gap-0 rounded-md px-3 text-left text-sm font-medium transition-colors group-hover:justify-start group-hover:gap-3 group-focus-within:justify-start group-focus-within:gap-3 ${
                   workspace === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
-                <Icon size={18} />
-                {item.label}
+                <Icon size={18} className="shrink-0" />
+                <span className="w-0 overflow-hidden whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:w-auto group-hover:opacity-100 group-focus-within:w-auto group-focus-within:opacity-100">{item.label}</span>
               </button>
             );
           })}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
           <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
             Datenquelle: <span className="font-semibold">{source === "supabase" ? "Supabase" : "Seed-Fallback"}</span>
             <br />
@@ -1350,11 +1664,16 @@ export function PlanningApp({ initialData, source }: Props) {
         </div>
       </aside>
 
-      <main className="lg:pl-64">
+      <main className="lg:pl-16">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           {saveError && (
             <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 lg:px-6">
               {saveError}
+            </div>
+          )}
+          {authNotice && (
+            <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 lg:px-6">
+              {authNotice}
             </div>
           )}
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 lg:px-6">
@@ -1388,9 +1707,6 @@ export function PlanningApp({ initialData, source }: Props) {
               >
                 <Filter size={16} />
                 Filter
-              </button>
-              <button type="button" className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600" aria-label="Einstellungen">
-                <Settings size={16} />
               </button>
             </div>
           </div>
@@ -1442,22 +1758,10 @@ export function PlanningApp({ initialData, source }: Props) {
                   placeholder="Nach Aufgabe, DoD oder Workstream suchen"
                 />
               </label>
-              <select value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
-                <option>Alle</option>
-                {data.profiles.map((profile) => <option key={profile.id}>{profile.name}</option>)}
-              </select>
-              <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
-                <option>Alle</option>
-                {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-              </select>
-              <select value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
-                <option>Alle</option>
-                {["P0", "P1", "P2", "P3", "P4"].map((priority) => <option key={priority}>{priority}</option>)}
-              </select>
-              <select value={filters.packageId} onChange={(event) => setFilters({ ...filters, packageId: event.target.value })} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
-                <option value="Alle">Alle Pakete</option>
-                {data.packages.map((pack) => <option key={pack.id} value={pack.id}>{pack.id}</option>)}
-              </select>
+              <CustomSelect value={filters.owner} onChange={(value) => setFilters({ ...filters, owner: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))]} />
+              <CustomSelect value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} />
+              <CustomSelect value={filters.priority} onChange={(value) => setFilters({ ...filters, priority: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))]} />
+              <CustomSelect value={filters.packageId} onChange={(value) => setFilters({ ...filters, packageId: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Group Commitments" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.id }))]} />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {quickFilters.map((filter) => (
@@ -1516,6 +1820,10 @@ export function PlanningApp({ initialData, source }: Props) {
               githubProviderTokenAvailable={githubProviderTokenAvailable}
               pending={isPending}
               notificationDispatchMessage={notificationDispatchMessage}
+              sprintPlanningOptions={sprintPlanningOptions}
+              plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions).length}
+              onUpdateSprintPlanning={setSprintPlanningOptions}
+              onCreateSprintPlan={createSprintPlan}
               onDispatchNotifications={dispatchNotifications}
             />
           )}
@@ -1556,6 +1864,7 @@ export function PlanningApp({ initialData, source }: Props) {
                           key={task.id}
                           task={task}
                           pack={packageById(data.packages, task.packageId)}
+                          ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
                           onOpen={(nextTask) => setSelectedTaskId(nextTask.id)}
                           onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
                           onDragStart={startTaskDrag}
@@ -1590,6 +1899,7 @@ export function PlanningApp({ initialData, source }: Props) {
                           key={task.id}
                           task={task}
                           pack={pack}
+                          ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
                           onOpen={(nextTask) => setSelectedTaskId(nextTask.id)}
                           onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
                         />
@@ -1615,14 +1925,10 @@ export function PlanningApp({ initialData, source }: Props) {
                   {visibleTasks.map((task) => (
                     <tr key={task.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
                       <td className="px-3 py-3">
-                        <select value={normalizeStatus(task.status)} onChange={(event) => updateTask(task, { status: event.target.value })} className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
-                          {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-                        </select>
+                        <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => updateTask(task, { status: value })} className="h-8 w-32 text-xs" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
                       </td>
                       <td className="px-3 py-3">
-                        <select value={task.owner} onChange={(event) => updateTask(task, { owner: event.target.value })} className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs">
-                          {data.profiles.map((profile) => <option key={profile.id}>{profile.name}</option>)}
-                        </select>
+                        <CustomSelect value={task.owner} onChange={(value) => updateTask(task, { owner: value })} className="h-8 w-32 text-xs" options={data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
                       </td>
                       <td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${priorityTone(task.priority)}`}>{task.priority}</span></td>
                       <td className="px-3 py-3 text-slate-600">{task.workstream}</td>
@@ -1665,7 +1971,7 @@ export function PlanningApp({ initialData, source }: Props) {
           onUpdate={(patch) => updateTask(selectedTask, patch)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
-          onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
+          onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
           onSyncGitHub={() => syncTaskToGitHub(selectedTask)}
         />
       )}
@@ -1683,41 +1989,54 @@ export function PlanningApp({ initialData, source }: Props) {
 }
 
 function ProjectsOverview({ data, tasks }: { data: PlanningData; tasks: Task[] }) {
+  const milestones = data.milestones.length
+    ? data.milestones
+    : [{ id: "", title: "Ohne Epic", description: "Group Commitments ohne zugeordneten Meilenstein.", targetDate: "", status: "planned" as const, sortOrder: 999 }];
+
   return (
     <div className="grid gap-4">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktives Projekt</div>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{data.project.name}</h2>
-        <p className="mt-1 text-sm text-slate-500">{data.project.range}</p>
+        <p className="mt-1 text-sm text-slate-500">Struktur: Epic / Meilenstein → Group Commitment → Deliverable → Sub-Issue. Sprints sind der Zeitcontainer für Deliverables.</p>
       </section>
-      <section className="grid gap-3 lg:grid-cols-2">
-        {data.packages.map((pack) => {
-          const packageTasks = tasks.filter((task) => task.packageId === pack.id);
-          const done = packageTasks.filter((task) => normalizeStatus(task.status) === "Erledigt").length;
-          const blocked = packageTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
+      <section className="grid gap-4">
+        {milestones.map((milestone) => {
+          const groups = data.packages.filter((pack) => (milestone.id ? pack.milestoneId === milestone.id : !pack.milestoneId));
+          const milestoneTasks = tasks.filter((task) => groups.some((pack) => pack.id === task.packageId));
           return (
-            <article key={pack.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
+            <article key={milestone.id || "without-epic"} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold text-blue-700">{pack.id} · {pack.priority}</div>
-                  <h3 className="mt-1 text-base font-semibold text-slate-950">{pack.title}</h3>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Epic / Meilenstein</div>
+                  <h3 className="mt-1 text-base font-semibold text-slate-950">{milestone.title}</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">{milestone.description}</p>
                 </div>
-                <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{packageTasks.length} Aufgaben</span>
+                <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{milestoneTasks.length} Deliverables</span>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{pack.goal}</p>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                <div className="rounded-md bg-slate-50 p-2">
-                  <div className="text-xs text-slate-500">Erledigt</div>
-                  <div className="font-semibold text-slate-900">{done}</div>
-                </div>
-                <div className="rounded-md bg-slate-50 p-2">
-                  <div className="text-xs text-slate-500">Blockiert</div>
-                  <div className="font-semibold text-slate-900">{blocked}</div>
-                </div>
-                <div className="rounded-md bg-slate-50 p-2">
-                  <div className="text-xs text-slate-500">Aufwand</div>
-                  <div className="font-semibold text-slate-900">{packageTasks.reduce((sum, task) => sum + task.hours, 0)}h</div>
-                </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {groups.map((pack) => {
+                  const packageTasks = tasks.filter((task) => task.packageId === pack.id && task.taskType !== "sub_issue");
+                  const done = packageTasks.filter((task) => normalizeStatus(task.status) === "Erledigt").length;
+                  const blocked = packageTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
+                  return (
+                    <div key={pack.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold text-blue-700">{pack.id} · {pack.priority}</div>
+                          <h4 className="mt-1 text-sm font-semibold text-slate-950">{pack.title}</h4>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">{packageTasks.length} Deliverables</span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{pack.goal}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-md bg-white p-2"><div className="text-xs text-slate-500">Erledigt</div><div className="font-semibold text-slate-900">{done}</div></div>
+                        <div className="rounded-md bg-white p-2"><div className="text-xs text-slate-500">Blockiert</div><div className="font-semibold text-slate-900">{blocked}</div></div>
+                        <div className="rounded-md bg-white p-2"><div className="text-xs text-slate-500">Aufwand</div><div className="font-semibold text-slate-900">{packageTasks.reduce((sum, task) => sum + task.hours, 0)}h</div></div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </article>
           );
@@ -1749,8 +2068,11 @@ function TeamOverview({
         return (
           <article key={profile.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">{profile.name}</h2>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: profileColor(profile) }} />
+                  <h2 className="text-base font-semibold text-slate-950">{profile.name}</h2>
+                </div>
                 <p className="mt-1 text-sm leading-5 text-slate-500">{profile.focus || "Kein Fokus hinterlegt."}</p>
                 <p className="mt-1 text-xs text-slate-500">@{profile.githubLogin || "nicht gemappt"}</p>
               </div>
@@ -1778,11 +2100,11 @@ function TeamOverview({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1 text-xs font-semibold text-slate-500">
                   Plattformrolle
-                  <select
+                  <CustomSelect
                     value={profile.platformRole}
                     disabled={pending}
-                    onChange={(event) => {
-                      const platformRole = event.target.value as PlatformRole;
+                    onChange={(value) => {
+                      const platformRole = value as PlatformRole;
                       onUpdateProfile(profile, {
                         platformRole,
                         orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : profile.orgRole,
@@ -1791,14 +2113,9 @@ function TeamOverview({
                         deputyActiveUntil: platformRole === "deputy" ? profile.deputyActiveUntil : "",
                       });
                     }}
-                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
-                  >
-                    {platformRoleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {role === "ceo" ? "CEO" : role === "founder" ? "Founder" : role === "deputy" ? "Deputy" : "Viewer"}
-                      </option>
-                    ))}
-                  </select>
+                    className="h-9 text-sm"
+                    options={platformRoleOptions.map((role) => ({ value: role, label: role === "ceo" ? "CEO" : role === "founder" ? "Founder" : role === "deputy" ? "Deputy" : "Viewer" }))}
+                  />
                 </label>
                 <label className="grid gap-1 text-xs font-semibold text-slate-500">
                   Org-Rolle
@@ -1828,6 +2145,27 @@ function TeamOverview({
                   className="min-h-16 resize-y rounded-md border border-slate-200 bg-white px-2 py-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                 />
               </label>
+              <div className="grid gap-2">
+                <div className="text-xs font-semibold text-slate-500">Post-it-Farbe</div>
+                <div className="flex flex-wrap gap-2">
+                  {profileColorOptions.map((color) => {
+                    const active = profileColor(profile).toLowerCase() === color.value.toLowerCase();
+                    return (
+                      <button
+                        key={color.value}
+                        type="button"
+                        disabled={pending}
+                        onClick={() => onUpdateProfile(profile, { color: color.value })}
+                        className={`grid h-8 w-8 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200 hover:border-slate-400"}`}
+                        title={color.label}
+                        aria-label={`${color.label} als Post-it-Farbe wählen`}
+                      >
+                        <span className="h-5 w-5 rounded-sm" style={{ backgroundColor: color.value }} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="grid gap-1 text-xs font-semibold text-slate-500">
                   Kapazität
@@ -1843,38 +2181,22 @@ function TeamOverview({
                 </label>
                 <label className="grid gap-1 text-xs font-semibold text-slate-500">
                   Vertreter für
-                  <select
+                  <CustomSelect
                     value={profile.deputyFor || ""}
                     disabled={pending || !isDeputy}
-                    onChange={(event) => onUpdateProfile(profile, { deputyFor: event.target.value })}
-                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:bg-slate-50 disabled:opacity-60"
-                  >
-                    <option value="">Keine Vertretung</option>
-                    {data.profiles.filter((item) => item.platformRole === "ceo" || item.id === profile.deputyFor).map((item) => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
+                    onChange={(value) => onUpdateProfile(profile, { deputyFor: value })}
+                    className="h-9 text-sm"
+                    options={[{ value: "", label: "Keine Vertretung" }, ...data.profiles.filter((item) => item.platformRole === "ceo" || item.id === profile.deputyFor).map((item) => ({ value: item.id, label: item.name }))]}
+                  />
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Von
-                    <input
-                      type="date"
-                      value={profile.deputyActiveFrom || ""}
-                      disabled={pending || !isDeputy}
-                      onChange={(event) => onUpdateProfile(profile, { deputyActiveFrom: event.target.value })}
-                      className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:bg-slate-50 disabled:opacity-60"
-                    />
+                    <CustomDatePicker value={profile.deputyActiveFrom || ""} disabled={pending || !isDeputy} onChange={(value) => onUpdateProfile(profile, { deputyActiveFrom: value })} className="h-9 text-sm" />
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Bis
-                    <input
-                      type="date"
-                      value={profile.deputyActiveUntil || ""}
-                      disabled={pending || !isDeputy}
-                      onChange={(event) => onUpdateProfile(profile, { deputyActiveUntil: event.target.value })}
-                      className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:bg-slate-50 disabled:opacity-60"
-                    />
+                    <CustomDatePicker value={profile.deputyActiveUntil || ""} disabled={pending || !isDeputy} onChange={(value) => onUpdateProfile(profile, { deputyActiveUntil: value })} className="h-9 text-sm" />
                   </label>
                 </div>
               </div>
@@ -1979,73 +2301,37 @@ function SprintScoreTableOverview({
   return (
     <div className="grid gap-4">
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(5,minmax(150px,1fr))_auto] xl:items-end">
+        <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Sprint
-            <select
-              value={sprint.id}
-              onChange={(event) => setSelectedSprintId(event.target.value)}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
-            >
-              {data.sprints.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
-            Name
-            <input
-              value={sprint.name}
-              disabled={pending || sprint.scoreLocked}
-              onChange={(event) => onUpdateSprint(sprint, { name: event.target.value })}
-              className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-60"
-            />
+            <CustomSelect value={sprint.id} onChange={setSelectedSprintId} className="h-9 text-sm" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Start
-            <input
-              type="date"
-              value={sprint.startDate}
-              disabled={pending || sprint.scoreLocked}
-              onChange={(event) => onUpdateSprint(sprint, { startDate: event.target.value })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-60"
-            />
+            <CustomDatePicker value={sprint.startDate} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { startDate: value })} className="h-9 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Ende
-            <input
-              type="date"
-              value={sprint.endDate}
-              disabled={pending || sprint.scoreLocked}
-              onChange={(event) => onUpdateSprint(sprint, { endDate: event.target.value })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-60"
-            />
+            <CustomDatePicker value={sprint.endDate} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { endDate: value })} className="h-9 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Review bis
-            <input
-              type="datetime-local"
-              value={sprint.reviewDueAt ? sprint.reviewDueAt.slice(0, 16) : ""}
-              disabled={pending || sprint.scoreLocked}
-              onChange={(event) => onUpdateSprint(sprint, { reviewDueAt: event.target.value })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-60"
-            />
+            <CustomDatePicker mode="datetime" value={sprint.reviewDueAt ? sprint.reviewDueAt.slice(0, 16) : ""} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { reviewDueAt: value })} className="h-9 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Status
-            <select
+            <CustomSelect
               value={sprint.status}
               disabled={pending || sprint.scoreLocked}
-              onChange={(event) => onUpdateSprint(sprint, { status: event.target.value as Sprint["status"] })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-60"
-            >
-              <option value="planning">Planung</option>
-              <option value="active">Aktiv</option>
-              <option value="review">Review</option>
-              <option value="closed">Abgeschlossen</option>
-            </select>
+              onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
+              className="h-9 text-sm"
+              options={[
+                { value: "planning", label: "Planung" },
+                { value: "active", label: "Aktiv" },
+                { value: "review", label: "Review" },
+                { value: "closed", label: "Abgeschlossen" },
+              ]}
+            />
           </label>
           <button
             type="button"
@@ -2104,14 +2390,7 @@ function SprintScoreTableOverview({
                     <div className="text-xs text-slate-500">{roleLabel(row.profile)}</div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3">
-                    <select
-                      value={row.commitment.commitmentLevel}
-                      disabled={pending || sprint.scoreLocked}
-                      onChange={(event) => onUpdateCommitment({ ...row.commitment, commitmentLevel: event.target.value as CommitmentLevel })}
-                      className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                    >
-                      {["Lite", "Standard", "Heavy", "Away"].map((level) => <option key={level}>{level}</option>)}
-                    </select>
+                    <CustomSelect value={row.commitment.commitmentLevel} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateCommitment({ ...row.commitment, commitmentLevel: value as CommitmentLevel })} className="h-8 w-28 text-xs" options={["Lite", "Standard", "Heavy", "Away"].map((level) => ({ value: level, label: level }))} />
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3">
                     <input
@@ -2184,19 +2463,20 @@ function SprintScoreTableOverview({
                         <div className="text-xs text-slate-500">{roleLabel(profile)}</div>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <select
+                        <CustomSelect
                           value={attendance.status}
                           disabled={pending}
-                          onChange={(event) => patchAttendance({ status: event.target.value as MeetingAttendance["status"] })}
-                          className="h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50"
-                        >
-                          <option value="pending">Offen</option>
-                          <option value="present">Anwesend</option>
-                          <option value="excused">Entschuldigt</option>
-                          <option value="late_excused">Spät entschuldigt</option>
-                          <option value="unexcused">Nicht akzeptiert</option>
-                          <option value="no_show">No-Show</option>
-                        </select>
+                          onChange={(value) => patchAttendance({ status: value as MeetingAttendance["status"] })}
+                          className="h-8 w-36 text-xs"
+                          options={[
+                            { value: "pending", label: "Offen" },
+                            { value: "present", label: "Anwesend" },
+                            { value: "excused", label: "Entschuldigt" },
+                            { value: "late_excused", label: "Spät entschuldigt" },
+                            { value: "unexcused", label: "Nicht akzeptiert" },
+                            { value: "no_show", label: "No-Show" },
+                          ]}
+                        />
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
                         <input
@@ -2226,14 +2506,7 @@ function SprintScoreTableOverview({
                         />
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <select
-                          value={attendance.points}
-                          disabled={pending}
-                          onChange={(event) => patchAttendance({ points: Number(event.target.value) })}
-                          className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50"
-                        >
-                          {[0, 1, 2, 3, 4].map((point) => <option key={point} value={point}>{point}</option>)}
-                        </select>
+                        <CustomSelect value={attendance.points} disabled={pending} onChange={(value) => patchAttendance({ points: Number(value) })} className="h-8 w-20 text-xs" options={[0, 1, 2, 3, 4].map((point) => ({ value: String(point), label: String(point) }))} />
                       </td>
                     </tr>
                   );
@@ -2281,32 +2554,14 @@ function SprintScoreTableOverview({
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{task.owner}</td>
                   <td className="border-b border-slate-100 px-3 py-3">
-                    <select
-                      value={normalizeStatus(task.status)}
-                      disabled={pending}
-                      onChange={(event) => onChangeStatus(task, event.target.value as TaskStatus)}
-                      className={`h-8 w-32 rounded-md border px-2 text-xs font-semibold ${statusTone(normalizeStatus(task.status))}`}
-                    >
-                      {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-                    </select>
+                    <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className={`h-8 w-32 text-xs font-semibold ${statusTone(normalizeStatus(task.status))}`} options={taskStatuses.map((status) => ({ value: status, label: status }))} />
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{reviewLabel(task.reviewStatus)}</td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                     {task.scorePoints} {task.scoreFinal ? "final" : "offen"}
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3">
-                    <select
-                      value={task.sprintId}
-                      disabled={pending || sprint.scoreLocked}
-                      onChange={(event) => onAssignSprint(task, event.target.value)}
-                      className="h-8 w-44 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                    >
-                      {data.sprints.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
+                    <CustomSelect value={task.sprintId} disabled={pending || sprint.scoreLocked} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-44 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{dateRange(task)}</td>
                   <td className="border-b border-slate-100 px-3 py-3">
@@ -2450,18 +2705,7 @@ function SprintScoreTableOverview({
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{task.owner}</td>
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{currentSprint?.name || "ohne Sprint"}</td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <select
-                          value={task.sprintId}
-                          disabled={pending}
-                          onChange={(event) => onAssignSprint(task, event.target.value)}
-                          className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                        >
-                          {data.sprints.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
+                        <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
                       </td>
                     </tr>
                   );
@@ -3231,6 +3475,10 @@ function SettingsOverview({
   githubProviderTokenAvailable,
   pending,
   notificationDispatchMessage,
+  sprintPlanningOptions,
+  plannedSprintCount,
+  onUpdateSprintPlanning,
+  onCreateSprintPlan,
   onDispatchNotifications,
 }: {
   data: PlanningData;
@@ -3240,6 +3488,10 @@ function SettingsOverview({
   githubProviderTokenAvailable: boolean;
   pending: boolean;
   notificationDispatchMessage: string;
+  sprintPlanningOptions: SprintPlanningOptions;
+  plannedSprintCount: number;
+  onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
+  onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
 }) {
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
@@ -3280,6 +3532,66 @@ function SettingsOverview({
               {check}
             </div>
           ))}
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Sprint-Planung</h2>
+            <p className="mt-1 text-sm text-slate-500">Legt automatisch die nächsten Sprint-Zeiträume an. Der aktuelle Sprint bleibt im Scoreboard sichtbar.</p>
+          </div>
+          <button
+            type="button"
+            disabled={pending || plannedSprintCount === 0}
+            onClick={() => onCreateSprintPlan(sprintPlanningOptions)}
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {plannedSprintCount > 0 ? `${plannedSprintCount} Sprint${plannedSprintCount === 1 ? "" : "s"} anlegen` : "Plan aktuell"}
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_140px_140px_140px]">
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Namensmuster
+            <input
+              value={sprintPlanningOptions.namePattern}
+              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, namePattern: event.target.value })}
+              className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+              placeholder="Sprint #"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Rhythmus (Wochen)
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={sprintPlanningOptions.rhythmWeeks}
+              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, rhythmWeeks: Number(event.target.value) })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Wochen voraus
+            <input
+              type="number"
+              min={1}
+              max={52}
+              value={sprintPlanningOptions.horizonWeeks}
+              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, horizonWeeks: Number(event.target.value) })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Bis Sprint-Nr.
+            <input
+              type="number"
+              min={0}
+              value={sprintPlanningOptions.targetSprintNumber || ""}
+              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, targetSprintNumber: Number(event.target.value) })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+              placeholder="optional"
+            />
+          </label>
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
@@ -3356,6 +3668,9 @@ function AuthControl({
   onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
+  const avatarUrl = getUserMetadataString(user, "avatar_url");
+  const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
 
   return (
     <div className="relative">
@@ -3370,10 +3685,27 @@ function AuthControl({
       {open && (
         <div className="absolute right-0 top-11 z-30 w-80 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-xl">
           {user ? (
-            <div className="grid gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Supabase Session</div>
-                <div className="mt-1 truncate font-medium text-slate-900">{user.email}</div>
+            <div className="grid gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600">
+                    {displayName.slice(0, 1).toUpperCase() || "?"}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
+                  <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
+                  {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
+                  {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
+                </div>
               </div>
               <button
                 type="button"
@@ -3410,6 +3742,11 @@ function AuthControl({
       )}
     </div>
   );
+}
+
+function getUserMetadataString(user: User | null, key: string) {
+  const value = user?.user_metadata?.[key];
+  return typeof value === "string" ? value : "";
 }
 
 function GanttView({ tasks, packages, onOpen }: { tasks: Task[]; packages: Package[]; onOpen: (task: Task) => void }) {
@@ -3482,6 +3819,8 @@ function NewTaskDialog({
 }) {
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
   const defaultOwner = defaults.owner || data.profiles[0]?.name || "Volkan";
+  const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
+  const groupCommitments = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({
     title: "",
     description: "",
@@ -3492,7 +3831,8 @@ function NewTaskDialog({
     evidenceRequired: "",
     taskType: defaults.taskType || "deliverable",
     parentTaskId: defaults.parentTaskId || "",
-    packageId: defaults.packageId || data.packages[0]?.id || "",
+    milestoneId: defaultMilestoneId,
+    packageId: defaults.packageId || groupCommitments[0]?.id || data.packages[0]?.id || "",
     sprintId: defaults.sprintId || activeSprint?.id || "",
     owner: defaultOwner,
     priority: defaults.priority || "P2",
@@ -3504,6 +3844,7 @@ function NewTaskDialog({
     definitionOfDone: "",
   });
   const parentTask = data.tasks.find((task) => task.id === draft.parentTaskId);
+  const visibleGroupCommitments = data.packages.filter((pack) => !draft.milestoneId || !pack.milestoneId || pack.milestoneId === draft.milestoneId);
   const canCreate = draft.title.trim().length >= 3 && (draft.taskType !== "sub_issue" || draft.parentTaskId);
 
   return (
@@ -3528,36 +3869,38 @@ function NewTaskDialog({
         </div>
 
         <div className="grid gap-4 p-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Typ
-              <select value={draft.taskType} onChange={(event) => setDraft((current) => ({ ...current, taskType: event.target.value as NewTaskDraft["taskType"] }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                <option value="deliverable">Deliverable</option>
-                <option value="proposal">Vorschlag</option>
-                <option value="sub_issue">Sub-Issue</option>
-              </select>
+              <CustomSelect value={draft.taskType} onChange={(value) => setDraft((current) => ({ ...current, taskType: value as NewTaskDraft["taskType"] }))} className="h-9 text-sm" options={[{ value: "deliverable", label: "Deliverable" }, { value: "proposal", label: "Vorschlag" }, { value: "sub_issue", label: "Sub-Issue" }]} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Paket
-              <select value={draft.packageId} onChange={(event) => setDraft((current) => ({ ...current, packageId: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                {data.packages.map((pack) => <option key={pack.id} value={pack.id}>{pack.id} · {pack.title}</option>)}
-              </select>
+              Epic / Meilenstein
+              <CustomSelect
+                value={draft.milestoneId}
+                onChange={(value) => {
+                  const milestoneId = value;
+                  const firstGroup = data.packages.find((pack) => !milestoneId || !pack.milestoneId || pack.milestoneId === milestoneId);
+                  setDraft((current) => ({ ...current, milestoneId, packageId: firstGroup?.id || current.packageId }));
+                }}
+                className="h-9 text-sm"
+                options={[{ value: "", label: "Ohne Epic" }, ...data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))]}
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              Group Commitment
+              <CustomSelect value={draft.packageId} onChange={(value) => setDraft((current) => ({ ...current, packageId: value }))} className="h-9 text-sm" options={visibleGroupCommitments.map((pack) => ({ value: pack.id, label: `${pack.id} · ${pack.title}` }))} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Sprint
-              <select value={draft.sprintId} disabled={draft.taskType !== "deliverable"} onChange={(event) => setDraft((current) => ({ ...current, sprintId: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:bg-slate-50">
-                {data.sprints.map((sprint) => <option key={sprint.id} value={sprint.id}>{sprint.name}</option>)}
-              </select>
+              <CustomSelect value={draft.sprintId} disabled={draft.taskType !== "deliverable"} onChange={(value) => setDraft((current) => ({ ...current, sprintId: value }))} className="h-9 text-sm" options={data.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))} />
             </label>
           </div>
 
           {draft.taskType === "sub_issue" && (
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Deliverable
-              <select value={draft.parentTaskId} onChange={(event) => setDraft((current) => ({ ...current, parentTaskId: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                <option value="">Deliverable auswählen</option>
-                {data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
-              </select>
+              <CustomSelect value={draft.parentTaskId} onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))} className="h-9 text-sm" options={[{ value: "", label: "Deliverable auswählen" }, ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: task.title }))]} />
               {parentTask && <span className="text-xs font-normal text-slate-500">Sub-Issues unter {parentTask.title} sind nicht score-relevant.</span>}
             </label>
           )}
@@ -3605,21 +3948,15 @@ function NewTaskDialog({
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Owner
-              <select value={draft.owner} onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                {data.profiles.map((profile) => <option key={profile.id}>{profile.name}</option>)}
-              </select>
+              <CustomSelect value={draft.owner} onChange={(value) => setDraft((current) => ({ ...current, owner: value }))} className="h-9 text-sm" options={data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Priorität
-              <select value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                {["P0", "P1", "P2", "P3", "P4"].map((priority) => <option key={priority}>{priority}</option>)}
-              </select>
+              <CustomSelect value={draft.priority} onChange={(value) => setDraft((current) => ({ ...current, priority: value }))} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Status
-              <select value={draft.status} disabled={draft.taskType === "proposal"} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:bg-slate-50">
-                {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-              </select>
+              <CustomSelect value={draft.status} disabled={draft.taskType === "proposal"} onChange={(value) => setDraft((current) => ({ ...current, status: value }))} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Aufwand
@@ -3634,11 +3971,11 @@ function NewTaskDialog({
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Start
-              <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm font-normal text-slate-800" />
+              <CustomDatePicker value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} className="h-9 text-sm" />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Ende
-              <input type="date" value={draft.endDate} onChange={(event) => setDraft((current) => ({ ...current, endDate: event.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm font-normal text-slate-800" />
+              <CustomDatePicker value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} className="h-9 text-sm" />
             </label>
           </div>
 
@@ -3713,19 +4050,15 @@ function TaskDetailPanel({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Status
-              <select value={normalizeStatus(task.status)} onChange={(event) => onUpdate({ status: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-              </select>
+              <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Owner
-              <select value={task.owner} onChange={(event) => onUpdate({ owner: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                {profiles.map((profile) => <option key={profile}>{profile}</option>)}
-              </select>
+              <CustomSelect value={task.owner} onChange={(value) => onUpdate({ owner: value })} className="h-9 text-sm" options={profiles.map((profile) => ({ value: profile, label: profile }))} />
             </label>
             <div>
-              <div className="text-xs font-semibold text-slate-500">Paket</div>
-              <div className="mt-1 text-sm text-slate-800">{pack ? `${pack.id} · ${pack.title}` : "ohne Paket"}</div>
+              <div className="text-xs font-semibold text-slate-500">Group Commitment</div>
+              <div className="mt-1 text-sm text-slate-800">{pack ? `${pack.id} · ${pack.title}` : "ohne Group Commitment"}</div>
             </div>
             <div>
               <div className="text-xs font-semibold text-slate-500">Zeitraum</div>

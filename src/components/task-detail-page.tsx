@@ -7,6 +7,7 @@ import { reviewLabel, syncLabel } from "@/lib/platform";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { Milestone, Package, PlanningData, Profile, Sprint, Task, TaskBlocker, TaskComment, TaskStatus } from "@/lib/types";
+import { CustomSelect } from "@/components/custom-select";
 import { TaskCommentThread } from "@/components/task-comment-thread";
 
 type Props = {
@@ -250,38 +251,27 @@ export function TaskDetailPage({
             <div className="mt-3 grid gap-3 text-sm">
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
                 Status
-                <select value={normalizeStatus(meta.status)} onChange={(event) => updateTask({ status: event.target.value as TaskStatus })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                  {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-                </select>
+                <CustomSelect value={normalizeStatus(meta.status)} onChange={(value) => updateTask({ status: value as TaskStatus })} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
               </label>
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
                 Owner
-                <select value={meta.owner} onChange={(event) => updateTask({ owner: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                  {profiles.map((profile) => <option key={profile.id} value={profile.name}>{profile.name}</option>)}
-                </select>
+                <CustomSelect value={meta.owner} onChange={(value) => updateTask({ owner: value })} className="h-9 text-sm" options={profiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
               </label>
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
                 Priorität
-                <select value={meta.priority} onChange={(event) => updateTask({ priority: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                  {["P0", "P1", "P2", "P3", "P4"].map((priority) => <option key={priority}>{priority}</option>)}
-                </select>
+                <CustomSelect value={meta.priority} onChange={(value) => updateTask({ priority: value })} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
               </label>
               <div className="border-t border-slate-100 pt-3">
-                <div className="text-xs font-semibold text-slate-500">Paket</div>
-                <div className="mt-1 text-sm font-semibold text-slate-800">{pack ? `${pack.id} · ${pack.title}` : "ohne Paket"}</div>
+                <div className="text-xs font-semibold text-slate-500">Group Commitment</div>
+                <div className="mt-1 text-sm font-semibold text-slate-800">{pack ? `${pack.id} · ${pack.title}` : "ohne Group Commitment"}</div>
               </div>
               <label className="grid gap-1 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">
                 Sprint
-                <select value={meta.sprintId} onChange={(event) => updateTask({ sprintId: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                  {sprints.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+                <CustomSelect value={meta.sprintId} onChange={(value) => updateTask({ sprintId: value })} className="h-9 text-sm" options={sprints.map((item) => ({ value: item.id, label: item.name }))} />
               </label>
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Meilenstein
-                <select value={meta.milestoneId || ""} onChange={(event) => updateTask({ milestoneId: event.target.value })} className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800">
-                  <option value="">Kein Meilenstein</option>
-                  {milestones.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-                </select>
+                Epic / Meilenstein
+                <CustomSelect value={meta.milestoneId || ""} onChange={(value) => updateTask({ milestoneId: value })} className="h-9 text-sm" options={[{ value: "", label: "Kein Epic" }, ...milestones.map((item) => ({ value: item.id, label: item.title }))]} />
               </label>
               <div className="border-t border-slate-100 pt-3">
                 <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
@@ -300,7 +290,7 @@ export function TaskDetailPage({
                 <div className="mt-1 text-sm font-semibold text-slate-800">{ownerProfile?.githubLogin || ownerProfile?.name || meta.owner}</div>
               </div>
               <div>
-                <div className="text-xs font-semibold text-slate-500">Milestone-Ziel</div>
+                <div className="text-xs font-semibold text-slate-500">Epic-Ziel</div>
                 <div className="mt-1 text-sm text-slate-700">{currentMilestone?.targetDate ? formatDate(currentMilestone.targetDate) : "Kein Zieltermin"}</div>
               </div>
               <div>

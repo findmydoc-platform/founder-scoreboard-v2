@@ -15,7 +15,8 @@ export const seedData: PlanningData = {
       "orgRole": "CEO",
       "githubLogin": "",
       "focus": "Klinikpartnerschaften, Investor, Standort, Entscheidungen",
-      "weeklyCapacity": 10
+      "weeklyCapacity": 10,
+      "color": "#22c55e"
     },
     {
       "id": "sebastian",
@@ -25,7 +26,8 @@ export const seedData: PlanningData = {
       "orgRole": "Founder",
       "githubLogin": "",
       "focus": "Produkt, Bookimed-Crawler-Daten, MVP, Datenmodell",
-      "weeklyCapacity": 8
+      "weeklyCapacity": 8,
+      "color": "#3b82f6"
     },
     {
       "id": "anil",
@@ -35,7 +37,8 @@ export const seedData: PlanningData = {
       "orgRole": "Founder",
       "githubLogin": "",
       "focus": "Notion/CRM, Klinik-Onboarding, Prozesspflege",
-      "weeklyCapacity": 6
+      "weeklyCapacity": 6,
+      "color": "#f59e0b"
     },
     {
       "id": "ozen",
@@ -45,7 +48,8 @@ export const seedData: PlanningData = {
       "orgRole": "Founder",
       "githubLogin": "",
       "focus": "Legal, Compliance, LOI, Founder Agreement, Standortfragen",
-      "weeklyCapacity": 6
+      "weeklyCapacity": 6,
+      "color": "#8b5cf6"
     },
     {
       "id": "youssef",
@@ -55,7 +59,8 @@ export const seedData: PlanningData = {
       "orgRole": "Founder",
       "githubLogin": "",
       "focus": "Outreach-Kampagnen, Content, Social, Landingpages",
-      "weeklyCapacity": 6
+      "weeklyCapacity": 6,
+      "color": "#ec4899"
     }
   ],
   "packages": [

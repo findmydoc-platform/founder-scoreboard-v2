@@ -1,0 +1,79 @@
+name: Deliverable
+description: Score-relevante Aufgabe aus der Founder-Scoreboard-v2-App
+title: "[Deliverable]: "
+labels: ["task", "deliverable"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Deliverables werden primär in der App erstellt und nach GitHub gespiegelt.
+        Nur Deliverables sind score-relevant. GitHub ist Backup, nicht Quelle der Wahrheit.
+
+  - type: input
+    id: epic
+    attributes:
+      label: Epic / Meilenstein
+    validations:
+      required: true
+
+  - type: input
+    id: group_commitment
+    attributes:
+      label: Group Commitment
+    validations:
+      required: true
+
+  - type: input
+    id: sprint
+    attributes:
+      label: Sprint
+      description: Zeitcontainer, nicht Parent-Ebene.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: Problem Statement
+    validations:
+      required: true
+
+  - type: textarea
+    id: intended_outcome
+    attributes:
+      label: Intended Outcome
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope_constraints
+    attributes:
+      label: Scope & Constraints
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Messbar, spezifisch und vom Owner beeinflussbar.
+      value: |
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence_required
+    attributes:
+      label: Evidence Required
+      description: Welcher Nachweis muss vorliegen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: definition_of_done
+    attributes:
+      label: Definition of Done
+      description: Qualitätsstandard oder DoD-Snapshot. Nicht mit Acceptance Criteria vermischen.
+    validations:
+      required: false

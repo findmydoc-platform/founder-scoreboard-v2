@@ -1,0 +1,33 @@
+name: Sub-Issue
+description: Nicht score-relevante Arbeitsunterteilung unter einem Deliverable
+title: "[Sub-Issue]: "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sub-Issues dienen der persönlichen Arbeitsstruktur unter einem Deliverable.
+        Sie sind nicht score-relevant.
+
+  - type: input
+    id: parent_deliverable
+    attributes:
+      label: Parent Deliverable
+      description: GitHub-Issue-Link oder App-Task-ID.
+    validations:
+      required: true
+
+  - type: textarea
+    id: work_item
+    attributes:
+      label: Arbeitsschritt
+      description: Was soll in diesem Sub-Issue erledigt werden?
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notizen / offene Fragen
+    validations:
+      required: false

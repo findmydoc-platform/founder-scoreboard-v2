@@ -14,6 +14,7 @@ type DbProfile = {
   deputy_active_until: string | null;
   focus: string | null;
   weekly_capacity: number;
+  profile_color: string | null;
   google_chat_user_id: string | null;
   google_chat_dm_space: string | null;
   notifications_enabled: boolean | null;
@@ -21,6 +22,7 @@ type DbProfile = {
 
 type DbPackage = {
   id: string;
+  milestone_id: string | null;
   title: string;
   goal: string | null;
   priority: string | null;
@@ -220,6 +222,42 @@ type DbMeetingAttendance = {
   updated_at: string;
 };
 
+const fallbackProfileColors: Record<string, string> = {
+  volkan: "#22c55e",
+  sebastian: "#3b82f6",
+  anil: "#f59e0b",
+  ozen: "#8b5cf6",
+  youssef: "#ec4899",
+};
+
+function profileColor(id: string, value?: string | null) {
+  return value || fallbackProfileColors[id] || "#64748b";
+}
+
+export const emptyPlanningData: PlanningData = {
+  project: {
+    id: "findmydoc-founder-execution",
+    name: "findmydoc Founder Execution",
+    range: "Geschützter Teamzugriff",
+  },
+  profiles: [],
+  packages: [],
+  milestones: [],
+  tasks: [],
+  sprints: [],
+  sprintCommitments: [],
+  decisions: [],
+  decisionComments: [],
+  taskComments: [],
+  taskBlockers: [],
+  notificationEvents: [],
+  notificationDeliveries: [],
+  meetings: [],
+  meetingAttendance: [],
+  audit: [],
+  availability: [],
+};
+
 function mapProfile(row: DbProfile): Profile {
   return {
     id: row.id,
@@ -233,6 +271,7 @@ function mapProfile(row: DbProfile): Profile {
     deputyActiveUntil: row.deputy_active_until || "",
     focus: row.focus || "",
     weeklyCapacity: row.weekly_capacity,
+    color: profileColor(row.id, row.profile_color),
     googleChatUserId: row.google_chat_user_id || "",
     googleChatDmSpace: row.google_chat_dm_space || "",
     notificationsEnabled: row.notifications_enabled !== false,
@@ -242,6 +281,7 @@ function mapProfile(row: DbProfile): Profile {
 function mapPackage(row: DbPackage): Package {
   return {
     id: row.id,
+    milestoneId: row.milestone_id || "",
     title: row.title,
     goal: row.goal || "",
     priority: row.priority || "P2",
@@ -479,8 +519,8 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
 
   const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskBlockerResult, notificationResult, notificationDeliveryResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
-    supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
-    supabase.from("packages").select("id,title,goal,priority,sort_order").order("sort_order"),
+    supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
+    supabase.from("packages").select("id,milestone_id,title,goal,priority,sort_order").order("sort_order"),
     supabase.from("milestones").select("id,title,description,target_date,status,sort_order").eq("project_id", "findmydoc-founder-execution").order("sort_order"),
     supabase
       .from("tasks")

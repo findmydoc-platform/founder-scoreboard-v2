@@ -15,6 +15,7 @@ type CreateTaskPayload = {
   taskType?: TaskType;
   parentTaskId?: string;
   packageId?: string;
+  milestoneId?: string;
   sprintId?: string;
   owner?: string;
   priority?: string;
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
   const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
   const owner = profileId(payload.owner) || permission.profile?.id || null;
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
+  const packageId = payload.packageId || null;
+  let milestoneId = payload.milestoneId || null;
 
   if (taskType === "sub_issue" && !parentTaskId) {
     return NextResponse.json({ error: "Sub-Issue braucht ein Deliverable." }, { status: 400 });
@@ -81,6 +84,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (packageId) {
+    const { data: groupCommitment, error: groupCommitmentError } = await supabase
+      .from("packages")
+      .select("id,milestone_id")
+      .eq("id", packageId)
+      .maybeSingle();
+    if (groupCommitmentError || !groupCommitment) {
+      return NextResponse.json({ error: "Group Commitment wurde nicht gefunden." }, { status: 404 });
+    }
+    milestoneId = milestoneId || groupCommitment.milestone_id || null;
+  }
+
   const { data: maxRow } = await supabase
     .from("tasks")
     .select("sort_order")
@@ -95,7 +110,8 @@ export async function POST(request: NextRequest) {
   const insert = {
     id,
     project_id: "findmydoc-founder-execution",
-    package_id: payload.packageId || null,
+    package_id: packageId,
+    milestone_id: milestoneId,
     title,
     description: typeof payload.description === "string" ? payload.description.trim().slice(0, 4000) : "",
     problem_statement: typeof payload.problemStatement === "string" ? payload.problemStatement.trim().slice(0, 4000) : "",
@@ -189,6 +205,7 @@ export async function POST(request: NextRequest) {
     startDate: created.start_date || "",
     endDate: created.end_date || "",
     sprintId: created.sprint_id || "",
+    milestoneId: created.milestone_id || "",
     reviewStatus: created.review_status || "not_requested",
     scorePoints: created.score_points || 0,
     scoreFinal: Boolean(created.score_final),

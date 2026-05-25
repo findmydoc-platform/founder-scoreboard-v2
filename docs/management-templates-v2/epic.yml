@@ -1,0 +1,34 @@
+name: Epic / Meilenstein
+description: Strategisches Ziel über mehrere Sprints
+title: "[Epic]: "
+labels: ["type:epic"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ein Epic / Meilenstein ist ein strategisches Ziel über mehrere Sprints.
+        Es ist nicht direkt score-relevant. Score-relevant sind nur Deliverables.
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: Problem Statement
+      description: Welches strategische Problem löst dieser Meilenstein?
+    validations:
+      required: true
+
+  - type: textarea
+    id: intended_outcome
+    attributes:
+      label: Intended Outcome
+      description: Welcher Zielzustand soll erreicht sein?
+    validations:
+      required: true
+
+  - type: textarea
+    id: success_signals
+    attributes:
+      label: Erfolgssignale
+      description: Woran erkennen wir, dass der Meilenstein erreicht wurde?
+    validations:
+      required: false
