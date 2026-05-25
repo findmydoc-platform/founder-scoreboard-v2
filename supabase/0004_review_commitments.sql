@@ -29,3 +29,5 @@ drop policy if exists "sprint_commitments_write_team" on sprint_commitments;
 create policy "sprint_commitments_write_team" on sprint_commitments for all to authenticated
 using (public.current_platform_role() in ('ceo', 'founder', 'deputy'))
 with check (public.current_platform_role() in ('ceo', 'founder', 'deputy'));
+
+notify pgrst, 'reload schema';

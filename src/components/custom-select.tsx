@@ -2,6 +2,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type CustomSelectOption = {
   value: string;
@@ -18,6 +19,12 @@ type CustomSelectProps = {
   menuClassName?: string;
 };
 
+type MenuPosition = {
+  top: number;
+  left: number;
+  width: number;
+};
+
 export function CustomSelect({
   value,
   options,
@@ -29,15 +36,40 @@ export function CustomSelect({
 }: CustomSelectProps) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const stringValue = String(value);
   const selectedOption = options.find((option) => option.value === stringValue) || options[0];
 
   useEffect(() => {
     if (!open) return;
 
+    const updateMenuPosition = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
     const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
 
     window.addEventListener("pointerdown", closeOnOutside);
@@ -62,11 +94,13 @@ export function CustomSelect({
         <span className="truncate">{selectedOption?.label || ""}</span>
         <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && (
+      {open && menuPosition && createPortal(
         <div
+          ref={menuRef}
           id={id}
           role="listbox"
-          className={`absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
+          style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.width }}
+          className={`fixed z-[100] max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
         >
           {options.map((option) => {
             const active = option.value === stringValue;
@@ -89,7 +123,8 @@ export function CustomSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
