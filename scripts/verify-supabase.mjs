@@ -1,0 +1,105 @@
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { createClient } from "@supabase/supabase-js";
+
+const envPath = resolve(process.cwd(), ".env.local");
+
+function parseEnvLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  const separator = trimmed.indexOf("=");
+  if (separator < 0) return null;
+
+  const key = trimmed.slice(0, separator).trim();
+  const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, "");
+  return [key, value];
+}
+
+if (existsSync(envPath)) {
+  const envFile = await readFile(envPath, "utf8");
+  for (const pair of envFile.split(/\r?\n/).map(parseEnvLine)) {
+    if (!pair) continue;
+    const [key, value] = pair;
+    process.env[key] ||= value;
+  }
+}
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!url || !key) {
+  console.error("Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.");
+  process.exit(1);
+}
+
+const supabase = createClient(url, key, {
+  auth: { persistSession: false },
+});
+
+async function count(table) {
+  const { count: rowCount, error } = await supabase.from(table).select("*", { count: "exact", head: true });
+  if (error) throw new Error(`${table}: ${error.message}`);
+  return rowCount ?? 0;
+}
+
+const schemaChecks = [
+  { name: "profiles.google_chat", table: "profiles", select: "id,google_chat_user_id,google_chat_dm_space,notifications_enabled" },
+  { name: "notification_preferences", table: "notification_preferences", select: "id,profile_id,channel,event_type,enabled" },
+  { name: "notification_deliveries.payload", table: "notification_deliveries", select: "id,target,payload" },
+  { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },
+  { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
+  { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
+  { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
+  { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
+];
+
+async function checkSchema(check) {
+  const { error } = await supabase.from(check.table).select(check.select).limit(1);
+  return {
+    name: check.name,
+    ok: !error,
+    error: error?.message || "",
+  };
+}
+
+const { data: project, error: projectError } = await supabase
+  .from("projects")
+  .select("id,name,range_label")
+  .eq("id", "findmydoc-founder-execution")
+  .single();
+
+if (projectError) throw new Error(`projects: ${projectError.message}`);
+
+const result = {
+  project: project.name,
+  range: project.range_label,
+  profiles: await count("profiles"),
+  packages: await count("packages"),
+  tasks: await count("tasks"),
+  dependencies: await count("task_dependencies"),
+  links: await count("task_links"),
+  notes: await count("task_notes"),
+  activity: await count("task_activity"),
+  sprints: await count("sprints"),
+  reviews: await count("task_reviews"),
+  decisions: await count("decision_log"),
+  audit: await count("audit_log"),
+  availability: await count("availability"),
+  comments: await count("task_comments"),
+  blockers: await count("task_blockers"),
+  notifications: await count("notification_events"),
+  notificationDeliveries: await count("notification_deliveries"),
+  meetings: await count("meetings"),
+  meetingAttendance: await count("meeting_attendance"),
+  milestones: await count("milestones"),
+  schema: await Promise.all(schemaChecks.map(checkSchema)),
+};
+
+console.log(JSON.stringify(result, null, 2));
+
+const missingSchema = result.schema.filter((check) => !check.ok);
+if (missingSchema.length) {
+  console.error("Supabase schema is incomplete. Run the missing migrations in order, especially 0008_google_chat_delivery.sql, 0009_sprint_carryover.sql and 0010_task_self_checklist.sql.");
+  process.exit(1);
+}
