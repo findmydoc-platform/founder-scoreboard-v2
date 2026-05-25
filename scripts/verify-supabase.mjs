@@ -51,9 +51,14 @@ const schemaChecks = [
   { name: "sprint_commitments", table: "sprint_commitments", select: "id,sprint_id,profile_id,commitment_level,weekly_hours,note" },
   { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
   { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
+  { name: "tasks.created_by", table: "tasks", select: "id,created_by" },
   { name: "packages.group_commitment", table: "packages", select: "id,milestone_id,title,goal,priority" },
   { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
   { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
+  { name: "feedback_items", table: "feedback_items", select: "id,type,status,severity,profile_id,title,description,page_url" },
+  { name: "fmd_tools", table: "fmd_tools", select: "id,name,category,kind,url,owner,status,sort_order" },
+  { name: "task_relationship_edges", table: "task_relationship_edges", select: "id,task_id,related_task_id,relation_type,note" },
+  { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
 ];
 
 async function checkSchema(check) {
@@ -90,7 +95,9 @@ const result = {
   audit: await count("audit_log"),
   availability: await count("availability"),
   comments: await count("task_comments"),
+  externalComments: await count("task_external_comments"),
   blockers: await count("task_blockers"),
+  relationships: await count("task_relationship_edges"),
   notifications: await count("notification_events"),
   notificationDeliveries: await count("notification_deliveries"),
   meetings: await count("meetings"),

@@ -10,6 +10,7 @@ Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatisc
 npm run verify:supabase
 npm run verify:auth
 npm run verify:operational
+npm run verify:github-sync
 npm test
 npm run lint
 npm run build
@@ -100,16 +101,20 @@ Erwartung:
 ## GitHub Sync
 
 Voraussetzung:
-- `GITHUB_SYNC_TOKEN` ist gesetzt.
-- Token hat Zugriff auf `findmydoc-platform/management`.
+- GitHub OAuth Login ist aktiv.
+- Der eingeloggte GitHub-User hat Zugriff auf `findmydoc-platform/management`.
+- Die Supabase OAuth Session enthält einen GitHub User-Token.
 
 Check:
-1. Task öffnen.
-2. `Jetzt spiegeln` klicken.
-3. Link zum GitHub Issue prüfen.
+1. `npm run verify:github-sync` ausführen.
+2. Task öffnen.
+3. `Jetzt spiegeln` klicken.
+4. Link zum GitHub Issue prüfen.
 
 Erwartung:
-- Issue wird im Management-Repo erstellt oder aktualisiert.
+- Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
+- Issue wird im Management-Repo im Namen des eingeloggten GitHub-Users erstellt oder aktualisiert.
+- Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
 - Body enthält Epic / Meilenstein, Group Commitment, Sprint, Review, Score, Blocker und Kommentare.
 - GitHub bleibt one-way Backup, nicht führendes System.
 
@@ -121,11 +126,12 @@ Voraussetzung:
 Check:
 1. Event erzeugen, z. B. Kommentar oder Review-Anfrage.
 2. Einstellungen öffnen.
-3. In `Google Chat Outbox` `Pending senden` klicken.
+3. In `Google Chat Digest` `Digest senden` klicken.
 
 Erwartung:
-- Delivery wird als `sent` oder mit konkretem Fehler gespeichert.
-- Ohne Webhook bleibt die Outbox sichtbar, aber Versand scheitert kontrolliert.
+- Wichtige Events werden als Digest gesendet und je Event als `sent` Delivery gespeichert.
+- Persönliche Einzelhinweise bleiben in der In-App-Notification-Inbox, bis sie geschlossen werden.
+- Ohne Webhook bleibt der Digest sichtbar, aber Versand scheitert kontrolliert.
 
 ## Offene V1-Grenzen
 

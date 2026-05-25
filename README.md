@@ -64,7 +64,7 @@ Als Vorlage für die Zuordnung gibt es `supabase/profile-auth-map.example.sql`.
 - Rollenmodell: `CEO`, `Founder`, `Deputy`, `Viewer` über `profiles.platform_role` und `profiles.github_login`.
 - Planungshierarchie: Epic / Meilenstein -> Group Commitment -> Deliverable -> Sub-Issue. Sprints sind Zeitcontainer für Deliverables.
 - Sprint/Scoring: Aufgaben haben `sprint_id`, Review-Status, Punkte und Score-Lock-Felder.
-- GitHub Sync: One-way App zu `findmydoc-platform/management` mit `GITHUB_SYNC_TOKEN`.
+- GitHub Sync: One-way App zu `findmydoc-platform/management` mit dem eingeloggten GitHub-User-Token aus Supabase OAuth.
 - Decision Log: CEO erstellt/ändert, Founder bestätigen, vollständige Bestätigung lockt den Eintrag.
 - Meeting Finder: V1 nutzt manuelle Arbeitszeiten und Abwesenheiten in Supabase.
 
@@ -82,7 +82,7 @@ Die Hierarchie aus Epic / Meilenstein, Group Commitment, Deliverable und Sub-Iss
 npm run verify:hierarchy
 ```
 
-Erwartet werden aktuell 5 Profile, 5 Packages und 53 Tasks.
+Erwartet werden aktuell 5 Profile, 5 Packages und 54 Tasks.
 
 Die Auth-Zuordnung prüft dieser Befehl:
 
@@ -96,6 +96,12 @@ Der operative Smoke-Test prüft Supabase, Health, Server-Render und Kernmarker d
 
 ```bash
 npm run verify:operational
+```
+
+Der GitHub-Sync-Check prüft read-only, ob Supabase-Mapping, Sync Queue und App-only-Deliverables sauber erkennbar sind. Echte GitHub-Schreibrechte werden im Browser mit dem eingeloggten GitHub-User geprüft:
+
+```bash
+npm run verify:github-sync
 ```
 
 Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.

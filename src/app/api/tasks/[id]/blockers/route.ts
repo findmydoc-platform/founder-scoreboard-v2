@@ -48,7 +48,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (insertError || !blocker) return NextResponse.json({ error: insertError?.message || "Blocker konnte nicht gespeichert werden." }, { status: 500 });
 
-  await supabase.from("tasks").update({ status: "Blockiert" }).eq("id", id);
+  await supabase.from("tasks").update({
+    status: "Blockiert",
+    github_sync_status: "not_synced",
+    github_sync_error: null,
+  }).eq("id", id);
 
   const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
   const notifications = (leads || [])

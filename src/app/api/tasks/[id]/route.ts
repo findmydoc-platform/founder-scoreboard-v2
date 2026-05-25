@@ -13,9 +13,11 @@ type UpdatePayload = {
   acceptanceCriteria?: string;
   evidenceRequired?: string;
   definitionOfDone?: string;
+  packageId?: string;
   milestoneId?: string;
   startDate?: string;
   endDate?: string;
+  deadline?: string;
   dependsOn?: string;
   evidenceLink?: string;
   note?: string;
@@ -43,6 +45,54 @@ function profileId(value?: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+type CurrentTaskForActivity = {
+  status?: string | null;
+  review_status?: string | null;
+  owner?: string | null;
+  priority?: string | null;
+  sprint_id?: string | null;
+  milestone_id?: string | null;
+  package_id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  deadline?: string | null;
+  evidence_link?: string | null;
+};
+
+function formatChange(previous?: string | number | boolean | null, next?: string | number | boolean | null) {
+  const before = previous === undefined || previous === null || previous === "" ? "leer" : String(previous);
+  const after = next === undefined || next === null || next === "" ? "leer" : String(next);
+  return `${before} → ${after}`;
+}
+
+function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForActivity | null) {
+  const messages: string[] = [];
+  if (payload.status && currentTask?.status && payload.status !== currentTask.status) {
+    messages.push(`Status geändert: ${currentTask.status} → ${payload.status}`);
+  }
+  if (payload.reviewStatus && currentTask?.review_status && payload.reviewStatus !== currentTask.review_status) {
+    messages.push(`Review geändert: ${currentTask.review_status} → ${payload.reviewStatus}`);
+  }
+  if (payload.owner !== undefined && payload.owner !== currentTask?.owner) messages.push(`Owner geändert: ${formatChange(currentTask?.owner, payload.owner)}`);
+  if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
+  if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
+  if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
+  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Group Commitment geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
+  if (
+    (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
+    || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)
+    || (payload.deadline !== undefined && payload.deadline !== currentTask?.deadline)
+  ) {
+    messages.push(`Zeitraum geändert: ${formatChange(currentTask?.start_date, payload.startDate ?? currentTask?.start_date)} bis ${formatChange(currentTask?.end_date, payload.endDate ?? currentTask?.end_date)}`);
+  }
+  if (payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined) messages.push("Aufgabenbrief aktualisiert");
+  if (payload.evidenceLink !== undefined && payload.evidenceLink !== currentTask?.evidence_link) messages.push("Evidence-Link geändert");
+  if (payload.selfDodChecked !== undefined || payload.selfEvidenceChecked !== undefined || payload.selfDocumentedChecked !== undefined || payload.selfBlockersChecked !== undefined) messages.push("Founder-Checkliste aktualisiert");
+  if (payload.note !== undefined) messages.push("Notiz aktualisiert");
+  if (payload.dependsOn !== undefined) messages.push("Abhängigkeit aktualisiert");
+  return [...new Set(messages)];
+}
+
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
   if (!supabase) {
@@ -59,15 +109,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,owner,review_status")
+    .select("id,title,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
+  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
+  const restrictedFields = [
+    payload.owner !== undefined ? "Owner" : "",
+    payload.priority !== undefined ? "Priorität" : "",
+    payload.packageId !== undefined ? "Group Commitment" : "",
+    payload.sprintId !== undefined ? "Sprint" : "",
+    payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
+    payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
+    payload.scorePoints !== undefined || payload.scoreFinal !== undefined ? "Score" : "",
+  ].filter(Boolean);
+
+  if (!isOperationalLead && restrictedFields.length) {
+    return NextResponse.json({ error: `Diese Felder sind geschützt: ${restrictedFields.join(", ")}.` }, { status: 403 });
+  }
 
   if (payload.status) {
     if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
       return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
     }
+    if (!isOperationalLead && payload.status === "Erledigt") {
+      return NextResponse.json({ error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt." }, { status: 403 });
+    }
+    if (!isOperationalLead && currentTask?.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
+      return NextResponse.json({ error: "Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden." }, { status: 403 });
+    }
     update.status = payload.status;
+    if (!isOperationalLead && payload.status === "Review") {
+      update.review_status = "requested";
+      update.score_final = false;
+    }
   }
 
   if (payload.priority) {
@@ -90,6 +164,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.milestone_id = nextMilestoneId;
   }
 
+  if (payload.packageId !== undefined) {
+    const nextPackageId = payload.packageId || null;
+    if (nextPackageId) {
+      const { data: groupCommitment, error: groupCommitmentError } = await supabase
+        .from("packages")
+        .select("id,milestone_id")
+        .eq("id", nextPackageId)
+        .single();
+      if (groupCommitmentError || !groupCommitment) return NextResponse.json({ error: "Group Commitment wurde nicht gefunden." }, { status: 404 });
+      update.package_id = nextPackageId;
+      if (payload.milestoneId === undefined) update.milestone_id = groupCommitment.milestone_id || null;
+    } else {
+      update.package_id = null;
+    }
+  }
+
   if (payload.owner) {
     const nextOwner = profileId(payload.owner);
     update.owner = nextOwner || null;
@@ -98,13 +188,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.startDate !== undefined) update.start_date = payload.startDate || null;
   if (payload.endDate !== undefined) update.end_date = payload.endDate || null;
+  if (payload.deadline !== undefined) update.deadline = payload.deadline || null;
   if (payload.problemStatement !== undefined) update.problem_statement = payload.problemStatement.trim().slice(0, 4000) || null;
   if (payload.intendedOutcome !== undefined) update.intended_outcome = payload.intendedOutcome.trim().slice(0, 4000) || null;
   if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim().slice(0, 4000) || null;
   if (payload.acceptanceCriteria !== undefined) update.acceptance_criteria = payload.acceptanceCriteria.trim().slice(0, 6000) || null;
   if (payload.evidenceRequired !== undefined) update.evidence_required = payload.evidenceRequired.trim().slice(0, 4000) || null;
   if (payload.definitionOfDone !== undefined) update.definition_of_done = payload.definitionOfDone.trim().slice(0, 4000) || null;
-  if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 1000) || null;
+  if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
 
   if (payload.sprintId !== undefined) {
     const nextSprintId = payload.sprintId || null;
@@ -124,8 +215,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!reviewStatuses.has(payload.reviewStatus)) {
       return NextResponse.json({ error: "Ungültiger Review-Status." }, { status: 400 });
     }
+    if (!isOperationalLead && payload.reviewStatus !== "requested") {
+      return NextResponse.json({ error: "Founder können Review nur anfragen. Final bewertet wird im CEO-Review." }, { status: 403 });
+    }
     update.review_status = payload.reviewStatus;
     update.score_final = ["accepted", "partial", "changes_requested"].includes(payload.reviewStatus);
+    if (!isOperationalLead) update.score_final = false;
   }
 
   if (payload.scorePoints !== undefined) {
@@ -147,6 +242,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.selfEvidenceChecked !== undefined) update.self_evidence_checked = Boolean(payload.selfEvidenceChecked);
   if (payload.selfDocumentedChecked !== undefined) update.self_documented_checked = Boolean(payload.selfDocumentedChecked);
   if (payload.selfBlockersChecked !== undefined) update.self_blockers_checked = Boolean(payload.selfBlockersChecked);
+
+  if (Object.keys(update).length && payload.githubSyncStatus === undefined) {
+    update.github_sync_status = "not_synced";
+    update.github_sync_error = null;
+  }
 
   if (Object.keys(update).length) {
     const { error } = await supabase.from("tasks").update(update).eq("id", id);
@@ -170,14 +270,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
+  let activities: Array<{ id: number; taskId: string; message: string; createdAt: string }> = [];
   if (Object.keys(update).length || payload.note !== undefined || payload.dependsOn !== undefined) {
-    await supabase.from("task_activity").insert({
-      task_id: id,
-      message: "Aufgabe aktualisiert",
-    });
+    const messages = activityMessages(payload, currentTask);
+    if (messages.length) {
+      const { data: activityRows } = await supabase.from("task_activity").insert(
+        messages.map((message) => ({
+          task_id: id,
+          message,
+        })),
+      ).select("id,task_id,message,created_at");
+      activities = (activityRows || []).map((activity) => ({
+        id: activity.id,
+        taskId: activity.task_id,
+        message: activity.message,
+        createdAt: activity.created_at,
+      }));
+    }
   }
 
-  if (currentTask && payload.reviewStatus === "requested" && currentTask.review_status !== "requested") {
+  if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {
     const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
     const notifications = (leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
@@ -195,6 +307,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, activities });
 }
 

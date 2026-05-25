@@ -2026,9 +2026,70 @@ export const seedData: PlanningData = {
   "decisions": [],
   "decisionComments": [],
   "taskComments": [],
+  "taskExternalComments": [],
   "taskBlockers": [],
+  "taskRelations": [],
+  "taskActivity": [],
   "notificationEvents": [],
   "notificationDeliveries": [],
+  "feedbackItems": [],
+  "fmdTools": [
+    {
+      "id": "email-signature-tool",
+      "name": "E-Mail-Signatur Tool",
+      "category": "tool",
+      "kind": "Web Tool",
+      "description": "Sebastians Generator für konsistente findmydoc E-Mail-Signaturen.",
+      "url": "https://mailsig.findmydoc.eu/",
+      "owner": "Sebastian",
+      "status": "active",
+      "sortOrder": 10
+    },
+    {
+      "id": "investor-calculator",
+      "name": "Investorenrechner",
+      "category": "tool",
+      "kind": "Finance Tool",
+      "description": "Finanz-, Runway- und Liquiditätsplanungsrechner für Investorengespräche.",
+      "url": "",
+      "owner": "Volkan",
+      "status": "missing_link",
+      "sortOrder": 20
+    },
+    {
+      "id": "sebastian-crawler",
+      "name": "Sebastians Crawler",
+      "category": "tool",
+      "kind": "Crawler",
+      "description": "Crawler/Automation für Recherche, Datenaufbereitung oder Pipeline-Zuarbeit.",
+      "url": "",
+      "owner": "Sebastian",
+      "status": "missing_link",
+      "sortOrder": 40
+    },
+    {
+      "id": "notion-docs-source",
+      "name": "Notion Dokumente",
+      "category": "knowledge",
+      "kind": "Notion",
+      "description": "Single Source of Truth für Strategie, Prozesse, Briefings und laufende Dokumentation.",
+      "url": "https://www.notion.so/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db",
+      "owner": "Team",
+      "status": "active",
+      "sortOrder": 60
+    },
+    {
+      "id": "google-drive-assets",
+      "name": "Google Drive Assets",
+      "category": "asset",
+      "kind": "Google Drive",
+      "description": "Bilder, Videos, statische Dokumente, Präsentationen und weitere Dateien.",
+      "url": "https://drive.google.com/drive/shared-drives",
+      "owner": "Team",
+      "status": "active",
+      "sortOrder": 70
+    }
+  ],
   "meetings": [
     {
       "id": 1,

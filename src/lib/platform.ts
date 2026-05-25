@@ -1,4 +1,4 @@
-import type { Profile, Task } from "./types";
+import type { Profile, Task, TaskRelation, TaskRelationType } from "./types";
 
 export function reviewLabel(status: Task["reviewStatus"]) {
   const labels: Record<Task["reviewStatus"], string> = {
@@ -19,6 +19,43 @@ export function syncLabel(status: Task["githubSyncStatus"]) {
     failed: "Sync fehlgeschlagen",
   };
   return labels[status];
+}
+
+export function hasGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
+  return Boolean(
+    task.githubIssueNumber ||
+    task.githubIssueUrl ||
+    task.issueNumber ||
+    task.issueUrl.includes("github.com"),
+  );
+}
+
+export function relationLabel(type: TaskRelationType) {
+  if (type === "blocked_by") return "Wartet auf";
+  if (type === "blocks") return "Blockiert";
+  return "Verknüpft mit";
+}
+
+export function taskRelationsFor(taskId: string, relations: TaskRelation[]) {
+  const waitsOn = relations.filter((relation) => relation.taskId === taskId && relation.relationType === "blocked_by");
+  const blocks = relations.filter((relation) =>
+    (relation.taskId === taskId && relation.relationType === "blocks") ||
+    (relation.relatedTaskId === taskId && relation.relationType === "blocked_by")
+  );
+  const related = relations.filter((relation) =>
+    relation.relationType === "relates_to" &&
+    (relation.taskId === taskId || relation.relatedTaskId === taskId)
+  );
+
+  return { waitsOn, blocks, related };
+}
+
+export function hasOpenWaitingRelation(taskId: string, tasks: Task[], relations: TaskRelation[]) {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  return taskRelationsFor(taskId, relations).waitsOn.some((relation) => {
+    const blockingTask = taskById.get(relation.relatedTaskId);
+    return blockingTask && blockingTask.status !== "Erledigt";
+  });
 }
 
 export function roleLabel(profile: Profile) {

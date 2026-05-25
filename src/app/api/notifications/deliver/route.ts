@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
-import { googleChatTarget, hasGoogleChatWebhook, sendGoogleChatWebhook, type GoogleChatDeliveryEvent } from "@/lib/google-chat";
+import { googleChatTarget, hasGoogleChatWebhook, sendGoogleChatDigest, shouldSendToGoogleChatDigest, type GoogleChatDigestEvent } from "@/lib/google-chat";
 import { getServerSupabase } from "@/lib/supabase";
 
 type NotificationRow = {
@@ -32,6 +32,14 @@ function safeLimit(value: unknown) {
 function statusCodeForError(errorMessage: string) {
   if (errorMessage.includes("GOOGLE_CHAT_WEBHOOK_URL")) return 424;
   return 502;
+}
+
+function appUrlFromRequest(request: NextRequest) {
+  const configured = process.env.APP_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  const proto = request.headers.get("x-forwarded-proto") || "http";
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+  return `${proto}://${host}`;
 }
 
 export async function GET(request: NextRequest) {
@@ -75,6 +83,21 @@ export async function POST(request: NextRequest) {
   if (eventError) return NextResponse.json({ error: eventError.message }, { status: 500 });
   if (!events?.length) return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });
 
+  const eventIds = (events as NotificationRow[]).map((event) => event.id);
+  const { data: existingDeliveries, error: deliveryReadError } = await supabase
+    .from("notification_deliveries")
+    .select("event_id,status")
+    .eq("channel", "google_chat")
+    .in("event_id", eventIds);
+
+  if (deliveryReadError) return NextResponse.json({ error: deliveryReadError.message }, { status: 500 });
+
+  const alreadyDelivered = new Set(
+    (existingDeliveries || [])
+      .filter((delivery: { event_id: number; status: string }) => delivery.status === "sent")
+      .map((delivery: { event_id: number }) => delivery.event_id),
+  );
+
   const profileIds = new Set<string>();
   for (const event of events as NotificationRow[]) {
     if (event.actor_profile_id) profileIds.add(event.actor_profile_id);
@@ -90,6 +113,8 @@ export async function POST(request: NextRequest) {
 
   const profiles = new Map((profileResult.data || []).map((profile: ProfileRow) => [profile.id, profile]));
   const results: Array<{ eventId: number; status: "sent" | "failed" | "skipped"; error?: string }> = [];
+  const digestEvents: GoogleChatDigestEvent[] = [];
+  const digestRows: Array<{ row: NotificationRow; target: string; payload: GoogleChatDigestEvent }> = [];
 
   for (const row of events as NotificationRow[]) {
     const actor = row.actor_profile_id ? profiles.get(row.actor_profile_id) : null;
@@ -98,7 +123,7 @@ export async function POST(request: NextRequest) {
       googleChatDmSpace: recipient.google_chat_dm_space || "",
       googleChatUserId: recipient.google_chat_user_id || "",
     } : null);
-    const deliveryEvent: GoogleChatDeliveryEvent = {
+    const deliveryEvent: GoogleChatDigestEvent = {
       id: row.id,
       type: row.type,
       title: row.title,
@@ -110,8 +135,17 @@ export async function POST(request: NextRequest) {
       recipientName: recipient?.name || "",
     };
 
+    if (alreadyDelivered.has(row.id)) {
+      results.push({ eventId: row.id, status: "skipped", error: "Bereits im Google-Chat-Digest gesendet." });
+      continue;
+    }
+
+    if (!shouldSendToGoogleChatDigest(row.type)) {
+      results.push({ eventId: row.id, status: "skipped", error: "Nur In-App-Benachrichtigung." });
+      continue;
+    }
+
     if (recipient?.notifications_enabled === false) {
-      await supabase.from("notification_events").update({ status: "dismissed" }).eq("id", row.id);
       await supabase.from("notification_deliveries").insert({
         event_id: row.id,
         channel: "google_chat",
@@ -125,33 +159,43 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    try {
-      await sendGoogleChatWebhook(deliveryEvent);
-      await supabase.from("notification_deliveries").insert({
+    digestEvents.push(deliveryEvent);
+    digestRows.push({ row, target, payload: deliveryEvent });
+  }
+
+  if (!digestEvents.length) {
+    return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: results.length, results });
+  }
+
+  try {
+    await sendGoogleChatDigest(digestEvents, appUrlFromRequest(request));
+    const deliveredAt = new Date().toISOString();
+    await supabase.from("notification_deliveries").insert(
+      digestRows.map(({ row, target, payload }) => ({
         event_id: row.id,
         channel: "google_chat",
         status: "sent",
         attempts: 1,
         target,
-        payload: deliveryEvent,
-        delivered_at: new Date().toISOString(),
-      });
-      await supabase.from("notification_events").update({ status: "sent" }).eq("id", row.id);
-      results.push({ eventId: row.id, status: "sent" });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Google Chat Versand fehlgeschlagen.";
-      await supabase.from("notification_deliveries").insert({
+        payload: { ...payload, digestSize: digestEvents.length },
+        delivered_at: deliveredAt,
+      })),
+    );
+    results.push(...digestRows.map(({ row }) => ({ eventId: row.id, status: "sent" as const })));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Google Chat Versand fehlgeschlagen.";
+    await supabase.from("notification_deliveries").insert(
+      digestRows.map(({ row, target, payload }) => ({
         event_id: row.id,
         channel: "google_chat",
         status: "failed",
         attempts: 1,
         target,
-        payload: deliveryEvent,
+        payload,
         last_error: message,
-      });
-      await supabase.from("notification_events").update({ status: "failed" }).eq("id", row.id);
-      results.push({ eventId: row.id, status: "failed", error: message });
-    }
+      })),
+    );
+    results.push(...digestRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error: message })));
   }
 
   const sent = results.filter((result) => result.status === "sent").length;

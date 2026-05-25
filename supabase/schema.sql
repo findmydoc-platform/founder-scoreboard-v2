@@ -33,6 +33,7 @@ create table if not exists tasks (
   priority text not null,
   owner text references profiles(id) on delete set null,
   assignee text references profiles(id) on delete set null,
+  created_by text references profiles(id) on delete set null,
   workstream text,
   sort_order integer not null default 0,
   start_date date,

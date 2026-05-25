@@ -1,24 +1,26 @@
 ---
 name: fmd-planning-security
-description: Use when changing or reviewing Founder Scoreboard authentication, logout, Supabase sessions, API authorization guards, role mapping, provider tokens, RLS policies, or any code path that could expose planning data without a valid team session.
+description: Use when changing or reviewing Founder Scoreboard authentication, logout, Supabase sessions, API authorization guards, role mapping, provider tokens, RLS policies, SQL grants, or any code path that could expose planning data without a valid team session.
 ---
 
 # FMD Planning Security
+
+Canonical discoverable copy: `.agents/skills/fmd-planning-security/SKILL.md`.
 
 ## Goal
 
 Keep Founder Scoreboard data private to mapped team users and make security-relevant gaps visible before they ship.
 
-## Required Workflow
+## Required workflow
 
 1. Identify the trust boundary first: browser session, API route, Supabase service role, anon client, GitHub provider token, or RLS policy.
 2. Fail closed when `REQUIRE_SUPABASE_AUTH=true`: do not render, serialize, cache, or fetch planning data until a valid Supabase session has been checked.
-3. Treat logout as a security transition: revoke/clear the session, clear local protected state, close sensitive panels, and show a visible German status message.
+3. Treat logout as a security transition: revoke or clear the session, clear local protected state, close sensitive panels, and show a visible German status message.
 4. Check every write API for `requireFounder`, `requireOperationalLead`, `requireCEO`, or an equally explicit role guard.
 5. Never persist or log Supabase access tokens, refresh tokens, GitHub `provider_token`, or Authorization headers.
-6. Add or update a focused contract test for any auth, role, guard, logout, or data-loading change.
+6. Add or update a focused contract test for any auth, role, guard, logout, RLS, grant, or data-loading change.
 
-## Project Checks
+## Project checks
 
 Run after meaningful security changes:
 
@@ -35,7 +37,7 @@ npm run verify:auth
 npm run verify:supabase
 ```
 
-## Red Flags
+## Red flags
 
 - Server components returning Supabase data while strict auth is enabled but no request session has been verified.
 - Client UI hiding data while the same data is still serialized into the initial page payload.

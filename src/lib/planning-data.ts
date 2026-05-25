@@ -1,6 +1,6 @@
 import { seedData } from "./generated/seed-data";
 import { getServerSupabase } from "./supabase";
-import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, Package, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskBlocker, TaskComment } from "./types";
+import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, Package, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "./types";
 
 type DbProfile = {
   id: string;
@@ -47,6 +47,7 @@ type DbTask = {
   priority: string;
   owner: string | null;
   assignee: string | null;
+  created_by: string | null;
   workstream: string | null;
   package_id: string | null;
   deadline: string | null;
@@ -163,6 +164,19 @@ type DbTaskComment = {
   created_at: string;
 };
 
+type DbTaskExternalComment = {
+  id: number;
+  task_id: string;
+  source: TaskExternalComment["source"];
+  external_id: string;
+  author_login: string;
+  author_avatar_url: string | null;
+  body: string;
+  html_url: string | null;
+  created_at: string;
+  imported_at: string;
+};
+
 type DbTaskBlocker = {
   id: number;
   task_id: string;
@@ -173,6 +187,23 @@ type DbTaskBlocker = {
   status: TaskBlocker["status"];
   created_at: string;
   resolved_at: string | null;
+};
+
+type DbTaskRelation = {
+  id: number;
+  task_id: string;
+  related_task_id: string;
+  relation_type: TaskRelation["relationType"];
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+type DbTaskActivity = {
+  id: number;
+  task_id: string;
+  message: string;
+  created_at: string;
 };
 
 type DbNotificationEvent = {
@@ -198,6 +229,30 @@ type DbNotificationDelivery = {
   last_error: string | null;
   delivered_at: string | null;
   created_at: string;
+};
+
+type DbFeedbackItem = {
+  id: number;
+  type: FeedbackItem["type"];
+  status: FeedbackItem["status"];
+  severity: FeedbackItem["severity"];
+  profile_id: string | null;
+  title: string;
+  description: string;
+  page_url: string | null;
+  created_at: string;
+};
+
+type DbFmdTool = {
+  id: string;
+  name: string;
+  category: FmdTool["category"];
+  kind: string;
+  description: string | null;
+  url: string | null;
+  owner: string | null;
+  status: FmdTool["status"];
+  sort_order: number;
 };
 
 type DbMeeting = {
@@ -249,9 +304,14 @@ export const emptyPlanningData: PlanningData = {
   decisions: [],
   decisionComments: [],
   taskComments: [],
+  taskExternalComments: [],
   taskBlockers: [],
+  taskRelations: [],
+  taskActivity: [],
   notificationEvents: [],
   notificationDeliveries: [],
+  feedbackItems: [],
+  fmdTools: [],
   meetings: [],
   meetingAttendance: [],
   audit: [],
@@ -303,6 +363,7 @@ function mapMilestone(row: DbMilestone): Milestone {
 function mapTask(row: DbTask, profiles: Profile[]): Task {
   const owner = profiles.find((profile) => profile.id === row.owner)?.name || row.owner || "Unassigned";
   const assignee = profiles.find((profile) => profile.id === row.assignee)?.name || row.assignee || owner;
+  const createdBy = profiles.find((profile) => profile.id === row.created_by)?.name || row.created_by || "";
 
   return {
     id: row.id,
@@ -313,6 +374,7 @@ function mapTask(row: DbTask, profiles: Profile[]): Task {
     priority: row.priority,
     owner,
     assignee,
+    createdBy,
     workstream: row.workstream || "",
     packageId: row.package_id || "",
     deadline: row.deadline || "",
@@ -444,6 +506,21 @@ function mapTaskComment(row: DbTaskComment): TaskComment {
   };
 }
 
+function mapTaskExternalComment(row: DbTaskExternalComment): TaskExternalComment {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    source: row.source,
+    externalId: row.external_id,
+    authorLogin: row.author_login,
+    authorAvatarUrl: row.author_avatar_url || "",
+    body: row.body,
+    htmlUrl: row.html_url || "",
+    createdAt: row.created_at,
+    importedAt: row.imported_at,
+  };
+}
+
 function mapTaskBlocker(row: DbTaskBlocker): TaskBlocker {
   return {
     id: row.id,
@@ -455,6 +532,27 @@ function mapTaskBlocker(row: DbTaskBlocker): TaskBlocker {
     status: row.status,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at || "",
+  };
+}
+
+function mapTaskRelation(row: DbTaskRelation): TaskRelation {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    relatedTaskId: row.related_task_id,
+    relationType: row.relation_type,
+    note: row.note || "",
+    createdBy: row.created_by || "",
+    createdAt: row.created_at,
+  };
+}
+
+function mapTaskActivity(row: DbTaskActivity): TaskActivity {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    message: row.message,
+    createdAt: row.created_at,
   };
 }
 
@@ -484,6 +582,34 @@ function mapNotificationDelivery(row: DbNotificationDelivery): NotificationDeliv
     lastError: row.last_error || "",
     deliveredAt: row.delivered_at || "",
     createdAt: row.created_at,
+  };
+}
+
+function mapFeedbackItem(row: DbFeedbackItem): FeedbackItem {
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    severity: row.severity,
+    profileId: row.profile_id || "",
+    title: row.title,
+    description: row.description,
+    pageUrl: row.page_url || "",
+    createdAt: row.created_at,
+  };
+}
+
+function mapFmdTool(row: DbFmdTool): FmdTool {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    kind: row.kind,
+    description: row.description || "",
+    url: row.url || "",
+    owner: row.owner || "",
+    status: row.status,
+    sortOrder: row.sort_order,
   };
 }
 
@@ -517,7 +643,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
   const supabase = getServerSupabase();
   if (!supabase) return { data: seedData, source: "seed" };
 
-  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskBlockerResult, notificationResult, notificationDeliveryResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
+  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, notificationResult, notificationDeliveryResult, feedbackResult, fmdToolResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
     supabase.from("packages").select("id,milestone_id,title,goal,priority,sort_order").order("sort_order"),
@@ -532,9 +658,14 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
     supabase.from("decision_log").select("id,title,context,decision,status,required_profile_ids,created_by,locked_at,decision_confirmations(profile_id)").order("created_at", { ascending: false }),
     supabase.from("decision_comments").select("id,decision_id,profile_id,type,comment,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at").order("created_at", { ascending: false }).limit(200),
+    supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").order("created_at", { ascending: false }).limit(300),
     supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").order("created_at", { ascending: false }).limit(200),
+    supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).limit(500),
+    supabase.from("task_activity").select("id,task_id,message,created_at").order("created_at", { ascending: true }).limit(500),
     supabase.from("notification_events").select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
+    supabase.from("feedback_items").select("id,type,status,severity,profile_id,title,description,page_url,created_at").order("created_at", { ascending: false }).limit(100),
+    supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,sort_order").order("sort_order"),
     supabase.from("meetings").select("id,sprint_id,title,meeting_at,status,agenda").order("meeting_at", { ascending: false }).limit(100),
     supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at").order("updated_at", { ascending: false }).limit(300),
     supabase.from("audit_log").select("id,entity_type,entity_id,action,actor_profile_id,created_at,before_data,after_data").eq("entity_type", "decision").order("created_at", { ascending: false }).limit(100),
@@ -564,9 +695,14 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
       decisions: decisionResult.error ? [] : (decisionResult.data as DbDecision[]).map(mapDecision),
       decisionComments: commentResult.error ? [] : (commentResult.data as DbDecisionComment[]).map(mapDecisionComment),
       taskComments: taskCommentResult.error ? [] : (taskCommentResult.data as DbTaskComment[]).map(mapTaskComment),
+      taskExternalComments: taskExternalCommentResult.error ? [] : (taskExternalCommentResult.data as DbTaskExternalComment[]).map(mapTaskExternalComment),
       taskBlockers: taskBlockerResult.error ? [] : (taskBlockerResult.data as DbTaskBlocker[]).map(mapTaskBlocker),
+      taskRelations: taskRelationResult.error ? [] : (taskRelationResult.data as DbTaskRelation[]).map(mapTaskRelation),
+      taskActivity: taskActivityResult.error ? [] : (taskActivityResult.data as DbTaskActivity[]).map(mapTaskActivity),
       notificationEvents: notificationResult.error ? [] : (notificationResult.data as DbNotificationEvent[]).map(mapNotificationEvent),
       notificationDeliveries: notificationDeliveryResult.error ? [] : (notificationDeliveryResult.data as DbNotificationDelivery[]).map(mapNotificationDelivery),
+      feedbackItems: feedbackResult.error ? [] : (feedbackResult.data as DbFeedbackItem[]).map(mapFeedbackItem),
+      fmdTools: fmdToolResult.error ? [] : (fmdToolResult.data as DbFmdTool[]).map(mapFmdTool),
       meetings: meetingResult.error ? [] : (meetingResult.data as DbMeeting[]).map(mapMeeting),
       meetingAttendance: meetingAttendanceResult.error ? [] : (meetingAttendanceResult.data as DbMeetingAttendance[]).map(mapMeetingAttendance),
       audit: auditResult.error ? [] : (auditResult.data as DbAuditEntry[]).map(mapAuditEntry),

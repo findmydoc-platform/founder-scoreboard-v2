@@ -83,7 +83,7 @@ const result = {
   },
   env: {
     requireSupabaseAuth: process.env.REQUIRE_SUPABASE_AUTH === "true",
-    githubSyncConfigured: Boolean(process.env.GITHUB_SYNC_TOKEN),
+    githubSyncMode: "logged_in_github_user_provider_token",
     googleChatConfigured: Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL),
   },
 };
@@ -91,11 +91,12 @@ const result = {
 console.log(JSON.stringify(result, null, 2));
 
 const failedMarkers = Object.entries(pageResult.markers).filter(([, ok]) => !ok).map(([marker]) => marker);
+const authGateEnabled = process.env.REQUIRE_SUPABASE_AUTH === "true";
 const failures = [
   healthResult.statusCode !== 200 ? `health status ${healthResult.statusCode}` : "",
   healthResult.body?.status !== "ready" ? `health body status ${healthResult.body?.status}` : "",
   pageResult.statusCode !== 200 ? `page status ${pageResult.statusCode}` : "",
-  failedMarkers.length ? `missing page markers: ${failedMarkers.join(", ")}` : "",
+  !authGateEnabled && failedMarkers.length ? `missing page markers: ${failedMarkers.join(", ")}` : "",
   result.data.profiles !== 5 ? `expected 5 profiles, got ${result.data.profiles}` : "",
   result.data.ceos !== 1 ? `expected 1 CEO, got ${result.data.ceos}` : "",
   result.data.githubMappedProfiles !== 5 ? `expected 5 github-mapped profiles, got ${result.data.githubMappedProfiles}` : "",

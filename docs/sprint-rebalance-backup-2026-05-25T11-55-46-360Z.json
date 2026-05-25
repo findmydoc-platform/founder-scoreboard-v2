@@ -1,0 +1,488 @@
+[
+  {
+    "id": "sebastian-bookimed-crawler-daten-als-notion-csv-prospect-liste-bereitstellen",
+    "title": "Bookimed-Crawler-Daten als Notion/CSV Prospect-Liste bereitstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-06-06",
+    "end_date": "2026-06-08"
+  },
+  {
+    "id": "ozen-content-claim-guardrails-definieren",
+    "title": "Content-/Claim-Guardrails definieren",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-18",
+    "end_date": "2026-06-20"
+  },
+  {
+    "id": "youssef-outreach-sequenz-fur-warme-kontakte-graue-prospects-finalisieren",
+    "title": "Outreach-Sequenz für warme Kontakte + graue Prospects finalisieren",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-06-22",
+    "end_date": "2026-06-24"
+  },
+  {
+    "id": "anil-klinik-stakeholder-bereinigen-und-p0-markieren",
+    "title": "`Klinik Stakeholder` bereinigen und P0 markieren",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC4",
+    "start_date": "2026-06-10",
+    "end_date": "2026-06-12"
+  },
+  {
+    "id": "volkan-loi-light-strategie-entscheiden",
+    "title": "LOI-Light Strategie entscheiden",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-05-25",
+    "end_date": "2026-05-27"
+  },
+  {
+    "id": "sebastian-bookimed-prospects-mit-qualitats-und-relevanzsignalen-erweitern",
+    "title": "Bookimed Prospects mit Qualitäts- und Relevanzsignalen erweitern",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-06-08",
+    "end_date": "2026-06-10"
+  },
+  {
+    "id": "youssef-englische-klinik-setter-outreach-welle-starten",
+    "title": "Englische Klinik-Setter-Outreach-Welle starten",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-06-22",
+    "end_date": "2026-06-24"
+  },
+  {
+    "id": "volkan-aktivierungsregel-fur-alle-warmen-klinik-messekontakte-freigeben",
+    "title": "Aktivierungsregel für alle warmen Klinik-Messekontakte freigeben",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-05-25",
+    "end_date": "2026-05-27"
+  },
+  {
+    "id": "anil-crm-regel-fur-graue-prospects-anlegen",
+    "title": "CRM-Regel für graue Prospects anlegen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC4",
+    "start_date": "2026-06-12",
+    "end_date": "2026-06-14"
+  },
+  {
+    "id": "ozen-website-legal-go-live-check-vorbereiten",
+    "title": "Website Legal Go-Live Check vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-18",
+    "end_date": "2026-06-20"
+  },
+  {
+    "id": "sebastian-contact-404-beheben-oder-links-umstellen",
+    "title": "Contact-404 beheben oder Links umstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-02",
+    "end_date": "2026-06-04"
+  },
+  {
+    "id": "sebastian-register-clinic-submission-prufen",
+    "title": "Register Clinic Submission prüfen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-04",
+    "end_date": "2026-06-06"
+  },
+  {
+    "id": "anil-clinic-onboarding-checkliste-erstellen",
+    "title": "Clinic-Onboarding-Checkliste erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-06-12",
+    "end_date": "2026-06-14"
+  },
+  {
+    "id": "youssef-partner-landing-copy-und-trust-claims-reviewen",
+    "title": "Partner Landing Copy und Trust-Claims reviewen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC1",
+    "start_date": "2026-06-24",
+    "end_date": "2026-06-26"
+  },
+  {
+    "id": "volkan-funding-narrative-zweistufig-festlegen",
+    "title": "Funding-Narrative zweistufig festlegen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-05-27",
+    "end_date": "2026-05-29"
+  },
+  {
+    "id": "ozen-privacy-policy-und-imprint-platzhalter-ersetzen-lassen",
+    "title": "Privacy Policy und Imprint Platzhalter ersetzen lassen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-18",
+    "end_date": "2026-06-20"
+  },
+  {
+    "id": "ozen-loi-und-graue-prospect-nutzung-zur-legal-prufung-vorbereiten",
+    "title": "LOI und graue Prospect-Nutzung zur Legal-Prüfung vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-20",
+    "end_date": "2026-06-22"
+  },
+  {
+    "id": "youssef-website-texte-seo-und-wording-review-erstellen",
+    "title": "Website-Texte SEO- und Wording-Review erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC5",
+    "start_date": "2026-06-24",
+    "end_date": "2026-06-26"
+  },
+  {
+    "id": "anil-investorendatenbank-felder-und-ansicht-in-notion-definieren",
+    "title": "Investorendatenbank-Felder und Ansicht in Notion definieren",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC4",
+    "start_date": "2026-06-12",
+    "end_date": "2026-06-14"
+  },
+  {
+    "id": "sebastian-clinic-contact-form-submission-prufen",
+    "title": "Clinic Contact Form Submission prüfen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-04",
+    "end_date": "2026-06-06"
+  },
+  {
+    "id": "volkan-ceo-briefing-fur-pitchdeck-v2-liefern",
+    "title": "CEO-Briefing für Pitchdeck v2 liefern",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-05-27",
+    "end_date": "2026-05-29"
+  },
+  {
+    "id": "youssef-pitchdeck-v2-ownern-und-umsetzen",
+    "title": "Pitchdeck v2 ownern und umsetzen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-06-24",
+    "end_date": "2026-06-26"
+  },
+  {
+    "id": "volkan-gtm-prioritaten-freigeben",
+    "title": "GTM-Prioritäten freigeben",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC5",
+    "start_date": "2026-05-25",
+    "end_date": "2026-05-27"
+  },
+  {
+    "id": "sebastian-website-fur-echte-klinik-onboardings-verifizieren",
+    "title": "Website für echte Klinik-Onboardings verifizieren",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-04",
+    "end_date": "2026-06-06"
+  },
+  {
+    "id": "ozen-prospecting-crawler-daten-do-don-t-liste-vorbereiten",
+    "title": "Prospecting-/Crawler-Daten Do/Don't-Liste vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-20",
+    "end_date": "2026-06-22"
+  },
+  {
+    "id": "anil-documents-register-in-notion-anlegen",
+    "title": "Documents Register in Notion anlegen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC4",
+    "start_date": "2026-06-14",
+    "end_date": "2026-06-16"
+  },
+  {
+    "id": "sebastian-map-interaktion-auf-klinikdetailseite-fixen",
+    "title": "Map-Interaktion auf Klinikdetailseite fixen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC1",
+    "start_date": "2026-06-02",
+    "end_date": "2026-06-04"
+  },
+  {
+    "id": "anil-dusseldorf-expo-outreach-und-meetingplan-erstellen",
+    "title": "Düsseldorf Expo Outreach- und Meetingplan erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC2",
+    "start_date": "2026-06-14",
+    "end_date": "2026-06-16"
+  },
+  {
+    "id": "youssef-malta-enterprise-versandpaket-vorbereiten",
+    "title": "Malta Enterprise Versandpaket vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-06-26",
+    "end_date": "2026-06-28"
+  },
+  {
+    "id": "ozen-founder-ip-marke-anwalt-briefing-vorbereiten",
+    "title": "Founder/IP/Marke Anwalt-Briefing vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-20",
+    "end_date": "2026-06-22"
+  },
+  {
+    "id": "volkan-warme-kontakte-nach-aktivierungswelle-anschreiben-ubergeben",
+    "title": "Warme Kontakte nach Aktivierungswelle anschreiben/übergeben",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-05-27",
+    "end_date": "2026-05-29"
+  },
+  {
+    "id": "sebastian-seed-preview-daten-sichtbar-und-intern-kennzeichnen",
+    "title": "Seed-/Preview-Daten sichtbar und intern kennzeichnen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-06",
+    "end_date": "2026-06-08"
+  },
+  {
+    "id": "volkan-schlanke-notion-struktur-und-de-en-dokumentenregel-freigeben",
+    "title": "Schlanke Notion-Struktur und DE/EN-Dokumentenregel freigeben",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC4",
+    "start_date": "2026-05-31",
+    "end_date": "2026-06-02"
+  },
+  {
+    "id": "anil-curemeabroad-feature-audit-erstellen",
+    "title": "CureMeAbroad Feature-Audit erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC5",
+    "start_date": "2026-06-14",
+    "end_date": "2026-06-16"
+  },
+  {
+    "id": "youssef-investor-e-mails-reviewen-und-template-erstellen",
+    "title": "Investor-E-Mails reviewen und Template erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-06-26",
+    "end_date": "2026-06-28"
+  },
+  {
+    "id": "ozen-malta-uk-deutschland-advisor-fragen-bundeln",
+    "title": "Malta/UK/Deutschland Advisor-Fragen bündeln",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC1",
+    "start_date": "2026-06-22",
+    "end_date": "2026-06-24"
+  },
+  {
+    "id": "anil-content-dokumentenregister-fur-blog-pflegen",
+    "title": "Content-/Dokumentenregister für Blog pflegen",
+    "sprint_id": "sprint-1",
+    "priority": "P3",
+    "package_id": "GC4",
+    "start_date": "2026-06-16",
+    "end_date": "2026-06-18"
+  },
+  {
+    "id": "youssef-linkedin-founder-update-vorbereiten",
+    "title": "LinkedIn Founder Update vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC3",
+    "start_date": "2026-06-26",
+    "end_date": "2026-06-28"
+  },
+  {
+    "id": "sebastian-unbelegte-trust-elemente-technisch-entfernen-oder-als-preview-markieren",
+    "title": "Unbelegte Trust-Elemente technisch entfernen oder als Preview markieren",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-06-06",
+    "end_date": "2026-06-08"
+  },
+  {
+    "id": "volkan-summit-investorenstatus-aktualisieren",
+    "title": "Summit-Investorenstatus aktualisieren",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-05-29",
+    "end_date": "2026-05-31"
+  },
+  {
+    "id": "youssef-blog-briefs-fur-erste-6-artikel-erstellen",
+    "title": "Blog-Briefs für erste 6 Artikel erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC5",
+    "start_date": "2026-06-28",
+    "end_date": "2026-06-30"
+  },
+  {
+    "id": "sebastian-clinic-profile-minimal-schema-finalisieren",
+    "title": "Clinic Profile Minimal-Schema finalisieren",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC1",
+    "start_date": "2026-06-08",
+    "end_date": "2026-06-10"
+  },
+  {
+    "id": "anil-follow-up-disziplin-sicherstellen",
+    "title": "Follow-up-Disziplin sicherstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC4",
+    "start_date": "2026-06-16",
+    "end_date": "2026-06-18"
+  },
+  {
+    "id": "volkan-summit-follow-ups-vorbereiten-und-senden",
+    "title": "Summit-Follow-ups vorbereiten und senden",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-05-29",
+    "end_date": "2026-05-31"
+  },
+  {
+    "id": "youssef-expo-materialien-vorbereiten",
+    "title": "Expo-Materialien vorbereiten",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC2",
+    "start_date": "2026-06-28",
+    "end_date": "2026-06-30"
+  },
+  {
+    "id": "sebastian-event-tracking-mvp-definieren",
+    "title": "Event-Tracking MVP definieren",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC1",
+    "start_date": "2026-06-08",
+    "end_date": "2026-06-10"
+  },
+  {
+    "id": "anil-startup-forderprogramme-und-cloud-credits-datenbank-erstellen",
+    "title": "Startup-Förderprogramme und Cloud-Credits Datenbank erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC5",
+    "start_date": "2026-06-16",
+    "end_date": "2026-06-18"
+  },
+  {
+    "id": "volkan-malta-enterprise-anfrage-senden",
+    "title": "Malta Enterprise Anfrage senden",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC3",
+    "start_date": "2026-05-29",
+    "end_date": "2026-05-31"
+  },
+  {
+    "id": "volkan-dusseldorf-expo-ziel-und-closing-regel-freigeben",
+    "title": "Düsseldorf Expo Ziel- und Closing-Regel freigeben",
+    "sprint_id": "sprint-1",
+    "priority": "P1",
+    "package_id": "GC2",
+    "start_date": "2026-05-31",
+    "end_date": "2026-06-02"
+  },
+  {
+    "id": "sebastian-blog-veroffentlichungsflow-prufen",
+    "title": "Blog-Veröffentlichungsflow prüfen",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC5",
+    "start_date": "2026-06-10",
+    "end_date": "2026-06-12"
+  },
+  {
+    "id": "sebastian-feature-gap-aus-konkurrenzanalyse-priorisieren",
+    "title": "Feature-Gap aus Konkurrenzanalyse priorisieren",
+    "sprint_id": "sprint-1",
+    "priority": "P2",
+    "package_id": "GC1",
+    "start_date": "2026-06-10",
+    "end_date": "2026-06-12"
+  },
+  {
+    "id": "volkan-markenrechte-risiko-und-losungsbericht-findmydoc-erstellen",
+    "title": "Markenrechte-Risiko- und Lösungsbericht findmydoc erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC1",
+    "start_date": "2026-05-31",
+    "end_date": "2026-06-02"
+  },
+  {
+    "id": "volkan-founder-output-impact-bericht-bis-biweekly-erstellen",
+    "title": "Founder Output & Impact Bericht bis Biweekly erstellen",
+    "sprint_id": "sprint-1",
+    "priority": "P0",
+    "package_id": "GC4",
+    "start_date": "2026-06-02",
+    "end_date": "2026-06-04"
+  },
+  {
+    "id": "ozen-consent-aware-tracking-stufen-und-datenumfang-fachlich-festlegen",
+    "title": "Consent-aware Tracking-Stufen und Datenumfang fachlich festlegen",
+    "sprint_id": null,
+    "priority": "P1",
+    "package_id": "GC1",
+    "start_date": null,
+    "end_date": null
+  }
+]

@@ -13,12 +13,22 @@ export type GitHubTaskSyncContext = {
   sprintReviewDueAt?: string;
   parentTitle?: string;
   parentGitHubUrl?: string;
+  relationships?: Array<{ label: string; title: string; issueUrl?: string; issueNumber?: number | null; status?: string; owner?: string }>;
   comments?: Array<{ author: string; comment: string; createdAt: string }>;
   blockers?: Array<{ author: string; reason: string; impact: string; needsHelpFrom: string; status: string; createdAt: string }>;
 };
 
 export function hasGitHubSyncEnv() {
-  return Boolean(process.env.GITHUB_SYNC_TOKEN);
+  return true;
+}
+
+export function githubRepoSlug() {
+  return `${owner}/${repo}`;
+}
+
+function githubRawUrl(path: string) {
+  const branch = process.env.GITHUB_SYNC_BRANCH || "main";
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 function taskTypeLabel(task: Task) {
@@ -55,6 +65,13 @@ function lines(value?: string) {
     .map((line) => (line.startsWith("- ") || line.startsWith("* ") ? line : `- ${line}`));
 }
 
+function relationshipLabel(value: string) {
+  if (value === "blocked_by") return "Wartet auf";
+  if (value === "blocks") return "Blockiert";
+  if (value === "relates_to") return "Verknüpft mit";
+  return value;
+}
+
 export function taskIssueTitle(task: Task) {
   return `[${taskTypeLabel(task)}] ${task.title}`;
 }
@@ -82,6 +99,10 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
   const blockers = (context.blockers || []).slice(0, 10).map((blocker) =>
     `- ${blocker.status}: ${blocker.author} - ${blocker.reason}${blocker.impact ? ` | Impact: ${blocker.impact}` : ""}${blocker.needsHelpFrom ? ` | Hilfe: ${blocker.needsHelpFrom}` : ""}`,
   );
+  const relationships = (context.relationships || []).map((relation) => {
+    const issueRef = relation.issueNumber ? `#${relation.issueNumber}` : relation.issueUrl || "";
+    return `- ${relationshipLabel(relation.label)}: ${issueRef ? `${issueRef} ` : ""}${relation.title}${relation.status ? ` (${relation.status})` : ""}${relation.owner ? ` - ${relation.owner}` : ""}`;
+  });
 
   return [
     "## Problem Statement",
@@ -126,6 +147,8 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
     "",
     ...compactSection("Offene Blocker", blockers),
     "",
+    ...compactSection("Relationships", relationships),
+    "",
     ...compactSection("Letzte Kommentare", comments),
     "",
     "## Source of Truth",
@@ -137,16 +160,40 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
   ].join("\n");
 }
 
-export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncContext = {}) {
-  const token = process.env.GITHUB_SYNC_TOKEN;
-  if (!token) throw new Error("GITHUB_SYNC_TOKEN ist nicht gesetzt.");
-
-  const headers = {
+function githubHeaders(token: string) {
+  return {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
     "x-github-api-version": "2022-11-28",
   };
+}
+
+async function githubErrorMessage(response: Response, fallback: string) {
+  const scopes = response.headers.get("x-oauth-scopes") || "";
+  const acceptedScopes = response.headers.get("x-accepted-oauth-scopes") || "";
+  const body = await response.json().catch(() => null) as { message?: string; documentation_url?: string } | null;
+  const details = [
+    body?.message ? `GitHub: ${body.message}` : "",
+    scopes ? `Token-Scopes: ${scopes}` : "",
+    acceptedScopes ? `Benötigte Scopes: ${acceptedScopes}` : "",
+  ].filter(Boolean).join(" | ");
+  return `${fallback}: ${response.status}${details ? ` (${details})` : ""}`;
+}
+
+export async function githubUserForToken(token: string) {
+  const response = await fetch("https://api.github.com/user", {
+    method: "GET",
+    headers: githubHeaders(token),
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub User-Token konnte nicht geprüft werden"));
+  return response.json() as Promise<{ login: string }>;
+}
+
+export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncContext = {}, token = "") {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+
+  const headers = githubHeaders(token);
   const payload = {
     title: taskIssueTitle(task),
     body: taskIssueBody(task, context),
@@ -161,7 +208,7 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
       headers,
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(`GitHub Update fehlgeschlagen: ${response.status}`);
+    if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Update fehlgeschlagen"));
     return response.json() as Promise<{ number: number; html_url: string }>;
   }
 
@@ -170,6 +217,79 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
     headers,
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error(`GitHub Issue-Erstellung fehlgeschlagen: ${response.status}`);
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
   return response.json() as Promise<{ number: number; html_url: string }>;
+}
+
+export async function createGitHubIssueComment(issueNumber: number, comment: string, token: string, marker?: string) {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
+    method: "POST",
+    headers: githubHeaders(token),
+    body: JSON.stringify({
+      body: marker ? `${comment}\n\n<!-- ${marker} -->` : comment,
+    }),
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Kommentar konnte nicht erstellt werden"));
+  return response.json() as Promise<{ id: number; html_url: string }>;
+}
+
+export async function listGitHubIssueComments(issueNumber: number, token: string) {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`, {
+    method: "GET",
+    headers: githubHeaders(token),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Kommentare konnten nicht geladen werden"));
+  return response.json() as Promise<Array<{
+    id: number;
+    body: string;
+    html_url: string;
+    created_at: string;
+    user?: {
+      login?: string;
+      avatar_url?: string;
+    } | null;
+  }>>;
+}
+
+export async function getGitHubIssue(issueNumber: number, token: string) {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    method: "GET",
+    headers: githubHeaders(token),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue konnte nicht geladen werden"));
+  return response.json() as Promise<{ number: number; body?: string | null; html_url: string }>;
+}
+
+export async function uploadGitHubAttachment(
+  path: string,
+  content: Buffer,
+  token: string,
+  message = "Add Founder Scoreboard attachment",
+) {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+    method: "PUT",
+    headers: githubHeaders(token),
+    body: JSON.stringify({
+      message,
+      content: content.toString("base64"),
+      branch: process.env.GITHUB_SYNC_BRANCH || "main",
+    }),
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub-Anhang konnte nicht gespeichert werden"));
+
+  const result = await response.json() as { content?: { download_url?: string | null; html_url?: string | null } };
+  return {
+    rawUrl: result.content?.download_url || githubRawUrl(path),
+    htmlUrl: result.content?.html_url || "",
+  };
 }

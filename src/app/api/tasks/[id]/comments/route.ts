@@ -1,10 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
+import { createGitHubIssueComment, githubUserForToken } from "@/lib/github";
 import { getServerSupabase } from "@/lib/supabase";
 
 type CommentPayload = {
   comment?: string;
 };
+
+function providerToken(request: NextRequest) {
+  return request.headers.get("x-github-provider-token")?.trim() || "";
+}
+
+async function requireMatchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
+  const token = providerToken(request);
+  if (!token) throw new Error("GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und kommentieren.");
+
+  const githubUser = await githubUserForToken(token);
+  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
+  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
+    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
+  }
+
+  return token;
+}
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
@@ -23,11 +41,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,owner")
+    .select("id,title,owner,github_issue_number,github_issue_url,issue_number,issue_url")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+
+  const githubIssueNumber = Number(task.github_issue_number || task.issue_number || 0);
+  const hasLinkedGitHubIssue = Number.isInteger(githubIssueNumber) && githubIssueNumber > 0;
 
   const { data: created, error: insertError } = await supabase
     .from("task_comments")
@@ -40,6 +61,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .single();
 
   if (insertError || !created) return NextResponse.json({ error: insertError?.message || "Kommentar konnte nicht gespeichert werden." }, { status: 500 });
+
+  let githubSyncError = "";
+  if (hasLinkedGitHubIssue) {
+    try {
+      const githubUserToken = await requireMatchingGitHubToken(request, permission.profile);
+      await createGitHubIssueComment(githubIssueNumber, comment, githubUserToken, `fmd-comment-id:${created.id}`);
+    } catch (syncError) {
+      githubSyncError = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";
+    }
+  }
 
   const recipients = new Set<string>();
   if (task.owner && task.owner !== permission.profile?.id) recipients.add(task.owner);
@@ -65,8 +96,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   await supabase.from("task_activity").insert({
     task_id: id,
-    message: `Kommentar hinzugefuegt: ${comment.slice(0, 160)}`,
+    message: `Kommentar hinzugefügt: ${comment.slice(0, 160)}`,
   });
+
+  await supabase.from("tasks").update({
+    github_sync_status: githubSyncError ? "failed" : "not_synced",
+    github_sync_error: githubSyncError || null,
+  }).eq("id", id);
 
   return NextResponse.json({
     ok: true,
@@ -77,5 +113,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       comment: created.comment,
       createdAt: created.created_at,
     },
+    githubSyncError,
   });
 }

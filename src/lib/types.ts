@@ -4,6 +4,7 @@ export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial
 export type GitHubSyncStatus = "not_synced" | "synced" | "pending" | "failed";
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
 export type TaskType = "deliverable" | "proposal" | "sub_issue";
+export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
 
 export type TaskStatus = "Vorschlag" | "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
 
@@ -58,6 +59,7 @@ export type Task = {
   priority: string;
   owner: string;
   assignee: string;
+  createdBy?: string;
   workstream: string;
   packageId: string;
   deadline: string;
@@ -151,6 +153,19 @@ export type TaskComment = {
   createdAt: string;
 };
 
+export type TaskExternalComment = {
+  id: number;
+  taskId: string;
+  source: "github";
+  externalId: string;
+  authorLogin: string;
+  authorAvatarUrl: string;
+  body: string;
+  htmlUrl: string;
+  createdAt: string;
+  importedAt: string;
+};
+
 export type TaskBlocker = {
   id: number;
   taskId: string;
@@ -161,6 +176,23 @@ export type TaskBlocker = {
   status: "open" | "resolved" | "accepted_carryover";
   createdAt: string;
   resolvedAt: string;
+};
+
+export type TaskRelation = {
+  id: number;
+  taskId: string;
+  relatedTaskId: string;
+  relationType: TaskRelationType;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type TaskActivity = {
+  id: number;
+  taskId: string;
+  message: string;
+  createdAt: string;
 };
 
 export type NotificationEvent = {
@@ -186,6 +218,30 @@ export type NotificationDelivery = {
   lastError: string;
   deliveredAt: string;
   createdAt: string;
+};
+
+export type FeedbackItem = {
+  id: number;
+  type: "bug" | "feature";
+  status: "open" | "triaged" | "planned" | "done" | "dismissed";
+  severity: "P0" | "P1" | "P2" | "P3";
+  profileId: string;
+  title: string;
+  description: string;
+  pageUrl: string;
+  createdAt: string;
+};
+
+export type FmdTool = {
+  id: string;
+  name: string;
+  category: "tool" | "repo" | "knowledge" | "asset";
+  kind: string;
+  description: string;
+  url: string;
+  owner: string;
+  status: "active" | "planned" | "missing_link" | "archived";
+  sortOrder: number;
 };
 
 export type Meeting = {
@@ -246,9 +302,14 @@ export type PlanningData = {
   decisions: Decision[];
   decisionComments: DecisionComment[];
   taskComments: TaskComment[];
+  taskExternalComments: TaskExternalComment[];
   taskBlockers: TaskBlocker[];
+  taskRelations: TaskRelation[];
+  taskActivity: TaskActivity[];
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];
+  feedbackItems: FeedbackItem[];
+  fmdTools: FmdTool[];
   meetings: Meeting[];
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];

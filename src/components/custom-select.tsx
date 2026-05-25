@@ -1,12 +1,14 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, CircleDot, Lock } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export type CustomSelectOption = {
   value: string;
   label: string;
+  current?: boolean;
+  locked?: boolean;
 };
 
 type CustomSelectProps = {
@@ -91,7 +93,11 @@ export function CustomSelect({
         }}
         className="flex h-full min-h-8 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-left font-normal text-slate-800 shadow-sm outline-none transition hover:border-slate-300 hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-70"
       >
-        <span className="truncate">{selectedOption?.label || ""}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{selectedOption?.label || ""}</span>
+          {selectedOption?.current && <CircleDot size={13} className="shrink-0 text-emerald-500" aria-label="Aktueller Sprint" />}
+          {selectedOption?.locked && <Lock size={13} className="shrink-0 text-slate-400" aria-label="Geschützter Sprint" />}
+        </span>
         <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && menuPosition && createPortal(
@@ -118,7 +124,11 @@ export function CustomSelect({
                   active ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                <span className="min-w-0 truncate">{option.label}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 truncate">{option.label}</span>
+                  {option.current && <CircleDot size={13} className="shrink-0 text-emerald-500" aria-label="Aktueller Sprint" />}
+                  {option.locked && <Lock size={13} className="shrink-0 text-slate-400" aria-label="Geschützter Sprint" />}
+                </span>
                 {active && <Check size={14} className="shrink-0" />}
               </button>
             );

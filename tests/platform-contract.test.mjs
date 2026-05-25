@@ -15,6 +15,40 @@ async function listFiles(dir, extension) {
   return nested.flat();
 }
 
+test("app UI uses custom dropdown and calendar controls", async () => {
+  const files = await listFiles("src", ".tsx");
+  const approved = new Set([
+    "src/components/custom-select.tsx",
+    "src/components/custom-date-picker.tsx",
+  ]);
+
+  for (const file of files) {
+    if (approved.has(file)) continue;
+    const source = await readFile(file, "utf8");
+
+    assert.doesNotMatch(source, /<select\b/);
+    assert.doesNotMatch(source, /<\/select>/);
+    assert.doesNotMatch(source, /<option\b/);
+    assert.doesNotMatch(source, /type=["']date["']/);
+    assert.doesNotMatch(source, /type=["']datetime-local["']/);
+  }
+});
+
+test("visible German app copy keeps real UTF-8 umlauts", async () => {
+  const files = [
+    ...(await listFiles("src", ".tsx")),
+    ...(await listFiles("docs", ".md")),
+    "README.md",
+    "AGENTS.md",
+  ];
+  const suspiciousFallbacks = /\b(fuer|zurueck|waehlen|loeschen|naechst|koennen|moech|groess|schliess|Ueber|Aender|Oeff)\b/;
+
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    assert.doesNotMatch(source, suspiciousFallbacks, `${file} contains likely ASCII umlaut fallback in visible copy`);
+  }
+});
+
 test("platform migration contains the role, decision, score and sync contracts", async () => {
   const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
 
@@ -32,10 +66,16 @@ test("github sync route keeps the app as source of truth", async () => {
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
 
   assert.match(route, /requireOperationalLead/);
+  assert.match(route, /x-github-provider-token/);
+  assert.match(route, /githubUserForToken/);
+  assert.match(route, /GitHub User-Token passt nicht zum angemeldeten Teamprofil/);
   assert.match(route, /buildSyncContext/);
   assert.match(route, /task_comments/);
   assert.match(route, /task_blockers/);
   assert.match(route, /parent_task_id/);
+  assert.match(route, /createIfMissing/);
+  assert.match(route, /Diese Aufgabe ist App-only/);
+  assert.match(route, /Nur Deliverables werden als eigenständige GitHub-Issues gespiegelt/);
   assert.match(route, /github_sync_status: "pending"/);
   assert.match(route, /github_sync_status: "synced"/);
   assert.match(route, /github_sync_status: "failed"/);
@@ -44,6 +84,7 @@ test("github sync route keeps the app as source of truth", async () => {
 test("github issue export includes structure review blockers and comments", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const platform = await readFile("src/lib/platform.ts", "utf8");
 
   assert.match(github, /taskIssueTitle/);
   assert.match(github, /taskIssueLabels/);
@@ -54,13 +95,110 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(github, /Acceptance Criteria/);
   assert.match(github, /Score-relevant/);
   assert.match(github, /Offene Blocker/);
+  assert.match(github, /Relationships/);
+  assert.match(github, /Wartet auf/);
+  assert.match(github, /Blockiert/);
   assert.match(github, /Letzte Kommentare/);
   assert.match(github, /Parent Deliverable/);
   assert.match(github, /Source of Truth/);
   assert.match(github, /linkedIssueNumber/);
   assert.match(github, /task\.issueNumber/);
+  assert.match(platform, /hasGitHubIssue/);
   assert.match(ui, /syncTaskToGitHub/);
   assert.match(ui, /Jetzt spiegeln/);
+  assert.match(ui, /GitHub Sync Queue/);
+  assert.match(ui, /Verknüpfte Issues synchronisieren/);
+  assert.match(ui, /createIfMissing: false/);
+});
+
+test("task relationships use github-like blocked by and blocking semantics", async () => {
+  const migration = await readFile("supabase/0016_task_relationship_edges.sql", "utf8");
+  const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const platform = await readFile("src/lib/platform.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
+
+  assert.match(migration, /create table if not exists task_relationship_edges/);
+  assert.match(migration, /blocked_by/);
+  assert.match(migration, /blocks/);
+  assert.match(migration, /relates_to/);
+  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /task.relationship_created/);
+  assert.match(route, /task.relationship_deleted/);
+  assert.match(route, /github_sync_status: "not_synced"/);
+  assert.match(types, /TaskRelationType/);
+  assert.match(data, /task_relationship_edges/);
+  assert.match(platform, /taskRelationsFor/);
+  assert.match(platform, /hasOpenWaitingRelation/);
+  assert.match(ui, /Relationship hinzufügen/);
+  assert.match(ui, /Relationship konnte nicht gespeichert werden/);
+  assert.match(ui, /Wartet auf/);
+  assert.match(ui, /Verknüpft mit/);
+  assert.match(detail, /RelationshipPanelList/);
+  assert.match(detail, /Relationship hinzufügen/);
+  assert.match(detail, /Diese Aufgabe kann erst sauber weitergehen/);
+  assert.match(script, /task_dependencies/);
+  assert.match(script, /relation_type: "blocked_by"/);
+});
+
+test("github sync queue is reopened by task comments blockers and relationship changes", async () => {
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
+  const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
+  const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
+
+  assert.match(taskRoute, /payload\.githubSyncStatus === undefined/);
+  assert.match(taskRoute, /github_sync_status = "not_synced"/);
+  assert.match(commentsRoute, /github_sync_status: githubSyncError \? "failed" : "not_synced"/);
+  assert.match(commentsRoute, /github_sync_error: githubSyncError \|\| null/);
+  assert.match(blockersRoute, /github_sync_status: "not_synced"/);
+  assert.match(relationshipsRoute, /github_sync_status: "not_synced"/);
+  assert.match(syncRoute, /task_relationship_edges/);
+  assert.match(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
+  assert.match(github, /Problem Statement/);
+  assert.match(github, /Review fällig bis/);
+  assert.match(github, /Priorität/);
+  assert.match(github, /Verknüpft mit/);
+});
+
+test("github sync verification is read-only and checks the management repo", async () => {
+  const script = await readFile("scripts/verify-github-sync.mjs", "utf8");
+  const pkg = await readFile("package.json", "utf8");
+
+  assert.match(pkg, /verify:github-sync/);
+  assert.match(script, /logged_in_github_user_provider_token/);
+  assert.match(script, /GITHUB_SYNC_OWNER/);
+  assert.match(script, /GITHUB_SYNC_REPO/);
+  assert.match(script, /linkedDeliverables\.filter/);
+  assert.match(script, /automaticSyncScope/);
+  assert.match(script, /syncQueuePreview/);
+  assert.match(script, /appOnlyPreview/);
+  assert.doesNotMatch(script, /method: "POST"/);
+  assert.doesNotMatch(script, /method: "PATCH"/);
+  assert.doesNotMatch(script, /method: "DELETE"/);
+});
+
+test("app-only tasks are visibly marked without creating github issues", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+
+  assert.match(ui, /GitHubMissingBadge/);
+  assert.match(ui, /App-only/);
+  assert.match(ui, /Nur in der App: noch kein GitHub-Issue verknüpft/);
+  assert.match(ui, /GitHub-Issue anlegen/);
+  assert.match(ui, /createIfMissing: true/);
+  assert.match(ui, /onCreateGitHubIssue/);
+  assert.match(detail, /Nur in der App: noch kein GitHub-Issue verknüpft/);
+  assert.match(detail, /GitHub-Issue anlegen/);
+  assert.match(detail, /createIfMissing: true/);
+  assert.match(detail, /githubState/);
+  assert.match(ui, /nicht automatisch dupliziert/);
+  assert.match(detail, /nicht automatisch dupliziert/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -101,14 +239,36 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
 
 test("github oauth prepares user-based sync without storing provider tokens", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
+  const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
   const rules = await readFile("AGENTS.md", "utf8");
 
   assert.match(ui, /signInWithOAuth/);
   assert.match(ui, /scopes: "repo read:user user:email"/);
   assert.match(ui, /provider_token/);
+  assert.match(ui, /x-github-provider-token/);
+  assert.match(detail, /x-github-provider-token/);
   assert.match(ui, /GitHub User-Token/);
+  assert.match(syncRoute, /x-github-provider-token/);
+  assert.match(syncRoute, /githubUser\.login\.toLowerCase\(\) !== expectedLogin/);
+  assert.match(commentsRoute, /createGitHubIssueComment/);
+  assert.match(commentsRoute, /githubSyncError/);
+  assert.match(attachmentRoute, /githubUserForToken/);
+  assert.match(attachmentRoute, /GitHub User-Token passt nicht zum angemeldeten Teamprofil/);
+  assert.match(attachmentRoute, /x-github-provider-token/);
+  assert.doesNotMatch(commentsRoute, /task_comments"\)\.delete/);
+  assert.match(github, /createGitHubIssueComment/);
+  assert.match(github, /uploadGitHubAttachment/);
+  assert.match(github, /getGitHubIssue/);
+  assert.match(github, /api\.github\.com\/repos\/\$\{owner\}\/\$\{repo\}\/contents/);
+  assert.match(github, /https:\/\/api\.github\.com\/user/);
   assert.match(rules, /provider_token/);
   assert.match(rules, /Never persist or log provider tokens/);
+  assert.doesNotMatch(syncRoute, /GITHUB_SYNC_TOKEN/);
+  assert.doesNotMatch(commentsRoute, /GITHUB_SYNC_TOKEN/);
 });
 
 test("strict auth gates planning data until a valid session is present", async () => {
@@ -120,6 +280,12 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(page, /emptyPlanningData/);
   assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
   assert.match(ui, /Du bist abgemeldet/);
+  assert.match(ui, /<AppBrand \/>/);
+  assert.doesNotMatch(ui, /ShieldCheck/);
+  assert.match(ui, /variant="gate"/);
+  assert.match(ui, /Rollen und Zugriff werden nach dem Login/);
+  assert.match(ui, /Mit GitHub anmelden/);
+  assert.doesNotMatch(ui, /Login öffnen/);
   assert.match(ui, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
   assert.match(ui, /\/api\/planning-data/);
 });
@@ -169,12 +335,22 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
 
 test("sprint configuration is operational-lead only and audited", async () => {
   const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
+  const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
   assert.match(route, /Gelockte Sprints können nicht mehr geändert werden/);
   assert.match(route, /Sprint-Start darf nicht nach dem Sprint-Ende liegen/);
+  assert.match(route, /Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden/);
   assert.match(route, /sprint.update/);
+  assert.match(planRoute, /protectedSprintIds/);
+  assert.match(ui, /findCurrentSprint/);
+  assert.match(ui, /Aktueller Sprint/);
+  assert.match(ui, /Zeitraum geschützt/);
+  assert.match(ui, /current: currentSprint\?\.id === item\.id/);
+  assert.match(ui, /locked: data\.tasks\.some/);
+  assert.doesNotMatch(ui, /· aktuell|· geschützt/);
 });
 
 test("tasks can be assigned to an unlocked sprint", async () => {
@@ -262,6 +438,11 @@ test("board tasks can be dragged between status columns", async () => {
   assert.match(ui, /onDrop=\{\(event\) => dropTaskOnStatus\(status, event\)\}/);
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
+  assert.match(ui, /founderStatusGuardMessage/);
+  assert.match(ui, /Founder können Aufgaben nicht direkt auf Erledigt setzen/);
+  assert.match(ui, /In Review verschieben/);
+  assert.match(ui, /Als blockiert markieren/);
+  assert.match(ui, /statusOptionsForRole/);
 });
 
 test("review workflow supports rework, suggestions, and sprint commitments", async () => {
@@ -299,64 +480,177 @@ test("founder self checklist is separate from CEO scoring", async () => {
 
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readFile("supabase/0005_comments_blockers_notifications.sql", "utf8");
+  const externalMigration = await readFile("supabase/0018_task_external_comments.sql", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
+  const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
+  const githubAssetsRoute = await readFile("src/app/api/github-assets/route.ts", "utf8");
+  const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists task_comments/);
+  assert.match(externalMigration, /create table if not exists task_external_comments/);
+  assert.match(externalMigration, /unique \(source, external_id\)/);
   assert.match(migration, /create table if not exists task_blockers/);
   assert.match(migration, /create table if not exists notification_events/);
   assert.match(migration, /review_due_at/);
   assert.match(data, /taskComments/);
+  assert.match(data, /taskExternalComments/);
+  assert.match(data, /task_external_comments/);
   assert.match(data, /taskBlockers/);
+  assert.match(data, /taskActivity/);
+  assert.match(data, /task_activity/);
   assert.match(data, /notificationEvents/);
   assert.match(commentsRoute, /task.comment/);
+  assert.match(commentsRoute, /Kommentar hinzugefügt/);
+  assert.match(attachmentRoute, /requireFounder/);
+  assert.match(attachmentRoute, /uploadGitHubAttachment/);
+  assert.match(attachmentRoute, /\.fmd-attachments\/tasks/);
+  assert.match(attachmentRoute, /10 MB/);
+  assert.match(attachmentRoute, /markdown/);
+  assert.match(githubCommentsRoute, /listGitHubIssueComments/);
+  assert.match(githubCommentsRoute, /getGitHubIssue/);
+  assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
+  assert.match(githubCommentsRoute, /Evidence aus GitHub-Issue importiert/);
+  assert.match(githubCommentsRoute, /evidenceLink/);
+  assert.match(githubCommentsRoute, /isAppMirroredComment/);
+  assert.match(githubCommentsRoute, /task_external_comments/);
+  assert.match(githubCommentsRoute, /source,external_id/);
+  assert.doesNotMatch(githubCommentsRoute, /events/);
   assert.match(blockersRoute, /task.blocker_reported/);
+  assert.match(taskRoute, /Status geändert/);
+  assert.match(taskRoute, /activityMessages/);
+  assert.match(syncRoute, /GitHub Sync ausgeführt/);
   assert.match(ui, /Blocker melden/);
   assert.match(ui, /TaskCommentThread/);
+  assert.match(ui, /selectedTaskActivity/);
   assert.match(thread, /Kommunikation/);
+  assert.match(thread, /activities/);
+  assert.match(thread, /externalComments/);
+  assert.match(thread, /GitHub aktualisieren/);
+  assert.match(thread, /github-comment/);
+  assert.match(thread, /timeline/);
+  assert.match(thread, /CommentBody/);
+  assert.match(thread, /<img\\b/);
+  assert.match(thread, /user-attachments\/assets/);
+  assert.match(thread, /GitHubCommentImage/);
+  assert.match(thread, /\/api\/github-assets\?url=/);
+  assert.match(thread, /URL\.createObjectURL/);
+  assert.match(thread, /getBrowserSupabase/);
+  assert.match(thread, /onUploadAttachment/);
+  assert.match(thread, /type="file"/);
+  assert.match(thread, /Paperclip/);
+  assert.match(thread, /Anhang/);
+  assert.match(githubAssetsRoute, /requireFounder/);
+  assert.match(githubAssetsRoute, /x-github-provider-token/);
+  assert.match(githubAssetsRoute, /githubUserForToken/);
+  assert.match(githubAssetsRoute, /user-attachments\/assets/);
+  assert.match(githubAssetsRoute, /content-type/);
+  assert.match(githubAssetsRoute, /image\//);
+  assert.match(thread, /Anhang in GitHub öffnen/);
+  assert.match(thread, /new Date\(left\.createdAt\)/);
   assert.match(thread, /Nachfragen/);
   assert.match(thread, /Kommentieren/);
+  assert.match(types, /TaskActivity/);
+  assert.match(types, /TaskExternalComment/);
   assert.match(ui, /Review bis/);
 });
 
-test("tasks have a full detail page with communication thread", async () => {
+test("task route opens the detail panel inside the planning shell", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const page = await readFile("src/components/task-detail-page.tsx", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const brand = await readFile("src/components/app-brand.tsx", "utf8");
+  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
 
   assert.match(route, /getPlanningData/);
+  assert.match(route, /PlanningApp/);
   assert.match(route, /TaskDetailPage/);
-  assert.match(route, /taskComments\.filter/);
+  assert.match(route, /view === "full"/);
+  assert.match(route, /initialTaskId=\{id\}/);
+  assert.match(ui, /initialTaskId/);
+  assert.match(ui, /useSearchParams/);
+  assert.match(ui, /fullTaskView/);
+  assert.match(ui, /searchParams\.get\("view"\) === "full"/);
+  assert.match(ui, /openTaskPanel/);
+  assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+  assert.match(ui, /router\.back\(\)/);
+  assert.match(ui, /event\.key !== "Backspace"/);
+  assert.match(ui, /TaskDetailPanel/);
+  assert.match(ui, /<TaskDetailPage/);
+  assert.match(ui, /bg-slate-950\/\[0\.03\]/);
+  assert.match(ui, /aria-label="Detailpanel schließen"/);
+  assert.match(ui, /Große Ansicht/);
+  assert.match(ui, /view=full/);
+  const taskDetailPanel = ui.slice(ui.indexOf("function TaskDetailPanel"));
+  assert.ok(taskDetailPanel.indexOf("Acceptance Criteria") < taskDetailPanel.indexOf("Definition of Done"));
+  assert.ok(taskDetailPanel.indexOf("Definition of Done") < taskDetailPanel.indexOf("Abhängigkeiten & Evidence"));
+  assert.ok(taskDetailPanel.indexOf("Blocker früh melden") < taskDetailPanel.indexOf("TaskCommentThread"));
+  assert.ok(taskDetailPanel.indexOf("TaskCommentThread") < taskDetailPanel.indexOf("Notizen"));
   assert.match(page, /title="Kommentare"/);
   assert.match(page, /api\/tasks\/\$\{task\.id\}\/comments/);
+  assert.match(page, /AppSidebar/);
+  assert.doesNotMatch(page, /detailNavItems/);
+  assert.match(ui, /AppSidebar/);
+  assert.match(sidebar, /appNavItems/);
+  assert.match(sidebar, /Hauptnavigation/);
+  assert.match(sidebar, /Meeting Finder/);
+  assert.match(sidebar, /FMD-Tools/);
+  assert.match(sidebar, /Sprint & Score/);
+  assert.match(sidebar, /Decision Log/);
+  assert.match(sidebar, /AppBrand/);
+  assert.match(ui, /AppBrand/);
+  assert.match(brand, /cross-mark\.svg/);
+  assert.match(brand, /FounderOps/);
   assert.match(page, /Relationships/);
   assert.match(page, /Sub-Issues/);
   assert.ok(page.indexOf("Sub-Issues") < page.indexOf("title=\"Kommentare\""));
-  assert.match(ui, /Große Detailseite öffnen/);
-  assert.match(ui, /href=\{`\/tasks\/\$\{task\.id\}`\}/);
 });
 
 test("task detail page supports github-like sidebar metadata and milestones", async () => {
   const migration = await readFile("supabase/0011_milestones_task_detail.sql", "utf8");
+  const creatorMigration = await readFile("supabase/0017_task_created_by.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const page = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const comments = await readFile("src/components/task-comment-thread.tsx", "utf8");
+  const app = await readFile("src/components/planning-app.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists milestones/);
   assert.match(migration, /milestone_id/);
+  assert.match(creatorMigration, /created_by text references profiles/);
   assert.match(route, /milestoneId/);
+  assert.match(route, /packageId/);
+  assert.match(route, /deadline/);
   assert.match(route, /dependsOn/);
   assert.match(route, /evidenceLink/);
+  assert.match(route, /Diese Felder sind geschützt/);
+  assert.match(route, /Founder können Aufgaben nur in Review geben/);
   assert.match(data, /milestones/);
+  assert.match(data, /createdBy/);
   assert.match(types, /export type Milestone/);
+  assert.match(types, /createdBy\?: string/);
   assert.match(page, /Priorität/);
   assert.match(page, /Meilenstein/);
+  assert.match(page, /Erstellt von/);
+  assert.match(page, /Assignee/);
   assert.match(page, /Relationships/);
-  assert.match(page, /updateTask/);
+  assert.match(page, /TaskChecklist/);
+  assert.match(page, /canManageTaskMeta/);
+  assert.match(page, /detailsEditing/);
+  assert.match(page, /detailsEditSnapshot/);
+  assert.match(page, /availableStatusOptions/);
+  assert.match(page, /CustomDatePicker/);
+  assert.match(page, /briefEditing/);
+  assert.match(page, /Bearbeiten/);
+  assert.match(comments, /github\.com\/\$\{login\}\.png/);
+  assert.match(app, /TaskChecklist/);
   assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a core workflow/);
 });
 
@@ -376,6 +670,10 @@ test("planning hierarchy treats sprint as time container and packages as group c
   assert.match(github, /Group Commitment/);
   assert.match(ui, /Epic \/ Meilenstein/);
   assert.match(ui, /Group Commitment/);
+  assert.match(ui, /expandedPackages/);
+  assert.match(ui, /Alle einklappen/);
+  assert.match(ui, /Alle ausklappen/);
+  assert.match(ui, /aria-expanded=\{expanded\}/);
   assert.match(pkg, /verify:hierarchy/);
 });
 
@@ -409,8 +707,14 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /notification_deliveries/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
   assert.match(chat, /formatGoogleChatMessage/);
-  assert.match(ui, /Google Chat Outbox/);
-  assert.match(ui, /Pending senden/);
+  assert.match(chat, /formatGoogleChatDigestCard/);
+  assert.match(route, /shouldSendToGoogleChatDigest/);
+  assert.match(route, /notification_deliveries/);
+  assert.match(ui, /NotificationInbox/);
+  assert.match(ui, /openTaskPanel\(task\.id\)/);
+  assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
+  assert.match(ui, /Notification-Ausgang/);
+  assert.match(ui, /Digest senden/);
 });
 
 test("health and supabase verification detect operational migrations", async () => {
@@ -422,6 +726,12 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(health, /profiles\.google_chat/);
   assert.match(health, /notification_preferences/);
   assert.match(health, /tasks\.carryover/);
+  assert.match(health, /sprint_commitments/);
+  assert.match(health, /packages\.group_commitment/);
+  assert.match(health, /tasks\.template_v2/);
+  assert.match(health, /task_relationship_edges/);
+  assert.match(health, /task_external_comments/);
+  assert.match(health, /githubSyncMode/);
   assert.match(health, /schemaReady/);
   assert.match(verify, /0008_google_chat_delivery\.sql/);
   assert.match(verify, /0009_sprint_carryover\.sql/);
@@ -430,6 +740,62 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(operational, /githubMappedProfiles/);
   assert.match(operational, /googleChatConfigured/);
   assert.match(pkg, /verify:operational/);
+});
+
+test("founder feedback creates bug and feature notifications with details", async () => {
+  const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
+  const route = await readFile("src/app/api/feedback/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+
+  assert.match(migration, /create table if not exists feedback_items/);
+  assert.match(migration, /type text not null check \(type in \('bug', 'feature'\)\)/);
+  assert.match(route, /requireFounder/);
+  assert.match(route, /feedback\.bug_reported/);
+  assert.match(route, /feedback\.feature_requested/);
+  assert.match(route, /notification_events/);
+  assert.match(ui, /Benachrichtigungscenter/);
+  assert.match(ui, /Feedback-Eingang/);
+  assert.match(ui, /Notification-Ausgang/);
+  assert.match(ui, /xl:col-span-2/);
+  assert.match(ui, /FeedbackDialog/);
+  assert.match(ui, /\/api\/feedback/);
+  assert.match(data, /feedbackItems/);
+});
+
+test("workspace selection survives page refreshes", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(ui, /workspaceStateKey/);
+  assert.match(ui, /URLSearchParams\(window\.location\.search\)/);
+  assert.match(ui, /window\.localStorage\.setItem\(workspaceStateKey, workspace\)/);
+  assert.match(ui, /url\.searchParams\.set\("workspace", workspace\)/);
+});
+
+test("fmd tools hub keeps internal tools repos notion and drive visible", async () => {
+  const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const seed = await readFile("src/lib/generated/seed-data.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+
+  assert.match(migration, /create table if not exists fmd_tools/);
+  assert.match(migration, /email-signature-tool/);
+  assert.match(migration, /https:\/\/mailsig\.findmydoc\.eu\//);
+  assert.match(migration, /'email-signature-tool'.*'active'/s);
+  assert.match(migration, /investor-calculator/);
+  assert.match(migration, /notion-docs-source/);
+  assert.match(migration, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
+  assert.match(migration, /google-drive-assets/);
+  assert.match(migration, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
+  assert.match(ui, /FMD-Tools Hub/);
+  assert.match(ui, /FmdToolsOverview/);
+  assert.match(ui, /Interne Tools/);
+  assert.match(data, /fmdTools/);
+  assert.match(seed, /https:\/\/mailsig\.findmydoc\.eu\//);
+  assert.match(seed, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
+  assert.match(seed, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
+  assert.match(types, /export type FmdTool/);
 });
 
 test("task creation supports deliverables proposals and non scoring sub issues", async () => {

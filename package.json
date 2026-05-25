@@ -12,8 +12,11 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
+    "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",
     "verify:hierarchy": "node scripts/verify-hierarchy.mjs",
+    "verify:github-sync": "node scripts/verify-github-sync.mjs",
     "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
+    "migrate:relationships": "node scripts/migrate-task-relationships.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"
   },
   "dependencies": {

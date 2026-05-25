@@ -2,6 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type CustomDatePickerProps = {
   value: string;
@@ -10,6 +11,11 @@ type CustomDatePickerProps = {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
+};
+
+type MenuPosition = {
+  top: number;
+  left: number;
 };
 
 const weekdayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -62,21 +68,41 @@ export function CustomDatePicker({
   "aria-label": ariaLabel,
 }: CustomDatePickerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [datePart, timePart = "12:00"] = value.split("T");
   const selectedDate = parseDateKey(datePart);
   const [viewMonth, setViewMonth] = useState(() => selectedDate || new Date());
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const days = useMemo(() => getMonthDays(viewMonth), [viewMonth]);
 
   useEffect(() => {
-    if (selectedDate) setViewMonth(selectedDate);
-  }, [datePart]);
+    if (!open) return;
+
+    const updateMenuPosition = () => {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
 
     const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
 
     window.addEventListener("pointerdown", closeOnOutside);
@@ -102,7 +128,10 @@ export function CustomDatePicker({
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open) setViewMonth(selectedDate || new Date());
+          setOpen((current) => !current);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
         }}
@@ -112,8 +141,12 @@ export function CustomDatePicker({
         {mode === "datetime" ? <Clock size={15} className="shrink-0 text-slate-400" /> : <CalendarDays size={15} className="shrink-0 text-slate-400" />}
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-72 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-xl shadow-slate-900/10">
+      {open && menuPosition && createPortal(
+        <div
+          ref={menuRef}
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+          className="fixed z-[100] w-72 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-xl shadow-slate-900/10"
+        >
           <div className="flex items-center justify-between gap-2">
             <button type="button" className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-50" onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))} aria-label="Vorheriger Monat">
               <ChevronLeft size={16} />
@@ -165,7 +198,8 @@ export function CustomDatePicker({
             <button type="button" onClick={() => onChange("")} className="h-8 rounded-md px-2 text-xs font-semibold text-slate-500 hover:bg-slate-50">Löschen</button>
             <button type="button" onClick={() => selectDate(new Date())} className="h-8 rounded-md px-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Heute</button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

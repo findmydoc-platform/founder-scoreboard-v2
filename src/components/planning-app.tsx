@@ -1,43 +1,51 @@
 ﻿"use client";
 
 import {
-  Archive,
+  AlertTriangle,
+  Bell,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   Circle,
+  CircleHelp,
   Columns3,
   FileText,
   Filter,
+  ExternalLink,
   GanttChart,
-  LayoutDashboard,
   Link2,
   ListTree,
+  Lock,
+  Maximize2,
   MessageSquare,
   PanelRight,
   Plus,
   Search,
-  Settings,
-  ShieldCheck,
   Table2,
   Users,
+  X,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import { AppBrand } from "@/components/app-brand";
+import { AppSidebar, appNavItems, type AppWorkspace } from "@/components/app-sidebar";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
+import { TaskChecklist } from "@/components/task-checklist";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
-import { founderScore, reviewLabel, roleLabel, syncLabel } from "@/lib/platform";
-import { TaskCommentThread } from "@/components/task-comment-thread";
-import type { CommitmentLevel, Meeting, MeetingAttendance, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskBlocker, TaskComment, TaskStatus, ViewMode } from "@/lib/types";
+import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
+import { TaskDetailPage } from "@/components/task-detail-page";
+import { CommentBody, TaskCommentThread } from "@/components/task-comment-thread";
+import type { CommitmentLevel, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
   source: "seed" | "supabase";
   authRequired: boolean;
+  initialTaskId?: string;
 };
 
 type Filters = {
@@ -49,7 +57,7 @@ type Filters = {
   quick: string;
 };
 
-type Workspace = "planning" | "mine" | "sprint" | "decisions" | "meetings" | "projects" | "team" | "settings";
+type Workspace = AppWorkspace;
 
 type NewTaskDraft = {
   title: string;
@@ -75,11 +83,49 @@ type NewTaskDraft = {
 };
 
 type SprintPlanningOptions = {
-  namePattern: string;
+  firstSprintNumber: number;
+  anchorStartDate: string;
   rhythmWeeks: number;
   horizonWeeks: number;
   targetSprintNumber: number;
 };
+
+type FeedbackDraft = {
+  type: "bug" | "feature";
+  severity: "P0" | "P1" | "P2" | "P3";
+  title: string;
+  description: string;
+  pageUrl: string;
+};
+
+function normalizePlanningData(data: PlanningData): PlanningData {
+  return {
+    ...data,
+    profiles: data.profiles || [],
+    packages: data.packages || [],
+    milestones: data.milestones || [],
+    tasks: data.tasks || [],
+    sprints: data.sprints || [],
+    sprintCommitments: data.sprintCommitments || [],
+    decisions: data.decisions || [],
+    decisionComments: data.decisionComments || [],
+    taskComments: data.taskComments || [],
+    taskExternalComments: data.taskExternalComments || [],
+    taskBlockers: data.taskBlockers || [],
+    taskRelations: data.taskRelations || [],
+    taskActivity: data.taskActivity || [],
+    notificationEvents: data.notificationEvents || [],
+    notificationDeliveries: data.notificationDeliveries || [],
+    feedbackItems: data.feedbackItems || [],
+    fmdTools: data.fmdTools || [],
+    meetings: data.meetings || [],
+    meetingAttendance: data.meetingAttendance || [],
+    audit: data.audit || [],
+    availability: data.availability || [],
+  };
+}
+
+let protectedPlanningDataCache: PlanningData | null = null;
 
 const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
   { id: "board", label: "Board", icon: Columns3 },
@@ -88,17 +134,6 @@ const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = 
   { id: "gantt", label: "Gantt", icon: GanttChart },
 ];
 
-const navItems = [
-  { id: "planning", label: "Planung", icon: LayoutDashboard },
-  { id: "mine", label: "Meine Aufgaben", icon: CheckCircle2 },
-  { id: "sprint", label: "Sprint & Score", icon: GanttChart },
-  { id: "decisions", label: "Decision Log", icon: FileText },
-  { id: "meetings", label: "Meeting Finder", icon: CalendarDays },
-  { id: "projects", label: "Projekte", icon: Archive },
-  { id: "team", label: "Team", icon: Users },
-  { id: "settings", label: "Einstellungen", icon: Settings },
-] satisfies Array<{ id: Workspace; label: string; icon: typeof LayoutDashboard }>;
-
 const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   mine: "Meine Aufgaben",
@@ -106,6 +141,7 @@ const workspaceLabels: Record<Workspace, string> = {
   decisions: "Decision Log",
   meetings: "Meeting Finder",
   projects: "Projekte",
+  tools: "FMD-Tools",
   team: "Team",
   settings: "Einstellungen",
 };
@@ -117,6 +153,7 @@ const workspaceSubtitles: Record<Workspace, string> = {
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
   projects: "Projekt- und Commitment-Überblick.",
+  tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
 };
@@ -147,6 +184,7 @@ const quickFilters = [
 ];
 
 const localStateKey = "fmd-planning-local-state-v1";
+const workspaceStateKey = "fmd-planning-workspace-v1";
 const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
 const profileColorOptions = [
   { value: "#22c55e", label: "Mint" },
@@ -201,6 +239,10 @@ function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
 }
 
+function workspaceFromValue(value: string | null) {
+  return appNavItems.find((item) => item.id === value)?.id || null;
+}
+
 function formatDate(value: string) {
   if (!value) return "ohne Datum";
   return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(new Date(value));
@@ -217,45 +259,68 @@ function sprintNumber(value: string) {
   return match ? Number(match[1]) : 0;
 }
 
-function sprintNameFromPattern(pattern: string, number: number) {
-  const trimmed = pattern.trim() || "Sprint #";
-  if (trimmed.includes("#")) return trimmed.replace(/#+/g, String(number));
-  return `${trimmed} ${number}`;
-}
-
 function addDaysIso(value: string, days: number) {
   const date = value ? new Date(`${value}T00:00:00`) : new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
-function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions) {
+function currentIsoDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function findCurrentSprint(sprints: Sprint[], today = currentIsoDate()) {
+  return sprints.find((sprint) => sprint.startDate <= today && sprint.endDate >= today)
+    || sprints.find((sprint) => sprint.status === "active")
+    || sprints.find((sprint) => sprint.status === "planning" || sprint.status === "review")
+    || sprints[0];
+}
+
+function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions, protectedSprintIds = new Set<string>()) {
   const rhythmWeeks = Math.min(Math.max(Number(options.rhythmWeeks) || 2, 1), 12);
   const horizonWeeks = Math.min(Math.max(Number(options.horizonWeeks) || 6, 1), 52);
   const targetSprintNumber = Math.max(Number(options.targetSprintNumber) || 0, 0);
-  const sorted = [...sprints].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
-  const latest = sorted[sorted.length - 1];
+  const firstSprintNumber = Math.max(Number(options.firstSprintNumber) || 1, 1);
+  const anchorStartDate = options.anchorStartDate || sprints[0]?.startDate || new Date().toISOString().slice(0, 10);
   const existingIds = new Set(sprints.map((sprint) => sprint.id));
-  const lastNumber = Math.max(0, ...sprints.map((sprint) => Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id))));
+  const sprintByNumber = new Map<number, Sprint>();
+  for (const sprint of sprints) {
+    const number = Math.max(sprintNumber(sprint.name), sprintNumber(sprint.id));
+    if (number > 0) sprintByNumber.set(number, sprint);
+  }
   const horizonEnd = addDaysIso(new Date().toISOString().slice(0, 10), horizonWeeks * 7);
-  let nextNumber = lastNumber + 1;
-  let nextStart = latest?.endDate ? addDaysIso(latest.endDate, 1) : new Date().toISOString().slice(0, 10);
+  let nextNumber = firstSprintNumber;
+  let nextStart = anchorStartDate;
   const drafts: Sprint[] = [];
 
   while (nextStart <= horizonEnd || (targetSprintNumber > 0 && nextNumber <= targetSprintNumber)) {
     const endDate = addDaysIso(nextStart, rhythmWeeks * 7 - 1);
+    const existing = sprintByNumber.get(nextNumber);
     const baseId = `sprint-${nextNumber}`;
-    const id = existingIds.has(baseId) ? `${baseId}-${nextStart.replaceAll("-", "")}` : baseId;
+    const id = existing?.id || (existingIds.has(baseId) ? `${baseId}-${nextStart.replaceAll("-", "")}` : baseId);
     existingIds.add(id);
-    drafts.push({
+    const draft = {
       id,
-      name: sprintNameFromPattern(options.namePattern, nextNumber),
-      status: "planning",
+      name: `Sprint ${nextNumber}`,
+      status: existing?.status || "planning",
       startDate: nextStart,
       endDate,
       reviewDueAt: `${addDaysIso(endDate, -2)}T12:00`,
-      scoreLocked: false,
-    });
+      scoreLocked: existing?.scoreLocked || false,
+    } satisfies Sprint;
+    const changed = existing && (
+      existing.name !== draft.name
+      || existing.startDate !== draft.startDate
+      || existing.endDate !== draft.endDate
+      || existing.reviewDueAt.slice(0, 16) !== draft.reviewDueAt
+    );
+    if (!existing || (!existing.scoreLocked && !protectedSprintIds.has(existing.id) && changed)) {
+      drafts.push(draft);
+    }
     nextNumber += 1;
     nextStart = addDaysIso(endDate, 1);
   }
@@ -311,10 +376,124 @@ function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked
   return "Entwurf";
 }
 
+function statusOptionsForRole(status: string, canManageTaskMeta: boolean) {
+  if (canManageTaskMeta) return taskStatuses;
+  if (normalizeStatus(status) === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
+  return taskStatuses.filter((item) => item !== "Erledigt");
+}
+
+function founderStatusGuardMessage(status: TaskStatus) {
+  if (status !== "Erledigt") return "";
+  return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
+}
+
+function notificationTypeLabel(type: string) {
+  if (type === "feedback.bug_reported") return "Bug";
+  if (type === "feedback.feature_requested") return "Feature";
+  if (type === "task.review_requested") return "Review";
+  if (type === "task.review_rework") return "Nacharbeit";
+  if (type === "task.review_completed") return "Review erledigt";
+  if (type === "task.blocker_reported") return "Blocker";
+  if (type === "task.comment") return "Kommentar";
+  if (type === "task.proposed") return "Vorschlag";
+  if (type === "sprint.task_carried_over") return "Carry-over";
+  if (type === "meeting.attendance_updated") return "Meeting";
+  if (type.startsWith("decision.")) return "Decision";
+  return "Hinweis";
+}
+
+function notificationTone(type: string) {
+  if (type === "feedback.bug_reported") return "border-red-200 bg-red-50 text-red-700";
+  if (type === "feedback.feature_requested") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (type === "task.blocker_reported") return "border-red-200 bg-red-50 text-red-700";
+  if (type === "task.review_rework") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (type === "task.review_requested") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (type === "task.review_completed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      title="Nur in der App: noch kein GitHub-Issue verknüpft."
+      className={`inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 font-semibold text-amber-700 ${
+        compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]"
+      }`}
+    >
+      <AlertTriangle size={compact ? 12 : 13} />
+      {!compact && "App-only"}
+    </span>
+  );
+}
+
+function RelationBadge({ label, count, tone = "slate" }: { label: string; count: number; tone?: "amber" | "blue" | "slate" }) {
+  if (!count) return null;
+  const classes = {
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-600",
+  }[tone];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>
+      {label} {count}
+    </span>
+  );
+}
+
+function relationshipHelpText(title: string) {
+  if (title === "Wartet auf") return "Diese Aufgabe kann erst sauber weitergehen, wenn die verknüpfte Aufgabe erledigt oder ausreichend geklärt ist.";
+  if (title === "Blockiert") return "Diese Aufgabe hält andere Aufgaben auf. Wenn sie verspätet ist, können die gelisteten Aufgaben ebenfalls nicht sauber abgeschlossen werden.";
+  if (title === "Verknüpft mit") return "Diese Aufgaben hängen fachlich zusammen, blockieren sich aber nicht zwingend gegenseitig.";
+  return "Zeigt, wie diese Aufgabe mit anderen Aufgaben verbunden ist.";
+}
+
+function relationTypeLabel(type: TaskRelationType) {
+  if (type === "blocked_by") return "Wartet auf";
+  if (type === "blocks") return "Blockiert";
+  return "Verknüpft mit";
+}
+
+function RelationshipInfo({ title }: { title: string }) {
+  const description = relationshipHelpText(title);
+  return (
+    <span className="group relative inline-flex">
+      <span
+        tabIndex={0}
+        title={description}
+        aria-label={`${title}: ${description}`}
+        className="grid h-5 w-5 cursor-help place-items-center rounded-full border border-slate-200 bg-white text-slate-400 outline-none transition hover:border-blue-200 hover:text-blue-600 focus:border-blue-300 focus:text-blue-700"
+      >
+        <CircleHelp size={13} />
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-6 z-20 hidden w-64 -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium leading-5 text-slate-700 shadow-lg group-hover:block group-focus-within:block">
+        {description}
+      </span>
+    </span>
+  );
+}
+
+function relationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]) {
+  const taskById = new Map(tasks.map((item) => [item.id, item]));
+  const grouped = taskRelationsFor(task.id, relations);
+  const toRow = (relation: TaskRelation, direction: "related" | "inverse") => {
+    const otherId = direction === "inverse" ? relation.taskId : relation.relatedTaskId;
+    return { relation, task: taskById.get(otherId) };
+  };
+
+  return {
+    waitsOn: grouped.waitsOn.map((relation) => toRow(relation, "related")),
+    blocks: grouped.blocks.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
+    related: grouped.related.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
+  };
+}
+
 function TaskCard({
   task,
   pack,
   ownerProfile,
+  relations,
+  allTasks,
+  statusOptions,
   onOpen,
   onStatusChange,
   onDragStart,
@@ -324,6 +503,9 @@ function TaskCard({
   task: Task;
   pack?: Package;
   ownerProfile?: Profile;
+  relations: TaskRelation[];
+  allTasks: Task[];
+  statusOptions: TaskStatus[];
   onOpen: (task: Task) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -332,6 +514,9 @@ function TaskCard({
 }) {
   const normalized = normalizeStatus(task.status);
   const ownerColor = profileColor(ownerProfile);
+  const missingGitHub = !hasGitHubIssue(task);
+  const relationGroups = taskRelationsFor(task.id, relations);
+  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
 
   return (
     <article
@@ -353,7 +538,10 @@ function TaskCard({
           onClick={() => onOpen(task)}
           className="min-w-0 text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
         >
-          {task.title}
+          <span className="inline-flex items-start gap-1.5">
+            {missingGitHub && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
+            <span>{task.title}</span>
+          </span>
         </button>
         <button
           type="button"
@@ -374,6 +562,9 @@ function TaskCard({
         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
           {task.hours}h
         </span>
+        {missingGitHub && <GitHubMissingBadge />}
+        <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
+        <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
       </div>
       <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{task.description}</p>
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
@@ -387,14 +578,14 @@ function TaskCard({
         <CustomSelect
           value={normalized}
           onChange={(value) => onStatusChange(task, value as TaskStatus)}
-          options={taskStatuses.map((status) => ({ value: status, label: status }))}
+          options={statusOptions.map((status) => ({ value: status, label: status }))}
           className="h-8 w-32 text-xs"
           aria-label="Status ändern"
         />
         <div className="flex items-center gap-2 text-slate-400">
           <MessageSquare size={14} />
           <FileText size={14} />
-          <Link2 size={14} className={task.evidenceLink || task.issueUrl ? "text-blue-500" : ""} />
+          <Link2 size={14} className={hasGitHubIssue(task) ? "text-blue-500" : "text-amber-500"} />
         </div>
       </div>
     </article>
@@ -414,30 +605,128 @@ function EmptyColumn() {
   );
 }
 
-export function PlanningApp({ initialData, source, authRequired }: Props) {
+function NotificationInbox({
+  notifications,
+  profiles,
+  open,
+  onToggle,
+  onOpen,
+  onDismiss,
+}: {
+  notifications: NotificationEvent[];
+  profiles: Profile[];
+  open: boolean;
+  onToggle: () => void;
+  onOpen: (event: NotificationEvent) => void;
+  onDismiss: (eventId: number) => void;
+}) {
+  const unreadCount = notifications.length;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+        aria-label="Benachrichtigungen"
+      >
+        <Bell size={16} />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <section className="absolute right-0 top-11 z-50 w-[min(92vw,380px)] rounded-lg border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Persönliche Hinweise bleiben hier, Google Chat bekommt nur Digests.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{unreadCount}</span>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto p-2">
+            {notifications.length ? notifications.slice(0, 12).map((event) => {
+              const actorName = profiles.find((profile) => profile.id === event.actorProfileId)?.name || "";
+              return (
+                <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
+                  <div className="flex items-start justify-between gap-2">
+                    <button type="button" onClick={() => onOpen(event)} className="min-w-0 flex-1 text-left">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${notificationTone(event.type)}`}>
+                        {notificationTypeLabel(event.type)}
+                      </span>
+                      <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
+                      {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
+                      <span className="mt-1 block text-xs text-slate-400">{actorName ? `${actorName} · ` : ""}{formatDate(event.createdAt)}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDismiss(event.id)}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-100 hover:bg-white hover:text-slate-700 sm:opacity-0 sm:group-hover:opacity-100"
+                      aria-label="Notification schließen"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </article>
+              );
+            }) : (
+              <div className="rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                Keine offenen Hinweise.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+export function PlanningApp({ initialData, source, authRequired, initialTaskId = "" }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const sidebarRef = useRef<HTMLElement | null>(null);
-  const [data, setData] = useState(initialData);
+  const protectedDataUserIdRef = useRef("");
+  const workspaceRestoredRef = useRef(false);
+  const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
+  const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
+  const initialClientData = useMemo(() => {
+    return authRequired && source === "supabase" && protectedPlanningDataCache ? protectedPlanningDataCache : safeInitialData;
+  }, [authRequired, safeInitialData, source]);
+  const [data, setData] = useState(initialClientData);
   const [localStateLoaded, setLocalStateLoaded] = useState(source === "supabase");
   const [workspace, setWorkspace] = useState<Workspace>("planning");
   const [view, setView] = useState<ViewMode>("board");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [selectedFeedbackId, setSelectedFeedbackId] = useState<number | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(!authRequired);
-  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired);
+  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || (source === "supabase" && Boolean(protectedPlanningDataCache)));
   const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [commentImportNotice, setCommentImportNotice] = useState("");
+  const [statusGuardNotice, setStatusGuardNotice] = useState("");
+  const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
+  const [showNotifications, setShowNotifications] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
   const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
-    namePattern: "Sprint #",
+    firstSprintNumber: 2,
+    anchorStartDate: addDaysIso(safeInitialData.sprints[0]?.startDate || new Date().toISOString().slice(0, 10), 7),
     rhythmWeeks: 2,
     horizonWeeks: 6,
     targetSprintNumber: 0,
@@ -455,10 +744,75 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
   const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
   const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
   const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
+  const selectedTaskExternalComments = selectedTask ? data.taskExternalComments.filter((comment) => comment.taskId === selectedTask.id) : [];
+  const selectedTaskActivity = selectedTask ? data.taskActivity.filter((activity) => activity.taskId === selectedTask.id) : [];
   const selectedTaskBlockers = selectedTask ? data.taskBlockers.filter((blocker) => blocker.taskId === selectedTask.id) : [];
+  const fullTaskView = searchParams.get("view") === "full";
   const authAvailable = hasSupabaseEnv();
   const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
   const currentProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
+  const unreadNotifications = useMemo(() => {
+    const pending = data.notificationEvents.filter((event) => event.status === "pending");
+    if (!currentProfile) return pending;
+    return pending.filter((event) => event.recipientProfileId === currentProfile.id);
+  }, [currentProfile, data.notificationEvents]);
+
+  const openTaskPanel = useCallback((taskId: string) => {
+    setSelectedTaskId(taskId);
+    router.push(`/tasks/${encodeURIComponent(taskId)}`);
+  }, [router]);
+
+  const closeTaskPanel = useCallback(() => {
+    setSelectedTaskId(null);
+    if (pathname?.startsWith("/tasks/")) {
+      if (window.history.length > 1) {
+        router.back();
+      } else {
+        router.push("/");
+      }
+    }
+  }, [pathname, router]);
+
+  useEffect(() => {
+    if (workspaceRestoredRef.current) return;
+    workspaceRestoredRef.current = true;
+
+    const urlWorkspace = workspaceFromValue(new URLSearchParams(window.location.search).get("workspace"));
+    const storedWorkspace = workspaceFromValue(window.localStorage.getItem(workspaceStateKey));
+    const nextWorkspace = urlWorkspace || storedWorkspace;
+    if (nextWorkspace) window.queueMicrotask(() => setWorkspace(nextWorkspace));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+
+    const closeOnBackspace = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditable = target?.closest("input, textarea, select, [contenteditable='true']");
+      if (isEditable || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key !== "Backspace") return;
+
+      event.preventDefault();
+      closeTaskPanel();
+    };
+
+    window.addEventListener("keydown", closeOnBackspace);
+    return () => window.removeEventListener("keydown", closeOnBackspace);
+  }, [closeTaskPanel, selectedTaskId]);
+
+  useEffect(() => {
+    if (!workspaceRestoredRef.current) return;
+
+    window.localStorage.setItem(workspaceStateKey, workspace);
+    const url = new URL(window.location.href);
+    if (workspace === "planning") {
+      url.searchParams.delete("workspace");
+    } else {
+      url.searchParams.set("workspace", workspace);
+    }
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [workspace]);
 
   useEffect(() => {
     if (source === "supabase") return;
@@ -504,7 +858,9 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
       setAuthError("");
       if (event === "SIGNED_IN") setAuthNotice("");
       if (event === "SIGNED_OUT") {
-        setData(initialData);
+        protectedDataUserIdRef.current = "";
+        protectedPlanningDataCache = null;
+        setData(safeInitialData);
         setProtectedDataLoaded(false);
         setSelectedTaskId(null);
         setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
@@ -515,35 +871,58 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
       active = false;
       subscription.subscription.unsubscribe();
     };
-  }, [initialData]);
+  }, [safeInitialData]);
 
   useEffect(() => {
     if (!authRequired || source !== "supabase" || !authUser) return;
+    if (protectedDataLoaded && protectedDataUserIdRef.current === authUser.id) return;
 
     let active = true;
+    const authUserId = authUser.id;
 
     async function loadProtectedPlanningData() {
-      setProtectedDataLoaded(false);
+      if (!data.tasks.length) setProtectedDataLoaded(false);
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      if (!token) return;
-
-      const response = await fetch("/api/planning-data", {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      const payload = await response.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
-
-      if (!active) return;
-      if (!response.ok || !payload?.data) {
-        setData(initialData);
+      if (!token) {
+        setAuthError("Session ist aktiv, aber kein Zugriffstoken verfügbar. Bitte erneut anmelden.");
         setProtectedDataLoaded(false);
-        setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
         return;
       }
 
-      setData(payload.data);
-      setProtectedDataLoaded(true);
-      setAuthError("");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10_000);
+
+      try {
+        const response = await fetch("/api/planning-data", {
+          headers: { authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
+
+        if (!active) return;
+        if (!response.ok || !payload?.data) {
+          protectedDataUserIdRef.current = "";
+          setData(safeInitialData);
+          setProtectedDataLoaded(false);
+          setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
+          return;
+        }
+
+        protectedDataUserIdRef.current = authUserId;
+        const nextData = normalizePlanningData(payload.data);
+        protectedPlanningDataCache = nextData;
+        setData(nextData);
+        setProtectedDataLoaded(true);
+        setAuthError("");
+      } catch (error) {
+        if (!active) return;
+        protectedDataUserIdRef.current = "";
+        setProtectedDataLoaded(false);
+        setAuthError(error instanceof DOMException && error.name === "AbortError" ? "Planungsdaten konnten nicht geladen werden: Zeitüberschreitung." : "Planungsdaten konnten nicht geladen werden.");
+      } finally {
+        window.clearTimeout(timeout);
+      }
     }
 
     loadProtectedPlanningData();
@@ -551,7 +930,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     return () => {
       active = false;
     };
-  }, [authRequired, authUser, initialData, source]);
+  }, [authRequired, authUser, data.tasks.length, protectedDataLoaded, safeInitialData, source]);
 
   const signIn = async () => {
     const supabase = getBrowserSupabase();
@@ -591,9 +970,11 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
       return;
     }
 
+    protectedDataUserIdRef.current = "";
+    protectedPlanningDataCache = null;
     setAuthUser(null);
     setGithubProviderTokenAvailable(false);
-    setData(initialData);
+    setData(safeInitialData);
     setProtectedDataLoaded(false);
     setSelectedTaskId(null);
     setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
@@ -631,11 +1012,22 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
 
   const updateTask = (task: Task, patch: Partial<Task>) => {
     setSaveError("");
+    setStatusGuardNotice("");
+    setStatusGuardTaskId(null);
+
+    if (patch.status && !canManageTaskMeta) {
+      const guardedMessage = founderStatusGuardMessage(patch.status as TaskStatus);
+      if (guardedMessage) {
+        setStatusGuardNotice(guardedMessage);
+        setStatusGuardTaskId(task.id);
+        return;
+      }
+    }
 
     setData((current) => {
       const nextData = {
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...patch } : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...patch, githubSyncStatus: patch.githubSyncStatus || "not_synced", githubSyncError: patch.githubSyncStatus ? item.githubSyncError : "" } : item)),
       };
 
       if (source === "seed") {
@@ -648,8 +1040,10 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
                 owner: item.owner,
                 assignee: item.assignee,
                 priority: item.priority,
+                packageId: item.packageId,
                 startDate: item.startDate,
                 endDate: item.endDate,
+                deadline: item.deadline,
                 note: item.note,
                 reviewStatus: item.reviewStatus,
                 scorePoints: item.scorePoints,
@@ -691,8 +1085,10 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
             status: patch.status,
             owner: patch.owner,
             priority: patch.priority,
+            packageId: patch.packageId,
             startDate: patch.startDate,
             endDate: patch.endDate,
+            deadline: patch.deadline,
             note: patch.note,
             reviewStatus: patch.reviewStatus,
             scorePoints: patch.scorePoints,
@@ -709,9 +1105,15 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
           }),
         });
 
+        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[] } | null;
         if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as { error?: string } | null;
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
+        }
+        if (body?.activities?.length) {
+          setData((current) => ({
+            ...current,
+            taskActivity: [...body.activities!, ...current.taskActivity],
+          }));
         }
       } catch (error) {
         setData((current) => ({
@@ -850,6 +1252,14 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     setDragOverStatus(null);
   };
 
+  const togglePackageCollapse = (packageId: string) => {
+    setExpandedPackages((current) => ({ ...current, [packageId]: !current[packageId] }));
+  };
+
+  const setAllPackageCollapse = (collapsed: boolean) => {
+    setExpandedPackages(Object.fromEntries(data.packages.map((pack) => [pack.id, !collapsed])));
+  };
+
   const updateSprint = (sprint: Sprint, patch: Partial<Sprint>) => {
     setSaveError("");
 
@@ -903,20 +1313,24 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
   };
 
   const createSprintPlanAsync = async (options: SprintPlanningOptions, silent = false) => {
-    const drafts = futureSprintDrafts(data.sprints, options);
+    const protectedSprintIds = new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId));
+    const drafts = futureSprintDrafts(data.sprints, options, protectedSprintIds);
     if (!drafts.length) {
-      if (!silent) setSprintLockMessage("Der Sprint-Plan deckt den gewünschten Zeitraum bereits ab.");
+      if (!silent) setSprintLockMessage("Die Sprint-Zeiträume entsprechen bereits der aktuellen Logik. Sprints mit Aufgabenbezug werden nicht automatisch umgeplant.");
       return 0;
     }
 
     const draftIds = new Set(drafts.map((sprint) => sprint.id));
     setData((current) => ({
       ...current,
-      sprints: [...current.sprints, ...drafts].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
+      sprints: [
+        ...current.sprints.filter((sprint) => !draftIds.has(sprint.id)),
+        ...drafts,
+      ].sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")),
     }));
 
     if (source !== "supabase") {
-      if (!silent) setSprintLockMessage(`${drafts.length} Sprint${drafts.length === 1 ? "" : "s"} lokal angelegt.`);
+      if (!silent) setSprintLockMessage(`${drafts.length} Sprint${drafts.length === 1 ? "" : "s"} lokal aktualisiert.`);
       return drafts.length;
     }
 
@@ -946,7 +1360,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
         }));
       }
 
-      if (!silent) setSprintLockMessage(`${body?.sprints?.length || drafts.length} Sprint${(body?.sprints?.length || drafts.length) === 1 ? "" : "s"} angelegt.`);
+      if (!silent) setSprintLockMessage(`${body?.sprints?.length || drafts.length} Sprint${(body?.sprints?.length || drafts.length) === 1 ? "" : "s"} aktualisiert. Sprints mit Aufgabenbezug bleiben geschützt.`);
       return body?.sprints?.length || drafts.length;
     } catch (error) {
       setData((current) => ({
@@ -1376,6 +1790,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
+      const githubProviderToken = session?.data.session?.provider_token;
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/comments`, {
@@ -1383,22 +1798,135 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
           headers: {
             "content-type": "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
+            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
           },
           body: JSON.stringify({ comment }),
         });
 
-        const body = (await response.json().catch(() => null)) as { error?: string; comment?: PlanningData["taskComments"][number] } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; githubSyncError?: string; comment?: PlanningData["taskComments"][number] } | null;
         if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
 
         setData((current) => ({
           ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? {
+            ...item,
+            githubSyncStatus: body.githubSyncError ? "failed" : "not_synced",
+            githubSyncError: body.githubSyncError || "",
+          } : item)),
           taskComments: [body.comment!, ...current.taskComments],
         }));
+        if (body.githubSyncError) {
+          setSaveError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
+        }
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.");
       }
     });
   };
+
+  const uploadTaskAttachment = async (task: Task, file: File) => {
+    setSaveError("");
+
+    if (source !== "supabase") {
+      throw new Error("Anhänge können nur mit Supabase- und GitHub-Login hochgeladen werden.");
+    }
+
+    const session = await getBrowserSupabase()?.auth.getSession();
+    const token = session?.data.session?.access_token;
+    const githubProviderToken = session?.data.session?.provider_token;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`/api/tasks/${task.id}/attachments`, {
+      method: "POST",
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+      },
+      body: formData,
+    });
+
+    const body = (await response.json().catch(() => null)) as { error?: string; markdown?: string } | null;
+    if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" } : item)),
+      taskActivity: [
+        {
+          id: Date.now(),
+          taskId: task.id,
+          message: `Anhang hochgeladen: ${file.name}`,
+          createdAt: new Date().toISOString(),
+        },
+        ...current.taskActivity,
+      ],
+    }));
+    return body.markdown;
+  };
+
+  const importGitHubComments = useCallback((task: Task, options: { silent?: boolean } = {}) => {
+    if (!options.silent) {
+      setSaveError("");
+      setCommentImportNotice("");
+    }
+
+    if (source !== "supabase") {
+      if (!options.silent) setSaveError("GitHub-Kommentarimport ist nur mit Supabase-Datenquelle verfügbar.");
+      return;
+    }
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      const githubProviderToken = session?.data.session?.provider_token;
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+          },
+        });
+
+        const body = (await response.json().catch(() => null)) as { error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] } | null;
+        if (!response.ok || !body?.comments) throw new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden.");
+
+        setData((current) => ({
+          ...current,
+          tasks: body.evidenceLink
+            ? current.tasks.map((item) => (item.id === task.id ? { ...item, evidenceLink: body.evidenceLink || item.evidenceLink, githubSyncStatus: "not_synced" } : item))
+            : current.tasks,
+          taskExternalComments: [
+            ...current.taskExternalComments.filter((comment) => comment.taskId !== task.id),
+            ...body.comments!,
+          ],
+        }));
+        const total = body.comments.length;
+        if (!options.silent) {
+          setCommentImportNotice(
+            total > 0
+              ? `GitHub-Kommentare geladen: ${total} Kommentar${total === 1 ? "" : "e"}.`
+              : "GitHub wurde geprüft, aber für dieses Issue wurden keine externen Kommentare gefunden.",
+          );
+        }
+      } catch (error) {
+        if (!options.silent) setSaveError(error instanceof Error ? error.message : "GitHub-Kommentare konnten nicht aktualisiert werden.");
+      }
+    });
+  }, [source, startTransition]);
+
+  useEffect(() => {
+    if (!selectedTask) return;
+    if (source !== "supabase") return;
+    if (!githubProviderTokenAvailable) return;
+    if (!hasGitHubIssue(selectedTask)) return;
+    if (autoImportedGitHubCommentsRef.current.has(selectedTask.id)) return;
+
+    autoImportedGitHubCommentsRef.current.add(selectedTask.id);
+    importGitHubComments(selectedTask, { silent: true });
+  }, [githubProviderTokenAvailable, importGitHubComments, selectedTask, source]);
 
   const reportTaskBlocker = (task: Task, payload: { reason: string; impact: string; needsHelpFrom: string }) => {
     if (!currentProfile) {
@@ -1423,7 +1951,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
 
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert" } : item)),
+      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert", githubSyncStatus: "not_synced", githubSyncError: "" } : item)),
       taskBlockers: [localBlocker, ...current.taskBlockers],
     }));
 
@@ -1461,7 +1989,100 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     });
   };
 
-  const syncTaskToGitHub = (task: Task) => {
+  const addTaskRelation = (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => {
+    setSaveError("");
+    if (!payload.relatedTaskId || payload.relatedTaskId === task.id) return;
+
+    const localRelation: TaskRelation = {
+      id: Date.now(),
+      taskId: task.id,
+      relatedTaskId: payload.relatedTaskId,
+      relationType: payload.relationType,
+      note: payload.note,
+      createdBy: currentProfile?.id || "",
+      createdAt: new Date().toISOString(),
+    };
+
+    setData((current) => ({ ...current, taskRelations: [localRelation, ...current.taskRelations] }));
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) =>
+        item.id === task.id || item.id === payload.relatedTaskId
+          ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" }
+          : item,
+      ),
+    }));
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; relation?: TaskRelation } | null;
+        if (!response.ok || !body?.relation) throw new Error(body?.error || "Relationship konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          taskRelations: current.taskRelations.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)),
+        }));
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Relationship konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const removeTaskRelation = (task: Task, relation: TaskRelation) => {
+    setSaveError("");
+    setData((current) => ({
+      ...current,
+      taskRelations: current.taskRelations.filter((item) => item.id !== relation.id),
+      tasks: current.tasks.map((item) =>
+        item.id === relation.taskId || item.id === relation.relatedTaskId
+          ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" }
+          : item,
+      ),
+    }));
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ relationId: relation.id }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Relationship konnte nicht entfernt werden.");
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          taskRelations: [relation, ...current.taskRelations],
+        }));
+        setSaveError(error instanceof Error ? error.message : "Relationship konnte nicht entfernt werden.");
+      }
+    });
+  };
+
+  const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean } = {}) => {
     setSaveError("");
 
     const previousTask = task;
@@ -1482,13 +2103,17 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
+      const githubProviderToken = session?.data.session?.provider_token;
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
           method: "POST",
           headers: {
+            "content-type": "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
+            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
           },
+          body: JSON.stringify({ createIfMissing: Boolean(options.createIfMissing) }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
@@ -1505,6 +2130,65 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
         }));
         setSaveError(message);
+      }
+    });
+  };
+
+  const syncLinkedGitHubTasks = () => {
+    setSaveError("");
+
+    if (source !== "supabase") {
+      setSaveError("GitHub Sync ist nur mit Supabase-Datenquelle verfügbar.");
+      return;
+    }
+
+    const queueTasks = data.tasks.filter((task) =>
+      task.taskType === "deliverable" &&
+      hasGitHubIssue(task) &&
+      task.githubSyncStatus !== "synced"
+    );
+
+    if (!queueTasks.length) return;
+
+    const previousTasks = new Map(queueTasks.map((task) => [task.id, task]));
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? { ...item, githubSyncStatus: "pending", githubSyncError: "" } : item),
+    }));
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      const githubProviderToken = session?.data.session?.provider_token;
+
+      for (const task of queueTasks) {
+        try {
+          const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+            },
+            body: JSON.stringify({ createIfMissing: false }),
+          });
+
+          const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+          if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
+
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "GitHub Sync konnte nicht ausgeführt werden.";
+          const previousTask = previousTasks.get(task.id) || task;
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
+          }));
+          setSaveError(message);
+        }
       }
     });
   };
@@ -1539,8 +2223,131 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
       } catch (error) {
         setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
       }
+      });
+    };
+
+  const createFeedback = (draft: FeedbackDraft) => {
+    if (!currentProfile) {
+      setFeedbackMessage("GitHub-User ist keinem Teamprofil zugeordnet.");
+      return;
+    }
+
+    setFeedbackMessage("");
+    setSaveError("");
+
+    const localFeedback: FeedbackItem = {
+      id: Date.now(),
+      type: draft.type,
+      status: "open",
+      severity: draft.severity,
+      profileId: currentProfile.id,
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      pageUrl: draft.pageUrl.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setData((current) => ({
+      ...current,
+      feedbackItems: [localFeedback, ...current.feedbackItems],
+    }));
+    setSelectedFeedbackId(localFeedback.id);
+
+    if (source !== "supabase") {
+      setFeedbackMessage("Feedback wurde lokal erfasst. Mit Supabase wird es als Notification an CEO/Deputy gesendet.");
+      setFeedbackDialogOpen(false);
+      return;
+    }
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/feedback", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(draft),
+        });
+
+        const body = (await response.json().catch(() => null)) as { error?: string; feedback?: FeedbackItem } | null;
+        if (!response.ok || !body?.feedback) throw new Error(body?.error || "Feedback konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          feedbackItems: [body.feedback!, ...current.feedbackItems.filter((item) => item.id !== localFeedback.id)],
+        }));
+        setSelectedFeedbackId(body.feedback.id);
+        setFeedbackMessage("Feedback wurde gesendet und als Notification zugestellt.");
+        setFeedbackDialogOpen(false);
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          feedbackItems: current.feedbackItems.filter((item) => item.id !== localFeedback.id),
+        }));
+        setSelectedFeedbackId(null);
+        setFeedbackMessage(error instanceof Error ? error.message : "Feedback konnte nicht gespeichert werden.");
+      }
     });
   };
+
+  const openNotification = (event: NotificationEvent) => {
+    if (event.entityType === "task") {
+      const task = data.tasks.find((item) => item.id === event.entityId);
+      if (!task) {
+        setSaveError("Die verknüpfte Aufgabe wurde nicht gefunden. Der Hinweis kann geschlossen werden.");
+        setShowNotifications(false);
+        return;
+      }
+      openTaskPanel(task.id);
+    } else if (event.entityType === "feedback") {
+      setSelectedFeedbackId(Number(event.entityId) || null);
+      setWorkspace("settings");
+    } else if (event.entityType === "decision") {
+      setWorkspace("decisions");
+    } else if (event.entityType === "meeting") {
+      setWorkspace("meetings");
+    }
+    setShowNotifications(false);
+  };
+
+  const dismissNotification = (eventId: number) => {
+    setData((current) => ({
+      ...current,
+      notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "dismissed" } : event)),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(`/api/notifications/${eventId}`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ status: "dismissed" }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Notification konnte nicht geschlossen werden.");
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "pending" } : event)),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Notification konnte nicht geschlossen werden.");
+      }
+    });
+  };
+
+  const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;
 
   const lockSprint = (sprintId: string) => {
     setSaveError("");
@@ -1583,7 +2390,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
   const metrics = {
     total: visibleTasks.length,
     open: visibleTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt").length,
-    blocked: visibleTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length,
+    blocked: visibleTasks.filter((task) => task.dependsOn || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations) || normalizeStatus(task.status) === "Blockiert").length,
     done: visibleTasks.filter((task) => normalizeStatus(task.status) === "Erledigt").length,
   };
 
@@ -1597,11 +2404,9 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
   if (authRequired && (!authChecked || !authUser)) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
-        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
-              <ShieldCheck size={22} />
-            </div>
+        <section className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-7 shadow-xl">
+          <div className="grid gap-5">
+            <AppBrand />
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Geschützter Teamzugriff</div>
               <h1 className="mt-1 text-xl font-semibold text-slate-950">findmydoc Founder Execution</h1>
@@ -1610,9 +2415,9 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               </p>
             </div>
           </div>
-          {authNotice && <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{authNotice}</p>}
-          {authError && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
-          <div className="mt-5">
+          {authNotice && <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{authNotice}</p>}
+          {authError && <p className="mt-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
+          <div className="mt-6">
             {authChecked ? (
               <AuthControl
                 user={authUser}
@@ -1620,6 +2425,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
                 busy={authBusy}
                 onSignIn={signIn}
                 onSignOut={signOut}
+                variant="gate"
               />
             ) : (
               <div className="h-9 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">Session wird geprüft...</div>
@@ -1630,19 +2436,17 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     );
   }
 
-  if (authRequired && authUser && !protectedDataLoaded) {
+  if (authRequired && authUser && !protectedDataLoaded && !data.tasks.length) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
-        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
-              <ShieldCheck size={22} />
-            </div>
+        <section className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-7 shadow-xl">
+          <div className="grid gap-5">
+            <AppBrand />
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Session aktiv</div>
-              <h1 className="mt-1 text-xl font-semibold text-slate-950">Planungsdaten werden geladen</h1>
+              <h1 className="mt-1 text-xl font-semibold text-slate-950">{authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen.
+                {authError ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet." : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."}
               </p>
             </div>
           </div>
@@ -1654,6 +2458,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               busy={authBusy}
               onSignIn={signIn}
               onSignOut={signOut}
+              variant="gate"
             />
           </div>
         </section>
@@ -1661,55 +2466,41 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     );
   }
 
+  if (fullTaskView && selectedTask) {
+    return (
+      <TaskDetailPage
+        task={selectedTask}
+        pack={selectedPackage}
+        packages={data.packages}
+        sprint={data.sprints.find((sprint) => sprint.id === selectedTask.sprintId)}
+        subIssues={selectedTaskSubIssues}
+        comments={selectedTaskComments}
+        externalComments={selectedTaskExternalComments}
+        activities={selectedTaskActivity}
+        blockers={selectedTaskBlockers}
+        taskRelations={data.taskRelations}
+        allTasks={data.tasks}
+        profiles={data.profiles}
+        sprints={data.sprints}
+        milestones={data.milestones}
+        source={source}
+        commentImportNotice={commentImportNotice}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
-      <aside
+      <AppSidebar
         ref={sidebarRef}
         onMouseLeave={releaseSidebarFocus}
-        className="group fixed inset-y-0 left-0 z-30 hidden w-16 overflow-hidden border-r border-slate-200 bg-white shadow-none transition-[width,box-shadow] duration-200 ease-out hover:w-64 hover:shadow-xl focus-within:w-64 focus-within:shadow-xl lg:block"
-      >
-        <div className="border-b border-slate-100 px-3 py-5">
-          <div className="flex items-center gap-3">
-            <Image src="/assets/icon-mark.svg" alt="" width={40} height={40} className="h-10 w-10 shrink-0" aria-hidden="true" />
-            <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-              <Image src="/assets/logo.svg" alt="findmydoc" width={140} height={26} className="h-5 w-auto max-w-36" priority />
-              <div className="mt-1 text-sm font-semibold text-slate-700">Founder Planning</div>
-            </div>
-          </div>
-        </div>
-        <nav className="space-y-1 px-3 py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => setWorkspace(item.id)}
-                title={item.label}
-                className={`flex h-10 w-full items-center justify-center gap-0 rounded-md px-3 text-left text-sm font-medium transition-colors group-hover:justify-start group-hover:gap-3 group-focus-within:justify-start group-focus-within:gap-3 ${
-                  workspace === item.id ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Icon size={18} className="shrink-0" />
-                <span className="w-0 overflow-hidden whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:w-auto group-hover:opacity-100 group-focus-within:w-auto group-focus-within:opacity-100">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-          <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-            Datenquelle: <span className="font-semibold">{source === "supabase" ? "Supabase" : "Seed-Fallback"}</span>
-            <br />
-            {source === "supabase" ? "Änderungen werden in Postgres gespeichert." : localStateLoaded ? "Änderungen werden lokal im Browser gespeichert." : "Lokaler Status wird geladen."}
-          </div>
-          {authAvailable && (
-            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
-              <div className="font-semibold text-slate-800">Teamzugriff</div>
-              <div className="mt-1 truncate">{authUser ? authUser.email : "Nicht angemeldet"}</div>
-            </div>
-          )}
-        </div>
-      </aside>
+        activeWorkspace={workspace}
+        onSelect={setWorkspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail={authUser?.email || ""}
+      />
 
       <main className="lg:pl-16">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -1723,6 +2514,14 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               {authNotice}
             </div>
           )}
+          {statusGuardNotice && (
+            <div className="flex items-start justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 lg:px-6">
+              <span>{statusGuardNotice}</span>
+              <button type="button" onClick={() => { setStatusGuardNotice(""); setStatusGuardTaskId(null); }} className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-amber-700 hover:bg-amber-100" aria-label="Hinweis schließen">
+                <X size={14} />
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 lg:px-6">
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
@@ -1730,6 +2529,14 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               <div className="mt-1 text-sm text-slate-500">{workspace === "planning" ? data.project.range : workspaceSubtitles[workspace]}</div>
             </div>
             <div className="flex items-center gap-2">
+              <NotificationInbox
+                notifications={unreadNotifications}
+                profiles={data.profiles}
+                open={showNotifications}
+                onToggle={() => setShowNotifications((value) => !value)}
+                onOpen={openNotification}
+                onDismiss={dismissNotification}
+              />
               {authAvailable && (
                 <AuthControl
                   user={authUser}
@@ -1739,6 +2546,14 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
                   onSignOut={signOut}
                 />
               )}
+              <button
+                type="button"
+                onClick={() => setFeedbackDialogOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+              >
+                <MessageSquare size={16} />
+                Feedback
+              </button>
               <button
                 type="button"
                 onClick={() => setTaskDialogDefaults({ taskType: workspace === "mine" ? "proposal" : "deliverable" })}
@@ -1778,6 +2593,32 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
             })}
           </div>}
         </header>
+
+        {statusGuardNotice && statusGuardTask && (
+          <div className="fixed inset-x-4 top-24 z-50 mx-auto max-w-md rounded-lg border border-amber-200 bg-white p-4 text-sm shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-50 text-amber-600">
+                <AlertTriangle size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-slate-950">Status geschützt</h2>
+                <p className="mt-1 leading-5 text-slate-600">{statusGuardNotice}</p>
+                <p className="mt-2 truncate text-xs font-semibold text-slate-500">{statusGuardTask.title}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => updateTask(statusGuardTask, { status: "Review" })} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">
+                    In Review verschieben
+                  </button>
+                  <button type="button" onClick={() => updateTask(statusGuardTask, { status: "Blockiert" })} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Als blockiert markieren
+                  </button>
+                  <button type="button" onClick={() => { setStatusGuardNotice(""); setStatusGuardTaskId(null); }} className="h-9 rounded-md px-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {planningWorkspaces.includes(workspace) && <section className="grid gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-6">
           {[
@@ -1829,12 +2670,13 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
 
         <section className="px-4 pb-8 pt-4 lg:px-6">
           {workspace === "projects" && <ProjectsOverview data={data} tasks={data.tasks} />}
+          {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}
           {workspace === "team" && <TeamOverview data={data} tasks={data.tasks} pending={isPending} onUpdateProfile={updateProfile} />}
           {workspace === "sprint" && (
             <SprintScoreTableOverview
               data={data}
               pending={isPending}
-              onOpen={(task) => setSelectedTaskId(task.id)}
+              onOpen={(task) => openTaskPanel(task.id)}
               onReview={reviewTask}
               onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
               onChangeStatus={(task, status) => updateTask(task, { status })}
@@ -1843,6 +2685,7 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               onUpdateCommitment={updateSprintCommitment}
               onUpdateMeetingAttendance={updateMeetingAttendance}
               onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
+              canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
               sprintLockMessage={sprintLockMessage}
             />
           )}
@@ -1866,12 +2709,17 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               authUserEmail={authUser?.email || ""}
               githubProviderTokenAvailable={githubProviderTokenAvailable}
               pending={isPending}
+              feedbackMessage={feedbackMessage}
+              selectedFeedbackId={selectedFeedbackId}
               notificationDispatchMessage={notificationDispatchMessage}
               sprintPlanningOptions={sprintPlanningOptions}
-              plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions).length}
+              plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions, new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId))).length}
               onUpdateSprintPlanning={setSprintPlanningOptions}
               onCreateSprintPlan={createSprintPlan}
               onDispatchNotifications={dispatchNotifications}
+              onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
+              onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
+              onSelectFeedback={setSelectedFeedbackId}
             />
           )}
 
@@ -1912,7 +2760,10 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
                           task={task}
                           pack={packageById(data.packages, task.packageId)}
                           ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
-                          onOpen={(nextTask) => setSelectedTaskId(nextTask.id)}
+                          relations={data.taskRelations}
+                          allTasks={data.tasks}
+                          statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
+                          onOpen={(nextTask) => openTaskPanel(nextTask.id)}
                           onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
                           onDragStart={startTaskDrag}
                           onDragEnd={endTaskDrag}
@@ -1928,30 +2779,62 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
 
           {view === "structure" && (
             <div className="grid gap-4">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAllPackageCollapse(true)}
+                  className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Alle einklappen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAllPackageCollapse(false)}
+                  className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Alle ausklappen
+                </button>
+              </div>
               {data.packages.map((pack) => {
                 const tasks = visibleTasks.filter((task) => task.packageId === pack.id);
+                const expanded = Boolean(expandedPackages[pack.id]);
                 return (
                   <section key={pack.id} className="rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                      <div>
-                        <div className="text-xs font-semibold text-blue-700">{pack.id} · {pack.priority}</div>
-                        <h2 className="text-base font-semibold text-slate-950">{pack.title}</h2>
-                        <p className="mt-1 text-sm text-slate-500">{pack.goal}</p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => togglePackageCollapse(pack.id)}
+                        className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus:ring-2 focus:ring-blue-100"
+                        aria-expanded={expanded}
+                      >
+                        <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500">
+                          <ChevronRight size={16} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-xs font-semibold text-blue-700">{pack.id} · {pack.priority}</span>
+                          <span className="mt-0.5 block text-base font-semibold text-slate-950">{pack.title}</span>
+                          <span className="mt-1 block text-sm text-slate-500">{pack.goal}</span>
+                        </span>
+                      </button>
                       <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{tasks.length} Aufgaben</span>
                     </div>
-                    <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-                      {tasks.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          pack={pack}
-                          ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
-                          onOpen={(nextTask) => setSelectedTaskId(nextTask.id)}
-                          onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
-                        />
-                      ))}
-                    </div>
+                    {expanded && (
+                      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+                        {tasks.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            pack={pack}
+                            ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
+                            relations={data.taskRelations}
+                            allTasks={data.tasks}
+                            statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
+                            onOpen={(nextTask) => openTaskPanel(nextTask.id)}
+                            onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </section>
                 );
               })}
@@ -1963,16 +2846,29 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
               <table className="min-w-[1320px] w-full border-collapse text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    {["Status", "Owner", "Priorität", "Workstream", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Definition of Done"].map((head) => (
+                    {["Status", "GitHub", "Owner", "Priorität", "Workstream", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Definition of Done"].map((head) => (
                       <th key={head} className="border-b border-slate-200 px-3 py-3">{head}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleTasks.map((task) => (
+                  {visibleTasks.map((task) => {
+                    const relationGroups = taskRelationsFor(task.id, data.taskRelations);
+                    const hasOpenWait = hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations);
+                    return (
                     <tr key={task.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
                       <td className="px-3 py-3">
-                        <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => updateTask(task, { status: value })} className="h-8 w-32 text-xs" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
+                        <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => updateTask(task, { status: value })} className="h-8 w-32 text-xs" options={statusOptionsForRole(task.status, canManageTaskMeta).map((status) => ({ value: status, label: status }))} />
+                      </td>
+                      <td className="px-3 py-3">
+                        {hasGitHubIssue(task) ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                            <Link2 size={13} />
+                            verknüpft
+                          </span>
+                        ) : (
+                          <GitHubMissingBadge />
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <CustomSelect value={task.owner} onChange={(value) => updateTask(task, { owner: value })} className="h-8 w-32 text-xs" options={data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
@@ -1980,23 +2876,32 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
                       <td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${priorityTone(task.priority)}`}>{task.priority}</span></td>
                       <td className="px-3 py-3 text-slate-600">{task.workstream}</td>
                       <td className="max-w-sm px-3 py-3">
-                        <button type="button" onClick={() => setSelectedTaskId(task.id)} className="text-left font-semibold text-slate-900 hover:text-blue-700">{task.title}</button>
+                        <button type="button" onClick={() => openTaskPanel(task.id)} className="inline-flex items-start gap-1.5 text-left font-semibold text-slate-900 hover:text-blue-700">
+                          {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
+                          <span>{task.title}</span>
+                        </button>
                         <p className="mt-1 line-clamp-2 text-xs text-slate-500">{task.description}</p>
                       </td>
                       <td className="px-3 py-3">{task.hours}h</td>
                       <td className="px-3 py-3">{dateRange(task)}</td>
                       <td className="px-3 py-3">{task.deadline}</td>
-                      <td className="max-w-52 px-3 py-3 text-xs text-amber-700">{task.dependsOn || "-"}</td>
+                      <td className="max-w-52 px-3 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
+                          <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
+                          {!relationGroups.waitsOn.length && !relationGroups.blocks.length && <span className="text-xs text-slate-400">-</span>}
+                        </div>
+                      </td>
                       <td className="max-w-sm px-3 py-3 text-xs leading-5 text-slate-600">{task.definitionOfDone}</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
           )}
 
           {view === "gantt" && (
-            <GanttView tasks={visibleTasks} packages={data.packages} onOpen={(task) => setSelectedTaskId(task.id)} />
+            <GanttView tasks={visibleTasks} packages={data.packages} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
           )}
           </>
           )}
@@ -2009,17 +2914,29 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
           task={selectedTask}
           pack={selectedPackage}
           comments={selectedTaskComments}
+          externalComments={selectedTaskExternalComments}
+          activities={selectedTaskActivity}
+          commentImportNotice={commentImportNotice}
           blockers={selectedTaskBlockers}
           subIssues={selectedTaskSubIssues}
           teamProfiles={data.profiles}
-          profiles={data.profiles.map((profile) => profile.name)}
+          packages={data.packages}
+          sprints={data.sprints}
+          milestones={data.milestones}
+          canManageTaskMeta={canManageTaskMeta}
+          allTasks={data.tasks}
+          relations={data.taskRelations}
           pending={isPending}
-          onClose={() => setSelectedTaskId(null)}
+          onClose={closeTaskPanel}
           onUpdate={(patch) => updateTask(selectedTask, patch)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
+          onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}
+          onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
-          onSyncGitHub={() => syncTaskToGitHub(selectedTask)}
+          onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
+          onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
+          onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
         />
       )}
       {taskDialogDefaults && (
@@ -2029,6 +2946,13 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
           pending={isPending}
           onClose={() => setTaskDialogDefaults(null)}
           onCreate={createTask}
+        />
+      )}
+      {feedbackDialogOpen && (
+        <FeedbackDialog
+          pending={isPending}
+          onClose={() => setFeedbackDialogOpen(false)}
+          onSubmit={createFeedback}
         />
       )}
     </div>
@@ -2089,6 +3013,70 @@ function ProjectsOverview({ data, tasks }: { data: PlanningData; tasks: Task[] }
           );
         })}
       </section>
+    </div>
+  );
+}
+
+function FmdToolsOverview({ tools = [] }: { tools?: FmdTool[] }) {
+  const groups: Array<{ id: FmdTool["category"]; label: string; empty: string }> = [
+    { id: "tool", label: "Interne Tools", empty: "Noch keine internen Tools hinterlegt." },
+    { id: "repo", label: "Repos & Automationen", empty: "Noch keine Repos hinterlegt." },
+    { id: "knowledge", label: "Notion & Wissen", empty: "Noch keine Wissensquellen hinterlegt." },
+    { id: "asset", label: "Drive & Assets", empty: "Noch keine Asset-Ablagen hinterlegt." },
+  ];
+  const activeTools = tools.filter((tool) => tool.status === "active").length;
+  const missingLinks = tools.filter((tool) => tool.status === "missing_link").length;
+
+  return (
+    <div className="grid gap-4">
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">FMD-Tools Hub</h2>
+            <p className="mt-1 text-sm text-slate-500">Zentraler Einstieg für interne Rechner, Generatoren, Crawler, Repos, Notion und Drive.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">{activeTools} aktiv</span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{missingLinks} Link fehlt</span>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {groups.map((group) => {
+          const groupTools = tools.filter((tool) => tool.category === group.id);
+          return (
+            <section key={group.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-950">{group.label}</h3>
+              <div className="mt-3 grid gap-2">
+                {groupTools.map((tool) => (
+                  <article key={tool.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-slate-950">{tool.name}</h4>
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">{tool.kind}</span>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">{tool.description}</p>
+                        <div className="mt-2 text-xs text-slate-500">{tool.owner || "Team"} · {tool.status === "missing_link" ? "Link ergänzen" : tool.status}</div>
+                      </div>
+                      {tool.url ? (
+                        <a href={tool.url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                          <ExternalLink size={14} />
+                          Öffnen
+                        </a>
+                      ) : (
+                        <span className="inline-flex h-8 shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-700">Link fehlt</span>
+                      )}
+                    </div>
+                  </article>
+                ))}
+                {!groupTools.length && <div className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-sm text-slate-500">{group.empty}</div>}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2270,6 +3258,7 @@ function SprintScoreTableOverview({
   onUpdateCommitment,
   onUpdateMeetingAttendance,
   onAssignSprint,
+  canManageSprint,
   sprintLockMessage,
 }: {
   data: PlanningData;
@@ -2289,9 +3278,11 @@ function SprintScoreTableOverview({
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
+  canManageSprint: boolean;
   sprintLockMessage: string;
 }) {
-  const [selectedSprintId, setSelectedSprintId] = useState(data.sprints[0]?.id || "");
+  const currentSprint = findCurrentSprint(data.sprints);
+  const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [selectedReviewTaskId, setSelectedReviewTaskId] = useState("");
   const [reviewComment, setReviewComment] = useState("");
   const [reviewChecklist, setReviewChecklist] = useState({
@@ -2301,7 +3292,15 @@ function SprintScoreTableOverview({
     blockerHandled: false,
   });
   const reviewScore = reviewChecklistScore(reviewChecklist);
-  const sprint = data.sprints.find((item) => item.id === selectedSprintId) || data.sprints[0];
+  useEffect(() => {
+    if (!data.sprints.length) return;
+    if (!selectedSprintId || !data.sprints.some((item) => item.id === selectedSprintId)) {
+      const nextSprintId = findCurrentSprint(data.sprints)?.id || data.sprints[0]?.id || "";
+      window.queueMicrotask(() => setSelectedSprintId(nextSprintId));
+    }
+  }, [data.sprints, selectedSprintId]);
+
+  const sprint = data.sprints.find((item) => item.id === selectedSprintId) || currentSprint || data.sprints[0];
   const sprintTasks = sprint ? data.tasks.filter((task) => task.sprintId === sprint.id) : data.tasks;
   const otherTasks = sprint ? data.tasks.filter((task) => task.sprintId !== sprint.id) : [];
   const unassignedTasks = data.tasks.filter((task) => !task.sprintId);
@@ -2330,6 +3329,9 @@ function SprintScoreTableOverview({
   const meeting = sprint ? data.meetings.find((item) => item.sprintId === sprint.id) : undefined;
   const finalScores = sprintTasks.filter((task) => task.scoreFinal).length;
   const openScores = sprintTasks.filter((task) => !task.scoreFinal).length;
+  const sprintHasTasks = sprintTasks.length > 0;
+  const sprintIsCurrent = currentSprint?.id === sprint.id;
+  const sprintControlsDisabled = pending || !canManageSprint;
   const sprintStatusLabel: Record<Sprint["status"], string> = {
     planning: "Planung",
     active: "Aktiv",
@@ -2351,25 +3353,37 @@ function SprintScoreTableOverview({
         <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Sprint
-            <CustomSelect value={sprint.id} onChange={setSelectedSprintId} className="h-9 text-sm" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
+            <CustomSelect
+              value={sprint.id}
+              onChange={setSelectedSprintId}
+              className="h-9 text-sm"
+              options={data.sprints.map((item) => ({
+                value: item.id,
+                label: item.name,
+                current: currentSprint?.id === item.id,
+                locked: data.tasks.some((task) => task.sprintId === item.id),
+              }))}
+            />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <div className="grid gap-1 text-xs font-semibold text-slate-500">
             Start
-            <CustomDatePicker value={sprint.startDate} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { startDate: value })} className="h-9 text-sm" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.startDate)}</div>
+          </div>
+          <div className="grid gap-1 text-xs font-semibold text-slate-500">
             Ende
-            <CustomDatePicker value={sprint.endDate} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { endDate: value })} className="h-9 text-sm" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.endDate)}</div>
+          </div>
+          <div className="grid gap-1 text-xs font-semibold text-slate-500">
             Review bis
-            <CustomDatePicker mode="datetime" value={sprint.reviewDueAt ? sprint.reviewDueAt.slice(0, 16) : ""} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateSprint(sprint, { reviewDueAt: value })} className="h-9 text-sm" />
-          </label>
+            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">
+              {sprint.reviewDueAt ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt)) : "ohne Datum"}
+            </div>
+          </div>
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Status
             <CustomSelect
               value={sprint.status}
-              disabled={pending || sprint.scoreLocked}
+              disabled={sprintControlsDisabled || sprint.scoreLocked}
               onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
               className="h-9 text-sm"
               options={[
@@ -2382,7 +3396,7 @@ function SprintScoreTableOverview({
           </label>
           <button
             type="button"
-            disabled={pending || sprint.scoreLocked}
+            disabled={sprintControlsDisabled || sprint.scoreLocked}
             onClick={() => onLockSprint(sprint.id)}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -2395,6 +3409,27 @@ function SprintScoreTableOverview({
           <div><span className="font-semibold text-slate-950">{finalScores}/{sprintTasks.length}</span> Scores final</div>
           <div><span className="font-semibold text-slate-950">{openScores}</span> Scores offen</div>
           <div><span className="font-semibold text-slate-950">{unassignedTasks.length}</span> ohne Sprint</div>
+        </div>
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
+          {sprintIsCurrent && (
+            <span
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600"
+              aria-label="Aktueller Sprint"
+              title="Aktueller Sprint"
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]" />
+            </span>
+          )}
+          {sprintHasTasks && (
+            <span
+              className="inline-flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-600"
+              aria-label={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
+              title={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
+            >
+              <Lock size={13} />
+              {sprintTasks.length}
+            </span>
+          )}
         </div>
         {sprintLockMessage && (
           <div className="border-t border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
@@ -2588,12 +3623,14 @@ function SprintScoreTableOverview({
               {sprintTasks.map((task) => (
                 <tr key={task.id} className="hover:bg-slate-50">
                   <td className="max-w-[360px] border-b border-slate-100 px-4 py-3">
-                    <button type="button" onClick={() => onOpen(task)} className="block truncate text-left font-semibold text-slate-950 hover:text-blue-700">
-                      {task.title}
+                    <button type="button" onClick={() => onOpen(task)} className="flex max-w-full items-start gap-1.5 truncate text-left font-semibold text-slate-950 hover:text-blue-700">
+                      {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
+                      <span className="truncate">{task.title}</span>
                     </button>
                     <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
-                    {(task.carriedFromSprintId || task.sprintOutcome) && (
+                    {(!hasGitHubIssue(task) || task.carriedFromSprintId || task.sprintOutcome) && (
                       <div className="mt-1 flex flex-wrap gap-1">
+                        {!hasGitHubIssue(task) && <GitHubMissingBadge />}
                         {task.carriedFromSprintId && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Carry-over</span>}
                         {task.sprintOutcome && <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{task.sprintOutcome}</span>}
                       </div>
@@ -3521,12 +4558,17 @@ function SettingsOverview({
   authUserEmail,
   githubProviderTokenAvailable,
   pending,
+  feedbackMessage,
+  selectedFeedbackId,
   notificationDispatchMessage,
   sprintPlanningOptions,
   plannedSprintCount,
   onUpdateSprintPlanning,
   onCreateSprintPlan,
   onDispatchNotifications,
+  onSyncLinkedGitHubTasks,
+  onCreateGitHubIssue,
+  onSelectFeedback,
 }: {
   data: PlanningData;
   source: "seed" | "supabase";
@@ -3534,16 +4576,30 @@ function SettingsOverview({
   authUserEmail: string;
   githubProviderTokenAvailable: boolean;
   pending: boolean;
+  feedbackMessage: string;
+  selectedFeedbackId: number | null;
   notificationDispatchMessage: string;
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
   onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
+  onSyncLinkedGitHubTasks: () => void;
+  onCreateGitHubIssue: (task: Task) => void;
+  onSelectFeedback: (id: number) => void;
 }) {
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
+  const selectedFeedback = data.feedbackItems.find((item) => item.id === selectedFeedbackId) || data.feedbackItems[0];
+  const openFeedbackCount = data.feedbackItems.filter((item) => item.status === "open").length;
+  const linkedSyncQueue = data.tasks.filter((task) =>
+    task.taskType === "deliverable" &&
+    hasGitHubIssue(task) &&
+    task.githubSyncStatus !== "synced"
+  );
+  const failedSyncTasks = data.tasks.filter((task) => task.taskType === "deliverable" && task.githubSyncStatus === "failed");
+  const appOnlyTasks = data.tasks.filter((task) => task.taskType === "deliverable" && !hasGitHubIssue(task));
 
   return (
     <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
@@ -3584,8 +4640,164 @@ function SettingsOverview({
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
+            <h2 className="text-base font-semibold text-slate-950">GitHub Sync Queue</h2>
+            <p className="mt-1 text-sm text-slate-500">App bleibt führend. Verknüpfte Issues werden aktualisiert; App-only-Aufgaben werden hier bewusst nicht neu angelegt.</p>
+          </div>
+          <button
+            type="button"
+            disabled={pending || !linkedSyncQueue.length}
+            onClick={onSyncLinkedGitHubTasks}
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Verknüpfte Issues synchronisieren
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sync offen</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{linkedSyncQueue.length}</div>
+          </div>
+          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fehlgeschlagen</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{failedSyncTasks.length}</div>
+          </div>
+          <div className="rounded-md bg-amber-50 px-3 py-2 text-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">App-only</div>
+            <div className="mt-1 text-2xl font-semibold text-amber-900">{appOnlyTasks.length}</div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-950">Aktualisierbare GitHub-Issues</h3>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600">{linkedSyncQueue.length}</span>
+            </div>
+            <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
+              {linkedSyncQueue.slice(0, 8).map((task) => (
+                <div key={task.id} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="line-clamp-1 font-semibold text-slate-900">{task.title}</div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span>{task.githubIssueNumber ? `#${task.githubIssueNumber}` : "Legacy-Link"}</span>
+                    <span>{syncLabel(task.githubSyncStatus)}</span>
+                  </div>
+                  {task.githubSyncError && <div className="mt-1 line-clamp-2 text-xs text-red-700">{task.githubSyncError}</div>}
+                </div>
+              ))}
+              {!linkedSyncQueue.length && <div className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500">Keine verknüpften Issues warten auf Sync.</div>}
+            </div>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-amber-950">App-only Aufgaben</h3>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-amber-700">{appOnlyTasks.length}</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-amber-800">Diese Aufgaben bleiben sichtbar markiert. Neue GitHub-Issues werden dafür erst nach einer bewussten Entscheidung erstellt.</p>
+            <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
+              {appOnlyTasks.slice(0, 8).map((task) => (
+                <div key={task.id} className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-1 font-semibold text-slate-900">{task.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{task.owner} · {task.priority} · {task.hours}h</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={pending || task.githubSyncStatus === "pending"}
+                      onClick={() => onCreateGitHubIssue(task)}
+                      className="h-7 shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Issue anlegen
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {!appOnlyTasks.length && <div className="rounded-md border border-dashed border-amber-200 bg-white px-3 py-4 text-center text-sm text-amber-700">Keine App-only Deliverables.</div>}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Benachrichtigungscenter</h2>
+            <p className="mt-1 text-sm text-slate-500">Feedback-Eingang für Bugs und Feature-Wünsche mit Absender, Kontextseite und Detailtext.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">{openFeedbackCount} Feedback offen</span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{pendingNotifications.length} im Ausgang</span>
+          </div>
+        </div>
+        {feedbackMessage && (
+          <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">{feedbackMessage}</p>
+        )}
+        <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+          <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Feedback-Eingang</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Neue Bugs und Verbesserungen aus dem Team.</p>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600">{data.feedbackItems.length}</span>
+            </div>
+            <div className="grid max-h-96 min-w-0 gap-2 overflow-y-auto pr-1">
+              {data.feedbackItems.map((item) => {
+                const reporter = data.profiles.find((profile) => profile.id === item.profileId)?.name || item.profileId || "Unbekannt";
+                const active = selectedFeedback?.id === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onSelectFeedback(item.id)}
+                    className={`min-w-0 rounded-md border px-3 py-2 text-left text-sm transition ${active ? "border-blue-200 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-100 hover:bg-blue-50/40"}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${item.type === "bug" ? "border-red-200 bg-red-50 text-red-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}>
+                        {item.type === "bug" ? "Bug" : "Feature"}
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-slate-500">{item.severity}</span>
+                    </div>
+                    <div className="mt-2 line-clamp-2 break-words font-semibold text-slate-900">{item.title}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{reporter} · {formatDate(item.createdAt)}</div>
+                  </button>
+                );
+              })}
+              {!data.feedbackItems.length && <div className="grid min-h-48 place-items-center rounded-md border border-dashed border-slate-200 bg-white px-3 py-8 text-center text-sm text-slate-500">Noch kein Feedback erfasst.</div>}
+            </div>
+          </div>
+          <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
+            {selectedFeedback ? (
+              <div className="grid min-w-0 gap-3 text-sm">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detail</div>
+                  <h3 className="mt-1 break-words text-base font-semibold text-slate-950">{selectedFeedback.title}</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">{selectedFeedback.status}</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">{selectedFeedback.severity}</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">{selectedFeedback.type === "bug" ? "Bug" : "Feature-Wunsch"}</span>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white p-3">
+                  <p className="whitespace-pre-wrap break-words leading-6 text-slate-700">{selectedFeedback.description}</p>
+                </div>
+                {selectedFeedback.pageUrl && (
+                  <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <span className="font-semibold text-blue-900">Kontextseite: </span>
+                    <span className="break-all">{selectedFeedback.pageUrl}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid min-h-48 place-items-center rounded-md border border-dashed border-slate-200 bg-white px-4 text-center text-sm text-slate-500">Feedback auswählen, um Details zu sehen.</div>
+            )}
+          </div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-slate-950">Sprint-Planung</h2>
-            <p className="mt-1 text-sm text-slate-500">Legt automatisch die nächsten Sprint-Zeiträume an. Der aktuelle Sprint bleibt im Scoreboard sichtbar.</p>
+            <p className="mt-1 text-sm text-slate-500">Legt Sprint-Zeiträume aus Startdatum und Rhythmus fest. Beispiel: 01.06.2026 plus 2 Wochen ergibt 01.06.-14.06., danach 15.06.-28.06.</p>
           </div>
           <button
             type="button"
@@ -3593,20 +4805,35 @@ function SettingsOverview({
             onClick={() => onCreateSprintPlan(sprintPlanningOptions)}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {plannedSprintCount > 0 ? `${plannedSprintCount} Sprint${plannedSprintCount === 1 ? "" : "s"} anlegen` : "Plan aktuell"}
+            {plannedSprintCount > 0 ? `${plannedSprintCount} Änderung${plannedSprintCount === 1 ? "" : "en"} anwenden` : "Plan aktuell"}
           </button>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_140px_140px_140px]">
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
-            Namensmuster
+        <div className="mt-4 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
+            Namenslogik
+            <div className="flex h-9 w-full min-w-0 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">
+              Sprint + Nummer
+            </div>
+          </div>
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
+            Erste Sprint-Nr.
             <input
-              value={sprintPlanningOptions.namePattern}
-              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, namePattern: event.target.value })}
-              className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
-              placeholder="Sprint #"
+              type="number"
+              min={1}
+              value={sprintPlanningOptions.firstSprintNumber}
+              onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, firstSprintNumber: Number(event.target.value) })}
+              className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
+            Startdatum
+            <CustomDatePicker
+              value={sprintPlanningOptions.anchorStartDate}
+              onChange={(value) => onUpdateSprintPlanning({ ...sprintPlanningOptions, anchorStartDate: value })}
+              className="h-9 w-full text-sm"
+            />
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
             Rhythmus (Wochen)
             <input
               type="number"
@@ -3614,10 +4841,10 @@ function SettingsOverview({
               max={12}
               value={sprintPlanningOptions.rhythmWeeks}
               onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, rhythmWeeks: Number(event.target.value) })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+              className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
             Wochen voraus
             <input
               type="number"
@@ -3625,17 +4852,17 @@ function SettingsOverview({
               max={52}
               value={sprintPlanningOptions.horizonWeeks}
               onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, horizonWeeks: Number(event.target.value) })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+              className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <label className="grid min-w-0 gap-1 text-xs font-semibold text-slate-500">
             Bis Sprint-Nr.
             <input
               type="number"
               min={0}
               value={sprintPlanningOptions.targetSprintNumber || ""}
               onChange={(event) => onUpdateSprintPlanning({ ...sprintPlanningOptions, targetSprintNumber: Number(event.target.value) })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
+              className="h-9 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-900"
               placeholder="optional"
             />
           </label>
@@ -3643,17 +4870,17 @@ function SettingsOverview({
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">Google Chat Outbox</h2>
-            <p className="mt-1 text-sm text-slate-500">Pending-Events werden erst nach Konfiguration von GOOGLE_CHAT_WEBHOOK_URL extern gesendet.</p>
-          </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">Notification-Ausgang</h2>
+              <p className="mt-1 text-sm text-slate-500">Google Chat bekommt nur wichtige Sammelmeldungen. Persönliche Hinweise bleiben oben in der Notification-Inbox.</p>
+            </div>
           <button
             type="button"
             disabled={pending || !pendingNotifications.length}
             onClick={onDispatchNotifications}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Pending senden
+              Digest senden
           </button>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -3707,84 +4934,142 @@ function AuthControl({
   busy,
   onSignIn,
   onSignOut,
+  variant = "header",
 }: {
   user: User | null;
   error: string;
   busy: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
+  variant?: "header" | "gate";
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
   const avatarUrl = getUserMetadataString(user, "avatar_url");
   const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
 
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+
+    window.addEventListener("pointerdown", closeOnOutside);
+    return () => window.removeEventListener("pointerdown", closeOnOutside);
+  }, [open]);
+
+  if (!user) {
+    return (
+      <div className={variant === "gate" ? "grid gap-3" : ""}>
+        {variant === "gate" && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+            Rollen und Zugriff werden nach dem Login über dein gemapptes GitHub-Profil geprüft.
+          </div>
+        )}
+        {error && variant === "gate" && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+        <button
+          type="button"
+          onClick={onSignIn}
+          disabled={busy}
+          className={variant === "gate"
+            ? "inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"}
+        >
+          <Users size={17} />
+          {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
+        </button>
+      </div>
+    );
+  }
+
+  if (variant === "gate") {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {avatarUrl ? (
+            <Image src={avatarUrl} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
+          ) : (
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700">
+              {displayName.slice(0, 1).toUpperCase() || "?"}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-slate-950">{displayName}</div>
+            <div className="truncate text-xs text-slate-500">{githubLogin ? `@${githubLogin}` : user.email || "GitHub angemeldet"}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={busy}
+            className="h-9 shrink-0 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Abmelden
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+        }}
+        aria-label="Account-Menü öffnen"
+        className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white p-0.5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
       >
-        <Users size={16} />
-        {user ? "Angemeldet" : "Login"}
+        {avatarUrl ? (
+          <Image
+            src={avatarUrl}
+            alt=""
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-full bg-slate-100 object-cover"
+          />
+        ) : (
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+            {displayName.slice(0, 1).toUpperCase() || "?"}
+          </span>
+        )}
       </button>
       {open && (
         <div className="absolute right-0 top-11 z-30 w-80 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-xl">
-          {user ? (
-            <div className="grid gap-4">
-              <div className="flex min-w-0 items-center gap-3">
-                {avatarUrl ? (
-                  <Image
-                    src={avatarUrl}
-                    alt=""
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600">
-                    {displayName.slice(0, 1).toUpperCase() || "?"}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
-                  <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
-                  {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
-                  {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
+          <div className="grid gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt=""
+                  width={44}
+                  height={44}
+                  className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100"
+                />
+              ) : (
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600">
+                  {displayName.slice(0, 1).toUpperCase() || "?"}
                 </div>
+              )}
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
+                <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
+                {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
+                {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
               </div>
-              <button
-                type="button"
-                onClick={onSignOut}
-                disabled={busy}
-                className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                Abmelden
-              </button>
             </div>
-          ) : (
-            <form
-              className="grid gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSignIn();
-              }}
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={busy}
+              className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
             >
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">GitHub Login</div>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Rollen werden über das gemappte GitHub-Profil in Supabase bestimmt.</p>
-              </div>
-              {error && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-              <button
-                type="submit"
-                disabled={busy}
-                className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {busy ? "GitHub wird geöffnet" : "Mit GitHub anmelden"}
-              </button>
-            </form>
-          )}
+              Abmelden
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -3796,7 +5081,86 @@ function getUserMetadataString(user: User | null, key: string) {
   return typeof value === "string" ? value : "";
 }
 
-function GanttView({ tasks, packages, onOpen }: { tasks: Task[]; packages: Package[]; onOpen: (task: Task) => void }) {
+function FeedbackDialog({
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (draft: FeedbackDraft) => void;
+}) {
+  const [draft, setDraft] = useState<FeedbackDraft>({
+    type: "bug",
+    severity: "P2",
+    title: "",
+    description: "",
+    pageUrl: typeof window === "undefined" ? "" : window.location.href,
+  });
+  const canSubmit = draft.title.trim().length >= 3 && draft.description.trim().length >= 10;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-6">
+      <form
+        className="w-full max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) onSubmit(draft);
+        }}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team-Feedback</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Bug oder Feature-Wunsch melden</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Feedback schließen">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="grid gap-4 p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              Typ
+              <CustomSelect
+                value={draft.type}
+                onChange={(value) => setDraft((current) => ({ ...current, type: value as FeedbackDraft["type"] }))}
+                className="h-9 text-sm"
+                options={[{ value: "bug", label: "Bug" }, { value: "feature", label: "Feature-Wunsch" }]}
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              Priorität
+              <CustomSelect
+                value={draft.severity}
+                onChange={(value) => setDraft((current) => ({ ...current, severity: value as FeedbackDraft["severity"] }))}
+                className="h-9 text-sm"
+                options={["P0", "P1", "P2", "P3"].map((value) => ({ value, label: value }))}
+              />
+            </label>
+          </div>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Titel
+            <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400" placeholder="Kurz beschreiben, was aufgefallen ist" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Beschreibung
+            <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-32 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Was ist passiert, was hast du erwartet, und wo genau im Tool?" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Kontextseite
+            <input value={draft.pageUrl} onChange={(event) => setDraft((current) => ({ ...current, pageUrl: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400" placeholder="URL oder Bereich im Tool" />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+          <button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">Abbrechen</button>
+          <button type="submit" disabled={pending || !canSubmit} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Senden</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function GanttView({ tasks, packages, relations, onOpen }: { tasks: Task[]; packages: Package[]; relations: TaskRelation[]; onOpen: (task: Task) => void }) {
   const start = new Date("2026-05-25");
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(start);
@@ -3841,7 +5205,8 @@ function GanttView({ tasks, packages, onOpen }: { tasks: Task[]; packages: Packa
                 >
                   <span className="block truncate">{task.title}</span>
                 </button>
-                {task.dependsOn && <span className="absolute right-2 top-4 h-2 w-2 rounded-full bg-amber-400" title="Hat Abhängigkeit" />}
+                {taskRelationsFor(task.id, relations).waitsOn.length > 0 && <span className="absolute right-2 top-4 h-2 w-2 rounded-full bg-amber-400" title="Wartet auf andere Aufgabe" />}
+                {taskRelationsFor(task.id, relations).blocks.length > 0 && <span className="absolute right-5 top-4 h-2 w-2 rounded-full bg-blue-400" title="Blockiert andere Aufgabe" />}
               </div>
             );
           })}
@@ -4043,138 +5408,255 @@ function NewTaskDialog({
   );
 }
 
+function RelationshipList({
+  title,
+  rows,
+  empty,
+  canManage,
+  onRemove,
+}: {
+  title: string;
+  rows: Array<{ relation: TaskRelation; task?: Task }>;
+  empty: string;
+  canManage?: boolean;
+  onRemove?: (relation: TaskRelation) => void;
+}) {
+  return (
+    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          {title}
+          <RelationshipInfo title={title} />
+        </span>
+        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-500">{rows.length}</span>
+      </div>
+      <div className="mt-2 grid gap-1.5">
+        {rows.map(({ relation, task }) => (
+          <div key={`${relation.id}-${task?.id || "unknown"}`} className="flex items-start justify-between gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
+            <div className="min-w-0">
+              <div className="break-words font-semibold text-slate-800">{task?.title || relation.relatedTaskId}</div>
+              <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${task.owner}` : "Aufgabe nicht gefunden"}</div>
+              {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
+            </div>
+            {canManage && onRemove && (
+              <button
+                type="button"
+                onClick={() => onRemove(relation)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                aria-label={`${title}-Relationship entfernen`}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        ))}
+        {!rows.length && <div className="text-xs text-slate-500">{empty}</div>}
+      </div>
+    </div>
+  );
+}
+
 function TaskDetailPanel({
   task,
   pack,
   comments,
+  externalComments,
+  activities,
+  commentImportNotice,
   blockers,
   subIssues,
   teamProfiles,
-  profiles,
+  packages,
+  sprints,
+  milestones,
+  canManageTaskMeta,
+  allTasks,
+  relations,
   pending,
   onClose,
   onUpdate,
   onAddComment,
+  onUploadAttachment,
+  onImportGitHubComments,
   onReportBlocker,
   onCreateSubIssue,
   onSyncGitHub,
+  onAddRelation,
+  onRemoveRelation,
 }: {
   task: Task;
   pack?: Package;
   comments: TaskComment[];
+  externalComments: TaskExternalComment[];
+  activities: TaskActivity[];
+  commentImportNotice: string;
   blockers: TaskBlocker[];
   subIssues: Task[];
   teamProfiles: Profile[];
-  profiles: string[];
+  packages: Package[];
+  sprints: Sprint[];
+  milestones: Milestone[];
+  canManageTaskMeta: boolean;
+  allTasks: Task[];
+  relations: TaskRelation[];
   pending: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => void;
+  onUploadAttachment: (file: File) => Promise<string>;
+  onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
-  onSyncGitHub: () => void;
+  onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
+  onRemoveRelation: (relation: TaskRelation) => void;
 }) {
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
+  const [relationDraft, setRelationDraft] = useState<{ relationType: TaskRelationType; relatedTaskId: string; note: string }>({
+    relationType: "blocked_by",
+    relatedTaskId: "",
+    note: "",
+  });
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
+  const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
+  const creatorProfile = teamProfiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
+    || teamProfiles.find((profile) => profile.platformRole === "ceo")
+    || ownerProfile;
+  const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
+  const currentSprint = sprints.find((item) => item.id === task.sprintId);
+  const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
+  const statusOptions = canManageTaskMeta
+    ? taskStatuses
+    : normalizeStatus(task.status) === "Nacharbeit"
+      ? (["In Arbeit", "Review", "Blockiert"] as TaskStatus[])
+      : taskStatuses.filter((status) => status !== "Erledigt");
+  const updatePackage = (packageId: string) => {
+    const nextPackage = packages.find((item) => item.id === packageId);
+    onUpdate({ packageId, milestoneId: nextPackage?.milestoneId || task.milestoneId });
+  };
+  const updateMilestone = (milestoneId: string) => {
+    const nextPackage = packages.find((item) => !milestoneId || !item.milestoneId || item.milestoneId === milestoneId);
+    onUpdate({ milestoneId, packageId: nextPackage?.id || task.packageId });
+  };
+  const canSyncExistingGitHubIssue = hasGitHubIssue(task);
+  const relationshipGroups = relationshipRows(task, allTasks, relations);
+  const relationTargetOptions = allTasks
+    .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
+    .map((item) => ({ value: item.id, label: `${item.title} · ${item.owner}` }));
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabendetails</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">{task.title}</h2>
-          <Link href={`/tasks/${task.id}`} className="mt-2 inline-flex h-8 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-            Große Detailseite öffnen
-          </Link>
-        </div>
-        <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Detailpanel schließen">
-          ×
-        </button>
-      </div>
-
-      <div className="grid gap-4 p-5">
-        <section className="rounded-lg border border-slate-200 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Status
-              <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Owner
-              <CustomSelect value={task.owner} onChange={(value) => onUpdate({ owner: value })} className="h-9 text-sm" options={profiles.map((profile) => ({ value: profile, label: profile }))} />
-            </label>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Group Commitment</div>
-              <div className="mt-1 text-sm text-slate-800">{pack ? `${pack.id} · ${pack.title}` : "ohne Group Commitment"}</div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
-              <div className="mt-1 flex items-center gap-2 text-sm text-slate-800"><CalendarDays size={15} />{dateRange(task)}</div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-slate-500">Review</div>
-              <div className="mt-1 text-sm text-slate-800">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
+    <>
+    <button
+      type="button"
+      className="fixed inset-0 z-30 cursor-default bg-slate-950/[0.03]"
+      aria-label="Detailpanel schließen"
+      onClick={onClose}
+    />
+    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
+      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabendetails</div>
+            <h2 className="mt-1 break-words text-xl font-semibold leading-7 text-slate-950">{task.title}</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${statusTone(normalizeStatus(task.status))}`}>{normalizeStatus(task.status)}</span>
+              <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${priorityTone(task.priority)}`}>{task.priority}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                <Users size={13} />
+                {task.owner}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                <CalendarDays size={13} />
+                {dateRange(task)}
+              </span>
             </div>
           </div>
-          {(task.carriedFromSprintId || task.carryoverReason || task.sprintOutcome) && (
-            <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-900">
-              <div className="font-semibold">Sprint-Verlauf</div>
-              {task.carriedFromSprintId && <div>Aus Sprint {task.carriedFromSprintId} übertragen.</div>}
-              {task.sprintOutcome && <div>Outcome im ursprünglichen Sprint: {task.sprintOutcome}</div>}
-              {task.carryoverReason && <div>{task.carryoverReason}</div>}
-            </div>
-          )}
-        </section>
-
-        <TaskCommentThread
-          comments={comments}
-          profiles={teamProfiles}
-          pending={pending}
-          onAddComment={onAddComment}
-        />
-
-        <section className="rounded-lg border border-slate-200 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-950">GitHub Sync</h3>
-              <p className="mt-1 text-xs text-slate-500">One-way Backup ins Management-Repo.</p>
-            </div>
-            <button
-              type="button"
-              disabled={pending || task.githubSyncStatus === "pending"}
-              onClick={onSyncGitHub}
-              className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={`/tasks/${task.id}?view=full`}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
-              {task.githubSyncStatus === "pending" ? "Synchronisiert..." : "Jetzt spiegeln"}
+              <Maximize2 size={14} />
+              Große Ansicht
+            </Link>
+            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Detailpanel schließen">
+              <X size={16} />
             </button>
           </div>
-          <div className="mt-2 grid gap-2 text-sm leading-6 text-slate-600">
-            <p>{task.githubRepo || "findmydoc-platform/management"} · {syncLabel(task.githubSyncStatus)}</p>
-            {task.githubIssueUrl ? (
-              <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{task.githubIssueUrl}</a>
-            ) : (
-              <p>Noch kein GitHub-Issue gespiegelt.</p>
-            )}
-            {task.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
-            {task.githubSyncError && <p className="text-red-700">{task.githubSyncError}</p>}
-          </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="rounded-lg border border-slate-200 p-4">
-          <h3 className="text-sm font-semibold text-slate-950">Beschreibung</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{task.description}</p>
-        </section>
+      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <main className="grid min-w-0 gap-4">
+          <section className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Beschreibung</h3>
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{task.description}</p>
+          </section>
+
+        {task.acceptanceCriteria && (
+          <section className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Acceptance Criteria</h3>
+            <div className="mt-2">
+              <TaskChecklist value={task.acceptanceCriteria} emptyText="Keine Acceptance Criteria hinterlegt." onChange={(nextValue) => onUpdate({ acceptanceCriteria: nextValue })} />
+            </div>
+          </section>
+        )}
 
         <section className="rounded-lg border border-slate-200 p-4">
           <h3 className="text-sm font-semibold text-slate-950">Definition of Done</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{task.definitionOfDone}</p>
+          <div className="mt-2">
+            <TaskChecklist value={task.definitionOfDone} emptyText="Keine Definition of Done hinterlegt." onChange={(nextValue) => onUpdate({ definitionOfDone: nextValue })} />
+          </div>
         </section>
 
         <section className="rounded-lg border border-slate-200 p-4">
           <h3 className="text-sm font-semibold text-slate-950">Abhängigkeiten & Evidence</h3>
           <div className="mt-2 grid gap-2 text-sm leading-6 text-slate-600">
-            <p>{task.dependsOn || "Keine harte Abhängigkeit erfasst."}</p>
-            <p>{task.evidenceLink || task.issueUrl || "Noch kein Evidence-Link hinterlegt."}</p>
+            <RelationshipList title="Wartet auf" rows={relationshipGroups.waitsOn} empty="Wartet auf keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+            <RelationshipList title="Blockiert" rows={relationshipGroups.blocks} empty="Blockiert keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+            <RelationshipList title="Verknüpft mit" rows={relationshipGroups.related} empty="Keine losen Verknüpfungen." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+            {task.dependsOn && <p className="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">Legacy-Notiz: {task.dependsOn}</p>}
+            {task.evidenceLink || task.issueUrl ? (
+              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                <CommentBody value={task.evidenceLink || task.issueUrl} />
+              </div>
+            ) : (
+              <p>Noch kein Evidence-Link hinterlegt.</p>
+            )}
+            {canManageTaskMeta && (
+              <div className="mt-2 grid gap-2 rounded-md border border-slate-200 bg-white p-3">
+                <div className="text-xs font-semibold text-slate-500">Relationship hinzufügen</div>
+                <CustomSelect
+                  value={relationDraft.relationType}
+                  onChange={(value) => setRelationDraft((current) => ({ ...current, relationType: value as TaskRelationType }))}
+                  className="h-9 text-sm"
+                  options={(["blocked_by", "blocks", "relates_to"] as TaskRelationType[]).map((type) => ({ value: type, label: relationTypeLabel(type) }))}
+                />
+                <CustomSelect
+                  value={relationDraft.relatedTaskId}
+                  onChange={(value) => setRelationDraft((current) => ({ ...current, relatedTaskId: value }))}
+                  className="h-9 text-sm"
+                  options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
+                />
+                <input
+                  value={relationDraft.note}
+                  onChange={(event) => setRelationDraft((current) => ({ ...current, note: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+                  placeholder="Optionaler Hinweis"
+                />
+                <button
+                  type="button"
+                  disabled={pending || !relationDraft.relatedTaskId}
+                  onClick={() => {
+                    onAddRelation(relationDraft);
+                    setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
+                  }}
+                  className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Relationship hinzufügen
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -4256,6 +5738,18 @@ function TaskDetailPanel({
           </div>
         </section>
 
+        <TaskCommentThread
+          comments={comments}
+          externalComments={externalComments}
+          activities={activities}
+          notice={commentImportNotice}
+          profiles={teamProfiles}
+          pending={pending}
+          onImportGitHubComments={onImportGitHubComments}
+          onUploadAttachment={onUploadAttachment}
+          onAddComment={onAddComment}
+        />
+
         <section className="rounded-lg border border-slate-200 p-4">
           <h3 className="text-sm font-semibold text-slate-950">Notizen</h3>
           <textarea
@@ -4266,8 +5760,174 @@ function TaskDetailPanel({
           />
           <div className="mt-2 text-xs text-slate-500">{pending ? "Speichert..." : "Änderungen werden gespeichert, lokal oder in Supabase je nach Datenquelle."}</div>
         </section>
+        </main>
+
+        <div className="grid h-fit min-w-0 gap-4 lg:sticky lg:top-24">
+          <section className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Steuerung</h3>
+            <div className="mt-3 grid gap-3">
+              <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                Status
+                <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={statusOptions.map((status) => ({ value: status, label: status }))} />
+              </label>
+              {canManageTaskMeta ? (
+                <>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Assignee
+                    <CustomSelect value={task.owner} onChange={(value) => onUpdate({ owner: value })} className="h-9 text-sm" options={teamProfiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Priorität
+                    <CustomSelect value={task.priority} onChange={(value) => onUpdate({ priority: value })} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Assignee</div>
+                    <div className="mt-1 flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800">{task.owner}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Priorität</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-800">{task.priority}</div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Planung</h3>
+            <div className="mt-3 grid gap-3">
+              {canManageTaskMeta ? (
+                <>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Group Commitment
+                    <CustomSelect value={task.packageId} onChange={updatePackage} className="h-9 text-sm" options={packages.map((item) => ({ value: item.id, label: `${item.id} · ${item.title}` }))} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Sprint
+                    <CustomSelect value={task.sprintId} onChange={(value) => onUpdate({ sprintId: value })} className="h-9 text-sm" options={sprints.map((item) => ({ value: item.id, label: item.name }))} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Epic / Meilenstein
+                    <CustomSelect value={task.milestoneId || ""} onChange={updateMilestone} className="h-9 text-sm" options={[{ value: "", label: "Kein Epic" }, ...milestones.map((item) => ({ value: item.id, label: item.title }))]} />
+                  </label>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
+                    <div className="mt-1 grid grid-cols-2 gap-2">
+                      <CustomDatePicker value={task.startDate || ""} onChange={(value) => onUpdate({ startDate: value })} className="h-9 text-sm" />
+                      <CustomDatePicker value={task.endDate || ""} onChange={(value) => onUpdate({ endDate: value })} className="h-9 text-sm" />
+                    </div>
+                  </div>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                    Zieltermin
+                    <CustomDatePicker value={task.deadline || ""} onChange={(value) => onUpdate({ deadline: value })} className="h-9 text-sm" />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Group Commitment</div>
+                    <div className="mt-1 break-words text-sm text-slate-800">{currentPackage ? `${currentPackage.id} · ${currentPackage.title}` : "ohne Group Commitment"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Sprint</div>
+                    <div className="mt-1 text-sm text-slate-800">{currentSprint?.name || "Kein Sprint"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Epic / Meilenstein</div>
+                    <div className="mt-1 break-words text-sm text-slate-800">{currentMilestone?.title || "Kein Epic"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
+                    <div className="mt-1 flex items-center gap-2 text-sm text-slate-800"><CalendarDays size={15} />{dateRange(task)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zieltermin</div>
+                    <div className="mt-1 text-sm text-slate-800">{task.deadline ? formatDate(task.deadline) : "Kein Zieltermin"}</div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">Review & Historie</h3>
+            <div className="mt-3 grid gap-3 text-sm text-slate-800">
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Review</div>
+                <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Erstellt von</div>
+                <div className="mt-1">{creatorProfile?.name || task.createdBy || "Unbekannt"}</div>
+              </div>
+              {(task.carriedFromSprintId || task.carryoverReason || task.sprintOutcome) && (
+                <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-900">
+                  <div className="font-semibold">Sprint-Verlauf</div>
+                  {task.carriedFromSprintId && <div>Aus Sprint {task.carriedFromSprintId} übertragen.</div>}
+                  {task.sprintOutcome && <div>Outcome im ursprünglichen Sprint: {task.sprintOutcome}</div>}
+                  {task.carryoverReason && <div>{task.carryoverReason}</div>}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">GitHub</h3>
+                <p className="mt-1 text-xs text-slate-500">Backup ins Management-Repo.</p>
+              </div>
+              {canSyncExistingGitHubIssue ? (
+                <button
+                  type="button"
+                  disabled={pending || task.githubSyncStatus === "pending"}
+                  onClick={() => onSyncGitHub()}
+                  className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {task.githubSyncStatus === "pending" ? "Sync..." : "Jetzt spiegeln"}
+                </button>
+              ) : task.taskType === "deliverable" ? (
+                <button
+                  type="button"
+                  disabled={pending || task.githubSyncStatus === "pending"}
+                  onClick={() => onSyncGitHub({ createIfMissing: true })}
+                  className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {task.githubSyncStatus === "pending" ? "Anlegen..." : "GitHub-Issue anlegen"}
+                </button>
+              ) : (
+                <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
+              <p className="break-words">{task.githubRepo || "findmydoc-platform/management"} · {syncLabel(task.githubSyncStatus)}</p>
+              {task.githubIssueUrl ? (
+                <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-blue-700 hover:underline">
+                  <Link2 size={15} className="shrink-0" />
+                  <span className="truncate">{task.githubIssueUrl}</span>
+                </a>
+              ) : (
+                <p className="inline-flex items-center gap-1.5 text-amber-700">
+                  <AlertTriangle size={15} />
+                  Noch kein GitHub-Issue verknüpft.
+                </p>
+              )}
+              {!hasGitHubIssue(task) && (
+                <p className="text-xs text-slate-500">
+                  Diese Aufgabe wird nicht automatisch dupliziert. Nutze “GitHub-Issue anlegen”, wenn sie bewusst ins Management-Repo gespiegelt werden soll.
+                </p>
+              )}
+              {task.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
+              {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}
+            </div>
+          </section>
+        </div>
       </div>
     </aside>
+    </>
   );
 }
 

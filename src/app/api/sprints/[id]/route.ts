@@ -68,6 +68,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: "Sprint-Start darf nicht nach dem Sprint-Ende liegen." }, { status: 400 });
   }
 
+  const timelineChanged = (update.name !== undefined && update.name !== current.name)
+    || (update.start_date !== undefined && update.start_date !== current.start_date)
+    || (update.end_date !== undefined && update.end_date !== current.end_date)
+    || (update.review_due_at !== undefined && update.review_due_at !== current.review_due_at);
+
+  if (timelineChanged) {
+    const { count, error: taskCountError } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("sprint_id", id);
+
+    if (taskCountError) return NextResponse.json({ error: taskCountError.message }, { status: 500 });
+    if ((count || 0) > 0) {
+      return NextResponse.json({
+        error: `Dieser Sprint ist geschützt, weil ${count} Aufgabe${count === 1 ? "" : "n"} damit verknüpft ${count === 1 ? "ist" : "sind"}. Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden.`,
+      }, { status: 409 });
+    }
+  }
+
   if (!Object.keys(update).length) {
     return NextResponse.json({
       ok: true,

@@ -31,7 +31,7 @@ if (existsSync(envPath)) {
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const githubToken = process.env.GITHUB_SYNC_TOKEN;
+const githubReadToken = process.env.GITHUB_READ_TOKEN;
 const owner = process.env.GITHUB_SYNC_OWNER || "findmydoc-platform";
 const repo = process.env.GITHUB_SYNC_REPO || "management";
 
@@ -56,7 +56,7 @@ function normalizeTitle(value) {
 }
 
 async function fetchIssues() {
-  if (!githubToken) {
+  if (!githubReadToken) {
     const { stdout } = await execFileAsync("gh", [
       "issue",
       "list",
@@ -82,7 +82,7 @@ async function fetchIssues() {
     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100&page=${page}`, {
       headers: {
         accept: "application/vnd.github+json",
-        authorization: `Bearer ${githubToken}`,
+        authorization: `Bearer ${githubReadToken}`,
         "x-github-api-version": "2022-11-28",
       },
     });
