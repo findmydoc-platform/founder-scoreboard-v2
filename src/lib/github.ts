@@ -33,6 +33,14 @@ function githubTypeLabel(task: Task) {
   return "Deliverable";
 }
 
+function linkedIssueNumber(task: Task) {
+  if (task.githubIssueNumber) return task.githubIssueNumber;
+  const legacyNumber = Number(task.issueNumber);
+  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
+  const legacyUrlMatch = task.issueUrl.match(/\/issues\/(\d+)(?:$|[?#])/);
+  return legacyUrlMatch ? Number(legacyUrlMatch[1]) : null;
+}
+
 function compactSection(title: string, rows: string[]) {
   const content = rows.filter(Boolean);
   if (!content.length) return [`## ${title}`, "_Nicht gesetzt._"];
@@ -55,6 +63,7 @@ export function taskIssueLabels(task: Task) {
   return [
     "task",
     task.taskType === "deliverable" ? "deliverable" : "",
+    task.taskType === "sub_issue" ? "sub-issue" : "",
     task.taskType === "proposal" ? "follow-up" : "",
     task.status === "Review" ? "review:ready" : "",
     task.status === "Nacharbeit" ? "changes-requested" : "",
@@ -119,6 +128,11 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
     "",
     ...compactSection("Letzte Kommentare", comments),
     "",
+    "## Source of Truth",
+    `- Founder Scoreboard v2 Task ID: ${task.id}`,
+    `- Sync-Ziel: ${owner}/${repo}`,
+    `- Bestehendes GitHub Issue: ${linkedIssueNumber(task) ? `#${linkedIssueNumber(task)}` : "noch nicht verknüpft"}`,
+    "",
     "_One-way Sync aus Founder Scoreboard v2. Änderungen in GitHub werden nicht automatisch zurückgeschrieben._",
   ].join("\n");
 }
@@ -139,8 +153,10 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
     labels: taskIssueLabels(task),
   };
 
-  if (task.githubIssueNumber) {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${task.githubIssueNumber}`, {
+  const issueNumber = linkedIssueNumber(task);
+
+  if (issueNumber) {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify(payload),

@@ -9,3 +9,5 @@ update profiles set profile_color = '#3b82f6' where id = 'sebastian' and profile
 update profiles set profile_color = '#f59e0b' where id = 'anil' and profile_color = '#64748b';
 update profiles set profile_color = '#8b5cf6' where id = 'ozen' and profile_color = '#64748b';
 update profiles set profile_color = '#ec4899' where id = 'youssef' and profile_color = '#64748b';
+
+notify pgrst, 'reload schema';

@@ -13,6 +13,7 @@
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
     "verify:hierarchy": "node scripts/verify-hierarchy.mjs",
+    "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"
   },
   "dependencies": {

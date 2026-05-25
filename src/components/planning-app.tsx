@@ -173,6 +173,30 @@ function profileColor(profile?: Pick<Profile, "color"> | null) {
   return profile?.color || "#64748b";
 }
 
+function createTaskDragPreview(source: HTMLElement, pointerX: number, pointerY: number) {
+  const rect = source.getBoundingClientRect();
+  const preview = source.cloneNode(true) as HTMLElement;
+  preview.style.position = "fixed";
+  preview.style.top = `${pointerY - 18}px`;
+  preview.style.left = `${pointerX - 24}px`;
+  preview.style.width = `${rect.width}px`;
+  preview.style.boxSizing = "border-box";
+  preview.style.pointerEvents = "none";
+  preview.style.transform = "rotate(-1.5deg) scale(1.03)";
+  preview.style.opacity = "1";
+  preview.style.filter = "drop-shadow(0 18px 28px rgba(15, 23, 42, 0.22))";
+  preview.style.zIndex = "9999";
+  document.body.appendChild(preview);
+  return preview;
+}
+
+function transparentDragImage() {
+  const image = document.createElement("canvas");
+  image.width = 1;
+  image.height = 1;
+  return image;
+}
+
 function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
 }
@@ -314,7 +338,9 @@ function TaskCard({
       draggable={Boolean(onDragStart)}
       onDragStart={(event) => onDragStart?.(task, event)}
       onDragEnd={onDragEnd}
-      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${isDragging ? "opacity-50 ring-2 ring-blue-300" : "cursor-grab active:cursor-grabbing"}`}
+      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${
+        isDragging ? "scale-[0.98] cursor-grabbing border-dashed opacity-55 ring-2 ring-blue-200" : "cursor-grab active:cursor-grabbing"
+      }`}
       style={{
         borderLeftColor: ownerColor,
         boxShadow: `inset 4px 0 0 ${ownerColor}, 0 1px 3px ${hexToRgba(ownerColor, 0.18)}`,
@@ -786,6 +812,27 @@ export function PlanningApp({ initialData, source, authRequired }: Props) {
     setDraggedTaskId(task.id);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", task.id);
+    event.dataTransfer.setDragImage(transparentDragImage(), 0, 0);
+
+    const preview = createTaskDragPreview(event.currentTarget, event.clientX, event.clientY);
+    document.body.style.cursor = "none";
+
+    const movePreview = (dragEvent: globalThis.DragEvent) => {
+      if (dragEvent.clientX === 0 && dragEvent.clientY === 0) return;
+      preview.style.left = `${dragEvent.clientX - 24}px`;
+      preview.style.top = `${dragEvent.clientY - 18}px`;
+    };
+    const cleanupPreview = () => {
+      preview.remove();
+      document.body.style.cursor = "";
+      window.removeEventListener("dragover", movePreview);
+      window.removeEventListener("drop", cleanupPreview);
+      window.removeEventListener("dragend", cleanupPreview);
+    };
+
+    window.addEventListener("dragover", movePreview);
+    window.addEventListener("drop", cleanupPreview, { once: true });
+    window.addEventListener("dragend", cleanupPreview, { once: true });
   };
 
   const dropTaskOnStatus = (status: TaskStatus, event: DragEvent<HTMLElement>) => {

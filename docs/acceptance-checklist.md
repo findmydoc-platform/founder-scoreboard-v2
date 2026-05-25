@@ -4,7 +4,7 @@ Stand: 2026-05-25
 
 ## Vorab
 
-Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatische Read-only-Pruefungen laufen ueber:
+Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatische Read-only-Prüfungen laufen über:
 
 ```bash
 npm run verify:supabase
@@ -17,7 +17,7 @@ npm run build
 
 ## Login und Basiszustand
 
-1. App unter `http://localhost:3000` oeffnen.
+1. App unter `http://localhost:3000` öffnen.
 2. Mit GitHub anmelden.
 3. Unten links muss der Teamzugriff die angemeldete Session zeigen.
 4. `/api/health` muss `status: "ready"` melden.
@@ -32,8 +32,8 @@ Erwartung:
 
 1. In `Planung` auf `Neu` klicken.
 2. Als CEO ein Deliverable erstellen.
-3. Pruefen, dass es im Board bei `Offen` erscheint.
-4. Task oeffnen und Status per Select aendern.
+3. Prüfen, dass es im Board bei `Offen` erscheint.
+4. Task öffnen und Status per Select ändern.
 5. Task per Drag and Drop in eine andere Spalte verschieben.
 
 Erwartung:
@@ -43,11 +43,11 @@ Erwartung:
 
 ## Kommentare, Blocker und Review
 
-1. Task oeffnen.
+1. Task öffnen.
 2. Kommentar erfassen.
 3. Blocker melden.
 4. Review anfragen.
-5. Als CEO ueber die Review-Checkliste akzeptieren, teilweise akzeptieren oder Nacharbeit setzen.
+5. Als CEO über die Review-Checkliste akzeptieren, teilweise akzeptieren oder Nacharbeit setzen.
 
 Erwartung:
 - Kommentare und Blocker bleiben nach Reload sichtbar.
@@ -58,8 +58,8 @@ Erwartung:
 
 ## Sprint & Score
 
-1. `Sprint & Score` oeffnen.
-2. Sprint-Daten pruefen: Start, Ende, Review bis, Status.
+1. `Sprint & Score` öffnen.
+2. Sprint-Daten prüfen: Start, Ende, Review bis, Status.
 3. Commitment pro Founder setzen: Lite, Standard, Heavy oder Away.
 4. Wochenstunden erfassen.
 5. Meeting-Anwesenheit und schriftliches Update testen.
@@ -71,14 +71,14 @@ Erwartung:
 
 ## Sprintabschluss und Carry-over
 
-Nur ausfuehren, wenn Testdaten oder ein bewusst abschliessbarer Sprint genutzt wird.
+Nur ausführen, wenn Testdaten oder ein bewusst abschließbarer Sprint genutzt wird.
 
 1. Offene Aufgabe mit Blocker anlegen oder bestehende Testaufgabe nutzen.
-2. Sprint abschliessen.
-3. Neue Carry-over-Aufgabe im naechsten Sprint pruefen.
+2. Sprint abschließen.
+3. Neue Carry-over-Aufgabe im nächsten Sprint prüfen.
 
 Erwartung:
-- Urspruengliche Aufgabe bekommt `score_final=true` und 0 offene Punkte.
+- Ursprüngliche Aufgabe bekommt `score_final=true` und 0 offene Punkte.
 - Kommunizierter Blocker wird als `accepted_carryover` markiert.
 - Carry-over-Aufgabe zeigt Ursprung und Grund im Detailpanel.
 - Notification-Event `sprint.task_carried_over` entsteht.
@@ -89,13 +89,13 @@ Erwartung:
 2. Decision editieren.
 3. Audit Trail ausklappen.
 4. Einwand erfassen.
-5. Bestaetigung testen.
+5. Bestätigung testen.
 
 Erwartung:
 - Edit ist CEO-only.
 - Audit zeigt Vorher/Nachher.
-- Einwaende sind sichtbar.
-- Nach allen erforderlichen Bestaetigungen wird gelockt.
+- Einwände sind sichtbar.
+- Nach allen erforderlichen Bestätigungen wird gelockt.
 
 ## GitHub Sync
 
@@ -104,14 +104,14 @@ Voraussetzung:
 - Token hat Zugriff auf `findmydoc-platform/management`.
 
 Check:
-1. Task oeffnen.
+1. Task öffnen.
 2. `Jetzt spiegeln` klicken.
-3. Link zum GitHub Issue pruefen.
+3. Link zum GitHub Issue prüfen.
 
 Erwartung:
 - Issue wird im Management-Repo erstellt oder aktualisiert.
 - Body enthält Epic / Meilenstein, Group Commitment, Sprint, Review, Score, Blocker und Kommentare.
-- GitHub bleibt one-way Backup, nicht fuehrendes System.
+- GitHub bleibt one-way Backup, nicht führendes System.
 
 ## Google Chat
 
@@ -120,7 +120,7 @@ Voraussetzung:
 
 Check:
 1. Event erzeugen, z. B. Kommentar oder Review-Anfrage.
-2. Einstellungen oeffnen.
+2. Einstellungen öffnen.
 3. In `Google Chat Outbox` `Pending senden` klicken.
 
 Erwartung:
@@ -129,7 +129,7 @@ Erwartung:
 
 ## Offene V1-Grenzen
 
-- Private 1:1-Google-Chat-DMs brauchen spaeter eine Google Chat App/Bot-Konfiguration.
+- Private 1:1-Google-Chat-DMs brauchen später eine Google Chat App/Bot-Konfiguration.
 - GitHub-Sync ist V1 one-way App zu GitHub.
 - Drag/Resize im Gantt ist noch nicht Teil von V1.
-- Andere Founder-Logins muessen noch real getestet werden, sobald sie sich einmal angemeldet haben.
+- Andere Founder-Logins müssen noch real getestet werden, sobald sie sich einmal angemeldet haben.

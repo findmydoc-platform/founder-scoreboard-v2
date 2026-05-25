@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
         attempts: 0,
         target,
         payload: deliveryEvent,
-        last_error: "Benachrichtigungen fuer Empfaenger deaktiviert.",
+        last_error: "Benachrichtigungen für Empfänger deaktiviert.",
       });
       results.push({ eventId: row.id, status: "skipped", error: "Benachrichtigungen deaktiviert." });
       continue;

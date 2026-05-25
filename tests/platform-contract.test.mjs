@@ -56,8 +56,24 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(github, /Offene Blocker/);
   assert.match(github, /Letzte Kommentare/);
   assert.match(github, /Parent Deliverable/);
+  assert.match(github, /Source of Truth/);
+  assert.match(github, /linkedIssueNumber/);
+  assert.match(github, /task\.issueNumber/);
   assert.match(ui, /syncTaskToGitHub/);
   assert.match(ui, /Jetzt spiegeln/);
+});
+
+test("existing management issues are linked before creating duplicates", async () => {
+  const script = await readFile("scripts/plan-github-issue-linking.mjs", "utf8");
+  const docs = await readFile("docs/planning-hierarchy.md", "utf8");
+
+  assert.match(script, /normalizeTitle/);
+  assert.match(script, /exactMatches/);
+  assert.match(script, /ambiguousMatches/);
+  assert.match(script, /github_issue_number/);
+  assert.match(script, /--apply/);
+  assert.match(docs, /Bestehende GitHub-Issues/);
+  assert.match(docs, /nicht gelöscht und nicht dupliziert/);
 });
 
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
