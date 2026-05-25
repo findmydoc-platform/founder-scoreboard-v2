@@ -211,11 +211,20 @@ test("decision objections are founder comments with audit trail", async () => {
 
 test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
+  const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(route, /requireCEO/);
   assert.match(route, /platformRoles/);
   assert.match(route, /Mindestens ein CEO muss gesetzt bleiben/);
   assert.match(route, /profile.update/);
+  assert.match(route, /profile_color/);
+  assert.match(migration, /profile_color/);
+  assert.match(migration, /profiles_profile_color_hex/);
+  assert.match(data, /profile_color/);
+  assert.match(ui, /profileColorOptions/);
+  assert.match(ui, /Post-it-Farbe/);
 });
 
 test("decision audit loads before and after data for collapsible diffs", async () => {
