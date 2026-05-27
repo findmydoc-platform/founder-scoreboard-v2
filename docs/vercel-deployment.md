@@ -43,11 +43,11 @@ Before production login works, configure Supabase Auth:
 Run from `fmd-planning`:
 
 ```bash
-npm run verify:vercel-ready
-npm run verify:google-chat
-npm run lint
 npm run build
+npm run verify:release
 ```
+
+`npm run verify:release` is the bundled local gate for non-build checks. It runs contract tests, lint, Vercel readiness, Google Chat rollout readiness, and `npm audit --audit-level=moderate`. Run `npm run build` as its own command before deployment, because `next build` starts worker processes on Windows and is more reliable as a standalone npm script. `verify:release` also does not run `verify:operational`, because that check needs a reachable local or deployed app.
 
 If production Supabase env is present locally, also run:
 

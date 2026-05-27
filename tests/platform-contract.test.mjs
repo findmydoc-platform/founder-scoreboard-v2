@@ -813,6 +813,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
   const deployment = await readFile("docs/vercel-deployment.md", "utf8");
   const skill = await readFile("skills/fmd-vercel-readiness/SKILL.md", "utf8");
+  const pkg = await readFile("package.json", "utf8");
+  const layout = await readFile("src/app/layout.tsx", "utf8");
+  const css = await readFile("src/app/globals.css", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
   assert.match(verify, /localProjectLinked/);
@@ -821,11 +824,24 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /npm run verify:google-chat/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /verify:google-chat/);
+  assert.match(pkg, /verify:release/);
+  assert.match(pkg, /node tests\/platform-contract\.test\.mjs/);
+  assert.match(pkg, /eslint/);
+  assert.match(pkg, /node scripts\/verify-vercel-ready\.mjs/);
+  assert.match(pkg, /node scripts\/verify-google-chat-rollout\.mjs/);
+  assert.match(pkg, /npm audit --audit-level=moderate/);
+  assert.doesNotMatch(pkg, /"verify:release": ".*next build/);
+  assert.match(deployment, /npm run build[\s\S]*npm run verify:release/);
+  assert.match(deployment, /npm run verify:release/);
+  assert.match(deployment, /npm audit --audit-level=moderate/);
+  assert.match(deployment, /Run `npm run build` as its own command/);
   assert.match(deployment, /localProjectLinked: false/);
   assert.match(deployment, /vercel link --yes --project founder-ops/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(skill, /localProjectLinked: false/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.doesNotMatch(layout, /next\/font\/google/);
+  assert.match(css, /--font-sans: Inter, ui-sans-serif/);
 });
 
 test("health and supabase verification detect operational migrations", async () => {
