@@ -54,9 +54,14 @@ async function pageSmoke() {
   const response = await fetch(appUrl, { cache: "no-store" });
   const html = await response.text();
   const markers = ["Founder Planning", "Sprint &amp; Score", "Decision Log", "Meeting Finder", "Board"];
+  const authGateEnabled = process.env.REQUIRE_SUPABASE_AUTH === "true";
+  const markerResults = Object.fromEntries(markers.map((marker) => [marker, html.includes(marker)]));
+
   return {
     statusCode: response.status,
-    markers: Object.fromEntries(markers.map((marker) => [marker, html.includes(marker)])),
+    mode: authGateEnabled ? "auth-gated" : "public",
+    markers: markerResults,
+    markerCheckRequired: !authGateEnabled,
   };
 }
 
