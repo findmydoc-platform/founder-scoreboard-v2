@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "audit:stewardship": "node scripts/code-stewardship-audit.mjs",
     "import:legacy": "node scripts/import-dashboard.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
@@ -15,6 +16,7 @@
     "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",
     "verify:hierarchy": "node scripts/verify-hierarchy.mjs",
     "verify:github-sync": "node scripts/verify-github-sync.mjs",
+    "verify:google-chat": "node scripts/verify-google-chat-rollout.mjs",
     "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
     "migrate:relationships": "node scripts/migrate-task-relationships.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"

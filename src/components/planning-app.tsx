@@ -37,9 +37,10 @@ import { TaskChecklist } from "@/components/task-checklist";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
+import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { TaskDetailPage } from "@/components/task-detail-page";
 import { CommentBody, TaskCommentThread } from "@/components/task-comment-thread";
-import type { CommitmentLevel, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -78,8 +79,15 @@ type NewTaskDraft = {
   workstream: string;
   startDate: string;
   endDate: string;
+  deadline: string;
   hours: number;
   definitionOfDone: string;
+  createGitHubIssue: boolean;
+  relationType: TaskRelationType;
+  relatedTaskId: string;
+  relationNote: string;
+  decisionId: number;
+  decisionLinkNote: string;
 };
 
 type SprintPlanningOptions = {
@@ -98,6 +106,18 @@ type FeedbackDraft = {
   pageUrl: string;
 };
 
+type GoogleChatStatus = {
+  webhookConfigured: boolean;
+  deliveryEnabled: boolean;
+  ready: boolean;
+  pending: number;
+};
+
+type HeaderPrimaryAction = {
+  label: string;
+  onClick: () => void;
+};
+
 function normalizePlanningData(data: PlanningData): PlanningData {
   return {
     ...data,
@@ -114,8 +134,11 @@ function normalizePlanningData(data: PlanningData): PlanningData {
     taskBlockers: data.taskBlockers || [],
     taskRelations: data.taskRelations || [],
     taskActivity: data.taskActivity || [],
+    taskFocusItems: data.taskFocusItems || [],
+    decisionTaskLinks: data.decisionTaskLinks || [],
     notificationEvents: data.notificationEvents || [],
     notificationDeliveries: data.notificationDeliveries || [],
+    notificationPreferences: data.notificationPreferences || [],
     feedbackItems: data.feedbackItems || [],
     fmdTools: data.fmdTools || [],
     meetings: data.meetings || [],
@@ -136,6 +159,7 @@ const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = 
 
 const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
+  execution: "Execution",
   mine: "Meine Aufgaben",
   sprint: "Sprint & Score",
   decisions: "Decision Log",
@@ -148,6 +172,7 @@ const workspaceLabels: Record<Workspace, string> = {
 
 const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
+  execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
   mine: "Fokus auf die Aufgaben von Volkan für die operative Steuerung.",
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
@@ -245,13 +270,21 @@ function workspaceFromValue(value: string | null) {
 
 function formatDate(value: string) {
   if (!value) return "ohne Datum";
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(date);
 }
 
 function dateRange(task: Task) {
   if (!task.startDate && !task.endDate) return task.deadline || "ohne Datum";
   if (task.startDate === task.endDate) return formatDate(task.startDate);
   return `${formatDate(task.startDate)} - ${formatDate(task.endDate)}`;
+}
+
+function parseIsoDate(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function sprintNumber(value: string) {
@@ -485,6 +518,92 @@ function relationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]) 
     blocks: grouped.blocks.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
     related: grouped.related.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
   };
+}
+
+type HygieneAlert = {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "decision" | "sync";
+  title: string;
+  description: string;
+  recommendedAction: string;
+  focusStatus?: TaskFocusItem["status"];
+  taskId?: string;
+  decisionId?: number;
+};
+
+function daysSinceIso(value: string, today = new Date()) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.floor((today.getTime() - date.getTime()) / 86400000);
+}
+
+function latestTaskSignal(taskId: string, comments: TaskComment[], activities: TaskActivity[]) {
+  const dates = [
+    ...comments.filter((comment) => comment.taskId === taskId).map((comment) => comment.createdAt),
+    ...activities.filter((activity) => activity.taskId === taskId).map((activity) => activity.createdAt),
+  ];
+  return dates.sort().at(-1) || "";
+}
+
+function buildHygieneAlerts(data: PlanningData) {
+  const alerts: HygieneAlert[] = [];
+  const openStatuses = new Set(["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert"]);
+
+  for (const task of data.tasks) {
+    const status = normalizeStatus(task.status);
+    if (!openStatuses.has(status)) continue;
+    const relationGroups = taskRelationsFor(task.id, data.taskRelations);
+    const openBlockers = data.taskBlockers.filter((blocker) => blocker.taskId === task.id && blocker.status === "open");
+    const latestSignal = latestTaskSignal(task.id, data.taskComments, data.taskActivity);
+    const staleDays = daysSinceIso(latestSignal || task.startDate || task.endDate);
+
+    if (task.priority === "P0" && (!task.owner || task.owner === "Unassigned")) {
+      alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Owner", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Owner festlegen und nächsten Schritt notieren.", taskId: task.id });
+    }
+    if (!task.acceptanceCriteria?.trim()) {
+      alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Acceptance Criteria fehlen", description: "Ohne Akzeptanzkriterien ist Review und Score schwammig.", recommendedAction: "Akzeptanzkriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
+    }
+    if (!task.definitionOfDone?.trim()) {
+      alerts.push({ id: `dod-${task.id}`, severity: "warning", area: "quality", title: "Definition of Done fehlt", description: "Die Aufgabe hat kein klares Fertig-Kriterium.", recommendedAction: "Definition of Done ergänzen und Review-Erwartung klären.", taskId: task.id });
+    }
+    if (status === "Blockiert" && !openBlockers.length) {
+      alerts.push({ id: `blocker-comment-${task.id}`, severity: "critical", area: "blocker", title: "Blockiert ohne Blocker-Meldung", description: "Der Status ist blockiert, aber es fehlt eine konkrete Blocker-Meldung.", recommendedAction: "Blocker mit Ursache, Auswirkung und benötigter Hilfe erfassen.", focusStatus: "blocked", taskId: task.id });
+    }
+    if (status === "Review" && (daysSinceIso(task.endDate) || 0) >= 2) {
+      alerts.push({ id: `review-aging-${task.id}`, severity: "warning", area: "review", title: "Review wartet zu lange", description: "Diese Aufgabe liegt mindestens zwei Tage in Review.", recommendedAction: "Review aktiv anstoßen oder Nacharbeit klar markieren.", taskId: task.id });
+    }
+    if (task.sprintId && status !== "Erledigt" && !task.evidenceLink && !task.githubIssueUrl && !task.issueUrl) {
+      alerts.push({ id: `evidence-${task.id}`, severity: "info", area: "evidence", title: "Evidence fehlt", description: "Sprint-Arbeit sollte einen Evidence- oder GitHub-Link haben.", recommendedAction: "Evidence-Link oder GitHub-Issue ergänzen.", taskId: task.id });
+    }
+    if (relationGroups.waitsOn.length && hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
+      alerts.push({ id: `waits-on-${task.id}`, severity: "warning", area: "dependency", title: "Wartet auf offene Aufgabe", description: "Eine Abhängigkeit ist noch offen und kann den Abschluss verschieben.", recommendedAction: "Abhängigkeit prüfen und Blocker oder Folgeaktion klären.", focusStatus: "blocked", taskId: task.id });
+    }
+    if (staleDays !== null && staleDays >= 2 && status !== "Erledigt") {
+      alerts.push({ id: `stale-${task.id}`, severity: "info", area: "focus", title: "Kein Update seit 48 Stunden", description: "Es gibt seit mindestens zwei Tagen keinen Kommentar oder Aktivitätseintrag.", recommendedAction: "Kurzstatus oder nächsten Schritt ergänzen.", taskId: task.id });
+    }
+    if (task.githubSyncStatus === "failed") {
+      alerts.push({ id: `sync-${task.id}`, severity: "warning", area: "sync", title: "GitHub-Sync fehlgeschlagen", description: task.githubSyncError || "Die Aufgabe konnte nicht sauber nach GitHub gespiegelt werden.", recommendedAction: "GitHub-Sync prüfen und Aufgabe erneut spiegeln.", taskId: task.id });
+    }
+  }
+
+  for (const decision of data.decisions) {
+    const links = data.decisionTaskLinks.filter((link) => link.decisionId === decision.id);
+    if (decision.status === "locked" && !links.length) {
+      alerts.push({ id: `decision-followup-${decision.id}`, severity: "warning", area: "decision", title: "Decision ohne Folgeaufgabe", description: "Die Decision ist gelockt, aber noch mit keiner Aufgabe verknüpft.", recommendedAction: "Folgeaufgabe erstellen oder bestehende Aufgabe verknüpfen.", focusStatus: "needs_decision", decisionId: decision.id });
+    }
+  }
+
+  return alerts;
+}
+
+function focusStatusLabel(status: TaskFocusItem["status"]) {
+  if (status === "done") return "Erledigt";
+  if (status === "blocked") return "Blockiert";
+  if (status === "deferred") return "Verschoben";
+  if (status === "needs_decision") return "Entscheidung nötig";
+  return "Geplant";
 }
 
 function TaskCard({
@@ -722,6 +841,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
+  const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
   const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
@@ -757,6 +877,15 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     if (!currentProfile) return pending;
     return pending.filter((event) => event.recipientProfileId === currentProfile.id);
   }, [currentProfile, data.notificationEvents]);
+  const hygieneAlerts = useMemo(() => buildHygieneAlerts(data), [data]);
+  const todayFocusDate = currentIsoDate();
+  const currentProfileFocusItems = useMemo(() => {
+    const profileId = currentProfile?.id || "volkan";
+    return data.taskFocusItems
+      .filter((item) => item.profileId === profileId && item.focusDate === todayFocusDate)
+      .sort((left, right) => left.position - right.position)
+      .slice(0, 3);
+  }, [currentProfile?.id, data.taskFocusItems, todayFocusDate]);
 
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -1009,6 +1138,52 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     if (workspace === "mine") return filteredTasks.filter((task) => task.owner === "Volkan");
     return filteredTasks;
   }, [filteredTasks, workspace]);
+  const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
+  const filtersAvailable = planningWorkspaces.includes(workspace);
+  const headerPrimaryAction: HeaderPrimaryAction | null = (() => {
+    if (workspace === "planning") {
+      return {
+        label: "Neue Aufgabe",
+        onClick: () => setTaskDialogDefaults({ taskType: "deliverable" }),
+      };
+    }
+
+    if (workspace === "mine") {
+      return {
+        label: "Vorschlag erstellen",
+        onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
+      };
+    }
+
+    if (workspace === "sprint") {
+      return {
+        label: "Aufgabe hinzufügen",
+        onClick: () =>
+          setTaskDialogDefaults({
+            taskType: "deliverable",
+            sprintId: activeSprint?.id || "",
+            startDate: activeSprint?.startDate || "",
+            endDate: activeSprint?.endDate || "",
+          }),
+      };
+    }
+
+    if (workspace === "decisions") {
+      return {
+        label: "Neue Decision",
+        onClick: () => document.getElementById("decision-create")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      };
+    }
+
+    if (workspace === "settings") {
+      return {
+        label: "Feedback erfassen",
+        onClick: () => setFeedbackDialogOpen(true),
+      };
+    }
+
+    return null;
+  })();
 
   const updateTask = (task: Task, patch: Partial<Task>) => {
     setSaveError("");
@@ -1147,7 +1322,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       workstream: draft.workstream,
       packageId: draft.packageId,
       milestoneId: draft.milestoneId,
-      deadline: draft.sprintId,
+      deadline: draft.deadline,
       definitionOfDone: draft.definitionOfDone,
       dependsOn: "",
       evidenceLink: "",
@@ -1177,7 +1352,23 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       selfBlockersChecked: false,
     };
 
-    setData((current) => ({ ...current, tasks: [...current.tasks, localTask] }));
+    const localDecisionLink: DecisionTaskLink | null = draft.decisionId
+      ? {
+        id: -Date.now() - 1,
+        decisionId: draft.decisionId,
+        taskId: localTask.id,
+        linkType: "follows_from",
+        note: draft.decisionLinkNote,
+        createdBy: currentProfile?.id || "",
+        createdAt: new Date().toISOString(),
+      }
+      : null;
+
+    setData((current) => ({
+      ...current,
+      tasks: [...current.tasks, localTask],
+      decisionTaskLinks: localDecisionLink ? [localDecisionLink, ...current.decisionTaskLinks] : current.decisionTaskLinks,
+    }));
     setTaskDialogDefaults(null);
 
     if (source !== "supabase") return;
@@ -1185,6 +1376,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
+      let createdTaskCommitted = false;
 
       try {
         const response = await fetch("/api/tasks", {
@@ -1202,10 +1394,238 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         setData((current) => ({
           ...current,
           tasks: current.tasks.map((task) => (task.id === localTask.id ? body.task! : task)),
+          decisionTaskLinks: localDecisionLink
+            ? current.decisionTaskLinks.map((link) => (link.id === localDecisionLink.id ? { ...link, taskId: body.task!.id } : link))
+            : current.decisionTaskLinks,
+        }));
+        createdTaskCommitted = true;
+
+        if (draft.decisionId) {
+          const decisionResponse = await fetch(`/api/decisions/${draft.decisionId}/tasks`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ taskId: body.task.id, linkType: "follows_from", note: draft.decisionLinkNote }),
+          });
+          const decisionBody = (await decisionResponse.json().catch(() => null)) as { error?: string; link?: DecisionTaskLink } | null;
+          if (!decisionResponse.ok || !decisionBody?.link) throw new Error(decisionBody?.error || "Decision-Folgeaufgabe konnte nicht verknüpft werden.");
+          setData((current) => ({
+            ...current,
+            decisionTaskLinks: localDecisionLink
+              ? current.decisionTaskLinks.map((link) => (link.id === localDecisionLink.id ? decisionBody.link! : link))
+              : [decisionBody.link!, ...current.decisionTaskLinks],
+          }));
+        }
+
+        if (draft.relatedTaskId && draft.relatedTaskId !== body.task.id) {
+          const relationResponse = await fetch(`/api/tasks/${body.task.id}/relationships`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              relationType: draft.relationType,
+              relatedTaskId: draft.relatedTaskId,
+              note: draft.relationNote,
+            }),
+          });
+          const relationBody = (await relationResponse.json().catch(() => null)) as { error?: string; relation?: TaskRelation } | null;
+          if (!relationResponse.ok || !relationBody?.relation) throw new Error(relationBody?.error || "Relationship konnte nicht gespeichert werden.");
+          setData((current) => ({
+            ...current,
+            taskRelations: [relationBody.relation!, ...current.taskRelations],
+            tasks: current.tasks.map((task) =>
+              task.id === body.task!.id || task.id === draft.relatedTaskId
+                ? { ...task, githubSyncStatus: "not_synced", githubSyncError: "" }
+                : task,
+            ),
+          }));
+        }
+
+        if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
+          const githubProviderToken = session?.data.session?.provider_token;
+          const syncResponse = await fetch(`/api/tasks/${body.task.id}/sync-github`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: `Bearer ${token}` } : {}),
+              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+            },
+            body: JSON.stringify({ createIfMissing: true }),
+          });
+          const syncBody = (await syncResponse.json().catch(() => null)) as { error?: string; task?: Task } | null;
+          if (!syncResponse.ok || !syncBody?.task) throw new Error(syncBody?.error || "GitHub-Issue konnte nicht angelegt werden.");
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((task) => (task.id === body.task!.id ? syncBody.task! : task)),
+          }));
+        }
+      } catch (error) {
+        if (!createdTaskCommitted) {
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.filter((task) => task.id !== localTask.id),
+            decisionTaskLinks: localDecisionLink ? current.decisionTaskLinks.filter((link) => link.id !== localDecisionLink.id) : current.decisionTaskLinks,
+          }));
+        }
+        setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.");
+      }
+    });
+  };
+
+  const upsertFocusItem = (task: Task, nextStep: string, status: TaskFocusItem["status"] = "planned") => {
+    setSaveError("");
+    const profileId = currentProfile?.id || "volkan";
+    const existing = data.taskFocusItems.find((item) => item.profileId === profileId && item.taskId === task.id && item.focusDate === todayFocusDate);
+    const position = existing?.position || Math.min(currentProfileFocusItems.length + 1, 3);
+    const localItem: TaskFocusItem = {
+      id: existing?.id || -Date.now(),
+      profileId,
+      taskId: task.id,
+      focusDate: todayFocusDate,
+      position,
+      nextStep,
+      status,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setData((current) => ({
+      ...current,
+      taskFocusItems: existing
+        ? current.taskFocusItems.map((item) => (item.id === existing.id ? localItem : item))
+        : [localItem, ...current.taskFocusItems],
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch("/api/focus", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ taskId: task.id, profileId, focusDate: todayFocusDate, position, nextStep, status }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; focusItem?: TaskFocusItem } | null;
+        if (!response.ok || !body?.focusItem) throw new Error(body?.error || "Fokus konnte nicht gespeichert werden.");
+        setData((current) => ({
+          ...current,
+          taskFocusItems: current.taskFocusItems.map((item) => (item.id === localItem.id ? body.focusItem! : item)),
         }));
       } catch (error) {
-        setData((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== localTask.id) }));
-        setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.");
+        setData((current) => ({
+          ...current,
+          taskFocusItems: existing ? current.taskFocusItems.map((item) => (item.id === existing.id ? existing : item)) : current.taskFocusItems.filter((item) => item.id !== localItem.id),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Fokus konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const removeFocusItem = (focusItem: TaskFocusItem) => {
+    setSaveError("");
+    setData((current) => ({
+      ...current,
+      taskFocusItems: current.taskFocusItems.filter((item) => item.id !== focusItem.id),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch(`/api/focus?id=${encodeURIComponent(String(focusItem.id))}`, {
+          method: "DELETE",
+          headers: {
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Fokus konnte nicht entfernt werden.");
+      } catch (error) {
+        setData((current) => ({ ...current, taskFocusItems: [focusItem, ...current.taskFocusItems] }));
+        setSaveError(error instanceof Error ? error.message : "Fokus konnte nicht entfernt werden.");
+      }
+    });
+  };
+
+  const linkDecisionTask = (decisionId: number, taskId: string, note: string) => {
+    setSaveError("");
+    const localLink: DecisionTaskLink = {
+      id: -Date.now(),
+      decisionId,
+      taskId,
+      linkType: "follows_from",
+      note,
+      createdBy: currentProfile?.id || "",
+      createdAt: new Date().toISOString(),
+    };
+
+    setData((current) => {
+      const exists = current.decisionTaskLinks.some((link) => link.decisionId === decisionId && link.taskId === taskId);
+      return exists ? current : { ...current, decisionTaskLinks: [localLink, ...current.decisionTaskLinks] };
+    });
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch(`/api/decisions/${decisionId}/tasks`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ taskId, linkType: "follows_from", note }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; link?: DecisionTaskLink } | null;
+        if (!response.ok || !body?.link) throw new Error(body?.error || "Decision-Link konnte nicht gespeichert werden.");
+        setData((current) => ({
+          ...current,
+          decisionTaskLinks: current.decisionTaskLinks.map((link) => (link.id === localLink.id ? body.link! : link)),
+        }));
+      } catch (error) {
+        setData((current) => ({ ...current, decisionTaskLinks: current.decisionTaskLinks.filter((link) => link.id !== localLink.id) }));
+        setSaveError(error instanceof Error ? error.message : "Decision-Link konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const removeDecisionTaskLink = (link: DecisionTaskLink) => {
+    setSaveError("");
+    setData((current) => ({
+      ...current,
+      decisionTaskLinks: current.decisionTaskLinks.filter((item) => item.id !== link.id),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch(`/api/decisions/${link.decisionId}/tasks?linkId=${encodeURIComponent(String(link.id))}`, {
+          method: "DELETE",
+          headers: {
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Decision-Link konnte nicht entfernt werden.");
+      } catch (error) {
+        setData((current) => ({ ...current, decisionTaskLinks: [link, ...current.decisionTaskLinks] }));
+        setSaveError(error instanceof Error ? error.message : "Decision-Link konnte nicht entfernt werden.");
       }
     });
   };
@@ -1461,6 +1881,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             focus: patch.focus,
             weeklyCapacity: patch.weeklyCapacity,
             color: patch.color,
+            googleChatUserId: patch.googleChatUserId,
+            googleChatDmSpace: patch.googleChatDmSpace,
+            notificationsEnabled: patch.notificationsEnabled,
           }),
         });
 
@@ -1478,9 +1901,65 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
+  const updateNotificationPreference = (profileId: string, eventType: string, enabled: boolean) => {
+    setSaveError("");
+
+    const previousPreferences = data.notificationPreferences;
+    const localPreference: NotificationPreference = {
+      id: previousPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType)?.id || Date.now(),
+      profileId,
+      channel: "google_chat",
+      eventType,
+      enabled,
+    };
+
+    setData((current) => {
+      const exists = current.notificationPreferences.some((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
+      return {
+        ...current,
+        notificationPreferences: exists
+          ? current.notificationPreferences.map((item) =>
+            item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType ? { ...item, enabled } : item
+          )
+          : [localPreference, ...current.notificationPreferences],
+      };
+    });
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/notification-preferences", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ profileId, eventType, enabled }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; preference?: NotificationPreference } | null;
+        if (!response.ok || !body?.preference) throw new Error(body?.error || "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          notificationPreferences: current.notificationPreferences.map((item) =>
+            item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType ? body.preference! : item
+          ),
+        }));
+      } catch (error) {
+        setData((current) => ({ ...current, notificationPreferences: previousPreferences }));
+        setSaveError(error instanceof Error ? error.message : "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
   const updateMeetingAttendance = (meeting: Meeting, attendance: MeetingAttendance) => {
     setSaveError("");
 
+    const previousData = data;
     setData((current) => {
       const exists = current.meetingAttendance.some((item) => item.meetingId === attendance.meetingId && item.profileId === attendance.profileId);
       return {
@@ -1524,6 +2003,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           ),
         }));
       } catch (error) {
+        setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Meeting-Rückmeldung konnte nicht gespeichert werden.");
       }
     });
@@ -2193,6 +2673,44 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
+  const refreshGoogleChatStatus = useCallback(async () => {
+    if (source !== "supabase") return;
+
+    const session = await getBrowserSupabase()?.auth.getSession();
+    const token = session?.data.session?.access_token;
+
+    try {
+      const response = await fetch("/api/notifications/deliver", {
+        headers: {
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const body = (await response.json().catch(() => null)) as {
+        googleChat?: { webhookConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean };
+        googleChatConfigured?: boolean;
+        pending?: number;
+      } | null;
+      if (!response.ok || !body) return;
+
+      setGoogleChatStatus({
+        webhookConfigured: Boolean(body.googleChat?.webhookConfigured ?? body.googleChatConfigured),
+        deliveryEnabled: Boolean(body.googleChat?.deliveryEnabled),
+        ready: Boolean(body.googleChat?.ready),
+        pending: body.pending || 0,
+      });
+    } catch {
+      // Settings can still show local queue counts when the status endpoint is unavailable.
+    }
+  }, [source]);
+
+  useEffect(() => {
+    if (workspace !== "settings") return;
+    const timeout = window.setTimeout(() => {
+      void refreshGoogleChatStatus();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [refreshGoogleChatStatus, workspace]);
+
   const dispatchNotifications = () => {
     setSaveError("");
     setNotificationDispatchMessage("");
@@ -2220,6 +2738,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         if (!response.ok) throw new Error(body?.error || "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
 
         setNotificationDispatchMessage(`${body?.sent || 0} gesendet, ${body?.failed || 0} fehlgeschlagen, ${body?.skipped || 0} übersprungen.`);
+        await refreshGoogleChatStatus();
       } catch (error) {
         setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
       }
@@ -2379,6 +2898,18 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt.`);
         }
+        const refreshResponse = await fetch("/api/planning-data", {
+          headers: {
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const refreshPayload = await refreshResponse.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
+        if (refreshResponse.ok && refreshPayload?.data) {
+          const nextData = normalizePlanningData(refreshPayload.data);
+          protectedPlanningDataCache = nextData;
+          setData(nextData);
+          setProtectedDataLoaded(true);
+        }
         await createSprintPlanAsync(sprintPlanningOptions, true);
       } catch (error) {
         setData(previousData);
@@ -2483,6 +3014,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         profiles={data.profiles}
         sprints={data.sprints}
         milestones={data.milestones}
+        decisions={data.decisions}
+        decisionTaskLinks={data.decisionTaskLinks}
         source={source}
         commentImportNotice={commentImportNotice}
       />
@@ -2554,26 +3087,30 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 <MessageSquare size={16} />
                 Feedback
               </button>
-              <button
-                type="button"
-                onClick={() => setTaskDialogDefaults({ taskType: workspace === "mine" ? "proposal" : "deliverable" })}
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-              >
-                <Plus size={16} />
-                Neu
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowFilters((value) => !value)}
-                className={`inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 ${planningWorkspaces.includes(workspace) ? "" : "hidden"}`}
-              >
-                <Filter size={16} />
-                Filter
-              </button>
+              {headerPrimaryAction && (
+                <button
+                  type="button"
+                  onClick={headerPrimaryAction.onClick}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                >
+                  <Plus size={16} />
+                  {headerPrimaryAction.label}
+                </button>
+              )}
+              {filtersAvailable && (
+                <button
+                  type="button"
+                  onClick={() => setShowFilters((value) => !value)}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                >
+                  <Filter size={16} />
+                  Filter
+                </button>
+              )}
             </div>
           </div>
 
-          {planningWorkspaces.includes(workspace) && <div className="flex items-center gap-2 overflow-x-auto px-4 pb-3 lg:px-6">
+          {filtersAvailable && <div className="flex items-center gap-2 overflow-x-auto px-4 pb-3 lg:px-6">
             {viewTabs.map((tab) => {
               const Icon = tab.icon;
               const active = view === tab.id;
@@ -2620,7 +3157,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           </div>
         )}
 
-        {planningWorkspaces.includes(workspace) && <section className="grid gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-6">
+        {filtersAvailable && <section className="grid gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-6">
           {[
             ["Alle Aufgaben", metrics.total],
             ["Offen", metrics.open],
@@ -2634,7 +3171,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           ))}
         </section>}
 
-        {showFilters && planningWorkspaces.includes(workspace) && (
+        {showFilters && filtersAvailable && (
           <section className="mx-4 mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:mx-6">
             <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_repeat(4,180px)]">
               <label className="relative">
@@ -2670,8 +3207,23 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
         <section className="px-4 pb-8 pt-4 lg:px-6">
           {workspace === "projects" && <ProjectsOverview data={data} tasks={data.tasks} />}
+          {workspace === "execution" && (
+            <ExecutionLayerOverview
+              data={data}
+              currentProfile={currentProfile}
+              focusItems={currentProfileFocusItems}
+              hygieneAlerts={hygieneAlerts}
+              pending={isPending}
+              onOpenTask={(task) => openTaskPanel(task.id)}
+              onSetFocus={upsertFocusItem}
+              onRemoveFocus={removeFocusItem}
+              onLinkDecisionTask={linkDecisionTask}
+              onRemoveDecisionTaskLink={removeDecisionTaskLink}
+              onCreateTask={(draft) => setTaskDialogDefaults(draft)}
+            />
+          )}
           {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}
-          {workspace === "team" && <TeamOverview data={data} tasks={data.tasks} pending={isPending} onUpdateProfile={updateProfile} />}
+          {workspace === "team" && <TeamOverview data={data} tasks={data.tasks} pending={isPending} onUpdateProfile={updateProfile} onUpdateNotificationPreference={updateNotificationPreference} />}
           {workspace === "sprint" && (
             <SprintScoreTableOverview
               data={data}
@@ -2685,6 +3237,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onUpdateCommitment={updateSprintCommitment}
               onUpdateMeetingAttendance={updateMeetingAttendance}
               onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
+              currentProfile={currentProfile}
               canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
               sprintLockMessage={sprintLockMessage}
             />
@@ -2698,6 +3251,18 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onConfirm={confirmDecision}
               onEdit={editDecision}
               onObject={objectDecision}
+              onRemoveDecisionTaskLink={removeDecisionTaskLink}
+              onCreateFollowUp={(decision) => setTaskDialogDefaults({
+                taskType: "deliverable",
+                title: `${decision.title} umsetzen`,
+                description: decision.context,
+                problemStatement: decision.context,
+                intendedOutcome: decision.decision,
+                acceptanceCriteria: decision.decision,
+                definitionOfDone: decision.decision,
+                decisionId: decision.id,
+                decisionLinkNote: "Folgeaufgabe aus Decision Log",
+              })}
             />
           )}
           {workspace === "meetings" && <MeetingFinderOverview data={data} />}
@@ -2712,6 +3277,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               feedbackMessage={feedbackMessage}
               selectedFeedbackId={selectedFeedbackId}
               notificationDispatchMessage={notificationDispatchMessage}
+              googleChatStatus={googleChatStatus}
               sprintPlanningOptions={sprintPlanningOptions}
               plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions, new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId))).length}
               onUpdateSprintPlanning={setSprintPlanningOptions}
@@ -2723,7 +3289,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             />
           )}
 
-          {planningWorkspaces.includes(workspace) && (
+          {filtersAvailable && (
           <>
           {view === "board" && (
             <div className="flex gap-4 overflow-x-auto pb-3">
@@ -2901,7 +3467,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           )}
 
           {view === "gantt" && (
-            <GanttView tasks={visibleTasks} packages={data.packages} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
+            <GanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
           )}
           </>
           )}
@@ -2923,6 +3489,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           packages={data.packages}
           sprints={data.sprints}
           milestones={data.milestones}
+          decisions={data.decisions}
+          decisionTaskLinks={data.decisionTaskLinks}
+          focusItems={data.taskFocusItems}
           canManageTaskMeta={canManageTaskMeta}
           allTasks={data.tasks}
           relations={data.taskRelations}
@@ -2955,6 +3524,492 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onSubmit={createFeedback}
         />
       )}
+    </div>
+  );
+}
+
+function ExecutionLayerOverview({
+  data,
+  currentProfile,
+  focusItems,
+  hygieneAlerts,
+  pending,
+  onOpenTask,
+  onSetFocus,
+  onRemoveFocus,
+  onLinkDecisionTask,
+  onRemoveDecisionTaskLink,
+  onCreateTask,
+}: {
+  data: PlanningData;
+  currentProfile: Profile | null;
+  focusItems: TaskFocusItem[];
+  hygieneAlerts: HygieneAlert[];
+  pending: boolean;
+  onOpenTask: (task: Task) => void;
+  onSetFocus: (task: Task, nextStep: string, status?: TaskFocusItem["status"]) => void;
+  onRemoveFocus: (focusItem: TaskFocusItem) => void;
+  onLinkDecisionTask: (decisionId: number, taskId: string, note: string) => void;
+  onRemoveDecisionTaskLink: (link: DecisionTaskLink) => void;
+  onCreateTask: (draft: Partial<NewTaskDraft>) => void;
+}) {
+  const [focusDrafts, setFocusDrafts] = useState<Record<string, string>>({});
+  const [decisionTaskDrafts, setDecisionTaskDrafts] = useState<Record<number, string>>({});
+  const [decisionNoteDrafts, setDecisionNoteDrafts] = useState<Record<number, string>>({});
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState<"all" | HygieneAlert["severity"]>("all");
+  const [alertAreaFilter, setAlertAreaFilter] = useState<"all" | HygieneAlert["area"]>("all");
+  const taskById = new Map(data.tasks.map((task) => [task.id, task]));
+  const openTasks = data.tasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
+  const focusStatusCounts = focusItems.reduce<Record<TaskFocusItem["status"], number>>((counts, item) => {
+    counts[item.status] += 1;
+    return counts;
+  }, { planned: 0, done: 0, blocked: 0, deferred: 0, needs_decision: 0 });
+  const endOfDayOpenItems = focusItems.filter((item) => item.status === "planned");
+  const endOfDayResolvedItems = focusItems.filter((item) => item.status !== "planned");
+  const endOfDayCompletion = focusItems.length ? Math.round((endOfDayResolvedItems.length / focusItems.length) * 100) : 0;
+  const today = currentIsoDate();
+  const weekStart = addDaysIso(today, -6);
+  const todayTeamFocusItems = data.taskFocusItems
+    .filter((item) => item.focusDate === today)
+    .sort((left, right) => left.position - right.position);
+  const focusHistoryByDate = data.taskFocusItems
+    .filter((item) => item.focusDate >= weekStart && item.focusDate <= today)
+    .reduce<Record<string, TaskFocusItem[]>>((groups, item) => {
+      groups[item.focusDate] = [...(groups[item.focusDate] || []), item];
+      return groups;
+    }, {});
+  const focusHistoryDates = Object.keys(focusHistoryByDate).sort((left, right) => right.localeCompare(left)).slice(0, 7);
+  const teamFocusCoverage = data.profiles.length
+    ? Math.round((new Set(todayTeamFocusItems.map((item) => item.profileId)).size / data.profiles.length) * 100)
+    : 0;
+  const executionMetrics = {
+    criticalAlerts: hygieneAlerts.filter((alert) => alert.severity === "critical").length,
+    reviewQueue: data.tasks.filter((task) => normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested").length,
+    openBlockers: data.tasks.filter((task) => normalizeStatus(task.status) === "Blockiert" || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length,
+    decisionsWithoutTasks: data.decisions.filter((decision) => decision.status === "locked" && !data.decisionTaskLinks.some((link) => link.decisionId === decision.id)).length,
+  };
+  const suggestedTasks = [...openTasks]
+    .sort((left, right) => {
+      const priorityScore = (value: string) => ({ P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 }[value as "P0"] ?? 5);
+      const leftBlocked = hasOpenWaitingRelation(left.id, data.tasks, data.taskRelations) ? -1 : 0;
+      const rightBlocked = hasOpenWaitingRelation(right.id, data.tasks, data.taskRelations) ? -1 : 0;
+      return priorityScore(left.priority) - priorityScore(right.priority) || leftBlocked - rightBlocked || (left.endDate || "").localeCompare(right.endDate || "");
+    })
+    .slice(0, 6);
+  const filteredAlerts = hygieneAlerts.filter((alert) =>
+    (alertSeverityFilter === "all" || alert.severity === alertSeverityFilter)
+    && (alertAreaFilter === "all" || alert.area === alertAreaFilter),
+  );
+  const visibleAlerts = filteredAlerts.slice(0, 12);
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+      <section className="xl:col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Kritische Alerts", executionMetrics.criticalAlerts, "text-red-700"],
+          ["Review Queue", executionMetrics.reviewQueue, "text-blue-700"],
+          ["Blockiert/abhängig", executionMetrics.openBlockers, "text-amber-700"],
+          ["Team-Fokus gesetzt", `${teamFocusCoverage}%`, "text-emerald-700"],
+        ].map(([label, value, tone]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="text-xs font-semibold text-slate-500">{label}</div>
+            <div className={`mt-1 text-2xl font-semibold ${tone}`}>{value}</div>
+          </div>
+        ))}
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Heute-Fokus</h2>
+            <p className="mt-1 text-sm text-slate-500">Maximal drei Aufgaben, nächster Schritt und Tagesstatus.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={pending || !focusItems.some((item) => item.status === "planned")}
+              onClick={() => {
+                focusItems
+                  .filter((item) => item.status === "planned")
+                  .forEach((item) => {
+                    const task = taskById.get(item.taskId);
+                    if (task) onSetFocus(task, item.nextStep || "Auf morgen verschoben.", "deferred");
+                  });
+              }}
+              className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Offene verschieben
+            </button>
+            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+              {currentProfile?.name || "Team"} · {focusItems.length}/3
+            </span>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {[
+            ["Geplant", focusStatusCounts.planned],
+            ["Erledigt", focusStatusCounts.done],
+            ["Blockiert", focusStatusCounts.blocked],
+            ["Entscheidung", focusStatusCounts.needs_decision],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-slate-500">{label}</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {focusItems.length ? focusItems.map((item) => {
+            const task = taskById.get(item.taskId);
+            if (!task) return null;
+            return (
+              <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <button type="button" onClick={() => onOpenTask(task)} className="text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                    {task.title}
+                  </button>
+                  <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
+                </div>
+                <input
+                  value={focusDrafts[item.taskId] ?? item.nextStep}
+                  onChange={(event) => setFocusDrafts((current) => ({ ...current, [item.taskId]: event.target.value }))}
+                  onBlur={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, item.status)}
+                  className="mt-3 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                  placeholder={task.intendedOutcome || task.description || "Nächsten Schritt ergänzen."}
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(["done", "blocked", "deferred", "needs_decision"] as TaskFocusItem["status"][]).map((status) => (
+                    <button key={status} type="button" disabled={pending} onClick={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, status)} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                      {focusStatusLabel(status)}
+                    </button>
+                  ))}
+                  <button type="button" disabled={pending} onClick={() => onRemoveFocus(item)} className="h-8 rounded-md border border-red-200 bg-red-50 px-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
+                    Entfernen
+                  </button>
+                </div>
+              </article>
+            );
+          }) : (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Noch kein Tagesfokus gesetzt.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-950">Tagesabschluss</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Offene Fokusaufgaben kurz abschließen, bevor sie in den nächsten Tag rutschen.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-semibold text-slate-500">Abschlussquote</div>
+              <div className="mt-1 text-xl font-semibold text-slate-950">{endOfDayCompletion}%</div>
+            </div>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${endOfDayCompletion}%` }} />
+          </div>
+          <div className="mt-4 grid gap-2">
+            {focusItems.length ? focusItems.map((item) => {
+              const task = taskById.get(item.taskId);
+              if (!task) return null;
+              const currentNextStep = focusDrafts[item.taskId] ?? item.nextStep;
+              return (
+                <article key={`checkin-${item.id}`} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 text-left text-sm font-semibold text-slate-900 hover:text-blue-700">
+                      {task.title}
+                    </button>
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">{focusStatusLabel(item.status)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Heute erledigt.", "done")} className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                      Als erledigt markieren
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Blocker für morgen klären.", "blocked")} className="h-8 rounded-md border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                      Blockiert
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Auf morgen verschoben.", "deferred")} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                      Verschieben
+                    </button>
+                    <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Braucht eine Entscheidung.", "needs_decision")} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+                      Entscheidung nötig
+                    </button>
+                  </div>
+                </article>
+              );
+            }) : (
+              <div className="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-500">Kein Tagesfokus für den Abschluss vorhanden.</div>
+            )}
+          </div>
+          {endOfDayOpenItems.length > 0 && (
+            <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              {endOfDayOpenItems.length} Fokusaufgaben sind noch geplant und brauchen einen Abschlussstatus.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <section>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-950">Team-Fokus heute</h3>
+              <span className="text-xs font-semibold text-slate-500">{todayTeamFocusItems.length} Fokusaufgaben</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {data.profiles.map((profile) => {
+                const profileFocus = todayTeamFocusItems.filter((item) => item.profileId === profile.id).slice(0, 3);
+                return (
+                  <article key={profile.id} className="rounded-md border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: profileColor(profile) }} />
+                        <span className="truncate text-sm font-semibold text-slate-950">{profile.name}</span>
+                      </div>
+                      <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{profileFocus.length}/3</span>
+                    </div>
+                    <div className="mt-2 grid gap-1">
+                      {profileFocus.length ? profileFocus.map((item) => {
+                        const task = taskById.get(item.taskId);
+                        return task ? (
+                          <button key={item.id} type="button" onClick={() => onOpenTask(task)} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-left text-xs hover:bg-blue-50">
+                            <span className="min-w-0 truncate font-semibold text-slate-700">{task.title}</span>
+                            <span className="shrink-0 text-slate-500">{focusStatusLabel(item.status)}</span>
+                          </button>
+                        ) : null;
+                      }) : (
+                        <div className="rounded-md border border-dashed border-slate-200 px-2 py-2 text-xs text-slate-500">Kein Fokus gesetzt.</div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-slate-950">Fokus-Verlauf</h3>
+              <span className="text-xs font-semibold text-slate-500">7 Tage</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {focusHistoryDates.length ? focusHistoryDates.map((date) => {
+                const items = focusHistoryByDate[date] || [];
+                const done = items.filter((item) => item.status === "done").length;
+                const blocked = items.filter((item) => item.status === "blocked" || item.status === "needs_decision").length;
+                return (
+                  <div key={date} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-700">{formatDate(date)}</span>
+                      <span className="text-xs text-slate-500">{items.length} Fokus</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{done} erledigt</span>
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{blocked} kritisch</span>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-500">Noch kein Fokus-Verlauf.</div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <h3 className="text-sm font-semibold text-slate-950">Vorschläge für heute</h3>
+          <div className="mt-3 grid gap-3">
+            {suggestedTasks.map((task) => (
+              <article key={task.id} className="rounded-md border border-slate-200 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <button type="button" onClick={() => onOpenTask(task)} className="truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                      {task.title}
+                    </button>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+                      <span className={`rounded-full border px-2 py-0.5 ${priorityTone(task.priority)}`}>{task.priority}</span>
+                      <span className={`rounded-full border px-2 py-0.5 ${statusTone(normalizeStatus(task.status))}`}>{normalizeStatus(task.status)}</span>
+                      {hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations) && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">wartet</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pending || focusItems.length >= 3}
+                    onClick={() => onSetFocus(task, focusDrafts[task.id] || task.intendedOutcome || task.acceptanceCriteria || "Nächsten Schritt klären.", "planned")}
+                    className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    In Fokus
+                  </button>
+                </div>
+                <input
+                  value={focusDrafts[task.id] || ""}
+                  onChange={(event) => setFocusDrafts((current) => ({ ...current, [task.id]: event.target.value }))}
+                  className="mt-3 h-9 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+                  placeholder="Nächster Schritt"
+                />
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-5">
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-950">Hygiene Alerts</h2>
+            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{filteredAlerts.length}/{hygieneAlerts.length} offen</span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <CustomSelect
+              value={alertSeverityFilter}
+              onChange={(value) => setAlertSeverityFilter(value as typeof alertSeverityFilter)}
+              className="h-9 text-sm"
+              options={[
+                { value: "all", label: "Alle Schweregrade" },
+                { value: "critical", label: "Kritisch" },
+                { value: "warning", label: "Warnung" },
+                { value: "info", label: "Info" },
+              ]}
+            />
+            <CustomSelect
+              value={alertAreaFilter}
+              onChange={(value) => setAlertAreaFilter(value as typeof alertAreaFilter)}
+              className="h-9 text-sm"
+              options={[
+                { value: "all", label: "Alle Bereiche" },
+                { value: "focus", label: "Fokus" },
+                { value: "quality", label: "Qualität" },
+                { value: "blocker", label: "Blocker" },
+                { value: "review", label: "Review" },
+                { value: "evidence", label: "Evidence" },
+                { value: "dependency", label: "Abhängigkeit" },
+                { value: "decision", label: "Decision" },
+                { value: "sync", label: "Sync" },
+              ]}
+            />
+          </div>
+          <div className="mt-4 grid gap-2">
+            {visibleAlerts.length ? visibleAlerts.map((alert) => {
+              const task = alert.taskId ? taskById.get(alert.taskId) : null;
+              const tone = alert.severity === "critical" ? "border-red-200 bg-red-50 text-red-700" : alert.severity === "warning" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-blue-200 bg-blue-50 text-blue-700";
+              return (
+                <article key={alert.id} className="rounded-md border border-slate-200 p-3">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-0.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{alert.severity === "critical" ? "kritisch" : alert.severity === "warning" ? "Warnung" : "Info"}</span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-950">{alert.title}</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">{alert.description}</p>
+                      <p className="mt-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs font-semibold leading-5 text-slate-700">
+                        Nächste Aktion: {alert.recommendedAction}
+                      </p>
+                      {task && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onOpenTask(task)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">{task.title}</button>
+                          <button type="button" disabled={pending || focusItems.length >= 3} onClick={() => onSetFocus(task, alert.recommendedAction, alert.focusStatus || "planned")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Aktion in Fokus</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            }) : (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Keine Hygiene Alerts offen.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-950">Decision-Folgearbeit</h2>
+            <span className="text-xs font-semibold text-slate-500">{data.decisionTaskLinks.length} Links · {executionMetrics.decisionsWithoutTasks} offen</span>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {data.decisions.slice(0, 5).map((decision) => {
+              const links = data.decisionTaskLinks.filter((link) => link.decisionId === decision.id);
+              const linkedTasks = links.map((link) => ({ link, task: taskById.get(link.taskId) })).filter((item): item is { link: DecisionTaskLink; task: Task } => Boolean(item.task));
+              const followUpCounts = {
+                open: linkedTasks.filter(({ task }) => !["Erledigt", "Blockiert"].includes(normalizeStatus(task.status))).length,
+                done: linkedTasks.filter(({ task }) => normalizeStatus(task.status) === "Erledigt").length,
+                blocked: linkedTasks.filter(({ task }) => normalizeStatus(task.status) === "Blockiert" || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length,
+              };
+              const selectedTaskId = decisionTaskDrafts[decision.id] || "";
+              return (
+                <article key={decision.id} className="rounded-md border border-slate-200 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-950">{decision.title}</h3>
+                      <p className="mt-1 text-xs text-slate-500">{links.length} verknüpfte Aufgaben · {decisionStatusLabel(decision.status)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onCreateTask({
+                        taskType: "deliverable",
+                        title: `${decision.title} umsetzen`,
+                        description: decision.context,
+                        problemStatement: decision.context,
+                        intendedOutcome: decision.decision,
+                        acceptanceCriteria: decision.decision,
+                        definitionOfDone: decision.decision,
+                        decisionId: decision.id,
+                        decisionLinkNote: "Folgeaufgabe aus Decision",
+                      })}
+                      className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Folgeaufgabe
+                    </button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-semibold">
+                    <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">{followUpCounts.open} Folgearbeit offen</span>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{followUpCounts.done} erledigt</span>
+                    <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{followUpCounts.blocked} blockiert</span>
+                  </div>
+                  {links.length > 0 && (
+                    <div className="mt-3 grid gap-1">
+                      {linkedTasks.map(({ link, task }) => {
+                        const status = normalizeStatus(task.status);
+                        const isBlocked = status === "Blockiert" || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations);
+                        return (
+                          <div key={link.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1">
+                            <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-slate-700 hover:text-blue-700">{task.title}</button>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${status === "Erledigt" ? "bg-emerald-50 text-emerald-700" : isBlocked ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+                              {status === "Erledigt" ? "erledigt" : isBlocked ? "blockiert" : "offen"}
+                            </span>
+                            <button type="button" disabled={pending} onClick={() => onRemoveDecisionTaskLink(link)} className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600" aria-label="Decision-Link entfernen">
+                              <X size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-3 grid gap-2">
+                    <CustomSelect
+                      value={selectedTaskId}
+                      onChange={(value) => setDecisionTaskDrafts((current) => ({ ...current, [decision.id]: value }))}
+                      options={[{ value: "", label: "Aufgabe auswählen" }, ...openTasks.map((task) => ({ value: task.id, label: task.title }))]}
+                      className="h-9 text-sm"
+                    />
+                    <input
+                      value={decisionNoteDrafts[decision.id] || ""}
+                      onChange={(event) => setDecisionNoteDrafts((current) => ({ ...current, [decision.id]: event.target.value }))}
+                      className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+                      placeholder="Warum folgt diese Aufgabe aus der Decision?"
+                    />
+                    <button
+                      type="button"
+                      disabled={pending || !selectedTaskId}
+                      onClick={() => onLinkDecisionTask(decision.id, selectedTaskId, decisionNoteDrafts[decision.id] || "")}
+                      className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Verknüpfen
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -3086,11 +4141,13 @@ function TeamOverview({
   tasks,
   pending,
   onUpdateProfile,
+  onUpdateNotificationPreference,
 }: {
   data: PlanningData;
   tasks: Task[];
   pending: boolean;
   onUpdateProfile: (profile: Profile, patch: Partial<Profile>) => void;
+  onUpdateNotificationPreference: (profileId: string, eventType: string, enabled: boolean) => void;
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -3100,6 +4157,10 @@ function TeamOverview({
         const highPriority = ownedTasks.filter((task) => ["P0", "P1"].includes(task.priority));
         const load = ownedTasks.reduce((sum, task) => sum + task.hours, 0);
         const isDeputy = profile.platformRole === "deputy";
+        const enabledPreferenceCount = googleChatDigestEventTypes.filter((eventType) => {
+          const preference = data.notificationPreferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
+          return preference?.enabled !== false;
+        }).length;
         return (
           <article key={profile.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -3171,6 +4232,68 @@ function TeamOverview({
                   className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                  Google Chat User-ID
+                  <input
+                    value={profile.googleChatUserId || ""}
+                    disabled={pending}
+                    onChange={(event) => onUpdateProfile(profile, { googleChatUserId: event.target.value })}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
+                    placeholder="users/..."
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-500">
+                  Google Chat DM-Space
+                  <input
+                    value={profile.googleChatDmSpace || ""}
+                    disabled={pending}
+                    onChange={(event) => onUpdateProfile(profile, { googleChatDmSpace: event.target.value })}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
+                    placeholder="spaces/..."
+                  />
+                </label>
+              </div>
+              <label className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                <span>
+                  Google-Chat-Benachrichtigungen
+                  <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert verhindert Digest-Zustellung für dieses Profil.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={profile.notificationsEnabled !== false}
+                  disabled={pending}
+                  onChange={(event) => onUpdateProfile(profile, { notificationsEnabled: event.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
+                />
+              </label>
+              <div className="rounded-md border border-slate-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-700">Google-Chat-Events</div>
+                    <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Feinsteuerung pro Ereignistyp. Ausgeschaltete Events bleiben in der App sichtbar.</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">{enabledPreferenceCount}/{googleChatDigestEventTypes.length}</span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {googleChatDigestEventTypes.map((eventType) => {
+                    const preference = data.notificationPreferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
+                    const enabled = preference?.enabled !== false;
+                    return (
+                      <label key={eventType} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600">
+                        <span className="min-w-0 truncate">{notificationEventLabel(eventType)}</span>
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          disabled={pending || profile.notificationsEnabled === false}
+                          onChange={(event) => onUpdateNotificationPreference(profile.id, eventType, event.target.checked)}
+                          className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 disabled:opacity-60"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
                 Fokus
                 <textarea
@@ -3258,6 +4381,7 @@ function SprintScoreTableOverview({
   onUpdateCommitment,
   onUpdateMeetingAttendance,
   onAssignSprint,
+  currentProfile,
   canManageSprint,
   sprintLockMessage,
 }: {
@@ -3278,6 +4402,7 @@ function SprintScoreTableOverview({
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
+  currentProfile: Profile | null;
   canManageSprint: boolean;
   sprintLockMessage: string;
 }) {
@@ -3538,32 +4663,44 @@ function SprintScoreTableOverview({
                     updatedAt: "",
                   };
                   const patchAttendance = (patch: Partial<MeetingAttendance>) => onUpdateMeetingAttendance(meeting, { ...attendance, ...patch, updatedAt: new Date().toISOString() });
+                  const canEditAttendanceRow = canManageSprint || currentProfile?.id === profile.id;
+                  const canScoreAttendance = canManageSprint;
+                  const statusOptions = canManageSprint
+                    ? [
+                      { value: "pending", label: "Offen" },
+                      { value: "present", label: "Anwesend" },
+                      { value: "excused", label: "Entschuldigt" },
+                      { value: "late_excused", label: "Spät entschuldigt" },
+                      { value: "unexcused", label: "Nicht akzeptiert" },
+                      { value: "no_show", label: "No-Show" },
+                    ]
+                    : [
+                      { value: "pending", label: "Offen" },
+                      { value: "excused", label: "Entschuldigt" },
+                      { value: "late_excused", label: "Spät entschuldigt" },
+                    ];
                   return (
                     <tr key={profile.id} className="hover:bg-slate-50">
                       <td className="border-b border-slate-100 px-4 py-3">
                         <div className="font-semibold text-slate-950">{profile.name}</div>
-                        <div className="text-xs text-slate-500">{roleLabel(profile)}</div>
+                        <div className="text-xs text-slate-500">
+                          {roleLabel(profile)}
+                          {!canManageSprint && currentProfile?.id === profile.id ? " · eigene Rückmeldung" : ""}
+                        </div>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
                         <CustomSelect
                           value={attendance.status}
-                          disabled={pending}
-                          onChange={(value) => patchAttendance({ status: value as MeetingAttendance["status"] })}
+                          disabled={pending || !canEditAttendanceRow}
+                          onChange={(value) => patchAttendance({ status: value as MeetingAttendance["status"], reasonAccepted: false, points: canManageSprint ? attendance.points : 0 })}
                           className="h-8 w-36 text-xs"
-                          options={[
-                            { value: "pending", label: "Offen" },
-                            { value: "present", label: "Anwesend" },
-                            { value: "excused", label: "Entschuldigt" },
-                            { value: "late_excused", label: "Spät entschuldigt" },
-                            { value: "unexcused", label: "Nicht akzeptiert" },
-                            { value: "no_show", label: "No-Show" },
-                          ]}
+                          options={statusOptions}
                         />
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
                         <input
                           value={attendance.absenceReason}
-                          disabled={pending}
+                          disabled={pending || !canEditAttendanceRow}
                           onChange={(event) => patchAttendance({ absenceReason: event.target.value })}
                           className="h-8 w-64 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50"
                           placeholder="z.B. Krankheit, Familie, nicht verschiebbar"
@@ -3572,7 +4709,7 @@ function SprintScoreTableOverview({
                       <td className="border-b border-slate-100 px-3 py-3">
                         <textarea
                           value={attendance.writtenUpdate}
-                          disabled={pending}
+                          disabled={pending || !canEditAttendanceRow}
                           onChange={(event) => patchAttendance({ writtenUpdate: event.target.value })}
                           className="min-h-12 w-80 resize-y rounded-md border border-slate-200 bg-white px-2 py-1 text-xs leading-5 text-slate-700 disabled:bg-slate-50"
                           placeholder="Kurzupdate, Blocker, nächster Schritt"
@@ -3582,13 +4719,13 @@ function SprintScoreTableOverview({
                         <input
                           type="checkbox"
                           checked={attendance.reasonAccepted}
-                          disabled={pending}
+                          disabled={pending || !canScoreAttendance}
                           onChange={(event) => patchAttendance({ reasonAccepted: event.target.checked })}
                           aria-label="Grund akzeptiert"
                         />
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <CustomSelect value={attendance.points} disabled={pending} onChange={(value) => patchAttendance({ points: Number(value) })} className="h-8 w-20 text-xs" options={[0, 1, 2, 3, 4].map((point) => ({ value: String(point), label: String(point) }))} />
+                        <CustomSelect value={attendance.points} disabled={pending || !canScoreAttendance} onChange={(value) => patchAttendance({ points: Number(value) })} className="h-8 w-20 text-xs" options={[0, 1, 2, 3, 4].map((point) => ({ value: String(point), label: String(point) }))} />
                       </td>
                     </tr>
                   );
@@ -4120,6 +5257,8 @@ function DecisionLogOverview({
   onConfirm,
   onEdit,
   onObject,
+  onRemoveDecisionTaskLink,
+  onCreateFollowUp,
 }: {
   data: PlanningData;
   currentProfileId: string;
@@ -4128,6 +5267,8 @@ function DecisionLogOverview({
   onConfirm: (decisionId: number) => void;
   onEdit: (decisionId: number, payload: { title: string; context: string; decision: string; requiredProfileIds: string[] }) => void;
   onObject: (decisionId: number, comment: string) => void;
+  onRemoveDecisionTaskLink: (link: DecisionTaskLink) => void;
+  onCreateFollowUp: (decision: PlanningData["decisions"][number]) => void;
 }) {
   const [title, setTitle] = useState("");
   const [context, setContext] = useState("");
@@ -4169,7 +5310,7 @@ function DecisionLogOverview({
           <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{data.decisions.length} Decisions</span>
         </div>
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section id="decision-create" className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Neue Decision</h2>
@@ -4263,6 +5404,10 @@ function DecisionLogOverview({
           .filter((entry) => entry.entityType === "decision" && entry.entityId === String(decision.id))
           .slice(0, 8);
         const objectionText = objectionDrafts[decision.id] || "";
+        const linkedTasks = data.decisionTaskLinks
+          .filter((link) => link.decisionId === decision.id)
+          .map((link) => ({ link, task: data.tasks.find((task) => task.id === link.taskId) }))
+          .filter((item) => item.task);
 
         return (
         <article key={decision.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -4276,13 +5421,20 @@ function DecisionLogOverview({
               <ChevronRight size={16} className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
               <span className="min-w-0">
                 <span className="block truncate font-semibold text-slate-950">{decision.title}</span>
-                <span className="mt-1 block text-xs text-slate-500">
-                  {decision.confirmedProfileIds.length}/{decision.requiredProfileIds.length} bestätigt · {auditEntries.length} Audit-Einträge
+              <span className="mt-1 block text-xs text-slate-500">
+                  {decision.confirmedProfileIds.length}/{decision.requiredProfileIds.length} bestätigt · {linkedTasks.length} Folgeaufgaben · {auditEntries.length} Audit-Einträge
                 </span>
               </span>
             </button>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{decisionStatusLabel(decision.status)}</span>
+              <button
+                type="button"
+                onClick={() => onCreateFollowUp(decision)}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+              >
+                Folgeaufgabe
+              </button>
               {canCreate && decision.status !== "locked" && (
                 <button
                   type="button"
@@ -4302,6 +5454,27 @@ function DecisionLogOverview({
             <>
           <p className="mt-3 text-sm leading-6 text-slate-600">{decision.context || "Kein Kontext hinterlegt."}</p>
           <div className="mt-3 text-sm text-slate-700">{decision.decision || "Noch keine finale Entscheidung."}</div>
+          <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold text-slate-500">Folgeaufgaben</h3>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-500">{linkedTasks.length}</span>
+            </div>
+            <div className="mt-2 grid gap-1.5">
+              {linkedTasks.length ? linkedTasks.map(({ link, task }) => (
+                <div key={link.id} className="flex items-start gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-slate-800">{task?.title}</div>
+                    <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${task.owner}` : "Aufgabe nicht gefunden"} · {link.note || "Keine Notiz"}</div>
+                  </div>
+                  <button type="button" disabled={pending} onClick={() => onRemoveDecisionTaskLink(link)} className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label="Decision-Link entfernen">
+                    <X size={12} />
+                  </button>
+                </div>
+              )) : (
+                <div className="text-xs text-slate-500">Noch keine Folgeaufgabe verknüpft.</div>
+              )}
+            </div>
+          </div>
           {isEditing && (
             <form
               className="mt-4 grid gap-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3"
@@ -4561,6 +5734,7 @@ function SettingsOverview({
   feedbackMessage,
   selectedFeedbackId,
   notificationDispatchMessage,
+  googleChatStatus,
   sprintPlanningOptions,
   plannedSprintCount,
   onUpdateSprintPlanning,
@@ -4579,6 +5753,7 @@ function SettingsOverview({
   feedbackMessage: string;
   selectedFeedbackId: number | null;
   notificationDispatchMessage: string;
+  googleChatStatus: GoogleChatStatus | null;
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
@@ -4590,7 +5765,13 @@ function SettingsOverview({
 }) {
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
+  const googleChatDigestNotifications = pendingNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
+  const inAppOnlyNotifications = pendingNotifications.filter((event) => !shouldSendToGoogleChatDigest(event.type));
+  const failedDigestNotifications = failedNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
+  const googleChatReady = Boolean(googleChatStatus?.ready);
+  const googleChatWebhookConfigured = Boolean(googleChatStatus?.webhookConfigured);
+  const googleChatDeliveryEnabled = Boolean(googleChatStatus?.deliveryEnabled);
   const selectedFeedback = data.feedbackItems.find((item) => item.id === selectedFeedbackId) || data.feedbackItems[0];
   const openFeedbackCount = data.feedbackItems.filter((item) => item.status === "open").length;
   const linkedSyncQueue = data.tasks.filter((task) =>
@@ -4622,6 +5803,12 @@ function SettingsOverview({
             <span className="text-slate-500">GitHub User-Token</span>
             <span className={`font-semibold ${githubProviderTokenAvailable ? "text-emerald-700" : "text-amber-700"}`}>
               {githubProviderTokenAvailable ? "verfügbar" : "neu anmelden nötig"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+            <span className="text-slate-500">Google Chat</span>
+            <span className={`font-semibold ${googleChatReady ? "text-emerald-700" : "text-amber-700"}`}>
+              {googleChatReady ? "versandbereit" : "nur gesammelt"}
             </span>
           </div>
         </div>
@@ -4725,7 +5912,7 @@ function SettingsOverview({
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">{openFeedbackCount} Feedback offen</span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{pendingNotifications.length} im Ausgang</span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{googleChatDigestNotifications.length} im Chat-Ausgang</span>
           </div>
         </div>
         {feedbackMessage && (
@@ -4876,42 +6063,52 @@ function SettingsOverview({
             </div>
           <button
             type="button"
-            disabled={pending || !pendingNotifications.length}
+            disabled={pending || !googleChatReady || !googleChatDigestNotifications.length}
             onClick={onDispatchNotifications}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
               Digest senden
           </button>
         </div>
+        {!googleChatReady && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
+            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für echten Versand braucht die Umgebung `GOOGLE_CHAT_WEBHOOK_URL` und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+          </div>
+        )}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pending</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{pendingNotifications.length}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chat-Digest</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDigestNotifications.length}</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fehlgeschlagen</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{failedNotifications.length}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nur In-App</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{inAppOnlyNotifications.length}</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Deliveries</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{data.notificationDeliveries.length}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fehler</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{failedDigestNotifications.length}</div>
           </div>
         </div>
         {notificationDispatchMessage && (
           <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">{notificationDispatchMessage}</p>
         )}
         <div className="mt-4 grid gap-2">
-          {pendingNotifications.slice(0, 5).map((event) => (
+          {googleChatDigestNotifications.slice(0, 5).map((event) => (
             <div key={event.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
               <span className="min-w-0">
                 <span className="block truncate font-medium text-slate-800">{event.title}</span>
-                <span className="text-xs text-slate-500">{event.type} · {event.entityType}</span>
+                <span className="text-xs text-slate-500">{event.type} · {event.entityType} · {notificationChannelLabel(event.type)}</span>
               </span>
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">pending</span>
             </div>
           ))}
-          {!pendingNotifications.length && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Keine pending Benachrichtigungen.</div>}
+          {!googleChatDigestNotifications.length && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Keine Benachrichtigung wartet auf den Google-Chat-Digest.</div>}
         </div>
+        {inAppOnlyNotifications.length > 0 && (
+          <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+            {inAppOnlyNotifications.length} pending Hinweis{inAppOnlyNotifications.length === 1 ? "" : "e"} bleiben bewusst nur in der In-App-Inbox.
+          </div>
+        )}
         {recentDeliveries.length > 0 && (
           <div className="mt-4 grid gap-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Letzte Zustellversuche</div>
@@ -5160,8 +6357,12 @@ function FeedbackDialog({
   );
 }
 
-function GanttView({ tasks, packages, relations, onOpen }: { tasks: Task[]; packages: Package[]; relations: TaskRelation[]; onOpen: (task: Task) => void }) {
-  const start = new Date("2026-05-25");
+function GanttView({ tasks, packages, sprints, relations, onOpen }: { tasks: Task[]; packages: Package[]; sprints: Sprint[]; relations: TaskRelation[]; onOpen: (task: Task) => void }) {
+  const firstTaskStart = tasks
+    .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || "") || parseIsoDate(task.startDate))
+    .filter((date): date is Date => Boolean(date))
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  const start = firstTaskStart || parseIsoDate(sprints[0]?.startDate || "") || new Date("2026-05-25T00:00:00");
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
@@ -5189,8 +6390,9 @@ function GanttView({ tasks, packages, relations, onOpen }: { tasks: Task[]; pack
             ))}
           </div>
           {tasks.map((task) => {
-            const taskStart = new Date(task.startDate || start);
-            const taskEnd = new Date(task.endDate || task.startDate || start);
+            const sprint = sprints.find((item) => item.id === task.sprintId);
+            const taskStart = parseIsoDate(sprint?.startDate || "") || parseIsoDate(task.startDate) || start;
+            const taskEnd = parseIsoDate(sprint?.endDate || "") || parseIsoDate(task.endDate) || parseIsoDate(task.startDate) || taskStart;
             const left = Math.max(0, Math.floor((taskStart.getTime() - start.getTime()) / 86400000));
             const length = Math.max(1, Math.floor((taskEnd.getTime() - taskStart.getTime()) / 86400000) + 1);
             const pack = packageById(packages, task.packageId);
@@ -5234,13 +6436,13 @@ function NewTaskDialog({
   const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const groupCommitments = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({
-    title: "",
-    description: "",
-    problemStatement: "",
-    intendedOutcome: "",
-    scopeConstraints: "",
-    acceptanceCriteria: "",
-    evidenceRequired: "",
+    title: defaults.title || "",
+    description: defaults.description || "",
+    problemStatement: defaults.problemStatement || "",
+    intendedOutcome: defaults.intendedOutcome || "",
+    scopeConstraints: defaults.scopeConstraints || "",
+    acceptanceCriteria: defaults.acceptanceCriteria || "",
+    evidenceRequired: defaults.evidenceRequired || "",
     taskType: defaults.taskType || "deliverable",
     parentTaskId: defaults.parentTaskId || "",
     milestoneId: defaultMilestoneId,
@@ -5249,15 +6451,24 @@ function NewTaskDialog({
     owner: defaultOwner,
     priority: defaults.priority || "P2",
     status: defaults.status || "Offen",
-    workstream: "",
+    workstream: defaults.workstream || "",
     startDate: defaults.startDate || activeSprint?.startDate || "",
     endDate: defaults.endDate || activeSprint?.endDate || "",
+    deadline: defaults.deadline || "",
     hours: defaults.hours || 2,
-    definitionOfDone: "",
+    definitionOfDone: defaults.definitionOfDone || "",
+    createGitHubIssue: (defaults.taskType || "deliverable") === "deliverable",
+    relationType: defaults.relationType || "blocked_by",
+    relatedTaskId: defaults.relatedTaskId || "",
+    relationNote: defaults.relationNote || "",
+    decisionId: defaults.decisionId || 0,
+    decisionLinkNote: defaults.decisionLinkNote || "",
   });
   const parentTask = data.tasks.find((task) => task.id === draft.parentTaskId);
   const visibleGroupCommitments = data.packages.filter((pack) => !draft.milestoneId || !pack.milestoneId || pack.milestoneId === draft.milestoneId);
-  const canCreate = draft.title.trim().length >= 3 && (draft.taskType !== "sub_issue" || draft.parentTaskId);
+  const deliverableNeedsStructure = draft.taskType === "deliverable" && (!draft.packageId || !draft.sprintId);
+  const invalidDateRange = Boolean(draft.startDate && draft.endDate && draft.startDate > draft.endDate);
+  const canCreate = draft.title.trim().length >= 3 && !deliverableNeedsStructure && !invalidDateRange && (draft.taskType !== "sub_issue" || draft.parentTaskId);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-8">
@@ -5284,7 +6495,16 @@ function NewTaskDialog({
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Typ
-              <CustomSelect value={draft.taskType} onChange={(value) => setDraft((current) => ({ ...current, taskType: value as NewTaskDraft["taskType"] }))} className="h-9 text-sm" options={[{ value: "deliverable", label: "Deliverable" }, { value: "proposal", label: "Vorschlag" }, { value: "sub_issue", label: "Sub-Issue" }]} />
+              <CustomSelect
+                value={draft.taskType}
+                onChange={(value) => setDraft((current) => ({
+                  ...current,
+                  taskType: value as NewTaskDraft["taskType"],
+                  createGitHubIssue: value === "deliverable" ? current.createGitHubIssue : false,
+                }))}
+                className="h-9 text-sm"
+                options={[{ value: "deliverable", label: "Deliverable" }, { value: "proposal", label: "Vorschlag" }, { value: "sub_issue", label: "Sub-Issue" }]}
+              />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Epic / Meilenstein
@@ -5315,6 +6535,13 @@ function NewTaskDialog({
               <CustomSelect value={draft.parentTaskId} onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))} className="h-9 text-sm" options={[{ value: "", label: "Deliverable auswählen" }, ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: task.title }))]} />
               {parentTask && <span className="text-xs font-normal text-slate-500">Sub-Issues unter {parentTask.title} sind nicht score-relevant.</span>}
             </label>
+          )}
+
+          {draft.decisionId > 0 && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm text-blue-950">
+              <div className="font-semibold">Wird als Decision-Folgeaufgabe verknüpft</div>
+              <p className="mt-1 text-xs leading-5 text-blue-800">{draft.decisionLinkNote || "Diese Aufgabe folgt aus einer Decision."}</p>
+            </div>
           )}
 
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
@@ -5376,6 +6603,29 @@ function NewTaskDialog({
             </label>
           </div>
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">Strukturprüfung</div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Deliverables brauchen Epic, Group Commitment und Sprint. Sub-Issues bleiben unter einem Deliverable und sind nicht score-relevant.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={draft.createGitHubIssue}
+                  disabled={draft.taskType !== "deliverable"}
+                  onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                Direkt als GitHub-Issue anlegen
+              </label>
+            </div>
+            {deliverableNeedsStructure && <div className="mt-2 text-xs font-semibold text-amber-700">Für ein Deliverable fehlen noch Sprint oder Group Commitment.</div>}
+            {invalidDateRange && <div className="mt-2 text-xs font-semibold text-red-700">Das Startdatum darf nicht nach dem Enddatum liegen.</div>}
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Workstream
@@ -5389,6 +6639,43 @@ function NewTaskDialog({
               Ende
               <CustomDatePicker value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} className="h-9 text-sm" />
             </label>
+          </div>
+
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Zieltermin
+            <CustomDatePicker value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} className="h-9 text-sm" />
+          </label>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <div className="text-sm font-semibold text-slate-950">Erste Relationship</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Optional, wenn diese Aufgabe direkt von einer anderen Aufgabe abhängt oder sie blockiert.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <CustomSelect
+                value={draft.relationType}
+                onChange={(value) => setDraft((current) => ({ ...current, relationType: value as TaskRelationType }))}
+                className="h-9 text-sm"
+                options={[
+                  { value: "blocked_by", label: "Wartet auf" },
+                  { value: "blocks", label: "Blockiert" },
+                  { value: "relates_to", label: "Verknüpft mit" },
+                ]}
+              />
+              <CustomSelect
+                value={draft.relatedTaskId}
+                onChange={(value) => setDraft((current) => ({ ...current, relatedTaskId: value }))}
+                className="h-9 text-sm sm:col-span-2"
+                options={[
+                  { value: "", label: "Keine Relationship" },
+                  ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: `${task.title} · ${task.owner}` })),
+                ]}
+              />
+            </div>
+            <input
+              value={draft.relationNote}
+              onChange={(event) => setDraft((current) => ({ ...current, relationNote: event.target.value }))}
+              className="mt-3 h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-800 outline-none focus:border-blue-400"
+              placeholder="Optionaler Hinweis zur Abhängigkeit"
+            />
           </div>
 
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
@@ -5469,6 +6756,9 @@ function TaskDetailPanel({
   packages,
   sprints,
   milestones,
+  decisions,
+  decisionTaskLinks,
+  focusItems,
   canManageTaskMeta,
   allTasks,
   relations,
@@ -5496,6 +6786,9 @@ function TaskDetailPanel({
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
+  decisions: PlanningData["decisions"];
+  decisionTaskLinks: DecisionTaskLink[];
+  focusItems: TaskFocusItem[];
   canManageTaskMeta: boolean;
   allTasks: Task[];
   relations: TaskRelation[];
@@ -5525,6 +6818,14 @@ function TaskDetailPanel({
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
+  const linkedDecisions = decisionTaskLinks
+    .filter((link) => link.taskId === task.id)
+    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
+    .filter((item) => item.decision);
+  const linkedFocusItems = focusItems
+    .filter((item) => item.taskId === task.id)
+    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
+    .slice(0, 5);
   const statusOptions = canManageTaskMeta
     ? taskStatuses
     : normalizeStatus(task.status) === "Nacharbeit"
@@ -5606,6 +6907,41 @@ function TaskDetailPanel({
           <h3 className="text-sm font-semibold text-slate-950">Definition of Done</h3>
           <div className="mt-2">
             <TaskChecklist value={task.definitionOfDone} emptyText="Keine Definition of Done hinterlegt." onChange={(nextValue) => onUpdate({ definitionOfDone: nextValue })} />
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 p-4">
+          <h3 className="text-sm font-semibold text-slate-950">Fokus-Kontext</h3>
+          <div className="mt-3 grid gap-2">
+            {linkedFocusItems.length ? linkedFocusItems.map((item) => (
+              <article key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-800">{profileName(item.profileId)} · {formatDate(item.focusDate)}</span>
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
+                </div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">{item.nextStep || "Kein nächster Schritt hinterlegt."}</div>
+              </article>
+            )) : (
+              <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+                Diese Aufgabe ist aktuell in keinem Tagesfokus.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 p-4">
+          <h3 className="text-sm font-semibold text-slate-950">Begründende Decisions</h3>
+          <div className="mt-3 grid gap-2">
+            {linkedDecisions.length ? linkedDecisions.map(({ link, decision }) => (
+              <article key={link.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                <div className="font-semibold text-slate-800">{decision?.title}</div>
+                <div className="mt-1 text-xs text-slate-500">{decision ? decisionStatusLabel(decision.status) : "Decision"} · {link.note || "Keine Notiz hinterlegt."}</div>
+              </article>
+            )) : (
+              <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+                Noch keine Decision verknüpft.
+              </div>
+            )}
           </div>
         </section>
 

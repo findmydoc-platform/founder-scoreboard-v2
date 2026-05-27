@@ -34,6 +34,10 @@ yarn-error.log*
 # local browser profiles
 .chrome-profile/
 .chrome-smoke-profile/
+.codex-splitwise-extracted/
+
+# local CI draft; GitHub OAuth push currently has no workflow scope
+.github/workflows/ci.yml
 
 # env files (can opt-in for committing if needed)
 .env*

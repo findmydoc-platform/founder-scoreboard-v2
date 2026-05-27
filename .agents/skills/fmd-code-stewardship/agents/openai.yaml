@@ -1,0 +1,4 @@
+interface:
+  display_name: "FMD Code Stewardship"
+  short_description: "Refactor Founder Scoreboard code safely."
+  default_prompt: "Review this Founder Scoreboard area with fmd-code-stewardship, identify maintainability risks, make small behavior-preserving improvements, and verify them."

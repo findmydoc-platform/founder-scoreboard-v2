@@ -21,6 +21,7 @@ const requiredEnvKeys = [
   "GITHUB_SYNC_OWNER",
   "GITHUB_SYNC_REPO",
   "GOOGLE_CHAT_WEBHOOK_URL",
+  "GOOGLE_CHAT_DELIVERY_ENABLED",
 ];
 
 async function read(path) {
@@ -34,7 +35,7 @@ for (const file of requiredFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["build", "start", "lint", "verify:vercel-ready"]) {
+for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 
@@ -65,13 +66,21 @@ for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) 
 }
 
 const deploymentDoc = await read("docs/vercel-deployment.md");
-for (const marker of ["vercel link", "vercel build --prod", "vercel deploy --prebuilt --prod", "Supabase Auth", "Domain Cutover"]) {
+for (const marker of ["vercel link", "vercel build --prod", "vercel deploy --prebuilt --prod", "Supabase Auth", "Domain Cutover", "GOOGLE_CHAT_DELIVERY_ENABLED=false"]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "Domain Cutover", "Deletion Safety"]) {
+for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "Domain Cutover", "Deletion Safety"]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
+}
+
+const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
+if (ciWorkflowPresent) {
+  const ci = await read(".github/workflows/ci.yml");
+  for (const marker of ["npm ci", "npm test", "npm run lint", "npm run build", "npm run verify:google-chat"]) {
+    if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
+  }
 }
 
 if (failures.length) {
@@ -86,7 +95,8 @@ console.log(JSON.stringify({
   requiredEnvKeys,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "verify:vercel-ready"],
+    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat"],
+    ciWorkflowPresent,
     healthRoute: true,
     deploymentDoc: true,
     skill: "fmd-vercel-readiness",

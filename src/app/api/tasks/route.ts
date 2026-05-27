@@ -23,6 +23,7 @@ type CreateTaskPayload = {
   workstream?: string;
   startDate?: string;
   endDate?: string;
+  deadline?: string;
   hours?: number;
   definitionOfDone?: string;
 };
@@ -67,6 +68,16 @@ export async function POST(request: NextRequest) {
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
   const packageId = payload.packageId || null;
   let milestoneId = payload.milestoneId || null;
+  const startDate = payload.startDate || null;
+  const endDate = payload.endDate || null;
+
+  if (startDate && endDate && startDate > endDate) {
+    return NextResponse.json({ error: "Das Startdatum darf nicht nach dem Enddatum liegen." }, { status: 400 });
+  }
+
+  if (taskType === "deliverable" && (!packageId || !payload.sprintId)) {
+    return NextResponse.json({ error: "Deliverables brauchen Group Commitment und Sprint." }, { status: 400 });
+  }
 
   if (taskType === "sub_issue" && !parentTaskId) {
     return NextResponse.json({ error: "Sub-Issue braucht ein Deliverable." }, { status: 400 });
@@ -127,9 +138,9 @@ export async function POST(request: NextRequest) {
     created_by: permission.profile?.id || null,
     workstream: typeof payload.workstream === "string" ? payload.workstream.trim().slice(0, 120) : "",
     sort_order: sortOrder,
-    start_date: payload.startDate || null,
-    end_date: payload.endDate || null,
-    deadline: payload.sprintId || "",
+    start_date: startDate,
+    end_date: endDate,
+    deadline: payload.deadline || null,
     estimate_hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
     definition_of_done: typeof payload.definitionOfDone === "string" ? payload.definitionOfDone.trim().slice(0, 4000) : "",
     sprint_id: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,

@@ -80,6 +80,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       score_points: points,
       score_final: scoreFinal,
       status: nextStatus,
+      github_sync_status: "not_synced",
+      github_sync_error: null,
     })
     .eq("id", id);
 
@@ -141,6 +143,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       reviewStatus: decision,
       scorePoints: points,
       scoreFinal,
+      githubSyncStatus: "not_synced",
     },
   });
 }

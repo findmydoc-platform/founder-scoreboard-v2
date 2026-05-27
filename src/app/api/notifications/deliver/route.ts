@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
-import { googleChatTarget, hasGoogleChatWebhook, sendGoogleChatDigest, shouldSendToGoogleChatDigest, type GoogleChatDigestEvent } from "@/lib/google-chat";
+import { googleChatDeliveryStatus, googleChatTarget, sendGoogleChatDigest, type GoogleChatDigestEvent } from "@/lib/google-chat";
+import { shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { getServerSupabase } from "@/lib/supabase";
 
 type NotificationRow = {
@@ -23,6 +24,12 @@ type ProfileRow = {
   notifications_enabled: boolean | null;
 };
 
+type PreferenceRow = {
+  profile_id: string;
+  event_type: string;
+  enabled: boolean;
+};
+
 function safeLimit(value: unknown) {
   const limit = Number(value || 20);
   if (!Number.isFinite(limit)) return 20;
@@ -30,6 +37,7 @@ function safeLimit(value: unknown) {
 }
 
 function statusCodeForError(errorMessage: string) {
+  if (errorMessage.includes("GOOGLE_CHAT_DELIVERY_ENABLED")) return 424;
   if (errorMessage.includes("GOOGLE_CHAT_WEBHOOK_URL")) return 424;
   return 502;
 }
@@ -58,7 +66,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    googleChatConfigured: hasGoogleChatWebhook(),
+    googleChat: googleChatDeliveryStatus(),
+    googleChatConfigured: googleChatDeliveryStatus().webhookConfigured,
     pending: count || 0,
   });
 }
@@ -72,6 +81,20 @@ export async function POST(request: NextRequest) {
 
   const payload = (await request.json().catch(() => ({}))) as { limit?: number };
   const limit = safeLimit(payload.limit);
+  const deliveryStatus = googleChatDeliveryStatus();
+
+  if (!deliveryStatus.ready) {
+    const missing = deliveryStatus.webhookConfigured
+      ? "GOOGLE_CHAT_DELIVERY_ENABLED ist nicht auf true gesetzt."
+      : "GOOGLE_CHAT_WEBHOOK_URL ist nicht gesetzt.";
+    return NextResponse.json({
+      error: missing,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      googleChat: deliveryStatus,
+    }, { status: 424 });
+  }
 
   const { data: events, error: eventError } = await supabase
     .from("notification_events")
@@ -111,7 +134,22 @@ export async function POST(request: NextRequest) {
       .in("id", [...profileIds])
     : { data: [] };
 
+  const preferenceResult = profileIds.size
+    ? await supabase
+      .from("notification_preferences")
+      .select("profile_id,event_type,enabled")
+      .eq("channel", "google_chat")
+      .in("profile_id", [...profileIds])
+    : { data: [] };
+
+  if ("error" in preferenceResult && preferenceResult.error) {
+    return NextResponse.json({ error: preferenceResult.error.message }, { status: 500 });
+  }
+
   const profiles = new Map((profileResult.data || []).map((profile: ProfileRow) => [profile.id, profile]));
+  const preferences = new Map(
+    (preferenceResult.data || []).map((preference: PreferenceRow) => [`${preference.profile_id}:${preference.event_type}`, preference.enabled]),
+  );
   const results: Array<{ eventId: number; status: "sent" | "failed" | "skipped"; error?: string }> = [];
   const digestEvents: GoogleChatDigestEvent[] = [];
   const digestRows: Array<{ row: NotificationRow; target: string; payload: GoogleChatDigestEvent }> = [];
@@ -156,6 +194,20 @@ export async function POST(request: NextRequest) {
         last_error: "Benachrichtigungen für Empfänger deaktiviert.",
       });
       results.push({ eventId: row.id, status: "skipped", error: "Benachrichtigungen deaktiviert." });
+      continue;
+    }
+
+    if (recipient && preferences.get(`${recipient.id}:${row.type}`) === false) {
+      await supabase.from("notification_deliveries").insert({
+        event_id: row.id,
+        channel: "google_chat",
+        status: "failed",
+        attempts: 0,
+        target,
+        payload: deliveryEvent,
+        last_error: "Google-Chat-Präferenz für diesen Event-Typ deaktiviert.",
+      });
+      results.push({ eventId: row.id, status: "skipped", error: "Google-Chat-Präferenz deaktiviert." });
       continue;
     }
 

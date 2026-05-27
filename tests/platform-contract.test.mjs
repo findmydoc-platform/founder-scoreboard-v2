@@ -72,6 +72,7 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.match(route, /buildSyncContext/);
   assert.match(route, /task_comments/);
   assert.match(route, /task_blockers/);
+  assert.match(route, /task_activity/);
   assert.match(route, /parent_task_id/);
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe ist App-only/);
@@ -99,6 +100,7 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(github, /Wartet auf/);
   assert.match(github, /Blockiert/);
   assert.match(github, /Letzte Kommentare/);
+  assert.match(github, /Aktivitätsprotokoll/);
   assert.match(github, /Parent Deliverable/);
   assert.match(github, /Source of Truth/);
   assert.match(github, /linkedIssueNumber/);
@@ -159,6 +161,7 @@ test("github sync queue is reopened by task comments blockers and relationship c
   assert.match(blockersRoute, /github_sync_status: "not_synced"/);
   assert.match(relationshipsRoute, /github_sync_status: "not_synced"/);
   assert.match(syncRoute, /task_relationship_edges/);
+  assert.match(syncRoute, /activitiesResult/);
   assert.match(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Review fällig bis/);
@@ -297,6 +300,7 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /task_reviews/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
+  assert.match(route, /github_sync_status: "not_synced"/);
   assert.match(route, /Nacharbeit/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
@@ -325,6 +329,10 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(migration, /carried_from_task_id/);
   assert.match(migration, /sprint_outcome/);
   assert.match(route, /communicated_blocker/);
+  assert.match(route, /review_status === "partial"/);
+  assert.match(route, /preserveScore/);
+  assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
+  assert.match(route, /github_issue_number: null/);
   assert.match(route, /missed_uncommunicated/);
   assert.match(route, /accepted_carryover/);
   assert.match(route, /sprint\.task_carried_over/);
@@ -412,11 +420,39 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(route, /Mindestens ein CEO muss gesetzt bleiben/);
   assert.match(route, /profile.update/);
   assert.match(route, /profile_color/);
+  assert.match(route, /google_chat_user_id/);
+  assert.match(route, /google_chat_dm_space/);
+  assert.match(route, /notifications_enabled/);
   assert.match(migration, /profile_color/);
   assert.match(migration, /profiles_profile_color_hex/);
   assert.match(data, /profile_color/);
   assert.match(ui, /profileColorOptions/);
   assert.match(ui, /Post-it-Farbe/);
+  assert.match(ui, /Google Chat User-ID/);
+  assert.match(ui, /Google Chat DM-Space/);
+  assert.match(ui, /Google-Chat-Benachrichtigungen/);
+});
+
+test("notification preferences are editable per profile and event type", async () => {
+  const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+
+  assert.match(route, /requireFounder/);
+  assert.match(route, /notification_preferences/);
+  assert.match(route, /allowedEventTypes/);
+  assert.match(route, /Keine Berechtigung für diese Benachrichtigungseinstellung/);
+  assert.match(route, /notification_preference\.update/);
+  assert.match(data, /notificationPreferenceResult/);
+  assert.match(data, /mapNotificationPreference/);
+  assert.match(types, /export type NotificationPreference/);
+  assert.match(ui, /Google-Chat-Events/);
+  assert.match(ui, /onUpdateNotificationPreference/);
+  assert.match(ui, /notificationEventLabel/);
+  assert.match(policy, /GoogleChatDigestEventType/);
+  assert.match(policy, /Review angefragt/);
 });
 
 test("decision audit loads before and after data for collapsible diffs", async () => {
@@ -535,12 +571,23 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /GitHub aktualisieren/);
   assert.match(thread, /github-comment/);
   assert.match(thread, /timeline/);
+  assert.match(thread, /describeActivity/);
+  assert.match(thread, /repairGermanText/);
+  assert.match(thread, /activityToneClass/);
+  assert.match(thread, /Status geändert/);
+  assert.match(thread, /Review finalisiert/);
+  assert.match(thread, /Relationship/);
   assert.match(thread, /CommentBody/);
   assert.match(thread, /<img\\b/);
   assert.match(thread, /user-attachments\/assets/);
   assert.match(thread, /GitHubCommentImage/);
   assert.match(thread, /\/api\/github-assets\?url=/);
   assert.match(thread, /URL\.createObjectURL/);
+  assert.match(thread, /decodeHtmlEntities/);
+  assert.match(thread, /useState\(isGitHubAsset\)/);
+  assert.match(thread, /if \(!isGitHubAsset\) return/);
+  assert.match(thread, /showCommentPreview/);
+  assert.match(thread, /Vorschau/);
   assert.match(thread, /getBrowserSupabase/);
   assert.match(thread, /onUploadAttachment/);
   assert.match(thread, /type="file"/);
@@ -697,6 +744,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const migration = await readFile("supabase/0008_google_chat_delivery.sql", "utf8");
   const route = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
+  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(migration, /google_chat_user_id/);
@@ -706,15 +754,63 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /notification_events/);
   assert.match(route, /notification_deliveries/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
+  assert.match(chat, /GOOGLE_CHAT_DELIVERY_ENABLED/);
+  assert.match(chat, /googleChatDeliveryStatus/);
   assert.match(chat, /formatGoogleChatMessage/);
   assert.match(chat, /formatGoogleChatDigestCard/);
   assert.match(route, /shouldSendToGoogleChatDigest/);
+  assert.match(route, /googleChatDeliveryStatus/);
+  assert.match(route, /notification_preferences/);
+  assert.match(route, /Google-Chat-Präferenz/);
   assert.match(route, /notification_deliveries/);
+  assert.match(policy, /task\.review_rework/);
+  assert.match(policy, /task\.review_completed/);
+  assert.match(policy, /meeting\.attendance_updated/);
+  assert.match(policy, /feedback\.bug_reported/);
+  assert.match(policy, /feedback\.feature_requested/);
   assert.match(ui, /NotificationInbox/);
   assert.match(ui, /openTaskPanel\(task\.id\)/);
   assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(ui, /Notification-Ausgang/);
+  assert.match(ui, /googleChatDigestNotifications/);
+  assert.match(ui, /googleChatReady/);
+  assert.match(ui, /nur gesammelt/);
+  assert.match(ui, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
+  assert.match(ui, /notificationChannelLabel/);
+  assert.match(ui, /Keine Benachrichtigung wartet auf den Google-Chat-Digest/);
   assert.match(ui, /Digest senden/);
+});
+
+test("google chat rollout is documented and verified before delivery activation", async () => {
+  const envExample = await readFile(".env.example", "utf8");
+  const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
+  const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
+  const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
+  const pkg = await readFile("package.json", "utf8");
+
+  assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
+  assert.match(envExample, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
+  assert.match(rollout, /notification_preferences/);
+  assert.match(rollout, /Rollback/);
+  assert.match(nextStep, /docs\/google-chat-rollout\.md/);
+  assert.match(script, /googleChatDeliveryStatus/);
+  assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(pkg, /verify:google-chat/);
+});
+
+test("repo readiness includes optional ci and deployment gates", async () => {
+  const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
+  const deployment = await readFile("docs/vercel-deployment.md", "utf8");
+  const skill = await readFile("skills/fmd-vercel-readiness/SKILL.md", "utf8");
+
+  assert.match(verify, /ciWorkflowPresent/);
+  assert.match(verify, /npm run verify:google-chat/);
+  assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
+  assert.match(verify, /verify:google-chat/);
+  assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
 });
 
 test("health and supabase verification detect operational migrations", async () => {
@@ -732,6 +828,9 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(health, /task_relationship_edges/);
   assert.match(health, /task_external_comments/);
   assert.match(health, /githubSyncMode/);
+  assert.match(health, /googleChatDeliveryStatus/);
+  assert.match(health, /tasksMin/);
+  assert.match(health, /counts\.tasks >= expected\.tasksMin/);
   assert.match(health, /schemaReady/);
   assert.match(verify, /0008_google_chat_delivery\.sql/);
   assert.match(verify, /0009_sprint_carryover\.sql/);
@@ -739,6 +838,8 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(operational, /Founder Planning/);
   assert.match(operational, /githubMappedProfiles/);
   assert.match(operational, /googleChatConfigured/);
+  assert.match(operational, /googleChatDeliveryEnabled/);
+  assert.match(operational, /googleChatReady/);
   assert.match(pkg, /verify:operational/);
 });
 
@@ -772,6 +873,28 @@ test("workspace selection survives page refreshes", async () => {
   assert.match(ui, /url\.searchParams\.set\("workspace", workspace\)/);
 });
 
+test("header actions are workspace aware", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(ui, /type HeaderPrimaryAction/);
+  assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
+  assert.match(ui, /label: "Neue Aufgabe"/);
+  assert.match(ui, /label: "Vorschlag erstellen"/);
+  assert.match(ui, /label: "Aufgabe hinzufügen"/);
+  assert.match(ui, /label: "Neue Decision"/);
+  assert.match(ui, /id="decision-create"/);
+  assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
+});
+
+test("gantt uses sprint dates for scheduled tasks", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(ui, /<GanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
+  assert.match(ui, /function GanttView\(\{ tasks, packages, sprints, relations, onOpen \}/);
+  assert.match(ui, /parseIsoDate\(sprint\?\.startDate \|\| ""\) \|\| parseIsoDate\(task\.startDate\)/);
+  assert.match(ui, /parseIsoDate\(sprint\?\.endDate \|\| ""\) \|\| parseIsoDate\(task\.endDate\)/);
+});
+
 test("fmd tools hub keeps internal tools repos notion and drive visible", async () => {
   const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
@@ -798,6 +921,97 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
   assert.match(types, /export type FmdTool/);
 });
 
+test("execution layer adds focus board hygiene alerts and decision task links", async () => {
+  const migration = await readFile("supabase/0020_execution_layer.sql", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
+  const decisionTaskRoute = await readFile("src/app/api/decisions/[id]/tasks/route.ts", "utf8");
+  const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
+  const health = await readFile("src/app/api/health/route.ts", "utf8");
+  const schema = await readFile("supabase/schema.sql", "utf8");
+  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
+  const agents = await readFile("AGENTS.md", "utf8");
+  const plan = await readFile("docs/execution-layer-plan.md", "utf8");
+
+  assert.match(migration, /create table if not exists task_focus_items/);
+  assert.match(migration, /create table if not exists decision_task_links/);
+  assert.match(migration, /unique \(profile_id, task_id, focus_date\)/);
+  assert.match(migration, /unique \(decision_id, task_id\)/);
+  assert.match(sidebar, /Execution/);
+  assert.match(ui, /ExecutionLayerOverview/);
+  assert.match(ui, /Heute-Fokus/);
+  assert.match(ui, /Hygiene Alerts/);
+  assert.match(ui, /Decision-Folgearbeit/);
+  assert.match(ui, /followUpCounts/);
+  assert.match(ui, /Folgearbeit offen/);
+  assert.match(ui, /Folgeaufgabe aus Decision/);
+  assert.match(ui, /Folgeaufgabe aus Decision Log/);
+  assert.match(ui, /Folgeaufgaben/);
+  assert.match(ui, /onCreateFollowUp/);
+  assert.match(ui, /In Fokus/);
+  assert.match(ui, /onRemoveFocus/);
+  assert.match(ui, /onRemoveDecisionTaskLink/);
+  assert.match(ui, /Alle Schweregrade/);
+  assert.match(ui, /Alle Bereiche/);
+  assert.match(ui, /Kritische Alerts/);
+  assert.match(ui, /Team-Fokus gesetzt/);
+  assert.match(ui, /Team-Fokus heute/);
+  assert.match(ui, /Fokus-Verlauf/);
+  assert.match(ui, /Tagesabschluss/);
+  assert.match(ui, /Abschlussquote/);
+  assert.match(ui, /Als erledigt markieren/);
+  assert.match(ui, /endOfDayCompletion/);
+  assert.match(ui, /teamFocusCoverage/);
+  assert.match(ui, /focusHistoryByDate/);
+  assert.match(ui, /Offene verschieben/);
+  assert.match(ui, /executionMetrics/);
+  assert.match(ui, /Decision-Link entfernen/);
+  assert.match(ui, /decisionId/);
+  assert.match(ui, /decisionLinkNote/);
+  assert.match(ui, /api\/decisions\/\$\{draft\.decisionId\}\/tasks/);
+  assert.match(ui, /buildHygieneAlerts/);
+  assert.match(ui, /recommendedAction/);
+  assert.match(ui, /Nächste Aktion/);
+  assert.match(ui, /Aktion in Fokus/);
+  assert.match(ui, /Acceptance Criteria fehlen/);
+  assert.match(ui, /Decision ohne Folgeaufgabe/);
+  assert.match(ui, /Begründende Decisions/);
+  assert.match(ui, /Fokus-Kontext/);
+  assert.match(detail, /Begründende Decisions/);
+  assert.match(detail, /Fokus-Kontext/);
+  assert.match(detail, /focusItems/);
+  assert.match(detail, /decisionTaskLinks/);
+  assert.match(taskPage, /focusItems=\{data\.taskFocusItems\}/);
+  assert.match(taskPage, /decisionTaskLinks=\{data\.decisionTaskLinks\}/);
+  assert.match(data, /taskFocusItems/);
+  assert.match(data, /decisionTaskLinks/);
+  assert.match(types, /export type TaskFocusItem/);
+  assert.match(types, /export type DecisionTaskLink/);
+  assert.match(focusRoute, /task_focus_items/);
+  assert.match(focusRoute, /Heute-Fokus ist auf drei Aufgaben begrenzt/);
+  assert.match(focusRoute, /export async function DELETE/);
+  assert.match(focusRoute, /Fokus entfernt/);
+  assert.match(focusRoute, /Fokus aktualisiert/);
+  assert.match(decisionTaskRoute, /decision_task_links/);
+  assert.match(decisionTaskRoute, /export async function DELETE/);
+  assert.match(decisionTaskRoute, /Decision-Verknüpfung entfernt/);
+  assert.match(decisionTaskRoute, /Mit Decision verknüpft/);
+  assert.match(verify, /task_focus_items/);
+  assert.match(verify, /decision_task_links/);
+  assert.match(health, /task_focus_items/);
+  assert.match(health, /decision_task_links/);
+  assert.match(schema, /create table if not exists task_focus_items/);
+  assert.match(schema, /create table if not exists decision_task_links/);
+  assert.match(agents, /docs\/execution-layer-plan\.md/);
+  assert.match(plan, /Focus Board \/ Heute-Modus/);
+  assert.match(plan, /Aging & Hygiene Alerts/);
+  assert.match(plan, /Decision-to-Task Links/);
+});
+
 test("task creation supports deliverables proposals and non scoring sub issues", async () => {
   const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
@@ -810,9 +1024,18 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(route, /task\.proposed/);
   assert.match(route, /Founder können nur eigene Deliverables verfeinern/);
   assert.match(route, /taskType === "deliverable"/);
+  assert.match(route, /Deliverables brauchen Group Commitment und Sprint/);
+  assert.match(route, /deadline: payload\.deadline/);
+  assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
   assert.match(ui, /NewTaskDialog/);
   assert.match(ui, /Sub-Issues/);
   assert.match(ui, /nicht score-relevant/);
+  assert.match(ui, /Direkt als GitHub-Issue anlegen/);
+  assert.match(ui, /createGitHubIssue/);
+  assert.match(ui, /relationType/);
+  assert.match(ui, /relatedTaskId/);
+  assert.match(ui, /Zieltermin/);
+  assert.match(ui, /createIfMissing: true/);
   assert.match(types, /TaskType = "deliverable" \| "proposal" \| "sub_issue"/);
 });
 
@@ -829,9 +1052,15 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
   assert.match(migration, /written_update/);
   assert.match(route, /meeting\.attendance_updated/);
   assert.match(route, /Founder können nur ihre eigene Meeting-Rückmeldung ändern/);
+  assert.match(route, /Nur CEO oder Deputy können Anwesenheit final bewerten/);
+  assert.match(route, /founderSelfReportStatuses/);
+  assert.match(route, /founder_self_report/);
+  assert.match(route, /lead_review/);
   assert.match(data, /meetingAttendance/);
   assert.match(ui, /Biweekly Meeting & Updates/);
   assert.match(ui, /Triftiger Grund/);
+  assert.match(ui, /eigene Rückmeldung/);
+  assert.match(ui, /canScoreAttendance/);
   assert.match(ui, /max\. 4 Punkte/);
   assert.match(types, /MeetingAttendanceStatus/);
 });

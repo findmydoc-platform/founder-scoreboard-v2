@@ -16,7 +16,7 @@ Make this project production-ready for Vercel without relying on Git-push deploy
 - Confirm the exact domain spelling before modifying DNS or Vercel domains. The known candidates are `founder-ops.findmydoc.eu` and `founder-ops.findmydog.eu`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, or Vercel tokens in logs, docs, or client code.
-- Run `npm run verify:vercel-ready`, `npm run lint`, and `npm run build` before any deploy attempt.
+- Run `npm run verify:vercel-ready`, `npm run verify:google-chat`, `npm run lint`, and `npm run build` before any deploy attempt.
 
 ## Readiness Workflow
 
@@ -32,6 +32,7 @@ Make this project production-ready for Vercel without relying on Git-push deploy
    - `REQUIRE_SUPABASE_AUTH=true`
    - `APP_URL=https://<production-domain>`
    - Optional: `GOOGLE_CHAT_WEBHOOK_URL`
+   - Default: `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout is explicitly enabled.
 
 3. Verify Supabase Auth:
    - GitHub provider enabled.

@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { hasGitHubIssue, reviewLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase } from "@/lib/supabase";
-import type { Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskStatus } from "@/lib/types";
+import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus } from "@/lib/types";
 import { CustomSelect } from "@/components/custom-select";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { TaskChecklist } from "@/components/task-checklist";
@@ -28,6 +28,9 @@ type Props = {
   profiles: Profile[];
   sprints: Sprint[];
   milestones: Milestone[];
+  decisions?: PlanningData["decisions"];
+  decisionTaskLinks?: DecisionTaskLink[];
+  focusItems?: TaskFocusItem[];
   source: "seed" | "supabase";
   commentImportNotice?: string;
 };
@@ -37,7 +40,9 @@ type DetailsDraft = Pick<EditableTaskState, "priority" | "owner" | "packageId" |
 
 function formatDate(value: string) {
   if (!value) return "ohne Datum";
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function dateRange(task: Task) {
@@ -63,6 +68,14 @@ function relationTypeLabel(type: TaskRelationType) {
   if (type === "blocked_by") return "Wartet auf";
   if (type === "blocks") return "Blockiert";
   return "Verknüpft mit";
+}
+
+function focusStatusLabel(status: TaskFocusItem["status"]) {
+  if (status === "done") return "Erledigt";
+  if (status === "blocked") return "Blockiert";
+  if (status === "deferred") return "Verschoben";
+  if (status === "needs_decision") return "Entscheidung nötig";
+  return "Geplant";
 }
 
 function RelationshipInfo({ title }: { title: string }) {
@@ -161,6 +174,9 @@ export function TaskDetailPage({
   profiles,
   sprints,
   milestones,
+  decisions = [],
+  decisionTaskLinks = [],
+  focusItems = [],
   source,
   commentImportNotice = "",
 }: Props) {
@@ -223,6 +239,14 @@ export function TaskDetailPage({
   const waitsOn = relationGroups.waitsOn.map((relation) => ({ relation, task: taskById.get(relation.relatedTaskId) }));
   const blocks = relationGroups.blocks.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) }));
   const related = relationGroups.related.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) }));
+  const linkedDecisions = decisionTaskLinks
+    .filter((link) => link.taskId === task.id)
+    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
+    .filter((item) => item.decision);
+  const linkedFocusItems = focusItems
+    .filter((item) => item.taskId === task.id)
+    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
+    .slice(0, 5);
   const relationTargetOptions = allTasks
     .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
     .map((item) => ({ value: item.id, label: `${item.title} · ${item.owner}` }));
@@ -714,6 +738,35 @@ export function TaskDetailPage({
                     <CommentBody value={meta.evidenceLink} />
                   </div>
                 )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Fokus-Kontext</h3>
+                <div className="mt-2 grid gap-2">
+                  {linkedFocusItems.length ? linkedFocusItems.map((item) => (
+                    <article key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-slate-800">{profileName(item.profileId)} · {formatDate(item.focusDate)}</span>
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">{item.nextStep || "Kein nächster Schritt hinterlegt."}</div>
+                    </article>
+                  )) : (
+                    <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Diese Aufgabe ist aktuell in keinem Tagesfokus.</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Begründende Decisions</h3>
+                <div className="mt-2 grid gap-2">
+                  {linkedDecisions.length ? linkedDecisions.map(({ link, decision }) => (
+                    <article key={link.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-800">{decision?.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{decision?.status || "Decision"} · {link.note || "Keine Notiz hinterlegt."}</div>
+                    </article>
+                  )) : (
+                    <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch keine Decision verknüpft.</div>
+                  )}
+                </div>
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-slate-950">Relationships</h3>

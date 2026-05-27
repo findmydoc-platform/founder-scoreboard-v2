@@ -68,6 +68,21 @@ Als Vorlage für die Zuordnung gibt es `supabase/profile-auth-map.example.sql`.
 - Decision Log: CEO erstellt/ändert, Founder bestätigen, vollständige Bestätigung lockt den Eintrag.
 - Meeting Finder: V1 nutzt manuelle Arbeitszeiten und Abwesenheiten in Supabase.
 
+## Google Chat
+
+Google Chat ist als Outbox-basierter Benachrichtigungskanal vorbereitet. Der Versand ist standardmäßig deaktiviert und braucht beide ENV-Werte:
+
+```bash
+GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_DELIVERY_ENABLED=false
+```
+
+Der sichere Rollout steht in `docs/google-chat-rollout.md`. Der lokale Check läuft mit:
+
+```bash
+npm run verify:google-chat
+```
+
 ## Supabase prüfen
 
 Nach dem Eintragen der `.env.local` prüft dieser Befehl, ob die wichtigsten Tabellen erreichbar und befüllt sind:

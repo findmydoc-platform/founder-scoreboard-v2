@@ -102,13 +102,14 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
   addProfileId(row.owner);
   addProfileId(row.assignee);
 
-  const [packageResult, milestoneResult, sprintResult, parentResult, commentsResult, blockersResult, outgoingRelationsResult, incomingRelationsResult] = await Promise.all([
+  const [packageResult, milestoneResult, sprintResult, parentResult, commentsResult, blockersResult, activitiesResult, outgoingRelationsResult, incomingRelationsResult] = await Promise.all([
     row.package_id ? supabase.from("packages").select("title,goal,milestone_id").eq("id", row.package_id).maybeSingle() : Promise.resolve({ data: null }),
     row.milestone_id ? supabase.from("milestones").select("title,target_date").eq("id", row.milestone_id).maybeSingle() : Promise.resolve({ data: null }),
     row.sprint_id ? supabase.from("sprints").select("name,start_date,end_date,review_due_at").eq("id", row.sprint_id).maybeSingle() : Promise.resolve({ data: null }),
     row.parent_task_id ? supabase.from("tasks").select("title,github_issue_url").eq("id", row.parent_task_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("task_comments").select("profile_id,comment,created_at").eq("task_id", row.id).order("created_at", { ascending: false }).limit(10),
     supabase.from("task_blockers").select("profile_id,reason,impact,needs_help_from,status,created_at").eq("task_id", row.id).order("created_at", { ascending: false }).limit(10),
+    supabase.from("task_activity").select("message,created_at").eq("task_id", row.id).order("created_at", { ascending: false }).limit(15),
     supabase.from("task_relationship_edges").select("id,relation_type,note,related_task_id,tasks!task_relationship_edges_related_task_id_fkey(id,title,status,owner,github_issue_number,github_issue_url)").eq("task_id", row.id),
     supabase.from("task_relationship_edges").select("id,relation_type,note,task_id,tasks!task_relationship_edges_task_id_fkey(id,title,status,owner,github_issue_number,github_issue_url)").eq("related_task_id", row.id),
   ]);
@@ -170,6 +171,10 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
       needsHelpFrom: blocker.needs_help_from || "",
       status: blocker.status,
       createdAt: blocker.created_at,
+    })),
+    activities: ((activitiesResult.data || []) as Array<{ message: string; created_at: string }>).map((activity) => ({
+      message: activity.message,
+      createdAt: activity.created_at,
     })),
   };
 }

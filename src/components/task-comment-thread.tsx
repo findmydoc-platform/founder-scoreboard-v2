@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranch, MessageSquare, Paperclip, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, GitBranch, GitPullRequestArrow, MessageSquare, Paperclip, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { Profile, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
@@ -19,6 +19,11 @@ type Props = {
   onImportGitHubComments?: () => void;
   onUploadAttachment?: (file: File) => Promise<string>;
 };
+
+type MarkdownPart =
+  | { type: "text"; text: string }
+  | { type: "link"; text: string; href: string }
+  | { type: "image"; alt: string; href: string };
 
 function formatDateTime(value: string) {
   if (!value) return "";
@@ -44,8 +49,20 @@ function ProfileAvatar({ profile }: { profile?: Profile }) {
   );
 }
 
+function repairGermanText(value: string) {
+  return value
+    .replace(new RegExp("\u00c3\u00a4", "g"), "ä")
+    .replace(new RegExp("\u00c3\u00b6", "g"), "ö")
+    .replace(new RegExp("\u00c3\u00bc", "g"), "ü")
+    .replace(new RegExp("\u00c3\u0084", "g"), "Ä")
+    .replace(new RegExp("\u00c3\u0096", "g"), "Ö")
+    .replace(new RegExp("\u00c3\u009c", "g"), "Ü")
+    .replace(new RegExp("\u00c3\u009f", "g"), "ß")
+    .replace(new RegExp("\u00c2\u00b7", "g"), "·");
+}
+
 function isUsefulActivity(message: string) {
-  const normalized = message.trim();
+  const normalized = repairGermanText(message).trim();
   if (!normalized) return false;
   if (normalized === "Aufgabe aktualisiert") return false;
   return [
@@ -61,12 +78,54 @@ function isUsefulActivity(message: string) {
     "Evidence",
     "Owner",
     "Nacharbeit",
+    "Priorität",
+    "Anhang",
+    "Aufgabenbrief",
+    "Founder-Checkliste",
+    "Fokus",
   ].some((prefix) => normalized.startsWith(prefix) || normalized.includes(prefix));
+}
+
+function describeActivity(message: string) {
+  const normalized = repairGermanText(message.trim());
+  const [rawTitle, ...detailParts] = normalized.split(":");
+  const detail = detailParts.join(":").trim();
+  const title = rawTitle.trim() || "Aktivität";
+
+  if (normalized.startsWith("Status geändert")) return { title: "Status geändert", detail, tone: "blue" as const, icon: Clock3 };
+  if (normalized.startsWith("Review geändert") || normalized.startsWith("Review finalisiert")) return { title, detail, tone: "emerald" as const, icon: CheckCircle2 };
+  if (normalized.startsWith("Nacharbeit")) return { title, detail, tone: "amber" as const, icon: AlertCircle };
+  if (normalized.startsWith("GitHub")) return { title, detail, tone: "violet" as const, icon: GitBranch };
+  if (normalized.startsWith("Relationship")) return { title, detail, tone: "slate" as const, icon: GitPullRequestArrow };
+  if (normalized.startsWith("Blocker")) return { title, detail, tone: "red" as const, icon: AlertCircle };
+  if (normalized.startsWith("Kommentar")) return { title, detail, tone: "slate" as const, icon: MessageSquare };
+  if (normalized.startsWith("Anhang")) return { title, detail, tone: "slate" as const, icon: Paperclip };
+  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
+
+  return { title, detail, tone: "slate" as const, icon: Clock3 };
+}
+
+function activityToneClass(tone: ReturnType<typeof describeActivity>["tone"]) {
+  if (tone === "blue") return "border-blue-100 bg-blue-50 text-blue-700";
+  if (tone === "emerald") return "border-emerald-100 bg-emerald-50 text-emerald-700";
+  if (tone === "amber") return "border-amber-100 bg-amber-50 text-amber-700";
+  if (tone === "red") return "border-red-100 bg-red-50 text-red-700";
+  if (tone === "violet") return "border-violet-100 bg-violet-50 text-violet-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 function safeUrl(value: string) {
   try {
-    const url = new URL(value);
+    const url = new URL(decodeHtmlEntities(value.trim()));
     if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
   } catch {
     return "";
@@ -94,30 +153,27 @@ function isGitHubAssetUrl(value: string) {
     return hostname === "github.com"
       || hostname.endsWith("githubusercontent.com")
       || hostname === "objects.githubusercontent.com"
-      || hostname.startsWith("github-production-user-asset-");
+      || hostname.startsWith("github-production-user-asset-")
+      || hostname.endsWith(".s3.amazonaws.com");
   } catch {
     return false;
   }
 }
 
 function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
+  const isGitHubAsset = isGitHubAssetUrl(href);
   const [src, setSrc] = useState(href);
   const [failed, setFailed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [fallbackAttempted, setFallbackAttempted] = useState(false);
+  const [loading, setLoading] = useState(isGitHubAsset);
+  const [proxyAttempted, setProxyAttempted] = useState(isGitHubAsset);
 
   useEffect(() => {
-    if (!fallbackAttempted) return;
+    if (!isGitHubAsset) return;
 
     let cancelled = false;
     let objectUrl = "";
 
     async function loadGitHubAsset() {
-      if (!isGitHubAssetUrl(href)) {
-        setFailed(true);
-        return;
-      }
-
       const supabase = getBrowserSupabase();
       const session = supabase ? (await supabase.auth.getSession()).data.session : null;
       const accessToken = session?.access_token || "";
@@ -151,11 +207,12 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
     }
 
     loadGitHubAsset();
+
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [fallbackAttempted, href]);
+  }, [href, isGitHubAsset]);
 
   return (
     <a href={href} target="_blank" rel="noreferrer" className="mt-2 block max-w-full">
@@ -175,9 +232,9 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => {
-            if (!fallbackAttempted && isGitHubAssetUrl(href)) {
+            if (!proxyAttempted && isGitHubAssetUrl(href)) {
               setLoading(true);
-              setFallbackAttempted(true);
+              setProxyAttempted(true);
               return;
             }
             setFailed(true);
@@ -190,18 +247,18 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
   );
 }
 
+function pushInlineText(parts: MarkdownPart[], value: string) {
+  if (value) parts.push({ type: "text", text: value });
+}
+
 function renderMarkdownParts(line: string) {
-  const parts: Array<
-    | { type: "text"; text: string }
-    | { type: "link"; text: string; href: string }
-    | { type: "image"; alt: string; href: string }
-  > = [];
+  const parts: MarkdownPart[] = [];
   const pattern = /<img\b[^>]*\balt=["']([^"']*)["'][^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>|<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>|!\[([^\]]*)\]\((https?:\/\/[^)\s"'>]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s"'>]+)\)|(https?:\/\/[^\s)"'>]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(line)) !== null) {
-    if (match.index > lastIndex) parts.push({ type: "text", text: line.slice(lastIndex, match.index) });
+    pushInlineText(parts, line.slice(lastIndex, match.index));
     if (match[2]) {
       parts.push({ type: "image", alt: match[1] || "Anhang", href: safeUrl(match[2]) });
     } else if (match[3]) {
@@ -217,7 +274,7 @@ function renderMarkdownParts(line: string) {
     lastIndex = pattern.lastIndex;
   }
 
-  if (lastIndex < line.length) parts.push({ type: "text", text: line.slice(lastIndex) });
+  pushInlineText(parts, line.slice(lastIndex));
   return parts.filter((part) => part.type === "text" || Boolean(part.href));
 }
 
@@ -268,6 +325,7 @@ export function TaskCommentThread({
   const [uploadPending, setUploadPending] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const showCommentPreview = /!\[[^\]]*\]\(https?:\/\/|https?:\/\/|\[[^\]]+\]\(https?:\/\//.test(newComment);
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const profileById = (profileId: string) => profiles.find((profile) => profile.id === profileId);
   const visibleActivities = activities.filter((activity) => isUsefulActivity(activity.message));
@@ -387,15 +445,24 @@ export function TaskCommentThread({
                 )}
               </div>
             </article>
-          ) : (
-            <article key={item.id} className="flex items-start gap-3 px-1 py-1 text-sm text-slate-500">
-              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
-              <div className="min-w-0 flex-1">
-                <span>{item.message}</span>
-                <span className="ml-2 text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>
-              </div>
-            </article>
-          )
+          ) : (() => {
+            const activity = describeActivity(item.message);
+            const Icon = activity.icon;
+            return (
+              <article key={item.id} className="flex gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border ${activityToneClass(activity.tone)}`}>
+                  <Icon size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-800">{activity.title}</span>
+                    <span className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>
+                  </div>
+                  {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600">{activity.detail}</div>}
+                </div>
+              </article>
+            );
+          })()
         ))}
         {!timeline.length && (
           <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
@@ -410,6 +477,12 @@ export function TaskCommentThread({
         className="mt-3 min-h-24 w-full resize-y rounded-md border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-blue-400"
         placeholder="Kommentar, Nachfrage oder kurzes Arbeitsupdate"
       />
+      {showCommentPreview && (
+        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-2 text-xs font-semibold text-slate-500">Vorschau</div>
+          <CommentBody value={newComment} />
+        </div>
+      )}
       {uploadError && <div className="mt-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{uploadError}</div>}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div>

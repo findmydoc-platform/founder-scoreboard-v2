@@ -8,6 +8,7 @@ import {
   GanttChart,
   LayoutDashboard,
   Settings,
+  Target,
   Users,
   Wrench,
 } from "lucide-react";
@@ -15,10 +16,11 @@ import Link from "next/link";
 import { forwardRef } from "react";
 import { AppBrand } from "@/components/app-brand";
 
-export type AppWorkspace = "planning" | "mine" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings";
+export type AppWorkspace = "planning" | "execution" | "mine" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings";
 
 export const appNavItems = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/" },
+  { id: "execution", label: "Execution", icon: Target, href: "/?workspace=execution" },
   { id: "mine", label: "Meine Aufgaben", icon: CheckCircle2, href: "/?workspace=mine" },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/?workspace=sprint" },
   { id: "decisions", label: "Decision Log", icon: FileText, href: "/?workspace=decisions" },

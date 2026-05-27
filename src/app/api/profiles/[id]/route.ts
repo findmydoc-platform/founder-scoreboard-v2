@@ -13,6 +13,9 @@ type UpdatePayload = {
   focus?: string;
   weeklyCapacity?: number;
   color?: string;
+  googleChatUserId?: string;
+  googleChatDmSpace?: string;
+  notificationsEnabled?: boolean;
 };
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
@@ -46,7 +49,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const payload = (await request.json()) as UpdatePayload;
-  const update: Record<string, string | number | null> = {};
+  const update: Record<string, string | number | boolean | null> = {};
 
   if (payload.githubLogin !== undefined) {
     update.github_login = cleanText(payload.githubLogin, 80) || null;
@@ -90,6 +93,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.deputy_active_until = value;
   }
 
+  if (payload.googleChatUserId !== undefined) {
+    update.google_chat_user_id = cleanText(payload.googleChatUserId, 160) || null;
+  }
+
+  if (payload.googleChatDmSpace !== undefined) {
+    update.google_chat_dm_space = cleanText(payload.googleChatDmSpace, 240) || null;
+  }
+
+  if (payload.notificationsEnabled !== undefined) {
+    update.notifications_enabled = Boolean(payload.notificationsEnabled);
+  }
+
   if (update.platform_role && update.platform_role !== "deputy") {
     update.deputy_for = null;
     update.deputy_active_from = null;
@@ -127,7 +142,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .from("profiles")
     .update(update)
     .eq("id", id)
-    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color")
+    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled")
     .single();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -156,6 +171,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       focus: updated.focus || "",
       weeklyCapacity: updated.weekly_capacity,
       color: updated.profile_color || "#64748b",
+      googleChatUserId: updated.google_chat_user_id || "",
+      googleChatDmSpace: updated.google_chat_dm_space || "",
+      notificationsEnabled: updated.notifications_enabled !== false,
     },
   });
 }

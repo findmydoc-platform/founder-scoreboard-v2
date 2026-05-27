@@ -13,6 +13,7 @@ type AttendancePayload = {
 };
 
 const statuses = new Set(["pending", "present", "excused", "late_excused", "unexcused", "no_show"]);
+const founderSelfReportStatuses = new Set(["pending", "excused", "late_excused"]);
 
 function defaultPoints(status: MeetingAttendanceStatus, reasonAccepted: boolean, writtenUpdate: string) {
   if (status === "present") return 4;
@@ -41,12 +42,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const status = payload.status && statuses.has(payload.status) ? payload.status : "pending";
+  if (!isLead && !founderSelfReportStatuses.has(status)) {
+    return NextResponse.json({ error: "Nur CEO oder Deputy können Anwesenheit final bewerten." }, { status: 403 });
+  }
+
   const absenceReason = typeof payload.absenceReason === "string" ? payload.absenceReason.trim().slice(0, 2000) : "";
   const writtenUpdate = typeof payload.writtenUpdate === "string" ? payload.writtenUpdate.trim().slice(0, 4000) : "";
+  if (!isLead && status !== "pending" && !absenceReason) {
+    return NextResponse.json({ error: "Für eine Meeting-Rückmeldung ist ein konkreter Grund erforderlich." }, { status: 400 });
+  }
+
   const reasonAccepted = isLead ? Boolean(payload.reasonAccepted) : false;
   const points = isLead && payload.points !== undefined
     ? Math.max(0, Math.min(4, Math.round(Number(payload.points))))
-    : defaultPoints(status, reasonAccepted, writtenUpdate);
+    : isLead ? defaultPoints(status, reasonAccepted, writtenUpdate) : 0;
 
   const { data: meeting, error: meetingError } = await supabase
     .from("meetings")
@@ -72,7 +81,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (error || !attendance) return NextResponse.json({ error: error?.message || "Meeting-Rückmeldung konnte nicht gespeichert werden." }, { status: 500 });
 
-  if (status !== "pending") {
+  if (!isLead && status !== "pending") {
     const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
     const notifications = (leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
@@ -88,12 +97,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (notifications.length) await supabase.from("notification_events").insert(notifications);
   }
 
+  if (isLead && profileId !== permission.profile?.id) {
+    await supabase.from("notification_events").insert({
+      type: "meeting.attendance_updated",
+      actor_profile_id: permission.profile?.id || null,
+      recipient_profile_id: profileId,
+      entity_type: "meeting",
+      entity_id: String(meetingId),
+      title: `Meeting bewertet: ${meeting.title}`,
+      body: `${status} · ${points} Punkte${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
+    });
+  }
+
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
     action: "meeting.attendance.update",
     entity_type: "meeting",
     entity_id: String(meetingId),
-    after_data: { profileId, status, absenceReason, reasonAccepted, points },
+    after_data: { profileId, status, absenceReason, reasonAccepted, points, mode: isLead ? "lead_review" : "founder_self_report" },
     request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
     user_agent: request.headers.get("user-agent"),
   });

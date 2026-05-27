@@ -2030,8 +2030,11 @@ export const seedData: PlanningData = {
   "taskBlockers": [],
   "taskRelations": [],
   "taskActivity": [],
+  "taskFocusItems": [],
+  "decisionTaskLinks": [],
   "notificationEvents": [],
   "notificationDeliveries": [],
+  "notificationPreferences": [],
   "feedbackItems": [],
   "fmdTools": [
     {

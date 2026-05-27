@@ -22,6 +22,8 @@ type TaskRow = {
   evidence_link: string | null;
   issue_number: string | null;
   issue_url: string | null;
+  github_issue_number: number | null;
+  github_issue_url: string | null;
   sprint_id: string | null;
   review_status: string | null;
   score_points: number | null;
@@ -30,6 +32,13 @@ type TaskRow = {
   score_relevant: boolean | null;
   carryover_count: number | null;
   original_sprint_id: string | null;
+  milestone_id: string | null;
+  problem_statement: string | null;
+  intended_outcome: string | null;
+  scope_constraints: string | null;
+  acceptance_criteria: unknown;
+  evidence_required: string | null;
+  dod_template_version: string | null;
 };
 
 function normalizeStatus(value: string) {
@@ -75,7 +84,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: nextSprint } = await supabase
     .from("sprints")
-    .select("id,name")
+    .select("id,name,start_date,end_date")
     .neq("id", id)
     .gt("start_date", sprint.start_date || "1900-01-01")
     .order("start_date", { ascending: true })
@@ -84,18 +93,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
-    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id")
+    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version")
     .eq("sprint_id", id);
 
   if (tasksError) return NextResponse.json({ error: tasksError.message }, { status: 500 });
 
   const sprintTasks = (tasks || []) as TaskRow[];
-  const openTasks = sprintTasks.filter((task) =>
+  const carryoverTasks = sprintTasks.filter((task) =>
     task.task_type !== "sub_issue"
     && task.score_relevant !== false
-    && !task.score_final
+    && (!task.score_final || task.review_status === "partial")
   );
-  const taskIds = openTasks.map((task) => task.id);
+  const taskIds = carryoverTasks.map((task) => task.id);
 
   const blockerResult = taskIds.length
     ? await supabase.from("task_blockers").select("id,task_id,status").in("task_id", taskIds).eq("status", "open")
@@ -106,17 +115,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const notifications = [];
   const nowSuffix = Date.now().toString(36);
 
-  for (const task of openTasks) {
+  for (const task of carryoverTasks) {
     const outcome = sprintOutcome(task, openBlockerTaskIds.has(task.id));
     const reason = carryoverReason(outcome);
+    const preserveScore = outcome === "partial";
 
     await supabase
       .from("tasks")
       .update({
-        score_points: 0,
+        score_points: preserveScore ? Number(task.score_points || 0) : 0,
         score_final: true,
         sprint_outcome: outcome,
         carryover_reason: reason,
+        github_sync_status: "not_synced",
+        github_sync_error: null,
       })
       .eq("id", task.id);
 
@@ -129,22 +141,31 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         id: `${task.id}-carryover-${nowSuffix}`,
         project_id: task.project_id,
         package_id: task.package_id,
+        milestone_id: task.milestone_id,
         title: task.title,
         description: task.description,
+        problem_statement: task.problem_statement,
+        intended_outcome: task.intended_outcome,
+        scope_constraints: task.scope_constraints,
+        acceptance_criteria: task.acceptance_criteria,
+        evidence_required: task.evidence_required,
+        dod_template_version: task.dod_template_version,
         status: outcome === "communicated_blocker" ? "Blockiert" : "Offen",
         priority: task.priority,
         owner: task.owner,
         assignee: task.assignee,
         workstream: task.workstream,
         sort_order: task.sort_order + 10000,
-        start_date: null,
-        end_date: null,
-        deadline: nextSprint.id,
+        start_date: nextSprint.start_date || null,
+        end_date: nextSprint.end_date || null,
+        deadline: nextSprint.end_date || null,
         estimate_hours: task.estimate_hours,
         definition_of_done: task.definition_of_done,
         evidence_link: task.evidence_link,
-        issue_number: task.issue_number,
-        issue_url: task.issue_url,
+        issue_number: null,
+        issue_url: null,
+        github_issue_number: null,
+        github_issue_url: null,
         sprint_id: nextSprint.id,
         review_status: "not_requested",
         score_points: 0,
@@ -206,7 +227,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     after_data: {
       scoreLocked: true,
       status: "closed",
-      openTasks: openTasks.length,
+      evaluatedTasks: carryoverTasks.length,
       carryoverCreated: carryoverInserts.length,
       nextSprintId: nextSprint?.id || null,
     },
@@ -220,7 +241,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     carryover: {
       nextSprintId: nextSprint?.id || "",
       created: carryoverInserts.length,
-      evaluated: openTasks.length,
+      evaluated: carryoverTasks.length,
     },
   });
 }

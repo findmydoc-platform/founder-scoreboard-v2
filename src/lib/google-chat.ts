@@ -13,18 +13,22 @@ export function hasGoogleChatWebhook() {
   return Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
 }
 
-export function googleChatTarget(profile?: Pick<Profile, "googleChatDmSpace" | "googleChatUserId"> | null) {
-  return profile?.googleChatDmSpace || profile?.googleChatUserId || "founder-scoreboard-space";
+export function isGoogleChatDeliveryEnabled() {
+  return process.env.GOOGLE_CHAT_DELIVERY_ENABLED === "true";
 }
 
-export function shouldSendToGoogleChatDigest(eventType: string) {
-  return [
-    "task.blocker_reported",
-    "task.proposed",
-    "task.review_requested",
-    "sprint.task_carried_over",
-    "decision.confirmation_requested",
-  ].includes(eventType);
+export function googleChatDeliveryStatus() {
+  const webhookConfigured = hasGoogleChatWebhook();
+  const deliveryEnabled = isGoogleChatDeliveryEnabled();
+  return {
+    webhookConfigured,
+    deliveryEnabled,
+    ready: webhookConfigured && deliveryEnabled,
+  };
+}
+
+export function googleChatTarget(profile?: Pick<Profile, "googleChatDmSpace" | "googleChatUserId"> | null) {
+  return profile?.googleChatDmSpace || profile?.googleChatUserId || "founder-scoreboard-space";
 }
 
 export function formatGoogleChatMessage(event: GoogleChatDeliveryEvent) {
@@ -103,13 +107,26 @@ export function formatGoogleChatDigestCard(events: GoogleChatDigestEvent[], appU
   };
 }
 
-export async function sendGoogleChatWebhook(event: GoogleChatDeliveryEvent) {
+function assertGoogleChatReady() {
+  const status = googleChatDeliveryStatus();
+  if (!status.deliveryEnabled) {
+    const error = new Error("GOOGLE_CHAT_DELIVERY_ENABLED ist nicht auf true gesetzt.");
+    error.name = "GoogleChatDeliveryDisabled";
+    throw error;
+  }
+
   const webhookUrl = process.env.GOOGLE_CHAT_WEBHOOK_URL;
   if (!webhookUrl) {
     const error = new Error("GOOGLE_CHAT_WEBHOOK_URL ist nicht gesetzt.");
     error.name = "GoogleChatNotConfigured";
     throw error;
   }
+
+  return webhookUrl;
+}
+
+export async function sendGoogleChatWebhook(event: GoogleChatDeliveryEvent) {
+  const webhookUrl = assertGoogleChatReady();
 
   const response = await fetch(webhookUrl, {
     method: "POST",
@@ -123,12 +140,7 @@ export async function sendGoogleChatWebhook(event: GoogleChatDeliveryEvent) {
 }
 
 export async function sendGoogleChatDigest(events: GoogleChatDigestEvent[], appUrl: string) {
-  const webhookUrl = process.env.GOOGLE_CHAT_WEBHOOK_URL;
-  if (!webhookUrl) {
-    const error = new Error("GOOGLE_CHAT_WEBHOOK_URL ist nicht gesetzt.");
-    error.name = "GoogleChatNotConfigured";
-    throw error;
-  }
+  const webhookUrl = assertGoogleChatReady();
 
   const response = await fetch(webhookUrl, {
     method: "POST",

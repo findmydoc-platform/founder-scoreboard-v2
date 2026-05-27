@@ -16,6 +16,7 @@ export type GitHubTaskSyncContext = {
   relationships?: Array<{ label: string; title: string; issueUrl?: string; issueNumber?: number | null; status?: string; owner?: string }>;
   comments?: Array<{ author: string; comment: string; createdAt: string }>;
   blockers?: Array<{ author: string; reason: string; impact: string; needsHelpFrom: string; status: string; createdAt: string }>;
+  activities?: Array<{ message: string; createdAt: string }>;
 };
 
 export function hasGitHubSyncEnv() {
@@ -99,6 +100,9 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
   const blockers = (context.blockers || []).slice(0, 10).map((blocker) =>
     `- ${blocker.status}: ${blocker.author} - ${blocker.reason}${blocker.impact ? ` | Impact: ${blocker.impact}` : ""}${blocker.needsHelpFrom ? ` | Hilfe: ${blocker.needsHelpFrom}` : ""}`,
   );
+  const activities = (context.activities || []).slice(0, 15).map((activity) =>
+    `- ${activity.createdAt}: ${activity.message}`,
+  );
   const relationships = (context.relationships || []).map((relation) => {
     const issueRef = relation.issueNumber ? `#${relation.issueNumber}` : relation.issueUrl || "";
     return `- ${relationshipLabel(relation.label)}: ${issueRef ? `${issueRef} ` : ""}${relation.title}${relation.status ? ` (${relation.status})` : ""}${relation.owner ? ` - ${relation.owner}` : ""}`;
@@ -150,6 +154,8 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
     ...compactSection("Relationships", relationships),
     "",
     ...compactSection("Letzte Kommentare", comments),
+    "",
+    ...compactSection("Aktivitätsprotokoll", activities),
     "",
     "## Source of Truth",
     `- Founder Scoreboard v2 Task ID: ${task.id}`,

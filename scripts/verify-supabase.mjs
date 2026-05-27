@@ -59,6 +59,8 @@ const schemaChecks = [
   { name: "fmd_tools", table: "fmd_tools", select: "id,name,category,kind,url,owner,status,sort_order" },
   { name: "task_relationship_edges", table: "task_relationship_edges", select: "id,task_id,related_task_id,relation_type,note" },
   { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
+  { name: "task_focus_items", table: "task_focus_items", select: "id,profile_id,task_id,focus_date,position,next_step,status" },
+  { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
 ];
 
 async function checkSchema(check) {
@@ -98,6 +100,8 @@ const result = {
   externalComments: await count("task_external_comments"),
   blockers: await count("task_blockers"),
   relationships: await count("task_relationship_edges"),
+  focusItems: await count("task_focus_items"),
+  decisionTaskLinks: await count("decision_task_links"),
   notifications: await count("notification_events"),
   notificationDeliveries: await count("notification_deliveries"),
   meetings: await count("meetings"),

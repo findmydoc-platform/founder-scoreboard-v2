@@ -1,6 +1,6 @@
 import { seedData } from "./generated/seed-data";
 import { getServerSupabase } from "./supabase";
-import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, Package, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "./types";
+import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 type DbProfile = {
   id: string;
@@ -206,6 +206,28 @@ type DbTaskActivity = {
   created_at: string;
 };
 
+type DbTaskFocusItem = {
+  id: number;
+  profile_id: string | null;
+  task_id: string;
+  focus_date: string;
+  position: number;
+  next_step: string | null;
+  status: TaskFocusItem["status"];
+  created_at: string;
+  updated_at: string;
+};
+
+type DbDecisionTaskLink = {
+  id: number;
+  decision_id: number;
+  task_id: string;
+  link_type: DecisionTaskLink["linkType"];
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 type DbNotificationEvent = {
   id: number;
   type: string;
@@ -229,6 +251,14 @@ type DbNotificationDelivery = {
   last_error: string | null;
   delivered_at: string | null;
   created_at: string;
+};
+
+type DbNotificationPreference = {
+  id: number;
+  profile_id: string;
+  channel: NotificationPreference["channel"];
+  event_type: string;
+  enabled: boolean;
 };
 
 type DbFeedbackItem = {
@@ -308,8 +338,11 @@ export const emptyPlanningData: PlanningData = {
   taskBlockers: [],
   taskRelations: [],
   taskActivity: [],
+  taskFocusItems: [],
+  decisionTaskLinks: [],
   notificationEvents: [],
   notificationDeliveries: [],
+  notificationPreferences: [],
   feedbackItems: [],
   fmdTools: [],
   meetings: [],
@@ -556,6 +589,32 @@ function mapTaskActivity(row: DbTaskActivity): TaskActivity {
   };
 }
 
+function mapTaskFocusItem(row: DbTaskFocusItem): TaskFocusItem {
+  return {
+    id: row.id,
+    profileId: row.profile_id || "",
+    taskId: row.task_id,
+    focusDate: row.focus_date,
+    position: row.position,
+    nextStep: row.next_step || "",
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapDecisionTaskLink(row: DbDecisionTaskLink): DecisionTaskLink {
+  return {
+    id: row.id,
+    decisionId: row.decision_id,
+    taskId: row.task_id,
+    linkType: row.link_type,
+    note: row.note || "",
+    createdBy: row.created_by || "",
+    createdAt: row.created_at,
+  };
+}
+
 function mapNotificationEvent(row: DbNotificationEvent): NotificationEvent {
   return {
     id: row.id,
@@ -582,6 +641,16 @@ function mapNotificationDelivery(row: DbNotificationDelivery): NotificationDeliv
     lastError: row.last_error || "",
     deliveredAt: row.delivered_at || "",
     createdAt: row.created_at,
+  };
+}
+
+function mapNotificationPreference(row: DbNotificationPreference): NotificationPreference {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    channel: row.channel,
+    eventType: row.event_type,
+    enabled: row.enabled,
   };
 }
 
@@ -643,7 +712,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
   const supabase = getServerSupabase();
   if (!supabase) return { data: seedData, source: "seed" };
 
-  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, notificationResult, notificationDeliveryResult, feedbackResult, fmdToolResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
+  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
     supabase.from("packages").select("id,milestone_id,title,goal,priority,sort_order").order("sort_order"),
@@ -662,8 +731,11 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
     supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").order("created_at", { ascending: false }).limit(200),
     supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).limit(500),
     supabase.from("task_activity").select("id,task_id,message,created_at").order("created_at", { ascending: true }).limit(500),
+    supabase.from("task_focus_items").select("id,profile_id,task_id,focus_date,position,next_step,status,created_at,updated_at").order("focus_date", { ascending: false }).order("position").limit(500),
+    supabase.from("decision_task_links").select("id,decision_id,task_id,link_type,note,created_by,created_at").order("created_at", { ascending: false }).limit(500),
     supabase.from("notification_events").select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
+    supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
     supabase.from("feedback_items").select("id,type,status,severity,profile_id,title,description,page_url,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,sort_order").order("sort_order"),
     supabase.from("meetings").select("id,sprint_id,title,meeting_at,status,agenda").order("meeting_at", { ascending: false }).limit(100),
@@ -699,8 +771,11 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
       taskBlockers: taskBlockerResult.error ? [] : (taskBlockerResult.data as DbTaskBlocker[]).map(mapTaskBlocker),
       taskRelations: taskRelationResult.error ? [] : (taskRelationResult.data as DbTaskRelation[]).map(mapTaskRelation),
       taskActivity: taskActivityResult.error ? [] : (taskActivityResult.data as DbTaskActivity[]).map(mapTaskActivity),
+      taskFocusItems: taskFocusResult.error ? [] : (taskFocusResult.data as DbTaskFocusItem[]).map(mapTaskFocusItem),
+      decisionTaskLinks: decisionTaskLinkResult.error ? [] : (decisionTaskLinkResult.data as DbDecisionTaskLink[]).map(mapDecisionTaskLink),
       notificationEvents: notificationResult.error ? [] : (notificationResult.data as DbNotificationEvent[]).map(mapNotificationEvent),
       notificationDeliveries: notificationDeliveryResult.error ? [] : (notificationDeliveryResult.data as DbNotificationDelivery[]).map(mapNotificationDelivery),
+      notificationPreferences: notificationPreferenceResult.error ? [] : (notificationPreferenceResult.data as DbNotificationPreference[]).map(mapNotificationPreference),
       feedbackItems: feedbackResult.error ? [] : (feedbackResult.data as DbFeedbackItem[]).map(mapFeedbackItem),
       fmdTools: fmdToolResult.error ? [] : (fmdToolResult.data as DbFmdTool[]).map(mapFmdTool),
       meetings: meetingResult.error ? [] : (meetingResult.data as DbMeeting[]).map(mapMeeting),

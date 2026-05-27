@@ -195,6 +195,28 @@ export type TaskActivity = {
   createdAt: string;
 };
 
+export type TaskFocusItem = {
+  id: number;
+  profileId: string;
+  taskId: string;
+  focusDate: string;
+  position: number;
+  nextStep: string;
+  status: "planned" | "done" | "blocked" | "deferred" | "needs_decision";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DecisionTaskLink = {
+  id: number;
+  decisionId: number;
+  taskId: string;
+  linkType: "follows_from" | "supports" | "blocks_decision";
+  note: string;
+  createdBy: string;
+  createdAt: string;
+};
+
 export type NotificationEvent = {
   id: number;
   type: string;
@@ -218,6 +240,14 @@ export type NotificationDelivery = {
   lastError: string;
   deliveredAt: string;
   createdAt: string;
+};
+
+export type NotificationPreference = {
+  id: number;
+  profileId: string;
+  channel: "google_chat" | "in_app" | "github";
+  eventType: string;
+  enabled: boolean;
 };
 
 export type FeedbackItem = {
@@ -306,8 +336,11 @@ export type PlanningData = {
   taskBlockers: TaskBlocker[];
   taskRelations: TaskRelation[];
   taskActivity: TaskActivity[];
+  taskFocusItems: TaskFocusItem[];
+  decisionTaskLinks: DecisionTaskLink[];
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];
+  notificationPreferences: NotificationPreference[];
   feedbackItems: FeedbackItem[];
   fmdTools: FmdTool[];
   meetings: Meeting[];

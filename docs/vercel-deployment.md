@@ -23,9 +23,10 @@ APP_URL=https://founder-ops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
-`GOOGLE_CHAT_WEBHOOK_URL` is optional until Google Chat notifications should go live.
+`GOOGLE_CHAT_WEBHOOK_URL` is optional until Google Chat notifications should go live. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
 
 ## Supabase Auth
 
@@ -43,6 +44,7 @@ Run from `fmd-planning`:
 
 ```bash
 npm run verify:vercel-ready
+npm run verify:google-chat
 npm run lint
 npm run build
 ```
