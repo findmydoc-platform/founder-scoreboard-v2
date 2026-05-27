@@ -584,8 +584,9 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /\/api\/github-assets\?url=/);
   assert.match(thread, /URL\.createObjectURL/);
   assert.match(thread, /decodeHtmlEntities/);
-  assert.match(thread, /useState\(isGitHubAsset\)/);
-  assert.match(thread, /if \(!isGitHubAsset\) return/);
+  assert.match(thread, /useState\(false\)/);
+  assert.match(thread, /loadViaProxy/);
+  assert.match(thread, /if \(!isGitHubAsset \|\| proxyAttempted\)/);
   assert.match(thread, /showCommentPreview/);
   assert.match(thread, /Vorschau/);
   assert.match(thread, /getBrowserSupabase/);

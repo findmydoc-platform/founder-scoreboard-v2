@@ -164,55 +164,57 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
   const isGitHubAsset = isGitHubAssetUrl(href);
   const [src, setSrc] = useState(href);
   const [failed, setFailed] = useState(false);
-  const [loading, setLoading] = useState(isGitHubAsset);
-  const [proxyAttempted, setProxyAttempted] = useState(isGitHubAsset);
+  const [loading, setLoading] = useState(false);
+  const [proxyAttempted, setProxyAttempted] = useState(false);
+  const objectUrlRef = useRef("");
 
-  useEffect(() => {
-    if (!isGitHubAsset) return;
+  async function loadViaProxy() {
+    if (!isGitHubAsset || proxyAttempted) {
+      setFailed(true);
+      return;
+    }
 
-    let cancelled = false;
-    let objectUrl = "";
+    setLoading(true);
+    setProxyAttempted(true);
 
-    async function loadGitHubAsset() {
+    try {
       const supabase = getBrowserSupabase();
       const session = supabase ? (await supabase.auth.getSession()).data.session : null;
       const accessToken = session?.access_token || "";
       const providerToken = session?.provider_token || "";
 
       if (!accessToken || !providerToken) {
-        setLoading(false);
         setFailed(true);
         return;
       }
 
-      try {
-        const response = await fetch(`/api/github-assets?url=${encodeURIComponent(href)}`, {
-          headers: {
-            authorization: `Bearer ${accessToken}`,
-            "x-github-provider-token": providerToken,
-          },
-        });
-        if (!response.ok) throw new Error(`GitHub asset failed: ${response.status}`);
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) {
-          setSrc(objectUrl);
-          setFailed(false);
-        }
-      } catch {
-        if (!cancelled) setFailed(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const response = await fetch(`/api/github-assets?url=${encodeURIComponent(href)}`, {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "x-github-provider-token": providerToken,
+        },
+      });
+      if (!response.ok) throw new Error(`GitHub asset failed: ${response.status}`);
+      const blob = await response.blob();
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = URL.createObjectURL(blob);
+      setSrc(objectUrlRef.current);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    loadGitHubAsset();
-
+  useEffect(() => {
     return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = "";
+      }
     };
-  }, [href, isGitHubAsset]);
+  }, []);
 
   return (
     <a href={href} target="_blank" rel="noreferrer" className="mt-2 block max-w-full">
@@ -232,12 +234,7 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => {
-            if (!proxyAttempted && isGitHubAssetUrl(href)) {
-              setLoading(true);
-              setProxyAttempted(true);
-              return;
-            }
-            setFailed(true);
+            void loadViaProxy();
           }}
           className="max-h-[420px] max-w-full rounded-md border border-slate-200 bg-white object-contain"
         />
