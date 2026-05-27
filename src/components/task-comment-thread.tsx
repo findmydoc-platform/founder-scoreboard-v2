@@ -383,7 +383,7 @@ export function TaskCommentThread({
               className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw size={13} />
-              GitHub aktualisieren
+              {importPending ? "Aktualisiert..." : "GitHub aktualisieren"}
             </button>
           )}
           <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
@@ -400,6 +400,11 @@ export function TaskCommentThread({
       {notice && (
         <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
           {notice}
+        </div>
+      )}
+      {!notice && importPending && (
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+          GitHub-Kommentare und Anhänge werden geprüft...
         </div>
       )}
 

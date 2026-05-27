@@ -184,6 +184,7 @@ export function TaskDetailPage({
   const [taskExternalComments, setTaskExternalComments] = useState(externalComments);
   const [taskActivities, setTaskActivities] = useState(activities);
   const [localCommentImportNotice, setLocalCommentImportNotice] = useState(commentImportNotice);
+  const [githubCommentImportPending, setGithubCommentImportPending] = useState(false);
   const autoImportedGitHubCommentsRef = useRef(false);
   const [relations, setRelations] = useState(taskRelations);
   const [relationDraft, setRelationDraft] = useState<{ relationType: TaskRelationType; relatedTaskId: string; note: string }>({
@@ -378,6 +379,7 @@ export function TaskDetailPage({
       return;
     }
 
+    setGithubCommentImportPending(true);
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
@@ -482,6 +484,8 @@ export function TaskDetailPage({
         );
       } catch (caught) {
         if (!options.silent) setError(caught instanceof Error ? caught.message : "GitHub-Kommentare konnten nicht aktualisiert werden.");
+      } finally {
+        setGithubCommentImportPending(false);
       }
     });
   }, [source, startTransition, task.id]);
@@ -839,6 +843,7 @@ export function TaskDetailPage({
             notice={localCommentImportNotice}
             profiles={profiles}
             pending={isPending}
+            importPending={githubCommentImportPending}
             onImportGitHubComments={importGitHubComments}
             onUploadAttachment={uploadAttachment}
             title="Kommentare"

@@ -837,6 +837,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [authBusy, setAuthBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [commentImportNotice, setCommentImportNotice] = useState("");
+  const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
   const [statusGuardNotice, setStatusGuardNotice] = useState("");
   const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -2267,6 +2268,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       return;
     }
 
+    setCommentImportPendingTaskIds((current) => new Set(current).add(task.id));
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
@@ -2393,6 +2395,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         }
       } catch (error) {
         if (!options.silent) setSaveError(error instanceof Error ? error.message : "GitHub-Kommentare konnten nicht aktualisiert werden.");
+      } finally {
+        setCommentImportPendingTaskIds((current) => {
+          const next = new Set(current);
+          next.delete(task.id);
+          return next;
+        });
       }
     });
   }, [source, startTransition]);
@@ -3496,6 +3504,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           allTasks={data.tasks}
           relations={data.taskRelations}
           pending={isPending}
+          commentImportPending={commentImportPendingTaskIds.has(selectedTask.id)}
           onClose={closeTaskPanel}
           onUpdate={(patch) => updateTask(selectedTask, patch)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
@@ -6750,6 +6759,7 @@ function TaskDetailPanel({
   externalComments,
   activities,
   commentImportNotice,
+  commentImportPending,
   blockers,
   subIssues,
   teamProfiles,
@@ -6780,6 +6790,7 @@ function TaskDetailPanel({
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
   commentImportNotice: string;
+  commentImportPending: boolean;
   blockers: TaskBlocker[];
   subIssues: Task[];
   teamProfiles: Profile[];
@@ -7081,6 +7092,7 @@ function TaskDetailPanel({
           notice={commentImportNotice}
           profiles={teamProfiles}
           pending={pending}
+          importPending={commentImportPending}
           onImportGitHubComments={onImportGitHubComments}
           onUploadAttachment={onUploadAttachment}
           onAddComment={onAddComment}
