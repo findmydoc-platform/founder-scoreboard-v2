@@ -8,6 +8,7 @@ const requiredFiles = [
   "src/app/api/health/route.ts",
   "src/lib/supabase.ts",
   ".env.example",
+  ".github/dependabot.yml",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -80,7 +81,7 @@ for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_D
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
 if (ciWorkflowPresent) {
   const ci = await read(".github/workflows/ci.yml");
-  for (const marker of ["npm ci", "npm test", "npm run lint", "npm run build", "npm run verify:google-chat"]) {
+  for (const marker of ["npm ci", "node tests/platform-contract.test.mjs", "npm run build", "npm run verify:release"]) {
     if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
   }
 }

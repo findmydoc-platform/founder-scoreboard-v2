@@ -811,6 +811,8 @@ test("google chat rollout is documented and verified before delivery activation"
 
 test("repo readiness includes optional ci and deployment gates", async () => {
   const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
+  const dependabot = await readFile(".github/dependabot.yml", "utf8");
+  const gitignore = await readFile(".gitignore", "utf8");
   const deployment = await readFile("docs/vercel-deployment.md", "utf8");
   const skill = await readFile("skills/fmd-vercel-readiness/SKILL.md", "utf8");
   const pkg = await readFile("package.json", "utf8");
@@ -818,10 +820,12 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const css = await readFile("src/app/globals.css", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
+  assert.match(verify, /node tests\/platform-contract\.test\.mjs/);
+  assert.match(verify, /npm run verify:release/);
   assert.match(verify, /localProjectLinked/);
   assert.match(verify, /manualNextSteps/);
   assert.match(verify, /vercel link --yes --project founder-ops/);
-  assert.match(verify, /npm run verify:google-chat/);
+  assert.match(verify, /\.github\/dependabot\.yml/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /verify:google-chat/);
   assert.match(pkg, /verify:release/);
@@ -831,6 +835,11 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(pkg, /node scripts\/verify-google-chat-rollout\.mjs/);
   assert.match(pkg, /npm audit --audit-level=moderate/);
   assert.doesNotMatch(pkg, /"verify:release": ".*next build/);
+  assert.match(gitignore, /\.github\/workflows\/ci\.yml/);
+  assert.match(dependabot, /package-ecosystem: npm/);
+  assert.match(dependabot, /package-ecosystem: github-actions/);
+  assert.match(dependabot, /timezone: Europe\/Berlin/);
+  assert.match(dependabot, /nextjs-stack/);
   assert.match(deployment, /npm run build[\s\S]*npm run verify:release/);
   assert.match(deployment, /npm run verify:release/);
   assert.match(deployment, /npm audit --audit-level=moderate/);
