@@ -199,6 +199,39 @@ const setupChecks = [
   "Health-Check zeigt status ready",
 ];
 
+const productionReadinessItems = [
+  {
+    title: "Release-Gate lokal",
+    description: "`npm run build` und `npm run verify:release` müssen vor jedem Deployment grün sein.",
+    status: "bereit",
+  },
+  {
+    title: "GitHub OAuth",
+    description: "OAuth-App gehört zur Organisation und nutzt den angemeldeten GitHub-User für Kommentare, Anhänge und Sync.",
+    status: "bereit",
+  },
+  {
+    title: "Vercel CLI",
+    description: "Noch offen: `vercel login`, danach `vercel link --yes --project founder-ops` und `vercel pull --yes --environment=production`.",
+    status: "manuell offen",
+  },
+  {
+    title: "Supabase Auth Redirects",
+    description: "Nach Domain-Cutover die Produktions-URL als Site URL und Redirect URL in Supabase eintragen.",
+    status: "nach Domain",
+  },
+  {
+    title: "Google Chat",
+    description: "`GOOGLE_CHAT_DELIVERY_ENABLED=false` bleibt sicherer Standard, bis Webhook, Domain und Test-Digest geprüft sind.",
+    status: "vorbereitet",
+  },
+  {
+    title: "GitHub Maintenance",
+    description: "Dependabot ist aktiv. GitHub-Sicherheitsmeldungen werden separat geprüft, lokale Audits bleiben Teil des Release-Gates.",
+    status: "aktiv",
+  },
+];
+
 const quickFilters = [
   { id: "mine", label: "Meine Aufgaben" },
   { id: "open", label: "Offen" },
@@ -5820,6 +5853,36 @@ function SettingsOverview({
               {googleChatReady ? "versandbereit" : "nur gesammelt"}
             </span>
           </div>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Production Readiness</h2>
+            <p className="mt-1 text-sm text-slate-500">Aktueller Übergang von lokaler App zu Vercel-Produktion. Vercel ist der einzige manuelle Blocker.</p>
+          </div>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+            Vercel Login offen
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {productionReadinessItems.map((item) => {
+            const blocked = item.status === "manuell offen";
+            return (
+              <div key={item.title} className={`rounded-lg border p-3 text-sm ${blocked ? "border-amber-200 bg-amber-50" : "border-slate-100 bg-slate-50"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className={`font-semibold ${blocked ? "text-amber-950" : "text-slate-950"}`}>{item.title}</h3>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${blocked ? "border-amber-200 bg-white text-amber-700" : "border-emerald-200 bg-white text-emerald-700"}`}>
+                    {item.status}
+                  </span>
+                </div>
+                <p className={`mt-2 leading-5 ${blocked ? "text-amber-800" : "text-slate-600"}`}>{item.description}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800">
+          Nächster echter Deployment-Schritt: im Projektordner `vercel login` ausführen und den Browser-Login abschließen. Danach kann Codex Link, Env-Pull, Build und Deploy weiterführen.
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

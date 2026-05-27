@@ -818,6 +818,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const pkg = await readFile("package.json", "utf8");
   const layout = await readFile("src/app/layout.tsx", "utf8");
   const css = await readFile("src/app/globals.css", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
   assert.match(verify, /node tests\/platform-contract\.test\.mjs/);
@@ -851,6 +852,11 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
+  assert.match(ui, /Production Readiness/);
+  assert.match(ui, /Vercel Login offen/);
+  assert.match(ui, /vercel login/);
+  assert.match(ui, /GitHub OAuth/);
+  assert.match(ui, /Supabase Auth Redirects/);
 });
 
 test("health and supabase verification detect operational migrations", async () => {
