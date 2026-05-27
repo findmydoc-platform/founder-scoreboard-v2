@@ -24,6 +24,8 @@ const requiredEnvKeys = [
   "GOOGLE_CHAT_DELIVERY_ENABLED",
 ];
 
+const vercelProjectFile = ".vercel/project.json";
+
 async function read(path) {
   return readFile(path, "utf8");
 }
@@ -83,16 +85,27 @@ if (ciWorkflowPresent) {
   }
 }
 
+const localProjectLinked = existsSync(vercelProjectFile);
+const manualNextSteps = [];
+if (!localProjectLinked) {
+  manualNextSteps.push("Run `vercel login` from fmd-planning and complete the browser login.");
+  manualNextSteps.push("Run `vercel link --yes --project founder-ops` after login.");
+  manualNextSteps.push("Run `vercel pull --yes --environment=production` once the project is linked.");
+}
+
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
 
 console.log(JSON.stringify({
-  status: "ready-for-vercel-cli-preflight",
+  status: localProjectLinked ? "ready-for-vercel-build-preflight" : "ready-for-vercel-cli-preflight",
   project: "founder-ops",
   rootDirectory: "fmd-planning",
   requiredEnvKeys,
+  localProjectLinked,
+  vercelProjectFile,
+  manualNextSteps,
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat"],

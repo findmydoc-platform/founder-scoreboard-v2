@@ -56,6 +56,8 @@ npm run verify:supabase
 npm run verify:auth
 ```
 
+`npm run verify:vercel-ready` reports `localProjectLinked: false` until `.vercel/project.json` exists. That is expected before the first CLI link and means the next manual step is still `vercel login` followed by `vercel link --yes --project founder-ops`.
+
 ## CLI Deploy
 
 Use the Vercel CLI from this directory:

@@ -815,10 +815,16 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const skill = await readFile("skills/fmd-vercel-readiness/SKILL.md", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
+  assert.match(verify, /localProjectLinked/);
+  assert.match(verify, /manualNextSteps/);
+  assert.match(verify, /vercel link --yes --project founder-ops/);
   assert.match(verify, /npm run verify:google-chat/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /verify:google-chat/);
+  assert.match(deployment, /localProjectLinked: false/);
+  assert.match(deployment, /vercel link --yes --project founder-ops/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(skill, /localProjectLinked: false/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
 });
 

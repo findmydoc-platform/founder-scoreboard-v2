@@ -24,6 +24,7 @@ Make this project production-ready for Vercel without relying on Git-push deploy
    - Work from `C:\Users\mehme\Documents\New project 2\fmd-planning`.
    - Verify `package.json` has `build`, `start`, `lint`, and `verify:vercel-ready`.
    - Verify `next.config.ts` has required external image domains.
+   - Check `npm run verify:vercel-ready`; `localProjectLinked: false` means `.vercel/project.json` is still missing and the next manual step is `vercel login` plus `vercel link --yes --project founder-ops`.
 
 2. Verify production env planning:
    - `NEXT_PUBLIC_SUPABASE_URL`
