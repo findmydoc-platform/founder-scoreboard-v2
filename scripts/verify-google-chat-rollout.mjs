@@ -29,6 +29,7 @@ const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
 const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
 const settingsUi = await readFile("src/components/planning-app.tsx", "utf8");
 const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
+const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
 
 function googleChatDeliveryStatus() {
   const webhookConfigured = Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
@@ -50,6 +51,9 @@ const requiredChecks = [
   ["next-step links rollout", nextStep.includes("docs/google-chat-rollout.md")],
   ["settings UI explains readiness", settingsUi.includes("googleChatReady")],
   ["delivery route is gated", deliverRoute.includes("googleChatDeliveryStatus")],
+  ["chat event route exists", eventRoute.includes("FounderOps Google Chat Events")],
+  ["chat event route stays gated", eventRoute.includes("googleChatDeliveryStatus")],
+  ["chat event route handles message events", eventRoute.includes("MESSAGE")],
 ];
 
 const failed = requiredChecks.filter(([, passed]) => !passed);

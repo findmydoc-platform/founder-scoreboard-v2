@@ -55,6 +55,7 @@ Erledigt:
 5. Die Kopfzeile zeigt eine In-App-Notification-Inbox für persönliche Hinweise.
 6. `POST /api/notifications/deliver` verarbeitet Pending-Events, filtert auf wichtige Chat-Typen und sendet einen Google-Chat-Digest, wenn `GOOGLE_CHAT_WEBHOOK_URL` gesetzt ist und `GOOGLE_CHAT_DELIVERY_ENABLED=true` gilt.
 7. Einstellungen zeigen den Google Chat Digest, den Zustellstatus und die persönlichen Event-Präferenzen.
+8. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet und antwortet auf Google-Chat-Events, ohne die Zustellung zu aktivieren.
 
 Noch offen:
 
@@ -66,7 +67,7 @@ Noch offen:
 ## Offene Punkte für persönliche DMs
 
 1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` speichern.
-2. `founderops.findmydoc.eu` auf Vercel schalten und `/api/google-chat/events` implementieren.
+2. `founderops.findmydoc.eu` auf Vercel schalten und `/api/google-chat/events` im Deployment testen.
 3. Private DM-Zustellung über Google Chat API an `spaces/{dmSpace}/messages` ergänzen; der bestehende Webhook-Digest sendet nicht automatisch in persönliche DMs.
 
 ## Nicht vergessen

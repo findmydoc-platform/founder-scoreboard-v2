@@ -787,6 +787,7 @@ test("google chat rollout is documented and verified before delivery activation"
   const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
   const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
   const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
+  const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
@@ -795,9 +796,16 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
   assert.match(rollout, /notification_preferences/);
   assert.match(rollout, /Rollback/);
+  assert.match(rollout, /\/api\/google-chat\/events/);
   assert.match(nextStep, /docs\/google-chat-rollout\.md/);
+  assert.match(nextStep, /\/api\/google-chat\/events/);
   assert.match(script, /googleChatDeliveryStatus/);
   assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(script, /chat event route exists/);
+  assert.match(eventRoute, /FounderOps Google Chat Events/);
+  assert.match(eventRoute, /googleChatDeliveryStatus/);
+  assert.match(eventRoute, /MESSAGE/);
+  assert.doesNotMatch(eventRoute, /sendGoogleChatWebhook/);
   assert.match(pkg, /verify:google-chat/);
 });
 

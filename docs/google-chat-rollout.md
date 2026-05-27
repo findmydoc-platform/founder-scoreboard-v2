@@ -34,7 +34,7 @@ Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem Vercel-Set
 https://founderops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist ein geplanter Zielwert. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die Vercel-App zeigt und die Route `/api/google-chat/events` im Deployment existiert.
+Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die Vercel-App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
 
 Empfohlene Google-Chat-App-Felder:
 
@@ -69,7 +69,7 @@ Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein 
 
 1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` eintragen. Normale 1:1-Chats zwischen Teammitgliedern sind dafür nicht korrekt.
 2. `founderops.findmydoc.eu` auf die Vercel-App zeigen lassen.
-3. Die Route `/api/google-chat/events` implementieren und deployen, damit die Google-Chat-App Nachrichten und Installations-/Message-Events verarbeiten kann.
+3. Die Route `/api/google-chat/events` deployen und mit Google Chat testen, damit die Google-Chat-App Nachrichten und Installations-/Message-Events verarbeiten kann.
 4. Den Versand von reinem `GOOGLE_CHAT_WEBHOOK_URL`-Digest auf Google Chat API Versand an `spaces/{dmSpace}/messages` erweitern, damit persönliche DMs wirklich an die Profil-DM-Spaces gehen.
 5. Danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` erst nach einem kontrollierten Test aktivieren.
 
