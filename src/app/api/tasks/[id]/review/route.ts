@@ -27,7 +27,7 @@ function checklistPoints(checklist: ReviewPayload["checklist"]) {
   return Math.round((checked / 4) * 10);
 }
 
-function defaultPoints(decision: ReviewPayload["decision"], checklist: ReviewPayload["checklist"]) {
+function reviewDecisionPoints(decision: ReviewPayload["decision"], checklist: ReviewPayload["checklist"]) {
   if (decision === "accepted" || decision === "partial") return checklistPoints(checklist);
   return 0;
 }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const checklist = payload.checklist || {};
-  const points = payload.points === undefined ? defaultPoints(decision, checklist) : Math.max(0, Math.min(10, Math.round(Number(payload.points))));
+  const points = reviewDecisionPoints(decision, checklist);
   const comment = typeof payload.comment === "string" ? payload.comment.trim().slice(0, 2000) : "";
 
   const { data: task, error: taskError } = await supabase

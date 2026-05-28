@@ -24,7 +24,7 @@ Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum und Review. Nur Deliver
 Persönliche Arbeitsunterteilung unter einem Deliverable. Nicht scoring-relevant.
 
 ## Problem Statement
-Welches konkrete Problem löst die Aufgabe und warum ist es jetzt relevant?
+Beschreibt den aktuellen Zustand, das konkrete Problem oder den Pain Point und warum es jetzt relevant ist. Keine Lösung, Umsetzungsschritte oder technische Vorgaben in das Problem Statement schreiben.
 
 ## Intended Outcome
 Welcher fertige Zustand soll erreicht sein?
@@ -32,11 +32,14 @@ Welcher fertige Zustand soll erreicht sein?
 ## Scope & Constraints
 Was gehört zur Aufgabe, was nicht, und welche Rahmenbedingungen gelten?
 
+Harte Vorgaben wie Recht, Compliance, Datenschutz, Security, externe API-Verträge oder zwingende Integrationsgrenzen gehören hierhin, nicht in das Problem Statement.
+
 ## Acceptance Criteria
 - Messbar und objektiv prüfbar.
 - Konkret für dieses Issue.
 - Nur Punkte, die der Owner beeinflussen kann.
 - Im abgeschlossenen Zustand formuliert.
+- Bei bereits freigegebenen, reviewten oder GitHub-gesyncten Stories nicht stillschweigend inhaltlich ändern; Änderungen als explizite Revision, Kommentar oder Follow-up behandeln.
 
 ## Evidence Required
 Welcher Nachweis muss vorliegen, z. B. Notion-Link, GitHub-Kommentar, Screenshot, CSV, PR oder CRM-View?

@@ -18,6 +18,7 @@
     "verify:github-sync": "node scripts/verify-github-sync.mjs",
     "verify:google-chat": "node scripts/verify-google-chat-rollout.mjs",
     "verify:release": "node tests/platform-contract.test.mjs && eslint && node scripts/verify-vercel-ready.mjs && node scripts/verify-google-chat-rollout.mjs && npm audit --audit-level=moderate",
+    "verify:deploy": "npm run verify:vercel-ready && npm run verify:google-chat && npm run lint",
     "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
     "migrate:relationships": "node scripts/migrate-task-relationships.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"

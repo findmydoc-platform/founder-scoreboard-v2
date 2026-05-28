@@ -25,7 +25,6 @@ import {
   X,
 } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
@@ -34,6 +33,7 @@ import { AppSidebar, appNavItems, type AppWorkspace } from "@/components/app-sid
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
 import { TaskChecklist } from "@/components/task-checklist";
+import { clearRememberedGitHubProviderToken, getRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
@@ -164,7 +164,7 @@ const workspaceLabels: Record<Workspace, string> = {
   sprint: "Sprint & Score",
   decisions: "Decision Log",
   meetings: "Meeting Finder",
-  projects: "Projekte",
+  projects: "Meilensteine",
   tools: "FMD-Tools",
   team: "Team",
   settings: "Einstellungen",
@@ -177,7 +177,7 @@ const workspaceSubtitles: Record<Workspace, string> = {
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
-  projects: "Projekt- und Commitment-Überblick.",
+  projects: "Epic-, Meilenstein- und Commitment-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
@@ -435,6 +435,13 @@ function reviewChecklistScore(checklist: { acceptanceCriteriaMet?: boolean; dodM
   ].filter(Boolean).length;
   return Math.round((checked / 4) * 10);
 }
+
+const reviewChecklistItems = [
+  ["acceptanceCriteriaMet", "Acceptance Criteria erfüllt", "2,5 Punkte"],
+  ["evidenceProvided", "Evidence/Link liegt vor", "2,5 Punkte"],
+  ["communicationClear", "Ergebnis und Kommunikation nachvollziehbar", "2,5 Punkte"],
+  ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt", "2,5 Punkte"],
+] as const;
 
 function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked") {
   if (status === "locked") return "Gelockt";
@@ -1007,20 +1014,41 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
     let active = true;
 
-    supabase.auth.getSession().then(({ data: sessionData }) => {
+    const applySessionState = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
       if (!active) return;
-      setAuthUser(sessionData.session?.user || null);
-      setGithubProviderTokenAvailable(Boolean(sessionData.session?.provider_token));
+      rememberGitHubProviderToken(session?.provider_token);
+      setAuthUser(session?.user || null);
+      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
+      setAuthChecked(true);
+    };
+
+    const refreshSessionState = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const expiresAt = sessionData.session?.expires_at || 0;
+      const expiresSoon = expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 300;
+      if (expiresSoon) {
+        const refreshed = await supabase.auth.refreshSession();
+        applySessionState(refreshed.data.session || sessionData.session);
+        return;
+      }
+      applySessionState(sessionData.session);
+    };
+
+    refreshSessionState().catch(() => {
+      if (!active) return;
       setAuthChecked(true);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      rememberGitHubProviderToken(session?.provider_token);
       setAuthUser(session?.user || null);
-      setGithubProviderTokenAvailable(Boolean(session?.provider_token));
+      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
       setAuthChecked(true);
       setAuthError("");
       if (event === "SIGNED_IN") setAuthNotice("");
       if (event === "SIGNED_OUT") {
+        clearRememberedGitHubProviderToken();
+        setGithubProviderTokenAvailable(false);
         protectedDataUserIdRef.current = "";
         protectedPlanningDataCache = null;
         setData(safeInitialData);
@@ -1030,8 +1058,18 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       }
     });
 
+    const keepAliveId = window.setInterval(() => {
+      refreshSessionState().catch(() => undefined);
+    }, 5 * 60 * 1000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshSessionState().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
     return () => {
       active = false;
+      window.clearInterval(keepAliveId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
       subscription.subscription.unsubscribe();
     };
   }, [safeInitialData]);
@@ -1125,6 +1163,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
+    clearRememberedGitHubProviderToken();
+    setGithubProviderTokenAvailable(false);
 
     const { error } = await supabase.auth.signOut({ scope: "global" });
     if (error) {
@@ -1480,7 +1520,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         }
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
-          const githubProviderToken = session?.data.session?.provider_token;
+          rememberGitHubProviderToken(session?.data.session?.provider_token);
+          const githubProviderToken = getRememberedGitHubProviderToken();
           const syncResponse = await fetch(`/api/tasks/${body.task.id}/sync-github`, {
             method: "POST",
             headers: {
@@ -2305,7 +2346,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/comments`, {
@@ -2348,7 +2390,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
     const session = await getBrowserSupabase()?.auth.getSession();
     const token = session?.data.session?.access_token;
-    const githubProviderToken = session?.data.session?.provider_token;
+    rememberGitHubProviderToken(session?.data.session?.provider_token);
+    const githubProviderToken = getRememberedGitHubProviderToken();
     const formData = new FormData();
     formData.append("file", file);
 
@@ -2393,7 +2436,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
@@ -2624,7 +2668,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
@@ -2680,7 +2725,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       for (const task of queueTasks) {
         try {
@@ -2995,6 +3041,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 user={authUser}
                 error={authError}
                 busy={authBusy}
+                githubProviderTokenAvailable={githubProviderTokenAvailable}
                 onSignIn={signIn}
                 onSignOut={signOut}
                 variant="gate"
@@ -3028,6 +3075,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               user={authUser}
               error={authError}
               busy={authBusy}
+              githubProviderTokenAvailable={githubProviderTokenAvailable}
               onSignIn={signIn}
               onSignOut={signOut}
               variant="gate"
@@ -3116,6 +3164,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                   user={authUser}
                   error={authError}
                   busy={authBusy}
+                  githubProviderTokenAvailable={githubProviderTokenAvailable}
                   onSignIn={signIn}
                   onSignOut={signOut}
                 />
@@ -3264,7 +3313,17 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             />
           )}
           {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}
-          {workspace === "team" && <TeamOverview data={data} tasks={data.tasks} pending={isPending} onUpdateProfile={updateProfile} onUpdateNotificationPreference={updateNotificationPreference} />}
+          {workspace === "team" && (
+            <TeamOverview
+              data={data}
+              tasks={data.tasks}
+              pending={isPending}
+              canManageTeam={source === "seed" || currentProfile?.platformRole === "ceo"}
+              currentProfileId={currentProfile?.id || ""}
+              onUpdateProfile={updateProfile}
+              onUpdateNotificationPreference={updateNotificationPreference}
+            />
+          )}
           {workspace === "sprint" && (
             <SprintScoreTableOverview
               data={data}
@@ -3324,6 +3383,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onUpdateSprintPlanning={setSprintPlanningOptions}
               onCreateSprintPlan={createSprintPlan}
               onDispatchNotifications={dispatchNotifications}
+              onReconnectGitHub={signIn}
               onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
               onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
               onSelectFeedback={setSelectedFeedbackId}
@@ -3537,6 +3597,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           allTasks={data.tasks}
           relations={data.taskRelations}
           pending={isPending}
+          githubProviderTokenAvailable={githubProviderTokenAvailable}
           commentImportPending={commentImportPendingTaskIds.has(selectedTask.id)}
           onClose={closeTaskPanel}
           onUpdate={(patch) => updateTask(selectedTask, patch)}
@@ -3545,6 +3606,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
+          onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
@@ -4182,23 +4244,77 @@ function TeamOverview({
   data,
   tasks,
   pending,
+  canManageTeam,
+  currentProfileId,
   onUpdateProfile,
   onUpdateNotificationPreference,
 }: {
   data: PlanningData;
   tasks: Task[];
   pending: boolean;
+  canManageTeam: boolean;
+  currentProfileId: string;
   onUpdateProfile: (profile: Profile, patch: Partial<Profile>) => void;
   onUpdateNotificationPreference: (profileId: string, eventType: string, enabled: boolean) => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const activeDeputies = data.profiles.filter((profile) => {
+    if (profile.platformRole !== "deputy") return false;
+    if (profile.deputyActiveFrom && profile.deputyActiveFrom > today) return false;
+    if (profile.deputyActiveUntil && profile.deputyActiveUntil < today) return false;
+    return Boolean(profile.deputyFor);
+  });
+
   return (
-    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4">
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Rollen & Vertretung</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+              CEO verwaltet Rollen, GitHub-Zuordnung, Deputy-Zeiträume und Google-Chat-Ziele. Deputy bekommt operative Rechte, aber kein Decision-Log-Edit.
+            </p>
+          </div>
+          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${canManageTeam ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+            {canManageTeam ? "CEO-Bearbeitung aktiv" : "Nur Ansicht"}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {platformRoleOptions.map((role) => {
+            const count = data.profiles.filter((profile) => profile.platformRole === role).length;
+            return (
+              <div key={role} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                <div className="text-xs font-semibold text-slate-500">{role === "ceo" ? "CEO" : role === "founder" ? "Founder" : role === "deputy" ? "Deputy" : "Viewer"}</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{count}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+          {activeDeputies.length ? (
+            activeDeputies.map((profile) => {
+              const represented = data.profiles.find((item) => item.id === profile.deputyFor);
+              return (
+                <div key={profile.id}>
+                  <span className="font-semibold text-slate-800">{profile.name}</span> vertritt {represented?.name || profile.deputyFor} {profile.deputyActiveUntil ? `bis ${formatDate(profile.deputyActiveUntil)}` : "ohne Enddatum"}.
+                </div>
+              );
+            })
+          ) : (
+            "Aktuell ist keine aktive Deputy-Vertretung gesetzt."
+          )}
+        </div>
+      </section>
+
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {data.profiles.map((profile) => {
         const ownedTasks = tasks.filter((task) => task.owner === profile.name);
         const openTasks = ownedTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
         const highPriority = ownedTasks.filter((task) => ["P0", "P1"].includes(task.priority));
         const load = ownedTasks.reduce((sum, task) => sum + task.hours, 0);
         const isDeputy = profile.platformRole === "deputy";
+        const canEditProfile = canManageTeam;
+        const canEditNotificationEvents = canManageTeam || currentProfileId === profile.id;
         const enabledPreferenceCount = googleChatDigestEventTypes.filter((eventType) => {
           const preference = data.notificationPreferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
           return preference?.enabled !== false;
@@ -4240,12 +4356,12 @@ function TeamOverview({
                   Plattformrolle
                   <CustomSelect
                     value={profile.platformRole}
-                    disabled={pending}
+                    disabled={pending || !canEditProfile}
                     onChange={(value) => {
                       const platformRole = value as PlatformRole;
                       onUpdateProfile(profile, {
                         platformRole,
-                        orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : profile.orgRole,
+                        orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : platformRole === "deputy" ? "Deputy" : "Viewer",
                         deputyFor: platformRole === "deputy" ? profile.deputyFor || "volkan" : "",
                         deputyActiveFrom: platformRole === "deputy" ? profile.deputyActiveFrom : "",
                         deputyActiveUntil: platformRole === "deputy" ? profile.deputyActiveUntil : "",
@@ -4259,7 +4375,7 @@ function TeamOverview({
                   Org-Rolle
                   <input
                     value={profile.orgRole}
-                    disabled={pending}
+                    disabled={pending || !canEditProfile}
                     onChange={(event) => onUpdateProfile(profile, { orgRole: event.target.value })}
                     className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                   />
@@ -4269,7 +4385,7 @@ function TeamOverview({
                 GitHub Login
                 <input
                   value={profile.githubLogin}
-                  disabled={pending}
+                  disabled={pending || !canEditProfile}
                   onChange={(event) => onUpdateProfile(profile, { githubLogin: event.target.value })}
                   className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                 />
@@ -4279,7 +4395,7 @@ function TeamOverview({
                   Google Chat User-ID
                   <input
                     value={profile.googleChatUserId || ""}
-                    disabled={pending}
+                    disabled={pending || !canEditProfile}
                     onChange={(event) => onUpdateProfile(profile, { googleChatUserId: event.target.value })}
                     className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                     placeholder="users/..."
@@ -4289,7 +4405,7 @@ function TeamOverview({
                   Google Chat DM-Space
                   <input
                     value={profile.googleChatDmSpace || ""}
-                    disabled={pending}
+                    disabled={pending || !canEditProfile}
                     onChange={(event) => onUpdateProfile(profile, { googleChatDmSpace: event.target.value })}
                     className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                     placeholder="spaces/..."
@@ -4304,7 +4420,7 @@ function TeamOverview({
                 <input
                   type="checkbox"
                   checked={profile.notificationsEnabled !== false}
-                  disabled={pending}
+                  disabled={pending || !canEditProfile}
                   onChange={(event) => onUpdateProfile(profile, { notificationsEnabled: event.target.checked })}
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
                 />
@@ -4327,7 +4443,7 @@ function TeamOverview({
                         <input
                           type="checkbox"
                           checked={enabled}
-                          disabled={pending || profile.notificationsEnabled === false}
+                          disabled={pending || profile.notificationsEnabled === false || !canEditNotificationEvents}
                           onChange={(event) => onUpdateNotificationPreference(profile.id, eventType, event.target.checked)}
                           className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 disabled:opacity-60"
                         />
@@ -4340,7 +4456,7 @@ function TeamOverview({
                 Fokus
                 <textarea
                   value={profile.focus || ""}
-                  disabled={pending}
+                  disabled={pending || !canEditProfile}
                   onChange={(event) => onUpdateProfile(profile, { focus: event.target.value })}
                   className="min-h-16 resize-y rounded-md border border-slate-200 bg-white px-2 py-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                 />
@@ -4354,7 +4470,7 @@ function TeamOverview({
                       <button
                         key={color.value}
                         type="button"
-                        disabled={pending}
+                        disabled={pending || !canEditProfile}
                         onClick={() => onUpdateProfile(profile, { color: color.value })}
                         className={`grid h-8 w-8 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200 hover:border-slate-400"}`}
                         title={color.label}
@@ -4374,7 +4490,7 @@ function TeamOverview({
                     min={0}
                     max={80}
                     value={profile.weeklyCapacity}
-                    disabled={pending}
+                    disabled={pending || !canEditProfile}
                     onChange={(event) => onUpdateProfile(profile, { weeklyCapacity: Number(event.target.value) })}
                     className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
                   />
@@ -4383,7 +4499,7 @@ function TeamOverview({
                   Vertreter für
                   <CustomSelect
                     value={profile.deputyFor || ""}
-                    disabled={pending || !isDeputy}
+                    disabled={pending || !isDeputy || !canEditProfile}
                     onChange={(value) => onUpdateProfile(profile, { deputyFor: value })}
                     className="h-9 text-sm"
                     options={[{ value: "", label: "Keine Vertretung" }, ...data.profiles.filter((item) => item.platformRole === "ceo" || item.id === profile.deputyFor).map((item) => ({ value: item.id, label: item.name }))]}
@@ -4392,21 +4508,22 @@ function TeamOverview({
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Von
-                    <CustomDatePicker value={profile.deputyActiveFrom || ""} disabled={pending || !isDeputy} onChange={(value) => onUpdateProfile(profile, { deputyActiveFrom: value })} className="h-9 text-sm" />
+                    <CustomDatePicker value={profile.deputyActiveFrom || ""} disabled={pending || !isDeputy || !canEditProfile} onChange={(value) => onUpdateProfile(profile, { deputyActiveFrom: value })} className="h-9 text-sm" />
                   </label>
                   <label className="grid gap-1 text-xs font-semibold text-slate-500">
                     Bis
-                    <CustomDatePicker value={profile.deputyActiveUntil || ""} disabled={pending || !isDeputy} onChange={(value) => onUpdateProfile(profile, { deputyActiveUntil: value })} className="h-9 text-sm" />
+                    <CustomDatePicker value={profile.deputyActiveUntil || ""} disabled={pending || !isDeputy || !canEditProfile} onChange={(value) => onUpdateProfile(profile, { deputyActiveUntil: value })} className="h-9 text-sm" />
                   </label>
                 </div>
               </div>
               <p className="text-xs leading-5 text-slate-500">
-                Änderungen sind CEO-geschützt. Deputy bekommt operative Rechte, aber kein Decision-Log-Edit.
+                Rollen, Stammdaten und der zentrale Benachrichtigungsschalter sind CEO-geschützt. Einzelne Google-Chat-Events kann das Profil selbst steuern.
               </p>
             </div>
           </article>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -4791,11 +4908,11 @@ function SprintScoreTableOverview({
                 <th className="border-b border-slate-200 px-4 py-3 font-semibold">Aufgabe</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Owner</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Status</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Score</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review-Status</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">CEO-Score</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Sprint</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Zeitraum</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review-Aktion</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Nächster Schritt</th>
               </tr>
             </thead>
             <tbody>
@@ -4868,6 +4985,7 @@ function SprintScoreTableOverview({
             <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">CEO Review-Blatt</div>
             <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>
             <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)}</p>
+            <p className="mt-2 text-xs leading-5 text-blue-800">CEO-Punkte entstehen nur hier im Review-Blatt. Das Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score.</p>
           </div>
           <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
@@ -4901,14 +5019,15 @@ function SprintScoreTableOverview({
               />
             </div>
             <div className="grid content-start gap-3">
-              {[
-                ["acceptanceCriteriaMet", "Acceptance Criteria erfüllt"],
-                ["evidenceProvided", "Evidence/Link liegt vor"],
-                ["communicationClear", "Ergebnis und Kommunikation nachvollziehbar"],
-                ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt"],
-              ].map(([key, label]) => (
+              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
+              </div>
+              {reviewChecklistItems.map(([key, label, pointsLabel]) => (
                 <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                  <span>{label}</span>
+                  <span>
+                    <span className="block">{label}</span>
+                    <span className="text-xs text-slate-500">{pointsLabel}</span>
+                  </span>
                   <input
                     type="checkbox"
                     checked={Boolean(reviewChecklist[key as keyof typeof reviewChecklist])}
@@ -4928,6 +5047,9 @@ function SprintScoreTableOverview({
                 />
                 <span className="text-[11px] font-normal text-slate-500">Berechnet aus den abgehakten Review-Kriterien.</span>
               </label>
+              <p className="text-[11px] leading-5 text-slate-500">
+                Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.
+              </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "accepted", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
                 <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "partial", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
@@ -5108,6 +5230,7 @@ function SprintScoreOverview({
             <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">CEO Review-Blatt</div>
             <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>
             <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)}</p>
+            <p className="mt-2 text-xs leading-5 text-blue-800">CEO-Punkte entstehen nur hier im Review-Blatt. Das Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score.</p>
           </div>
           <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
@@ -5141,14 +5264,15 @@ function SprintScoreOverview({
               />
             </div>
             <div className="grid content-start gap-3">
-              {[
-                ["acceptanceCriteriaMet", "Acceptance Criteria erfüllt"],
-                ["evidenceProvided", "Evidence/Link liegt vor"],
-                ["communicationClear", "Ergebnis und Kommunikation nachvollziehbar"],
-                ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt"],
-              ].map(([key, label]) => (
+              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
+              </div>
+              {reviewChecklistItems.map(([key, label, pointsLabel]) => (
                 <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                  <span>{label}</span>
+                  <span>
+                    <span className="block">{label}</span>
+                    <span className="text-xs text-slate-500">{pointsLabel}</span>
+                  </span>
                   <input
                     type="checkbox"
                     checked={Boolean(reviewChecklist[key as keyof typeof reviewChecklist])}
@@ -5168,6 +5292,9 @@ function SprintScoreOverview({
                 />
                 <span className="text-[11px] font-normal text-slate-500">Berechnet aus den abgehakten Review-Kriterien.</span>
               </label>
+              <p className="text-[11px] leading-5 text-slate-500">
+                Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.
+              </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={pending || sprint?.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "accepted", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
                 <button type="button" disabled={pending || sprint?.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "partial", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
@@ -5782,6 +5909,7 @@ function SettingsOverview({
   onUpdateSprintPlanning,
   onCreateSprintPlan,
   onDispatchNotifications,
+  onReconnectGitHub,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
   onSelectFeedback,
@@ -5801,6 +5929,7 @@ function SettingsOverview({
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
   onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
+  onReconnectGitHub: () => void;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
   onSelectFeedback: (id: number) => void;
@@ -5847,6 +5976,22 @@ function SettingsOverview({
               {githubProviderTokenAvailable ? "verfügbar" : "neu anmelden nötig"}
             </span>
           </div>
+          {!githubProviderTokenAvailable && authUserEmail && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+              <div className="font-semibold">GitHub-Verbindung erneuern</div>
+              <p className="mt-1 text-xs leading-5">
+                Deine Supabase-Session ist aktiv, aber der GitHub-Token für Sync, Kommentare und Anhänge fehlt. Das ist kein App-Logout.
+              </p>
+              <button
+                type="button"
+                onClick={onReconnectGitHub}
+                disabled={pending}
+                className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                GitHub-Rechte erneuern
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
             <span className="text-slate-500">Google Chat</span>
             <span className={`font-semibold ${googleChatReady ? "text-emerald-700" : "text-amber-700"}`}>
@@ -5904,13 +6049,18 @@ function SettingsOverview({
           </div>
           <button
             type="button"
-            disabled={pending || !linkedSyncQueue.length}
+            disabled={pending || !linkedSyncQueue.length || !githubProviderTokenAvailable}
             onClick={onSyncLinkedGitHubTasks}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Verknüpfte Issues synchronisieren
           </button>
         </div>
+        {!githubProviderTokenAvailable && authUserEmail && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            GitHub-Sync ist gesperrt, bis du die GitHub-Rechte erneuerst. Die App-Daten bleiben weiter verfügbar.
+          </div>
+        )}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sync offen</div>
@@ -6201,6 +6351,7 @@ function AuthControl({
   user,
   error,
   busy,
+  githubProviderTokenAvailable = true,
   onSignIn,
   onSignOut,
   variant = "header",
@@ -6208,6 +6359,7 @@ function AuthControl({
   user: User | null;
   error: string;
   busy: boolean;
+  githubProviderTokenAvailable?: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
   variant?: "header" | "gate";
@@ -6258,7 +6410,8 @@ function AuthControl({
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex min-w-0 items-center gap-3">
           {avatarUrl ? (
-            <Image src={avatarUrl} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
           ) : (
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700">
               {displayName.slice(0, 1).toUpperCase() || "?"}
@@ -6277,6 +6430,20 @@ function AuthControl({
             Abmelden
           </button>
         </div>
+        {!githubProviderTokenAvailable && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+            <div className="font-semibold">GitHub-Rechte fehlen</div>
+            <p className="mt-1">Die App-Session ist aktiv. Für GitHub-Sync, Kommentare und Anhänge muss GitHub einmal neu autorisiert werden.</p>
+            <button
+              type="button"
+              onClick={onSignIn}
+              disabled={busy}
+              className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              GitHub-Rechte erneuern
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -6293,11 +6460,10 @@ function AuthControl({
         className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white p-0.5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
       >
         {avatarUrl ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={avatarUrl}
             alt=""
-            width={32}
-            height={32}
             className="h-8 w-8 rounded-full bg-slate-100 object-cover"
           />
         ) : (
@@ -6311,12 +6477,11 @@ function AuthControl({
           <div className="grid gap-4">
             <div className="flex min-w-0 items-center gap-3">
               {avatarUrl ? (
-                <Image
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
                   src={avatarUrl}
                   alt=""
-                  width={44}
-                  height={44}
-                  className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100"
+                  className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
                 />
               ) : (
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600">
@@ -6330,6 +6495,20 @@ function AuthControl({
                 {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
               </div>
             </div>
+            {!githubProviderTokenAvailable && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                <div className="font-semibold">GitHub-Rechte fehlen</div>
+                <p className="mt-1">Sync, Kommentare und Anhänge brauchen eine neue GitHub-Autorisierung.</p>
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  disabled={busy}
+                  className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  GitHub-Rechte erneuern
+                </button>
+              </div>
+            )}
             <button
               type="button"
               onClick={onSignOut}
@@ -6836,6 +7015,7 @@ function TaskDetailPanel({
   allTasks,
   relations,
   pending,
+  githubProviderTokenAvailable,
   onClose,
   onUpdate,
   onAddComment,
@@ -6843,6 +7023,7 @@ function TaskDetailPanel({
   onImportGitHubComments,
   onReportBlocker,
   onCreateSubIssue,
+  onReconnectGitHub,
   onSyncGitHub,
   onAddRelation,
   onRemoveRelation,
@@ -6867,6 +7048,7 @@ function TaskDetailPanel({
   allTasks: Task[];
   relations: TaskRelation[];
   pending: boolean;
+  githubProviderTokenAvailable: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => void;
@@ -6874,6 +7056,7 @@ function TaskDetailPanel({
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
+  onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -7315,7 +7498,7 @@ function TaskDetailPanel({
               {canSyncExistingGitHubIssue ? (
                 <button
                   type="button"
-                  disabled={pending || task.githubSyncStatus === "pending"}
+                  disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
                   onClick={() => onSyncGitHub()}
                   className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -7324,7 +7507,7 @@ function TaskDetailPanel({
               ) : task.taskType === "deliverable" ? (
                 <button
                   type="button"
-                  disabled={pending || task.githubSyncStatus === "pending"}
+                  disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
                   onClick={() => onSyncGitHub({ createIfMissing: true })}
                   className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -7351,6 +7534,20 @@ function TaskDetailPanel({
                 <p className="text-xs text-slate-500">
                   Diese Aufgabe wird nicht automatisch dupliziert. Nutze “GitHub-Issue anlegen”, wenn sie bewusst ins Management-Repo gespiegelt werden soll.
                 </p>
+              )}
+              {!githubProviderTokenAvailable && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  <div className="font-semibold">GitHub-Rechte müssen erneuert werden.</div>
+                  <p className="mt-1">Du bist weiter in der App angemeldet, aber Sync, Kommentare und Anhänge brauchen einen frischen GitHub-Token.</p>
+                  <button
+                    type="button"
+                    onClick={onReconnectGitHub}
+                    disabled={pending}
+                    className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    GitHub-Rechte erneuern
+                  </button>
+                </div>
               )}
               {task.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
               {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}

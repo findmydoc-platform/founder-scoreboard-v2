@@ -2,6 +2,7 @@
 
 import { AlertCircle, CheckCircle2, Clock3, GitBranch, GitPullRequestArrow, MessageSquare, Paperclip, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { Profile, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
@@ -181,7 +182,8 @@ function GitHubCommentImage({ href, alt }: { href: string; alt: string }) {
       const supabase = getBrowserSupabase();
       const session = supabase ? (await supabase.auth.getSession()).data.session : null;
       const accessToken = session?.access_token || "";
-      const providerToken = session?.provider_token || "";
+      rememberGitHubProviderToken(session?.provider_token);
+      const providerToken = getRememberedGitHubProviderToken();
 
       if (!accessToken || !providerToken) {
         setFailed(true);

@@ -12,6 +12,7 @@ import { CustomSelect } from "@/components/custom-select";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { TaskChecklist } from "@/components/task-checklist";
 import { CommentBody, TaskCommentThread } from "@/components/task-comment-thread";
+import { getRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 
 type Props = {
   task: Task;
@@ -225,6 +226,7 @@ export function TaskDetailPage({
     githubSyncError: task.githubSyncError,
   });
   const [currentRole, setCurrentRole] = useState<Profile["platformRole"] | "">(source === "seed" ? "ceo" : "");
+  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(hasRememberedGitHubProviderToken());
   const [isPending, startTransition] = useTransition();
   const ownerProfile = profiles.find((profile) => profile.name === meta.owner || profile.id === meta.owner);
   const creatorProfile = profiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
@@ -289,6 +291,8 @@ export function TaskDetailPage({
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
+      rememberGitHubProviderToken(data.session?.provider_token);
+      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
       const login = String(data.session?.user.user_metadata?.user_name || data.session?.user.user_metadata?.preferred_username || "");
       const profile = profiles.find((item) => item.githubLogin === login);
       setCurrentRole(profile?.platformRole || "");
@@ -298,6 +302,22 @@ export function TaskDetailPage({
       active = false;
     };
   }, [profiles, source]);
+
+  const reconnectGitHub = async () => {
+    const supabase = getBrowserSupabase();
+    if (!supabase) return;
+
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: {
+        redirectTo: window.location.origin,
+        scopes: "repo read:user user:email",
+      },
+    });
+
+    if (error) setError("GitHub-Anmeldung konnte nicht gestartet werden.");
+  };
 
   const updateTask = (patch: Partial<EditableTaskState>) => {
     const next = { ...meta, ...patch };
@@ -383,7 +403,8 @@ export function TaskDetailPage({
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/comments`, {
@@ -417,7 +438,8 @@ export function TaskDetailPage({
 
     const session = await getBrowserSupabase()?.auth.getSession();
     const token = session?.data.session?.access_token;
-    const githubProviderToken = session?.data.session?.provider_token;
+    rememberGitHubProviderToken(session?.data.session?.provider_token);
+    const githubProviderToken = getRememberedGitHubProviderToken();
     const formData = new FormData();
     formData.append("file", file);
 
@@ -458,7 +480,8 @@ export function TaskDetailPage({
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
@@ -503,7 +526,8 @@ export function TaskDetailPage({
     startTransition(async () => {
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
-      const githubProviderToken = session?.data.session?.provider_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
@@ -1010,7 +1034,7 @@ export function TaskDetailPage({
               {canSyncExistingGitHubIssue ? (
                 <button
                   type="button"
-                  disabled={isPending || githubState.githubSyncStatus === "pending"}
+                  disabled={isPending || githubState.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
                   onClick={() => syncGitHub()}
                   className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1019,7 +1043,7 @@ export function TaskDetailPage({
               ) : task.taskType === "deliverable" ? (
                 <button
                   type="button"
-                  disabled={isPending || githubState.githubSyncStatus === "pending"}
+                  disabled={isPending || githubState.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
                   onClick={() => syncGitHub({ createIfMissing: true })}
                   className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1041,6 +1065,20 @@ export function TaskDetailPage({
                 </p>
               )}
               {!canSyncExistingGitHubIssue && <p className="text-xs text-slate-500">Diese Aufgabe wird nicht automatisch dupliziert. Nutze “GitHub-Issue anlegen”, wenn sie bewusst ins Management-Repo gespiegelt werden soll.</p>}
+              {!githubProviderTokenAvailable && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  <div className="font-semibold">GitHub-Rechte müssen erneuert werden.</div>
+                  <p className="mt-1">Du bist weiter in der App angemeldet, aber Sync, Kommentare und Anhänge brauchen einen frischen GitHub-Token.</p>
+                  <button
+                    type="button"
+                    onClick={reconnectGitHub}
+                    disabled={isPending}
+                    className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    GitHub-Rechte erneuern
+                  </button>
+                </div>
+              )}
               {githubState.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {githubState.githubLastSyncedAt}</p>}
               {githubState.githubSyncError && <p className="flex gap-2 text-red-700"><MessageSquareWarning size={16} />{githubState.githubSyncError}</p>}
             </div>

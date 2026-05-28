@@ -2082,6 +2082,17 @@ export const seedData: PlanningData = {
       "sortOrder": 60
     },
     {
+      "id": "pitchdeck-site",
+      "name": "Pitch-Deck",
+      "category": "asset",
+      "kind": "Pitch Deck",
+      "description": "Aktuelles findmydoc Pitch-Deck für Investorengespräche, Founder-Abstimmung und externe Präsentationen.",
+      "url": "https://pitchdeck.findmydoc.eu/",
+      "owner": "Youssef",
+      "status": "active",
+      "sortOrder": 65
+    },
+    {
       "id": "google-drive-assets",
       "name": "Google Drive Assets",
       "category": "asset",

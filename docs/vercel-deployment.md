@@ -6,9 +6,8 @@ This project is intended to be deployed through the Vercel CLI from the `fmd-pla
 
 - Project name: `founder-ops`
 - Root directory: `fmd-planning`
-- Production domain: confirm exact spelling before assigning
-  - likely: `founder-ops.findmydoc.eu`
-  - user also mentioned: `founder-ops.findmydog.eu`
+- Production domain after cutover: `founderops.findmydoc.eu`
+- Do not assign or move a domain before the user explicitly confirms the final cutover.
 
 ## Required Production Environment
 
@@ -19,7 +18,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 REQUIRE_SUPABASE_AUTH=true
-APP_URL=https://founder-ops.findmydoc.eu
+APP_URL=https://founderops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GOOGLE_CHAT_WEBHOOK_URL=
@@ -28,6 +27,8 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 
 `GOOGLE_CHAT_WEBHOOK_URL` is optional until Google Chat notifications should go live. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
 
+Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, comments, and attachments must use the logged-in user's GitHub OAuth provider token from the active Supabase session, so GitHub shows the real actor.
+
 ## Supabase Auth
 
 Before production login works, configure Supabase Auth:
@@ -35,6 +36,8 @@ Before production login works, configure Supabase Auth:
 - Enable GitHub provider.
 - Add the production app URL as Site URL.
 - Add the production app URL as an allowed redirect URL.
+- Keep the GitHub OAuth App owned by `findmydoc-platform`, not a personal account.
+- The GitHub OAuth App callback remains the Supabase callback URL, for example `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
 - Ensure every team profile has `github_login`.
 - Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
 
@@ -69,6 +72,15 @@ vercel pull --yes --environment=production
 vercel build --prod
 vercel deploy --prebuilt --prod
 ```
+
+Before deploying, run the local gate:
+
+```bash
+npm run verify:deploy
+npm run build
+```
+
+`verify:deploy` runs Vercel readiness, Google Chat rollout readiness, and lint. Run `npm run build` separately, because `next build` starts worker processes on Windows and is more reliable as a standalone command. If either command fails, fix the reported item before running `vercel build --prod`.
 
 If the project belongs to a team, include the explicit scope:
 

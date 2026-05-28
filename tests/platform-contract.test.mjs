@@ -240,9 +240,41 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 
+test("story writing skill protects approved stories and enforces template guardrails", async () => {
+  const skill = await readFile(".agents/skills/fmd-story-writing/SKILL.md", "utf8");
+  const examples = await readFile(".agents/skills/fmd-story-writing/references/examples.md", "utf8");
+  const agent = await readFile(".agents/skills/fmd-story-writing/agents/openai.yaml", "utf8");
+  const rules = await readFile("AGENTS.md", "utf8");
+  const docs = await readFile("docs/task-template-v2.md", "utf8");
+
+  assert.match(skill, /fmd-story-writing/);
+  assert.match(skill, /Approved, released, reviewed, or GitHub-synced story/);
+  assert.match(skill, /Never change Acceptance Criteria/);
+  assert.match(skill, /Problem Statement/);
+  assert.match(skill, /current state/);
+  assert.match(skill, /pain point/);
+  assert.match(skill, /Do not describe the solution/);
+  assert.match(skill, /Scope & Constraints/);
+  assert.match(skill, /Acceptance Criteria/);
+  assert.match(skill, /objective and testable/);
+  assert.match(skill, /controlled by the owner/);
+  assert.match(skill, /Definition of Done/);
+  assert.match(examples, /Good:/);
+  assert.match(examples, /Bad:/);
+  assert.match(examples, /Protected Existing Story/);
+  assert.match(agent, /FMD Story Writing/);
+  assert.match(rules, /\.agents\/skills\/fmd-story-writing/);
+  assert.match(rules, /Do not silently rewrite/);
+  assert.match(docs, /Keine Lösung, Umsetzungsschritte oder technische Vorgaben/);
+  assert.match(docs, /Harte Vorgaben wie Recht, Compliance, Datenschutz, Security/);
+});
+
 test("github oauth prepares user-based sync without storing provider tokens", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
+  const providerTokenMemory = await readFile("src/lib/github-provider-token.ts", "utf8");
+  const supabase = await readFile("src/lib/supabase.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
@@ -254,6 +286,23 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.match(ui, /provider_token/);
   assert.match(ui, /x-github-provider-token/);
   assert.match(detail, /x-github-provider-token/);
+  assert.match(supabase, /persistSession: true/);
+  assert.match(supabase, /autoRefreshToken: true/);
+  assert.match(ui, /refreshSessionState/);
+  assert.match(ui, /supabase\.auth\.refreshSession\(\)/);
+  assert.match(ui, /visibilitychange/);
+  assert.match(ui, /5 \* 60 \* 1000/);
+  assert.match(ui, /getRememberedGitHubProviderToken/);
+  assert.match(ui, /clearRememberedGitHubProviderToken/);
+  assert.match(detail, /getRememberedGitHubProviderToken/);
+  assert.match(ui, /GitHub-Rechte erneuern/);
+  assert.match(detail, /GitHub-Rechte erneuern/);
+  assert.match(ui, /Sync, Kommentare und Anhänge/);
+  assert.match(detail, /Sync, Kommentare und Anhänge/);
+  assert.match(thread, /getRememberedGitHubProviderToken/);
+  assert.match(providerTokenMemory, /rememberedGitHubProviderToken/);
+  assert.match(providerTokenMemory, /clearRememberedGitHubProviderToken/);
+  assert.doesNotMatch(providerTokenMemory, /localStorage|sessionStorage|indexedDB/i);
   assert.match(ui, /GitHub User-Token/);
   assert.match(syncRoute, /x-github-provider-token/);
   assert.match(syncRoute, /githubUser\.login\.toLowerCase\(\) !== expectedLogin/);
@@ -300,11 +349,14 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /task_reviews/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
+  assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.match(route, /github_sync_status: "not_synced"/);
   assert.match(route, /Nacharbeit/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(ui, /Acceptance Criteria erfüllt/);
+  assert.match(ui, /CEO-Score/);
+  assert.match(ui, /Nächster Schritt/);
   assert.match(ui, /Evidence Required/);
   assert.match(ui, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
@@ -431,6 +483,11 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(ui, /Google Chat User-ID/);
   assert.match(ui, /Google Chat DM-Space/);
   assert.match(ui, /Google-Chat-Benachrichtigungen/);
+  assert.match(ui, /CEO-Bearbeitung aktiv/);
+  assert.match(ui, /Nur Ansicht/);
+  assert.match(ui, /canManageTeam/);
+  assert.match(ui, /Aktuell ist keine aktive Deputy-Vertretung gesetzt/);
+  assert.match(ui, /Rollen, Stammdaten und der zentrale Benachrichtigungsschalter sind CEO-geschützt/);
 });
 
 test("notification preferences are editable per profile and event type", async () => {
@@ -503,13 +560,16 @@ test("founder self checklist is separate from CEO scoring", async () => {
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);
-  assert.match(reviewRoute, /payload\.points === undefined \? defaultPoints/);
+  assert.match(reviewRoute, /reviewDecisionPoints/);
+  assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.doesNotMatch(ui, /Founder-Arbeitsstand/);
   assert.doesNotMatch(ui, /Selbstkontrolle ohne Punkte/);
   assert.match(ui, /Review-Blatt/);
   assert.match(ui, /CEO Review-Blatt/);
+  assert.match(ui, /Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score/);
   assert.match(ui, /reviewChecklistScore/);
   assert.match(ui, /Automatische CEO-Punkte/);
+  assert.match(ui, /Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte/);
   assert.match(reviewRoute, /checklistPoints/);
   assert.match(reviewRoute, /acceptanceCriteriaMet/);
 });
@@ -834,7 +894,10 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /\.github\/dependabot\.yml/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /verify:google-chat/);
+  assert.match(verify, /GITHUB_SYNC_TOKEN/);
+  assert.match(verify, /founderops\.findmydoc\.eu/);
   assert.match(pkg, /verify:release/);
+  assert.match(pkg, /verify:deploy/);
   assert.match(pkg, /node tests\/platform-contract\.test\.mjs/);
   assert.match(pkg, /eslint/);
   assert.match(pkg, /node scripts\/verify-vercel-ready\.mjs/);
@@ -853,8 +916,12 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /localProjectLinked: false/);
   assert.match(deployment, /vercel link --yes --project founder-ops/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(deployment, /founderops\.findmydoc\.eu/);
+  assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
+  assert.match(deployment, /npm run verify:deploy/);
   assert.match(skill, /localProjectLinked: false/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(skill, /founderops\.findmydoc\.eu/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /Production Readiness/);
@@ -962,12 +1029,16 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
   assert.match(migration, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
   assert.match(migration, /google-drive-assets/);
   assert.match(migration, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
+  const pitchdeckMigration = await readFile("supabase/0021_pitchdeck_tool.sql", "utf8");
+  assert.match(pitchdeckMigration, /pitchdeck-site/);
+  assert.match(pitchdeckMigration, /https:\/\/pitchdeck\.findmydoc\.eu\//);
   assert.match(ui, /FMD-Tools Hub/);
   assert.match(ui, /FmdToolsOverview/);
   assert.match(ui, /Interne Tools/);
   assert.match(data, /fmdTools/);
   assert.match(seed, /https:\/\/mailsig\.findmydoc\.eu\//);
   assert.match(seed, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
+  assert.match(seed, /https:\/\/pitchdeck\.findmydoc\.eu\//);
   assert.match(seed, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
   assert.match(types, /export type FmdTool/);
 });

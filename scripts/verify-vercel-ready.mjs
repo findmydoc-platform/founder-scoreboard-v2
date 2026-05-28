@@ -26,6 +26,7 @@ const requiredEnvKeys = [
 ];
 
 const vercelProjectFile = ".vercel/project.json";
+const productionDomain = "founderops.findmydoc.eu";
 
 async function read(path) {
   return readFile(path, "utf8");
@@ -38,7 +39,7 @@ for (const file of requiredFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat"]) {
+for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 
@@ -53,6 +54,9 @@ if (!nextConfig.includes("avatars.githubusercontent.com")) {
 const envExample = await read(".env.example");
 for (const key of requiredEnvKeys) {
   if (!new RegExp(`^${key}=`, "m").test(envExample)) failures.push(`.env.example missing ${key}`);
+}
+if (/^GITHUB_SYNC_TOKEN=/m.test(envExample)) {
+  failures.push(".env.example must not include GITHUB_SYNC_TOKEN; production sync must use the logged-in GitHub user provider token.");
 }
 
 const supabase = await read("src/lib/supabase.ts");
@@ -69,13 +73,28 @@ for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) 
 }
 
 const deploymentDoc = await read("docs/vercel-deployment.md");
-for (const marker of ["vercel link", "vercel build --prod", "vercel deploy --prebuilt --prod", "Supabase Auth", "Domain Cutover", "GOOGLE_CHAT_DELIVERY_ENABLED=false"]) {
+for (const marker of [
+  "vercel link",
+  "vercel build --prod",
+  "vercel deploy --prebuilt --prod",
+  "Supabase Auth",
+  "Domain Cutover",
+  "GOOGLE_CHAT_DELIVERY_ENABLED=false",
+  productionDomain,
+  "GitHub OAuth App owned by `findmydoc-platform`",
+  "Do not configure a shared `GITHUB_SYNC_TOKEN`",
+]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "Domain Cutover", "Deletion Safety"]) {
+for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "Domain Cutover", "Deletion Safety", productionDomain]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
+}
+
+const workspaceRules = await read("AGENTS.md");
+for (const marker of [productionDomain, "provider_token", "Never persist or log provider tokens"]) {
+  if (!workspaceRules.includes(marker)) failures.push(`AGENTS.md missing Vercel/security marker: ${marker}`);
 }
 
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
@@ -103,13 +122,14 @@ console.log(JSON.stringify({
   status: localProjectLinked ? "ready-for-vercel-build-preflight" : "ready-for-vercel-cli-preflight",
   project: "founder-ops",
   rootDirectory: "fmd-planning",
+  productionDomain,
   requiredEnvKeys,
   localProjectLinked,
   vercelProjectFile,
   manualNextSteps,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat"],
+    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy"],
     ciWorkflowPresent,
     healthRoute: true,
     deploymentDoc: true,

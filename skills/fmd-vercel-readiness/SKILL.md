@@ -1,6 +1,6 @@
 ---
 name: fmd-vercel-readiness
-description: Prepare, verify, deploy, inspect, and cut over the findmydoc Founder OPS / Founder Scoreboard project on Vercel using the Vercel CLI. Use when the user mentions Vercel readiness, CLI deploys, production env vars, Supabase Auth redirect URLs, project/domain migration, deleting the old Founder Scoreboard deployment, or assigning founder-ops.findmydoc.eu / founder-ops.findmydog.eu.
+description: Prepare, verify, deploy, inspect, and cut over the findmydoc Founder OPS / Founder Scoreboard project on Vercel using the Vercel CLI. Use when the user mentions Vercel readiness, CLI deploys, production env vars, Supabase Auth redirect URLs, project/domain migration, deleting the old Founder Scoreboard deployment, or assigning founderops.findmydoc.eu.
 ---
 
 # FMD Vercel Readiness
@@ -13,7 +13,7 @@ Make this project production-ready for Vercel without relying on Git-push deploy
 
 - Use Vercel CLI workflows, not Git integration, unless the user explicitly changes this decision.
 - Treat deleting the old Vercel project and moving domains as destructive production operations. Prepare commands and checks, but require explicit user confirmation before running them.
-- Confirm the exact domain spelling before modifying DNS or Vercel domains. The known candidates are `founder-ops.findmydoc.eu` and `founder-ops.findmydog.eu`.
+- Confirm the final cutover before modifying DNS or Vercel domains. The planned production domain is `founderops.findmydoc.eu`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, or Vercel tokens in logs, docs, or client code.
 - Run `npm run verify:vercel-ready`, `npm run verify:google-chat`, `npm run lint`, and `npm run build` before any deploy attempt.
