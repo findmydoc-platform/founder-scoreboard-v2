@@ -6208,6 +6208,20 @@ function addDaysKey(value: string, days: number) {
   return dateKey(date);
 }
 
+function startOfWeekKey(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  const day = date.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + mondayOffset);
+  return dateKey(date);
+}
+
+function addMonthsToWeekKey(value: string, months: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setMonth(date.getMonth() + months);
+  return startOfWeekKey(dateKey(date));
+}
+
 function timeToMinutes(value: string) {
   const [hours = "0", minutes = "0"] = value.split(":");
   return Number(hours) * 60 + Number(minutes);
@@ -6227,6 +6241,20 @@ function formatDateLabel(value: string) {
 
 function formatLongDateLabel(value: string) {
   return new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatCalendarMonthLabel(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  const month = new Intl.DateTimeFormat("de-DE", { month: "long" });
+  const monthYear = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
+  if (startDate.getFullYear() === endDate.getFullYear() && startDate.getMonth() === endDate.getMonth()) {
+    return monthYear.format(startDate);
+  }
+  if (startDate.getFullYear() === endDate.getFullYear()) {
+    return `${month.format(startDate)}/${monthYear.format(endDate)}`;
+  }
+  return `${monthYear.format(startDate)} / ${monthYear.format(endDate)}`;
 }
 
 function formatMeetingDateTime(value: string) {
@@ -6387,11 +6415,19 @@ function MeetingFinderOverview({
 }) {
   const today = dateKey(new Date());
   const defaultEnd = addDaysKey(today, 14);
-  const selectableProfiles = data.profiles.filter((profile) => profile.platformRole !== "viewer");
-  const editableProfiles = canManageAvailability ? selectableProfiles : selectableProfiles.filter((profile) => profile.id === currentProfile?.id);
-  const [selectedProfileIds, setSelectedProfileIds] = useState(() => selectableProfiles.map((profile) => profile.id));
+  const selectableProfiles = useMemo(() => data.profiles.filter((profile) => profile.platformRole !== "viewer"), [data.profiles]);
+  const editableProfiles = useMemo(
+    () => canManageAvailability ? selectableProfiles : selectableProfiles.filter((profile) => profile.id === currentProfile?.id),
+    [canManageAvailability, currentProfile?.id, selectableProfiles],
+  );
+  const defaultSelectedProfileIds = useMemo(() => currentProfile?.id && selectableProfiles.some((profile) => profile.id === currentProfile.id)
+    ? [currentProfile.id]
+    : selectableProfiles.slice(0, 1).map((profile) => profile.id), [currentProfile, selectableProfiles]);
+  const defaultSelectionAppliedRef = useRef(false);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(defaultEnd);
+  const [calendarWeekStart, setCalendarWeekStart] = useState(() => startOfWeekKey(today));
   const [duration, setDuration] = useState("60");
   const [workProfileId, setWorkProfileId] = useState(editableProfiles[0]?.id || "");
   const [workWeekday, setWorkWeekday] = useState("1");
@@ -6422,7 +6458,9 @@ function MeetingFinderOverview({
   const slots = selectedProfileIds.length ? findMeetingSlots(data, selectedProfileIds, fromDate, toDate, Number(duration)) : [];
   const fullSlots = slots.filter((slot) => slot.matchType === "full");
   const visibleSlots = slots.slice(0, 12);
-  const calendarDates = Array.from({ length: Math.min(7, Math.max(1, Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000) + 1)) }, (_, index) => addDaysKey(fromDate, index));
+  const calendarDates = Array.from({ length: 7 }, (_, index) => addDaysKey(calendarWeekStart, index));
+  const calendarWeekEnd = calendarDates[6] || calendarWeekStart;
+  const calendarMonthLabel = formatCalendarMonthLabel(calendarWeekStart, calendarWeekEnd);
   const calendarHours = Array.from({ length: 14 }, (_, index) => 8 * 60 + index * 60);
   const nextRecommendedSlot = slots[0];
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
@@ -6436,6 +6474,13 @@ function MeetingFinderOverview({
     value: profile.id,
     label: selectedProfileIds.includes(profile.id) ? `${profile.name} ✓` : profile.name,
   }));
+
+  useEffect(() => {
+    if (!defaultSelectionAppliedRef.current && defaultSelectedProfileIds.length) {
+      setSelectedProfileIds(defaultSelectedProfileIds);
+      defaultSelectionAppliedRef.current = true;
+    }
+  }, [defaultSelectedProfileIds]);
 
   const toggleParticipant = (profileId: string) => {
     setSelectedProfileIds((current) =>
@@ -6708,14 +6753,87 @@ function MeetingFinderOverview({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Kalenderansicht</h2>
-            <p className="mt-1 text-sm text-slate-500">Wochenraster für die ausgewählten Teilnehmer. Leere Flächen bleiben bewusst ruhig; nur freie Zeiten, Blocker und vorgemerkte Meetings werden als Blöcke angezeigt.</p>
+            <p className="mt-1 text-sm text-slate-500">Feste Woche von Montag bis Sonntag. Schraffierte Flächen liegen außerhalb der FindMyDoc-Arbeitszeit; farbige Blöcke zeigen Verfügbarkeit, Blocker oder Meetings.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCalendarWeekStart(startOfWeekKey(today))}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Heute
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarWeekStart((current) => addMonthsToWeekKey(current, -1))}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Monat zurück
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarWeekStart((current) => addDaysKey(current, -7))}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Woche zurück
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarWeekStart((current) => addDaysKey(current, 7))}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Woche vor
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarWeekStart((current) => addMonthsToWeekKey(current, 1))}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Monat vor
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <div>
+            <div className="text-lg font-semibold text-slate-950">{calendarMonthLabel}</div>
+            <div className="text-xs text-slate-500">{formatDateLabel(calendarWeekStart)} bis {formatDateLabel(calendarWeekEnd)}</div>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Frei</span>
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Teilweise</span>
             <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-700">Blockiert</span>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">Meeting</span>
+            <span className="rounded-full border border-slate-200 bg-[repeating-linear-gradient(135deg,rgba(239,68,68,0.10)_0,rgba(239,68,68,0.10)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-2 py-1 text-slate-600">Nicht verfügbar</span>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+          <span className="mr-1 text-xs font-semibold text-slate-500">Kalender anzeigen:</span>
+          {currentProfile?.id && (
+            <button
+              type="button"
+              onClick={() => setSelectedProfileIds([currentProfile.id])}
+              className="h-8 rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              Mein Kalender
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSelectedProfileIds(selectableProfiles.map((profile) => profile.id))}
+            className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Alle anzeigen
+          </button>
+          {selectableProfiles.map((profile) => (
+            <button
+              key={`calendar-profile-${profile.id}`}
+              type="button"
+              onClick={() => toggleParticipant(profile.id)}
+              className={`h-8 rounded-md border px-3 text-xs font-semibold ${selectedProfileIds.includes(profile.id) ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`}
+            >
+              {profile.name}
+            </button>
+          ))}
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
           <div className="min-w-[980px]">
@@ -6724,7 +6842,7 @@ function MeetingFinderOverview({
               {calendarDates.map((date) => (
                 <div key={date} className="border-l border-slate-200 px-3 py-2">
                   <div className="text-[11px] font-semibold uppercase text-slate-500">{new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${date}T00:00:00`))}</div>
-                  <div className="mt-0.5 text-lg font-semibold text-slate-950">{new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T00:00:00`))}</div>
+                  <div className="mt-0.5 text-lg font-semibold text-slate-950">{new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T00:00:00`))}</div>
                 </div>
               ))}
             </div>
@@ -6735,7 +6853,15 @@ function MeetingFinderOverview({
                   const cell = calendarCellFor(date, hour);
                   return (
                     <div key={`${date}-${hour}`} className="min-h-16 border-l border-slate-100 bg-white px-1 py-1">
-                      {cell.kind !== "closed" && (
+                      {cell.kind === "closed" ? (
+                        <div
+                          className="h-full min-h-12 rounded-md border border-transparent opacity-70"
+                          title={cell.label}
+                          style={{
+                            backgroundImage: "repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0, rgba(239, 68, 68, 0.08) 6px, rgba(255, 255, 255, 0) 6px, rgba(255, 255, 255, 0) 12px)",
+                          }}
+                        />
+                      ) : (
                         <div className={`h-full min-h-12 rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${availabilitySummaryTone(cell.kind)}`}>
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-semibold">{cell.label}</span>

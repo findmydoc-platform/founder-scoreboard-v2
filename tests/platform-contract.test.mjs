@@ -1250,8 +1250,13 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(ui, /Kalenderansicht/);
   assert.match(ui, /calendarCellFor/);
   assert.match(ui, /availabilitySummaryTone/);
-  assert.match(ui, /Wochenraster/);
-  assert.match(ui, /Leere Flächen bleiben bewusst ruhig/);
+  assert.match(ui, /Feste Woche von Montag bis Sonntag/);
+  assert.match(ui, /Schraffierte Flächen/);
+  assert.match(ui, /calendarWeekStart/);
+  assert.match(ui, /startOfWeekKey/);
+  assert.match(ui, /calendarMonthLabel/);
+  assert.match(ui, /Mein Kalender/);
+  assert.match(ui, /Alle anzeigen/);
   assert.match(ui, /Vorgemerkte Meetings/);
   assert.match(ui, /Meeting absagen/);
   assert.match(ui, /attendanceForMeeting/);
