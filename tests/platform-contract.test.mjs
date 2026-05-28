@@ -1191,6 +1191,25 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
   assert.match(types, /MeetingAttendanceStatus/);
 });
 
+test("meeting finder manages working hours blockers and guarded availability", async () => {
+  const route = await readFile("src/app/api/availability/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const migration = await readFile("supabase/0002_founder_platform.sql", "utf8");
+
+  assert.match(migration, /create table if not exists availability/);
+  assert.match(route, /requireFounder/);
+  assert.match(route, /Founder können nur eigene Verfügbarkeiten pflegen/);
+  assert.match(route, /availability\.create/);
+  assert.match(route, /availability\.delete/);
+  assert.match(ui, /findMeetingSlots/);
+  assert.match(ui, /Arbeitszeiten pflegen/);
+  assert.match(ui, /Blocker eintragen/);
+  assert.match(ui, /Google Workspace wird als nächster Sync-Schritt vorbereitet/);
+  assert.match(ui, /Keine passenden Slots/);
+  assert.match(ui, /CustomDatePicker/);
+  assert.match(ui, /CustomSelect/);
+});
+
 test("app choice controls use custom components instead of browser-native pickers", async () => {
   const files = (await listFiles("src", ".tsx")).filter((file) => ![
     "src/components/custom-select.tsx",

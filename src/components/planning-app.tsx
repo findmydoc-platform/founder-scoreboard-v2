@@ -40,7 +40,7 @@ import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, role
 import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { TaskDetailPage } from "@/components/task-detail-page";
 import { CommentBody, TaskCommentThread } from "@/components/task-comment-thread";
-import type { CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -2084,6 +2084,78 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
+  const createAvailability = (entry: Omit<AvailabilityEntry, "id">) => {
+    setSaveError("");
+
+    const localEntry: AvailabilityEntry = { ...entry, id: Date.now() };
+    const previousData = data;
+    setData((current) => ({
+      ...current,
+      availability: [localEntry, ...current.availability],
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/availability", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(entry),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; availability?: AvailabilityEntry } | null;
+        if (!response.ok || !body?.availability) throw new Error(body?.error || "Verfügbarkeit konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          availability: current.availability.map((item) => (item.id === localEntry.id ? body.availability! : item)),
+        }));
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const deleteAvailability = (entry: AvailabilityEntry) => {
+    setSaveError("");
+
+    const previousData = data;
+    setData((current) => ({
+      ...current,
+      availability: current.availability.filter((item) => item.id !== entry.id),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/availability", {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ id: entry.id }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Verfügbarkeit konnte nicht gelöscht werden.");
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht gelöscht werden.");
+      }
+    });
+  };
+
   const createDecision = (payload: { title: string; context: string; decision: string; requiredProfileIds: string[] }) => {
     setSaveError("");
 
@@ -3365,7 +3437,16 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               })}
             />
           )}
-          {workspace === "meetings" && <MeetingFinderOverview data={data} />}
+          {workspace === "meetings" && (
+            <MeetingFinderOverview
+              data={data}
+              pending={isPending}
+              currentProfile={currentProfile}
+              canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
+              onCreateAvailability={createAvailability}
+              onDeleteAvailability={deleteAvailability}
+            />
+          )}
           {workspace === "settings" && (
             <SettingsOverview
               data={data}
@@ -5862,31 +5943,367 @@ void SprintScoreOverview;
 void SprintScoreOverviewLegacy;
 void DecisionLogOverviewLegacy;
 
-function MeetingFinderOverview({ data }: { data: PlanningData }) {
+const weekdayOptions = [
+  { value: "1", label: "Montag" },
+  { value: "2", label: "Dienstag" },
+  { value: "3", label: "Mittwoch" },
+  { value: "4", label: "Donnerstag" },
+  { value: "5", label: "Freitag" },
+  { value: "6", label: "Samstag" },
+  { value: "0", label: "Sonntag" },
+];
+
+const blockerTypeOptions = [
+  { value: "busy", label: "Arbeit / blockiert" },
+  { value: "vacation", label: "Urlaub" },
+  { value: "sick", label: "Krank" },
+];
+
+const durationOptions = [
+  { value: "30", label: "30 Minuten" },
+  { value: "45", label: "45 Minuten" },
+  { value: "60", label: "60 Minuten" },
+  { value: "90", label: "90 Minuten" },
+];
+
+const timeOptions = Array.from({ length: 35 }, (_, index) => {
+  const minutes = 6 * 60 + index * 30;
+  const value = minutesToTime(minutes);
+  return { value, label: value };
+});
+
+type MeetingSlot = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  availableProfileIds: string[];
+  unavailable: Array<{ profileId: string; reason: string }>;
+  matchType: "full" | "partial";
+};
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDaysKey(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateKey(date);
+}
+
+function timeToMinutes(value: string) {
+  const [hours = "0", minutes = "0"] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function minutesToTime(value: number) {
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+}
+
+function weekdayForDate(value: string) {
+  return new Date(`${value}T00:00:00`).getDay();
+}
+
+function formatDateLabel(value: string) {
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatLongDateLabel(value: string) {
+  return new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${value}T00:00:00`));
+}
+
+function availabilityTypeLabel(type: AvailabilityEntry["type"]) {
+  if (type === "working_hours") return "Arbeitszeit";
+  if (type === "vacation") return "Urlaub";
+  if (type === "sick") return "Krank";
+  return "Blockiert";
+}
+
+function availabilityReason(entry: AvailabilityEntry) {
+  const base = availabilityTypeLabel(entry.type);
+  return entry.note ? `${base}: ${entry.note}` : base;
+}
+
+function overlapsSlot(entry: AvailabilityEntry, date: string, start: number, end: number) {
+  if (entry.type === "working_hours") return false;
+  if (entry.startDate && entry.startDate > date) return false;
+  if (entry.endDate && entry.endDate < date) return false;
+  const blockStart = entry.startTime ? timeToMinutes(entry.startTime) : 0;
+  const blockEnd = entry.endTime ? timeToMinutes(entry.endTime) : 24 * 60;
+  return start < blockEnd && end > blockStart;
+}
+
+function workingWindowFor(profileId: string, date: string, availability: AvailabilityEntry[]) {
+  const weekday = weekdayForDate(date);
+  const entry = availability.find((item) => item.profileId === profileId && item.type === "working_hours" && item.weekday === weekday);
+  if (!entry?.startTime || !entry.endTime) return null;
+  return { start: timeToMinutes(entry.startTime), end: timeToMinutes(entry.endTime) };
+}
+
+function findMeetingSlots(data: PlanningData, profileIds: string[], from: string, to: string, durationMinutes: number) {
+  const slots: MeetingSlot[] = [];
+  let current = from;
+  let guard = 0;
+
+  while (current <= to && guard < 21 && slots.length < 60) {
+    guard += 1;
+    for (let start = 7 * 60; start + durationMinutes <= 22 * 60 && slots.length < 60; start += 30) {
+      const end = start + durationMinutes;
+      const availableProfileIds: string[] = [];
+      const unavailable: MeetingSlot["unavailable"] = [];
+
+      for (const profileId of profileIds) {
+        const window = workingWindowFor(profileId, current, data.availability);
+        if (!window) {
+          unavailable.push({ profileId, reason: "Keine Arbeitszeit hinterlegt" });
+          continue;
+        }
+        if (start < window.start || end > window.end) {
+          unavailable.push({ profileId, reason: "Außerhalb Arbeitszeit" });
+          continue;
+        }
+        const blocker = data.availability.find((entry) => entry.profileId === profileId && overlapsSlot(entry, current, start, end));
+        if (blocker) {
+          unavailable.push({ profileId, reason: availabilityReason(blocker) });
+          continue;
+        }
+        availableProfileIds.push(profileId);
+      }
+
+      if (availableProfileIds.length === profileIds.length || availableProfileIds.length >= Math.ceil(profileIds.length * 0.6)) {
+        slots.push({
+          date: current,
+          startTime: minutesToTime(start),
+          endTime: minutesToTime(end),
+          availableProfileIds,
+          unavailable,
+          matchType: unavailable.length ? "partial" : "full",
+        });
+      }
+    }
+    current = addDaysKey(current, 1);
+  }
+
+  return slots.sort((a, b) => {
+    if (a.matchType !== b.matchType) return a.matchType === "full" ? -1 : 1;
+    return `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`);
+  });
+}
+
+function MeetingFinderOverview({
+  data,
+  pending,
+  currentProfile,
+  canManageAvailability,
+  onCreateAvailability,
+  onDeleteAvailability,
+}: {
+  data: PlanningData;
+  pending: boolean;
+  currentProfile: Profile | null;
+  canManageAvailability: boolean;
+  onCreateAvailability: (entry: Omit<AvailabilityEntry, "id">) => void;
+  onDeleteAvailability: (entry: AvailabilityEntry) => void;
+}) {
+  const today = dateKey(new Date());
+  const defaultEnd = addDaysKey(today, 14);
+  const selectableProfiles = data.profiles.filter((profile) => profile.platformRole !== "viewer");
+  const editableProfiles = canManageAvailability ? selectableProfiles : selectableProfiles.filter((profile) => profile.id === currentProfile?.id);
+  const [selectedProfileIds, setSelectedProfileIds] = useState(() => selectableProfiles.map((profile) => profile.id));
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(defaultEnd);
+  const [duration, setDuration] = useState("60");
+  const [workProfileId, setWorkProfileId] = useState(editableProfiles[0]?.id || "");
+  const [workWeekday, setWorkWeekday] = useState("1");
+  const [workStart, setWorkStart] = useState("09:00");
+  const [workEnd, setWorkEnd] = useState("18:00");
+  const [blockerProfileId, setBlockerProfileId] = useState(editableProfiles[0]?.id || "");
+  const [blockerType, setBlockerType] = useState<AvailabilityEntry["type"]>("busy");
+  const [blockerStartDate, setBlockerStartDate] = useState(today);
+  const [blockerEndDate, setBlockerEndDate] = useState(today);
+  const [blockerStartTime, setBlockerStartTime] = useState("09:00");
+  const [blockerEndTime, setBlockerEndTime] = useState("18:00");
+  const [blockerNote, setBlockerNote] = useState("");
+
   const workingHours = data.availability.filter((entry) => entry.type === "working_hours");
-  const absences = data.availability.filter((entry) => entry.type === "vacation" || entry.type === "sick" || entry.type === "busy");
+  const blockers = data.availability.filter((entry) => entry.type === "vacation" || entry.type === "sick" || entry.type === "busy");
+  const profileNameById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
+  const selectedProfiles = selectableProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
+  const slots = selectedProfileIds.length ? findMeetingSlots(data, selectedProfileIds, fromDate, toDate, Number(duration)) : [];
+  const fullSlots = slots.filter((slot) => slot.matchType === "full");
+  const visibleSlots = slots.slice(0, 12);
+
+  const profileOptions = editableProfiles.map((profile) => ({ value: profile.id, label: profile.name }));
+  const participantOptions = selectableProfiles.map((profile) => ({
+    value: profile.id,
+    label: selectedProfileIds.includes(profile.id) ? `${profile.name} ✓` : profile.name,
+  }));
+
+  const toggleParticipant = (profileId: string) => {
+    setSelectedProfileIds((current) =>
+      current.includes(profileId) ? current.filter((id) => id !== profileId) : [...current, profileId],
+    );
+  };
+
+  const addWorkingHours = () => {
+    if (!workProfileId) return;
+    onCreateAvailability({
+      profileId: workProfileId,
+      type: "working_hours",
+      weekday: Number(workWeekday),
+      startDate: "",
+      endDate: "",
+      startTime: workStart,
+      endTime: workEnd,
+      note: "Reguläre FindMyDoc-Arbeitszeit",
+    });
+  };
+
+  const addBlocker = () => {
+    if (!blockerProfileId) return;
+    onCreateAvailability({
+      profileId: blockerProfileId,
+      type: blockerType,
+      weekday: null,
+      startDate: blockerStartDate,
+      endDate: blockerEndDate || blockerStartDate,
+      startTime: blockerStartTime,
+      endTime: blockerEndTime,
+      note: blockerNote.trim(),
+    });
+    setBlockerNote("");
+  };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+    <div className="grid gap-4 xl:grid-cols-[430px_1fr]">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-950">Meeting Finder V1</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          V1 nutzt manuelle Arbeitszeiten und Abwesenheiten. Google Calendar Sync bleibt späterer Ausbau.
-        </p>
+        <h2 className="text-base font-semibold text-slate-950">Meeting Finder</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus FindMyDoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit und sonstigen Blockern. Google Workspace wird als nächster Sync-Schritt vorbereitet.</p>
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Arbeitszeiten</div><div className="font-semibold">{workingHours.length}</div></div>
-          <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{absences.length}</div></div>
+          <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{blockers.length}</div></div>
+          <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
+          <div className="rounded-md bg-blue-50 p-3"><div className="text-xs text-blue-700">Teilnehmer</div><div className="font-semibold text-blue-900">{selectedProfiles.length}</div></div>
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-950">Team-Slots</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Freie Slots finden</h2>
+            <p className="mt-1 text-sm text-slate-500">Volle Treffer werden zuerst gezeigt, Teilmatches bleiben sichtbar, damit du schnell entscheiden kannst.</p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">{visibleSlots.length}/{slots.length} Slots</span>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_160px]">
+          <CustomDatePicker value={fromDate} onChange={setFromDate} className="h-9 text-sm" aria-label="Startdatum wählen" />
+          <CustomDatePicker value={toDate} onChange={setToDate} className="h-9 text-sm" aria-label="Enddatum wählen" />
+          <CustomSelect value={duration} onChange={setDuration} className="h-9 text-sm" options={durationOptions} aria-label="Meetingdauer wählen" />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedProfileIds(selectedProfileIds.length === selectableProfiles.length ? [] : selectableProfiles.map((profile) => profile.id))}
+            className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {selectedProfileIds.length === selectableProfiles.length ? "Alle abwählen" : "Alle wählen"}
+          </button>
+          {participantOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => toggleParticipant(option.value)}
+              className={`h-8 rounded-md border px-3 text-xs font-semibold ${selectedProfileIds.includes(option.value) ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         <div className="mt-4 grid gap-2">
-          {data.profiles.map((profile) => (
-            <div key={profile.id} className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm">
-              <span className="font-medium text-slate-800">{profile.name}</span>
-              <span className="text-slate-500">{profile.weeklyCapacity}h Kapazität · {roleLabel(profile)}</span>
+          {visibleSlots.map((slot) => (
+            <div key={`${slot.date}-${slot.startTime}-${slot.endTime}`} className={`rounded-lg border px-3 py-2 text-sm ${slot.matchType === "full" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold text-slate-950">{formatLongDateLabel(slot.date)} · {slot.startTime}-{slot.endTime}</div>
+                <span className={`rounded-full border bg-white px-2 py-0.5 text-xs font-semibold ${slot.matchType === "full" ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
+                  {slot.availableProfileIds.length}/{selectedProfileIds.length} verfügbar
+                </span>
+              </div>
+              <div className="mt-1 text-xs leading-5 text-slate-600">Verfügbar: {slot.availableProfileIds.map((id) => profileNameById.get(id) || id).join(", ") || "niemand"}</div>
+              {slot.unavailable.length > 0 && (
+                <div className="mt-1 text-xs leading-5 text-amber-800">
+                  Nicht verfügbar: {slot.unavailable.map((item) => `${profileNameById.get(item.profileId) || item.profileId} (${item.reason})`).join(", ")}
+                </div>
+              )}
             </div>
           ))}
+          {!visibleSlots.length && (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              Keine passenden Slots. Prüfe Arbeitszeiten, verkürze die Dauer oder wähle weniger Teilnehmer.
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
+        <p className="mt-1 text-sm text-slate-500">Regelmäßige FindMyDoc-Zeit pro Person und Wochentag.</p>
+        <div className="mt-4 grid gap-3">
+          <CustomSelect value={workProfileId} onChange={setWorkProfileId} disabled={!profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
+          <CustomSelect value={workWeekday} onChange={setWorkWeekday} disabled={pending} className="h-9 text-sm" options={weekdayOptions} />
+          <div className="grid grid-cols-2 gap-2">
+            <CustomSelect value={workStart} onChange={setWorkStart} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Start" />
+            <CustomSelect value={workEnd} onChange={setWorkEnd} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Ende" />
+          </div>
+          <button type="button" onClick={addWorkingHours} disabled={pending || !workProfileId || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            Arbeitszeit speichern
+          </button>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-950">Blocker eintragen</h2>
+        <p className="mt-1 text-sm text-slate-500">Arbeit, Urlaub, Krankheit oder sonstige Nicht-Verfügbarkeit.</p>
+        <div className="mt-4 grid gap-3">
+          <CustomSelect value={blockerProfileId} onChange={setBlockerProfileId} disabled={!profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
+          <CustomSelect value={blockerType} onChange={(value) => setBlockerType(value as AvailabilityEntry["type"])} disabled={pending} className="h-9 text-sm" options={blockerTypeOptions} />
+          <div className="grid grid-cols-2 gap-2">
+            <CustomDatePicker value={blockerStartDate} onChange={setBlockerStartDate} disabled={pending} className="h-9 text-sm" aria-label="Blocker Startdatum" />
+            <CustomDatePicker value={blockerEndDate} onChange={setBlockerEndDate} disabled={pending} className="h-9 text-sm" aria-label="Blocker Enddatum" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <CustomSelect value={blockerStartTime} onChange={setBlockerStartTime} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Startzeit" />
+            <CustomSelect value={blockerEndTime} onChange={setBlockerEndTime} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
+          </div>
+          <textarea value={blockerNote} onChange={(event) => setBlockerNote(event.target.value)} placeholder="Grund oder Kontext" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          <button type="button" onClick={addBlocker} disabled={pending || !blockerProfileId || timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime)} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
+            Blocker speichern
+          </button>
+        </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <h2 className="text-base font-semibold text-slate-950">Kalender & Blocker</h2>
+        <p className="mt-1 text-sm text-slate-500">Google Workspace Sync kommt über einen separaten Connector. Bis dahin sind manuelle Einträge die führende Quelle.</p>
+        <div className="mt-4 grid gap-2 lg:grid-cols-2">
+          {[...workingHours, ...blockers].slice(0, 16).map((entry) => (
+            <div key={entry.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <div className="font-semibold text-slate-900">{profileNameById.get(entry.profileId) || entry.profileId} · {availabilityTypeLabel(entry.type)}</div>
+                <div className="mt-0.5 truncate text-xs text-slate-500">
+                  {entry.type === "working_hours"
+                    ? `${weekdayOptions.find((item) => item.value === String(entry.weekday))?.label || "Wochentag"} · ${entry.startTime}-${entry.endTime}`
+                    : `${formatDateLabel(entry.startDate)} bis ${formatDateLabel(entry.endDate)} · ${entry.startTime}-${entry.endTime}`}
+                  {entry.note ? ` · ${entry.note}` : ""}
+                </div>
+              </div>
+              {(canManageAvailability || entry.profileId === currentProfile?.id) && (
+                <button type="button" onClick={() => onDeleteAvailability(entry)} disabled={pending} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  Löschen
+                </button>
+              )}
+            </div>
+          ))}
+          {![...workingHours, ...blockers].length && (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 lg:col-span-2">
+              Noch keine Arbeitszeiten oder Blocker hinterlegt.
+            </div>
+          )}
         </div>
       </section>
     </div>
