@@ -6297,9 +6297,7 @@ function formatMeetingDateTime(value: string) {
   return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-function availabilitySummaryTone(kind: "free" | "partial" | "blocked" | "closed" | "meeting") {
-  if (kind === "free") return "border-emerald-300 bg-emerald-50 text-emerald-900";
-  if (kind === "partial") return "border-amber-300 bg-amber-50 text-amber-900";
+function availabilitySummaryTone(kind: "open" | "blocked" | "closed" | "meeting") {
   if (kind === "meeting") return "border-blue-300 bg-blue-50 text-blue-900";
   if (kind === "blocked") return "border-red-300 bg-red-50 text-red-900";
   return "";
@@ -6595,55 +6593,47 @@ function MeetingFinderOverview({
       };
     }
 
-    let availableCount = 0;
+    let workingCount = 0;
     const reasons: string[] = [];
 
     for (const profileId of selectedProfileIds) {
       const name = profileNameById.get(profileId) || profileId;
       const window = workingWindowFor(profileId, date, data.availability);
       if (!window || start < window.start || end > window.end) {
-        reasons.push(`${name}: keine Arbeitszeit`);
         continue;
       }
 
+      workingCount += 1;
       const blocker = data.availability.find((entry) => entry.profileId === profileId && overlapsSlot(entry, date, start, end));
       if (blocker) {
         reasons.push(`${name}: ${availabilityReason(blocker)}`);
-        continue;
       }
-
-      availableCount += 1;
     }
 
     if (!selectedProfileIds.length) {
-      return { kind: "closed" as const, label: "Keine Auswahl", detail: "Wähle Teilnehmer aus.", availableCount };
+      return { kind: "closed" as const, label: "Keine Auswahl", detail: "Wähle Teilnehmer aus.", availableCount: 0 };
     }
-    if (availableCount === selectedProfileIds.length) {
-      return { kind: "free" as const, label: "Alle frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar`, availableCount };
+    if (!workingCount) {
+      return { kind: "closed" as const, label: "Keine Arbeitszeit", detail: "", availableCount: 0 };
     }
-    if (availableCount > 0) {
-      return { kind: "partial" as const, label: "Teilweise frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar · ${reasons.slice(0, 2).join(", ")}`, availableCount };
+    if (reasons.length) {
+      return {
+        kind: "blocked" as const,
+        label: reasons.length === 1 ? "Blocker" : "Mehrere Blocker",
+        detail: reasons.slice(0, 3).join(", "),
+        availableCount: workingCount - reasons.length,
+      };
     }
-    const hasWorkingHour = selectedProfileIds.some((profileId) => {
-      const window = workingWindowFor(profileId, date, data.availability);
-      return window && start >= window.start && end <= window.end;
-    });
-    return {
-      kind: hasWorkingHour ? "blocked" as const : "closed" as const,
-      label: hasWorkingHour ? "Blockiert" : "Keine Arbeitszeit",
-      detail: hasWorkingHour ? reasons.slice(0, 2).join(", ") || "Kein Teilnehmer ist verfügbar." : "",
-      availableCount,
-    };
+    return { kind: "open" as const, label: "Arbeitszeit frei", detail: "", availableCount: workingCount };
   };
 
   const calendarDaySummary = (date: string) => {
     const cells = calendarHours.map((hour) => calendarCellFor(date, hour));
-    const free = cells.filter((cell) => cell.kind === "free").length;
-    const partial = cells.filter((cell) => cell.kind === "partial").length;
+    const open = cells.filter((cell) => cell.kind === "open").length;
     const blocked = cells.filter((cell) => cell.kind === "blocked").length;
     const meetings = cells.filter((cell) => cell.kind === "meeting").length;
     const closed = cells.filter((cell) => cell.kind === "closed").length;
-    return { free, partial, blocked, meetings, closed };
+    return { open, blocked, meetings, closed };
   };
 
   const moveCalendar = (direction: -1 | 1) => {
@@ -6845,12 +6835,10 @@ function MeetingFinderOverview({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
           <p className="text-sm text-slate-500">
             {calendarView === "week"
-              ? "Wochenraster wie im Kalender. Schraffierte Flächen liegen außerhalb der FindMyDoc-Arbeitszeit; farbige Blöcke zeigen Verfügbarkeit, Blocker oder Meetings."
-              : "Monatsübersicht für Orientierung und schnelle Planung. Die Tagesmarker fassen freie Zeiten, Teiltreffer, Blocker und Meetings zusammen."}
+              ? "Wochenraster wie im Kalender. Schraffierte Flächen liegen außerhalb der FindMyDoc-Arbeitszeit; farbige Blöcke zeigen nur Blocker und Meetings."
+              : "Monatsübersicht für Orientierung und schnelle Planung. Die Tagesmarker fassen Blocker und Meetings zusammen."}
           </p>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Frei</span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Teilweise</span>
             <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-700">Blockiert</span>
             <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">Meeting</span>
             <span className="rounded-full border border-slate-200 bg-[repeating-linear-gradient(135deg,rgba(239,68,68,0.10)_0,rgba(239,68,68,0.10)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-2 py-1 text-slate-600">Nicht verfügbar</span>
@@ -6912,6 +6900,8 @@ function MeetingFinderOverview({
                               backgroundImage: "repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0, rgba(239, 68, 68, 0.08) 6px, rgba(255, 255, 255, 0) 6px, rgba(255, 255, 255, 0) 12px)",
                             }}
                           />
+                        ) : cell.kind === "open" ? (
+                          <div className="h-full min-h-12 rounded-md border border-transparent bg-white" title="Arbeitszeit ohne Blocker" />
                         ) : (
                           <div className={`h-full min-h-12 rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${availabilitySummaryTone(cell.kind)}`}>
                             <div className="flex items-center justify-between gap-2">
@@ -6949,11 +6939,9 @@ function MeetingFinderOverview({
                       {date === today && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">Heute</span>}
                     </div>
                     <div className="mt-3 grid gap-1 text-[11px] font-semibold">
-                      {summary.free > 0 && <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">{summary.free} freie Stunden</div>}
-                      {summary.partial > 0 && <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{summary.partial} teilweise frei</div>}
                       {summary.blocked > 0 && <div className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">{summary.blocked} blockiert</div>}
                       {summary.meetings > 0 && <div className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">{summary.meetings} Meeting</div>}
-                      {summary.free === 0 && summary.partial === 0 && summary.blocked === 0 && summary.meetings === 0 && (
+                      {summary.open === 0 && summary.blocked === 0 && summary.meetings === 0 && (
                         <div
                           className="min-h-14 rounded border border-transparent"
                           title="Nicht verfügbar"
