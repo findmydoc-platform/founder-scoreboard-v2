@@ -2317,9 +2317,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           skipped?: boolean;
           reason?: string;
           imported?: number;
+          removed?: number;
           syncedAt?: string;
           availability?: AvailabilityEntry[];
-          results?: Array<{ profileId: string; email: string; imported: number; error?: string }>;
+          results?: Array<{ profileId: string; email: string; imported: number; removed?: number; error?: string }>;
         } | null;
 
         if (!response.ok) throw new Error(body?.error || "Google Calendar Sync konnte nicht ausgeführt werden.");
@@ -2332,7 +2333,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         if (body?.skipped) {
           setCalendarSyncMessage(body.reason || "Google Calendar Sync wurde übersprungen.");
         } else {
-          setCalendarSyncMessage(`Google Calendar Sync abgeschlossen: ${body?.imported || 0} Kalenderblöcke importiert${failedProfiles ? `, ${failedProfiles} Profil(e) mit Fehler` : ""}.`);
+          setCalendarSyncMessage(`Google Calendar Sync abgeschlossen: ${body?.imported || 0} Kalenderblöcke importiert, ${body?.removed || 0} alte Blöcke entfernt${failedProfiles ? `, ${failedProfiles} Profil(e) mit Fehler` : ""}.`);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google Calendar Sync konnte nicht ausgeführt werden.";

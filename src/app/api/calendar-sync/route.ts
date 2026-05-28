@@ -161,18 +161,22 @@ export async function POST(request: NextRequest) {
   const syncedAt = new Date().toISOString();
   const from = dateKey(new Date());
   const to = dateKey(addDays(new Date(), syncWindowDays));
-  const results: Array<{ profileId: string; email: string; imported: number; error?: string }> = [];
+  const results: Array<{ profileId: string; email: string; imported: number; removed: number; error?: string }> = [];
   let imported = 0;
+  let removed = 0;
 
   for (const profile of enabledProfiles) {
     const email = profile.google_calendar_email || "";
     try {
       const events = await getGoogleCalendarEvents(email, from, to);
       let profileImported = 0;
+      let profileRemoved = 0;
+      const activeEventIds = new Set<string>();
 
       for (const event of events) {
         const row = mapEventToAvailability(profile, event, syncedAt);
         if (!row) continue;
+        activeEventIds.add(row.external_id);
 
         const { data: existing } = await supabase
           .from("availability")
@@ -192,14 +196,38 @@ export async function POST(request: NextRequest) {
         profileImported += 1;
       }
 
+      const { data: existingGoogleRows, error: existingGoogleRowsError } = await supabase
+        .from("availability")
+        .select("id,external_id")
+        .eq("source", "google_calendar")
+        .eq("external_calendar_id", email)
+        .lte("start_date", to)
+        .gte("end_date", from);
+      if (existingGoogleRowsError) throw existingGoogleRowsError;
+
+      const staleIds = (existingGoogleRows || [])
+        .filter((row) => !row.external_id || !activeEventIds.has(row.external_id))
+        .map((row) => row.id);
+
+      if (staleIds.length) {
+        const { error: staleDeleteError } = await supabase
+          .from("availability")
+          .delete()
+          .in("id", staleIds);
+        if (staleDeleteError) throw staleDeleteError;
+        profileRemoved = staleIds.length;
+      }
+
       await supabase.from("profiles").update({ google_calendar_last_synced_at: syncedAt }).eq("id", profile.id);
-      results.push({ profileId: profile.id, email, imported: profileImported });
+      results.push({ profileId: profile.id, email, imported: profileImported, removed: profileRemoved });
       imported += profileImported;
+      removed += profileRemoved;
     } catch (error) {
       results.push({
         profileId: profile.id,
         email,
         imported: 0,
+        removed: 0,
         error: error instanceof Error ? error.message : "Google Calendar Sync fehlgeschlagen.",
       });
     }
@@ -227,6 +255,7 @@ export async function POST(request: NextRequest) {
     syncedAt,
     window: { from, to },
     imported,
+    removed,
     results,
     availability: ((availabilityRows || []) as AvailabilityRow[]).map(mapAvailability),
   });

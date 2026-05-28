@@ -21,4 +21,4 @@ Nur CEO oder Deputy dürfen den Sync auslösen. Founder können weiterhin ihre e
 
 `POST /api/calendar-sync` importiert die nächsten 14 Tage. Google-Termine werden als `availability.source = 'google_calendar'` gespeichert und blockieren Slots im Meeting Finder. Bestehende Google-Blocker werden anhand von Kalender-E-Mail und Event-ID aktualisiert.
 
-Die Route löscht aktuell keine alten Google-Blocker. Das ist bewusst defensiv, bis wir den echten Workspace-Sync mit euch getestet haben.
+Google-Blocker im aktuellen Sync-Fenster werden entfernt, wenn sie im Google-Kalender nicht mehr vorkommen. Das Cleanup betrifft ausschließlich `source = 'google_calendar'`; manuelle Arbeitszeiten, Urlaub, Krankheit und manuelle Blocker bleiben unberührt.

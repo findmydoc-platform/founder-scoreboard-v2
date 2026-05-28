@@ -1232,6 +1232,9 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(calendarRoute, /availability\.google_calendar_sync/);
   assert.match(calendarRoute, /google_calendar_sync_enabled/);
   assert.match(calendarRoute, /source: "google_calendar"/);
+  assert.match(calendarRoute, /activeEventIds/);
+  assert.match(calendarRoute, /staleIds/);
+  assert.match(calendarRoute, /removed/);
   assert.match(calendarLib, /GOOGLE_SERVICE_ACCOUNT_EMAIL/);
   assert.match(calendarLib, /GOOGLE_SERVICE_ACCOUNT_KEY/);
   assert.match(calendarLib, /calendar\.readonly/);
