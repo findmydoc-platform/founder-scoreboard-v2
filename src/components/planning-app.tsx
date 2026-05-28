@@ -6174,7 +6174,7 @@ const weekdayOptions = [
 ];
 
 const blockerTypeOptions = [
-  { value: "busy", label: "Arbeit / blockiert" },
+  { value: "busy", label: "On Business / blockiert" },
   { value: "vacation", label: "Urlaub" },
   { value: "sick", label: "Krank" },
 ];
@@ -6333,7 +6333,7 @@ function availabilityTypeLabel(type: AvailabilityEntry["type"]) {
   if (type === "working_hours") return "Arbeitszeit";
   if (type === "vacation") return "Urlaub";
   if (type === "sick") return "Krank";
-  return "Blockiert";
+  return "On Business";
 }
 
 function availabilityTone(type: AvailabilityEntry["type"], source?: AvailabilityEntry["source"]) {
@@ -6351,7 +6351,6 @@ function availabilityReason(entry: AvailabilityEntry) {
 
 function availabilityCalendarLabel(entry: AvailabilityEntry) {
   if (entry.source === "google_calendar") return "Google Kalender";
-  if (entry.type === "busy" && entry.note?.trim()) return entry.note.trim();
   return availabilityTypeLabel(entry.type);
 }
 
@@ -6689,7 +6688,7 @@ function MeetingFinderOverview({
           id: `blocker-${entry.id}-${profileId}-${date}`,
           kind: "blocked",
           label: availabilityCalendarLabel(entry),
-          detail: `${name}${entry.note?.trim() && entry.type !== "busy" ? `: ${entry.note.trim()}` : ""}`,
+          detail: `${name}${entry.note?.trim() ? `: ${entry.note.trim()}` : ""}`,
           start,
           end,
           tone: availabilityTone(entry.type, entry.source),
@@ -6978,7 +6977,7 @@ function MeetingFinderOverview({
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate font-semibold">{activeBlock.label}</span>
-                              <span className="shrink-0 text-[11px] opacity-75">{minutesToTime(activeBlock.start)}</span>
+                              <span className="shrink-0 text-[11px] opacity-75">{minutesToTime(activeBlock.start)}-{minutesToTime(activeBlock.end)}</span>
                             </div>
                             {activeBlock.detail && <div className="mt-0.5 line-clamp-3 opacity-80">{activeBlock.detail}</div>}
                           </div>
