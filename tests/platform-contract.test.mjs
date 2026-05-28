@@ -192,6 +192,10 @@ test("app-only tasks are visibly marked without creating github issues", async (
 
   assert.match(ui, /GitHubMissingBadge/);
   assert.match(ui, /App-only/);
+  assert.match(ui, /App-only-Aufgaben bleiben dauerhaft sichtbar/);
+  assert.match(ui, /Diese Liste bleibt dauerhaft erhalten/);
+  assert.match(ui, /GitHub anlegen/);
+  assert.match(ui, /Keine App-only Aufgaben ohne GitHub-Issue/);
   assert.match(ui, /Nur in der App: noch kein GitHub-Issue verknüpft/);
   assert.match(ui, /GitHub-Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
