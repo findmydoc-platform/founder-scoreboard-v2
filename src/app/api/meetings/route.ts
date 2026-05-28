@@ -4,11 +4,13 @@ import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
 
 type CreateMeetingPayload = {
+  id?: number;
   title?: string;
   meetingAt?: string;
   agenda?: string;
   sprintId?: string;
   profileIds?: string[];
+  status?: Meeting["status"];
 };
 
 function cleanText(value: unknown, maxLength: number) {
@@ -143,4 +145,64 @@ export async function POST(request: NextRequest) {
     meeting: mapMeeting(meeting),
     attendance: (attendance || []).map(mapAttendance),
   });
+}
+
+export async function PATCH(request: NextRequest) {
+  const supabase = getServerSupabase();
+  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+
+  const permission = await requireOperationalLead(request);
+  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+
+  const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
+  const id = Number(payload.id);
+  if (!Number.isFinite(id)) return NextResponse.json({ error: "Meeting ist erforderlich." }, { status: 400 });
+
+  const { data: current, error: currentError } = await supabase
+    .from("meetings")
+    .select("id,sprint_id,title,meeting_at,status,agenda")
+    .eq("id", id)
+    .single();
+  if (currentError || !current) return NextResponse.json({ error: "Meeting wurde nicht gefunden." }, { status: 404 });
+
+  const patch: Record<string, string> = { updated_at: new Date().toISOString() };
+  const title = cleanText(payload.title, 160);
+  const agenda = cleanText(payload.agenda, 4000);
+  const status = payload.status;
+  const meetingAt = cleanText(payload.meetingAt, 80);
+  const parsedMeetingAt = meetingAt ? new Date(meetingAt) : null;
+
+  if (title) patch.title = title;
+  if (typeof payload.agenda === "string") patch.agenda = agenda;
+  if (status) {
+    if (!["planned", "done", "cancelled"].includes(status)) return NextResponse.json({ error: "Meeting-Status ist ungültig." }, { status: 400 });
+    patch.status = status;
+  }
+  if (meetingAt) {
+    if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return NextResponse.json({ error: "Meeting-Zeitpunkt ist ungültig." }, { status: 400 });
+    patch.meeting_at = parsedMeetingAt.toISOString();
+  }
+
+  const { data: meeting, error } = await supabase
+    .from("meetings")
+    .update(patch)
+    .eq("id", id)
+    .select("id,sprint_id,title,meeting_at,status,agenda")
+    .single();
+
+  if (error || !meeting) return NextResponse.json({ error: error?.message || "Meeting konnte nicht aktualisiert werden." }, { status: 500 });
+
+  await supabase.from("audit_log").insert({
+    actor_profile_id: permission.profile.id,
+    action: "meeting.update",
+    entity_type: "meeting",
+    entity_id: String(id),
+    before_data: current,
+    after_data: patch,
+    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    user_agent: request.headers.get("user-agent"),
+  });
+
+  return NextResponse.json({ meeting: mapMeeting(meeting) });
 }

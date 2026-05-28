@@ -1222,8 +1222,10 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(route, /availability\.create/);
   assert.match(route, /availability\.delete/);
   assert.match(meetingRoute, /requireOperationalLead/);
+  assert.match(meetingRoute, /export async function PATCH/);
   assert.match(meetingRoute, /meeting_attendance/);
   assert.match(meetingRoute, /meeting\.create/);
+  assert.match(meetingRoute, /meeting\.update/);
   assert.match(meetingRoute, /meeting\.created/);
   assert.match(meetingRoute, /profileIds/);
   assert.match(calendarRoute, /requireOperationalLead/);
@@ -1245,6 +1247,9 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(ui, /Google-Termin öffnen/);
   assert.match(ui, /Meeting vormerken/);
   assert.match(ui, /Intern vormerken/);
+  assert.match(ui, /Vorgemerkte Meetings/);
+  assert.match(ui, /Meeting absagen/);
+  assert.match(ui, /attendanceForMeeting/);
   assert.match(ui, /meetingSlotIso/);
   assert.match(ui, /googleCalendarEmail/);
   assert.match(ui, /Kalenderwoche & Blocker/);
