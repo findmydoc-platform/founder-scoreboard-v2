@@ -24,6 +24,9 @@ export type Profile = {
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
+  googleCalendarEmail?: string;
+  googleCalendarSyncEnabled?: boolean;
+  googleCalendarLastSyncedAt?: string;
 };
 
 export type Project = {

@@ -45,6 +45,7 @@ async function count(table) {
 
 const schemaChecks = [
   { name: "profiles.google_chat", table: "profiles", select: "id,google_chat_user_id,google_chat_dm_space,notifications_enabled" },
+  { name: "profiles.google_calendar", table: "profiles", select: "id,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at" },
   { name: "notification_preferences", table: "notification_preferences", select: "id,profile_id,channel,event_type,enabled" },
   { name: "notification_deliveries.payload", table: "notification_deliveries", select: "id,target,payload" },
   { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },

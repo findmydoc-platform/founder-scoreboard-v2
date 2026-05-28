@@ -18,6 +18,9 @@ type DbProfile = {
   google_chat_user_id: string | null;
   google_chat_dm_space: string | null;
   notifications_enabled: boolean | null;
+  google_calendar_email: string | null;
+  google_calendar_sync_enabled: boolean | null;
+  google_calendar_last_synced_at: string | null;
 };
 
 type DbPackage = {
@@ -372,6 +375,9 @@ function mapProfile(row: DbProfile): Profile {
     googleChatUserId: row.google_chat_user_id || "",
     googleChatDmSpace: row.google_chat_dm_space || "",
     notificationsEnabled: row.notifications_enabled !== false,
+    googleCalendarEmail: row.google_calendar_email || "",
+    googleCalendarSyncEnabled: Boolean(row.google_calendar_sync_enabled),
+    googleCalendarLastSyncedAt: row.google_calendar_last_synced_at || "",
   };
 }
 
@@ -722,7 +728,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
 
   const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
-    supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
+    supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at").order("name"),
     supabase.from("packages").select("id,milestone_id,title,goal,priority,sort_order").order("sort_order"),
     supabase.from("milestones").select("id,title,description,target_date,status,sort_order").eq("project_id", "findmydoc-founder-execution").order("sort_order"),
     supabase

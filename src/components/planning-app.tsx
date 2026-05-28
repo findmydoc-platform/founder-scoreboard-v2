@@ -882,6 +882,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
+  const [calendarSyncMessage, setCalendarSyncMessage] = useState("");
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
@@ -1959,6 +1960,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             googleChatUserId: patch.googleChatUserId,
             googleChatDmSpace: patch.googleChatDmSpace,
             notificationsEnabled: patch.notificationsEnabled,
+            googleCalendarEmail: patch.googleCalendarEmail,
+            googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
           }),
         });
 
@@ -2152,6 +2155,58 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       } catch (error) {
         setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht gelöscht werden.");
+      }
+    });
+  };
+
+  const syncGoogleCalendar = () => {
+    setSaveError("");
+    setCalendarSyncMessage("Google Calendar Sync wird geprüft...");
+
+    if (source !== "supabase") {
+      setCalendarSyncMessage("Google Calendar Sync ist nur mit Supabase-Datenquelle aktiv.");
+      return;
+    }
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/calendar-sync", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+          ready?: boolean;
+          skipped?: boolean;
+          reason?: string;
+          imported?: number;
+          syncedAt?: string;
+          availability?: AvailabilityEntry[];
+          results?: Array<{ profileId: string; email: string; imported: number; error?: string }>;
+        } | null;
+
+        if (!response.ok) throw new Error(body?.error || "Google Calendar Sync konnte nicht ausgeführt werden.");
+
+        if (body?.availability) {
+          setData((current) => ({ ...current, availability: body.availability! }));
+        }
+
+        const failedProfiles = body?.results?.filter((result) => result.error).length || 0;
+        if (body?.skipped) {
+          setCalendarSyncMessage(body.reason || "Google Calendar Sync wurde übersprungen.");
+        } else {
+          setCalendarSyncMessage(`Google Calendar Sync abgeschlossen: ${body?.imported || 0} Kalenderblöcke importiert${failedProfiles ? `, ${failedProfiles} Profil(e) mit Fehler` : ""}.`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Google Calendar Sync konnte nicht ausgeführt werden.";
+        setCalendarSyncMessage(message);
+        setSaveError(message);
       }
     });
   };
@@ -3443,8 +3498,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               pending={isPending}
               currentProfile={currentProfile}
               canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
+              calendarSyncMessage={calendarSyncMessage}
               onCreateAvailability={createAvailability}
               onDeleteAvailability={deleteAvailability}
+              onSyncGoogleCalendar={syncGoogleCalendar}
             />
           )}
           {workspace === "settings" && (
@@ -4353,7 +4410,7 @@ function TeamOverview({
           <div>
             <h2 className="text-base font-semibold text-slate-950">Rollen & Vertretung</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              CEO verwaltet Rollen, GitHub-Zuordnung, Deputy-Zeiträume und Google-Chat-Ziele. Deputy bekommt operative Rechte, aber kein Decision-Log-Edit.
+              CEO verwaltet Rollen, GitHub-Zuordnung, Deputy-Zeiträume, Google-Chat-Ziele und Kalender-Sync. Deputy bekommt operative Rechte, aber kein Decision-Log-Edit.
             </p>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${canManageTeam ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
@@ -4506,6 +4563,35 @@ function TeamOverview({
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
                 />
               </label>
+              <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-blue-900">Google Calendar Sync</div>
+                    <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Aktiviert importiert Kalendertermine als schreibgeschützte Meeting-Finder-Blocker.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(profile.googleCalendarSyncEnabled)}
+                    disabled={pending || !canEditProfile || !profile.googleCalendarEmail}
+                    onChange={(event) => onUpdateProfile(profile, { googleCalendarSyncEnabled: event.target.checked })}
+                    className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600 disabled:opacity-60"
+                    aria-label="Google Calendar Sync aktivieren"
+                  />
+                </div>
+                <label className="mt-3 grid gap-1 text-xs font-semibold text-blue-900">
+                  Kalender-E-Mail
+                  <input
+                    value={profile.googleCalendarEmail || ""}
+                    disabled={pending || !canEditProfile}
+                    onChange={(event) => onUpdateProfile(profile, { googleCalendarEmail: event.target.value })}
+                    className="h-9 rounded-md border border-blue-100 bg-white px-2 text-sm font-normal text-slate-800 disabled:opacity-60"
+                    placeholder="name@findmydoc.eu"
+                  />
+                </label>
+                <p className="mt-2 text-[11px] leading-4 text-blue-700">
+                  Letzter Sync: {profile.googleCalendarLastSyncedAt ? formatDate(profile.googleCalendarLastSyncedAt) : "noch nicht synchronisiert"}
+                </p>
+              </div>
               <div className="rounded-md border border-slate-200 bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -6128,15 +6214,19 @@ function MeetingFinderOverview({
   pending,
   currentProfile,
   canManageAvailability,
+  calendarSyncMessage,
   onCreateAvailability,
   onDeleteAvailability,
+  onSyncGoogleCalendar,
 }: {
   data: PlanningData;
   pending: boolean;
   currentProfile: Profile | null;
   canManageAvailability: boolean;
+  calendarSyncMessage: string;
   onCreateAvailability: (entry: Omit<AvailabilityEntry, "id">) => void;
   onDeleteAvailability: (entry: AvailabilityEntry) => void;
+  onSyncGoogleCalendar: () => void;
 }) {
   const today = dateKey(new Date());
   const defaultEnd = addDaysKey(today, 14);
@@ -6162,6 +6252,12 @@ function MeetingFinderOverview({
   const workingHours = data.availability.filter((entry) => entry.type === "working_hours");
   const blockers = data.availability.filter((entry) => entry.type === "vacation" || entry.type === "sick" || entry.type === "busy");
   const googleCalendarBlocks = blockers.filter((entry) => entry.source === "google_calendar");
+  const googleCalendarProfiles = selectableProfiles.filter((profile) => profile.googleCalendarSyncEnabled && profile.googleCalendarEmail);
+  const lastGoogleSync = googleCalendarProfiles
+    .map((profile) => profile.googleCalendarLastSyncedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || "";
   const profileNameById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
   const selectedProfiles = selectableProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
   const slots = selectedProfileIds.length ? findMeetingSlots(data, selectedProfileIds, fromDate, toDate, Number(duration)) : [];
@@ -6231,15 +6327,30 @@ function MeetingFinderOverview({
     <div className="grid gap-4 xl:grid-cols-[430px_1fr]">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Meeting Finder</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus FindMyDoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit und sonstigen Blockern. Google Workspace wird als nächster Sync-Schritt vorbereitet.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus FindMyDoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Google-Workspace-Blockern.</p>
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Arbeitszeiten</div><div className="font-semibold">{workingHours.length}</div></div>
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{blockers.length}</div></div>
           <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
           <div className="rounded-md bg-blue-50 p-3"><div className="text-xs text-blue-700">Teilnehmer</div><div className="font-semibold text-blue-900">{selectedProfiles.length}</div></div>
         </div>
-        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800">
-          Google-Kalender ist vorbereitet: manuelle Einträge bleiben führend, importierte Kalenderblöcke werden später als schreibgeschützte Blocker mit Quellenmarkierung angezeigt.
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-3 text-sm leading-6 text-blue-800">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="font-semibold text-blue-950">Google Workspace Sync</div>
+              <div>{googleCalendarProfiles.length} Profil(e) sind für Kalenderimport vorbereitet. Importierte Termine erscheinen als Google-Blocker.</div>
+              {lastGoogleSync && <div className="mt-1 text-xs text-blue-700">Letzter Sync: {formatDate(lastGoogleSync)}</div>}
+              {calendarSyncMessage && <div className="mt-2 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-800">{calendarSyncMessage}</div>}
+            </div>
+            <button
+              type="button"
+              onClick={onSyncGoogleCalendar}
+              disabled={pending || !canManageAvailability}
+              className="h-9 rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Google-Kalender synchronisieren
+            </button>
+          </div>
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -6417,7 +6528,7 @@ function MeetingFinderOverview({
           )}
         </div>
         <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Kalenderstatus: {googleCalendarBlocks.length} importierte Google-Blöcke, manuelle Pflege aktiv. Der Live-Import wird freigeschaltet, sobald Google-Workspace-Credentials und Kalenderfreigaben vorliegen.
+          Kalenderstatus: {googleCalendarBlocks.length} importierte Google-Blöcke, {googleCalendarProfiles.length} Profil(e) für Sync aktiviert. Manuelle Arbeitszeiten bleiben führend; Google-Termine blockieren nur freie Slots.
         </div>
       </section>
     </div>

@@ -16,6 +16,8 @@ type UpdatePayload = {
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
+  googleCalendarEmail?: string;
+  googleCalendarSyncEnabled?: boolean;
 };
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
@@ -105,6 +107,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.notifications_enabled = Boolean(payload.notificationsEnabled);
   }
 
+  if (payload.googleCalendarEmail !== undefined) {
+    update.google_calendar_email = cleanText(payload.googleCalendarEmail, 240) || null;
+  }
+
+  if (payload.googleCalendarSyncEnabled !== undefined) {
+    update.google_calendar_sync_enabled = Boolean(payload.googleCalendarSyncEnabled);
+  }
+
   if (update.platform_role && update.platform_role !== "deputy") {
     update.deputy_for = null;
     update.deputy_active_from = null;
@@ -142,7 +152,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .from("profiles")
     .update(update)
     .eq("id", id)
-    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled")
+    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at")
     .single();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -174,6 +184,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       googleChatUserId: updated.google_chat_user_id || "",
       googleChatDmSpace: updated.google_chat_dm_space || "",
       notificationsEnabled: updated.notifications_enabled !== false,
+      googleCalendarEmail: updated.google_calendar_email || "",
+      googleCalendarSyncEnabled: Boolean(updated.google_calendar_sync_enabled),
+      googleCalendarLastSyncedAt: updated.google_calendar_last_synced_at || "",
     },
   });
 }
