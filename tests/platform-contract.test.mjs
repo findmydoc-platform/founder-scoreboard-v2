@@ -636,8 +636,13 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /Große Ansicht/);
   assert.match(ui, /view=full/);
   const taskDetailPanel = ui.slice(ui.indexOf("function TaskDetailPanel"));
-  assert.ok(taskDetailPanel.indexOf("Acceptance Criteria") < taskDetailPanel.indexOf("Definition of Done"));
-  assert.ok(taskDetailPanel.indexOf("Definition of Done") < taskDetailPanel.indexOf("Abhängigkeiten & Evidence"));
+  assert.match(taskDetailPanel, /Aufgabenbrief/);
+  assert.ok(taskDetailPanel.indexOf("Problem Statement") < taskDetailPanel.indexOf("Intended Outcome"));
+  assert.ok(taskDetailPanel.indexOf("Intended Outcome") < taskDetailPanel.indexOf("Scope & Constraints"));
+  assert.ok(taskDetailPanel.indexOf("Scope & Constraints") < taskDetailPanel.indexOf("Acceptance Criteria"));
+  assert.ok(taskDetailPanel.indexOf("Acceptance Criteria") < taskDetailPanel.indexOf("Evidence Required"));
+  assert.ok(taskDetailPanel.indexOf("Evidence Required") < taskDetailPanel.indexOf("Definition of Done"));
+  assert.ok(taskDetailPanel.indexOf("Definition of Done") < taskDetailPanel.indexOf("Fokus-Kontext"));
   assert.ok(taskDetailPanel.indexOf("Blocker früh melden") < taskDetailPanel.indexOf("TaskCommentThread"));
   assert.ok(taskDetailPanel.indexOf("TaskCommentThread") < taskDetailPanel.indexOf("Notizen"));
   assert.match(page, /title="Kommentare"/);
