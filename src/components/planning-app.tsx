@@ -6349,6 +6349,12 @@ function availabilityReason(entry: AvailabilityEntry) {
   return entry.note ? `${base}: ${entry.note}` : base;
 }
 
+function availabilityCalendarLabel(entry: AvailabilityEntry) {
+  if (entry.source === "google_calendar") return "Google Kalender";
+  if (entry.type === "busy" && entry.note?.trim()) return entry.note.trim();
+  return availabilityTypeLabel(entry.type);
+}
+
 function overlapsSlot(entry: AvailabilityEntry, date: string, start: number, end: number) {
   if (entry.type === "working_hours") return false;
   if (entry.startDate && entry.startDate > date) return false;
@@ -6452,6 +6458,10 @@ function MeetingFinderOverview({
     () => canManageAvailability ? selectableProfiles : selectableProfiles.filter((profile) => profile.id === currentProfile?.id),
     [canManageAvailability, currentProfile?.id, selectableProfiles],
   );
+  const defaultEditableProfileId = useMemo(() => {
+    if (currentProfile?.id && editableProfiles.some((profile) => profile.id === currentProfile.id)) return currentProfile.id;
+    return editableProfiles[0]?.id || "";
+  }, [currentProfile?.id, editableProfiles]);
   const defaultSelectedProfileIds = useMemo(() => currentProfile?.id && selectableProfiles.some((profile) => profile.id === currentProfile.id)
     ? [currentProfile.id]
     : selectableProfiles.slice(0, 1).map((profile) => profile.id), [currentProfile, selectableProfiles]);
@@ -6462,11 +6472,11 @@ function MeetingFinderOverview({
   const [calendarWeekStart, setCalendarWeekStart] = useState(() => startOfWeekKey(today));
   const [calendarView, setCalendarView] = useState<"week" | "month">("week");
   const [duration, setDuration] = useState("60");
-  const [workProfileId, setWorkProfileId] = useState(editableProfiles[0]?.id || "");
+  const [workProfileId, setWorkProfileId] = useState(defaultEditableProfileId);
   const [workWeekdays, setWorkWeekdays] = useState<string[]>(["1", "2", "3", "4", "5"]);
   const [workStart, setWorkStart] = useState("09:00");
   const [workEnd, setWorkEnd] = useState("18:00");
-  const [blockerProfileId, setBlockerProfileId] = useState(editableProfiles[0]?.id || "");
+  const [blockerProfileId, setBlockerProfileId] = useState(defaultEditableProfileId);
   const [blockerType, setBlockerType] = useState<AvailabilityEntry["type"]>("busy");
   const [blockerStartDate, setBlockerStartDate] = useState(today);
   const [blockerEndDate, setBlockerEndDate] = useState(today);
@@ -6527,11 +6537,14 @@ function MeetingFinderOverview({
     );
   };
 
+  const normalizedWorkProfileId = editableProfiles.some((profile) => profile.id === workProfileId) ? workProfileId : defaultEditableProfileId;
+  const normalizedBlockerProfileId = editableProfiles.some((profile) => profile.id === blockerProfileId) ? blockerProfileId : defaultEditableProfileId;
+
   const addWorkingHours = () => {
-    if (!workProfileId || !workWeekdays.length) return;
+    if (!normalizedWorkProfileId || !workWeekdays.length) return;
     for (const weekday of workWeekdays) {
       onCreateAvailability({
-        profileId: workProfileId,
+        profileId: normalizedWorkProfileId,
         type: "working_hours",
         weekday: Number(weekday),
         startDate: "",
@@ -6550,9 +6563,9 @@ function MeetingFinderOverview({
   };
 
   const addBlocker = () => {
-    if (!blockerProfileId) return;
+    if (!normalizedBlockerProfileId) return;
     onCreateAvailability({
-      profileId: blockerProfileId,
+      profileId: normalizedBlockerProfileId,
       type: blockerType,
       weekday: null,
       startDate: blockerStartDate,
@@ -6625,6 +6638,66 @@ function MeetingFinderOverview({
       };
     }
     return { kind: "open" as const, label: "Arbeitszeit frei", detail: "", availableCount: workingCount };
+  };
+
+  type CalendarBlock = {
+    id: string;
+    kind: "blocked" | "meeting";
+    label: string;
+    detail: string;
+    start: number;
+    end: number;
+    tone: string;
+  };
+
+  const calendarBlocksForDate = (date: string): CalendarBlock[] => {
+    const firstVisibleMinute = calendarHours[0] || 8 * 60;
+    const lastVisibleMinute = (calendarHours.at(-1) || 21 * 60) + 60;
+    const blocks: CalendarBlock[] = [];
+
+    for (const meeting of data.meetings) {
+      if (!meetingOverlapsSlot(meeting, date, firstVisibleMinute, lastVisibleMinute)) continue;
+      const meetingDate = new Date(meeting.meetingAt);
+      const meetingStart = meetingDate.getHours() * 60 + meetingDate.getMinutes();
+      const meetingEnd = meetingStart + 60;
+      blocks.push({
+        id: `meeting-${meeting.id}-${date}`,
+        kind: "meeting",
+        label: "Meeting",
+        detail: meeting.title,
+        start: Math.max(firstVisibleMinute, meetingStart),
+        end: Math.min(lastVisibleMinute, meetingEnd),
+        tone: availabilitySummaryTone("meeting"),
+      });
+    }
+
+    for (const profileId of selectedProfileIds) {
+      const window = workingWindowFor(profileId, date, data.availability);
+      if (!window) continue;
+      const name = profileNameById.get(profileId) || profileId;
+      for (const entry of data.availability) {
+        if (entry.profileId !== profileId || entry.type === "working_hours") continue;
+        if (!overlapsSlot(entry, date, firstVisibleMinute, lastVisibleMinute)) continue;
+
+        const entryStart = entry.startTime ? timeToMinutes(entry.startTime) : 0;
+        const entryEnd = entry.endTime ? timeToMinutes(entry.endTime) : 24 * 60;
+        const start = Math.max(firstVisibleMinute, window.start, entryStart);
+        const end = Math.min(lastVisibleMinute, window.end, entryEnd);
+        if (start >= end) continue;
+
+        blocks.push({
+          id: `blocker-${entry.id}-${profileId}-${date}`,
+          kind: "blocked",
+          label: availabilityCalendarLabel(entry),
+          detail: `${name}${entry.note?.trim() && entry.type !== "busy" ? `: ${entry.note.trim()}` : ""}`,
+          start,
+          end,
+          tone: availabilityTone(entry.type, entry.source),
+        });
+      }
+    }
+
+    return blocks.sort((a, b) => a.start - b.start || b.end - a.end || a.id.localeCompare(b.id));
   };
 
   const calendarDaySummary = (date: string) => {
@@ -6890,9 +6963,28 @@ function MeetingFinderOverview({
                   <div className="bg-white px-3 py-2 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
                   {calendarDates.map((date) => {
                     const cell = calendarCellFor(date, hour);
+                    const dateBlocks = calendarBlocksForDate(date);
+                    const activeBlock = dateBlocks.find((block) => block.start < hour + 60 && block.end > hour);
+                    const startsHere = activeBlock ? activeBlock.start >= hour && activeBlock.start < hour + 60 : false;
+                    const blockTop = activeBlock ? Math.max(4, ((activeBlock.start - hour) / 60) * 64 + 4) : 0;
+                    const blockHeight = activeBlock ? Math.max(34, ((activeBlock.end - activeBlock.start) / 60) * 64 - 8) : 0;
                     return (
-                      <div key={`${date}-${hour}`} className="min-h-16 border-l border-slate-100 bg-white px-1 py-1">
-                        {cell.kind === "closed" ? (
+                      <div key={`${date}-${hour}`} className="relative h-16 overflow-visible border-l border-slate-100 bg-white px-1 py-1">
+                        {startsHere && activeBlock ? (
+                          <div
+                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${activeBlock.kind === "meeting" ? availabilitySummaryTone("meeting") : activeBlock.tone}`}
+                            style={{ top: `${blockTop}px`, height: `${blockHeight}px` }}
+                            title={`${activeBlock.label}${activeBlock.detail ? ` · ${activeBlock.detail}` : ""}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate font-semibold">{activeBlock.label}</span>
+                              <span className="shrink-0 text-[11px] opacity-75">{minutesToTime(activeBlock.start)}</span>
+                            </div>
+                            {activeBlock.detail && <div className="mt-0.5 line-clamp-3 opacity-80">{activeBlock.detail}</div>}
+                          </div>
+                        ) : activeBlock ? (
+                          <div className="h-full rounded-md border border-transparent bg-white" title={`${activeBlock.label} läuft weiter`} />
+                        ) : cell.kind === "closed" ? (
                           <div
                             className="h-full min-h-12 rounded-md border border-transparent opacity-70"
                             title={cell.label}
@@ -6967,7 +7059,7 @@ function MeetingFinderOverview({
         <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
         <p className="mt-1 text-sm text-slate-500">Regelmäßige FindMyDoc-Zeit pro Person und mehrere Wochentage in einem Schritt.</p>
         <div className="mt-4 grid gap-3">
-          <CustomSelect value={workProfileId} onChange={setWorkProfileId} disabled={!profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
+          <CustomSelect value={normalizedWorkProfileId} onChange={setWorkProfileId} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setWorkWeekdays(["1", "2", "3", "4", "5"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -7004,7 +7096,7 @@ function MeetingFinderOverview({
             <CustomSelect value={workStart} onChange={setWorkStart} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Start" />
             <CustomSelect value={workEnd} onChange={setWorkEnd} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Ende" />
           </div>
-          <button type="button" onClick={addWorkingHours} disabled={pending || !workProfileId || !workWeekdays.length || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={addWorkingHours} disabled={pending || !normalizedWorkProfileId || !workWeekdays.length || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             Arbeitszeiten für {workWeekdays.length || 0} Tag{workWeekdays.length === 1 ? "" : "e"} speichern
           </button>
         </div>
@@ -7013,7 +7105,7 @@ function MeetingFinderOverview({
         <h2 className="text-base font-semibold text-slate-950">Blocker eintragen</h2>
         <p className="mt-1 text-sm text-slate-500">Arbeit, Urlaub, Krankheit oder sonstige Nicht-Verfügbarkeit.</p>
         <div className="mt-4 grid gap-3">
-          <CustomSelect value={blockerProfileId} onChange={setBlockerProfileId} disabled={!profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
+          <CustomSelect value={normalizedBlockerProfileId} onChange={setBlockerProfileId} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
           <CustomSelect value={blockerType} onChange={(value) => setBlockerType(value as AvailabilityEntry["type"])} disabled={pending} className="h-9 text-sm" options={blockerTypeOptions} />
           <div className="grid grid-cols-2 gap-2">
             <CustomDatePicker value={blockerStartDate} onChange={setBlockerStartDate} disabled={pending} className="h-9 text-sm" aria-label="Blocker Startdatum" />
@@ -7028,7 +7120,7 @@ function MeetingFinderOverview({
             <CustomSelect value={blockerEndTime} onChange={setBlockerEndTime} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
           </div>
           <textarea value={blockerNote} onChange={(event) => setBlockerNote(event.target.value)} placeholder="Grund oder Kontext" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          <button type="button" onClick={addBlocker} disabled={pending || !blockerProfileId || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={addBlocker} disabled={pending || !normalizedBlockerProfileId || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
             Blocker speichern
           </button>
         </div>
