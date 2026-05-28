@@ -41,6 +41,10 @@ function mapAvailability(row: {
   start_time: string | null;
   end_time: string | null;
   note: string | null;
+  source?: AvailabilityEntry["source"] | null;
+  external_id?: string | null;
+  external_calendar_id?: string | null;
+  synced_at?: string | null;
 }): AvailabilityEntry {
   return {
     id: row.id,
@@ -52,6 +56,10 @@ function mapAvailability(row: {
     startTime: row.start_time?.slice(0, 5) || "",
     endTime: row.end_time?.slice(0, 5) || "",
     note: row.note || "",
+    source: row.source || "manual",
+    externalId: row.external_id || "",
+    externalCalendarId: row.external_calendar_id || "",
+    syncedAt: row.synced_at || "",
   };
 }
 
@@ -86,6 +94,7 @@ export async function POST(request: NextRequest) {
     end_time: endTime,
     note: typeof payload.note === "string" ? payload.note.trim().slice(0, 1000) : null,
     created_by: permission.profile.id,
+    source: "manual",
   };
 
   if (type === "working_hours") {
@@ -106,7 +115,7 @@ export async function POST(request: NextRequest) {
   const { data: availability, error } = await supabase
     .from("availability")
     .insert(row)
-    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note")
+    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -138,7 +147,7 @@ export async function DELETE(request: NextRequest) {
 
   const { data: current, error: readError } = await supabase
     .from("availability")
-    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note")
+    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .eq("id", id)
     .single();
 

@@ -6012,11 +6012,39 @@ function formatLongDateLabel(value: string) {
   return new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${value}T00:00:00`));
 }
 
+function googleCalendarDate(date: string, time: string) {
+  return `${date.replaceAll("-", "")}T${time.replace(":", "")}00`;
+}
+
+function googleCalendarUrl(slot: MeetingSlot, profiles: Profile[]) {
+  const title = encodeURIComponent("FindMyDoc Teammeeting");
+  const details = encodeURIComponent(`Teilnehmer: ${profiles.map((profile) => profile.name).join(", ")}`);
+  const dates = `${googleCalendarDate(slot.date, slot.startTime)}/${googleCalendarDate(slot.date, slot.endTime)}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&ctz=Europe/Berlin&details=${details}`;
+}
+
+function meetingOverlapsSlot(meeting: Meeting, date: string, start: number, end: number) {
+  if (meeting.status === "cancelled") return false;
+  const meetingDate = new Date(meeting.meetingAt);
+  if (dateKey(meetingDate) !== date) return false;
+  const meetingStart = meetingDate.getHours() * 60 + meetingDate.getMinutes();
+  const meetingEnd = meetingStart + 60;
+  return start < meetingEnd && end > meetingStart;
+}
+
 function availabilityTypeLabel(type: AvailabilityEntry["type"]) {
   if (type === "working_hours") return "Arbeitszeit";
   if (type === "vacation") return "Urlaub";
   if (type === "sick") return "Krank";
   return "Blockiert";
+}
+
+function availabilityTone(type: AvailabilityEntry["type"], source?: AvailabilityEntry["source"]) {
+  if (source === "google_calendar") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (type === "working_hours") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (type === "vacation") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (type === "sick") return "border-red-200 bg-red-50 text-red-800";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 function availabilityReason(entry: AvailabilityEntry) {
@@ -6065,6 +6093,11 @@ function findMeetingSlots(data: PlanningData, profileIds: string[], from: string
         const blocker = data.availability.find((entry) => entry.profileId === profileId && overlapsSlot(entry, current, start, end));
         if (blocker) {
           unavailable.push({ profileId, reason: availabilityReason(blocker) });
+          continue;
+        }
+        const meetingConflict = data.meetings.find((meeting) => meetingOverlapsSlot(meeting, current, start, end));
+        if (meetingConflict) {
+          unavailable.push({ profileId, reason: `Schon belegt: ${meetingConflict.title}` });
           continue;
         }
         availableProfileIds.push(profileId);
@@ -6123,15 +6156,19 @@ function MeetingFinderOverview({
   const [blockerEndDate, setBlockerEndDate] = useState(today);
   const [blockerStartTime, setBlockerStartTime] = useState("09:00");
   const [blockerEndTime, setBlockerEndTime] = useState("18:00");
+  const [blockerAllDay, setBlockerAllDay] = useState(false);
   const [blockerNote, setBlockerNote] = useState("");
 
   const workingHours = data.availability.filter((entry) => entry.type === "working_hours");
   const blockers = data.availability.filter((entry) => entry.type === "vacation" || entry.type === "sick" || entry.type === "busy");
+  const googleCalendarBlocks = blockers.filter((entry) => entry.source === "google_calendar");
   const profileNameById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
   const selectedProfiles = selectableProfiles.filter((profile) => selectedProfileIds.includes(profile.id));
   const slots = selectedProfileIds.length ? findMeetingSlots(data, selectedProfileIds, fromDate, toDate, Number(duration)) : [];
   const fullSlots = slots.filter((slot) => slot.matchType === "full");
   const visibleSlots = slots.slice(0, 12);
+  const calendarDates = Array.from({ length: Math.min(7, Math.max(1, Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000) + 1)) }, (_, index) => addDaysKey(fromDate, index));
+  const nextRecommendedSlot = slots[0];
 
   const profileOptions = editableProfiles.map((profile) => ({ value: profile.id, label: profile.name }));
   const participantOptions = selectableProfiles.map((profile) => ({
@@ -6159,6 +6196,22 @@ function MeetingFinderOverview({
     });
   };
 
+  const addWeekdayWorkingHours = () => {
+    if (!workProfileId) return;
+    for (const weekday of [1, 2, 3, 4, 5]) {
+      onCreateAvailability({
+        profileId: workProfileId,
+        type: "working_hours",
+        weekday,
+        startDate: "",
+        endDate: "",
+        startTime: workStart,
+        endTime: workEnd,
+        note: "Reguläre FindMyDoc-Arbeitszeit",
+      });
+    }
+  };
+
   const addBlocker = () => {
     if (!blockerProfileId) return;
     onCreateAvailability({
@@ -6167,8 +6220,8 @@ function MeetingFinderOverview({
       weekday: null,
       startDate: blockerStartDate,
       endDate: blockerEndDate || blockerStartDate,
-      startTime: blockerStartTime,
-      endTime: blockerEndTime,
+      startTime: blockerAllDay ? "00:00" : blockerStartTime,
+      endTime: blockerAllDay ? "23:59" : blockerEndTime,
       note: blockerNote.trim(),
     });
     setBlockerNote("");
@@ -6185,6 +6238,9 @@ function MeetingFinderOverview({
           <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
           <div className="rounded-md bg-blue-50 p-3"><div className="text-xs text-blue-700">Teilnehmer</div><div className="font-semibold text-blue-900">{selectedProfiles.length}</div></div>
         </div>
+        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800">
+          Google-Kalender ist vorbereitet: manuelle Einträge bleiben führend, importierte Kalenderblöcke werden später als schreibgeschützte Blocker mit Quellenmarkierung angezeigt.
+        </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -6199,6 +6255,24 @@ function MeetingFinderOverview({
           <CustomDatePicker value={toDate} onChange={setToDate} className="h-9 text-sm" aria-label="Enddatum wählen" />
           <CustomSelect value={duration} onChange={setDuration} className="h-9 text-sm" options={durationOptions} aria-label="Meetingdauer wählen" />
         </div>
+        {nextRecommendedSlot && (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Empfohlener Slot</div>
+                <div className="mt-1 font-semibold text-emerald-950">{formatLongDateLabel(nextRecommendedSlot.date)} · {nextRecommendedSlot.startTime}-{nextRecommendedSlot.endTime}</div>
+              </div>
+              <a
+                href={googleCalendarUrl(nextRecommendedSlot, selectedProfiles)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Google-Termin öffnen
+              </a>
+            </div>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
@@ -6223,9 +6297,14 @@ function MeetingFinderOverview({
             <div key={`${slot.date}-${slot.startTime}-${slot.endTime}`} className={`rounded-lg border px-3 py-2 text-sm ${slot.matchType === "full" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="font-semibold text-slate-950">{formatLongDateLabel(slot.date)} · {slot.startTime}-{slot.endTime}</div>
-                <span className={`rounded-full border bg-white px-2 py-0.5 text-xs font-semibold ${slot.matchType === "full" ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
-                  {slot.availableProfileIds.length}/{selectedProfileIds.length} verfügbar
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full border bg-white px-2 py-0.5 text-xs font-semibold ${slot.matchType === "full" ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
+                    {slot.availableProfileIds.length}/{selectedProfileIds.length} verfügbar
+                  </span>
+                  <a href={googleCalendarUrl(slot, selectedProfiles)} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                    Kalender
+                  </a>
+                </div>
               </div>
               <div className="mt-1 text-xs leading-5 text-slate-600">Verfügbar: {slot.availableProfileIds.map((id) => profileNameById.get(id) || id).join(", ") || "niemand"}</div>
               {slot.unavailable.length > 0 && (
@@ -6255,6 +6334,9 @@ function MeetingFinderOverview({
           <button type="button" onClick={addWorkingHours} disabled={pending || !workProfileId || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             Arbeitszeit speichern
           </button>
+          <button type="button" onClick={addWeekdayWorkingHours} disabled={pending || !workProfileId || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">
+            Mo-Fr übernehmen
+          </button>
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -6267,24 +6349,53 @@ function MeetingFinderOverview({
             <CustomDatePicker value={blockerStartDate} onChange={setBlockerStartDate} disabled={pending} className="h-9 text-sm" aria-label="Blocker Startdatum" />
             <CustomDatePicker value={blockerEndDate} onChange={setBlockerEndDate} disabled={pending} className="h-9 text-sm" aria-label="Blocker Enddatum" />
           </div>
+          <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+            <input type="checkbox" checked={blockerAllDay} onChange={(event) => setBlockerAllDay(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+            Ganztägig blockieren
+          </label>
           <div className="grid grid-cols-2 gap-2">
-            <CustomSelect value={blockerStartTime} onChange={setBlockerStartTime} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Startzeit" />
-            <CustomSelect value={blockerEndTime} onChange={setBlockerEndTime} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
+            <CustomSelect value={blockerStartTime} onChange={setBlockerStartTime} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Startzeit" />
+            <CustomSelect value={blockerEndTime} onChange={setBlockerEndTime} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
           </div>
           <textarea value={blockerNote} onChange={(event) => setBlockerNote(event.target.value)} placeholder="Grund oder Kontext" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          <button type="button" onClick={addBlocker} disabled={pending || !blockerProfileId || timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime)} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={addBlocker} disabled={pending || !blockerProfileId || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
             Blocker speichern
           </button>
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-        <h2 className="text-base font-semibold text-slate-950">Kalender & Blocker</h2>
-        <p className="mt-1 text-sm text-slate-500">Google Workspace Sync kommt über einen separaten Connector. Bis dahin sind manuelle Einträge die führende Quelle.</p>
+        <h2 className="text-base font-semibold text-slate-950">Kalenderwoche & Blocker</h2>
+        <p className="mt-1 text-sm text-slate-500">Die nächsten Tage zeigen Arbeitszeiten, Abwesenheiten und später importierte Google-Kalenderblöcke zusammen.</p>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+          {calendarDates.map((date) => {
+            const dayEntries = data.availability.filter((entry) => {
+              if (entry.type === "working_hours") return entry.weekday === weekdayForDate(date);
+              return (!entry.startDate || entry.startDate <= date) && (!entry.endDate || entry.endDate >= date);
+            });
+            return (
+              <div key={date} className="min-h-36 rounded-lg border border-slate-100 bg-slate-50 p-2">
+                <div className="text-xs font-semibold text-slate-700">{formatDateLabel(date)}</div>
+                <div className="mt-2 grid gap-1">
+                  {dayEntries.slice(0, 6).map((entry) => (
+                    <div key={`${date}-${entry.id}`} className={`rounded-md border px-2 py-1 text-[11px] leading-4 ${availabilityTone(entry.type, entry.source)}`}>
+                      <div className="font-semibold">{profileNameById.get(entry.profileId) || entry.profileId}</div>
+                      <div>{availabilityTypeLabel(entry.type)} · {entry.startTime}-{entry.endTime}</div>
+                    </div>
+                  ))}
+                  {!dayEntries.length && <div className="rounded-md border border-dashed border-slate-200 bg-white px-2 py-3 text-center text-xs text-slate-400">Keine Einträge</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
         <div className="mt-4 grid gap-2 lg:grid-cols-2">
           {[...workingHours, ...blockers].slice(0, 16).map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
               <div className="min-w-0">
-                <div className="font-semibold text-slate-900">{profileNameById.get(entry.profileId) || entry.profileId} · {availabilityTypeLabel(entry.type)}</div>
+                <div className="font-semibold text-slate-900">
+                  {profileNameById.get(entry.profileId) || entry.profileId} · {availabilityTypeLabel(entry.type)}
+                  {entry.source === "google_calendar" ? " · Google Kalender" : ""}
+                </div>
                 <div className="mt-0.5 truncate text-xs text-slate-500">
                   {entry.type === "working_hours"
                     ? `${weekdayOptions.find((item) => item.value === String(entry.weekday))?.label || "Wochentag"} · ${entry.startTime}-${entry.endTime}`
@@ -6304,6 +6415,9 @@ function MeetingFinderOverview({
               Noch keine Arbeitszeiten oder Blocker hinterlegt.
             </div>
           )}
+        </div>
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Kalenderstatus: {googleCalendarBlocks.length} importierte Google-Blöcke, manuelle Pflege aktiv. Der Live-Import wird freigeschaltet, sobald Google-Workspace-Credentials und Kalenderfreigaben vorliegen.
         </div>
       </section>
     </div>

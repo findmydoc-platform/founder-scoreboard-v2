@@ -134,6 +134,10 @@ type DbAvailability = {
   start_time: string | null;
   end_time: string | null;
   note: string | null;
+  source: AvailabilityEntry["source"] | null;
+  external_id: string | null;
+  external_calendar_id: string | null;
+  synced_at: string | null;
 };
 
 type DbAuditEntry = {
@@ -502,6 +506,10 @@ function mapAvailability(row: DbAvailability): AvailabilityEntry {
     startTime: row.start_time || "",
     endTime: row.end_time || "",
     note: row.note || "",
+    source: row.source || "manual",
+    externalId: row.external_id || "",
+    externalCalendarId: row.external_calendar_id || "",
+    syncedAt: row.synced_at || "",
   };
 }
 
@@ -741,7 +749,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
     supabase.from("meetings").select("id,sprint_id,title,meeting_at,status,agenda").order("meeting_at", { ascending: false }).limit(100),
     supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at").order("updated_at", { ascending: false }).limit(300),
     supabase.from("audit_log").select("id,entity_type,entity_id,action,actor_profile_id,created_at,before_data,after_data").eq("entity_type", "decision").order("created_at", { ascending: false }).limit(100),
-    supabase.from("availability").select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note").order("start_date"),
+    supabase.from("availability").select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at").order("start_date"),
   ]);
 
   if (projectResult.error || profileResult.error || packageResult.error || taskResult.error) {

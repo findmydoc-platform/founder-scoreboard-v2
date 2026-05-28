@@ -319,6 +319,10 @@ export type AvailabilityEntry = {
   startTime: string;
   endTime: string;
   note: string;
+  source?: "manual" | "google_calendar";
+  externalId?: string;
+  externalCalendarId?: string;
+  syncedAt?: string;
 };
 
 export type PlanningData = {

@@ -61,6 +61,7 @@ const schemaChecks = [
   { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
   { name: "task_focus_items", table: "task_focus_items", select: "id,profile_id,task_id,focus_date,position,next_step,status" },
   { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
+  { name: "availability.calendar_sync", table: "availability", select: "id,source,external_id,external_calendar_id,synced_at" },
 ];
 
 async function checkSchema(check) {
