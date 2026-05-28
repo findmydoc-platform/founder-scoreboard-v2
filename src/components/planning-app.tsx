@@ -851,6 +851,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const protectedDataUserIdRef = useRef("");
   const workspaceRestoredRef = useRef(false);
   const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
+  const optimisticAvailabilityIdRef = useRef(-1);
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
   const initialClientData = useMemo(() => {
     return authRequired && source === "supabase" && protectedPlanningDataCache ? protectedPlanningDataCache : safeInitialData;
@@ -2218,7 +2219,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const createAvailability = (entry: Omit<AvailabilityEntry, "id">) => {
     setSaveError("");
 
-    const localEntry: AvailabilityEntry = { ...entry, id: Date.now() };
+    const localEntry: AvailabilityEntry = { ...entry, id: optimisticAvailabilityIdRef.current };
+    optimisticAvailabilityIdRef.current -= 1;
     const previousData = data;
     setData((current) => ({
       ...current,
@@ -6430,7 +6432,7 @@ function MeetingFinderOverview({
   const [calendarWeekStart, setCalendarWeekStart] = useState(() => startOfWeekKey(today));
   const [duration, setDuration] = useState("60");
   const [workProfileId, setWorkProfileId] = useState(editableProfiles[0]?.id || "");
-  const [workWeekday, setWorkWeekday] = useState("1");
+  const [workWeekdays, setWorkWeekdays] = useState<string[]>(["1", "2", "3", "4", "5"]);
   const [workStart, setWorkStart] = useState("09:00");
   const [workEnd, setWorkEnd] = useState("18:00");
   const [blockerProfileId, setBlockerProfileId] = useState(editableProfiles[0]?.id || "");
@@ -6489,26 +6491,12 @@ function MeetingFinderOverview({
   };
 
   const addWorkingHours = () => {
-    if (!workProfileId) return;
-    onCreateAvailability({
-      profileId: workProfileId,
-      type: "working_hours",
-      weekday: Number(workWeekday),
-      startDate: "",
-      endDate: "",
-      startTime: workStart,
-      endTime: workEnd,
-      note: "Reguläre FindMyDoc-Arbeitszeit",
-    });
-  };
-
-  const addWeekdayWorkingHours = () => {
-    if (!workProfileId) return;
-    for (const weekday of [1, 2, 3, 4, 5]) {
+    if (!workProfileId || !workWeekdays.length) return;
+    for (const weekday of workWeekdays) {
       onCreateAvailability({
         profileId: workProfileId,
         type: "working_hours",
-        weekday,
+        weekday: Number(weekday),
         startDate: "",
         endDate: "",
         startTime: workStart,
@@ -6516,6 +6504,12 @@ function MeetingFinderOverview({
         note: "Reguläre FindMyDoc-Arbeitszeit",
       });
     }
+  };
+
+  const toggleWorkWeekday = (weekday: string) => {
+    setWorkWeekdays((current) =>
+      current.includes(weekday) ? current.filter((item) => item !== weekday) : [...current, weekday].sort(),
+    );
   };
 
   const addBlocker = () => {
@@ -6885,19 +6879,47 @@ function MeetingFinderOverview({
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
-        <p className="mt-1 text-sm text-slate-500">Regelmäßige FindMyDoc-Zeit pro Person und Wochentag.</p>
+        <p className="mt-1 text-sm text-slate-500">Regelmäßige FindMyDoc-Zeit pro Person und mehrere Wochentage in einem Schritt.</p>
         <div className="mt-4 grid gap-3">
           <CustomSelect value={workProfileId} onChange={setWorkProfileId} disabled={!profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} />
-          <CustomSelect value={workWeekday} onChange={setWorkWeekday} disabled={pending} className="h-9 text-sm" options={weekdayOptions} />
+          <div className="grid gap-2">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setWorkWeekdays(["1", "2", "3", "4", "5"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Mo-Fr auswählen
+              </button>
+              <button type="button" onClick={() => setWorkWeekdays(["6", "0"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Wochenende
+              </button>
+              <button type="button" onClick={() => setWorkWeekdays(["0"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Nur Sonntag
+              </button>
+              <button type="button" onClick={() => setWorkWeekdays(weekdayOptions.map((item) => item.value))} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Alle Tage
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {weekdayOptions.map((option) => (
+                <button
+                  key={`work-weekday-${option.value}`}
+                  type="button"
+                  onClick={() => toggleWorkWeekday(option.value)}
+                  className={`h-9 rounded-md border px-3 text-left text-xs font-semibold ${
+                    workWeekdays.includes(option.value)
+                      ? "border-blue-300 bg-blue-50 text-blue-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <CustomSelect value={workStart} onChange={setWorkStart} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Start" />
             <CustomSelect value={workEnd} onChange={setWorkEnd} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Ende" />
           </div>
-          <button type="button" onClick={addWorkingHours} disabled={pending || !workProfileId || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-            Arbeitszeit speichern
-          </button>
-          <button type="button" onClick={addWeekdayWorkingHours} disabled={pending || !workProfileId || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">
-            Mo-Fr übernehmen
+          <button type="button" onClick={addWorkingHours} disabled={pending || !workProfileId || !workWeekdays.length || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            Arbeitszeiten für {workWeekdays.length || 0} Tag{workWeekdays.length === 1 ? "" : "e"} speichern
           </button>
         </div>
       </section>
@@ -6993,8 +7015,8 @@ function MeetingFinderOverview({
               <div key={date} className="min-h-36 rounded-lg border border-slate-100 bg-slate-50 p-2">
                 <div className="text-xs font-semibold text-slate-700">{formatDateLabel(date)}</div>
                 <div className="mt-2 grid gap-1">
-                  {dayEntries.slice(0, 6).map((entry) => (
-                    <div key={`${date}-${entry.id}`} className={`rounded-md border px-2 py-1 text-[11px] leading-4 ${availabilityTone(entry.type, entry.source)}`}>
+                  {dayEntries.slice(0, 6).map((entry, index) => (
+                    <div key={`${date}-${entry.id}-${entry.profileId}-${entry.weekday ?? entry.startDate}-${index}`} className={`rounded-md border px-2 py-1 text-[11px] leading-4 ${availabilityTone(entry.type, entry.source)}`}>
                       <div className="font-semibold">{profileNameById.get(entry.profileId) || entry.profileId}</div>
                       <div>{availabilityTypeLabel(entry.type)} · {entry.startTime}-{entry.endTime}</div>
                     </div>
@@ -7006,8 +7028,8 @@ function MeetingFinderOverview({
           })}
         </div>
         <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          {[...workingHours, ...blockers].slice(0, 16).map((entry) => (
-            <div key={entry.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
+          {[...workingHours, ...blockers].slice(0, 16).map((entry, index) => (
+            <div key={`${entry.id}-${entry.profileId}-${entry.type}-${entry.weekday ?? entry.startDate}-${entry.startTime}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
               <div className="min-w-0">
                 <div className="font-semibold text-slate-900">
                   {profileNameById.get(entry.profileId) || entry.profileId} · {availabilityTypeLabel(entry.type)}

@@ -1239,7 +1239,9 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(ui, /findMeetingSlots/);
   assert.match(ui, /meetingOverlapsSlot/);
   assert.match(ui, /Arbeitszeiten pflegen/);
-  assert.match(ui, /Mo-Fr übernehmen/);
+  assert.match(ui, /Mo-Fr auswählen/);
+  assert.match(ui, /toggleWorkWeekday/);
+  assert.match(ui, /Arbeitszeiten für/);
   assert.match(ui, /Blocker eintragen/);
   assert.match(ui, /Ganztägig blockieren/);
   assert.match(ui, /Google Workspace Sync/);
