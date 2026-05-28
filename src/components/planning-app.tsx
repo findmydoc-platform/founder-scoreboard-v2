@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bell,
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
   Circle,
   CircleHelp,
@@ -6224,6 +6225,33 @@ function addMonthsToWeekKey(value: string, months: number) {
   return startOfWeekKey(dateKey(date));
 }
 
+function monthStartKey(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(1);
+  return dateKey(date);
+}
+
+function monthEndKey(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setMonth(date.getMonth() + 1, 0);
+  return dateKey(date);
+}
+
+function calendarMonthGridDates(value: string) {
+  const firstDay = monthStartKey(value);
+  const lastDay = monthEndKey(value);
+  const gridStart = startOfWeekKey(firstDay);
+  const lastDate = new Date(`${lastDay}T00:00:00`);
+  const lastDayOfWeek = lastDate.getDay();
+  const sundayOffset = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+  const gridEnd = addDaysKey(lastDay, sundayOffset);
+  const dates: string[] = [];
+  for (let date = gridStart; date <= gridEnd; date = addDaysKey(date, 1)) {
+    dates.push(date);
+  }
+  return dates;
+}
+
 function timeToMinutes(value: string) {
   const [hours = "0", minutes = "0"] = value.split(":");
   return Number(hours) * 60 + Number(minutes);
@@ -6257,6 +6285,10 @@ function formatCalendarMonthLabel(start: string, end: string) {
     return `${month.format(startDate)}/${monthYear.format(endDate)}`;
   }
   return `${monthYear.format(startDate)} / ${monthYear.format(endDate)}`;
+}
+
+function formatCalendarSingleMonthLabel(value: string) {
+  return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
 function formatMeetingDateTime(value: string) {
@@ -6430,6 +6462,7 @@ function MeetingFinderOverview({
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(defaultEnd);
   const [calendarWeekStart, setCalendarWeekStart] = useState(() => startOfWeekKey(today));
+  const [calendarView, setCalendarView] = useState<"week" | "month">("week");
   const [duration, setDuration] = useState("60");
   const [workProfileId, setWorkProfileId] = useState(editableProfiles[0]?.id || "");
   const [workWeekdays, setWorkWeekdays] = useState<string[]>(["1", "2", "3", "4", "5"]);
@@ -6463,6 +6496,12 @@ function MeetingFinderOverview({
   const calendarDates = Array.from({ length: 7 }, (_, index) => addDaysKey(calendarWeekStart, index));
   const calendarWeekEnd = calendarDates[6] || calendarWeekStart;
   const calendarMonthLabel = formatCalendarMonthLabel(calendarWeekStart, calendarWeekEnd);
+  const calendarTitle = calendarView === "week" ? calendarMonthLabel : formatCalendarSingleMonthLabel(calendarWeekStart);
+  const calendarSubtitle = calendarView === "week"
+    ? `${formatDateLabel(calendarWeekStart)} bis ${formatDateLabel(calendarWeekEnd)}`
+    : `${formatDateLabel(monthStartKey(calendarWeekStart))} bis ${formatDateLabel(monthEndKey(calendarWeekStart))}`;
+  const calendarMonthDates = calendarMonthGridDates(calendarWeekStart);
+  const calendarActiveMonth = new Date(`${calendarWeekStart}T00:00:00`).getMonth();
   const calendarHours = Array.from({ length: 14 }, (_, index) => 8 * 60 + index * 60);
   const nextRecommendedSlot = slots[0];
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
@@ -6595,6 +6634,20 @@ function MeetingFinderOverview({
       detail: hasWorkingHour ? reasons.slice(0, 2).join(", ") || "Kein Teilnehmer ist verfügbar." : "",
       availableCount,
     };
+  };
+
+  const calendarDaySummary = (date: string) => {
+    const cells = calendarHours.map((hour) => calendarCellFor(date, hour));
+    const free = cells.filter((cell) => cell.kind === "free").length;
+    const partial = cells.filter((cell) => cell.kind === "partial").length;
+    const blocked = cells.filter((cell) => cell.kind === "blocked").length;
+    const meetings = cells.filter((cell) => cell.kind === "meeting").length;
+    const closed = cells.filter((cell) => cell.kind === "closed").length;
+    return { free, partial, blocked, meetings, closed };
+  };
+
+  const moveCalendar = (direction: -1 | 1) => {
+    setCalendarWeekStart((current) => calendarView === "week" ? addDaysKey(current, direction * 7) : addMonthsToWeekKey(current, direction));
   };
 
   return (
@@ -6744,54 +6797,57 @@ function MeetingFinderOverview({
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">Kalenderansicht</h2>
-            <p className="mt-1 text-sm text-slate-500">Feste Woche von Montag bis Sonntag. Schraffierte Flächen liegen außerhalb der FindMyDoc-Arbeitszeit; farbige Blöcke zeigen Verfügbarkeit, Blocker oder Meetings.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setCalendarWeekStart(startOfWeekKey(today))}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="h-9 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Heute
             </button>
-            <button
-              type="button"
-              onClick={() => setCalendarWeekStart((current) => addMonthsToWeekKey(current, -1))}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Monat zurück
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalendarWeekStart((current) => addDaysKey(current, -7))}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Woche zurück
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalendarWeekStart((current) => addDaysKey(current, 7))}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Woche vor
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalendarWeekStart((current) => addMonthsToWeekKey(current, 1))}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Monat vor
-            </button>
+            <div className="flex items-center rounded-full border border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={() => moveCalendar(-1)}
+                aria-label={calendarView === "week" ? "Vorherige Woche" : "Vorheriger Monat"}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-l-full text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => moveCalendar(1)}
+                aria-label={calendarView === "week" ? "Nächste Woche" : "Nächster Monat"}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-r-full text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-w-0 px-1">
+              <h2 className="truncate text-lg font-semibold text-slate-950">{calendarTitle}</h2>
+              <p className="text-xs text-slate-500">{calendarSubtitle}</p>
+            </div>
+          </div>
+          <div className="w-36">
+            <CustomSelect
+              value={calendarView}
+              onChange={(value) => setCalendarView(value as "week" | "month")}
+              className="h-9 text-sm"
+              options={[
+                { value: "week", label: "Woche" },
+                { value: "month", label: "Monat" },
+              ]}
+              aria-label="Kalenderansicht wählen"
+            />
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-          <div>
-            <div className="text-lg font-semibold text-slate-950">{calendarMonthLabel}</div>
-            <div className="text-xs text-slate-500">{formatDateLabel(calendarWeekStart)} bis {formatDateLabel(calendarWeekEnd)}</div>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <p className="text-sm text-slate-500">
+            {calendarView === "week"
+              ? "Wochenraster wie im Kalender. Schraffierte Flächen liegen außerhalb der FindMyDoc-Arbeitszeit; farbige Blöcke zeigen Verfügbarkeit, Blocker oder Meetings."
+              : "Monatsübersicht für Orientierung und schnelle Planung. Die Tagesmarker fassen freie Zeiten, Teiltreffer, Blocker und Meetings zusammen."}
+          </p>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Frei</span>
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Teilweise</span>
@@ -6829,51 +6885,93 @@ function MeetingFinderOverview({
             </button>
           ))}
         </div>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-          <div className="min-w-[980px]">
-            <div className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-200 bg-white">
-              <div className="px-3 py-3 text-xs font-semibold text-slate-500">GMT+02</div>
-              {calendarDates.map((date) => (
-                <div key={date} className="border-l border-slate-200 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase text-slate-500">{new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${date}T00:00:00`))}</div>
-                  <div className="mt-0.5 text-lg font-semibold text-slate-950">{new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T00:00:00`))}</div>
+        {calendarView === "week" ? (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+            <div className="min-w-[980px]">
+              <div className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-200 bg-white">
+                <div className="px-3 py-3 text-xs font-semibold text-slate-500">GMT+02</div>
+                {calendarDates.map((date) => (
+                  <div key={date} className="border-l border-slate-200 px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase text-slate-500">{new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${date}T00:00:00`))}</div>
+                    <div className="mt-0.5 text-lg font-semibold text-slate-950">{new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T00:00:00`))}</div>
+                  </div>
+                ))}
+              </div>
+              {calendarHours.map((hour) => (
+                <div key={hour} className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-100 last:border-b-0">
+                  <div className="bg-white px-3 py-2 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
+                  {calendarDates.map((date) => {
+                    const cell = calendarCellFor(date, hour);
+                    return (
+                      <div key={`${date}-${hour}`} className="min-h-16 border-l border-slate-100 bg-white px-1 py-1">
+                        {cell.kind === "closed" ? (
+                          <div
+                            className="h-full min-h-12 rounded-md border border-transparent opacity-70"
+                            title={cell.label}
+                            style={{
+                              backgroundImage: "repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0, rgba(239, 68, 68, 0.08) 6px, rgba(255, 255, 255, 0) 6px, rgba(255, 255, 255, 0) 12px)",
+                            }}
+                          />
+                        ) : (
+                          <div className={`h-full min-h-12 rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${availabilitySummaryTone(cell.kind)}`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold">{cell.label}</span>
+                              <span className="text-[11px] opacity-75">{minutesToTime(hour)}</span>
+                            </div>
+                            {cell.detail && <div className="mt-0.5 line-clamp-2 opacity-80">{cell.detail}</div>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
-            {calendarHours.map((hour) => (
-              <div key={hour} className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-100 last:border-b-0">
-                <div className="bg-white px-3 py-2 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
-                {calendarDates.map((date) => {
-                  const cell = calendarCellFor(date, hour);
-                  return (
-                    <div key={`${date}-${hour}`} className="min-h-16 border-l border-slate-100 bg-white px-1 py-1">
-                      {cell.kind === "closed" ? (
+          </div>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+              {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((weekday) => (
+                <div key={`month-head-${weekday}`} className="border-l border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-500 first:border-l-0">
+                  {weekday}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 bg-white">
+              {calendarMonthDates.map((date) => {
+                const summary = calendarDaySummary(date);
+                const isMuted = new Date(`${date}T00:00:00`).getMonth() !== calendarActiveMonth;
+                const dayNumber = new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T00:00:00`));
+                return (
+                  <div key={`month-cell-${date}`} className={`min-h-32 border-l border-t border-slate-100 p-2 first:border-l-0 ${isMuted ? "bg-slate-50 text-slate-400" : "bg-white text-slate-900"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold">{dayNumber}</span>
+                      {date === today && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">Heute</span>}
+                    </div>
+                    <div className="mt-3 grid gap-1 text-[11px] font-semibold">
+                      {summary.free > 0 && <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">{summary.free} freie Stunden</div>}
+                      {summary.partial > 0 && <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{summary.partial} teilweise frei</div>}
+                      {summary.blocked > 0 && <div className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">{summary.blocked} blockiert</div>}
+                      {summary.meetings > 0 && <div className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">{summary.meetings} Meeting</div>}
+                      {summary.free === 0 && summary.partial === 0 && summary.blocked === 0 && summary.meetings === 0 && (
                         <div
-                          className="h-full min-h-12 rounded-md border border-transparent opacity-70"
-                          title={cell.label}
+                          className="min-h-14 rounded border border-transparent"
+                          title="Nicht verfügbar"
                           style={{
                             backgroundImage: "repeating-linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0, rgba(239, 68, 68, 0.08) 6px, rgba(255, 255, 255, 0) 6px, rgba(255, 255, 255, 0) 12px)",
                           }}
                         />
-                      ) : (
-                        <div className={`h-full min-h-12 rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${availabilitySummaryTone(cell.kind)}`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold">{cell.label}</span>
-                            <span className="text-[11px] opacity-75">{minutesToTime(hour)}</span>
-                          </div>
-                          {cell.detail && <div className="mt-0.5 line-clamp-2 opacity-80">{cell.detail}</div>}
-                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            ))}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
         {!workingHours.length && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-            Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre FindMyDoc-Zeiten ein oder nutze „Mo-Fr übernehmen“. Erst dann kann das Raster echte freie Zeiten zeigen.
+            Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre FindMyDoc-Zeiten ein oder nutze „Mo-Fr auswählen“. Erst dann kann das Raster echte freie Zeiten zeigen.
           </div>
         )}
       </section>
