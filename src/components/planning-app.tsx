@@ -883,6 +883,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
   const [calendarSyncMessage, setCalendarSyncMessage] = useState("");
+  const [meetingCreateMessage, setMeetingCreateMessage] = useState("");
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
@@ -2083,6 +2084,83 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       } catch (error) {
         setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Meeting-Rückmeldung konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const createMeetingFromSlot = (payload: {
+    title: string;
+    agenda: string;
+    sprintId: string;
+    meetingAt: string;
+    profileIds: string[];
+  }) => {
+    setSaveError("");
+    setMeetingCreateMessage("");
+
+    const localMeetingId = Date.now();
+    const now = new Date().toISOString();
+    const localMeeting: Meeting = {
+      id: localMeetingId,
+      sprintId: payload.sprintId,
+      title: payload.title,
+      meetingAt: payload.meetingAt,
+      status: "planned",
+      agenda: payload.agenda,
+    };
+    const localAttendance: MeetingAttendance[] = payload.profileIds.map((profileId, index) => ({
+      id: localMeetingId + index + 1,
+      meetingId: localMeetingId,
+      profileId,
+      status: "pending",
+      absenceReason: "",
+      reasonAccepted: false,
+      writtenUpdate: "",
+      points: 0,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    const previousData = data;
+
+    setData((current) => ({
+      ...current,
+      meetings: [localMeeting, ...current.meetings],
+      meetingAttendance: [...localAttendance, ...current.meetingAttendance],
+    }));
+    setMeetingCreateMessage(`Meeting vorgemerkt: ${payload.title}`);
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/meetings", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = (await response.json().catch(() => null)) as { error?: string; meeting?: Meeting; attendance?: MeetingAttendance[] } | null;
+        if (!response.ok || !body?.meeting) throw new Error(body?.error || "Meeting konnte nicht vorgemerkt werden.");
+
+        setData((current) => ({
+          ...current,
+          meetings: current.meetings.map((item) => (item.id === localMeetingId ? body.meeting! : item)),
+          meetingAttendance: [
+            ...(body.attendance || []),
+            ...current.meetingAttendance.filter((item) => item.meetingId !== localMeetingId),
+          ],
+        }));
+        setMeetingCreateMessage(`Meeting vorgemerkt: ${body.meeting.title}`);
+      } catch (error) {
+        setData(previousData);
+        setMeetingCreateMessage("");
+        setSaveError(error instanceof Error ? error.message : "Meeting konnte nicht vorgemerkt werden.");
       }
     });
   };
@@ -3499,9 +3577,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               currentProfile={currentProfile}
               canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
               calendarSyncMessage={calendarSyncMessage}
+              meetingCreateMessage={meetingCreateMessage}
               onCreateAvailability={createAvailability}
               onDeleteAvailability={deleteAvailability}
               onSyncGoogleCalendar={syncGoogleCalendar}
+              onCreateMeeting={createMeetingFromSlot}
             />
           )}
           {workspace === "settings" && (
@@ -6102,11 +6182,17 @@ function googleCalendarDate(date: string, time: string) {
   return `${date.replaceAll("-", "")}T${time.replace(":", "")}00`;
 }
 
-function googleCalendarUrl(slot: MeetingSlot, profiles: Profile[]) {
-  const title = encodeURIComponent("FindMyDoc Teammeeting");
-  const details = encodeURIComponent(`Teilnehmer: ${profiles.map((profile) => profile.name).join(", ")}`);
+function meetingSlotIso(slot: MeetingSlot) {
+  return new Date(`${slot.date}T${slot.startTime}:00`).toISOString();
+}
+
+function googleCalendarUrl(slot: MeetingSlot, profiles: Profile[], title = "FindMyDoc Teammeeting", agenda = "") {
+  const attendeeEmails = profiles.map((profile) => profile.googleCalendarEmail).filter(Boolean);
+  const encodedTitle = encodeURIComponent(title);
+  const details = encodeURIComponent(`${agenda ? `${agenda}\n\n` : ""}Teilnehmer: ${profiles.map((profile) => profile.name).join(", ")}`);
   const dates = `${googleCalendarDate(slot.date, slot.startTime)}/${googleCalendarDate(slot.date, slot.endTime)}`;
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&ctz=Europe/Berlin&details=${details}`;
+  const attendees = attendeeEmails.length ? `&add=${encodeURIComponent(attendeeEmails.join(","))}` : "";
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodedTitle}&dates=${dates}&ctz=Europe/Berlin&details=${details}${attendees}`;
 }
 
 function meetingOverlapsSlot(meeting: Meeting, date: string, start: number, end: number) {
@@ -6215,18 +6301,22 @@ function MeetingFinderOverview({
   currentProfile,
   canManageAvailability,
   calendarSyncMessage,
+  meetingCreateMessage,
   onCreateAvailability,
   onDeleteAvailability,
   onSyncGoogleCalendar,
+  onCreateMeeting,
 }: {
   data: PlanningData;
   pending: boolean;
   currentProfile: Profile | null;
   canManageAvailability: boolean;
   calendarSyncMessage: string;
+  meetingCreateMessage: string;
   onCreateAvailability: (entry: Omit<AvailabilityEntry, "id">) => void;
   onDeleteAvailability: (entry: AvailabilityEntry) => void;
   onSyncGoogleCalendar: () => void;
+  onCreateMeeting: (payload: { title: string; agenda: string; sprintId: string; meetingAt: string; profileIds: string[] }) => void;
 }) {
   const today = dateKey(new Date());
   const defaultEnd = addDaysKey(today, 14);
@@ -6248,6 +6338,8 @@ function MeetingFinderOverview({
   const [blockerEndTime, setBlockerEndTime] = useState("18:00");
   const [blockerAllDay, setBlockerAllDay] = useState(false);
   const [blockerNote, setBlockerNote] = useState("");
+  const [meetingTitle, setMeetingTitle] = useState("FindMyDoc Teammeeting");
+  const [meetingAgenda, setMeetingAgenda] = useState("Sprint-Update, Blocker, Entscheidungen und nächste Schritte.");
 
   const workingHours = data.availability.filter((entry) => entry.type === "working_hours");
   const blockers = data.availability.filter((entry) => entry.type === "vacation" || entry.type === "sick" || entry.type === "busy");
@@ -6265,6 +6357,7 @@ function MeetingFinderOverview({
   const visibleSlots = slots.slice(0, 12);
   const calendarDates = Array.from({ length: Math.min(7, Math.max(1, Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000) + 1)) }, (_, index) => addDaysKey(fromDate, index));
   const nextRecommendedSlot = slots[0];
+  const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
 
   const profileOptions = editableProfiles.map((profile) => ({ value: profile.id, label: profile.name }));
   const participantOptions = selectableProfiles.map((profile) => ({
@@ -6323,6 +6416,21 @@ function MeetingFinderOverview({
     setBlockerNote("");
   };
 
+  const sprintForSlot = (slot: MeetingSlot) =>
+    data.sprints.find((sprint) => sprint.startDate <= slot.date && sprint.endDate >= slot.date) || activeSprint;
+
+  const reserveSlot = (slot: MeetingSlot) => {
+    const sprint = sprintForSlot(slot);
+    if (!sprint || !selectedProfileIds.length) return;
+    onCreateMeeting({
+      title: meetingTitle.trim() || "FindMyDoc Teammeeting",
+      agenda: meetingAgenda.trim(),
+      sprintId: sprint.id,
+      meetingAt: meetingSlotIso(slot),
+      profileIds: selectedProfileIds,
+    });
+  };
+
   return (
     <div className="grid gap-4 xl:grid-cols-[430px_1fr]">
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -6366,6 +6474,25 @@ function MeetingFinderOverview({
           <CustomDatePicker value={toDate} onChange={setToDate} className="h-9 text-sm" aria-label="Enddatum wählen" />
           <CustomSelect value={duration} onChange={setDuration} className="h-9 text-sm" options={durationOptions} aria-label="Meetingdauer wählen" />
         </div>
+        <div className="mt-4 grid gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <div className="text-sm font-semibold text-slate-950">Meeting vormerken</div>
+          <input
+            value={meetingTitle}
+            onChange={(event) => setMeetingTitle(event.target.value)}
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            placeholder="Meeting-Titel"
+          />
+          <textarea
+            value={meetingAgenda}
+            onChange={(event) => setMeetingAgenda(event.target.value)}
+            className="min-h-20 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            placeholder="Agenda oder Kontext"
+          />
+          <p className="text-xs leading-5 text-slate-500">
+            Ein vorgemerkter Slot legt ein internes Meeting an und erzeugt offene Anwesenheitszeilen für alle ausgewählten Teilnehmer.
+          </p>
+          {meetingCreateMessage && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{meetingCreateMessage}</div>}
+        </div>
         {nextRecommendedSlot && (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -6373,14 +6500,24 @@ function MeetingFinderOverview({
                 <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Empfohlener Slot</div>
                 <div className="mt-1 font-semibold text-emerald-950">{formatLongDateLabel(nextRecommendedSlot.date)} · {nextRecommendedSlot.startTime}-{nextRecommendedSlot.endTime}</div>
               </div>
-              <a
-                href={googleCalendarUrl(nextRecommendedSlot, selectedProfiles)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-8 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-              >
-                Google-Termin öffnen
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => reserveSlot(nextRecommendedSlot)}
+                  disabled={pending || !canManageAvailability || !selectedProfileIds.length || !activeSprint}
+                  className="inline-flex h-8 items-center rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Intern vormerken
+                </button>
+                <a
+                  href={googleCalendarUrl(nextRecommendedSlot, selectedProfiles, meetingTitle, meetingAgenda)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  Google-Termin öffnen
+                </a>
+              </div>
             </div>
           </div>
         )}
@@ -6412,7 +6549,15 @@ function MeetingFinderOverview({
                   <span className={`rounded-full border bg-white px-2 py-0.5 text-xs font-semibold ${slot.matchType === "full" ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
                     {slot.availableProfileIds.length}/{selectedProfileIds.length} verfügbar
                   </span>
-                  <a href={googleCalendarUrl(slot, selectedProfiles)} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => reserveSlot(slot)}
+                    disabled={pending || !canManageAvailability || !selectedProfileIds.length || !activeSprint}
+                    className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Vormerken
+                  </button>
+                  <a href={googleCalendarUrl(slot, selectedProfiles, meetingTitle, meetingAgenda)} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                     Kalender
                   </a>
                 </div>

@@ -1199,6 +1199,7 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
 
 test("meeting finder manages working hours blockers and guarded availability", async () => {
   const route = await readFile("src/app/api/availability/route.ts", "utf8");
+  const meetingRoute = await readFile("src/app/api/meetings/route.ts", "utf8");
   const calendarRoute = await readFile("src/app/api/calendar-sync/route.ts", "utf8");
   const calendarLib = await readFile("src/lib/google-calendar.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
@@ -1220,6 +1221,11 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(route, /external_calendar_id/);
   assert.match(route, /availability\.create/);
   assert.match(route, /availability\.delete/);
+  assert.match(meetingRoute, /requireOperationalLead/);
+  assert.match(meetingRoute, /meeting_attendance/);
+  assert.match(meetingRoute, /meeting\.create/);
+  assert.match(meetingRoute, /meeting\.created/);
+  assert.match(meetingRoute, /profileIds/);
   assert.match(calendarRoute, /requireOperationalLead/);
   assert.match(calendarRoute, /availability\.google_calendar_sync/);
   assert.match(calendarRoute, /google_calendar_sync_enabled/);
@@ -1237,6 +1243,10 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(ui, /Google Workspace Sync/);
   assert.match(ui, /Google-Kalender synchronisieren/);
   assert.match(ui, /Google-Termin öffnen/);
+  assert.match(ui, /Meeting vormerken/);
+  assert.match(ui, /Intern vormerken/);
+  assert.match(ui, /meetingSlotIso/);
+  assert.match(ui, /googleCalendarEmail/);
   assert.match(ui, /Kalenderwoche & Blocker/);
   assert.match(ui, /Keine passenden Slots/);
   assert.match(ui, /CustomDatePicker/);
