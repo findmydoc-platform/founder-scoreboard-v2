@@ -78,6 +78,16 @@ State the expected proof: GitHub issue/PR, Notion link, Drive link, screenshot, 
 
 Keep DoD separate from Acceptance Criteria. DoD is a general quality standard or a saved snapshot of central standards, not a second issue-specific checklist.
 
+Write DoD as multiple short checklist lines when there is more than one condition. Do not bundle several conditions into one paragraph.
+
+Do not put template-compliance meta work into a story DoD. For example, `Template v2 is complete`, `task is assigned to the current sprint`, or `owner is set` are creation-quality checks for the agent, not completion criteria for the assignee.
+
+Good DoD items describe the expected quality bar of the finished work, such as:
+
+- The result is documented in a place the team can access.
+- Open blockers, access gaps, or follow-up decisions are explicitly recorded.
+- The result can be reviewed by the intended reviewer without needing hidden context.
+
 ## Review Checklist
 
 Before finishing a new or revised story, verify:
@@ -86,6 +96,8 @@ Before finishing a new or revised story, verify:
 - Problem Statement contains no direct solution or implementation instruction.
 - Hard constraints are in Scope & Constraints.
 - Acceptance Criteria are measurable and owner-controllable.
+- DoD is written as separate checklist lines when it contains multiple conditions.
+- DoD contains no template-compliance or assignment metadata.
 - DoD is not mixed with Acceptance Criteria.
 - Protected stories were not silently rewritten.
 - German visible text uses real UTF-8 umlauts.

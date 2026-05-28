@@ -47,5 +47,9 @@ Welcher Nachweis muss vorliegen, z. B. Notion-Link, GitHub-Kommentar, Screenshot
 ## Definition of Done
 Zentraler Qualitätsstandard oder gespeicherter DoD-Snapshot. Nicht mit Acceptance Criteria vermischen.
 
+Wenn mehrere Bedingungen gelten, DoD als mehrere kurze Checklist-Punkte formulieren. Nicht mehrere Abschlussbedingungen in einen einzigen Absatz packen.
+
+Nicht in die DoD gehören Meta-Punkte zur Aufgabenerstellung wie `Template v2 ist vollständig ausgefüllt`, `Aufgabe ist im Sprint`, `Owner ist gesetzt` oder ähnliche Formular-/Zuordnungschecks. Diese Punkte sind Qualitätsregeln beim Anlegen der Aufgabe, aber kein fachlicher Abschlussstandard für den Owner.
+
 ## Follow-up / Sub-Issues
 Optional. Dient der persönlichen Arbeitsstruktur und ist nicht score-relevant.
