@@ -6235,6 +6235,14 @@ function formatMeetingDateTime(value: string) {
   return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
+function availabilitySummaryTone(kind: "free" | "partial" | "blocked" | "closed" | "meeting") {
+  if (kind === "free") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (kind === "partial") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (kind === "meeting") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (kind === "blocked") return "border-red-200 bg-red-50 text-red-800";
+  return "border-slate-200 bg-slate-50 text-slate-500";
+}
+
 function googleCalendarDate(date: string, time: string) {
   return `${date.replaceAll("-", "")}T${time.replace(":", "")}00`;
 }
@@ -6415,6 +6423,7 @@ function MeetingFinderOverview({
   const fullSlots = slots.filter((slot) => slot.matchType === "full");
   const visibleSlots = slots.slice(0, 12);
   const calendarDates = Array.from({ length: Math.min(7, Math.max(1, Math.floor((new Date(`${toDate}T00:00:00`).getTime() - new Date(`${fromDate}T00:00:00`).getTime()) / 86400000) + 1)) }, (_, index) => addDaysKey(fromDate, index));
+  const calendarHours = Array.from({ length: 14 }, (_, index) => 8 * 60 + index * 60);
   const nextRecommendedSlot = slots[0];
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
   const plannedMeetings = data.meetings
@@ -6495,6 +6504,59 @@ function MeetingFinderOverview({
   };
 
   const attendanceForMeeting = (meeting: Meeting) => data.meetingAttendance.filter((attendance) => attendance.meetingId === meeting.id);
+
+  const calendarCellFor = (date: string, start: number) => {
+    const end = start + 60;
+    const meetingConflict = data.meetings.find((meeting) => meetingOverlapsSlot(meeting, date, start, end));
+    if (meetingConflict) {
+      return {
+        kind: "meeting" as const,
+        label: "Meeting",
+        detail: meetingConflict.title,
+        availableCount: 0,
+      };
+    }
+
+    let availableCount = 0;
+    const reasons: string[] = [];
+
+    for (const profileId of selectedProfileIds) {
+      const name = profileNameById.get(profileId) || profileId;
+      const window = workingWindowFor(profileId, date, data.availability);
+      if (!window || start < window.start || end > window.end) {
+        reasons.push(`${name}: keine Arbeitszeit`);
+        continue;
+      }
+
+      const blocker = data.availability.find((entry) => entry.profileId === profileId && overlapsSlot(entry, date, start, end));
+      if (blocker) {
+        reasons.push(`${name}: ${availabilityReason(blocker)}`);
+        continue;
+      }
+
+      availableCount += 1;
+    }
+
+    if (!selectedProfileIds.length) {
+      return { kind: "closed" as const, label: "Keine Auswahl", detail: "Wähle Teilnehmer aus.", availableCount };
+    }
+    if (availableCount === selectedProfileIds.length) {
+      return { kind: "free" as const, label: "Frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar`, availableCount };
+    }
+    if (availableCount > 0) {
+      return { kind: "partial" as const, label: "Teilweise frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar · ${reasons.slice(0, 2).join(", ")}`, availableCount };
+    }
+    const hasWorkingHour = selectedProfileIds.some((profileId) => {
+      const window = workingWindowFor(profileId, date, data.availability);
+      return window && start >= window.start && end <= window.end;
+    });
+    return {
+      kind: hasWorkingHour ? "blocked" as const : "closed" as const,
+      label: hasWorkingHour ? "Blockiert" : "Keine Arbeitszeit",
+      detail: reasons.slice(0, 2).join(", ") || "Kein Teilnehmer ist verfügbar.",
+      availableCount,
+    };
+  };
 
   return (
     <div className="grid gap-4 xl:grid-cols-[430px_1fr]">
@@ -6641,6 +6703,53 @@ function MeetingFinderOverview({
             </div>
           )}
         </div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Kalenderansicht</h2>
+            <p className="mt-1 text-sm text-slate-500">Stundenraster für die ausgewählten Teilnehmer. Grün heißt: alle sind frei. Gelb heißt: ein Teil ist frei. Blau sind bereits vorgemerkte Meetings.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Frei</span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">Teilweise</span>
+            <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-700">Blockiert</span>
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">Meeting</span>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="min-w-[980px]">
+            <div className="grid grid-cols-[72px_repeat(7,minmax(124px,1fr))] border-b border-slate-200 bg-slate-50">
+              <div className="px-3 py-2 text-xs font-semibold text-slate-500">Zeit</div>
+              {calendarDates.map((date) => (
+                <div key={date} className="border-l border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                  {formatDateLabel(date)}
+                </div>
+              ))}
+            </div>
+            {calendarHours.map((hour) => (
+              <div key={hour} className="grid grid-cols-[72px_repeat(7,minmax(124px,1fr))] border-b border-slate-100 last:border-b-0">
+                <div className="bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
+                {calendarDates.map((date) => {
+                  const cell = calendarCellFor(date, hour);
+                  return (
+                    <div key={`${date}-${hour}`} className="border-l border-slate-100 p-1.5">
+                      <div className={`min-h-14 rounded-md border px-2 py-1.5 text-xs leading-4 ${availabilitySummaryTone(cell.kind)}`}>
+                        <div className="font-semibold">{cell.label}</div>
+                        <div className="mt-0.5 line-clamp-2 opacity-80">{cell.detail}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+        {!workingHours.length && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+            Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre FindMyDoc-Zeiten ein oder nutze „Mo-Fr übernehmen“. Erst dann kann das Raster echte freie Zeiten zeigen.
+          </div>
+        )}
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
