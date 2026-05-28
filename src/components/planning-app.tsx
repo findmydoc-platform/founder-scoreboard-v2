@@ -6236,11 +6236,11 @@ function formatMeetingDateTime(value: string) {
 }
 
 function availabilitySummaryTone(kind: "free" | "partial" | "blocked" | "closed" | "meeting") {
-  if (kind === "free") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (kind === "partial") return "border-amber-200 bg-amber-50 text-amber-800";
-  if (kind === "meeting") return "border-blue-200 bg-blue-50 text-blue-800";
-  if (kind === "blocked") return "border-red-200 bg-red-50 text-red-800";
-  return "border-slate-200 bg-slate-50 text-slate-500";
+  if (kind === "free") return "border-emerald-300 bg-emerald-50 text-emerald-900";
+  if (kind === "partial") return "border-amber-300 bg-amber-50 text-amber-900";
+  if (kind === "meeting") return "border-blue-300 bg-blue-50 text-blue-900";
+  if (kind === "blocked") return "border-red-300 bg-red-50 text-red-900";
+  return "";
 }
 
 function googleCalendarDate(date: string, time: string) {
@@ -6541,7 +6541,7 @@ function MeetingFinderOverview({
       return { kind: "closed" as const, label: "Keine Auswahl", detail: "Wähle Teilnehmer aus.", availableCount };
     }
     if (availableCount === selectedProfileIds.length) {
-      return { kind: "free" as const, label: "Frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar`, availableCount };
+      return { kind: "free" as const, label: "Alle frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar`, availableCount };
     }
     if (availableCount > 0) {
       return { kind: "partial" as const, label: "Teilweise frei", detail: `${availableCount}/${selectedProfileIds.length} verfügbar · ${reasons.slice(0, 2).join(", ")}`, availableCount };
@@ -6553,7 +6553,7 @@ function MeetingFinderOverview({
     return {
       kind: hasWorkingHour ? "blocked" as const : "closed" as const,
       label: hasWorkingHour ? "Blockiert" : "Keine Arbeitszeit",
-      detail: reasons.slice(0, 2).join(", ") || "Kein Teilnehmer ist verfügbar.",
+      detail: hasWorkingHour ? reasons.slice(0, 2).join(", ") || "Kein Teilnehmer ist verfügbar." : "",
       availableCount,
     };
   };
@@ -6708,7 +6708,7 @@ function MeetingFinderOverview({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Kalenderansicht</h2>
-            <p className="mt-1 text-sm text-slate-500">Stundenraster für die ausgewählten Teilnehmer. Grün heißt: alle sind frei. Gelb heißt: ein Teil ist frei. Blau sind bereits vorgemerkte Meetings.</p>
+            <p className="mt-1 text-sm text-slate-500">Wochenraster für die ausgewählten Teilnehmer. Leere Flächen bleiben bewusst ruhig; nur freie Zeiten, Blocker und vorgemerkte Meetings werden als Blöcke angezeigt.</p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">Frei</span>
@@ -6719,25 +6719,31 @@ function MeetingFinderOverview({
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
           <div className="min-w-[980px]">
-            <div className="grid grid-cols-[72px_repeat(7,minmax(124px,1fr))] border-b border-slate-200 bg-slate-50">
-              <div className="px-3 py-2 text-xs font-semibold text-slate-500">Zeit</div>
+            <div className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-200 bg-white">
+              <div className="px-3 py-3 text-xs font-semibold text-slate-500">GMT+02</div>
               {calendarDates.map((date) => (
-                <div key={date} className="border-l border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
-                  {formatDateLabel(date)}
+                <div key={date} className="border-l border-slate-200 px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase text-slate-500">{new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${date}T00:00:00`))}</div>
+                  <div className="mt-0.5 text-lg font-semibold text-slate-950">{new Intl.DateTimeFormat("de-DE", { day: "2-digit" }).format(new Date(`${date}T00:00:00`))}</div>
                 </div>
               ))}
             </div>
             {calendarHours.map((hour) => (
-              <div key={hour} className="grid grid-cols-[72px_repeat(7,minmax(124px,1fr))] border-b border-slate-100 last:border-b-0">
-                <div className="bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
+              <div key={hour} className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-100 last:border-b-0">
+                <div className="bg-white px-3 py-2 text-xs font-semibold text-slate-500">{minutesToTime(hour)}</div>
                 {calendarDates.map((date) => {
                   const cell = calendarCellFor(date, hour);
                   return (
-                    <div key={`${date}-${hour}`} className="border-l border-slate-100 p-1.5">
-                      <div className={`min-h-14 rounded-md border px-2 py-1.5 text-xs leading-4 ${availabilitySummaryTone(cell.kind)}`}>
-                        <div className="font-semibold">{cell.label}</div>
-                        <div className="mt-0.5 line-clamp-2 opacity-80">{cell.detail}</div>
-                      </div>
+                    <div key={`${date}-${hour}`} className="min-h-16 border-l border-slate-100 bg-white px-1 py-1">
+                      {cell.kind !== "closed" && (
+                        <div className={`h-full min-h-12 rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${availabilitySummaryTone(cell.kind)}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold">{cell.label}</span>
+                            <span className="text-[11px] opacity-75">{minutesToTime(hour)}</span>
+                          </div>
+                          {cell.detail && <div className="mt-0.5 line-clamp-2 opacity-80">{cell.detail}</div>}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
