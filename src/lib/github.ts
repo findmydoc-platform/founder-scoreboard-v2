@@ -204,6 +204,7 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
     title: taskIssueTitle(task),
     body: taskIssueBody(task, context),
     labels: taskIssueLabels(task),
+    state: task.status === "Erledigt" ? "closed" : "open",
   };
 
   const issueNumber = linkedIssueNumber(task);
@@ -224,6 +225,22 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
+  return response.json() as Promise<{ number: number; html_url: string }>;
+}
+
+export async function archiveGitHubIssue(issueNumber: number, token: string) {
+  if (!token) throw new Error("GitHub User-Token ist nicht verfÃ¼gbar. Bitte erneut mit GitHub anmelden.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    method: "PATCH",
+    headers: githubHeaders(token),
+    body: JSON.stringify({
+      state: "closed",
+      state_reason: "not_planned",
+      labels: ["task", "test/deleted"],
+    }),
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue konnte nicht geschlossen werden"));
   return response.json() as Promise<{ number: number; html_url: string }>;
 }
 

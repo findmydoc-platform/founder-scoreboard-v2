@@ -64,6 +64,7 @@ test("platform migration contains the role, decision, score and sync contracts",
 
 test("github sync route keeps the app as source of truth", async () => {
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /x-github-provider-token/);
@@ -80,6 +81,37 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.match(route, /github_sync_status: "pending"/);
   assert.match(route, /github_sync_status: "synced"/);
   assert.match(route, /github_sync_status: "failed"/);
+  assert.match(github, /state: task\.status === "Erledigt" \? "closed" : "open"/);
+});
+
+test("dev role switch is local-only and flows through API authorization", async () => {
+  const authz = await readFile("src/lib/authz.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(authz, /x-fmd-dev-profile-id/);
+  assert.match(authz, /process\.env\.NODE_ENV === "production"/);
+  assert.match(authz, /localhost\|127\\\.0\\\.0\\\.1\|\\\[::1\\\]/);
+  assert.match(authz, /profile\.platform_role === "ceo" \|\| profile\.platform_role === "deputy"/);
+  assert.match(ui, /DevRoleSwitch/);
+  assert.match(ui, /Dev-Ansicht/);
+  assert.match(ui, /x-fmd-dev-profile-id/);
+  assert.match(ui, /devProfileStateKey/);
+});
+
+test("operational leads can delete test tasks and close linked github issues", async () => {
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(taskRoute, /export async function DELETE/);
+  assert.match(taskRoute, /Nur CEO oder Deputy können Aufgaben löschen/);
+  assert.match(taskRoute, /archiveGitHubIssue/);
+  assert.match(taskRoute, /githubClosed/);
+  assert.match(github, /export async function archiveGitHubIssue/);
+  assert.match(github, /state_reason: "not_planned"/);
+  assert.match(github, /test\/deleted/);
+  assert.match(ui, /Test & Bereinigung/);
+  assert.match(ui, /Aufgabe löschen/);
 });
 
 test("github issue export includes structure review blockers and comments", async () => {
@@ -1063,6 +1095,16 @@ test("header actions are workspace aware", async () => {
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 
+test("mine workspace follows the effective current profile", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+
+  assert.match(ui, /const mineOwnerName = currentProfile\?\.name \|\| "Volkan"/);
+  assert.match(ui, /filters\.quick === "mine" && task\.owner === mineOwnerName/);
+  assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === mineOwnerName\)/);
+  assert.match(ui, /Fokus auf die Aufgaben von \$\{mineOwnerName\}/);
+  assert.doesNotMatch(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === "Volkan"\)/);
+});
+
 test("gantt uses sprint dates for scheduled tasks", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
@@ -1270,6 +1312,9 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(route, /external_calendar_id/);
   assert.match(route, /availability\.create/);
   assert.match(route, /availability\.delete/);
+  assert.match(route, /export async function PATCH/);
+  assert.match(route, /availability\.update/);
+  assert.match(route, /Google-Kalenderblöcke/);
   assert.match(meetingRoute, /requireOperationalLead/);
   assert.match(meetingRoute, /export async function PATCH/);
   assert.match(meetingRoute, /meeting_attendance/);
@@ -1310,6 +1355,11 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(ui, /Monatsübersicht/);
   assert.match(ui, /Kalenderansicht wählen/);
   assert.match(ui, /Schraffierte Flächen/);
+  assert.match(ui, /availabilityDialogMode/);
+  assert.match(ui, /beginCalendarSelection/);
+  assert.match(ui, /openAvailabilityEditDialog/);
+  assert.match(ui, /onUpdateAvailability/);
+  assert.match(ui, /Blocker bearbeiten/);
   assert.doesNotMatch(ui, /Alle frei/);
   assert.doesNotMatch(ui, /Teilweise frei/);
   assert.match(ui, /calendarWeekStart/);

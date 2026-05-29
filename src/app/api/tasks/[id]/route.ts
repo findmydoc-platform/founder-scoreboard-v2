@@ -1,5 +1,6 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
+import { archiveGitHubIssue, githubUserForToken } from "@/lib/github";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 
@@ -35,6 +36,30 @@ type UpdatePayload = {
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
 const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
+
+function providerToken(request: NextRequest) {
+  return request.headers.get("x-github-provider-token")?.trim() || "";
+}
+
+function linkedIssueNumber(row: { github_issue_number?: number | null; issue_number?: string | null; github_issue_url?: string | null; issue_url?: string | null }) {
+  if (row.github_issue_number) return Number(row.github_issue_number);
+  const legacyNumber = Number(row.issue_number);
+  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
+  const url = row.github_issue_url || row.issue_url || "";
+  const match = url.match(/\/issues\/(\d+)(?:$|[?#])/);
+  return match ? Number(match[1]) : null;
+}
+
+async function matchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
+  const token = providerToken(request);
+  if (!token) return "";
+  const githubUser = await githubUserForToken(token);
+  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
+  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
+    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
+  }
+  return token;
+}
 
 function profileId(value?: string) {
   return value
@@ -308,5 +333,55 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   return NextResponse.json({ ok: true, activities });
+}
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const supabase = getServerSupabase();
+  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+
+  const permission = await requireFounder(request);
+  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
+  if (!isOperationalLead) return NextResponse.json({ error: "Nur CEO oder Deputy können Aufgaben löschen." }, { status: 403 });
+
+  const { id } = await context.params;
+  const { data: task, error: taskError } = await supabase
+    .from("tasks")
+    .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url")
+    .eq("id", id)
+    .single();
+  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+
+  const issueNumber = linkedIssueNumber(task);
+  let githubClosed = false;
+  if (issueNumber) {
+    try {
+      const token = await matchingGitHubToken(request, permission.profile);
+      if (!token) {
+        return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte GitHub-Rechte erneuern und dann erneut löschen." }, { status: 409 });
+      }
+      await archiveGitHubIssue(issueNumber, token);
+      githubClosed = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GitHub Issue konnte nicht geschlossen werden.";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+  }
+
+  const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+
+  await supabase.from("audit_log").insert({
+    actor_profile_id: permission.profile?.id || null,
+    action: "task.delete",
+    entity_type: "task",
+    entity_id: id,
+    before_data: task,
+    after_data: { deleted: true, githubClosed },
+    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    user_agent: request.headers.get("user-agent"),
+  });
+
+  return NextResponse.json({ ok: true, deletedTaskId: id, githubClosed });
 }
 

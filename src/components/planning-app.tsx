@@ -22,6 +22,7 @@ import {
   Plus,
   Search,
   Table2,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -151,6 +152,11 @@ function normalizePlanningData(data: PlanningData): PlanningData {
   };
 }
 
+function isLocalDevHost() {
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
 let protectedPlanningDataCache: PlanningData | null = null;
 
 const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
@@ -176,7 +182,7 @@ const workspaceLabels: Record<Workspace, string> = {
 const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
-  mine: "Fokus auf die Aufgaben von Volkan für die operative Steuerung.",
+  mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
@@ -246,6 +252,7 @@ const quickFilters = [
 
 const localStateKey = "fmd-planning-local-state-v1";
 const workspaceStateKey = "fmd-planning-workspace-v1";
+const devProfileStateKey = "fmd-planning-dev-profile-v1";
 const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
 const profileColorOptions = [
   { value: "#22c55e", label: "Mint" },
@@ -846,6 +853,42 @@ function NotificationInbox({
   );
 }
 
+function DevRoleSwitch({
+  profiles,
+  actualProfile,
+  value,
+  onChange,
+}: {
+  profiles: Profile[];
+  actualProfile: Profile | null;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const effectiveProfile = profiles.find((profile) => profile.id === value) || actualProfile;
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Dev-Ansicht</span>
+      <CustomSelect
+        value={value || ""}
+        onChange={onChange}
+        className="h-7 min-w-36 text-xs"
+        options={[
+          { value: "", label: actualProfile ? `${actualProfile.name} (echt)` : "Echt angemeldet" },
+          ...profiles.map((profile) => ({
+            value: profile.id,
+            label: `${profile.name} · ${roleLabel(profile)}`,
+          })),
+        ]}
+      />
+      {effectiveProfile && (
+        <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+          {roleLabel(effectiveProfile)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function PlanningApp({ initialData, source, authRequired, initialTaskId = "" }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -873,6 +916,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [showFilters, setShowFilters] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [devProfileId, setDevProfileId] = useState("");
   const [authChecked, setAuthChecked] = useState(!authRequired);
   const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || (source === "supabase" && Boolean(protectedPlanningDataCache)));
   const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
@@ -917,7 +961,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const fullTaskView = searchParams.get("view") === "full";
   const authAvailable = hasSupabaseEnv();
   const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
-  const currentProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const actualProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const devRoleSwitchAvailable = source === "supabase" && process.env.NODE_ENV !== "production" && isLocalDevHost() && (actualProfile?.platformRole === "ceo" || actualProfile?.platformRole === "deputy");
+  const devProfile = devRoleSwitchAvailable && devProfileId ? data.profiles.find((profile) => profile.id === devProfileId) || null : null;
+  const currentProfile = devProfile || actualProfile;
+  const mineOwnerName = currentProfile?.name || "Volkan";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
@@ -933,6 +981,15 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       .sort((left, right) => left.position - right.position)
       .slice(0, 3);
   }, [currentProfile?.id, data.taskFocusItems, todayFocusDate]);
+  const requestHeaders = useCallback((token?: string, options: { json?: boolean; github?: boolean } = { json: true }) => {
+    const githubProviderToken = options.github ? getRememberedGitHubProviderToken() : "";
+    return {
+      ...(options.json !== false ? { "content-type": "application/json" } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(devRoleSwitchAvailable && devProfileId ? { "x-fmd-dev-profile-id": devProfileId } : {}),
+      ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+    };
+  }, [devProfileId, devRoleSwitchAvailable]);
 
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -958,7 +1015,21 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     const storedWorkspace = workspaceFromValue(window.localStorage.getItem(workspaceStateKey));
     const nextWorkspace = urlWorkspace || storedWorkspace;
     if (nextWorkspace) window.queueMicrotask(() => setWorkspace(nextWorkspace));
+
+    const storedDevProfile = window.localStorage.getItem(devProfileStateKey) || "";
+    if (storedDevProfile) window.queueMicrotask(() => setDevProfileId(storedDevProfile));
   }, []);
+
+  useEffect(() => {
+    if (!devRoleSwitchAvailable && devProfileId) {
+      window.queueMicrotask(() => setDevProfileId(""));
+      window.localStorage.removeItem(devProfileStateKey);
+      return;
+    }
+    if (!devRoleSwitchAvailable) return;
+    if (devProfileId) window.localStorage.setItem(devProfileStateKey, devProfileId);
+    else window.localStorage.removeItem(devProfileStateKey);
+  }, [devProfileId, devRoleSwitchAvailable]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -1202,7 +1273,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
         const matchesQuick =
           !filters.quick ||
-          (filters.quick === "mine" && task.owner === "Volkan") ||
+          (filters.quick === "mine" && task.owner === mineOwnerName) ||
           (filters.quick === "open" && normalized === "Offen") ||
           (filters.quick === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn))) ||
           (filters.quick === "week" && isThisWeek(task)) ||
@@ -1212,12 +1283,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
       }),
     );
-  }, [data.tasks, filters]);
+  }, [data.tasks, filters, mineOwnerName]);
 
   const visibleTasks = useMemo(() => {
-    if (workspace === "mine") return filteredTasks.filter((task) => task.owner === "Volkan");
+    if (workspace === "mine") return filteredTasks.filter((task) => task.owner === mineOwnerName);
     return filteredTasks;
-  }, [filteredTasks, workspace]);
+  }, [filteredTasks, mineOwnerName, workspace]);
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerPrimaryAction: HeaderPrimaryAction | null = (() => {
@@ -1332,10 +1403,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}`, {
           method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({
             status: patch.status,
             owner: patch.owner,
@@ -1369,6 +1437,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             ...current,
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
+        }
+        if (patch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
+          syncTaskToGitHub({ ...task, ...patch }, { silent: true });
         }
       } catch (error) {
         setData((current) => ({
@@ -1461,10 +1532,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch("/api/tasks", {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify(draft),
         });
 
@@ -1527,14 +1595,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
           rememberGitHubProviderToken(session?.data.session?.provider_token);
-          const githubProviderToken = getRememberedGitHubProviderToken();
           const syncResponse = await fetch(`/api/tasks/${body.task.id}/sync-github`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-            },
+            headers: requestHeaders(token, { github: true }),
             body: JSON.stringify({ createIfMissing: true }),
           });
           const syncBody = (await syncResponse.json().catch(() => null)) as { error?: string; task?: Task } | null;
@@ -1589,10 +1652,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch("/api/focus", {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({ taskId: task.id, profileId, focusDate: todayFocusDate, position, nextStep, status }),
         });
         const body = (await response.json().catch(() => null)) as { error?: string; focusItem?: TaskFocusItem } | null;
@@ -1626,9 +1686,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/focus?id=${encodeURIComponent(String(focusItem.id))}`, {
           method: "DELETE",
-          headers: {
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token, { json: false }),
         });
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         if (!response.ok) throw new Error(body?.error || "Fokus konnte nicht entfernt werden.");
@@ -2292,6 +2350,45 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
+  const updateAvailability = (entry: AvailabilityEntry, patch: Partial<Omit<AvailabilityEntry, "id" | "source" | "externalId" | "externalCalendarId" | "syncedAt">>) => {
+    setSaveError("");
+
+    const updatedEntry: AvailabilityEntry = { ...entry, ...patch };
+    const previousData = data;
+    setData((current) => ({
+      ...current,
+      availability: current.availability.map((item) => (item.id === entry.id ? updatedEntry : item)),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/availability", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ id: entry.id, ...patch }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; availability?: AvailabilityEntry } | null;
+        if (!response.ok || !body?.availability) throw new Error(body?.error || "Verfügbarkeit konnte nicht aktualisiert werden.");
+
+        setData((current) => ({
+          ...current,
+          availability: current.availability.map((item) => (item.id === entry.id ? body.availability! : item)),
+        }));
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht aktualisiert werden.");
+      }
+    });
+  };
+
   const syncGoogleCalendar = () => {
     setSaveError("");
     setCalendarSyncMessage("Google Calendar Sync wird geprüft...");
@@ -2559,15 +2656,15 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}/review`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({ decision: reviewStatus, points: scorePoints, checklist, comment }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         if (!response.ok) throw new Error(body?.error || "Review konnte nicht gespeichert werden.");
+        if (hasGitHubIssue(task) && githubProviderTokenAvailable) {
+          syncTaskToGitHub({ ...task, status: nextStatus, reviewStatus, scorePoints, scoreFinal }, { silent: true });
+        }
       } catch (error) {
         setData((current) => ({
           ...current,
@@ -2608,16 +2705,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/comments`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
           body: JSON.stringify({ comment }),
         });
 
@@ -2652,16 +2744,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     const session = await getBrowserSupabase()?.auth.getSession();
     const token = session?.data.session?.access_token;
     rememberGitHubProviderToken(session?.data.session?.provider_token);
-    const githubProviderToken = getRememberedGitHubProviderToken();
     const formData = new FormData();
     formData.append("file", file);
 
     const response = await fetch(`/api/tasks/${task.id}/attachments`, {
       method: "POST",
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-      },
+      headers: requestHeaders(token, { json: false, github: true }),
       body: formData,
     });
 
@@ -2698,16 +2786,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] } | null;
@@ -2741,7 +2824,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         });
       }
     });
-  }, [source, startTransition]);
+  }, [requestHeaders, source, startTransition]);
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -2790,10 +2873,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}/blockers`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify(payload),
         });
 
@@ -2908,8 +2988,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
-  const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean } = {}) => {
-    setSaveError("");
+  const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean; silent?: boolean } = {}) => {
+    if (!options.silent) setSaveError("");
 
     const previousTask = task;
     setData((current) => ({
@@ -2930,16 +3010,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
           body: JSON.stringify({ createIfMissing: Boolean(options.createIfMissing) }),
         });
 
@@ -2956,7 +3031,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
         }));
-        setSaveError(message);
+        if (!options.silent) setSaveError(message);
       }
     });
   };
@@ -2987,17 +3062,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       for (const task of queueTasks) {
         try {
           const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-            },
+            headers: requestHeaders(token, { github: true }),
             body: JSON.stringify({ createIfMissing: false }),
           });
 
@@ -3017,6 +3087,60 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           }));
           setSaveError(message);
         }
+      }
+    });
+  };
+
+  const deleteTask = (task: Task) => {
+    if (!canManageTaskMeta) {
+      setSaveError("Nur CEO oder Deputy können Aufgaben löschen.");
+      return;
+    }
+    const confirmed = window.confirm(
+      hasGitHubIssue(task)
+        ? "Aufgabe aus der App löschen und das verknüpfte GitHub-Issue schließen?"
+        : "Aufgabe aus der App löschen?",
+    );
+    if (!confirmed) return;
+
+    setSaveError("");
+    const previousTask = task;
+    const previousRelations = data.taskRelations;
+    const previousComments = data.taskComments;
+    const previousActivity = data.taskActivity;
+
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id),
+      taskRelations: current.taskRelations.filter((relation) => relation.taskId !== task.id && relation.relatedTaskId !== task.id),
+      taskComments: current.taskComments.filter((comment) => comment.taskId !== task.id),
+      taskActivity: current.taskActivity.filter((activity) => activity.taskId !== task.id),
+    }));
+    closeTaskPanel();
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}`, {
+          method: "DELETE",
+          headers: requestHeaders(token, { json: false, github: true }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Aufgabe konnte nicht gelöscht werden.");
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          tasks: [previousTask, ...current.tasks],
+          taskRelations: previousRelations,
+          taskComments: previousComments,
+          taskActivity: previousActivity,
+        }));
+        setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht gelöscht werden.");
       }
     });
   };
@@ -3411,9 +3535,23 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
               <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
-              <div className="mt-1 text-sm text-slate-500">{workspace === "planning" ? data.project.range : workspaceSubtitles[workspace]}</div>
+              <div className="mt-1 text-sm text-slate-500">
+                {workspace === "planning"
+                  ? data.project.range
+                  : workspace === "mine"
+                    ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
+                    : workspaceSubtitles[workspace]}
+              </div>
             </div>
             <div className="flex items-center gap-2">
+              {devRoleSwitchAvailable && (
+                <DevRoleSwitch
+                  profiles={data.profiles}
+                  actualProfile={actualProfile}
+                  value={devProfileId}
+                  onChange={setDevProfileId}
+                />
+              )}
               <NotificationInbox
                 notifications={unreadNotifications}
                 profiles={data.profiles}
@@ -3637,6 +3775,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               calendarSyncMessage={calendarSyncMessage}
               meetingCreateMessage={meetingCreateMessage}
               onCreateAvailability={createAvailability}
+              onUpdateAvailability={updateAvailability}
               onDeleteAvailability={deleteAvailability}
               onSyncGoogleCalendar={syncGoogleCalendar}
               onCreateMeeting={createMeetingFromSlot}
@@ -3885,6 +4024,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
           onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
+          onDelete={() => deleteTask(selectedTask)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
         />
@@ -6438,6 +6578,7 @@ function MeetingFinderOverview({
   calendarSyncMessage,
   meetingCreateMessage,
   onCreateAvailability,
+  onUpdateAvailability,
   onDeleteAvailability,
   onSyncGoogleCalendar,
   onCreateMeeting,
@@ -6450,6 +6591,7 @@ function MeetingFinderOverview({
   calendarSyncMessage: string;
   meetingCreateMessage: string;
   onCreateAvailability: (entry: Omit<AvailabilityEntry, "id">) => void;
+  onUpdateAvailability: (entry: AvailabilityEntry, patch: Partial<Omit<AvailabilityEntry, "id" | "source" | "externalId" | "externalCalendarId" | "syncedAt">>) => void;
   onDeleteAvailability: (entry: AvailabilityEntry) => void;
   onSyncGoogleCalendar: () => void;
   onCreateMeeting: (payload: { title: string; agenda: string; sprintId: string; meetingAt: string; profileIds: string[] }) => void;
@@ -6488,6 +6630,9 @@ function MeetingFinderOverview({
   const [blockerEndTime, setBlockerEndTime] = useState("18:00");
   const [blockerAllDay, setBlockerAllDay] = useState(false);
   const [blockerNote, setBlockerNote] = useState("");
+  const [availabilityDialogMode, setAvailabilityDialogMode] = useState<"create" | "edit" | null>(null);
+  const [editingAvailability, setEditingAvailability] = useState<AvailabilityEntry | null>(null);
+  const [calendarSelection, setCalendarSelection] = useState<{ date: string; anchorStart: number; start: number; end: number } | null>(null);
   const [meetingTitle, setMeetingTitle] = useState("FindMyDoc Teammeeting");
   const [meetingAgenda, setMeetingAgenda] = useState("Sprint-Update, Blocker, Entscheidungen und nächste Schritte.");
 
@@ -6581,6 +6726,92 @@ function MeetingFinderOverview({
     setBlockerNote("");
   };
 
+  const canEditAvailabilityEntry = (entry: AvailabilityEntry) =>
+    entry.source !== "google_calendar" && (canManageAvailability || entry.profileId === currentProfile?.id);
+
+  const openAvailabilityCreateDialog = (date: string, start: number, end: number) => {
+    if (!normalizedBlockerProfileId) return;
+    setEditingAvailability(null);
+    setAvailabilityDialogMode("create");
+    setBlockerProfileId(normalizedBlockerProfileId);
+    setBlockerType("busy");
+    setBlockerStartDate(date);
+    setBlockerEndDate(date);
+    setBlockerStartTime(minutesToTime(start));
+    setBlockerEndTime(minutesToTime(end));
+    setBlockerAllDay(false);
+    setBlockerNote("");
+  };
+
+  const openAvailabilityEditDialog = (entry: AvailabilityEntry) => {
+    if (!canEditAvailabilityEntry(entry)) return;
+    setEditingAvailability(entry);
+    setAvailabilityDialogMode("edit");
+    setBlockerProfileId(entry.profileId);
+    setBlockerType(entry.type);
+    setBlockerStartDate(entry.startDate || today);
+    setBlockerEndDate(entry.endDate || entry.startDate || today);
+    setBlockerStartTime(entry.startTime || "09:00");
+    setBlockerEndTime(entry.endTime || "18:00");
+    setBlockerAllDay(entry.startTime === "00:00" && (entry.endTime === "23:59" || entry.endTime === "24:00"));
+    setBlockerNote(entry.note || "");
+  };
+
+  const closeAvailabilityDialog = () => {
+    setAvailabilityDialogMode(null);
+    setEditingAvailability(null);
+    setCalendarSelection(null);
+  };
+
+  const saveAvailabilityDialog = () => {
+    const patch = {
+      profileId: normalizedBlockerProfileId,
+      type: blockerType,
+      weekday: null,
+      startDate: blockerStartDate,
+      endDate: blockerEndDate || blockerStartDate,
+      startTime: blockerAllDay ? "00:00" : blockerStartTime,
+      endTime: blockerAllDay ? "23:59" : blockerEndTime,
+      note: blockerNote.trim(),
+    };
+    if (!patch.profileId || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))) return;
+    if (availabilityDialogMode === "edit" && editingAvailability) {
+      onUpdateAvailability(editingAvailability, patch);
+    } else {
+      onCreateAvailability(patch);
+    }
+    closeAvailabilityDialog();
+    setBlockerNote("");
+  };
+
+  const deleteAvailabilityDialogEntry = () => {
+    if (!editingAvailability) return;
+    onDeleteAvailability(editingAvailability);
+    closeAvailabilityDialog();
+  };
+
+  const beginCalendarSelection = (date: string, start: number) => {
+    if (!normalizedBlockerProfileId) return;
+    setCalendarSelection({ date, anchorStart: start, start, end: start + 60 });
+  };
+
+  const extendCalendarSelection = (date: string, start: number) => {
+    setCalendarSelection((current) => {
+      if (!current || current.date !== date) return current;
+      return {
+        ...current,
+        start: Math.min(current.anchorStart, start),
+        end: Math.max(current.anchorStart + 60, start + 60),
+      };
+    });
+  };
+
+  const finishCalendarSelection = () => {
+    if (!calendarSelection) return;
+    openAvailabilityCreateDialog(calendarSelection.date, calendarSelection.start, calendarSelection.end);
+    setCalendarSelection(null);
+  };
+
   const sprintForSlot = (slot: MeetingSlot) =>
     data.sprints.find((sprint) => sprint.startDate <= slot.date && sprint.endDate >= slot.date) || activeSprint;
 
@@ -6647,6 +6878,7 @@ function MeetingFinderOverview({
   type CalendarBlock = {
     id: string;
     kind: "blocked" | "meeting";
+    entry?: AvailabilityEntry;
     label: string;
     detail: string;
     start: number;
@@ -6692,6 +6924,7 @@ function MeetingFinderOverview({
         blocks.push({
           id: `blocker-${entry.id}-${profileId}-${date}`,
           kind: "blocked",
+          entry,
           label: availabilityCalendarLabel(entry),
           detail: `${name}${entry.note?.trim() ? `: ${entry.note.trim()}` : ""}`,
           start,
@@ -6972,11 +7205,28 @@ function MeetingFinderOverview({
                     const startsHere = activeBlock ? activeBlock.start >= hour && activeBlock.start < hour + 60 : false;
                     const blockTop = activeBlock ? Math.max(4, ((activeBlock.start - hour) / 60) * 64 + 4) : 0;
                     const blockHeight = activeBlock ? Math.max(34, ((activeBlock.end - activeBlock.start) / 60) * 64 - 8) : 0;
+                    const isSelecting = calendarSelection?.date === date && calendarSelection.start < hour + 60 && calendarSelection.end > hour;
                     return (
-                      <div key={`${date}-${hour}`} className="relative h-16 overflow-visible border-l border-slate-100 bg-white px-1 py-1">
+                      <div
+                        key={`${date}-${hour}`}
+                        className="relative h-16 overflow-visible border-l border-slate-100 bg-white px-1 py-1"
+                        onMouseDown={() => !activeBlock && beginCalendarSelection(date, hour)}
+                        onMouseEnter={() => extendCalendarSelection(date, hour)}
+                        onMouseUp={finishCalendarSelection}
+                      >
+                        {isSelecting && (
+                          <div className="pointer-events-none absolute inset-x-1 inset-y-1 z-10 rounded-md border border-blue-300 bg-blue-50/80 shadow-sm" />
+                        )}
                         {startsHere && activeBlock ? (
-                          <div
-                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-md border px-2 py-1.5 text-xs leading-4 shadow-sm ${activeBlock.kind === "meeting" ? availabilitySummaryTone("meeting") : activeBlock.tone}`}
+                          <button
+                            type="button"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onMouseUp={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (activeBlock.entry) openAvailabilityEditDialog(activeBlock.entry);
+                            }}
+                            className={`absolute left-1 right-1 z-20 overflow-hidden rounded-md border px-2 py-1.5 text-left text-xs leading-4 shadow-sm ${activeBlock.entry && canEditAvailabilityEntry(activeBlock.entry) ? "cursor-pointer hover:ring-2 hover:ring-blue-100" : "cursor-default"} ${activeBlock.kind === "meeting" ? availabilitySummaryTone("meeting") : activeBlock.tone}`}
                             style={{ top: `${blockTop}px`, height: `${blockHeight}px` }}
                             title={`${activeBlock.label}${activeBlock.detail ? ` · ${activeBlock.detail}` : ""}`}
                           >
@@ -6985,7 +7235,7 @@ function MeetingFinderOverview({
                               <span className="shrink-0 text-[11px] opacity-75">{minutesToTime(activeBlock.start)}-{minutesToTime(activeBlock.end)}</span>
                             </div>
                             {activeBlock.detail && <div className="mt-0.5 line-clamp-3 opacity-80">{activeBlock.detail}</div>}
-                          </div>
+                          </button>
                         ) : activeBlock ? (
                           <div className="h-full rounded-md border border-transparent bg-white" title={`${activeBlock.label} läuft weiter`} />
                         ) : cell.kind === "closed" ? (
@@ -7056,6 +7306,60 @@ function MeetingFinderOverview({
         {!workingHours.length && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
             Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre FindMyDoc-Zeiten ein oder nutze „Mo-Fr auswählen“. Erst dann kann das Raster echte freie Zeiten zeigen.
+          </div>
+        )}
+        {availabilityDialogMode && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={availabilityDialogMode === "edit" ? "Blocker bearbeiten" : "Blocker anlegen"}>
+            <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">{availabilityDialogMode === "edit" ? "Blocker bearbeiten" : "Blocker anlegen"}</h3>
+                  <p className="mt-1 text-sm text-slate-500">Direkt aus der Kalenderansicht. Zeiten und Typ können nachträglich angepasst werden.</p>
+                </div>
+                <button type="button" onClick={closeAvailabilityDialog} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Dialog schließen">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <CustomSelect value={normalizedBlockerProfileId} onChange={setBlockerProfileId} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} aria-label="Profil wählen" />
+                <CustomSelect value={blockerType} onChange={(value) => setBlockerType(value as AvailabilityEntry["type"])} disabled={pending} className="h-9 text-sm" options={blockerTypeOptions} aria-label="Blocker-Typ wählen" />
+                <div className="grid grid-cols-2 gap-2">
+                  <CustomDatePicker value={blockerStartDate} onChange={setBlockerStartDate} disabled={pending} className="h-9 text-sm" aria-label="Startdatum wählen" />
+                  <CustomDatePicker value={blockerEndDate} onChange={setBlockerEndDate} disabled={pending} className="h-9 text-sm" aria-label="Enddatum wählen" />
+                </div>
+                <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={blockerAllDay} onChange={(event) => setBlockerAllDay(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+                  Ganztägig blockieren
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <CustomSelect value={blockerStartTime} onChange={setBlockerStartTime} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Startzeit wählen" />
+                  <CustomSelect value={blockerEndTime} onChange={setBlockerEndTime} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Endzeit wählen" />
+                </div>
+                <textarea
+                  value={blockerNote}
+                  onChange={(event) => setBlockerNote(event.target.value)}
+                  placeholder={blockerType === "busy" ? "Titel oder Kontext, z. B. Arbeit, Kundentermin, On Business" : "Grund oder Kontext"}
+                  className="min-h-24 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap justify-between gap-2">
+                <div>
+                  {availabilityDialogMode === "edit" && editingAvailability && (
+                    <button type="button" onClick={deleteAvailabilityDialogEntry} disabled={pending} className="h-9 rounded-md border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
+                      Löschen
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={closeAvailabilityDialog} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Abbrechen
+                  </button>
+                  <button type="button" onClick={saveAvailabilityDialog} disabled={pending || !normalizedBlockerProfileId || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    {availabilityDialogMode === "edit" ? "Änderungen speichern" : "Blocker speichern"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -8408,6 +8712,7 @@ function TaskDetailPanel({
   onCreateSubIssue,
   onReconnectGitHub,
   onSyncGitHub,
+  onDelete,
   onAddRelation,
   onRemoveRelation,
 }: {
@@ -8441,6 +8746,7 @@ function TaskDetailPanel({
   onCreateSubIssue: () => void;
   onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onDelete: () => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
 }) {
@@ -8936,6 +9242,27 @@ function TaskDetailPanel({
               {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}
             </div>
           </section>
+
+          {canManageTaskMeta && (
+            <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
+              <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
+              <p className="mt-1 text-xs leading-5 text-red-800">
+                Löscht die Aufgabe aus der App. Ein verknüpftes GitHub-Issue wird vorher geschlossen und als Test/Löschung markiert.
+              </p>
+              <button
+                type="button"
+                disabled={pending || (hasGitHubIssue(task) && !githubProviderTokenAvailable)}
+                onClick={onDelete}
+                className="mt-3 inline-flex h-8 items-center gap-2 rounded-md border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                Aufgabe löschen
+              </button>
+              {hasGitHubIssue(task) && !githubProviderTokenAvailable && (
+                <p className="mt-2 text-xs text-red-700">GitHub-Rechte erneuern, bevor eine verknüpfte Testaufgabe gelöscht wird.</p>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </aside>
