@@ -830,12 +830,18 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /notification_events/);
   assert.match(route, /notification_deliveries/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
+  assert.match(chat, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL/);
+  assert.match(chat, /GOOGLE_CHAT_PRIVATE_KEY/);
   assert.match(chat, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(chat, /googleChatDeliveryStatus/);
   assert.match(chat, /formatGoogleChatMessage/);
   assert.match(chat, /formatGoogleChatDigestCard/);
+  assert.match(chat, /sendGoogleChatSpaceDigest/);
+  assert.match(chat, /https:\/\/www\.googleapis\.com\/auth\/chat\.bot/);
   assert.match(route, /shouldSendToGoogleChatDigest/);
   assert.match(route, /googleChatDeliveryStatus/);
+  assert.match(route, /isGoogleChatDmSpace/);
+  assert.match(route, /deliveryMode: "direct_dm"/);
   assert.match(route, /notification_preferences/);
   assert.match(route, /Google-Chat-Präferenz/);
   assert.match(route, /notification_deliveries/);
@@ -866,10 +872,14 @@ test("google chat rollout is documented and verified before delivery activation"
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
+  assert.match(envExample, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=/);
+  assert.match(envExample, /GOOGLE_CHAT_PRIVATE_KEY=/);
   assert.match(envExample, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
   assert.match(rollout, /notification_preferences/);
+  assert.match(rollout, /profiles\.google_chat_dm_space/);
+  assert.match(rollout, /spaces\/\.\.\./);
   assert.match(rollout, /Rollback/);
   assert.match(rollout, /\/api\/google-chat\/events/);
   assert.match(nextStep, /docs\/google-chat-rollout\.md/);

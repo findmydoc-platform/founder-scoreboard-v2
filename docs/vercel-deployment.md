@@ -37,10 +37,12 @@ APP_URL=https://founder-ops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
+GOOGLE_CHAT_PRIVATE_KEY=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
-`GOOGLE_CHAT_WEBHOOK_URL` is optional until Google Chat notifications should go live. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
+`GOOGLE_CHAT_WEBHOOK_URL` is optional as a Space-Digest fallback. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
 
 Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, comments, and attachments must use the logged-in user's GitHub OAuth provider token from the active Supabase session, so GitHub shows the real actor.
 

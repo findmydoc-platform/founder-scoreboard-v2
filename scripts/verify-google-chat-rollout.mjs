@@ -33,16 +33,20 @@ const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "ut
 
 function googleChatDeliveryStatus() {
   const webhookConfigured = Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
+  const apiConfigured = Boolean(process.env.GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_CHAT_PRIVATE_KEY);
   const deliveryEnabled = process.env.GOOGLE_CHAT_DELIVERY_ENABLED === "true";
   return {
     webhookConfigured,
+    apiConfigured,
     deliveryEnabled,
-    ready: webhookConfigured && deliveryEnabled,
+    ready: (webhookConfigured || apiConfigured) && deliveryEnabled,
   };
 }
 
 const requiredChecks = [
   ["env example contains webhook", envExample.includes("GOOGLE_CHAT_WEBHOOK_URL=")],
+  ["env example contains chat api service account", envExample.includes("GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=")],
+  ["env example contains chat api private key", envExample.includes("GOOGLE_CHAT_PRIVATE_KEY=")],
   ["env example contains delivery gate", envExample.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
   ["rollout documents disabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
   ["rollout documents enabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=true")],
@@ -51,6 +55,7 @@ const requiredChecks = [
   ["next-step links rollout", nextStep.includes("docs/google-chat-rollout.md")],
   ["settings UI explains readiness", settingsUi.includes("googleChatReady")],
   ["delivery route is gated", deliverRoute.includes("googleChatDeliveryStatus")],
+  ["delivery route supports direct dm spaces", deliverRoute.includes("sendGoogleChatSpaceDigest") && deliverRoute.includes("isGoogleChatDmSpace")],
   ["chat event route exists", eventRoute.includes("FounderOps Google Chat Events")],
   ["chat event route stays gated", eventRoute.includes("googleChatDeliveryStatus")],
   ["chat event route handles message events", eventRoute.includes("MESSAGE")],
@@ -61,6 +66,7 @@ const failed = requiredChecks.filter(([, passed]) => !passed);
 const status = googleChatDeliveryStatus();
 const result = {
   googleChatConfigured: status.webhookConfigured,
+  googleChatApiConfigured: status.apiConfigured,
   googleChatDeliveryEnabled: status.deliveryEnabled,
   googleChatReady: status.ready,
   checks: Object.fromEntries(requiredChecks),

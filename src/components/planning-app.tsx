@@ -109,8 +109,10 @@ type FeedbackDraft = {
 
 type GoogleChatStatus = {
   webhookConfigured: boolean;
+  apiConfigured: boolean;
   deliveryEnabled: boolean;
   ready: boolean;
+  mode: "direct-dm" | "space-webhook" | "not-configured";
   pending: number;
 };
 
@@ -3032,7 +3034,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         },
       });
       const body = (await response.json().catch(() => null)) as {
-        googleChat?: { webhookConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean };
+        googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: GoogleChatStatus["mode"] };
         googleChatConfigured?: boolean;
         pending?: number;
       } | null;
@@ -3040,8 +3042,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
       setGoogleChatStatus({
         webhookConfigured: Boolean(body.googleChat?.webhookConfigured ?? body.googleChatConfigured),
+        apiConfigured: Boolean(body.googleChat?.apiConfigured),
         deliveryEnabled: Boolean(body.googleChat?.deliveryEnabled),
         ready: Boolean(body.googleChat?.ready),
+        mode: body.googleChat?.mode || "not-configured",
         pending: body.pending || 0,
       });
     } catch {
@@ -7290,7 +7294,9 @@ function SettingsOverview({
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
   const googleChatReady = Boolean(googleChatStatus?.ready);
   const googleChatWebhookConfigured = Boolean(googleChatStatus?.webhookConfigured);
+  const googleChatApiConfigured = Boolean(googleChatStatus?.apiConfigured);
   const googleChatDeliveryEnabled = Boolean(googleChatStatus?.deliveryEnabled);
+  const googleChatModeLabel = googleChatStatus?.mode === "direct-dm" ? "persönliche DMs" : googleChatStatus?.mode === "space-webhook" ? "Space-Digest" : "nicht konfiguriert";
   const selectedFeedback = data.feedbackItems.find((item) => item.id === selectedFeedbackId) || data.feedbackItems[0];
   const openFeedbackCount = data.feedbackItems.filter((item) => item.status === "open").length;
   const githubCreatableTasks = data.tasks.filter((task) => task.taskType === "deliverable" || task.taskType === "proposal");
@@ -7666,7 +7672,12 @@ function SettingsOverview({
         </div>
         {!googleChatReady && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
-            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für echten Versand braucht die Umgebung `GOOGLE_CHAT_WEBHOOK_URL` und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Chat API: {googleChatApiConfigured ? "gesetzt" : "fehlt"} · Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für persönliche DMs braucht die Umgebung `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, DM-Spaces in den Profilen und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+          </div>
+        )}
+        {googleChatReady && (
+          <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800">
+            Google Chat ist versandbereit. Aktiver Modus: {googleChatModeLabel}. Persönliche DMs werden nur an Profile mit `spaces/...` in der Google-Chat-DM-Space gesendet.
           </div>
         )}
         <div className="mt-4 grid gap-3 md:grid-cols-3">

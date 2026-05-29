@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
-import { googleChatDeliveryStatus, googleChatTarget, sendGoogleChatDigest, type GoogleChatDigestEvent } from "@/lib/google-chat";
+import {
+  googleChatDeliveryStatus,
+  googleChatTarget,
+  isGoogleChatDmSpace,
+  sendGoogleChatDigest,
+  sendGoogleChatSpaceDigest,
+  type GoogleChatDigestEvent,
+} from "@/lib/google-chat";
 import { shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -30,6 +37,12 @@ type PreferenceRow = {
   enabled: boolean;
 };
 
+type DeliveryRow = {
+  row: NotificationRow;
+  target: string;
+  payload: GoogleChatDigestEvent;
+};
+
 function safeLimit(value: unknown) {
   const limit = Number(value || 20);
   if (!Number.isFinite(limit)) return 20;
@@ -39,6 +52,9 @@ function safeLimit(value: unknown) {
 function statusCodeForError(errorMessage: string) {
   if (errorMessage.includes("GOOGLE_CHAT_DELIVERY_ENABLED")) return 424;
   if (errorMessage.includes("GOOGLE_CHAT_WEBHOOK_URL")) return 424;
+  if (errorMessage.includes("GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL")) return 424;
+  if (errorMessage.includes("GOOGLE_CHAT_PRIVATE_KEY")) return 424;
+  if (errorMessage.includes("DM-Space")) return 424;
   return 502;
 }
 
@@ -48,6 +64,32 @@ function appUrlFromRequest(request: NextRequest) {
   const proto = request.headers.get("x-forwarded-proto") || "http";
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
   return `${proto}://${host}`;
+}
+
+async function insertDeliveryRows(
+  supabase: ReturnType<typeof getServerSupabase>,
+  rows: DeliveryRow[],
+  status: "sent" | "failed",
+  attempts: number,
+  extras: { deliveredAt?: string; deliveryMode?: "direct_dm" | "webhook_digest"; error?: string; digestSize?: number },
+) {
+  if (!supabase || !rows.length) return;
+  await supabase.from("notification_deliveries").insert(
+    rows.map(({ row, target, payload }) => ({
+      event_id: row.id,
+      channel: "google_chat",
+      status,
+      attempts,
+      target,
+      payload: {
+        ...payload,
+        ...(extras.deliveryMode ? { deliveryMode: extras.deliveryMode } : {}),
+        ...(extras.digestSize ? { digestSize: extras.digestSize } : {}),
+      },
+      delivered_at: extras.deliveredAt || null,
+      last_error: extras.error || null,
+    })),
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -64,10 +106,11 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const status = googleChatDeliveryStatus();
   return NextResponse.json({
     ok: true,
-    googleChat: googleChatDeliveryStatus(),
-    googleChatConfigured: googleChatDeliveryStatus().webhookConfigured,
+    googleChat: status,
+    googleChatConfigured: status.webhookConfigured || status.apiConfigured,
     pending: count || 0,
   });
 }
@@ -84,9 +127,9 @@ export async function POST(request: NextRequest) {
   const deliveryStatus = googleChatDeliveryStatus();
 
   if (!deliveryStatus.ready) {
-    const missing = deliveryStatus.webhookConfigured
+    const missing = deliveryStatus.webhookConfigured || deliveryStatus.apiConfigured
       ? "GOOGLE_CHAT_DELIVERY_ENABLED ist nicht auf true gesetzt."
-      : "GOOGLE_CHAT_WEBHOOK_URL ist nicht gesetzt.";
+      : "GOOGLE_CHAT_WEBHOOK_URL oder Google-Chat-Service-Account ist nicht gesetzt.";
     return NextResponse.json({
       error: missing,
       sent: 0,
@@ -151,8 +194,7 @@ export async function POST(request: NextRequest) {
     (preferenceResult.data || []).map((preference: PreferenceRow) => [`${preference.profile_id}:${preference.event_type}`, preference.enabled]),
   );
   const results: Array<{ eventId: number; status: "sent" | "failed" | "skipped"; error?: string }> = [];
-  const digestEvents: GoogleChatDigestEvent[] = [];
-  const digestRows: Array<{ row: NotificationRow; target: string; payload: GoogleChatDigestEvent }> = [];
+  const deliverableRows: DeliveryRow[] = [];
 
   for (const row of events as NotificationRow[]) {
     const actor = row.actor_profile_id ? profiles.get(row.actor_profile_id) : null;
@@ -184,70 +226,81 @@ export async function POST(request: NextRequest) {
     }
 
     if (recipient?.notifications_enabled === false) {
-      await supabase.from("notification_deliveries").insert({
-        event_id: row.id,
-        channel: "google_chat",
-        status: "failed",
-        attempts: 0,
-        target,
-        payload: deliveryEvent,
-        last_error: "Benachrichtigungen für Empfänger deaktiviert.",
+      await insertDeliveryRows(supabase, [{ row, target, payload: deliveryEvent }], "failed", 0, {
+        error: "Benachrichtigungen für Empfänger deaktiviert.",
       });
       results.push({ eventId: row.id, status: "skipped", error: "Benachrichtigungen deaktiviert." });
       continue;
     }
 
     if (recipient && preferences.get(`${recipient.id}:${row.type}`) === false) {
-      await supabase.from("notification_deliveries").insert({
-        event_id: row.id,
-        channel: "google_chat",
-        status: "failed",
-        attempts: 0,
-        target,
-        payload: deliveryEvent,
-        last_error: "Google-Chat-Präferenz für diesen Event-Typ deaktiviert.",
+      await insertDeliveryRows(supabase, [{ row, target, payload: deliveryEvent }], "failed", 0, {
+        error: "Google-Chat-Präferenz für diesen Event-Typ deaktiviert.",
       });
       results.push({ eventId: row.id, status: "skipped", error: "Google-Chat-Präferenz deaktiviert." });
       continue;
     }
 
-    digestEvents.push(deliveryEvent);
-    digestRows.push({ row, target, payload: deliveryEvent });
+    deliverableRows.push({ row, target, payload: deliveryEvent });
   }
 
-  if (!digestEvents.length) {
+  if (!deliverableRows.length) {
     return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: results.length, results });
   }
 
-  try {
-    await sendGoogleChatDigest(digestEvents, appUrlFromRequest(request));
-    const deliveredAt = new Date().toISOString();
-    await supabase.from("notification_deliveries").insert(
-      digestRows.map(({ row, target, payload }) => ({
-        event_id: row.id,
-        channel: "google_chat",
-        status: "sent",
-        attempts: 1,
-        target,
-        payload: { ...payload, digestSize: digestEvents.length },
-        delivered_at: deliveredAt,
-      })),
-    );
-    results.push(...digestRows.map(({ row }) => ({ eventId: row.id, status: "sent" as const })));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Google Chat Versand fehlgeschlagen.";
-    await supabase.from("notification_deliveries").insert(
-      digestRows.map(({ row, target, payload }) => ({
-        event_id: row.id,
-        channel: "google_chat",
-        status: "failed",
-        attempts: 1,
-        target,
-        payload,
-        last_error: message,
-      })),
-    );
-    results.push(...digestRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error: message })));
+  const appUrl = appUrlFromRequest(request);
+  const deliveredAt = new Date().toISOString();
+  const directDmRows = deliveryStatus.apiConfigured
+    ? deliverableRows.filter(({ target }) => isGoogleChatDmSpace(target))
+    : [];
+  const webhookRows = deliveryStatus.webhookConfigured
+    ? deliverableRows.filter(({ target }) => !deliveryStatus.apiConfigured || !isGoogleChatDmSpace(target))
+    : [];
+  const undeliverableRows = deliverableRows.filter(({ target }) =>
+    deliveryStatus.apiConfigured && !deliveryStatus.webhookConfigured && !isGoogleChatDmSpace(target),
+  );
+
+  if (undeliverableRows.length) {
+    const error = "Kein Google-Chat-DM-Space im Profil hinterlegt.";
+    await insertDeliveryRows(supabase, undeliverableRows, "failed", 0, { error });
+    results.push(...undeliverableRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error })));
+  }
+
+  if (directDmRows.length) {
+    const rowsBySpace = new Map<string, DeliveryRow[]>();
+    for (const row of directDmRows) rowsBySpace.set(row.target, [...(rowsBySpace.get(row.target) || []), row]);
+
+    for (const [target, rows] of rowsBySpace) {
+      try {
+        await sendGoogleChatSpaceDigest(target, rows.map(({ payload }) => payload), appUrl);
+        await insertDeliveryRows(supabase, rows, "sent", 1, {
+          deliveredAt,
+          deliveryMode: "direct_dm",
+          digestSize: rows.length,
+        });
+        results.push(...rows.map(({ row }) => ({ eventId: row.id, status: "sent" as const })));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Google Chat DM-Versand fehlgeschlagen.";
+        await insertDeliveryRows(supabase, rows, "failed", 1, { error: message, deliveryMode: "direct_dm" });
+        results.push(...rows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error: message })));
+      }
+    }
+  }
+
+  if (webhookRows.length) {
+    try {
+      await sendGoogleChatDigest(webhookRows.map(({ payload }) => payload), appUrl);
+      await insertDeliveryRows(supabase, webhookRows, "sent", 1, {
+        deliveredAt,
+        deliveryMode: "webhook_digest",
+        digestSize: webhookRows.length,
+      });
+      results.push(...webhookRows.map(({ row }) => ({ eventId: row.id, status: "sent" as const })));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Google Chat Versand fehlgeschlagen.";
+      await insertDeliveryRows(supabase, webhookRows, "failed", 1, { error: message, deliveryMode: "webhook_digest" });
+      results.push(...webhookRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error: message })));
+    }
   }
 
   const sent = results.filter((result) => result.status === "sent").length;
@@ -259,5 +312,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage, sent, failed, skipped, results }, { status: statusCodeForError(errorMessage) });
   }
 
-  return NextResponse.json({ ok: true, sent, failed, skipped, results });
+  return NextResponse.json({ ok: true, sent, failed, skipped, results, googleChat: deliveryStatus });
 }
