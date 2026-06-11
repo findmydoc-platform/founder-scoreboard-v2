@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
+import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import type { TaskFocusItem } from "@/lib/types";
 
@@ -44,8 +46,18 @@ export async function POST(request: NextRequest) {
   if (!taskId) return NextResponse.json({ error: "Aufgabe ist erforderlich." }, { status: 400 });
 
   const status = payload.status && focusStatuses.has(payload.status) ? payload.status : "planned";
-  const profileId = payload.profileId || permission.profile?.id || "";
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  const profileId = isOperationalLead ? payload.profileId || permission.profile?.id || "" : permission.profile?.id || "";
   const focusDate = payload.focusDate || todayIso();
+  const { data: task, error: taskError } = await supabase
+    .from("tasks")
+    .select("id,owner")
+    .eq("id", taskId)
+    .single();
+  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (!isOperationalLead && task.owner !== permission.profile?.id) {
+    return NextResponse.json({ error: "Founder können nur eigene Aufgaben in den Fokus nehmen." }, { status: 403 });
+  }
   const { data: existingFocus } = await supabase
     .from("task_focus_items")
     .select("id,task_id")
@@ -61,7 +73,7 @@ export async function POST(request: NextRequest) {
     task_id: taskId,
     focus_date: focusDate,
     position: Math.max(1, Math.min(3, Math.round(Number(payload.position || 1)))),
-    next_step: typeof payload.nextStep === "string" ? payload.nextStep.trim().slice(0, 500) : "",
+    next_step: cleanText(payload.nextStep, 500),
     status,
     updated_at: new Date().toISOString(),
   };
@@ -94,10 +106,14 @@ export async function DELETE(request: NextRequest) {
 
   const { data: focusItem, error: readError } = await supabase
     .from("task_focus_items")
-    .select("id,task_id")
+    .select("id,task_id,profile_id")
     .eq("id", id)
     .single();
   if (readError || !focusItem) return NextResponse.json({ error: "Fokus-Eintrag nicht gefunden." }, { status: 404 });
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  if (!isOperationalLead && focusItem.profile_id !== permission.profile?.id) {
+    return NextResponse.json({ error: "Founder können nur eigene Fokus-Einträge entfernen." }, { status: 403 });
+  }
 
   const { error } = await supabase.from("task_focus_items").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

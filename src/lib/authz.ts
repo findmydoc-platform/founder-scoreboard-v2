@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { isOperationalLeadRole } from "./platform";
 import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
 import type { PlatformRole, Profile } from "./types";
 
@@ -44,7 +45,7 @@ export async function requirePlatformRole(
   if (profileError || !profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
   let effectiveProfile = profile;
   const devProfileId = request.headers.get("x-fmd-dev-profile-id")?.trim() || "";
-  const canUseDevProfile = profile.platform_role === "ceo" || profile.platform_role === "deputy";
+  const canUseDevProfile = isOperationalLeadRole(profile.platform_role);
 
   if (devProfileId && devProfileOverrideAllowed(request) && canUseDevProfile) {
     const { data: overrideProfile, error: overrideError } = await supabase

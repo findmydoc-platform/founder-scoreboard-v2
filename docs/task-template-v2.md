@@ -4,7 +4,7 @@ Die alten GitHub-Templates bleiben nur Referenz. Neue Sprint-Deliverables verwen
 
 ```text
 Epic / Meilenstein
-  -> Group Commitment
+  -> Initiative
       -> Deliverable
           -> Sub-Issue
 ```
@@ -14,8 +14,10 @@ Der Sprint ist kein Parent in dieser Hierarchie, sondern der Zeitcontainer für 
 ## Epic / Meilenstein
 Strategisches Ziel über mehrere Sprints, z. B. Investor Ready, Messe Launch oder Legal Go-Live. Nicht direkt scoring-relevant.
 
-## Group Commitment
-Themenblock innerhalb eines Epics. Bündelt mehrere Deliverables, ist aber selbst nicht direkt scoring-relevant.
+## Initiative
+Outcome-Brief innerhalb eines Epics. Bündelt mehrere Deliverables, benennt Owner, Ziel und Erfolgskriterien, ist aber selbst nicht direkt scoring-relevant.
+
+Die Initiative trägt den Mini-RACI-Kontext: genau ein Accountable-Profil sowie Profil-Listen für Responsible, Consulted und Informed. Deliverables berücksichtigen diesen Kontext, bleiben aber die score-relevante Arbeitsebene.
 
 ## Deliverable
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum und Review. Nur Deliverables sind scoring-relevant.

@@ -1,5 +1,9 @@
 import type { Profile, Task, TaskRelation, TaskRelationType } from "./types";
 
+export function isOperationalLeadRole(role?: Profile["platformRole"] | null) {
+  return role === "ceo" || role === "deputy";
+}
+
 export function reviewLabel(status: Task["reviewStatus"]) {
   const labels: Record<Task["reviewStatus"], string> = {
     not_requested: "Nicht angefragt",

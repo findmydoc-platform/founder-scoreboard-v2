@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireOperationalLead } from "@/lib/authz";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
+import { requireFounder, requireOperationalLead } from "@/lib/authz";
+import { createGoogleCalendarEvent, isGoogleCalendarSyncConfigured } from "@/lib/google-calendar";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
 
@@ -7,29 +9,53 @@ type CreateMeetingPayload = {
   id?: number;
   title?: string;
   meetingAt?: string;
+  durationMinutes?: number;
   agenda?: string;
   sprintId?: string;
   profileIds?: string[];
   status?: Meeting["status"];
 };
 
-function cleanText(value: unknown, maxLength: number) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
 function cleanProfileIds(value: unknown) {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)));
 }
 
-function mapMeeting(row: { id: number; sprint_id: string; title: string; meeting_at: string; status: Meeting["status"]; agenda: string | null }): Meeting {
+function cleanDurationMinutes(value: unknown) {
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes < 15 || minutes > 480) return 60;
+  return minutes;
+}
+
+function mapMeeting(row: {
+  id: number;
+  sprint_id: string;
+  title: string;
+  meeting_at: string;
+  duration_minutes: number | null;
+  status: Meeting["status"];
+  agenda: string | null;
+  google_calendar_id: string | null;
+  google_calendar_event_id: string | null;
+  google_calendar_html_link: string | null;
+  google_calendar_sync_status: Meeting["googleCalendarSyncStatus"] | null;
+  google_calendar_sync_error: string | null;
+  google_calendar_synced_at: string | null;
+}): Meeting {
   return {
     id: row.id,
     sprintId: row.sprint_id,
     title: row.title,
     meetingAt: row.meeting_at,
+    durationMinutes: row.duration_minutes || 60,
     status: row.status,
     agenda: row.agenda || "",
+    googleCalendarId: row.google_calendar_id || "",
+    googleCalendarEventId: row.google_calendar_event_id || "",
+    googleCalendarHtmlLink: row.google_calendar_html_link || "",
+    googleCalendarSyncStatus: row.google_calendar_sync_status || "not_synced",
+    googleCalendarSyncError: row.google_calendar_sync_error || "",
+    googleCalendarSyncedAt: row.google_calendar_synced_at || "",
   };
 }
 
@@ -63,7 +89,7 @@ export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
   if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
 
-  const permission = await requireOperationalLead(request);
+  const permission = await requireFounder(request);
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
   if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
 
@@ -74,14 +100,18 @@ export async function POST(request: NextRequest) {
   const profileIds = cleanProfileIds(payload.profileIds);
   const meetingAt = cleanText(payload.meetingAt, 80);
   const parsedMeetingAt = meetingAt ? new Date(meetingAt) : null;
+  const durationMinutes = cleanDurationMinutes(payload.durationMinutes);
 
   if (!sprintId) return NextResponse.json({ error: "Sprint ist erforderlich." }, { status: 400 });
   if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return NextResponse.json({ error: "Meeting-Zeitpunkt ist ungültig." }, { status: 400 });
   if (!profileIds.length) return NextResponse.json({ error: "Mindestens ein Teilnehmer ist erforderlich." }, { status: 400 });
 
-  const [{ data: sprint }, { data: profiles }] = await Promise.all([
+  const [{ data: sprint }, { data: profiles }, { data: actorProfile }] = await Promise.all([
     supabase.from("sprints").select("id").eq("id", sprintId).single(),
-    supabase.from("profiles").select("id").in("id", profileIds),
+    supabase.from("profiles").select("id,name,google_calendar_email").in("id", profileIds),
+    permission.profile?.id
+      ? supabase.from("profiles").select("id,google_calendar_email").eq("id", permission.profile.id).single()
+      : Promise.resolve({ data: null }),
   ]);
 
   if (!sprint) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
@@ -94,11 +124,12 @@ export async function POST(request: NextRequest) {
       sprint_id: sprintId,
       title,
       meeting_at: parsedMeetingAt.toISOString(),
+      duration_minutes: durationMinutes,
       status: "planned",
       agenda,
       updated_at: new Date().toISOString(),
     })
-    .select("id,sprint_id,title,meeting_at,status,agenda")
+    .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .single();
 
   if (meetingError || !meeting) return NextResponse.json({ error: meetingError?.message || "Meeting konnte nicht angelegt werden." }, { status: 500 });
@@ -118,6 +149,55 @@ export async function POST(request: NextRequest) {
 
   if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 });
 
+  const attendeeEmails = (profiles || [])
+    .map((profile) => profile.google_calendar_email)
+    .filter((email): email is string => Boolean(email));
+  const organizerEmail = actorProfile?.google_calendar_email || attendeeEmails[0] || "";
+  let calendarSync: { status: "synced" | "skipped" | "failed"; htmlLink?: string; error?: string } = { status: "skipped" };
+
+  if (isGoogleCalendarSyncConfigured() && organizerEmail) {
+    try {
+      const synced = await createGoogleCalendarEvent({
+        organizerEmail,
+        attendeeEmails: attendeeEmails.filter((email) => email !== organizerEmail),
+        title,
+        agenda,
+        startIso: parsedMeetingAt.toISOString(),
+        durationMinutes,
+      });
+      const syncedAt = new Date().toISOString();
+      const { data: syncedMeeting } = await supabase
+        .from("meetings")
+        .update({
+          google_calendar_id: synced.calendarId,
+          google_calendar_event_id: synced.eventId,
+          google_calendar_html_link: synced.htmlLink,
+          google_calendar_sync_status: "synced",
+          google_calendar_sync_error: "",
+          google_calendar_synced_at: syncedAt,
+          updated_at: syncedAt,
+        })
+        .eq("id", meeting.id)
+        .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
+        .single();
+      if (syncedMeeting) Object.assign(meeting, syncedMeeting);
+      calendarSync = { status: "synced", htmlLink: synced.htmlLink };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Google Calendar Sync fehlgeschlagen.";
+      await supabase
+        .from("meetings")
+        .update({
+          google_calendar_sync_status: "failed",
+          google_calendar_sync_error: message.slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", meeting.id);
+      meeting.google_calendar_sync_status = "failed";
+      meeting.google_calendar_sync_error = message;
+      calendarSync = { status: "failed", error: message };
+    }
+  }
+
   const notifications = profileIds
     .filter((profileId) => profileId !== permission.profile?.id)
     .map((profileId) => ({
@@ -136,14 +216,14 @@ export async function POST(request: NextRequest) {
     action: "meeting.create",
     entity_type: "meeting",
     entity_id: String(meeting.id),
-    after_data: { title, agenda, sprintId, meetingAt: parsedMeetingAt.toISOString(), profileIds },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    after_data: { title, agenda, sprintId, meetingAt: parsedMeetingAt.toISOString(), durationMinutes, profileIds, calendarSync },
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({
     meeting: mapMeeting(meeting),
     attendance: (attendance || []).map(mapAttendance),
+    calendarSync,
   });
 }
 
@@ -161,7 +241,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data: current, error: currentError } = await supabase
     .from("meetings")
-    .select("id,sprint_id,title,meeting_at,status,agenda")
+    .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .eq("id", id)
     .single();
   if (currentError || !current) return NextResponse.json({ error: "Meeting wurde nicht gefunden." }, { status: 404 });
@@ -188,7 +268,7 @@ export async function PATCH(request: NextRequest) {
     .from("meetings")
     .update(patch)
     .eq("id", id)
-    .select("id,sprint_id,title,meeting_at,status,agenda")
+    .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .single();
 
   if (error || !meeting) return NextResponse.json({ error: error?.message || "Meeting konnte nicht aktualisiert werden." }, { status: 500 });
@@ -200,8 +280,7 @@ export async function PATCH(request: NextRequest) {
     entity_id: String(id),
     before_data: current,
     after_data: patch,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ meeting: mapMeeting(meeting) });

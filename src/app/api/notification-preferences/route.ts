@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { getServerSupabase } from "@/lib/supabase";
@@ -67,8 +68,7 @@ export async function PATCH(request: NextRequest) {
       event_type: eventType,
       enabled: payload.enabled,
     },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

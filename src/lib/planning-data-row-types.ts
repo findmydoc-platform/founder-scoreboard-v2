@@ -1,0 +1,331 @@
+import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, Sprint, SprintCommitment, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+
+export type DbProfile = {
+  id: string;
+  name: string;
+  role: Profile["role"];
+  platform_role: Profile["platformRole"] | null;
+  org_role: string | null;
+  github_login: string | null;
+  deputy_for: string | null;
+  deputy_active_from: string | null;
+  deputy_active_until: string | null;
+  focus: string | null;
+  weekly_capacity: number;
+  profile_color: string | null;
+  google_chat_user_id: string | null;
+  google_chat_dm_space: string | null;
+  notifications_enabled: boolean | null;
+  google_calendar_email: string | null;
+  google_calendar_sync_enabled: boolean | null;
+  google_calendar_last_synced_at: string | null;
+};
+
+export type DbPackage = {
+  id: string;
+  milestone_id: string | null;
+  owner_id: string | null;
+  accountable_profile_id: string | null;
+  responsible_profile_ids: string[] | null;
+  consulted_profile_ids: string[] | null;
+  informed_profile_ids: string[] | null;
+  title: string;
+  goal: string | null;
+  priority: string | null;
+  status: Package["status"] | null;
+  target_date: string | null;
+  success_criteria: string | null;
+  scope_constraints: string | null;
+  sort_order: number;
+};
+
+export type DbMilestone = {
+  id: string;
+  title: string;
+  description: string | null;
+  target_date: string | null;
+  status: Milestone["status"];
+  sort_order: number;
+};
+
+export type DbTask = {
+  id: string;
+  sort_order: number;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  owner: string | null;
+  assignee: string | null;
+  created_by: string | null;
+  workstream: string | null;
+  package_id: string | null;
+  deadline: string | null;
+  problem_statement: string | null;
+  intended_outcome: string | null;
+  scope_constraints: string | null;
+  acceptance_criteria: string | null;
+  evidence_required: string | null;
+  dod_template_version: string | null;
+  definition_of_done: string | null;
+  evidence_link: string | null;
+  issue_number: string | null;
+  issue_url: string | null;
+  watched: boolean | null;
+  estimate_hours: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  sprint_id: string | null;
+  milestone_id: string | null;
+  review_status: Task["reviewStatus"] | null;
+  score_points: number | null;
+  score_final: boolean | null;
+  github_repo: string | null;
+  github_issue_number: number | null;
+  github_issue_url: string | null;
+  github_sync_status: Task["githubSyncStatus"] | null;
+  github_last_synced_at: string | null;
+  github_sync_error: string | null;
+  task_type: Task["taskType"] | null;
+  parent_task_id: string | null;
+  score_relevant: boolean | null;
+  original_sprint_id: string | null;
+  carried_from_task_id: string | null;
+  carried_from_sprint_id: string | null;
+  carryover_reason: string | null;
+  carryover_count: number | null;
+  sprint_outcome: Task["sprintOutcome"] | null;
+  self_dod_checked: boolean | null;
+  self_evidence_checked: boolean | null;
+  self_documented_checked: boolean | null;
+  self_blockers_checked: boolean | null;
+  task_dependencies?: { note: string }[];
+  task_notes?: { note: string } | null;
+};
+
+export type DbSprint = {
+  id: string;
+  name: string;
+  status: Sprint["status"];
+  start_date: string | null;
+  end_date: string | null;
+  review_due_at: string | null;
+  score_locked: boolean;
+};
+
+export type DbDecision = {
+  id: number;
+  title: string;
+  context: string | null;
+  decision: string | null;
+  status: Decision["status"];
+  required_profile_ids: string[] | null;
+  created_by: string | null;
+  locked_at: string | null;
+  decision_confirmations?: { profile_id: string }[];
+};
+
+export type DbSprintCommitment = {
+  id: number;
+  sprint_id: string;
+  profile_id: string;
+  commitment_level: SprintCommitment["commitmentLevel"];
+  weekly_hours: number;
+  note: string | null;
+};
+
+export type DbAvailability = {
+  id: number;
+  profile_id: string;
+  type: AvailabilityEntry["type"];
+  title: string | null;
+  blocker_kind: AvailabilityEntry["blockerKind"] | null;
+  weekday: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  note: string | null;
+  source: AvailabilityEntry["source"] | null;
+  external_id: string | null;
+  external_calendar_id: string | null;
+  synced_at: string | null;
+};
+
+export type DbAuditEntry = {
+  id: number;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor_profile_id: string | null;
+  created_at: string;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+};
+
+export type DbDecisionComment = {
+  id: number;
+  decision_id: number;
+  profile_id: string | null;
+  type: DecisionComment["type"];
+  comment: string;
+  created_at: string;
+};
+
+export type DbTaskComment = {
+  id: number;
+  task_id: string;
+  profile_id: string | null;
+  comment: string;
+  created_at: string;
+};
+
+export type DbTaskExternalComment = {
+  id: number;
+  task_id: string;
+  source: TaskExternalComment["source"];
+  external_id: string;
+  author_login: string;
+  author_avatar_url: string | null;
+  body: string;
+  html_url: string | null;
+  created_at: string;
+  imported_at: string;
+};
+
+export type DbTaskBlocker = {
+  id: number;
+  task_id: string;
+  profile_id: string | null;
+  reason: string;
+  impact: string | null;
+  needs_help_from: string | null;
+  status: TaskBlocker["status"];
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export type DbTaskRelation = {
+  id: number;
+  task_id: string;
+  related_task_id: string;
+  relation_type: TaskRelation["relationType"];
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DbTaskActivity = {
+  id: number;
+  task_id: string;
+  message: string;
+  created_at: string;
+};
+
+export type DbTaskFocusItem = {
+  id: number;
+  profile_id: string | null;
+  task_id: string;
+  focus_date: string;
+  position: number;
+  next_step: string | null;
+  status: TaskFocusItem["status"];
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbDecisionTaskLink = {
+  id: number;
+  decision_id: number;
+  task_id: string;
+  link_type: DecisionTaskLink["linkType"];
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type DbNotificationEvent = {
+  id: number;
+  type: string;
+  actor_profile_id: string | null;
+  recipient_profile_id: string | null;
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  body: string | null;
+  status: NotificationEvent["status"];
+  created_at: string;
+};
+
+export type DbNotificationDelivery = {
+  id: number;
+  event_id: number;
+  channel: NotificationDelivery["channel"];
+  status: NotificationDelivery["status"];
+  attempts: number;
+  target: string | null;
+  last_error: string | null;
+  delivered_at: string | null;
+  created_at: string;
+};
+
+export type DbNotificationPreference = {
+  id: number;
+  profile_id: string;
+  channel: NotificationPreference["channel"];
+  event_type: string;
+  enabled: boolean;
+};
+
+export type DbFeedbackItem = {
+  id: number;
+  type: FeedbackItem["type"];
+  status: FeedbackItem["status"];
+  severity: FeedbackItem["severity"];
+  profile_id: string | null;
+  title: string;
+  description: string;
+  page_url: string | null;
+  created_at: string;
+};
+
+export type DbFmdTool = {
+  id: string;
+  name: string;
+  category: FmdTool["category"];
+  kind: string;
+  description: string | null;
+  url: string | null;
+  owner: string | null;
+  status: FmdTool["status"];
+  sort_order: number;
+};
+
+export type DbMeeting = {
+  id: number;
+  sprint_id: string;
+  title: string;
+  meeting_at: string;
+  duration_minutes: number | null;
+  status: Meeting["status"];
+  agenda: string | null;
+  google_calendar_id: string | null;
+  google_calendar_event_id: string | null;
+  google_calendar_html_link: string | null;
+  google_calendar_sync_status: Meeting["googleCalendarSyncStatus"] | null;
+  google_calendar_sync_error: string | null;
+  google_calendar_synced_at: string | null;
+};
+
+export type DbMeetingAttendance = {
+  id: number;
+  meeting_id: number;
+  profile_id: string;
+  status: MeetingAttendance["status"];
+  absence_reason: string | null;
+  reason_accepted: boolean;
+  written_update: string | null;
+  points: number;
+  created_at: string;
+  updated_at: string;
+};

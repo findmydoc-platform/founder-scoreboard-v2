@@ -16,12 +16,24 @@ create table if not exists projects (
 
 create table if not exists packages (
   id text primary key,
-  project_id text not null references projects(id) on delete cascade,
-  title text not null,
+    project_id text not null references projects(id) on delete cascade,
+    owner_id text references profiles(id) on delete set null,
+    accountable_profile_id text references profiles(id) on delete set null,
+    responsible_profile_ids text[] not null default '{}',
+    consulted_profile_ids text[] not null default '{}',
+    informed_profile_ids text[] not null default '{}',
+    title text not null,
   goal text,
   priority text,
-  sort_order integer not null default 0
-);
+  status text not null default 'planned' check (status in ('planned', 'active', 'done', 'paused')),
+  target_date date,
+  success_criteria text not null default '',
+    scope_constraints text not null default '',
+    sort_order integer not null default 0,
+    constraint packages_responsible_profile_ids_no_null check (array_position(responsible_profile_ids, null) is null),
+    constraint packages_consulted_profile_ids_no_null check (array_position(consulted_profile_ids, null) is null),
+    constraint packages_informed_profile_ids_no_null check (array_position(informed_profile_ids, null) is null)
+  );
 
 create table if not exists tasks (
   id text primary key,
@@ -100,7 +112,11 @@ create table if not exists decision_task_links (
 );
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
-create index if not exists packages_project_id_idx on packages(project_id);
+  create index if not exists packages_project_id_idx on packages(project_id);
+  create index if not exists packages_owner_id_idx on packages(owner_id);
+  create index if not exists packages_accountable_profile_id_idx on packages(accountable_profile_id);
+  create index if not exists packages_status_idx on packages(status);
+create index if not exists packages_target_date_idx on packages(target_date);
 create index if not exists tasks_project_id_idx on tasks(project_id);
 create index if not exists tasks_package_id_idx on tasks(package_id);
 create index if not exists tasks_status_idx on tasks(status);

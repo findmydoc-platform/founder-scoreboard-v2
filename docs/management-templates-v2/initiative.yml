@@ -1,0 +1,88 @@
+name: Initiative
+description: Outcome-Brief innerhalb eines Epic / Meilensteins
+title: "[Initiative]: "
+labels: ["type:initiative"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Eine Initiative bündelt mehrere Deliverables innerhalb eines Epic / Meilensteins.
+        Sie ist ein CEO-/Leadership-Brief und nicht direkt score-relevant.
+
+  - type: input
+    id: epic
+    attributes:
+      label: Epic / Meilenstein
+      description: Zu welchem Epic gehört diese Initiative?
+      placeholder: "z. B. Investor Ready"
+    validations:
+      required: true
+
+  - type: input
+    id: owner
+    attributes:
+      label: Initiative-Owner
+      description: Wer zerlegt die Initiative in konkrete Deliverables?
+      placeholder: "z. B. Youssef"
+    validations:
+      required: true
+
+  - type: input
+    id: accountable
+    attributes:
+      label: Accountable
+      description: Genau eine Person mit Entscheidungs- und Ergebnisverantwortung.
+      placeholder: "z. B. Volkan"
+    validations:
+      required: true
+
+  - type: input
+    id: responsible
+    attributes:
+      label: Responsible
+      description: Wer führt die Umsetzung oder zentrale Deliverables?
+      placeholder: "z. B. Youssef, Özen"
+    validations:
+      required: true
+
+  - type: input
+    id: consulted
+    attributes:
+      label: Consulted
+      description: Wer muss aktiv einbezogen werden?
+      placeholder: "z. B. Anil"
+    validations:
+      required: false
+
+  - type: input
+    id: informed
+    attributes:
+      label: Informed
+      description: Wer soll informiert bleiben?
+      placeholder: "z. B. Sebastian"
+    validations:
+      required: false
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ziel / Outcome
+      description: Welcher fertige Zustand soll durch diese Initiative entstehen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: success_criteria
+    attributes:
+      label: Erfolgskriterien
+      description: Woran erkennt das Team, dass diese Initiative ausreichend erfüllt ist?
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Welche harten Rahmenbedingungen, No-Gos oder Abhängigkeiten gelten?
+    validations:
+      required: false

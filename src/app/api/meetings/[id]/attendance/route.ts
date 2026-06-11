@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { MeetingAttendanceStatus } from "@/lib/types";
@@ -46,8 +47,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: "Nur CEO oder Deputy können Anwesenheit final bewerten." }, { status: 403 });
   }
 
-  const absenceReason = typeof payload.absenceReason === "string" ? payload.absenceReason.trim().slice(0, 2000) : "";
-  const writtenUpdate = typeof payload.writtenUpdate === "string" ? payload.writtenUpdate.trim().slice(0, 4000) : "";
+  const absenceReason = cleanText(payload.absenceReason, 2000);
+  const writtenUpdate = cleanText(payload.writtenUpdate, 4000);
   if (!isLead && status !== "pending" && !absenceReason) {
     return NextResponse.json({ error: "Für eine Meeting-Rückmeldung ist ein konkreter Grund erforderlich." }, { status: 400 });
   }
@@ -115,8 +116,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     entity_type: "meeting",
     entity_id: String(meetingId),
     after_data: { profileId, status, absenceReason, reasonAccepted, points, mode: isLead ? "lead_review" : "founder_self_report" },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

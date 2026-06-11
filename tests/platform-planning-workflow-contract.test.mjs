@@ -1,0 +1,353 @@
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import assert from "node:assert/strict";
+
+test("dev role switch is local-only and flows through API authorization", async () => {
+  const authz = await readFile("src/lib/authz.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const devSwitch = await readFile("src/components/dev-role-switch.tsx", "utf8");
+
+  assert.match(authz, /x-fmd-dev-profile-id/);
+  assert.match(authz, /process\.env\.NODE_ENV === "production"/);
+  assert.match(authz, /localhost\|127\\\.0\\\.0\\\.1\|\\\[::1\\\]/);
+  assert.match(authz, /isOperationalLeadRole\(profile\.platform_role\)/);
+  assert.match(ui, /DevRoleSwitch/);
+  assert.match(devSwitch, /Dev-Ansicht/);
+  assert.match(devSwitch, /roleLabel\(effectiveProfile\)/);
+  assert.match(ui, /x-fmd-dev-profile-id/);
+  assert.match(ui, /devProfileStateKey/);
+});
+
+test("task template v2 separates outcome criteria evidence and DoD", async () => {
+  const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
+  const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
+  const newTaskUi = await readFile("src/components/new-task-dialog.tsx", "utf8");
+  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const briefSection = await readFile("src/components/task-brief-section.tsx", "utf8");
+  const docs = await readFile("docs/task-template-v2.md", "utf8");
+
+  assert.match(migration, /problem_statement/);
+  assert.match(migration, /intended_outcome/);
+  assert.match(migration, /acceptance_criteria/);
+  assert.match(migration, /evidence_required/);
+  assert.match(createRoute, /problemStatement/);
+  assert.match(updateRoute, /acceptanceCriteria/);
+  assert.match(types, /problemStatement/);
+  assert.match(data, /task_dependencies\(note\), task_notes\(note\)/);
+  assert.match(dataRowTypes, /problem_statement/);
+  assert.match(newTaskUi, /Template v2/);
+  assert.match(detail, /TaskBriefSection/);
+  assert.match(briefSection, /Aufgabenbrief/);
+  assert.match(briefSection, /Acceptance Criteria/);
+  assert.match(briefSection, /Evidence Required/);
+  assert.match(briefSection, /Definition of Done/);
+  assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
+});
+
+test("story writing skill protects approved stories and enforces template guardrails", async () => {
+  const skill = await readFile(".agents/skills/fmd-story-writing/SKILL.md", "utf8");
+  const examples = await readFile(".agents/skills/fmd-story-writing/references/examples.md", "utf8");
+  const agent = await readFile(".agents/skills/fmd-story-writing/agents/openai.yaml", "utf8");
+  const rules = await readFile("AGENTS.md", "utf8");
+  const docs = await readFile("docs/task-template-v2.md", "utf8");
+
+  assert.match(skill, /fmd-story-writing/);
+  assert.match(skill, /Approved, released, reviewed, or GitHub-synced story/);
+  assert.match(skill, /Never change Acceptance Criteria/);
+  assert.match(skill, /Problem Statement/);
+  assert.match(skill, /current state/);
+  assert.match(skill, /pain point/);
+  assert.match(skill, /Do not describe the solution/);
+  assert.match(skill, /Scope & Constraints/);
+  assert.match(skill, /Acceptance Criteria/);
+  assert.match(skill, /objective and testable/);
+  assert.match(skill, /controlled by the owner/);
+  assert.match(skill, /Definition of Done/);
+  assert.match(examples, /Good:/);
+  assert.match(examples, /Bad:/);
+  assert.match(examples, /Protected Existing Story/);
+  assert.match(agent, /FMD Story Writing/);
+  assert.match(rules, /\.agents\/skills\/fmd-story-writing/);
+  assert.match(rules, /Do not silently rewrite/);
+  assert.match(docs, /Keine Lösung, Umsetzungsschritte oder technische Vorgaben/);
+  assert.match(docs, /Harte Vorgaben wie Recht, Compliance, Datenschutz, Security/);
+});
+
+test("strict auth gates planning data until a valid session is present", async () => {
+  const page = await readFile("src/app/page.tsx", "utf8");
+  const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
+  const authControl = await readFile("src/components/auth-control.tsx", "utf8");
+
+  assert.match(page, /requiresSupabaseAuth\(\)/);
+  assert.match(page, /emptyPlanningData/);
+  assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(authHook, /Du bist abgemeldet/);
+  assert.match(ui, /<AppBrand \/>/);
+  assert.doesNotMatch(ui, /ShieldCheck/);
+  assert.match(ui, /variant="gate"/);
+  assert.match(authControl, /Rollen und Zugriff werden nach dem Login/);
+  assert.match(authControl, /Mit GitHub anmelden/);
+  assert.match(authControl, /GitHub-Rechte fehlen/);
+  assert.doesNotMatch(authControl, /Login öffnen/);
+  assert.match(authHook, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
+  assert.match(authHook, /\/api\/planning-data/);
+});
+
+test("task review uses operational lead route and keeps rework non-final", async () => {
+  const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
+  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
+
+  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /task_reviews/);
+  assert.match(route, /scoreFinal = decision !== "changes_requested"/);
+  assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
+  assert.match(route, /github_sync_status: "not_synced"/);
+  assert.match(route, /Nacharbeit/);
+  assert.match(route, /checklist/);
+  assert.match(route, /acceptanceCriteriaMet/);
+  assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
+  assert.match(sprintUi, /CEO-Score/);
+  assert.match(sprintUi, /Nächster Schritt/);
+  assert.match(sprintUi, /Evidence Required/);
+  assert.match(sprintUi, /Definition of Done Snapshot/);
+  assert.match(route, /Sprint-Score ist bereits gelockt/);
+});
+
+test("sprint lock freezes open scores and closes the sprint", async () => {
+  const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+
+  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /score_points: 0/);
+  assert.match(route, /score_final: true/);
+  assert.match(route, /sprint.lock_score/);
+});
+
+test("sprint lock creates carryover for unfinished deliverables", async () => {
+  const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
+  const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+
+  assert.match(migration, /original_sprint_id/);
+  assert.match(migration, /carried_from_task_id/);
+  assert.match(migration, /sprint_outcome/);
+  assert.match(route, /communicated_blocker/);
+  assert.match(route, /review_status === "partial"/);
+  assert.match(route, /preserveScore/);
+  assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
+  assert.match(route, /github_issue_number: null/);
+  assert.match(route, /missed_uncommunicated/);
+  assert.match(route, /accepted_carryover/);
+  assert.match(route, /sprint\.task_carried_over/);
+  assert.match(panelSidebar, /Sprint-Verlauf/);
+  assert.match(ui, /Carry-over/);
+  assert.match(types, /carryoverReason/);
+});
+
+test("sprint configuration is operational-lead only and audited", async () => {
+  const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
+  const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
+  const sprintPlanningUi = await readFile("src/components/settings-sprint-planning.tsx", "utf8");
+
+  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /score_locked/);
+  assert.match(route, /Gelockte Sprints können nicht mehr geändert werden/);
+  assert.match(route, /Sprint-Start darf nicht nach dem Sprint-Ende liegen/);
+  assert.match(route, /Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden/);
+  assert.match(route, /sprint.update/);
+  assert.match(planRoute, /protectedSprintIds/);
+  assert.match(sprintUi, /findCurrentSprint/);
+  assert.match(sprintUi, /Aktueller Sprint/);
+  assert.match(sprintUi, /Zeitraum geschützt/);
+  assert.match(sprintUi, /current: currentSprint\?\.id === item\.id/);
+  assert.match(sprintUi, /locked: data\.tasks\.some/);
+  assert.match(ui, /SettingsOverview/);
+  assert.match(settingsOverviewUi, /SprintPlanningSection/);
+  assert.match(sprintPlanningUi, /Sprint-Planung/);
+  assert.match(sprintPlanningUi, /CustomDatePicker/);
+  assert.match(sprintPlanningUi, /onCreateSprintPlan\(sprintPlanningOptions\)/);
+  assert.match(sprintPlanningUi, /plannedSprintCount/);
+  assert.doesNotMatch(sprintUi, /· aktuell|· geschützt/);
+});
+
+test("tasks can be assigned to an unlocked sprint", async () => {
+  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+
+  assert.match(route, /sprintId/);
+  assert.match(route, /sprint_id/);
+  assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
+});
+
+test("decision confirmation can lock decisions after required confirmations", async () => {
+  const route = await readFile("src/app/api/decisions/[id]/confirm/route.ts", "utf8");
+
+  assert.match(route, /requireFounder/);
+  assert.match(route, /open_for_confirmation/);
+  assert.match(route, /status: "locked"/);
+  assert.match(route, /confirm_and_lock/);
+});
+
+test("decision creation opens CEO decisions for confirmation", async () => {
+  const route = await readFile("src/app/api/decisions/route.ts", "utf8");
+
+  assert.match(route, /requireCEO/);
+  assert.match(route, /open_for_confirmation/);
+  assert.match(route, /requiredProfileIds/);
+  assert.match(route, /Entscheidungstext ist erforderlich/);
+});
+
+test("decision edit is CEO-only, audited, and resets confirmations", async () => {
+  const route = await readFile("src/app/api/decisions/[id]/route.ts", "utf8");
+
+  assert.match(route, /requireCEO/);
+  assert.match(route, /Gelockte Decisions sind unveränderlich/);
+  assert.match(route, /decision_confirmations"\)\.delete/);
+  assert.match(route, /decision.update/);
+  assert.match(route, /before_data/);
+  assert.match(route, /after_data/);
+});
+
+test("decision objections are founder comments with audit trail", async () => {
+  const route = await readFile("src/app/api/decisions/[id]/objections/route.ts", "utf8");
+  const sql = await readFile("supabase/0003_decision_comments.sql", "utf8");
+
+  assert.match(sql, /create table if not exists decision_comments/);
+  assert.match(route, /requireFounder/);
+  assert.match(route, /decision_comments/);
+  assert.match(route, /decision.objection/);
+  assert.match(route, /Gelockte Decisions können nicht mehr beanstandet werden/);
+});
+
+test("profile role management is CEO-only and keeps one CEO", async () => {
+  const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
+  const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
+
+  assert.match(route, /requireCEO/);
+  assert.match(route, /platformRoles/);
+  assert.match(route, /Mindestens ein CEO muss gesetzt bleiben/);
+  assert.match(route, /profile.update/);
+  assert.match(route, /profile_color/);
+  assert.match(route, /google_chat_user_id/);
+  assert.match(route, /google_chat_dm_space/);
+  assert.match(route, /notifications_enabled/);
+  assert.match(route, /google_calendar_email/);
+  assert.match(route, /google_calendar_sync_enabled/);
+  assert.match(migration, /profile_color/);
+  assert.match(migration, /profiles_profile_color_hex/);
+  assert.match(data, /profile_color/);
+  assert.match(data, /google_calendar_last_synced_at/);
+  assert.match(ui, /TeamOverview/);
+  assert.match(teamUi, /profileColorOptions/);
+  assert.match(teamUi, /Post-it-Farbe/);
+  assert.match(teamUi, /Google Chat User-ID/);
+  assert.match(teamUi, /Google Chat DM-Space/);
+  assert.match(teamUi, /Google-Chat-Benachrichtigungen/);
+  assert.match(teamUi, /Kalender-E-Mail/);
+  assert.match(teamUi, /CEO-Bearbeitung aktiv/);
+  assert.match(teamUi, /Nur Ansicht/);
+  assert.match(teamUi, /canManageTeam/);
+  assert.match(teamUi, /Aktuell ist keine aktive Deputy-Vertretung gesetzt/);
+  assert.match(teamUi, /Rollen, Stammdaten und der zentrale Benachrichtigungsschalter sind CEO-geschützt/);
+});
+
+test("notification preferences are editable per profile and event type", async () => {
+  const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
+  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+
+  assert.match(route, /requireFounder/);
+  assert.match(route, /notification_preferences/);
+  assert.match(route, /allowedEventTypes/);
+  assert.match(route, /Keine Berechtigung für diese Benachrichtigungseinstellung/);
+  assert.match(route, /notification_preference\.update/);
+  assert.match(data, /notificationPreferenceResult/);
+  assert.match(dataMappers, /mapNotificationPreference/);
+  assert.match(types, /export type NotificationPreference/);
+  assert.match(teamUi, /Google-Chat-Events/);
+  assert.match(ui, /onUpdateNotificationPreference/);
+  assert.match(teamUi, /notificationEventLabel/);
+  assert.match(policy, /GoogleChatDigestEventType/);
+  assert.match(policy, /Review angefragt/);
+});
+
+test("decision audit loads before and after data for collapsible diffs", async () => {
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const decisionUi = await readFile("src/components/decision-log-overview.tsx", "utf8");
+
+  assert.match(data, /before_data,after_data/);
+  assert.match(dataMappers, /beforeData: row.before_data/);
+  assert.match(decisionUi, /auditChanges/);
+  assert.match(decisionUi, /Audit Trail/);
+  assert.match(decisionUi, /Vorher/);
+  assert.match(decisionUi, /Nachher/);
+});
+
+test("board tasks can be dragged between status columns", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
+
+  assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
+  assert.match(ui, /onDrop=\{\(event\) => dropTaskOnStatus\(status, event\)\}/);
+  assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
+  assert.match(ui, /updateTask\(task, \{ status \}\)/);
+  assert.match(ui, /founderStatusGuardMessage/);
+  assert.match(ui, /Founder können Aufgaben nicht direkt auf Erledigt setzen/);
+  assert.match(ui, /In Review verschieben/);
+  assert.match(ui, /Als blockiert markieren/);
+  assert.match(ui, /statusOptionsForRole/);
+});
+
+test("review workflow supports rework, suggestions, and sprint commitments", async () => {
+  const status = await readFile("src/lib/status.ts", "utf8");
+  const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
+  const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
+  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+
+  assert.match(status, /Nacharbeit/);
+  assert.match(status, /Vorschlag/);
+  assert.match(migration, /create table if not exists sprint_commitments/);
+  assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
+  assert.match(sprintUi, /CEO Review-Blatt/);
+  assert.match(sprintUi, /Review anfragen/);
+});
+
+test("founder self checklist is separate from CEO scoring", async () => {
+  const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
+  const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+
+  assert.match(migration, /self_dod_checked/);
+  assert.match(taskRoute, /self_dod_checked/);
+  assert.match(reviewRoute, /reviewDecisionPoints/);
+  assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
+  assert.doesNotMatch(sprintUi, /Founder-Arbeitsstand/);
+  assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
+  assert.match(sprintUi, /Review-Blatt/);
+  assert.match(sprintUi, /CEO Review-Blatt/);
+  assert.match(sprintUi, /Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score/);
+  assert.match(sprintUi, /reviewChecklistScore/);
+  assert.match(sprintUi, /Automatische CEO-Punkte/);
+  assert.match(sprintUi, /Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte/);
+  assert.match(reviewRoute, /checklistPoints/);
+  assert.match(reviewRoute, /acceptanceCriteriaMet/);
+});

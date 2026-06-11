@@ -6,6 +6,11 @@ const repo = process.env.GITHUB_SYNC_REPO || "management";
 export type GitHubTaskSyncContext = {
   packageTitle?: string;
   packageGoal?: string;
+  packageSuccessCriteria?: string;
+  raciAccountable?: string;
+  raciResponsible?: string;
+  raciConsulted?: string;
+  raciInformed?: string;
   milestoneTitle?: string;
   milestoneTargetDate?: string;
   sprintName?: string;
@@ -128,8 +133,13 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
       `- Typ: ${githubTypeLabel(task)}`,
       `- Epic / Milestone: ${context.milestoneTitle || task.milestoneId || "ohne Epic"}`,
       context.milestoneTargetDate ? `- Epic-Zieltermin: ${context.milestoneTargetDate}` : "",
-      `- Group Commitment: ${context.packageTitle || task.packageId || "ohne Group Commitment"}`,
-      context.packageGoal ? `- Group-Commitment-Ziel: ${context.packageGoal}` : "",
+      `- Initiative: ${context.packageTitle || task.packageId || "ohne Initiative"}`,
+      context.packageGoal ? `- Initiative-Ziel: ${context.packageGoal}` : "",
+      context.packageSuccessCriteria ? `- Initiative-Erfolgskriterien: ${context.packageSuccessCriteria}` : "",
+      context.raciAccountable ? `- RACI Accountable: ${context.raciAccountable}` : "",
+      context.raciResponsible ? `- RACI Responsible: ${context.raciResponsible}` : "",
+      context.raciConsulted ? `- RACI Consulted: ${context.raciConsulted}` : "",
+      context.raciInformed ? `- RACI Informed: ${context.raciInformed}` : "",
       `- Sprint: ${context.sprintName || task.sprintId || "nicht zugewiesen"}`,
       context.sprintRange ? `- Sprint-Zeitraum: ${context.sprintRange}` : "",
       context.sprintReviewDueAt ? `- Review fällig bis: ${context.sprintReviewDueAt}` : "",
@@ -229,7 +239,7 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
 }
 
 export async function archiveGitHubIssue(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfÃ¼gbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     method: "PATCH",

@@ -1,15 +1,19 @@
 import { readFile } from "node:fs/promises";
 
 const checks = [
-  ["docs/planning-hierarchy.md", /Epic \/ Meilenstein[\s\S]*Group Commitment[\s\S]*Deliverable[\s\S]*Sub-Issue/],
-  ["AGENTS.md", /Epic \/ Milestone -> Group Commitment -> Deliverable -> Sub-Issue/],
+  ["docs/planning-hierarchy.md", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
+  ["AGENTS.md", /Epic \/ Milestone -> Initiative -> Deliverable -> Sub-Issue/],
   ["supabase/0013_epic_group_commitment_hierarchy.sql", /packages add column if not exists milestone_id/],
+  ["supabase/0027_initiative_structure.sql", /owner_id[\s\S]*success_criteria[\s\S]*scope_constraints/],
+  ["supabase/0028_initiative_raci.sql", /accountable_profile_id[\s\S]*responsible_profile_ids[\s\S]*consulted_profile_ids[\s\S]*informed_profile_ids/],
   ["src/lib/types.ts", /milestoneId\?: string/],
   ["src/lib/github.ts", /Epic \/ Milestone/],
-  ["src/lib/github.ts", /Group Commitment/],
-  ["src/components/planning-app.tsx", /Epic \/ Meilenstein/],
-  ["src/components/planning-app.tsx", /Group Commitment/],
-  ["src/components/task-detail-page.tsx", /Epic \/ Meilenstein/],
+  ["src/lib/github.ts", /Initiative/],
+  ["src/components/planning-app.tsx", /Initiative/],
+  ["src/components/projects-overview.tsx", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
+  ["src/components/initiative-dialog.tsx", /Epic \/ Meilenstein/],
+  ["src/components/new-task-dialog.tsx", /Deliverables brauchen Epic, Initiative und Sprint/],
+  ["src/components/task-detail-panel-sidebar.tsx", /Epic \/ Meilenstein/],
 ];
 
 const failures = [];

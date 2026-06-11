@@ -245,9 +245,14 @@ create table if not exists projects (
 create table if not exists packages (
   id text primary key,
   project_id text not null references projects(id) on delete cascade,
+  owner_id text references profiles(id) on delete set null,
   title text not null,
   goal text,
   priority text,
+  status text not null default 'planned' check (status in ('planned', 'active', 'done', 'paused')),
+  target_date date,
+  success_criteria text not null default '',
+  scope_constraints text not null default '',
   sort_order integer not null default 0
 );
 
@@ -304,6 +309,9 @@ create table if not exists task_activity (
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
 create index if not exists packages_project_id_idx on packages(project_id);
+create index if not exists packages_owner_id_idx on packages(owner_id);
+create index if not exists packages_status_idx on packages(status);
+create index if not exists packages_target_date_idx on packages(target_date);
 create index if not exists tasks_project_id_idx on tasks(project_id);
 create index if not exists tasks_package_id_idx on tasks(package_id);
 create index if not exists tasks_status_idx on tasks(status);

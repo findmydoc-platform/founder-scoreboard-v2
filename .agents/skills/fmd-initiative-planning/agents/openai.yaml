@@ -1,0 +1,4 @@
+interface:
+  display_name: "FMD Initiative Planning"
+  short_description: "Write CEO initiative briefs and owner deliverables."
+  default_prompt: "Create or review an FMD Initiative using fmd-initiative-planning: keep CEO briefs outcome-focused, let owners define deliverables, and preserve the Epic / Initiative / Deliverable hierarchy."

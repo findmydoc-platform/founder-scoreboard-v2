@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const decisionId = Number(id);
   const payload = (await request.json()) as ObjectionPayload;
-  const comment = typeof payload.comment === "string" ? payload.comment.trim().slice(0, 2000) : "";
+  const comment = cleanText(payload.comment, 2000);
 
   if (!comment) return NextResponse.json({ error: "Ein Kommentar ist erforderlich." }, { status: 400 });
 

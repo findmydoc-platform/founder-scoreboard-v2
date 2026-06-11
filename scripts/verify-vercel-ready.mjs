@@ -34,6 +34,7 @@ const vercelProjectFile = ".vercel/project.json";
 const project = "founder-ops";
 const rootDirectory = ".";
 const productionDomain = "founder-ops.findmydoc.eu";
+const googleChatDomain = "founderops.findmydoc.eu";
 const githubEnvironments = ["preview", "production"];
 
 async function read(path) {
@@ -160,7 +161,18 @@ for (const marker of [
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
 }
 
+const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
+if (ciWorkflowPresent) {
+  const ci = await read(".github/workflows/ci.yml");
+  for (const marker of ["npm ci", "node --test tests/*.test.mjs", "npm run build", "npm run verify:release"]) {
+    if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
+  }
+}
+
 const localProjectLinked = existsSync(vercelProjectFile);
+const manualNextSteps = localProjectLinked
+  ? []
+  : ["vercel link --yes --project founder-ops"];
 
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
@@ -172,10 +184,12 @@ console.log(JSON.stringify({
   project,
   rootDirectory,
   productionDomain,
+  googleChatDomain,
   githubEnvironments,
   requiredEnvKeys,
   localProjectLinked,
   vercelProjectFile,
+  manualNextSteps,
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],

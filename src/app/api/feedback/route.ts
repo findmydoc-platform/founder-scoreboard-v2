@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { FeedbackItem } from "@/lib/types";
@@ -13,10 +14,6 @@ type FeedbackPayload = {
 
 const feedbackTypes = new Set(["bug", "feature"]);
 const severities = new Set(["P0", "P1", "P2", "P3"]);
-
-function cleanText(value: unknown, maxLength: number) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
@@ -71,8 +68,7 @@ export async function POST(request: NextRequest) {
     entity_type: "feedback",
     entity_id: String(created.id),
     after_data: { ...created },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   const feedback: FeedbackItem = {

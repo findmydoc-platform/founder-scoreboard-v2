@@ -8,6 +8,7 @@ This project deploys through lean GitHub Actions workflows using the Vercel CLI 
 - Vercel project: `founder-ops`
 - Root directory: `.`
 - Current production URL: `https://founder-ops.findmydoc.eu`
+- Planned Google Chat app URL: `https://founderops.findmydoc.eu/api/google-chat/events`
 - GitHub Environments: `preview` and `production`
 
 ## GitHub Environment Secrets
@@ -113,8 +114,17 @@ Run from the repository root:
 npm test
 npm run lint
 npm run build
+npm run verify:release
 npm run verify:vercel-ready
 npm run vercel:build
+```
+
+Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `npm audit --audit-level=moderate`.
+
+If `npm run verify:vercel-ready` reports `localProjectLinked: false`, link the local checkout to the Vercel project:
+
+```bash
+vercel link --yes --project founder-ops
 ```
 
 If production Supabase env is present locally, also run:

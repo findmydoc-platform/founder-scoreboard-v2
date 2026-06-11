@@ -17,6 +17,8 @@ type AvailabilityRow = {
   id: number;
   profile_id: string;
   type: AvailabilityEntry["type"];
+  title: string | null;
+  blocker_kind: AvailabilityEntry["blockerKind"] | null;
   weekday: number | null;
   start_date: string | null;
   end_date: string | null;
@@ -91,6 +93,8 @@ function mapEventToAvailability(profile: CalendarProfileRow, event: GoogleCalend
   return {
     profile_id: profile.id,
     type: "busy" as const,
+    title: event.summary ? event.summary.trim().slice(0, 160) : "Google Kalender",
+    blocker_kind: "calendar_event" as const,
     weekday: null,
     start_date: startDate,
     end_date: endDate,
@@ -109,6 +113,8 @@ function mapAvailability(row: AvailabilityRow): AvailabilityEntry {
     id: row.id,
     profileId: row.profile_id,
     type: row.type,
+    title: row.title || "",
+    blockerKind: row.blocker_kind || (row.source === "google_calendar" ? "calendar_event" : row.type === "vacation" ? "vacation" : row.type === "sick" ? "sick" : "on_business"),
     weekday: row.weekday,
     startDate: row.start_date || "",
     endDate: row.end_date || "",
@@ -245,7 +251,7 @@ export async function POST(request: NextRequest) {
 
   const { data: availabilityRows, error: availabilityError } = await supabase
     .from("availability")
-    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
+    .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .order("start_date");
 
   if (availabilityError) return NextResponse.json({ error: availabilityError.message }, { status: 500 });

@@ -75,6 +75,8 @@ GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
+The planned Google Chat app endpoint is `https://founderops.findmydoc.eu/api/google-chat/events`; keep it aligned with `docs/google-chat-rollout.md` before enabling delivery.
+
 ## Readiness Workflow
 
 Run from the repository root:
@@ -83,8 +85,15 @@ Run from the repository root:
 npm test
 npm run lint
 npm run build
+npm run verify:release
 npm run verify:vercel-ready
 npm run vercel:build
+```
+
+Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures. If `npm run verify:vercel-ready` reports `localProjectLinked: false`, run:
+
+```bash
+vercel link --yes --project founder-ops
 ```
 
 For production Supabase env validation, also run:

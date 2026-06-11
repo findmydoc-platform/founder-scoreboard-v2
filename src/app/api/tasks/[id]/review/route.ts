@@ -1,4 +1,5 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const checklist = payload.checklist || {};
   const points = reviewDecisionPoints(decision, checklist);
-  const comment = typeof payload.comment === "string" ? payload.comment.trim().slice(0, 2000) : "";
+  const comment = cleanText(payload.comment, 2000);
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
@@ -131,8 +132,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     entity_type: "task",
     entity_id: id,
     after_data: { decision, points, status: nextStatus, scoreFinal, checklist },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

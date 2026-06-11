@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { archiveGitHubIssue, githubUserForToken } from "@/lib/github";
+import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 
@@ -71,6 +72,7 @@ function profileId(value?: string) {
 }
 
 type CurrentTaskForActivity = {
+  task_type?: string | null;
   status?: string | null;
   review_status?: string | null;
   owner?: string | null;
@@ -102,7 +104,7 @@ function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForAc
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
   if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
-  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Group Commitment geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
+  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Initiative geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
   if (
     (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
     || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)
@@ -134,14 +136,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
-  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const restrictedFields = [
     payload.owner !== undefined ? "Owner" : "",
     payload.priority !== undefined ? "Priorität" : "",
-    payload.packageId !== undefined ? "Group Commitment" : "",
+    payload.packageId !== undefined ? "Initiative" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
     payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
     payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
@@ -192,21 +194,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.packageId !== undefined) {
     const nextPackageId = payload.packageId || null;
     if (nextPackageId) {
-      const { data: groupCommitment, error: groupCommitmentError } = await supabase
+      const { data: initiative, error: initiativeError } = await supabase
         .from("packages")
         .select("id,milestone_id")
         .eq("id", nextPackageId)
         .single();
-      if (groupCommitmentError || !groupCommitment) return NextResponse.json({ error: "Group Commitment wurde nicht gefunden." }, { status: 404 });
+      if (initiativeError || !initiative) return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
       update.package_id = nextPackageId;
-      if (payload.milestoneId === undefined) update.milestone_id = groupCommitment.milestone_id || null;
+      if (payload.milestoneId === undefined) update.milestone_id = initiative.milestone_id || null;
     } else {
       update.package_id = null;
     }
   }
 
-  if (payload.owner) {
+  if (payload.owner !== undefined) {
     const nextOwner = profileId(payload.owner);
+    if (!nextOwner && currentTask?.task_type !== "proposal") {
+      return NextResponse.json({ error: "Nur Vorschläge können ohne Assignee bleiben." }, { status: 400 });
+    }
     update.owner = nextOwner || null;
     update.assignee = nextOwner || null;
   }
@@ -341,7 +346,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   const permission = await requireFounder(request);
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   if (!isOperationalLead) return NextResponse.json({ error: "Nur CEO oder Deputy können Aufgaben löschen." }, { status: 403 });
 
   const { id } = await context.params;

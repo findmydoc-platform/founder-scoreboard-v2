@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { PlatformRole } from "@/lib/types";
@@ -22,17 +23,6 @@ type UpdatePayload = {
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
 
-function cleanText(value: unknown, maxLength: number) {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed ? trimmed.slice(0, maxLength) : "";
-}
-
-function cleanDate(value: unknown) {
-  if (typeof value !== "string" || !value) return null;
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-}
-
 function cleanColor(value: unknown) {
   if (typeof value !== "string") return undefined;
   return /^#[0-9A-Fa-f]{6}$/.test(value) ? value : undefined;
@@ -54,7 +44,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
 
   if (payload.githubLogin !== undefined) {
-    update.github_login = cleanText(payload.githubLogin, 80) || null;
+    update.github_login = cleanOptionalText(payload.githubLogin, 80) || null;
   }
 
   if (payload.platformRole !== undefined) {
@@ -64,8 +54,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.platform_role = payload.platformRole;
   }
 
-  if (payload.orgRole !== undefined) update.org_role = cleanText(payload.orgRole, 80) || null;
-  if (payload.focus !== undefined) update.focus = cleanText(payload.focus, 240) || null;
+  if (payload.orgRole !== undefined) update.org_role = cleanOptionalText(payload.orgRole, 80) || null;
+  if (payload.focus !== undefined) update.focus = cleanOptionalText(payload.focus, 240) || null;
 
   if (payload.color !== undefined) {
     const color = cleanColor(payload.color);
@@ -81,26 +71,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.weekly_capacity = Math.round(capacity);
   }
 
-  if (payload.deputyFor !== undefined) update.deputy_for = cleanText(payload.deputyFor, 80) || null;
+  if (payload.deputyFor !== undefined) update.deputy_for = cleanOptionalText(payload.deputyFor, 80) || null;
 
   if (payload.deputyActiveFrom !== undefined) {
-    const value = cleanDate(payload.deputyActiveFrom);
+    const value = cleanOptionalDate(payload.deputyActiveFrom);
     if (value === undefined) return NextResponse.json({ error: "Ungültiges Startdatum." }, { status: 400 });
     update.deputy_active_from = value;
   }
 
   if (payload.deputyActiveUntil !== undefined) {
-    const value = cleanDate(payload.deputyActiveUntil);
+    const value = cleanOptionalDate(payload.deputyActiveUntil);
     if (value === undefined) return NextResponse.json({ error: "Ungültiges Enddatum." }, { status: 400 });
     update.deputy_active_until = value;
   }
 
   if (payload.googleChatUserId !== undefined) {
-    update.google_chat_user_id = cleanText(payload.googleChatUserId, 160) || null;
+    update.google_chat_user_id = cleanOptionalText(payload.googleChatUserId, 160) || null;
   }
 
   if (payload.googleChatDmSpace !== undefined) {
-    update.google_chat_dm_space = cleanText(payload.googleChatDmSpace, 240) || null;
+    update.google_chat_dm_space = cleanOptionalText(payload.googleChatDmSpace, 240) || null;
   }
 
   if (payload.notificationsEnabled !== undefined) {
@@ -108,7 +98,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (payload.googleCalendarEmail !== undefined) {
-    update.google_calendar_email = cleanText(payload.googleCalendarEmail, 240) || null;
+    update.google_calendar_email = cleanOptionalText(payload.googleCalendarEmail, 240) || null;
   }
 
   if (payload.googleCalendarSyncEnabled !== undefined) {

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -24,7 +25,7 @@ export async function PUT(request: NextRequest) {
   const profileId = payload.profileId?.trim() || permission.profile?.id || "";
   const commitmentLevel = payload.commitmentLevel || "Standard";
   const weeklyHours = Math.max(0, Math.min(80, Math.round(Number(payload.weeklyHours ?? 0))));
-  const note = typeof payload.note === "string" ? payload.note.trim().slice(0, 1000) : "";
+  const note = cleanText(payload.note, 1000);
 
   if (!sprintId) return NextResponse.json({ error: "Sprint ist erforderlich." }, { status: 400 });
   if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
@@ -56,8 +57,7 @@ export async function PUT(request: NextRequest) {
     entity_type: "sprint_commitment",
     entity_id: String(data.id),
     after_data: data,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({
