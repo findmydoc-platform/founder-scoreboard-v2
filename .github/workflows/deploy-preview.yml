@@ -1,0 +1,75 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24.14.0
+  VERCEL_CLI_VERSION: 54.1.0
+  NEXT_TELEMETRY_DISABLED: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy-preview:
+    name: Deploy Preview
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: preview
+      url: ${{ steps.vercel_preview.outputs.deploymentUrl }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Pull Vercel Environment Variables for Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
+
+      - name: Deploy to Vercel Preview
+        id: vercel_preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx vercel@${VERCEL_CLI_VERSION} deploy --target=preview --yes --token="$VERCEL_TOKEN" | tee vercel-deploy-output.txt
+          deployment_url="$(grep -Eo 'https://[[:alnum:].-]+\.vercel\.app' vercel-deploy-output.txt | tail -n 1)"
+          echo "deploymentUrl=${deployment_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate deployment summary
+        if: always()
+        env:
+          DEPLOYMENT_OUTCOME: ${{ steps.vercel_preview.outcome }}
+          DEPLOYMENT_URL: ${{ steps.vercel_preview.outputs.deploymentUrl }}
+        run: |
+          {
+            echo "## Preview Deployment Summary"
+            if [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
+              echo "- **Status**: Success"
+              echo "- **URL**: ${DEPLOYMENT_URL}"
+            else
+              echo "- **Status**: Failed"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

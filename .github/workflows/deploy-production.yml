@@ -1,0 +1,110 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24.14.0
+  VERCEL_CLI_VERSION: 54.1.0
+  NEXT_TELEMETRY_DISABLED: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  require-main:
+    name: Require main branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ref guard
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Deploy Production can only run from refs/heads/main."
+            exit 1
+          fi
+
+  deploy-production:
+    name: Deploy Production
+    needs: require-main
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.vercel_production.outputs.deploymentUrl }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pull Vercel Environment Variables for Production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build Vercel Output
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy Prebuilt Output to Vercel Production
+        id: vercel_production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REQUIRE_SUPABASE_AUTH: ${{ secrets.REQUIRE_SUPABASE_AUTH }}
+          APP_URL: ${{ secrets.APP_URL }}
+          GOOGLE_CHAT_DELIVERY_ENABLED: ${{ secrets.GOOGLE_CHAT_DELIVERY_ENABLED }}
+        run: |
+          npx vercel@${VERCEL_CLI_VERSION} deploy \
+            --prebuilt \
+            --prod \
+            --yes \
+            --token="$VERCEL_TOKEN" \
+            --env NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --env NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+            --env SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
+            --env REQUIRE_SUPABASE_AUTH="$REQUIRE_SUPABASE_AUTH" \
+            --env APP_URL="$APP_URL" \
+            --env GITHUB_SYNC_OWNER=findmydoc-platform \
+            --env GITHUB_SYNC_REPO=management \
+            --env GOOGLE_CHAT_DELIVERY_ENABLED="$GOOGLE_CHAT_DELIVERY_ENABLED" \
+            | tee vercel-deploy-output.txt
+          deployment_url="$(grep -Eo 'https://[[:alnum:].-]+\.vercel\.app' vercel-deploy-output.txt | tail -n 1)"
+          echo "deploymentUrl=${deployment_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate deployment summary
+        if: always()
+        env:
+          DEPLOYMENT_OUTCOME: ${{ steps.vercel_production.outcome }}
+          DEPLOYMENT_URL: ${{ steps.vercel_production.outputs.deploymentUrl }}
+        run: |
+          {
+            echo "## Production Deployment Summary"
+            if [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
+              echo "- **Status**: Success"
+              echo "- **URL**: ${DEPLOYMENT_URL}"
+            else
+              echo "- **Status**: Failed"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

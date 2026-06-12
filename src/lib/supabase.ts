@@ -3,15 +3,35 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let browserClient: SupabaseClient | null = null;
 let serverClient: SupabaseClient | null = null;
 
+const browserSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const browserSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+function runtimeEnv(key: string) {
+  return process.env[key];
+}
+
+function runtimeSupabaseUrl() {
+  return runtimeEnv("NEXT_PUBLIC_SUPABASE_URL") || runtimeEnv("SUPABASE_URL");
+}
+
+function runtimeSupabaseAnonKey() {
+  return (
+    runtimeEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") ||
+    runtimeEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") ||
+    runtimeEnv("SUPABASE_ANON_KEY") ||
+    runtimeEnv("SUPABASE_PUBLISHABLE_KEY")
+  );
+}
+
 export function hasSupabaseEnv() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return Boolean(runtimeSupabaseUrl() && runtimeSupabaseAnonKey());
 }
 
 export function getBrowserSupabase() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
+  if (!browserSupabaseUrl || !browserSupabaseAnonKey) return null;
   browserClient ??= createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    browserSupabaseUrl,
+    browserSupabaseAnonKey,
     {
       auth: {
         persistSession: true,
@@ -25,8 +45,8 @@ export function getBrowserSupabase() {
 }
 
 export function getServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = runtimeSupabaseUrl();
+  const key = runtimeEnv("SUPABASE_SERVICE_ROLE_KEY") || runtimeEnv("SUPABASE_SECRET_KEY") || runtimeSupabaseAnonKey();
   if (!url || !key) return null;
   serverClient ??= createClient(url, key, {
     auth: { persistSession: false },
@@ -35,8 +55,8 @@ export function getServerSupabase() {
 }
 
 export function getSupabaseForToken(token: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = runtimeSupabaseUrl();
+  const anonKey = runtimeSupabaseAnonKey();
   if (!url || !anonKey) return null;
 
   return createClient(url, anonKey, {
@@ -50,5 +70,5 @@ export function getSupabaseForToken(token: string) {
 }
 
 export function requiresSupabaseAuth() {
-  return process.env.REQUIRE_SUPABASE_AUTH === "true";
+  return runtimeEnv("REQUIRE_SUPABASE_AUTH") === "true";
 }

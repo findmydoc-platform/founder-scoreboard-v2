@@ -884,8 +884,11 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(pkg, /verify:google-chat/);
 });
 
-test("repo readiness includes optional ci and deployment gates", async () => {
+test("repo readiness includes the Vercel deployment pipeline gates", async () => {
   const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
+  const vercelJson = await readFile("vercel.json", "utf8");
+  const previewWorkflow = await readFile(".github/workflows/deploy-preview.yml", "utf8");
+  const productionWorkflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const dependabot = await readFile(".github/dependabot.yml", "utf8");
   const gitignore = await readFile(".gitignore", "utf8");
   const deployment = await readFile("docs/vercel-deployment.md", "utf8");
@@ -895,19 +898,44 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const css = await readFile("src/app/globals.css", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
-  assert.match(verify, /ciWorkflowPresent/);
-  assert.match(verify, /node tests\/platform-contract\.test\.mjs/);
-  assert.match(verify, /npm run verify:release/);
+  assert.match(verify, /ready-for-github-actions-vercel-pipeline/);
+  assert.match(verify, /deploy-preview\.yml/);
+  assert.match(verify, /deploy-production\.yml/);
+  assert.match(verify, /vercel\.json/);
+  assert.match(verify, /githubEnvironments/);
+  assert.match(verify, /founder-ops-beta\.vercel\.app/);
   assert.match(verify, /localProjectLinked/);
-  assert.match(verify, /manualNextSteps/);
-  assert.match(verify, /vercel link --yes --project founder-ops/);
   assert.match(verify, /\.github\/dependabot\.yml/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /verify:google-chat/);
   assert.match(verify, /GITHUB_SYNC_TOKEN/);
-  assert.match(verify, /founderops\.findmydoc\.eu/);
+  assert.doesNotMatch(verify, /manualNextSteps/);
+  assert.doesNotMatch(verify, /vercel link --yes --project founder-ops/);
+  assert.match(vercelJson, /"installCommand": "npm ci"/);
+  assert.match(vercelJson, /"buildCommand": "npm run vercel:build"/);
+  assert.match(previewWorkflow, /environment:[\s\S]*name: preview/);
+  assert.match(previewWorkflow, /url: \$\{\{ steps\.vercel_preview\.outputs\.deploymentUrl \}\}/);
+  assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+  assert.match(previewWorkflow, /pull --yes --environment=preview/);
+  assert.match(previewWorkflow, /deploy --target=preview/);
+  assert.match(previewWorkflow, /deploymentUrl=/);
+  assert.match(productionWorkflow, /environment:[\s\S]*name: production/);
+  assert.match(productionWorkflow, /url: \$\{\{ steps\.vercel_production\.outputs\.deploymentUrl \}\}/);
+  assert.match(productionWorkflow, /refs\/heads\/main/);
+  assert.match(productionWorkflow, /pull --yes --environment=production/);
+  assert.match(productionWorkflow, /build --prod/);
+  assert.match(productionWorkflow, /deploy[\s\S]*--prebuilt[\s\S]*--prod/);
+  assert.match(productionWorkflow, /--env NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(productionWorkflow, /--env SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(productionWorkflow, /--env APP_URL/);
+  assert.match(productionWorkflow, /--env GITHUB_SYNC_OWNER=findmydoc-platform/);
+  assert.match(productionWorkflow, /deploymentUrl=/);
+  assert.doesNotMatch(previewWorkflow, /VERCEL_TOKEN is required/);
+  assert.doesNotMatch(productionWorkflow, /VERCEL_TOKEN is required/);
   assert.match(pkg, /verify:release/);
   assert.match(pkg, /verify:deploy/);
+  assert.match(pkg, /vercel:build/);
+  assert.match(pkg, /npm test && npm run verify:vercel-ready/);
   assert.match(pkg, /node tests\/platform-contract\.test\.mjs/);
   assert.match(pkg, /eslint/);
   assert.match(pkg, /node scripts\/verify-vercel-ready\.mjs/);
@@ -919,19 +947,28 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(dependabot, /package-ecosystem: github-actions/);
   assert.match(dependabot, /timezone: Europe\/Berlin/);
   assert.match(dependabot, /nextjs-stack/);
-  assert.match(deployment, /npm run build[\s\S]*npm run verify:release/);
-  assert.match(deployment, /npm run verify:release/);
-  assert.match(deployment, /npm audit --audit-level=moderate/);
-  assert.match(deployment, /Run `npm run build` as its own command/);
-  assert.match(deployment, /localProjectLinked: false/);
-  assert.match(deployment, /vercel link --yes --project founder-ops/);
+  assert.match(deployment, /GitHub Actions/);
+  assert.match(deployment, /helper deploy scripts/);
+  assert.match(deployment, /GitHub Environments/);
+  assert.match(deployment, /VERCEL_TOKEN/);
+  assert.match(deployment, /VERCEL_ORG_ID/);
+  assert.match(deployment, /VERCEL_PROJECT_ID/);
+  assert.match(deployment, /vercel deploy --target preview/);
+  assert.match(deployment, /vercel build --prod/);
+  assert.match(deployment, /vercel deploy --prebuilt --prod/);
+  assert.match(deployment, /founder-ops-beta\.vercel\.app/);
+  assert.match(deployment, /npm run vercel:build/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(deployment, /founderops\.findmydoc\.eu/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /npm run verify:deploy/);
-  assert.match(skill, /localProjectLinked: false/);
+  assert.doesNotMatch(deployment, /vercel link --yes --project founder-ops/);
+  assert.match(skill, /GitHub Actions/);
+  assert.match(skill, /Vercel CLI/);
+  assert.match(skill, /preview/);
+  assert.match(skill, /production/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(skill, /founderops\.findmydoc\.eu/);
+  assert.match(skill, /founder-ops-beta\.vercel\.app/);
+  assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /Production Readiness/);
@@ -1300,5 +1337,3 @@ test("app choice controls use custom components instead of browser-native picker
 
   assert.deepEqual(violations, []);
 });
-
-

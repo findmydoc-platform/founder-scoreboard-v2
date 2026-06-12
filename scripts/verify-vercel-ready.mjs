@@ -3,12 +3,15 @@ import { existsSync } from "node:fs";
 
 const requiredFiles = [
   "package.json",
+  "vercel.json",
   "next.config.ts",
   "src/app/page.tsx",
   "src/app/api/health/route.ts",
   "src/lib/supabase.ts",
   ".env.example",
   ".github/dependabot.yml",
+  ".github/workflows/deploy-preview.yml",
+  ".github/workflows/deploy-production.yml",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -26,7 +29,10 @@ const requiredEnvKeys = [
 ];
 
 const vercelProjectFile = ".vercel/project.json";
-const productionDomain = "founderops.findmydoc.eu";
+const project = "founder-ops";
+const rootDirectory = ".";
+const productionDomain = "founder-ops-beta.vercel.app";
+const githubEnvironments = ["preview", "production"];
 
 async function read(path) {
   return readFile(path, "utf8");
@@ -39,12 +45,20 @@ for (const file of requiredFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
-for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy"]) {
+for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
+if (!packageJson.scripts?.["verify:deploy"]?.includes("npm test")) failures.push("verify:deploy must run npm test.");
+if (!packageJson.scripts?.["vercel:build"]?.includes("npm run verify:deploy")) failures.push("vercel:build must run verify:deploy before build.");
+if (!packageJson.scripts?.["vercel:build"]?.includes("npm run build")) failures.push("vercel:build must run npm run build.");
 
 if (!packageJson.dependencies?.next) failures.push("Next.js dependency missing.");
 if (!packageJson.dependencies?.["@supabase/supabase-js"]) failures.push("Supabase client dependency missing.");
+
+const vercelJson = JSON.parse(await read("vercel.json"));
+if (vercelJson.framework !== "nextjs") failures.push("vercel.json must set framework to nextjs.");
+if (vercelJson.installCommand !== "npm ci") failures.push("vercel.json must set installCommand to npm ci.");
+if (vercelJson.buildCommand !== "npm run vercel:build") failures.push("vercel.json must set buildCommand to npm run vercel:build.");
 
 const nextConfig = await read("next.config.ts");
 if (!nextConfig.includes("avatars.githubusercontent.com")) {
@@ -74,11 +88,19 @@ for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) 
 
 const deploymentDoc = await read("docs/vercel-deployment.md");
 for (const marker of [
-  "vercel link",
+  "GitHub Actions",
+  "deploy-preview.yml",
+  "deploy-production.yml",
+  "vercel deploy --target preview",
   "vercel build --prod",
   "vercel deploy --prebuilt --prod",
+  "GitHub Environments",
+  "`preview`",
+  "`production`",
+  "VERCEL_TOKEN",
+  "VERCEL_ORG_ID",
+  "VERCEL_PROJECT_ID",
   "Supabase Auth",
-  "Domain Cutover",
   "GOOGLE_CHAT_DELIVERY_ENABLED=false",
   productionDomain,
   "GitHub OAuth App owned by `findmydoc-platform`",
@@ -88,30 +110,49 @@ for (const marker of [
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "Domain Cutover", "Deletion Safety", productionDomain]) {
+for (const marker of ["GitHub Actions", "Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
 }
 
 const workspaceRules = await read("AGENTS.md");
-for (const marker of [productionDomain, "provider_token", "Never persist or log provider tokens"]) {
+for (const marker of ["provider_token", "Never persist or log provider tokens"]) {
   if (!workspaceRules.includes(marker)) failures.push(`AGENTS.md missing Vercel/security marker: ${marker}`);
 }
 
-const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
-if (ciWorkflowPresent) {
-  const ci = await read(".github/workflows/ci.yml");
-  for (const marker of ["npm ci", "node tests/platform-contract.test.mjs", "npm run build", "npm run verify:release"]) {
-    if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
-  }
+const previewWorkflow = await read(".github/workflows/deploy-preview.yml");
+for (const marker of [
+  "branches: [main]",
+  "github.event.pull_request.head.repo.full_name == github.repository",
+  "name: preview",
+  "url: ${{ steps.vercel_preview.outputs.deploymentUrl }}",
+  "pull --yes --environment=preview",
+  "deploy --target=preview",
+  "deploymentUrl=",
+]) {
+  if (!previewWorkflow.includes(marker)) failures.push(`deploy-preview.yml missing: ${marker}`);
+}
+
+const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+for (const marker of [
+  "workflow_dispatch",
+  "refs/heads/main",
+  "name: production",
+  "url: ${{ steps.vercel_production.outputs.deploymentUrl }}",
+  "pull --yes --environment=production",
+  "build --prod",
+  "deploy \\",
+  "--prebuilt",
+  "--prod",
+  "--env NEXT_PUBLIC_SUPABASE_URL",
+  "--env SUPABASE_SERVICE_ROLE_KEY",
+  "--env APP_URL",
+  "--env GITHUB_SYNC_OWNER=findmydoc-platform",
+  "deploymentUrl=",
+]) {
+  if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
 }
 
 const localProjectLinked = existsSync(vercelProjectFile);
-const manualNextSteps = [];
-if (!localProjectLinked) {
-  manualNextSteps.push("Run `vercel login` from fmd-planning and complete the browser login.");
-  manualNextSteps.push("Run `vercel link --yes --project founder-ops` after login.");
-  manualNextSteps.push("Run `vercel pull --yes --environment=production` once the project is linked.");
-}
 
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
@@ -119,18 +160,18 @@ if (failures.length) {
 }
 
 console.log(JSON.stringify({
-  status: localProjectLinked ? "ready-for-vercel-build-preflight" : "ready-for-vercel-cli-preflight",
-  project: "founder-ops",
-  rootDirectory: "fmd-planning",
+  status: "ready-for-github-actions-vercel-pipeline",
+  project,
+  rootDirectory,
   productionDomain,
+  githubEnvironments,
   requiredEnvKeys,
   localProjectLinked,
   vercelProjectFile,
-  manualNextSteps,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy"],
-    ciWorkflowPresent,
+    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
+    workflows: ["deploy-preview", "deploy-production"],
     healthRoute: true,
     deploymentDoc: true,
     skill: "fmd-vercel-readiness",

@@ -1,80 +1,107 @@
 ---
 name: fmd-vercel-readiness
-description: Prepare, verify, deploy, inspect, and cut over the findmydoc Founder OPS / Founder Scoreboard project on Vercel using the Vercel CLI. Use when the user mentions Vercel readiness, CLI deploys, production env vars, Supabase Auth redirect URLs, project/domain migration, deleting the old Founder Scoreboard deployment, or assigning founderops.findmydoc.eu.
+description: Prepare, verify, and inspect the findmydoc Founder Scoreboard Vercel deployment pipeline through GitHub Actions and Vercel CLI.
 ---
 
 # FMD Vercel Readiness
 
 ## Purpose
 
-Make this project production-ready for Vercel without relying on Git-push deployments. The expected deployment path is Vercel CLI from the `fmd-planning` project root.
+Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on Vercel Git auto-deploys. GitHub Actions runs Vercel CLI commands directly for the `founder-ops` Vercel project.
 
 ## Core Rules
 
-- Use Vercel CLI workflows, not Git integration, unless the user explicitly changes this decision.
-- Treat deleting the old Vercel project and moving domains as destructive production operations. Prepare commands and checks, but require explicit user confirmation before running them.
-- Confirm the final cutover before modifying DNS or Vercel domains. The planned production domain is `founderops.findmydoc.eu`.
+- Use GitHub Actions workflows for preview and production deploys.
+- Use GitHub Environments named `preview` and `production`.
+- Keep Vercel authentication secrets in the GitHub Environment, not repository-level secrets.
+- Do not pre-validate Vercel secrets in workflow scripts; let the Vercel CLI fail naturally.
+- Do not add separate deploy helper scripts unless the workflow becomes materially more complex.
+- Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
-- Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, or Vercel tokens in logs, docs, or client code.
-- Run `npm run verify:vercel-ready`, `npm run verify:google-chat`, `npm run lint`, and `npm run build` before any deploy attempt.
+- Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the Google Chat rollout is explicitly enabled.
+- Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, Vercel tokens, or provider tokens in logs, docs, or client code.
+- Do not move domains, change DNS, rename projects, or deploy production unless the user explicitly asks for that action.
+
+## Pipeline Shape
+
+1. Preview workflow:
+   - File: `.github/workflows/deploy-preview.yml`
+   - Trigger: internal pull requests to `main` and manual `workflow_dispatch`
+   - Environment: `preview`
+   - Pull env: `vercel pull --yes --environment=preview`
+   - Deploy: `vercel deploy --target preview`
+   - Environment URL: `steps.vercel_preview.outputs.deploymentUrl`
+   - Deployment URL is parsed inline from Vercel CLI output.
+
+2. Production workflow:
+   - File: `.github/workflows/deploy-production.yml`
+   - Trigger: manual `workflow_dispatch`
+   - Branch guard: `refs/heads/main`
+   - Environment: `production`
+   - Pull env: `vercel pull --yes --environment=production`
+   - Build: `vercel build --prod`
+   - Deploy: `vercel deploy --prebuilt --prod`
+   - Environment URL: `steps.vercel_production.outputs.deploymentUrl`
+   - Deployment URL is parsed inline from Vercel CLI output.
+
+3. Vercel build:
+   - `vercel.json` sets `installCommand` to `npm ci`.
+   - `vercel.json` sets `buildCommand` to `npm run vercel:build`.
+   - `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
+
+## Required GitHub Environment Secrets
+
+Each GitHub Environment must provide:
+
+```text
+VERCEL_TOKEN=
+VERCEL_ORG_ID=
+VERCEL_PROJECT_ID=
+```
+
+## Runtime Environment Planning
+
+Set these in Vercel Production:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+REQUIRE_SUPABASE_AUTH=true
+APP_URL=https://founder-ops-beta.vercel.app
+GITHUB_SYNC_OWNER=findmydoc-platform
+GITHUB_SYNC_REPO=management
+GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_DELIVERY_ENABLED=false
+```
 
 ## Readiness Workflow
 
-1. Inspect the project root:
-   - Work from `C:\Users\mehme\Documents\New project 2\fmd-planning`.
-   - Verify `package.json` has `build`, `start`, `lint`, and `verify:vercel-ready`.
-   - Verify `next.config.ts` has required external image domains.
-   - Check `npm run verify:vercel-ready`; `localProjectLinked: false` means `.vercel/project.json` is still missing and the next manual step is `vercel login` plus `vercel link --yes --project founder-ops`.
+Run from the repository root:
 
-2. Verify production env planning:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `REQUIRE_SUPABASE_AUTH=true`
-   - `APP_URL=https://<production-domain>`
-   - Optional: `GOOGLE_CHAT_WEBHOOK_URL`
-   - Default: `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout is explicitly enabled.
+```bash
+npm test
+npm run lint
+npm run build
+npm run verify:vercel-ready
+npm run vercel:build
+```
 
-3. Verify Supabase Auth:
-   - GitHub provider enabled.
-   - Production URL added to Supabase Auth Site URL / Redirect URLs.
-   - Team profiles have `github_login` and valid `platform_role`.
+For production Supabase env validation, also run:
 
-4. Verify database readiness:
-   - Run all Supabase migrations before production use.
-   - `/api/health` must return `status: "ready"` after deployment.
+```bash
+npm run verify:supabase
+npm run verify:auth
+```
 
-5. Link and deploy with Vercel CLI:
-   - Prefer explicit linking: `vercel link --yes --project founder-ops`
-   - Pull env: `vercel pull --yes --environment=production`
-   - Build with production env: `vercel build --prod`
-   - Deploy prebuilt: `vercel deploy --prebuilt --prod`
+## Post-Deploy Checks
 
-6. Post-deploy checks:
-   - Open the deployment URL.
-   - Call `/api/health`.
-   - Check login with GitHub.
-   - Check task read/write as the CEO user.
-   - Check Vercel logs for errors.
-
-## Domain Cutover Workflow
-
-Use only after the user confirms the exact domain.
-
-1. List current projects and domains:
-   - `vercel projects ls`
-   - `vercel domains ls`
-2. Identify old Founder Scoreboard project and new Founder OPS project.
-3. Remove the old domain assignment only after confirming the old project name.
-4. Add the chosen production domain to the new project.
-5. Update `APP_URL` in Vercel Production env to the final domain.
-6. Update Supabase Auth redirect URLs to include the final domain.
-7. Redeploy or promote so generated URLs and auth redirects use the final domain.
-
-## Deletion Safety
-
-Never delete the old Vercel project in the same step as a new deployment. First deploy and verify Founder OPS, then move the domain, then wait for user confirmation before deleting the old project.
+- Open the deployment URL.
+- Call `/api/health`.
+- Check login with GitHub.
+- Check task read/write as the CEO user.
+- Check Vercel logs for errors.
 
 ## References
 
-- Read `docs/vercel-deployment.md` for the project-specific checklist and exact commands.
+- Read `docs/vercel-deployment.md` for the project-specific checklist and exact workflow behavior.
