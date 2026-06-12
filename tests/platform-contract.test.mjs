@@ -923,6 +923,8 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(productionWorkflow, /url: \$\{\{ steps\.vercel_production\.outputs\.deploymentUrl \}\}/);
   assert.match(productionWorkflow, /refs\/heads\/main/);
   assert.match(productionWorkflow, /pull --yes --environment=production/);
+  assert.match(productionWorkflow, /Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_URL \}\}/);
+  assert.match(productionWorkflow, /Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_ANON_KEY: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_ANON_KEY \}\}/);
   assert.match(productionWorkflow, /build --prod/);
   assert.match(productionWorkflow, /deploy[\s\S]*--prebuilt[\s\S]*--prod/);
   assert.match(productionWorkflow, /--env NEXT_PUBLIC_SUPABASE_URL/);

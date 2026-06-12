@@ -133,6 +133,12 @@ for (const marker of [
 }
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
+  failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
+}
+if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_ANON_KEY:/.test(productionWorkflow)) {
+  failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_ANON_KEY during the Vercel build step.");
+}
 for (const marker of [
   "workflow_dispatch",
   "refs/heads/main",

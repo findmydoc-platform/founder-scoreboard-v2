@@ -63,6 +63,8 @@ jobs:
       - name: Build Vercel Output
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: npx vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy Prebuilt Output to Vercel Production
