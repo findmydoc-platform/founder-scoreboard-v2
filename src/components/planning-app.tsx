@@ -212,8 +212,8 @@ const productionReadinessItems = [
     status: "bereit",
   },
   {
-    title: "Vercel CLI",
-    description: "Noch offen: `vercel login`, danach `vercel link --yes --project founder-ops` und `vercel pull --yes --environment=production`.",
+    title: "GitHub Actions",
+    description: "Noch offen: Deploy-Workflows und GitHub Environments prüfen, damit Preview und Production über Actions laufen.",
     status: "manuell offen",
   },
   {
@@ -7350,10 +7350,10 @@ function SettingsOverview({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Production Readiness</h2>
-            <p className="mt-1 text-sm text-slate-500">Aktueller Übergang von lokaler App zu Vercel-Produktion. Vercel ist der einzige manuelle Blocker.</p>
+            <p className="mt-1 text-sm text-slate-500">Aktueller Übergang von lokaler App zu GitHub-Actions-Deployment. GitHub Actions ist der einzige manuelle Blocker.</p>
           </div>
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-            Vercel Login offen
+            GitHub Actions offen
           </span>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -7373,7 +7373,7 @@ function SettingsOverview({
           })}
         </div>
         <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800">
-          Nächster echter Deployment-Schritt: im Projektordner `vercel login` ausführen und den Browser-Login abschließen. Danach kann Codex Link, Env-Pull, Build und Deploy weiterführen.
+          Nächster echter Deployment-Schritt: GitHub Actions Workflow mit den Deploy-Secrets ausführen. Danach laufen Env-Pull, Build und Deploy vollständig über Actions.
         </div>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -7666,7 +7666,7 @@ function SettingsOverview({
         </div>
         {!googleChatReady && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
-            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für echten Versand braucht die Umgebung `GOOGLE_CHAT_WEBHOOK_URL` und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+            Operative Event Messages bleiben in der App. Google Chat ist nur für Release-Details gedacht, wenn der Versand bewusst aktiviert ist. Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für echten Versand braucht die Umgebung `GOOGLE_CHAT_WEBHOOK_URL` und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
           </div>
         )}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -8931,5 +8931,3 @@ function TaskDetailPanel({
     </>
   );
 }
-
-

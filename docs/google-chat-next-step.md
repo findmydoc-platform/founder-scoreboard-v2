@@ -27,16 +27,19 @@ Nicht direkt beim Speichern an Google Chat senden. Stattdessen nutzt die App ein
 - `notification_preferences`: steuerbar pro Person und Event-Typ.
 - `profiles.google_chat_user_id`, `profiles.google_chat_dm_space`: vorbereitet für spätere private DM-Zustellung.
 
+Operative Event Messages bleiben in der Applikation. Eine Google-Chat-Pipeline darf nur für Release-Details oder Deployment-Zusammenfassungen verwendet werden.
+
 ## Google Chat Stufen
 
-1. MVP: ein Founder-Scoreboard-Space via Google Chat Webhook (`GOOGLE_CHAT_WEBHOOK_URL`) mit priorisiertem Digest statt Einzelspam.
-2. Danach: echte private Nachrichten über Google Chat App/Bot und Chat API.
+1. In-App: operative Event Messages bleiben im Board und in der Outbox.
+2. Release-Kanal: GitHub Actions darf bei Bedarf Release-Details oder Deployment-Zusammenfassungen an Google Chat senden.
+3. Danach: echte private Nachrichten über Google Chat App/Bot und Chat API.
 
-Wichtig: Ein Incoming Webhook sendet nur in den konfigurierten Space. Für echte private 1:1-DMs braucht es eine Google-Chat-App/Bot-Konfiguration in Google Cloud und eine Zuordnung der Profile zu Google-Chat-Usern bzw. DM-Spaces.
+Wichtig: Ein Incoming Webhook sendet nur in den konfigurierten Space. Für echte private 1:1-DMs braucht es eine Google-Chat-App/Bot-Konfiguration in Google Cloud und eine Zuordnung der Profile zu Google-Chat-Usern bzw. DM-Spaces. Die Release-Pipeline ist davon getrennt.
 
 ## FounderOps Entscheidung
 
-Die Chat-App/Bot-Anzeige soll `FounderOps` heißen. Der geplante Google-Chat-App-Endpoint nach Vercel-Deployment und Domain-Cutover ist:
+Die Chat-App/Bot-Anzeige soll `FounderOps` heißen. Der geplante Google-Chat-App-Endpoint nach GitHub-Actions-Deployment und Domain-Cutover ist:
 
 ```text
 https://founderops.findmydoc.eu/api/google-chat/events
@@ -67,7 +70,7 @@ Noch offen:
 ## Offene Punkte für persönliche DMs
 
 1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` speichern.
-2. `founderops.findmydoc.eu` auf Vercel schalten und `/api/google-chat/events` im Deployment testen.
+2. `founderops.findmydoc.eu` auf die per GitHub Actions deployte App schalten und `/api/google-chat/events` im Deployment testen.
 3. Private DM-Zustellung über Google Chat API an `spaces/{dmSpace}/messages` ergänzen; der bestehende Webhook-Digest sendet nicht automatisch in persönliche DMs.
 
 ## Nicht vergessen

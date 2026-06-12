@@ -1,13 +1,13 @@
 ---
 name: fmd-vercel-readiness
-description: Prepare, verify, and inspect the findmydoc Founder Scoreboard Vercel deployment pipeline through GitHub Actions and Vercel CLI.
+description: Prepare, verify, and inspect the findmydoc Founder Scoreboard deployment pipeline through GitHub Actions and Vercel CLI.
 ---
 
 # FMD Vercel Readiness
 
 ## Purpose
 
-Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on Vercel Git auto-deploys. GitHub Actions runs Vercel CLI commands directly for the `founder-ops` Vercel project.
+Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, without relying on Vercel Git auto-deploys or any local manual deploy flow. GitHub Actions runs Vercel CLI commands directly for the `founder-ops` project.
 
 ## Core Rules
 
@@ -19,6 +19,7 @@ Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on 
 - Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the Google Chat rollout is explicitly enabled.
+- Never instruct operators to use a local manual deploy flow; GitHub Actions owns the deployment flow and observability.
 - Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, Vercel tokens, or provider tokens in logs, docs, or client code.
 - Do not move domains, change DNS, rename projects, or deploy production unless the user explicitly asks for that action.
 
@@ -44,7 +45,7 @@ Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on 
    - Environment URL: `steps.vercel_production.outputs.deploymentUrl`
    - Deployment URL is parsed inline from Vercel CLI output.
 
-3. Vercel build:
+3. GitHub Actions build step:
    - `vercel.json` sets `installCommand` to `npm ci`.
    - `vercel.json` sets `buildCommand` to `npm run vercel:build`.
    - `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
@@ -100,7 +101,7 @@ npm run verify:auth
 - Call `/api/health`.
 - Check login with GitHub.
 - Check task read/write as the CEO user.
-- Check Vercel logs for errors.
+- Check GitHub Actions job logs and the deployment summary for errors.
 
 ## References
 

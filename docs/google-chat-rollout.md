@@ -6,6 +6,8 @@ Stand: 2026-05-27
 
 Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Decisions, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
 
+Operative Event Messages bleiben in der Applikation. Ein möglicher Google-Chat-Pfad über eine Pipeline ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
+
 ## Sicherheitsmodell
 
 Die Zustellung ist zweifach gesperrt:
@@ -26,15 +28,15 @@ Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für d
 
 ## Bot-Branding und geplanter Endpoint
 
-Die Google-Chat-App soll unter dem Namen `FounderOps` geführt werden. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, Vercel- und Dokumentationsänderungen nicht weitergeführt werden.
+Die Google-Chat-App soll unter dem Namen `FounderOps` geführt werden. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
 
-Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem Vercel-Setup dieser öffentliche HTTPS-Endpunkt vorgesehen:
+Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem GitHub-Actions-Deployment und Domain-Cutover dieser öffentliche HTTPS-Endpunkt vorgesehen:
 
 ```text
 https://founderops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die Vercel-App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
+Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die per GitHub Actions bereitgestellte App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
 
 Empfohlene Google-Chat-App-Felder:
 
@@ -68,8 +70,8 @@ Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein 
 ## Offene Punkte für persönliche DMs
 
 1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` eintragen. Normale 1:1-Chats zwischen Teammitgliedern sind dafür nicht korrekt.
-2. `founderops.findmydoc.eu` auf die Vercel-App zeigen lassen.
-3. Die Route `/api/google-chat/events` deployen und mit Google Chat testen, damit die Google-Chat-App Nachrichten und Installations-/Message-Events verarbeiten kann.
+2. `founderops.findmydoc.eu` auf die per GitHub Actions bereitgestellte App zeigen lassen.
+3. Die Route `/api/google-chat/events` über den GitHub-Actions-Deploy ausrollen und mit Google Chat testen, damit die Google-Chat-App Nachrichten und Installations-/Message-Events verarbeiten kann.
 4. Den Versand von reinem `GOOGLE_CHAT_WEBHOOK_URL`-Digest auf Google Chat API Versand an `spaces/{dmSpace}/messages` erweitern, damit persönliche DMs wirklich an die Profil-DM-Spaces gehen.
 5. Danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` erst nach einem kontrollierten Test aktivieren.
 

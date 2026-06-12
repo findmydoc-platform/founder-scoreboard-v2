@@ -28,7 +28,6 @@ const requiredEnvKeys = [
   "GOOGLE_CHAT_DELIVERY_ENABLED",
 ];
 
-const vercelProjectFile = ".vercel/project.json";
 const project = "founder-ops";
 const rootDirectory = ".";
 const productionDomain = "founder-ops.findmydoc.eu";
@@ -88,6 +87,7 @@ for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) 
 
 const deploymentDoc = await read("docs/vercel-deployment.md");
 for (const marker of [
+  "GitHub Actions Deployment Workflow",
   "GitHub Actions",
   "deploy-preview.yml",
   "deploy-production.yml",
@@ -103,15 +103,23 @@ for (const marker of [
   "Supabase Auth",
   "GOOGLE_CHAT_DELIVERY_ENABLED=false",
   productionDomain,
+  "Operational event messages stay inside the application",
   "GitHub OAuth App owned by `findmydoc-platform`",
   "Do not configure a shared `GITHUB_SYNC_TOKEN`",
+  "GitHub Actions job logs",
 ]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
+}
+for (const banned of ["vercel login", "vercel link", "vercel inspect", "vercel logs"]) {
+  if (deploymentDoc.includes(banned)) failures.push(`docs/vercel-deployment.md must not include: ${banned}`);
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
 for (const marker of ["GitHub Actions", "Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
+}
+for (const banned of ["vercel login", "vercel link", "vercel inspect", "vercel logs"]) {
+  if (skill.includes(banned)) failures.push(`fmd-vercel-readiness skill must not include: ${banned}`);
 }
 
 const workspaceRules = await read("AGENTS.md");
@@ -158,8 +166,6 @@ for (const marker of [
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
 }
 
-const localProjectLinked = existsSync(vercelProjectFile);
-
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
@@ -172,8 +178,6 @@ console.log(JSON.stringify({
   productionDomain,
   githubEnvironments,
   requiredEnvKeys,
-  localProjectLinked,
-  vercelProjectFile,
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
