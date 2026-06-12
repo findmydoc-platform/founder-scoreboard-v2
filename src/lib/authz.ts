@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { isOperationalLeadRole } from "./platform";
 import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
 import type { PlatformRole, Profile } from "./types";
 
@@ -10,6 +11,12 @@ export function bearerToken(request: NextRequest) {
   const header = request.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) return "";
   return header.slice("Bearer ".length).trim();
+}
+
+function devProfileOverrideAllowed(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") return false;
+  const host = request.headers.get("host") || "";
+  return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
 }
 
 export async function requirePlatformRole(
@@ -36,18 +43,32 @@ export async function requirePlatformRole(
 
   const { data: profile, error: profileError } = await profileQuery;
   if (profileError || !profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
+  let effectiveProfile = profile;
+  const devProfileId = request.headers.get("x-fmd-dev-profile-id")?.trim() || "";
+  const canUseDevProfile = isOperationalLeadRole(profile.platform_role);
 
-  if (!allowedRoles.includes(profile.platform_role)) {
+  if (devProfileId && devProfileOverrideAllowed(request) && canUseDevProfile) {
+    const { data: overrideProfile, error: overrideError } = await supabase
+      .from("profiles")
+      .select("id,name,platform_role,github_login")
+      .eq("id", devProfileId)
+      .single();
+
+    if (overrideError || !overrideProfile) return { ok: false, status: 403, error: "Dev-Testprofil wurde nicht gefunden." };
+    effectiveProfile = overrideProfile;
+  }
+
+  if (!allowedRoles.includes(effectiveProfile.platform_role)) {
     return { ok: false, status: 403, error: "Keine Berechtigung für diese Aktion." };
   }
 
   return {
     ok: true,
     profile: {
-      id: profile.id,
-      name: profile.name,
-      platformRole: profile.platform_role,
-      githubLogin: profile.github_login || "",
+      id: effectiveProfile.id,
+      name: effectiveProfile.name,
+      platformRole: effectiveProfile.platform_role,
+      githubLogin: effectiveProfile.github_login || "",
     },
   };
 }

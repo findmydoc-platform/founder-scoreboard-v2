@@ -38,9 +38,18 @@ export type Project = {
 export type Package = {
   id: string;
   milestoneId?: string;
+  ownerId?: string;
+  accountableProfileId?: string;
+  responsibleProfileIds?: string[];
+  consultedProfileIds?: string[];
+  informedProfileIds?: string[];
   title: string;
   goal: string;
   priority: string;
+  status?: "planned" | "active" | "done" | "paused";
+  targetDate?: string;
+  successCriteria?: string;
+  scopeConstraints?: string;
   sortOrder: number;
 };
 
@@ -282,8 +291,15 @@ export type Meeting = {
   sprintId: string;
   title: string;
   meetingAt: string;
+  durationMinutes?: number;
   status: "planned" | "done" | "cancelled";
   agenda: string;
+  googleCalendarId?: string;
+  googleCalendarEventId?: string;
+  googleCalendarHtmlLink?: string;
+  googleCalendarSyncStatus?: "not_synced" | "synced" | "skipped" | "failed";
+  googleCalendarSyncError?: string;
+  googleCalendarSyncedAt?: string;
 };
 
 export type MeetingAttendanceStatus = "pending" | "present" | "excused" | "late_excused" | "unexcused" | "no_show";
@@ -316,6 +332,21 @@ export type AvailabilityEntry = {
   id: number;
   profileId: string;
   type: "working_hours" | "busy" | "vacation" | "sick";
+  title: string;
+  blockerKind:
+    | "working_hours"
+    | "on_business"
+    | "customer_appointment"
+    | "internal_meeting"
+    | "focus_time"
+    | "admin"
+    | "travel"
+    | "private_appointment"
+    | "vacation"
+    | "sick"
+    | "care"
+    | "calendar_event"
+    | "other";
   weekday: number | null;
   startDate: string;
   endDate: string;

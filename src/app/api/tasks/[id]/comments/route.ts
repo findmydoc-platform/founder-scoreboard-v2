@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { createGitHubIssueComment, githubUserForToken } from "@/lib/github";
 import { getServerSupabase } from "@/lib/supabase";
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { id } = await context.params;
   const payload = (await request.json()) as CommentPayload;
-  const comment = typeof payload.comment === "string" ? payload.comment.trim().slice(0, 4000) : "";
+  const comment = cleanText(payload.comment, 4000);
 
   if (comment.length < 2) {
     return NextResponse.json({ error: "Kommentar ist erforderlich." }, { status: 400 });

@@ -25,12 +25,15 @@ const requiredEnvKeys = [
   "GITHUB_SYNC_OWNER",
   "GITHUB_SYNC_REPO",
   "GOOGLE_CHAT_WEBHOOK_URL",
+  "GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL",
+  "GOOGLE_CHAT_PRIVATE_KEY",
   "GOOGLE_CHAT_DELIVERY_ENABLED",
 ];
 
 const project = "founder-ops";
 const rootDirectory = ".";
 const productionDomain = "founder-ops.findmydoc.eu";
+const googleChatDomain = "founderops.findmydoc.eu";
 const githubEnvironments = ["preview", "production"];
 
 async function read(path) {
@@ -91,9 +94,6 @@ for (const marker of [
   "GitHub Actions",
   "deploy-preview.yml",
   "deploy-production.yml",
-  "vercel deploy --target preview",
-  "vercel build --prod",
-  "vercel deploy --prebuilt --prod",
   "GitHub Environments",
   "`preview`",
   "`production`",
@@ -110,15 +110,15 @@ for (const marker of [
 ]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
 }
-for (const banned of ["vercel login", "vercel link", "vercel inspect", "vercel logs"]) {
+for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
   if (deploymentDoc.includes(banned)) failures.push(`docs/vercel-deployment.md must not include: ${banned}`);
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["GitHub Actions", "Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
+for (const marker of ["GitHub Actions", "GitHub Actions job logs", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
 }
-for (const banned of ["vercel login", "vercel link", "vercel inspect", "vercel logs"]) {
+for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
   if (skill.includes(banned)) failures.push(`fmd-vercel-readiness skill must not include: ${banned}`);
 }
 
@@ -166,16 +166,25 @@ for (const marker of [
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
 }
 
+const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
+if (ciWorkflowPresent) {
+  const ci = await read(".github/workflows/ci.yml");
+  for (const marker of ["npm ci", "node --test tests/*.test.mjs", "npm run build", "npm run verify:release"]) {
+    if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
+  }
+}
+
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
 
 console.log(JSON.stringify({
-  status: "ready-for-github-actions-vercel-pipeline",
+  status: "ready-for-github-actions-deployment",
   project,
   rootDirectory,
   productionDomain,
+  googleChatDomain,
   githubEnvironments,
   requiredEnvKeys,
   checks: {

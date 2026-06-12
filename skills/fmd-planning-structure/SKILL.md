@@ -1,6 +1,6 @@
 ---
 name: fmd-planning-structure
-description: Use when changing Founder Scoreboard v2 planning hierarchy, task templates, GitHub sync, Supabase migrations, scoring, docs, tests, or UI labels. Enforces Epic / Milestone -> Group Commitment -> Deliverable -> Sub-Issue, with Sprint as a time container.
+description: Use when changing Founder Scoreboard v2 planning hierarchy, task templates, GitHub sync, Supabase migrations, scoring, docs, tests, or UI labels. Enforces Epic / Milestone -> Initiative -> Deliverable -> Sub-Issue, with Sprint as a time container.
 ---
 
 # FMD Planning Structure
@@ -13,7 +13,7 @@ Use this model everywhere:
 
 ```text
 Epic / Milestone
-  -> Group Commitment
+  -> Initiative
       -> Deliverable
           -> Sub-Issue
 ```
@@ -23,7 +23,7 @@ Sprint is a time container for Deliverables, not a parent level.
 ## Rules
 
 - Keep `milestones` as Epic / Milestone.
-- Keep `packages` as the database table for Group Commitments until a planned rename migration exists.
+- Keep `packages` as the compatibility database table for Initiatives; user-facing language is `Initiative`.
 - Keep only Deliverables score-relevant.
 - Keep Sub-Issues non-score-relevant and scoped under one Deliverable.
 - Keep GitHub Issues as one-way backup/export from the app unless a new plan changes source of truth.

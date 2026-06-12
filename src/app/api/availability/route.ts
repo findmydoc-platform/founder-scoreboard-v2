@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanDate, cleanTime } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
+import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import type { AvailabilityEntry } from "@/lib/types";
 
@@ -7,6 +9,8 @@ type AvailabilityPayload = {
   id?: number;
   profileId?: string;
   type?: AvailabilityEntry["type"];
+  title?: string;
+  blockerKind?: AvailabilityEntry["blockerKind"];
   weekday?: number | null;
   startDate?: string;
   endDate?: string;
@@ -16,25 +20,28 @@ type AvailabilityPayload = {
 };
 
 const availabilityTypes = new Set(["working_hours", "busy", "vacation", "sick"]);
-
-function isOperationalLead(role: string) {
-  return role === "ceo" || role === "deputy";
-}
-
-function cleanDate(value: unknown) {
-  if (typeof value !== "string" || !value) return "";
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
-}
-
-function cleanTime(value: unknown) {
-  if (typeof value !== "string" || !value) return "";
-  return /^\d{2}:\d{2}$/.test(value) ? value : "";
-}
+const blockerKinds = new Set([
+  "working_hours",
+  "on_business",
+  "customer_appointment",
+  "internal_meeting",
+  "focus_time",
+  "admin",
+  "travel",
+  "private_appointment",
+  "vacation",
+  "sick",
+  "care",
+  "calendar_event",
+  "other",
+]);
 
 function mapAvailability(row: {
   id: number;
   profile_id: string;
   type: AvailabilityEntry["type"];
+  title: string | null;
+  blocker_kind: AvailabilityEntry["blockerKind"] | null;
   weekday: number | null;
   start_date: string | null;
   end_date: string | null;
@@ -50,6 +57,8 @@ function mapAvailability(row: {
     id: row.id,
     profileId: row.profile_id,
     type: row.type,
+    title: row.title || "",
+    blockerKind: row.blocker_kind || (row.type === "working_hours" ? "working_hours" : row.type === "vacation" ? "vacation" : row.type === "sick" ? "sick" : "on_business"),
     weekday: row.weekday,
     startDate: row.start_date || "",
     endDate: row.end_date || "",
@@ -74,13 +83,15 @@ export async function POST(request: NextRequest) {
   const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : "";
   const type = typeof payload.type === "string" && availabilityTypes.has(payload.type) ? payload.type : "";
+  const title = typeof payload.title === "string" ? payload.title.trim().slice(0, 160) : "";
+  const blockerKind = typeof payload.blockerKind === "string" && blockerKinds.has(payload.blockerKind) ? payload.blockerKind : type === "working_hours" ? "working_hours" : type === "vacation" ? "vacation" : type === "sick" ? "sick" : "on_business";
   const startTime = cleanTime(payload.startTime);
   const endTime = cleanTime(payload.endTime);
 
   if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
   if (!type) return NextResponse.json({ error: "Typ ist erforderlich." }, { status: 400 });
   if (!startTime || !endTime || startTime >= endTime) return NextResponse.json({ error: "Start- und Endzeit sind ungültig." }, { status: 400 });
-  if (!isOperationalLead(permission.profile.platformRole) && profileId !== permission.profile.id) {
+  if (!isOperationalLeadRole(permission.profile.platformRole) && profileId !== permission.profile.id) {
     return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten pflegen." }, { status: 403 });
   }
 
@@ -90,6 +101,8 @@ export async function POST(request: NextRequest) {
   const row: Record<string, string | number | null> = {
     profile_id: profileId,
     type,
+    title,
+    blocker_kind: blockerKind,
     start_time: startTime,
     end_time: endTime,
     note: typeof payload.note === "string" ? payload.note.trim().slice(0, 1000) : null,
@@ -115,7 +128,7 @@ export async function POST(request: NextRequest) {
   const { data: availability, error } = await supabase
     .from("availability")
     .insert(row)
-    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
+    .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -126,8 +139,7 @@ export async function POST(request: NextRequest) {
     entity_type: "availability",
     entity_id: String(availability.id),
     after_data: row,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ availability: mapAvailability(availability) });
@@ -147,12 +159,12 @@ export async function DELETE(request: NextRequest) {
 
   const { data: current, error: readError } = await supabase
     .from("availability")
-    .select("id,profile_id,type,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
+    .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .eq("id", id)
     .single();
 
   if (readError || !current) return NextResponse.json({ error: "Eintrag wurde nicht gefunden." }, { status: 404 });
-  if (!isOperationalLead(permission.profile.platformRole) && current.profile_id !== permission.profile.id) {
+  if (!isOperationalLeadRole(permission.profile.platformRole) && current.profile_id !== permission.profile.id) {
     return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten löschen." }, { status: 403 });
   }
 
@@ -165,9 +177,98 @@ export async function DELETE(request: NextRequest) {
     entity_type: "availability",
     entity_id: String(id),
     before_data: current,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ ok: true });
+}
+
+export async function PATCH(request: NextRequest) {
+  const supabase = getServerSupabase();
+  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+
+  const permission = await requireFounder(request);
+  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+
+  const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
+  const id = Number(payload.id);
+  if (!Number.isFinite(id)) return NextResponse.json({ error: "Eintrag ist erforderlich." }, { status: 400 });
+
+  const { data: current, error: readError } = await supabase
+    .from("availability")
+    .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
+    .eq("id", id)
+    .single();
+
+  if (readError || !current) return NextResponse.json({ error: "Eintrag wurde nicht gefunden." }, { status: 404 });
+  if (current.source === "google_calendar") {
+    return NextResponse.json({ error: "Importierte Google-Kalenderblöcke können nicht in der App bearbeitet werden." }, { status: 403 });
+  }
+  if (!isOperationalLeadRole(permission.profile.platformRole) && current.profile_id !== permission.profile.id) {
+    return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten bearbeiten." }, { status: 403 });
+  }
+
+  const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : current.profile_id;
+  const type = typeof payload.type === "string" && availabilityTypes.has(payload.type) ? payload.type : current.type;
+  const title = typeof payload.title === "string" ? payload.title.trim().slice(0, 160) : current.title;
+  const blockerKind = typeof payload.blockerKind === "string" && blockerKinds.has(payload.blockerKind) ? payload.blockerKind : current.blocker_kind;
+  const startTime = cleanTime(payload.startTime) || current.start_time?.slice(0, 5) || "";
+  const endTime = cleanTime(payload.endTime) || current.end_time?.slice(0, 5) || "";
+
+  if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
+  if (!type) return NextResponse.json({ error: "Typ ist erforderlich." }, { status: 400 });
+  if (!startTime || !endTime || startTime >= endTime) return NextResponse.json({ error: "Start- und Endzeit sind ungültig." }, { status: 400 });
+  if (!isOperationalLeadRole(permission.profile.platformRole) && profileId !== permission.profile.id) {
+    return NextResponse.json({ error: "Founder können Einträge nicht auf andere Profile übertragen." }, { status: 403 });
+  }
+
+  const { data: targetProfile, error: profileError } = await supabase.from("profiles").select("id").eq("id", profileId).single();
+  if (profileError || !targetProfile) return NextResponse.json({ error: "Profil wurde nicht gefunden." }, { status: 404 });
+
+  const row: Record<string, string | number | null> = {
+    profile_id: profileId,
+    type,
+    title,
+    blocker_kind: blockerKind,
+    start_time: startTime,
+    end_time: endTime,
+    note: typeof payload.note === "string" ? payload.note.trim().slice(0, 1000) : current.note,
+  };
+
+  if (type === "working_hours") {
+    const weekday = Number(payload.weekday ?? current.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return NextResponse.json({ error: "Wochentag ist ungültig." }, { status: 400 });
+    row.weekday = weekday;
+    row.start_date = null;
+    row.end_date = null;
+  } else {
+    const startDate = cleanDate(payload.startDate) || current.start_date || "";
+    const endDate = cleanDate(payload.endDate) || current.end_date || startDate;
+    if (!startDate || !endDate || startDate > endDate) return NextResponse.json({ error: "Datumsbereich ist ungültig." }, { status: 400 });
+    row.weekday = null;
+    row.start_date = startDate;
+    row.end_date = endDate;
+  }
+
+  const { data: availability, error } = await supabase
+    .from("availability")
+    .update(row)
+    .eq("id", id)
+    .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await supabase.from("audit_log").insert({
+    actor_profile_id: permission.profile.id,
+    action: "availability.update",
+    entity_type: "availability",
+    entity_id: String(id),
+    before_data: current,
+    after_data: row,
+    ...auditRequestMetadata(request),
+  });
+
+  return NextResponse.json({ availability: mapAvailability(availability) });
 }

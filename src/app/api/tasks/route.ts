@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
+import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 import type { Task, TaskType } from "@/lib/types";
@@ -53,21 +55,16 @@ export async function POST(request: NextRequest) {
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
 
   const payload = (await request.json()) as CreateTaskPayload;
-  const title = typeof payload.title === "string" ? payload.title.trim().slice(0, 240) : "";
+  const title = cleanText(payload.title, 240);
   if (title.length < 3) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
 
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return NextResponse.json({ error: "Ungültiger Aufgabentyp." }, { status: 400 });
 
-  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
-  const taskType: TaskType = requestedType === "deliverable" && !isOperationalLead ? "proposal" : requestedType;
-  const scoreRelevant = taskType === "deliverable";
-  const status = taskType === "proposal" ? "Vorschlag" : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
-  const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
-  const owner = profileId(payload.owner) || permission.profile?.id || null;
-  const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const packageId = payload.packageId || null;
   let milestoneId = payload.milestoneId || null;
+  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null } | null = null;
   const startDate = payload.startDate || null;
   const endDate = payload.endDate || null;
 
@@ -75,8 +72,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Das Startdatum darf nicht nach dem Enddatum liegen." }, { status: 400 });
   }
 
+  if (packageId) {
+    const { data: initiativeRow, error: initiativeError } = await supabase
+      .from("packages")
+      .select("id,milestone_id,owner_id")
+      .eq("id", packageId)
+      .maybeSingle();
+    if (initiativeError || !initiativeRow) {
+      return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
+    }
+    initiative = initiativeRow;
+    milestoneId = milestoneId || initiative.milestone_id || null;
+  }
+
+
+  const canCreateDeliverable = isOperationalLead || (requestedType === "deliverable" && initiative?.owner_id === permission.profile?.id);
+  const taskType: TaskType = requestedType === "deliverable" && !canCreateDeliverable ? "proposal" : requestedType;
+  const scoreRelevant = taskType === "deliverable";
+  const status = taskType === "proposal" ? "Vorschlag" : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
+  const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
+  const owner = profileId(payload.owner) || (taskType === "proposal" ? null : permission.profile?.id || null);
+  const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
+
   if (taskType === "deliverable" && (!packageId || !payload.sprintId)) {
-    return NextResponse.json({ error: "Deliverables brauchen Group Commitment und Sprint." }, { status: 400 });
+    return NextResponse.json({ error: "Deliverables brauchen Initiative und Sprint." }, { status: 400 });
   }
 
   if (taskType === "sub_issue" && !parentTaskId) {
@@ -93,18 +112,6 @@ export async function POST(request: NextRequest) {
     if (!isOperationalLead && parent.owner !== permission.profile?.id) {
       return NextResponse.json({ error: "Founder können nur eigene Deliverables verfeinern." }, { status: 403 });
     }
-  }
-
-  if (packageId) {
-    const { data: groupCommitment, error: groupCommitmentError } = await supabase
-      .from("packages")
-      .select("id,milestone_id")
-      .eq("id", packageId)
-      .maybeSingle();
-    if (groupCommitmentError || !groupCommitment) {
-      return NextResponse.json({ error: "Group Commitment wurde nicht gefunden." }, { status: 404 });
-    }
-    milestoneId = milestoneId || groupCommitment.milestone_id || null;
   }
 
   const { data: maxRow } = await supabase
@@ -124,25 +131,25 @@ export async function POST(request: NextRequest) {
     package_id: packageId,
     milestone_id: milestoneId,
     title,
-    description: typeof payload.description === "string" ? payload.description.trim().slice(0, 4000) : "",
-    problem_statement: typeof payload.problemStatement === "string" ? payload.problemStatement.trim().slice(0, 4000) : "",
-    intended_outcome: typeof payload.intendedOutcome === "string" ? payload.intendedOutcome.trim().slice(0, 4000) : "",
-    scope_constraints: typeof payload.scopeConstraints === "string" ? payload.scopeConstraints.trim().slice(0, 4000) : "",
-    acceptance_criteria: typeof payload.acceptanceCriteria === "string" ? payload.acceptanceCriteria.trim().slice(0, 6000) : "",
-    evidence_required: typeof payload.evidenceRequired === "string" ? payload.evidenceRequired.trim().slice(0, 4000) : "",
+    description: cleanText(payload.description, 4000),
+    problem_statement: cleanText(payload.problemStatement, 4000),
+    intended_outcome: cleanText(payload.intendedOutcome, 4000),
+    scope_constraints: cleanText(payload.scopeConstraints, 4000),
+    acceptance_criteria: cleanText(payload.acceptanceCriteria, 6000),
+    evidence_required: cleanText(payload.evidenceRequired, 4000),
     dod_template_version: "founder-deliverable-v2",
     status,
     priority,
     owner,
     assignee: owner,
     created_by: permission.profile?.id || null,
-    workstream: typeof payload.workstream === "string" ? payload.workstream.trim().slice(0, 120) : "",
+    workstream: cleanText(payload.workstream, 120),
     sort_order: sortOrder,
     start_date: startDate,
     end_date: endDate,
     deadline: payload.deadline || null,
     estimate_hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
-    definition_of_done: typeof payload.definitionOfDone === "string" ? payload.definitionOfDone.trim().slice(0, 4000) : "",
+    definition_of_done: cleanText(payload.definitionOfDone, 4000),
     sprint_id: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,
     review_status: "not_requested",
     score_points: 0,
@@ -184,8 +191,7 @@ export async function POST(request: NextRequest) {
     entity_type: "task",
     entity_id: id,
     after_data: { ...insert },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   const task: Task = {
@@ -195,8 +201,8 @@ export async function POST(request: NextRequest) {
     description: created.description || "",
     status: created.status,
     priority: created.priority,
-    owner: payload.owner || permission.profile?.name || "Unassigned",
-    assignee: payload.owner || permission.profile?.name || "Unassigned",
+    owner: payload.owner || (taskType === "proposal" ? "" : permission.profile?.name || ""),
+    assignee: payload.owner || (taskType === "proposal" ? "" : permission.profile?.name || ""),
     createdBy: permission.profile?.name || "",
     workstream: created.workstream || "",
     packageId: created.package_id || "",

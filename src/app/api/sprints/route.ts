@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -21,10 +22,6 @@ type CreateSprintPlanPayload = {
 };
 
 const projectId = "findmydoc-founder-execution";
-
-function isIsoDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
 
 function sprintNumber(value: string) {
   const match = value.match(/sprint\D*(\d+)/i) || value.match(/(\d+)$/);

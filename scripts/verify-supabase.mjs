@@ -53,7 +53,7 @@ const schemaChecks = [
   { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
   { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
   { name: "tasks.created_by", table: "tasks", select: "id,created_by" },
-  { name: "packages.group_commitment", table: "packages", select: "id,milestone_id,title,goal,priority" },
+  { name: "packages.initiative", table: "packages", select: "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints" },
   { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
   { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
   { name: "feedback_items", table: "feedback_items", select: "id,type,status,severity,profile_id,title,description,page_url" },
@@ -62,7 +62,8 @@ const schemaChecks = [
   { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
   { name: "task_focus_items", table: "task_focus_items", select: "id,profile_id,task_id,focus_date,position,next_step,status" },
   { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
-  { name: "availability.calendar_sync", table: "availability", select: "id,source,external_id,external_calendar_id,synced_at" },
+  { name: "availability.calendar_sync", table: "availability", select: "id,title,blocker_kind,source,external_id,external_calendar_id,synced_at" },
+  { name: "meetings.google_calendar_sync", table: "meetings", select: "id,duration_minutes,google_calendar_id,google_calendar_event_id,google_calendar_sync_status" },
 ];
 
 async function checkSchema(check) {

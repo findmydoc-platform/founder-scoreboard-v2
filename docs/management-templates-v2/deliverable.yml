@@ -17,9 +17,9 @@ body:
       required: true
 
   - type: input
-    id: group_commitment
+    id: initiative
     attributes:
-      label: Group Commitment
+      label: Initiative
     validations:
       required: true
 

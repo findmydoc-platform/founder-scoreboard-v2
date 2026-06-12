@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { TaskRelationType } from "@/lib/types";
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const payload = (await request.json()) as RelationPayload;
   const relationType = payload.relationType;
   const relatedTaskId = typeof payload.relatedTaskId === "string" ? payload.relatedTaskId.trim() : "";
-  const note = typeof payload.note === "string" ? payload.note.trim().slice(0, 500) : "";
+  const note = cleanText(payload.note, 500);
 
   if (!relationType || !relationTypes.has(relationType)) {
     return NextResponse.json({ error: "Ungültige Relationship-Art." }, { status: 400 });
@@ -78,8 +79,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     entity_type: "task",
     entity_id: id,
     after_data: { relationType, relatedTaskId, note },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({
@@ -139,8 +139,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     entity_type: "task",
     entity_id: id,
     before_data: relation,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ ok: true, relationId });

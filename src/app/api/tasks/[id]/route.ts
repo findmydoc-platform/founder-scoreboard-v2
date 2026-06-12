@@ -1,5 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
+import { archiveGitHubIssue, githubUserForToken } from "@/lib/github";
+import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 
@@ -36,6 +38,30 @@ const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
 const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
 
+function providerToken(request: NextRequest) {
+  return request.headers.get("x-github-provider-token")?.trim() || "";
+}
+
+function linkedIssueNumber(row: { github_issue_number?: number | null; issue_number?: string | null; github_issue_url?: string | null; issue_url?: string | null }) {
+  if (row.github_issue_number) return Number(row.github_issue_number);
+  const legacyNumber = Number(row.issue_number);
+  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
+  const url = row.github_issue_url || row.issue_url || "";
+  const match = url.match(/\/issues\/(\d+)(?:$|[?#])/);
+  return match ? Number(match[1]) : null;
+}
+
+async function matchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
+  const token = providerToken(request);
+  if (!token) return "";
+  const githubUser = await githubUserForToken(token);
+  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
+  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
+    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
+  }
+  return token;
+}
+
 function profileId(value?: string) {
   return value
     ?.normalize("NFKD")
@@ -46,6 +72,7 @@ function profileId(value?: string) {
 }
 
 type CurrentTaskForActivity = {
+  task_type?: string | null;
   status?: string | null;
   review_status?: string | null;
   owner?: string | null;
@@ -77,7 +104,7 @@ function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForAc
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
   if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
-  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Group Commitment geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
+  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Initiative geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
   if (
     (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
     || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)
@@ -109,14 +136,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
-  const isOperationalLead = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const restrictedFields = [
     payload.owner !== undefined ? "Owner" : "",
     payload.priority !== undefined ? "Priorität" : "",
-    payload.packageId !== undefined ? "Group Commitment" : "",
+    payload.packageId !== undefined ? "Initiative" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
     payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
     payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
@@ -167,21 +194,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.packageId !== undefined) {
     const nextPackageId = payload.packageId || null;
     if (nextPackageId) {
-      const { data: groupCommitment, error: groupCommitmentError } = await supabase
+      const { data: initiative, error: initiativeError } = await supabase
         .from("packages")
         .select("id,milestone_id")
         .eq("id", nextPackageId)
         .single();
-      if (groupCommitmentError || !groupCommitment) return NextResponse.json({ error: "Group Commitment wurde nicht gefunden." }, { status: 404 });
+      if (initiativeError || !initiative) return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
       update.package_id = nextPackageId;
-      if (payload.milestoneId === undefined) update.milestone_id = groupCommitment.milestone_id || null;
+      if (payload.milestoneId === undefined) update.milestone_id = initiative.milestone_id || null;
     } else {
       update.package_id = null;
     }
   }
 
-  if (payload.owner) {
+  if (payload.owner !== undefined) {
     const nextOwner = profileId(payload.owner);
+    if (!nextOwner && currentTask?.task_type !== "proposal") {
+      return NextResponse.json({ error: "Nur Vorschläge können ohne Assignee bleiben." }, { status: 400 });
+    }
     update.owner = nextOwner || null;
     update.assignee = nextOwner || null;
   }
@@ -308,5 +338,55 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   return NextResponse.json({ ok: true, activities });
+}
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const supabase = getServerSupabase();
+  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+
+  const permission = await requireFounder(request);
+  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  if (!isOperationalLead) return NextResponse.json({ error: "Nur CEO oder Deputy können Aufgaben löschen." }, { status: 403 });
+
+  const { id } = await context.params;
+  const { data: task, error: taskError } = await supabase
+    .from("tasks")
+    .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url")
+    .eq("id", id)
+    .single();
+  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+
+  const issueNumber = linkedIssueNumber(task);
+  let githubClosed = false;
+  if (issueNumber) {
+    try {
+      const token = await matchingGitHubToken(request, permission.profile);
+      if (!token) {
+        return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte GitHub-Rechte erneuern und dann erneut löschen." }, { status: 409 });
+      }
+      await archiveGitHubIssue(issueNumber, token);
+      githubClosed = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GitHub Issue konnte nicht geschlossen werden.";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+  }
+
+  const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+
+  await supabase.from("audit_log").insert({
+    actor_profile_id: permission.profile?.id || null,
+    action: "task.delete",
+    entity_type: "task",
+    entity_id: id,
+    before_data: task,
+    after_data: { deleted: true, githubClosed },
+    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    user_agent: request.headers.get("user-agent"),
+  });
+
+  return NextResponse.json({ ok: true, deletedTaskId: id, githubClosed });
 }
 

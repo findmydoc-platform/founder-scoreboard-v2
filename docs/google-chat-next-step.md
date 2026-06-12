@@ -1,12 +1,12 @@
 # Google Chat Integration - Next Step
 
-Stand: 2026-05-27
+Stand: 2026-05-29
 
 Der kontrollierte Aktivierungsplan steht in `docs/google-chat-rollout.md`.
 
 ## Ziel
 
-Google Chat soll nicht zum Einzelspam werden. Die App sammelt operative Ereignisse in Supabase, zeigt sie jedem Nutzer als In-App-Notification und sendet nur wichtige Sammelmeldungen in den bestehenden Founder-Scoreboard-Chat.
+Google Chat soll nicht zum Einzelspam werden. Die App sammelt operative Ereignisse in Supabase, zeigt sie jedem Nutzer als In-App-Notification und sendet nur wichtige Sammelmeldungen oder persönliche FounderOps-DMs.
 
 ## Gewünschte Benachrichtigungen
 
@@ -25,7 +25,7 @@ Nicht direkt beim Speichern an Google Chat senden. Stattdessen nutzt die App ein
 - `notification_events`: fachliches Ereignis und In-App-Hinweis, z.B. `task.review_requested`.
 - `notification_deliveries`: Zustellversuche, Kanal, Status, Fehler, Retry.
 - `notification_preferences`: steuerbar pro Person und Event-Typ.
-- `profiles.google_chat_user_id`, `profiles.google_chat_dm_space`: vorbereitet für spätere private DM-Zustellung.
+- `profiles.google_chat_user_id`, `profiles.google_chat_dm_space`: Zuordnung für persönliche DM-Zustellung.
 
 Operative Event Messages bleiben in der Applikation. Eine Google-Chat-Pipeline darf nur für Release-Details oder Deployment-Zusammenfassungen verwendet werden.
 
@@ -56,9 +56,10 @@ Erledigt:
 3. Notification-Outbox Tabellen/API sind ergänzt.
 4. Events beim Review-Anfragen, Review-Abschluss, Task-Kommentar, Blocker, Task-Vorschlag und Meeting-Rückmeldung werden erzeugt.
 5. Die Kopfzeile zeigt eine In-App-Notification-Inbox für persönliche Hinweise.
-6. `POST /api/notifications/deliver` verarbeitet Pending-Events, filtert auf wichtige Chat-Typen und sendet einen Google-Chat-Digest, wenn `GOOGLE_CHAT_WEBHOOK_URL` gesetzt ist und `GOOGLE_CHAT_DELIVERY_ENABLED=true` gilt.
-7. Einstellungen zeigen den Google Chat Digest, den Zustellstatus und die persönlichen Event-Präferenzen.
-8. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet und antwortet auf Google-Chat-Events, ohne die Zustellung zu aktivieren.
+6. Einstellungen zeigen Google Chat, Zustellstatus, Fehler und persönliche Event-Präferenzen.
+7. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet.
+8. `/api/notifications/deliver` kann bei aktivierter Chat API persönliche FounderOps-DMs an `profiles.google_chat_dm_space` senden.
+9. Ohne DM-Space wird sauber in `notification_deliveries` protokolliert oder bei gesetztem Webhook in den Space-Digest zurückgefallen.
 
 Noch offen:
 

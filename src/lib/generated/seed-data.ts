@@ -69,6 +69,14 @@ export const seedData: PlanningData = {
       "title": "Go-Live: MVP & Legal Ready",
       "goal": "Website, Formulare, Trust-/Legal-Basis und echte Klinik-Onboarding-Fähigkeit herstellen.",
       "priority": "P0",
+      "ownerId": "volkan",
+      "accountableProfileId": "volkan",
+      "responsibleProfileIds": ["volkan"],
+      "consultedProfileIds": ["anil", "ozen"],
+      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "status": "active",
+      "successCriteria": "MVP, Legal-Basis und Klinik-Onboarding können ohne versteckte Vorarbeit reviewed werden.",
+      "scopeConstraints": "",
       "sortOrder": 1
     },
     {
@@ -76,6 +84,14 @@ export const seedData: PlanningData = {
       "title": "Klinikpipeline: Prospects, Outreach & Expo",
       "goal": "Warme Kontakte, Bookimed/Grey Prospects und Düsseldorf Expo in Calls, LOIs und Pilotkliniken übersetzen.",
       "priority": "P0",
+      "ownerId": "volkan",
+      "accountableProfileId": "volkan",
+      "responsibleProfileIds": ["volkan"],
+      "consultedProfileIds": ["anil", "ozen"],
+      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "status": "active",
+      "successCriteria": "Warme Klinik- und Messekontakte haben Owner, nächsten Schritt und dokumentierten Follow-up-Status.",
+      "scopeConstraints": "",
       "sortOrder": 2
     },
     {
@@ -83,6 +99,14 @@ export const seedData: PlanningData = {
       "title": "Investor Readiness & Funding",
       "goal": "Pitchdeck, Investor-Follow-ups, Funding-Narrative und Malta Enterprise paketfähig machen.",
       "priority": "P1",
+      "ownerId": "youssef",
+      "accountableProfileId": "youssef",
+      "responsibleProfileIds": ["youssef"],
+      "consultedProfileIds": ["volkan"],
+      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "status": "planned",
+      "successCriteria": "Pitchdeck, Funding-Narrative und Investor-Follow-ups sind als reviewfähiges Paket vorbereitet.",
+      "scopeConstraints": "",
       "sortOrder": 3
     },
     {
@@ -90,6 +114,14 @@ export const seedData: PlanningData = {
       "title": "Company, Governance & Operating System",
       "goal": "Founder-Struktur, IP/Marke, Notion/CRM und Teamtransparenz sauber aufsetzen.",
       "priority": "P1",
+      "ownerId": "anil",
+      "accountableProfileId": "anil",
+      "responsibleProfileIds": ["anil"],
+      "consultedProfileIds": [],
+      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "status": "planned",
+      "successCriteria": "Founder-Struktur, Governance und operative Transparenz sind für das Team nachvollziehbar dokumentiert.",
+      "scopeConstraints": "",
       "sortOrder": 4
     },
     {
@@ -97,6 +129,14 @@ export const seedData: PlanningData = {
       "title": "Marketing, Content & Competitive Research",
       "goal": "Website-Copy, Blog, LinkedIn, Konkurrenzanalyse und GTM-Materialien vorbereiten.",
       "priority": "P2",
+      "ownerId": "youssef",
+      "accountableProfileId": "youssef",
+      "responsibleProfileIds": ["youssef"],
+      "consultedProfileIds": ["volkan"],
+      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "status": "planned",
+      "successCriteria": "Marketing- und Content-Arbeit ist priorisiert, briefbar und ohne medizinische Risikoaussagen nutzbar.",
+      "scopeConstraints": "",
       "sortOrder": 5
     }
   ],

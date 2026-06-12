@@ -115,7 +115,7 @@ Erwartung:
 - Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
 - Issue wird im Management-Repo im Namen des eingeloggten GitHub-Users erstellt oder aktualisiert.
 - Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
-- Body enthält Epic / Meilenstein, Group Commitment, Sprint, Review, Score, Blocker und Kommentare.
+- Body enthält Epic / Meilenstein, Initiative, Sprint, Review, Score, Blocker und Kommentare.
 - GitHub bleibt one-way Backup, nicht führendes System.
 
 ## Google Chat

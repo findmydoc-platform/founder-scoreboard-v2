@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -8,11 +9,6 @@ type CreateDecisionPayload = {
   decision?: string;
   requiredProfileIds?: string[];
 };
-
-function cleanText(value: unknown, maxLength: number) {
-  if (typeof value !== "string") return "";
-  return value.trim().slice(0, maxLength);
-}
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();

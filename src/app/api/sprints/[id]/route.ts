@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -11,10 +12,6 @@ type UpdateSprintPayload = {
 };
 
 const sprintStatuses = new Set(["planning", "active", "review", "closed"]);
-
-function isIsoDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();

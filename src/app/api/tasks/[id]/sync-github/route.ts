@@ -103,7 +103,7 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
   addProfileId(row.assignee);
 
   const [packageResult, milestoneResult, sprintResult, parentResult, commentsResult, blockersResult, activitiesResult, outgoingRelationsResult, incomingRelationsResult] = await Promise.all([
-    row.package_id ? supabase.from("packages").select("title,goal,milestone_id").eq("id", row.package_id).maybeSingle() : Promise.resolve({ data: null }),
+    row.package_id ? supabase.from("packages").select("title,goal,success_criteria,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids").eq("id", row.package_id).maybeSingle() : Promise.resolve({ data: null }),
     row.milestone_id ? supabase.from("milestones").select("title,target_date").eq("id", row.milestone_id).maybeSingle() : Promise.resolve({ data: null }),
     row.sprint_id ? supabase.from("sprints").select("name,start_date,end_date,review_due_at").eq("id", row.sprint_id).maybeSingle() : Promise.resolve({ data: null }),
     row.parent_task_id ? supabase.from("tasks").select("title,github_issue_url").eq("id", row.parent_task_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -135,13 +135,40 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
     : { data: [] };
   const profileNameById = new Map((profilesResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 
-  const packageData = packageResult.data as { title?: string | null; goal?: string | null; milestone_id?: string | null } | null;
+  const packageData = packageResult.data as {
+    title?: string | null;
+    goal?: string | null;
+    success_criteria?: string | null;
+    milestone_id?: string | null;
+    owner_id?: string | null;
+    accountable_profile_id?: string | null;
+    responsible_profile_ids?: string[] | null;
+    consulted_profile_ids?: string[] | null;
+    informed_profile_ids?: string[] | null;
+  } | null;
+  if (packageData) {
+    addProfileId(packageData.owner_id);
+    addProfileId(packageData.accountable_profile_id);
+    for (const profileId of packageData.responsible_profile_ids || []) addProfileId(profileId);
+    for (const profileId of packageData.consulted_profile_ids || []) addProfileId(profileId);
+    for (const profileId of packageData.informed_profile_ids || []) addProfileId(profileId);
+  }
+  const refreshedProfilesResult = profileIds.size
+    ? await supabase.from("profiles").select("id,name").in("id", [...profileIds])
+    : { data: [] };
+  const refreshedProfileNameById = new Map((refreshedProfilesResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+  const namesFor = (profileIds?: string[] | null) => (profileIds || []).map((profileId) => refreshedProfileNameById.get(profileId) || profileId).filter(Boolean).join(", ");
   const milestoneData = milestoneResult.data as { title?: string | null; target_date?: string | null } | null;
   const sprintData = sprintResult.data as { name?: string | null; start_date?: string | null; end_date?: string | null; review_due_at?: string | null } | null;
   const parentData = parentResult.data as { title?: string | null; github_issue_url?: string | null } | null;
   return {
     packageTitle: packageData?.title || "",
     packageGoal: packageData?.goal || "",
+    packageSuccessCriteria: packageData?.success_criteria || "",
+    raciAccountable: refreshedProfileNameById.get(packageData?.accountable_profile_id || packageData?.owner_id || "") || packageData?.accountable_profile_id || packageData?.owner_id || "",
+    raciResponsible: namesFor(packageData?.responsible_profile_ids?.length ? packageData.responsible_profile_ids : packageData?.owner_id ? [packageData.owner_id] : []),
+    raciConsulted: namesFor(packageData?.consulted_profile_ids),
+    raciInformed: namesFor(packageData?.informed_profile_ids),
     milestoneTitle: milestoneData?.title || "",
     milestoneTargetDate: milestoneData?.target_date || "",
     sprintName: sprintData?.name || "",

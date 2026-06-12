@@ -4,20 +4,29 @@
 
 ```text
 Epic / Meilenstein
-  -> Group Commitment
+  -> Initiative
       -> Deliverable
           -> Sub-Issue
 ```
 
-Der Sprint ist ein Zeitcontainer und keine fachliche Parent-Ebene. Ein Deliverable gehört fachlich zu einem Group Commitment und zeitlich zu einem Sprint.
+Der Sprint ist ein Zeitcontainer und keine fachliche Parent-Ebene. Ein Deliverable gehört fachlich zu einer Initiative und zeitlich zu einem Sprint.
 
 ## Begriffe
 
 ### Epic / Meilenstein
-Strategisches Ziel über mehrere Sprints. Beispiele: Investor Ready, Messe Launch, Legal Go-Live. Ein Epic bündelt Group Commitments und ist nicht direkt scoring-relevant.
+Strategisches Ziel über mehrere Sprints. Beispiele: Investor Ready, Messe Launch, Legal Go-Live. Ein Epic bündelt Initiativen und ist nicht direkt scoring-relevant.
 
-### Group Commitment
-Themenblock innerhalb eines Epics. Ein Group Commitment erklärt, warum mehrere Deliverables zusammengehören. Es ist nicht direkt scoring-relevant.
+### Initiative
+Outcome-Brief innerhalb eines Epics. Eine Initiative erklärt, warum mehrere Deliverables zusammengehören, wer sie ownern soll und woran das Ergebnis erkannt wird. Sie ist nicht direkt scoring-relevant.
+
+Mini-RACI liegt auf der Initiative:
+
+- `Accountable`: genau eine Person mit Entscheidungs- und Ergebnisverantwortung.
+- `Responsible`: eine oder mehrere Personen, die Umsetzung oder Führung übernehmen.
+- `Consulted`: Personen, die aktiv einbezogen werden.
+- `Informed`: Personen, die informiert bleiben.
+
+Responsible, Consulted und Informed werden als Profil-Listen geführt. Sub-Issues bekommen kein eigenes RACI.
 
 ### Deliverable
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum, Review und Evidence. Nur Deliverables werden bepunktet.
@@ -46,7 +55,8 @@ Die App bleibt führend. GitHub im Repo `findmydoc-platform/management` ist ein 
 Gespiegelte GitHub-Issues müssen die Struktur explizit enthalten:
 
 - `Epic / Milestone`
-- `Group Commitment`
+- `Initiative`
+- `RACI: Accountable / Responsible / Consulted / Informed`
 - `Sprint`
 - `Typ`
 - `Problem Statement`

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { DecisionTaskLink } from "@/lib/types";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       decision_id: decisionId,
       task_id: taskId,
       link_type: linkType,
-      note: typeof payload.note === "string" ? payload.note.trim().slice(0, 1000) : "",
+      note: cleanText(payload.note, 1000),
       created_by: permission.profile?.id || null,
     }, { onConflict: "decision_id,task_id" })
     .select("id,decision_id,task_id,link_type,note,created_by,created_at")

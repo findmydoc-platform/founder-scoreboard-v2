@@ -120,6 +120,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const section = await readFile("src/components/task-relationships-section.tsx", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
@@ -139,9 +140,11 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(ui, /Relationship konnte nicht gespeichert werden/);
   assert.match(ui, /Wartet auf/);
   assert.match(ui, /Verknüpft mit/);
-  assert.match(detail, /RelationshipPanelList/);
-  assert.match(detail, /Relationship hinzufügen/);
-  assert.match(detail, /Diese Aufgabe kann erst sauber weitergehen/);
+  assert.match(detail, /TaskRelationshipsSection/);
+  assert.match(section, /RelationshipPanelList/);
+  assert.match(section, /Relationship hinzufügen/);
+  assert.match(section, /Wartet auf/);
+  assert.match(section, /Verknüpft mit/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);
 });
@@ -189,25 +192,26 @@ test("github sync verification is read-only and checks the management repo", asy
 test("app-only tasks are visibly marked without creating github issues", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
+  const githubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
-  assert.match(ui, /App-only/);
+  assert.match(taskCard, /App-only/);
   assert.match(ui, /App-only-Aufgaben bleiben dauerhaft sichtbar/);
   assert.match(ui, /Diese Liste bleibt dauerhaft erhalten/);
-  assert.match(ui, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
   assert.match(ui, /Vorschläge und Deliverables bleiben App-only/);
   assert.match(ui, /GitHub anlegen/);
   assert.match(ui, /Keine App-only Aufgaben ohne GitHub-Issue/);
-  assert.match(ui, /Nur in der App: noch kein GitHub-Issue verknüpft/);
-  assert.match(ui, /GitHub-Issue anlegen/);
+  assert.match(taskCard, /Nur in der App: noch kein GitHub-Issue verknüpft/);
+  assert.match(githubSyncCard, /Nur in der App: noch kein GitHub-Issue verknüpft/);
+  assert.match(githubSyncCard, /GitHub-Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
   assert.match(ui, /onCreateGitHubIssue/);
-  assert.match(detail, /Nur in der App: noch kein GitHub-Issue verknüpft/);
-  assert.match(detail, /GitHub-Issue anlegen/);
+  assert.match(detail, /TaskGitHubSyncCard/);
   assert.match(detail, /createIfMissing: true/);
   assert.match(detail, /githubState/);
   assert.match(ui, /nicht automatisch dupliziert/);
-  assert.match(detail, /nicht automatisch dupliziert/);
+  assert.match(githubSyncCard, /nicht automatisch dupliziert/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -229,8 +233,10 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const briefSection = await readFile("src/components/task-brief-section.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
   assert.match(migration, /problem_statement/);
@@ -240,9 +246,11 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(createRoute, /problemStatement/);
   assert.match(updateRoute, /acceptanceCriteria/);
   assert.match(types, /problemStatement/);
-  assert.match(data, /problem_statement/);
+  assert.match(data, /mapTask/);
+  assert.match(dataMappers, /problem_statement/);
   assert.match(ui, /Template v2/);
-  assert.match(detail, /Aufgabenbrief/);
+  assert.match(detail, /TaskBriefSection/);
+  assert.match(briefSection, /Aufgabenbrief/);
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 
@@ -279,6 +287,8 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
   const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
+  const githubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
+  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
   const providerTokenMemory = await readFile("src/lib/github-provider-token.ts", "utf8");
   const supabase = await readFile("src/lib/supabase.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
@@ -287,25 +297,25 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   const github = await readFile("src/lib/github.ts", "utf8");
   const rules = await readFile("AGENTS.md", "utf8");
 
-  assert.match(ui, /signInWithOAuth/);
-  assert.match(ui, /scopes: "repo read:user user:email"/);
-  assert.match(ui, /provider_token/);
+  assert.match(authHook, /signInWithOAuth/);
+  assert.match(authHook, /scopes: "repo read:user user:email"/);
+  assert.match(authHook, /provider_token/);
   assert.match(ui, /x-github-provider-token/);
   assert.match(detail, /x-github-provider-token/);
   assert.match(supabase, /persistSession: true/);
   assert.match(supabase, /autoRefreshToken: true/);
-  assert.match(ui, /refreshSessionState/);
-  assert.match(ui, /supabase\.auth\.refreshSession\(\)/);
-  assert.match(ui, /visibilitychange/);
-  assert.match(ui, /5 \* 60 \* 1000/);
+  assert.match(authHook, /refreshSessionState/);
+  assert.match(authHook, /supabase\.auth\.refreshSession\(\)/);
+  assert.match(authHook, /visibilitychange/);
+  assert.match(authHook, /5 \* 60 \* 1000/);
   assert.match(ui, /getRememberedGitHubProviderToken/);
-  assert.match(ui, /clearRememberedGitHubProviderToken/);
+  assert.match(authHook, /clearRememberedGitHubProviderToken/);
   assert.match(detail, /getRememberedGitHubProviderToken/);
   assert.match(ui, /GitHub-Rechte erneuern/);
-  assert.match(detail, /GitHub-Rechte erneuern/);
+  assert.match(githubSyncCard, /GitHub-Rechte erneuern/);
   assert.match(ui, /Sync, Kommentare und Anhänge/);
-  assert.match(detail, /Sync, Kommentare und Anhänge/);
-  assert.match(thread, /getRememberedGitHubProviderToken/);
+  assert.match(githubSyncCard, /Sync, Kommentare und Anhänge/);
+  assert.match(thread, /onUploadAttachment/);
   assert.match(providerTokenMemory, /rememberedGitHubProviderToken/);
   assert.match(providerTokenMemory, /clearRememberedGitHubProviderToken/);
   assert.doesNotMatch(providerTokenMemory, /localStorage|sessionStorage|indexedDB/i);
@@ -333,24 +343,27 @@ test("strict auth gates planning data until a valid session is present", async (
   const page = await readFile("src/app/page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const authControl = await readFile("src/components/auth-control.tsx", "utf8");
+  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
 
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /emptyPlanningData/);
   assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
-  assert.match(ui, /Du bist abgemeldet/);
+  assert.match(authHook, /Du bist abgemeldet/);
   assert.match(ui, /<AppBrand \/>/);
   assert.doesNotMatch(ui, /ShieldCheck/);
   assert.match(ui, /variant="gate"/);
-  assert.match(ui, /Rollen und Zugriff werden nach dem Login/);
-  assert.match(ui, /Mit GitHub anmelden/);
-  assert.doesNotMatch(ui, /Login öffnen/);
-  assert.match(ui, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
+  assert.match(authControl, /Rollen und Zugriff werden nach dem Login/);
+  assert.match(authControl, /Mit GitHub anmelden/);
+  assert.doesNotMatch(authControl, /Login öffnen/);
+  assert.match(authHook, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
   assert.match(ui, /\/api\/planning-data/);
 });
 
 test("task review uses operational lead route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /task_reviews/);
@@ -360,7 +373,7 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /Nacharbeit/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
-  assert.match(ui, /Acceptance Criteria erfüllt/);
+  assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
   assert.match(ui, /CEO-Score/);
   assert.match(ui, /Nächster Schritt/);
   assert.match(ui, /Evidence Required/);
@@ -527,7 +540,6 @@ test("decision audit loads before and after data for collapsible diffs", async (
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(data, /before_data,after_data/);
-  assert.match(data, /beforeData: row.before_data/);
   assert.match(ui, /auditChanges/);
   assert.match(ui, /Audit Trail/);
   assert.match(ui, /Vorher/);
@@ -536,8 +548,9 @@ test("decision audit loads before and after data for collapsible diffs", async (
 
 test("board tasks can be dragged between status columns", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
 
-  assert.match(ui, /draggable=\{Boolean\(onDragStart\)\}/);
+  assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
   assert.match(ui, /onDrop=\{\(event\) => dropTaskOnStatus\(status, event\)\}/);
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
@@ -597,6 +610,10 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
+  const timeline = await readFile("src/components/task-comment-timeline.tsx", "utf8");
+  const commentBody = await readFile("src/components/task-comment-body.tsx", "utf8");
+  const githubCommentImage = await readFile("src/components/github-comment-image.tsx", "utf8");
+  const composer = await readFile("src/components/task-comment-composer.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists task_comments/);
@@ -641,39 +658,39 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /GitHub aktualisieren/);
   assert.match(thread, /github-comment/);
   assert.match(thread, /timeline/);
-  assert.match(thread, /describeActivity/);
-  assert.match(thread, /repairGermanText/);
-  assert.match(thread, /activityToneClass/);
-  assert.match(thread, /Status geändert/);
-  assert.match(thread, /Review finalisiert/);
-  assert.match(thread, /Relationship/);
+  assert.match(timeline, /describeActivity/);
+  assert.match(timeline, /repairGermanText/);
+  assert.match(timeline, /activityToneClass/);
+  assert.match(timeline, /Status geändert/);
+  assert.match(timeline, /Review finalisiert/);
+  assert.match(timeline, /Relationship/);
   assert.match(thread, /CommentBody/);
-  assert.match(thread, /<img\\b/);
-  assert.match(thread, /user-attachments\/assets/);
-  assert.match(thread, /GitHubCommentImage/);
-  assert.match(thread, /\/api\/github-assets\?url=/);
-  assert.match(thread, /URL\.createObjectURL/);
-  assert.match(thread, /decodeHtmlEntities/);
-  assert.match(thread, /useState\(false\)/);
-  assert.match(thread, /loadViaProxy/);
-  assert.match(thread, /if \(!isGitHubAsset \|\| proxyAttempted\)/);
-  assert.match(thread, /showCommentPreview/);
-  assert.match(thread, /Vorschau/);
-  assert.match(thread, /getBrowserSupabase/);
-  assert.match(thread, /onUploadAttachment/);
-  assert.match(thread, /type="file"/);
-  assert.match(thread, /Paperclip/);
-  assert.match(thread, /Anhang/);
+  assert.match(githubCommentImage, /<img\b/);
+  assert.match(commentBody, /user-attachments\/assets/);
+  assert.match(commentBody, /GitHubCommentImage/);
+  assert.match(githubCommentImage, /\/api\/github-assets\?url=/);
+  assert.match(githubCommentImage, /URL\.createObjectURL/);
+  assert.match(commentBody, /decodeHtmlEntities/);
+  assert.match(githubCommentImage, /useState\(false\)/);
+  assert.match(githubCommentImage, /loadViaProxy/);
+  assert.match(githubCommentImage, /if \(!isGitHubAsset \|\| proxyAttempted\)/);
+  assert.match(composer, /showCommentPreview/);
+  assert.match(composer, /Vorschau/);
+  assert.match(githubCommentImage, /getBrowserSupabase/);
+  assert.match(composer, /onUploadAttachment/);
+  assert.match(composer, /type="file"/);
+  assert.match(composer, /Paperclip/);
+  assert.match(composer, /Anhang/);
   assert.match(githubAssetsRoute, /requireFounder/);
   assert.match(githubAssetsRoute, /x-github-provider-token/);
   assert.match(githubAssetsRoute, /githubUserForToken/);
   assert.match(githubAssetsRoute, /user-attachments\/assets/);
   assert.match(githubAssetsRoute, /content-type/);
   assert.match(githubAssetsRoute, /image\//);
-  assert.match(thread, /Anhang in GitHub öffnen/);
+  assert.match(githubCommentImage, /Anhang in GitHub öffnen/);
   assert.match(thread, /new Date\(left\.createdAt\)/);
-  assert.match(thread, /Nachfragen/);
-  assert.match(thread, /Kommentieren/);
+  assert.match(timeline, /Nachfragen/);
+  assert.match(composer, /Kommentieren/);
   assert.match(types, /TaskActivity/);
   assert.match(types, /TaskExternalComment/);
   assert.match(ui, /Review bis/);
@@ -682,6 +699,8 @@ test("comments blockers and notification outbox are modeled before Google Chat d
 test("task route opens the detail panel inside the planning shell", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const page = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const detailsCard = await readFile("src/components/task-details-card.tsx", "utf8");
+  const commentsHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const brand = await readFile("src/components/app-brand.tsx", "utf8");
   const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
@@ -705,20 +724,26 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /aria-label="Detailpanel schließen"/);
   assert.match(ui, /Große Ansicht/);
   assert.match(ui, /view=full/);
-  const taskDetailPanel = ui.slice(ui.indexOf("function TaskDetailPanel"));
-  assert.match(taskDetailPanel, /Aufgabenbrief/);
-  assert.ok(taskDetailPanel.indexOf("Problem Statement") < taskDetailPanel.indexOf("Intended Outcome"));
-  assert.ok(taskDetailPanel.indexOf("Intended Outcome") < taskDetailPanel.indexOf("Scope & Constraints"));
-  assert.ok(taskDetailPanel.indexOf("Scope & Constraints") < taskDetailPanel.indexOf("Acceptance Criteria"));
-  assert.ok(taskDetailPanel.indexOf("Acceptance Criteria") < taskDetailPanel.indexOf("Evidence Required"));
-  assert.ok(taskDetailPanel.indexOf("Evidence Required") < taskDetailPanel.indexOf("Definition of Done"));
-  assert.ok(taskDetailPanel.indexOf("Definition of Done") < taskDetailPanel.indexOf("Fokus-Kontext"));
-  assert.ok(taskDetailPanel.indexOf("Blocker früh melden") < taskDetailPanel.indexOf("TaskCommentThread"));
-  assert.ok(taskDetailPanel.indexOf("TaskCommentThread") < taskDetailPanel.indexOf("Notizen"));
-  assert.match(page, /title="Kommentare"/);
-  assert.match(page, /api\/tasks\/\$\{task\.id\}\/comments/);
   assert.match(page, /AppSidebar/);
-  assert.doesNotMatch(page, /detailNavItems/);
+  assert.match(page, /TaskBriefSection/);
+  assert.match(page, /TaskRelationshipsSection/);
+  assert.match(page, /TaskSubIssuesSection/);
+  assert.match(page, /TaskContextSection/);
+  assert.match(page, /TaskCommentThread/);
+  assert.match(page, /TaskDetailsCard/);
+  assert.match(page, /briefEditing/);
+  assert.match(page, /detailsEditing/);
+  assert.match(page, /detailsEditSnapshot/);
+  assert.match(page, /canManageTaskMeta/);
+  assert.match(page, /title="Kommentare"/);
+  assert.match(commentsHook, /api\/tasks\/\$\{task\.id\}\/comments/);
+  assert.match(detailsCard, /Priorität/);
+  assert.match(detailsCard, /Initiative/);
+  assert.match(detailsCard, /Epic \/ Meilenstein/);
+  assert.match(detailsCard, /CustomDatePicker/);
+  assert.match(detailsCard, /Bearbeiten/);
+  assert.match(detailsCard, /availableStatusOptions/);
+  assert.match(detailsCard, /canManageTaskMeta/);
   assert.match(ui, /AppSidebar/);
   assert.match(sidebar, /appNavItems/);
   assert.match(sidebar, /Hauptnavigation/);
@@ -730,9 +755,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /AppBrand/);
   assert.match(brand, /cross-mark\.svg/);
   assert.match(brand, /FounderOps/);
-  assert.match(page, /Relationships/);
-  assert.match(page, /Sub-Issues/);
-  assert.ok(page.indexOf("Sub-Issues") < page.indexOf("title=\"Kommentare\""));
+  assert.doesNotMatch(route, /detailNavItems/);
 });
 
 test("task detail page supports github-like sidebar metadata and milestones", async () => {
@@ -740,7 +763,11 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const creatorMigration = await readFile("supabase/0017_task_created_by.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const page = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const detailsCard = await readFile("src/components/task-details-card.tsx", "utf8");
+  const contextSection = await readFile("src/components/task-context-section.tsx", "utf8");
+  const commentsHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
   const comments = await readFile("src/components/task-comment-thread.tsx", "utf8");
   const app = await readFile("src/components/planning-app.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -756,23 +783,33 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(route, /Diese Felder sind geschützt/);
   assert.match(route, /Founder können Aufgaben nur in Review geben/);
   assert.match(data, /milestones/);
-  assert.match(data, /createdBy/);
+  assert.match(data, /mapTask/);
+  assert.match(dataMappers, /createdBy/);
   assert.match(types, /export type Milestone/);
   assert.match(types, /createdBy\?: string/);
-  assert.match(page, /Priorität/);
-  assert.match(page, /Meilenstein/);
-  assert.match(page, /Erstellt von/);
-  assert.match(page, /Assignee/);
-  assert.match(page, /Relationships/);
-  assert.match(page, /TaskChecklist/);
-  assert.match(page, /canManageTaskMeta/);
+  assert.match(page, /AppSidebar/);
+  assert.match(page, /TaskBriefSection/);
+  assert.match(page, /TaskRelationshipsSection/);
+  assert.match(page, /TaskSubIssuesSection/);
+  assert.match(page, /TaskCommentThread/);
+  assert.match(page, /TaskDetailsCard/);
+  assert.match(page, /briefEditing/);
   assert.match(page, /detailsEditing/);
   assert.match(page, /detailsEditSnapshot/);
-  assert.match(page, /availableStatusOptions/);
-  assert.match(page, /CustomDatePicker/);
-  assert.match(page, /briefEditing/);
-  assert.match(page, /Bearbeiten/);
-  assert.match(comments, /github\.com\/\$\{login\}\.png/);
+  assert.match(page, /canManageTaskMeta/);
+  assert.match(page, /title="Kommentare"/);
+  assert.match(detailsCard, /Priorität/);
+  assert.match(detailsCard, /Initiative/);
+  assert.match(detailsCard, /Epic \/ Meilenstein/);
+  assert.match(detailsCard, /Erstellt von/);
+  assert.match(detailsCard, /Assignee/);
+  assert.match(detailsCard, /availableStatusOptions/);
+  assert.match(detailsCard, /CustomDatePicker/);
+  assert.match(detailsCard, /Bearbeiten/);
+  assert.match(contextSection, /Begründende Decisions/);
+  assert.match(contextSection, /Fokus-Kontext/);
+  assert.match(comments, /TaskCommentThread/);
+  assert.match(commentsHook, /api\/tasks\/\$\{task\.id\}\/comments/);
   assert.match(app, /TaskChecklist/);
   assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a core workflow/);
 });
@@ -786,11 +823,11 @@ test("planning hierarchy treats sprint as time container and packages as group c
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(migration, /packages add column if not exists milestone_id/);
-  assert.match(docs, /Epic \/ Meilenstein[\s\S]*Group Commitment[\s\S]*Deliverable[\s\S]*Sub-Issue/);
+  assert.match(docs, /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/);
   assert.match(docs, /Sprint ist ein Zeitcontainer/);
   assert.match(skill, /Sprint is a time container/);
   assert.match(github, /Epic \/ Milestone/);
-  assert.match(github, /Group Commitment/);
+  assert.match(github, /Initiative/);
   assert.match(ui, /Epic \/ Meilenstein/);
   assert.match(ui, /Group Commitment/);
   assert.match(ui, /expandedPackages/);
@@ -803,7 +840,7 @@ test("planning hierarchy treats sprint as time container and packages as group c
 test("management repo cleanup plan protects legacy templates from deletion without approval", async () => {
   const plan = await readFile("docs/management-repo-v2-plan.md", "utf8");
   const deliverableTemplate = await readFile("docs/management-templates-v2/deliverable.yml", "utf8");
-  const groupTemplate = await readFile("docs/management-templates-v2/group-commitment.yml", "utf8");
+  const initiativeTemplate = await readFile("docs/management-templates-v2/initiative.yml", "utf8");
   const subIssueTemplate = await readFile("docs/management-templates-v2/sub-issue.yml", "utf8");
 
   assert.match(plan, /Keine Datei im Management-Repo löschen/);
@@ -812,7 +849,8 @@ test("management repo cleanup plan protects legacy templates from deletion witho
   assert.match(plan, /sprint-title-sync\.yml/);
   assert.match(deliverableTemplate, /GitHub ist Backup, nicht Quelle der Wahrheit/);
   assert.match(deliverableTemplate, /Acceptance Criteria/);
-  assert.match(groupTemplate, /Epic \/ Meilenstein/);
+  assert.match(initiativeTemplate, /type:initiative/);
+  assert.match(initiativeTemplate, /Epic \/ Meilenstein/);
   assert.match(subIssueTemplate, /nicht score-relevant/);
 });
 
@@ -890,7 +928,7 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(pkg, /verify:google-chat/);
 });
 
-test("repo readiness includes the Vercel deployment pipeline gates", async () => {
+test("repo readiness includes the GitHub Actions deployment pipeline gates", async () => {
   const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
   const vercelJson = await readFile("vercel.json", "utf8");
   const previewWorkflow = await readFile(".github/workflows/deploy-preview.yml", "utf8");
@@ -904,7 +942,7 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   const css = await readFile("src/app/globals.css", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
-  assert.match(verify, /ready-for-github-actions-vercel-pipeline/);
+  assert.match(verify, /ready-for-github-actions-deployment/);
   assert.match(verify, /deploy-preview\.yml/);
   assert.match(verify, /deploy-production\.yml/);
   assert.match(verify, /vercel\.json/);
@@ -942,7 +980,7 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(pkg, /verify:deploy/);
   assert.match(pkg, /vercel:build/);
   assert.match(pkg, /npm test && npm run verify:vercel-ready/);
-  assert.match(pkg, /node tests\/platform-contract\.test\.mjs/);
+  assert.match(pkg, /node --test tests\/\*\.test\.mjs/);
   assert.match(pkg, /eslint/);
   assert.match(pkg, /node scripts\/verify-vercel-ready\.mjs/);
   assert.match(pkg, /node scripts\/verify-google-chat-rollout\.mjs/);
@@ -959,9 +997,6 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(deployment, /VERCEL_TOKEN/);
   assert.match(deployment, /VERCEL_ORG_ID/);
   assert.match(deployment, /VERCEL_PROJECT_ID/);
-  assert.match(deployment, /vercel deploy --target preview/);
-  assert.match(deployment, /vercel build --prod/);
-  assert.match(deployment, /vercel deploy --prebuilt --prod/);
   assert.match(deployment, /founder-ops\.findmydoc\.eu/);
   assert.match(deployment, /npm run vercel:build/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
@@ -971,23 +1006,27 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(deployment, /GitHub Actions job logs/);
   assert.doesNotMatch(deployment, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(deployment, /vercel login/);
+  assert.doesNotMatch(deployment, /vercel deploy/);
+  assert.doesNotMatch(deployment, /vercel build --prod/);
   assert.doesNotMatch(deployment, /vercel inspect/);
   assert.doesNotMatch(deployment, /vercel logs/);
   assert.match(skill, /GitHub Actions/);
-  assert.match(skill, /Vercel CLI/);
+  assert.match(skill, /GitHub Actions job logs/);
   assert.match(skill, /preview/);
   assert.match(skill, /production/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(skill, /founder-ops\.findmydoc\.eu/);
-  assert.match(skill, /GitHub Actions job logs/);
+  assert.doesNotMatch(skill, /Vercel CLI/);
   assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(skill, /vercel login/);
+  assert.doesNotMatch(skill, /vercel deploy/);
+  assert.doesNotMatch(skill, /vercel build --prod/);
   assert.doesNotMatch(skill, /vercel inspect/);
   assert.doesNotMatch(skill, /vercel logs/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /Production Readiness/);
-  assert.match(ui, /GitHub Actions offen/);
+  assert.match(ui, /manuell offen/);
   assert.match(ui, /GitHub Actions/);
   assert.doesNotMatch(ui, /vercel login/);
   assert.match(ui, /GitHub OAuth/);
@@ -1004,7 +1043,7 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(health, /notification_preferences/);
   assert.match(health, /tasks\.carryover/);
   assert.match(health, /sprint_commitments/);
-  assert.match(health, /packages\.group_commitment/);
+  assert.match(health, /packages\.initiative/);
   assert.match(health, /tasks\.template_v2/);
   assert.match(health, /task_relationship_edges/);
   assert.match(health, /task_external_comments/);
@@ -1046,12 +1085,12 @@ test("founder feedback creates bug and feature notifications with details", asyn
 });
 
 test("workspace selection survives page refreshes", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const workspaceHook = await readFile("src/hooks/use-planning-workspace.ts", "utf8");
 
-  assert.match(ui, /workspaceStateKey/);
-  assert.match(ui, /URLSearchParams\(window\.location\.search\)/);
-  assert.match(ui, /window\.localStorage\.setItem\(workspaceStateKey, workspace\)/);
-  assert.match(ui, /url\.searchParams\.set\("workspace", workspace\)/);
+  assert.match(workspaceHook, /workspaceStateKey/);
+  assert.match(workspaceHook, /URLSearchParams\(window\.location\.search\)/);
+  assert.match(workspaceHook, /window\.localStorage\.setItem\(workspaceStateKey, workspace\)/);
+  assert.match(workspaceHook, /url\.searchParams\.set\("workspace", workspace\)/);
 });
 
 test("header actions are workspace aware", async () => {
@@ -1070,7 +1109,7 @@ test("header actions are workspace aware", async () => {
 test("gantt uses sprint dates for scheduled tasks", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
-  assert.match(ui, /<GanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
+  assert.match(ui, /<CurrentGanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
   assert.match(ui, /function GanttView\(\{ tasks, packages, sprints, relations, onOpen \}/);
   assert.match(ui, /parseIsoDate\(sprint\?\.startDate \|\| ""\) \|\| parseIsoDate\(task\.startDate\)/);
   assert.match(ui, /parseIsoDate\(sprint\?\.endDate \|\| ""\) \|\| parseIsoDate\(task\.endDate\)/);
@@ -1118,6 +1157,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schema = await readFile("supabase/schema.sql", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const contextSection = await readFile("src/components/task-context-section.tsx", "utf8");
   const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const agents = await readFile("AGENTS.md", "utf8");
   const plan = await readFile("docs/execution-layer-plan.md", "utf8");
@@ -1166,8 +1206,9 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(ui, /Decision ohne Folgeaufgabe/);
   assert.match(ui, /Begründende Decisions/);
   assert.match(ui, /Fokus-Kontext/);
-  assert.match(detail, /Begründende Decisions/);
-  assert.match(detail, /Fokus-Kontext/);
+  assert.match(detail, /TaskContextSection/);
+  assert.match(contextSection, /Begründende Decisions/);
+  assert.match(contextSection, /Fokus-Kontext/);
   assert.match(detail, /focusItems/);
   assert.match(detail, /decisionTaskLinks/);
   assert.match(taskPage, /focusItems=\{data\.taskFocusItems\}/);
@@ -1209,7 +1250,7 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(route, /task\.proposed/);
   assert.match(route, /Founder können nur eigene Deliverables verfeinern/);
   assert.match(route, /taskType === "deliverable"/);
-  assert.match(route, /Deliverables brauchen Group Commitment und Sprint/);
+  assert.match(route, /Deliverables brauchen Initiative und Sprint/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
   assert.match(ui, /NewTaskDialog/);
@@ -1290,7 +1331,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(calendarRoute, /removed/);
   assert.match(calendarLib, /GOOGLE_SERVICE_ACCOUNT_EMAIL/);
   assert.match(calendarLib, /GOOGLE_SERVICE_ACCOUNT_KEY/);
-  assert.match(calendarLib, /calendar\.readonly/);
+  assert.match(calendarLib, /calendar\.events/);
   assert.doesNotMatch(calendarRoute, /console\.log/);
   assert.match(ui, /findMeetingSlots/);
   assert.match(ui, /meetingOverlapsSlot/);

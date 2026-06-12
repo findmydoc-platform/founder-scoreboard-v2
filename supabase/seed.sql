@@ -17,9 +17,14 @@ create table if not exists projects (
 create table if not exists packages (
   id text primary key,
   project_id text not null references projects(id) on delete cascade,
+  owner_id text references profiles(id) on delete set null,
   title text not null,
   goal text,
   priority text,
+  status text not null default 'planned' check (status in ('planned', 'active', 'done', 'paused')),
+  target_date date,
+  success_criteria text not null default '',
+  scope_constraints text not null default '',
   sort_order integer not null default 0
 );
 
@@ -76,6 +81,9 @@ create table if not exists task_activity (
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
 create index if not exists packages_project_id_idx on packages(project_id);
+create index if not exists packages_owner_id_idx on packages(owner_id);
+create index if not exists packages_status_idx on packages(status);
+create index if not exists packages_target_date_idx on packages(target_date);
 create index if not exists tasks_project_id_idx on tasks(project_id);
 create index if not exists tasks_package_id_idx on tasks(package_id);
 create index if not exists tasks_status_idx on tasks(status);
@@ -193,6 +201,52 @@ insert into packages (id, project_id, title, goal, priority, sort_order) values 
 insert into packages (id, project_id, title, goal, priority, sort_order) values ('GC4', 'findmydoc-founder-execution', 'Company, Governance & Operating System', 'Founder-Struktur, IP/Marke, Notion/CRM und Teamtransparenz sauber aufsetzen.', 'P1', 4) on conflict (id) do update set title = excluded.title, goal = excluded.goal, priority = excluded.priority, sort_order = excluded.sort_order;
 
 insert into packages (id, project_id, title, goal, priority, sort_order) values ('GC5', 'findmydoc-founder-execution', 'Marketing, Content & Competitive Research', 'Website-Copy, Blog, LinkedIn, Konkurrenzanalyse und GTM-Materialien vorbereiten.', 'P2', 5) on conflict (id) do update set title = excluded.title, goal = excluded.goal, priority = excluded.priority, sort_order = excluded.sort_order;
+
+update packages
+set
+    owner_id = case
+      when id in ('GC1', 'GC2') then 'volkan'
+      when id in ('GC3') then 'youssef'
+      when id in ('GC4') then 'anil'
+      when id in ('GC5') then 'youssef'
+      else owner_id
+    end,
+    accountable_profile_id = case
+      when id in ('GC1', 'GC2') then 'volkan'
+      when id in ('GC3') then 'youssef'
+      when id in ('GC4') then 'anil'
+      when id in ('GC5') then 'youssef'
+      else accountable_profile_id
+    end,
+    responsible_profile_ids = case
+      when id in ('GC1', 'GC2') then array['volkan']
+      when id in ('GC3') then array['youssef']
+      when id in ('GC4') then array['anil']
+      when id in ('GC5') then array['youssef']
+      else responsible_profile_ids
+    end,
+    consulted_profile_ids = case
+      when id in ('GC1', 'GC2') then array['anil', 'ozen']
+      when id in ('GC3', 'GC5') then array['volkan']
+      else consulted_profile_ids
+    end,
+    informed_profile_ids = case
+      when id in ('GC1', 'GC2', 'GC3', 'GC4', 'GC5') then array['volkan', 'sebastian', 'anil', 'ozen', 'youssef']
+      else informed_profile_ids
+    end,
+    status = case
+    when id in ('GC1', 'GC2') then 'active'
+    else status
+  end,
+  success_criteria = case
+    when id = 'GC1' then 'MVP, Legal-Basis und Klinik-Onboarding können ohne versteckte Vorarbeit reviewed werden.'
+    when id = 'GC2' then 'Warme Klinik- und Messekontakte haben Owner, nächsten Schritt und dokumentierten Follow-up-Status.'
+    when id = 'GC3' then 'Pitchdeck, Funding-Narrative und Investor-Follow-ups sind als reviewfähiges Paket vorbereitet.'
+    when id = 'GC4' then 'Founder-Struktur, Governance und operative Transparenz sind für das Team nachvollziehbar dokumentiert.'
+    when id = 'GC5' then 'Marketing- und Content-Arbeit ist priorisiert, briefbar und ohne medizinische Risikoaussagen nutzbar.'
+    else success_criteria
+  end
+where id in ('GC1', 'GC2', 'GC3', 'GC4', 'GC5');
 
 insert into tasks (id, project_id, package_id, title, description, status, priority, owner, assignee, workstream, sort_order, start_date, end_date, deadline, estimate_hours, definition_of_done, evidence_link, issue_number, issue_url, watched) values ('volkan-gtm-prioritaten-freigeben', 'findmydoc-founder-execution', 'GC5', 'GTM-Prioritäten freigeben', 'Für den Start festlegen: Clinic-first, Blog/SEO als Trust-Fundament, LinkedIn für Investor/B2B, Paid Ads erst später nach Legal-/Tracking-Basis.', 'Offen', 'P1', 'volkan', 'volkan', 'Marketing', 5, '2026-05-25', '2026-05-27', 'Sprint 1', 4, 'GTM-Arbeitshypothese ist fürs Team freigegeben.', null, null, null, false) on conflict (id) do update set package_id = excluded.package_id, title = excluded.title, description = excluded.description, status = excluded.status, priority = excluded.priority, owner = excluded.owner, assignee = excluded.assignee, workstream = excluded.workstream, sort_order = excluded.sort_order, start_date = excluded.start_date, end_date = excluded.end_date, deadline = excluded.deadline, estimate_hours = excluded.estimate_hours, definition_of_done = excluded.definition_of_done, evidence_link = excluded.evidence_link, issue_number = excluded.issue_number, issue_url = excluded.issue_url, watched = excluded.watched;
 

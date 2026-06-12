@@ -1,46 +1,68 @@
-﻿"use client";
+"use client";
 
 import {
   AlertTriangle,
-  Bell,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Circle,
   CircleHelp,
   Columns3,
-  FileText,
-  Filter,
   ExternalLink,
+  Filter,
   GanttChart,
-  Link2,
-  ListTree,
   Lock,
   Maximize2,
+  Link2,
+  ListTree,
   MessageSquare,
-  PanelRight,
   Plus,
   Search,
   Table2,
   Users,
   X,
 } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
+import type { User } from "@supabase/supabase-js";
 import { AppBrand } from "@/components/app-brand";
-import { AppSidebar, appNavItems, type AppWorkspace } from "@/components/app-sidebar";
+import { AppSidebar, type AppWorkspace } from "@/components/app-sidebar";
+import { AuthControl as CurrentAuthControl } from "@/components/auth-control";
+import { CommentBody } from "@/components/task-comment-body";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
+import { DecisionLogOverview as CurrentDecisionLogOverview } from "@/components/decision-log-overview";
+import { DevRoleSwitch } from "@/components/dev-role-switch";
+import { ExecutionLayerOverview } from "@/components/execution-layer-overview";
+import { FeedbackDialog as CurrentFeedbackDialog, type FeedbackDraft } from "@/components/feedback-dialog";
+import { FmdToolsOverview as CurrentFmdToolsOverview } from "@/components/fmd-tools-overview";
+import { GanttView as CurrentGanttView } from "@/components/gantt-view";
+import { persistLocalPlanningTasks, useLocalPlanningState } from "@/hooks/use-local-planning-state";
+import { getProtectedPlanningDataCache, setProtectedPlanningDataCache, usePlanningAuth } from "@/hooks/use-planning-auth";
+import { usePlanningWorkspace } from "@/hooks/use-planning-workspace";
+import { InitiativeDialog, type InitiativeDraft } from "@/components/initiative-dialog";
+import { NewTaskDialog as CurrentNewTaskDialog, type NewTaskDraft } from "@/components/new-task-dialog";
+import { MeetingFinderOverview as CurrentMeetingFinderOverview } from "@/components/meeting-finder-overview";
+import { NotificationInbox } from "@/components/notification-inbox";
+import { ProjectsOverview as CurrentProjectsOverview } from "@/components/projects-overview";
+import { SettingsOverview } from "@/components/settings-overview";
+import { SprintScoreTableOverview as CurrentSprintScoreTableOverview } from "@/components/sprint-score-overview";
+import type { SprintPlanningOptions } from "@/components/settings-sprint-planning";
+import { EmptyColumn, GitHubMissingBadge, RelationBadge, TaskCard } from "@/components/task-card";
 import { TaskChecklist } from "@/components/task-checklist";
-import { clearRememberedGitHubProviderToken, getRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
+import { TaskCommentThread } from "@/components/task-comment-thread";
+import { TaskDetailPanel as CurrentTaskDetailPanel } from "@/components/task-detail-panel";
+import { TeamOverview as CurrentTeamOverview } from "@/components/team-overview";
+import { dateRange, focusStatusLabel, formatDate, initiativeMetaLabel, initiativeOptionLabel, relationshipHelpText, relationTypeLabel, taskOwnerOptions } from "@/lib/display";
+import { decisionStatusLabel } from "@/lib/execution-layer-view-model";
+import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
+import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
+import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
+import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
-import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
-import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import { CommentBody, TaskCommentThread } from "@/components/task-comment-thread";
 import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
@@ -61,56 +83,12 @@ type Filters = {
 
 type Workspace = AppWorkspace;
 
-type NewTaskDraft = {
-  title: string;
-  description: string;
-  problemStatement: string;
-  intendedOutcome: string;
-  scopeConstraints: string;
-  acceptanceCriteria: string;
-  evidenceRequired: string;
-  taskType: "deliverable" | "proposal" | "sub_issue";
-  parentTaskId: string;
-  milestoneId: string;
-  packageId: string;
-  sprintId: string;
-  owner: string;
-  priority: string;
-  status: string;
-  workstream: string;
-  startDate: string;
-  endDate: string;
-  deadline: string;
-  hours: number;
-  definitionOfDone: string;
-  createGitHubIssue: boolean;
-  relationType: TaskRelationType;
-  relatedTaskId: string;
-  relationNote: string;
-  decisionId: number;
-  decisionLinkNote: string;
-};
-
-type SprintPlanningOptions = {
-  firstSprintNumber: number;
-  anchorStartDate: string;
-  rhythmWeeks: number;
-  horizonWeeks: number;
-  targetSprintNumber: number;
-};
-
-type FeedbackDraft = {
-  type: "bug" | "feature";
-  severity: "P0" | "P1" | "P2" | "P3";
-  title: string;
-  description: string;
-  pageUrl: string;
-};
-
 type GoogleChatStatus = {
   webhookConfigured: boolean;
+  apiConfigured: boolean;
   deliveryEnabled: boolean;
   ready: boolean;
+  mode: "direct-dm" | "space-webhook" | "not-configured";
   pending: number;
 };
 
@@ -149,7 +127,11 @@ function normalizePlanningData(data: PlanningData): PlanningData {
   };
 }
 
-let protectedPlanningDataCache: PlanningData | null = null;
+function isLocalDevHost() {
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
 
 const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
   { id: "board", label: "Board", icon: Columns3 },
@@ -165,7 +147,7 @@ const workspaceLabels: Record<Workspace, string> = {
   sprint: "Sprint & Score",
   decisions: "Decision Log",
   meetings: "Meeting Finder",
-  projects: "Meilensteine",
+  projects: "Meilensteine & Initiativen",
   tools: "FMD-Tools",
   team: "Team",
   settings: "Einstellungen",
@@ -174,11 +156,11 @@ const workspaceLabels: Record<Workspace, string> = {
 const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
-  mine: "Fokus auf die Aufgaben von Volkan für die operative Steuerung.",
+  mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
-  projects: "Epic-, Meilenstein- und Commitment-Überblick.",
+  projects: "Epic-, Meilenstein- und Initiative-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
@@ -242,8 +224,6 @@ const quickFilters = [
   { id: "evidence", label: "Ohne Evidence" },
 ];
 
-const localStateKey = "fmd-planning-local-state-v1";
-const workspaceStateKey = "fmd-planning-workspace-v1";
 const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
 const profileColorOptions = [
   { value: "#22c55e", label: "Mint" },
@@ -256,18 +236,25 @@ const profileColorOptions = [
   { value: "#64748b", label: "Schiefer" },
 ];
 
-function hexToRgba(hex: string, alpha: number) {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) return `rgba(100, 116, 139, ${alpha})`;
-  const value = match[1];
-  const red = Number.parseInt(value.slice(0, 2), 16);
-  const green = Number.parseInt(value.slice(2, 4), 16);
-  const blue = Number.parseInt(value.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
+const devProfileStateKey = "fmd-planning-dev-profile-v1";
 function profileColor(profile?: Pick<Profile, "color"> | null) {
   return profile?.color || "#64748b";
+}
+
+function parseIsoDate(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function relationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]) {
+  const taskById = new Map(tasks.map((item) => [item.id, item]));
+  const groups = taskRelationsFor(task.id, relations);
+  return {
+    waitsOn: groups.waitsOn.map((relation) => ({ relation, task: taskById.get(relation.relatedTaskId) })),
+    blocks: groups.blocks.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) })),
+    related: groups.related.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) })),
+  };
 }
 
 function createTaskDragPreview(source: HTMLElement, pointerX: number, pointerY: number) {
@@ -296,29 +283,6 @@ function transparentDragImage() {
 
 function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
-}
-
-function workspaceFromValue(value: string | null) {
-  return appNavItems.find((item) => item.id === value)?.id || null;
-}
-
-function formatDate(value: string) {
-  if (!value) return "ohne Datum";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short" }).format(date);
-}
-
-function dateRange(task: Task) {
-  if (!task.startDate && !task.endDate) return task.deadline || "ohne Datum";
-  if (task.startDate === task.endDate) return formatDate(task.startDate);
-  return `${formatDate(task.startDate)} - ${formatDate(task.endDate)}`;
-}
-
-function parseIsoDate(value: string) {
-  if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function sprintNumber(value: string) {
@@ -396,6 +360,8 @@ function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions, p
 }
 
 function taskText(task: Task) {
+  const githubIssueNumber = task.githubIssueNumber ? String(task.githubIssueNumber) : "";
+  const legacyIssueNumber = task.issueNumber ? String(task.issueNumber) : "";
   return [
     task.title,
     task.description,
@@ -404,6 +370,13 @@ function taskText(task: Task) {
     task.priority,
     task.definitionOfDone,
     task.deadline,
+    task.githubRepo,
+    task.githubIssueUrl,
+    task.issueUrl,
+    githubIssueNumber,
+    githubIssueNumber ? `#${githubIssueNumber}` : "",
+    legacyIssueNumber,
+    legacyIssueNumber ? `#${legacyIssueNumber}` : "",
   ]
     .join(" ")
     .toLowerCase();
@@ -427,29 +400,6 @@ function sortTasks(tasks: Task[]) {
   });
 }
 
-function reviewChecklistScore(checklist: { acceptanceCriteriaMet?: boolean; dodMet?: boolean; evidenceProvided?: boolean; communicationClear?: boolean; blockerHandled?: boolean }) {
-  const checked = [
-    checklist.acceptanceCriteriaMet ?? checklist.dodMet,
-    checklist.evidenceProvided,
-    checklist.communicationClear,
-    checklist.blockerHandled,
-  ].filter(Boolean).length;
-  return Math.round((checked / 4) * 10);
-}
-
-const reviewChecklistItems = [
-  ["acceptanceCriteriaMet", "Acceptance Criteria erfüllt", "2,5 Punkte"],
-  ["evidenceProvided", "Evidence/Link liegt vor", "2,5 Punkte"],
-  ["communicationClear", "Ergebnis und Kommunikation nachvollziehbar", "2,5 Punkte"],
-  ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt", "2,5 Punkte"],
-] as const;
-
-function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked") {
-  if (status === "locked") return "Gelockt";
-  if (status === "open_for_confirmation") return "Zur Bestätigung offen";
-  return "Entwurf";
-}
-
 function statusOptionsForRole(status: string, canManageTaskMeta: boolean) {
   if (canManageTaskMeta) return taskStatuses;
   if (normalizeStatus(status) === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
@@ -459,106 +409,6 @@ function statusOptionsForRole(status: string, canManageTaskMeta: boolean) {
 function founderStatusGuardMessage(status: TaskStatus) {
   if (status !== "Erledigt") return "";
   return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
-}
-
-function notificationTypeLabel(type: string) {
-  if (type === "feedback.bug_reported") return "Bug";
-  if (type === "feedback.feature_requested") return "Feature";
-  if (type === "task.review_requested") return "Review";
-  if (type === "task.review_rework") return "Nacharbeit";
-  if (type === "task.review_completed") return "Review erledigt";
-  if (type === "task.blocker_reported") return "Blocker";
-  if (type === "task.comment") return "Kommentar";
-  if (type === "task.proposed") return "Vorschlag";
-  if (type === "sprint.task_carried_over") return "Carry-over";
-  if (type === "meeting.attendance_updated") return "Meeting";
-  if (type.startsWith("decision.")) return "Decision";
-  return "Hinweis";
-}
-
-function notificationTone(type: string) {
-  if (type === "feedback.bug_reported") return "border-red-200 bg-red-50 text-red-700";
-  if (type === "feedback.feature_requested") return "border-violet-200 bg-violet-50 text-violet-700";
-  if (type === "task.blocker_reported") return "border-red-200 bg-red-50 text-red-700";
-  if (type === "task.review_rework") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (type === "task.review_requested") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (type === "task.review_completed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  return "border-slate-200 bg-slate-50 text-slate-600";
-}
-
-function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
-  return (
-    <span
-      title="Nur in der App: noch kein GitHub-Issue verknüpft."
-      className={`inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 font-semibold text-amber-700 ${
-        compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]"
-      }`}
-    >
-      <AlertTriangle size={compact ? 12 : 13} />
-      {!compact && "App-only"}
-    </span>
-  );
-}
-
-function RelationBadge({ label, count, tone = "slate" }: { label: string; count: number; tone?: "amber" | "blue" | "slate" }) {
-  if (!count) return null;
-  const classes = {
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    slate: "border-slate-200 bg-slate-50 text-slate-600",
-  }[tone];
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>
-      {label} {count}
-    </span>
-  );
-}
-
-function relationshipHelpText(title: string) {
-  if (title === "Wartet auf") return "Diese Aufgabe kann erst sauber weitergehen, wenn die verknüpfte Aufgabe erledigt oder ausreichend geklärt ist.";
-  if (title === "Blockiert") return "Diese Aufgabe hält andere Aufgaben auf. Wenn sie verspätet ist, können die gelisteten Aufgaben ebenfalls nicht sauber abgeschlossen werden.";
-  if (title === "Verknüpft mit") return "Diese Aufgaben hängen fachlich zusammen, blockieren sich aber nicht zwingend gegenseitig.";
-  return "Zeigt, wie diese Aufgabe mit anderen Aufgaben verbunden ist.";
-}
-
-function relationTypeLabel(type: TaskRelationType) {
-  if (type === "blocked_by") return "Wartet auf";
-  if (type === "blocks") return "Blockiert";
-  return "Verknüpft mit";
-}
-
-function RelationshipInfo({ title }: { title: string }) {
-  const description = relationshipHelpText(title);
-  return (
-    <span className="group relative inline-flex">
-      <span
-        tabIndex={0}
-        title={description}
-        aria-label={`${title}: ${description}`}
-        className="grid h-5 w-5 cursor-help place-items-center rounded-full border border-slate-200 bg-white text-slate-400 outline-none transition hover:border-blue-200 hover:text-blue-600 focus:border-blue-300 focus:text-blue-700"
-      >
-        <CircleHelp size={13} />
-      </span>
-      <span className="pointer-events-none absolute left-1/2 top-6 z-20 hidden w-64 -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium leading-5 text-slate-700 shadow-lg group-hover:block group-focus-within:block">
-        {description}
-      </span>
-    </span>
-  );
-}
-
-function relationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]) {
-  const taskById = new Map(tasks.map((item) => [item.id, item]));
-  const grouped = taskRelationsFor(task.id, relations);
-  const toRow = (relation: TaskRelation, direction: "related" | "inverse") => {
-    const otherId = direction === "inverse" ? relation.taskId : relation.relatedTaskId;
-    return { relation, task: taskById.get(otherId) };
-  };
-
-  return {
-    waitsOn: grouped.waitsOn.map((relation) => toRow(relation, "related")),
-    blocks: grouped.blocks.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
-    related: grouped.related.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
-  };
 }
 
 type HygieneAlert = {
@@ -600,8 +450,8 @@ function buildHygieneAlerts(data: PlanningData) {
     const latestSignal = latestTaskSignal(task.id, data.taskComments, data.taskActivity);
     const staleDays = daysSinceIso(latestSignal || task.startDate || task.endDate);
 
-    if (task.priority === "P0" && (!task.owner || task.owner === "Unassigned")) {
-      alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Owner", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Owner festlegen und nächsten Schritt notieren.", taskId: task.id });
+    if (task.priority === "P0" && !task.owner && task.taskType !== "proposal") {
+      alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Assignee", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Assignee festlegen und nächsten Schritt notieren.", taskId: task.id });
     }
     if (!task.acceptanceCriteria?.trim()) {
       alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Acceptance Criteria fehlen", description: "Ohne Akzeptanzkriterien ist Review und Score schwammig.", recommendedAction: "Akzeptanzkriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
@@ -639,244 +489,32 @@ function buildHygieneAlerts(data: PlanningData) {
   return alerts;
 }
 
-function focusStatusLabel(status: TaskFocusItem["status"]) {
-  if (status === "done") return "Erledigt";
-  if (status === "blocked") return "Blockiert";
-  if (status === "deferred") return "Verschoben";
-  if (status === "needs_decision") return "Entscheidung nötig";
-  return "Geplant";
-}
-
-function TaskCard({
-  task,
-  pack,
-  ownerProfile,
-  relations,
-  allTasks,
-  statusOptions,
-  onOpen,
-  onStatusChange,
-  onDragStart,
-  onDragEnd,
-  isDragging,
-}: {
-  task: Task;
-  pack?: Package;
-  ownerProfile?: Profile;
-  relations: TaskRelation[];
-  allTasks: Task[];
-  statusOptions: TaskStatus[];
-  onOpen: (task: Task) => void;
-  onStatusChange: (task: Task, status: TaskStatus) => void;
-  onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
-  onDragEnd?: () => void;
-  isDragging?: boolean;
-}) {
-  const normalized = normalizeStatus(task.status);
-  const ownerColor = profileColor(ownerProfile);
-  const missingGitHub = !hasGitHubIssue(task);
-  const relationGroups = taskRelationsFor(task.id, relations);
-  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
-
-  return (
-    <article
-      draggable={Boolean(onDragStart)}
-      onDragStart={(event) => onDragStart?.(task, event)}
-      onDragEnd={onDragEnd}
-      className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${
-        isDragging ? "scale-[0.98] cursor-grabbing border-dashed opacity-55 ring-2 ring-blue-200" : "cursor-grab active:cursor-grabbing"
-      }`}
-      style={{
-        borderLeftColor: ownerColor,
-        boxShadow: `inset 4px 0 0 ${ownerColor}, 0 1px 3px ${hexToRgba(ownerColor, 0.18)}`,
-        background: `linear-gradient(90deg, ${hexToRgba(ownerColor, 0.13)}, #ffffff 34%)`,
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => onOpen(task)}
-          className="min-w-0 text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
-        >
-          <span className="inline-flex items-start gap-1.5">
-            {missingGitHub && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
-            <span>{task.title}</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onOpen(task)}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-          aria-label="Aufgabe öffnen"
-        >
-          <PanelRight size={15} />
-        </button>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(normalized)}`}>
-          {normalized}
-        </span>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${priorityTone(task.priority)}`}>
-          {task.priority}
-        </span>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-          {task.hours}h
-        </span>
-        {missingGitHub && <GitHubMissingBadge />}
-        <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
-        <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
-      </div>
-      <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{task.description}</p>
-      <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-500">
-        <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
-          <span className="truncate">{pack?.id || "ohne Group Commitment"} · {task.owner}</span>
-        </span>
-        <span className="shrink-0">{dateRange(task)}</span>
-      </div>
-      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2">
-        <CustomSelect
-          value={normalized}
-          onChange={(value) => onStatusChange(task, value as TaskStatus)}
-          options={statusOptions.map((status) => ({ value: status, label: status }))}
-          className="h-8 w-32 text-xs"
-          aria-label="Status ändern"
-        />
-        <div className="flex items-center gap-2 text-slate-400">
-          <MessageSquare size={14} />
-          <FileText size={14} />
-          <Link2 size={14} className={hasGitHubIssue(task) ? "text-blue-500" : "text-amber-500"} />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function EmptyColumn() {
-  return (
-    <div className="grid min-h-72 place-items-center rounded-lg border border-dashed border-blue-200 bg-blue-50/40 px-6 text-center">
-      <div>
-        <div className="mx-auto grid h-16 w-24 place-items-center rounded-lg border border-blue-100 bg-white text-blue-300">
-          <Columns3 size={28} />
-        </div>
-        <p className="mt-4 text-sm font-medium text-slate-600">Keine Treffer in dieser Spalte.</p>
-      </div>
-    </div>
-  );
-}
-
-function NotificationInbox({
-  notifications,
-  profiles,
-  open,
-  onToggle,
-  onOpen,
-  onDismiss,
-}: {
-  notifications: NotificationEvent[];
-  profiles: Profile[];
-  open: boolean;
-  onToggle: () => void;
-  onOpen: (event: NotificationEvent) => void;
-  onDismiss: (eventId: number) => void;
-}) {
-  const unreadCount = notifications.length;
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-        aria-label="Benachrichtigungen"
-      >
-        <Bell size={16} />
-        {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <section className="absolute right-0 top-11 z-50 w-[min(92vw,380px)] rounded-lg border border-slate-200 bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Persönliche Hinweise bleiben hier, Google Chat bekommt nur Digests.</p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{unreadCount}</span>
-          </div>
-          <div className="max-h-[420px] overflow-y-auto p-2">
-            {notifications.length ? notifications.slice(0, 12).map((event) => {
-              const actorName = profiles.find((profile) => profile.id === event.actorProfileId)?.name || "";
-              return (
-                <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
-                  <div className="flex items-start justify-between gap-2">
-                    <button type="button" onClick={() => onOpen(event)} className="min-w-0 flex-1 text-left">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${notificationTone(event.type)}`}>
-                        {notificationTypeLabel(event.type)}
-                      </span>
-                      <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
-                      {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
-                      <span className="mt-1 block text-xs text-slate-400">{actorName ? `${actorName} · ` : ""}{formatDate(event.createdAt)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDismiss(event.id)}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-100 hover:bg-white hover:text-slate-700 sm:opacity-0 sm:group-hover:opacity-100"
-                      aria-label="Notification schließen"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </article>
-              );
-            }) : (
-              <div className="rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                Keine offenen Hinweise.
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
 export function PlanningApp({ initialData, source, authRequired, initialTaskId = "" }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const sidebarRef = useRef<HTMLElement | null>(null);
-  const protectedDataUserIdRef = useRef("");
-  const workspaceRestoredRef = useRef(false);
   const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
   const optimisticAvailabilityIdRef = useRef(-1);
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
   const initialClientData = useMemo(() => {
-    return authRequired && source === "supabase" && protectedPlanningDataCache ? protectedPlanningDataCache : safeInitialData;
+    return authRequired && source === "supabase" && getProtectedPlanningDataCache() ? getProtectedPlanningDataCache()! : safeInitialData;
   }, [authRequired, safeInitialData, source]);
   const [data, setData] = useState(initialClientData);
-  const [localStateLoaded, setLocalStateLoaded] = useState(source === "supabase");
-  const [workspace, setWorkspace] = useState<Workspace>("planning");
+  const { localStateLoaded } = useLocalPlanningState({ source, setData });
+  const { workspace, setWorkspace } = usePlanningWorkspace();
   const [view, setView] = useState<ViewMode>("board");
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
+  const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [selectedFeedbackId, setSelectedFeedbackId] = useState<number | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [authUser, setAuthUser] = useState<User | null>(null);
-  const [authChecked, setAuthChecked] = useState(!authRequired);
-  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || (source === "supabase" && Boolean(protectedPlanningDataCache)));
-  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
-  const [authError, setAuthError] = useState("");
-  const [authNotice, setAuthNotice] = useState("");
-  const [authBusy, setAuthBusy] = useState(false);
+  const [devProfileId, setDevProfileId] = useState("");
   const [saveError, setSaveError] = useState("");
   const [commentImportNotice, setCommentImportNotice] = useState("");
   const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
@@ -904,6 +542,27 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     packageId: "Alle",
     quick: "",
   });
+  const clearSelectedTask = useCallback(() => setSelectedTaskId(null), []);
+  const {
+    authUser,
+    authChecked,
+    protectedDataLoaded,
+    setProtectedDataLoaded,
+    githubProviderTokenAvailable,
+    authError,
+    authNotice,
+    authBusy,
+    signIn,
+    signOut,
+  } = usePlanningAuth({
+    authRequired,
+    source,
+    safeInitialData,
+    taskCount: data.tasks.length,
+    setData,
+    normalizePlanningData,
+    onSignedOut: clearSelectedTask,
+  });
 
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
   const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
@@ -915,7 +574,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const fullTaskView = searchParams.get("view") === "full";
   const authAvailable = hasSupabaseEnv();
   const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
-  const currentProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const actualProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const devRoleSwitchAvailable = source === "supabase" && process.env.NODE_ENV !== "production" && isLocalDevHost() && (actualProfile?.platformRole === "ceo" || actualProfile?.platformRole === "deputy");
+  const devProfile = devRoleSwitchAvailable && devProfileId ? data.profiles.find((profile) => profile.id === devProfileId) || null : null;
+  const currentProfile = devProfile || actualProfile;
+  const mineOwnerName = currentProfile?.name || "Volkan";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
@@ -931,6 +594,15 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       .sort((left, right) => left.position - right.position)
       .slice(0, 3);
   }, [currentProfile?.id, data.taskFocusItems, todayFocusDate]);
+  const requestHeaders = useCallback((token?: string, options: { json?: boolean; github?: boolean } = { json: true }) => {
+    const githubProviderToken = options.github ? getRememberedGitHubProviderToken() : "";
+    return {
+      ...(options.json !== false ? { "content-type": "application/json" } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(devRoleSwitchAvailable && devProfileId ? { "x-fmd-dev-profile-id": devProfileId } : {}),
+      ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
+    };
+  }, [devProfileId, devRoleSwitchAvailable]);
 
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -949,14 +621,20 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   }, [pathname, router]);
 
   useEffect(() => {
-    if (workspaceRestoredRef.current) return;
-    workspaceRestoredRef.current = true;
-
-    const urlWorkspace = workspaceFromValue(new URLSearchParams(window.location.search).get("workspace"));
-    const storedWorkspace = workspaceFromValue(window.localStorage.getItem(workspaceStateKey));
-    const nextWorkspace = urlWorkspace || storedWorkspace;
-    if (nextWorkspace) window.queueMicrotask(() => setWorkspace(nextWorkspace));
+    const storedDevProfile = window.localStorage.getItem(devProfileStateKey) || "";
+    if (storedDevProfile) window.queueMicrotask(() => setDevProfileId(storedDevProfile));
   }, []);
+
+  useEffect(() => {
+    if (!devRoleSwitchAvailable && devProfileId) {
+      window.queueMicrotask(() => setDevProfileId(""));
+      window.localStorage.removeItem(devProfileStateKey);
+      return;
+    }
+    if (!devRoleSwitchAvailable) return;
+    if (devProfileId) window.localStorage.setItem(devProfileStateKey, devProfileId);
+    else window.localStorage.removeItem(devProfileStateKey);
+  }, [devProfileId, devRoleSwitchAvailable]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -975,219 +653,6 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     return () => window.removeEventListener("keydown", closeOnBackspace);
   }, [closeTaskPanel, selectedTaskId]);
 
-  useEffect(() => {
-    if (!workspaceRestoredRef.current) return;
-
-    window.localStorage.setItem(workspaceStateKey, workspace);
-    const url = new URL(window.location.href);
-    if (workspace === "planning") {
-      url.searchParams.delete("workspace");
-    } else {
-      url.searchParams.set("workspace", workspace);
-    }
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [workspace]);
-
-  useEffect(() => {
-    if (source === "supabase") return;
-
-    queueMicrotask(() => {
-      try {
-        const stored = window.localStorage.getItem(localStateKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as Partial<Record<string, Partial<Task>>>;
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((task) => ({ ...task, ...(parsed[task.id] || {}) })),
-          }));
-        }
-      } catch {
-        // Keep seed data if local recovery fails.
-      } finally {
-        setLocalStateLoaded(true);
-      }
-    });
-  }, [source]);
-
-  useEffect(() => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) {
-      queueMicrotask(() => setAuthChecked(true));
-      return;
-    }
-
-    let active = true;
-
-    const applySessionState = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
-      if (!active) return;
-      rememberGitHubProviderToken(session?.provider_token);
-      setAuthUser(session?.user || null);
-      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
-      setAuthChecked(true);
-    };
-
-    const refreshSessionState = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const expiresAt = sessionData.session?.expires_at || 0;
-      const expiresSoon = expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 300;
-      if (expiresSoon) {
-        const refreshed = await supabase.auth.refreshSession();
-        applySessionState(refreshed.data.session || sessionData.session);
-        return;
-      }
-      applySessionState(sessionData.session);
-    };
-
-    refreshSessionState().catch(() => {
-      if (!active) return;
-      setAuthChecked(true);
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      rememberGitHubProviderToken(session?.provider_token);
-      setAuthUser(session?.user || null);
-      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
-      setAuthChecked(true);
-      setAuthError("");
-      if (event === "SIGNED_IN") setAuthNotice("");
-      if (event === "SIGNED_OUT") {
-        clearRememberedGitHubProviderToken();
-        setGithubProviderTokenAvailable(false);
-        protectedDataUserIdRef.current = "";
-        protectedPlanningDataCache = null;
-        setData(safeInitialData);
-        setProtectedDataLoaded(false);
-        setSelectedTaskId(null);
-        setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
-      }
-    });
-
-    const keepAliveId = window.setInterval(() => {
-      refreshSessionState().catch(() => undefined);
-    }, 5 * 60 * 1000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshSessionState().catch(() => undefined);
-    };
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
-    return () => {
-      active = false;
-      window.clearInterval(keepAliveId);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      subscription.subscription.unsubscribe();
-    };
-  }, [safeInitialData]);
-
-  useEffect(() => {
-    if (!authRequired || source !== "supabase" || !authUser) return;
-    if (protectedDataLoaded && protectedDataUserIdRef.current === authUser.id) return;
-
-    let active = true;
-    const authUserId = authUser.id;
-
-    async function loadProtectedPlanningData() {
-      if (!data.tasks.length) setProtectedDataLoaded(false);
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      if (!token) {
-        setAuthError("Session ist aktiv, aber kein Zugriffstoken verfügbar. Bitte erneut anmelden.");
-        setProtectedDataLoaded(false);
-        return;
-      }
-
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 10_000);
-
-      try {
-        const response = await fetch("/api/planning-data", {
-          headers: { authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
-
-        if (!active) return;
-        if (!response.ok || !payload?.data) {
-          protectedDataUserIdRef.current = "";
-          setData(safeInitialData);
-          setProtectedDataLoaded(false);
-          setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
-          return;
-        }
-
-        protectedDataUserIdRef.current = authUserId;
-        const nextData = normalizePlanningData(payload.data);
-        protectedPlanningDataCache = nextData;
-        setData(nextData);
-        setProtectedDataLoaded(true);
-        setAuthError("");
-      } catch (error) {
-        if (!active) return;
-        protectedDataUserIdRef.current = "";
-        setProtectedDataLoaded(false);
-        setAuthError(error instanceof DOMException && error.name === "AbortError" ? "Planungsdaten konnten nicht geladen werden: Zeitüberschreitung." : "Planungsdaten konnten nicht geladen werden.");
-      } finally {
-        window.clearTimeout(timeout);
-      }
-    }
-
-    loadProtectedPlanningData();
-
-    return () => {
-      active = false;
-    };
-  }, [authRequired, authUser, data.tasks.length, protectedDataLoaded, safeInitialData, source]);
-
-  const signIn = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
-    setAuthBusy(true);
-    setAuthError("");
-    setAuthNotice("");
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: window.location.origin,
-        scopes: "repo read:user user:email",
-      },
-    });
-
-    setAuthBusy(false);
-    if (error) {
-      setAuthError("GitHub-Anmeldung konnte nicht gestartet werden.");
-      return;
-    }
-  };
-
-  const signOut = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
-    setAuthBusy(true);
-    setAuthError("");
-    setAuthNotice("");
-    clearRememberedGitHubProviderToken();
-    setGithubProviderTokenAvailable(false);
-
-    const { error } = await supabase.auth.signOut({ scope: "global" });
-    if (error) {
-      setAuthError("Abmeldung konnte nicht abgeschlossen werden.");
-      setAuthBusy(false);
-      return;
-    }
-
-    protectedDataUserIdRef.current = "";
-    protectedPlanningDataCache = null;
-    setAuthUser(null);
-    setGithubProviderTokenAvailable(false);
-    setData(safeInitialData);
-    setProtectedDataLoaded(false);
-    setSelectedTaskId(null);
-    setAuthNotice("Du bist abgemeldet. Der Zugriff auf die Planungsdaten ist gesperrt.");
-    setAuthBusy(false);
-  };
-
   const filteredTasks = useMemo(() => {
     return sortTasks(
       data.tasks.filter((task) => {
@@ -1200,7 +665,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
         const matchesQuick =
           !filters.quick ||
-          (filters.quick === "mine" && task.owner === "Volkan") ||
+          (filters.quick === "mine" && task.owner === mineOwnerName) ||
           (filters.quick === "open" && normalized === "Offen") ||
           (filters.quick === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn))) ||
           (filters.quick === "week" && isThisWeek(task)) ||
@@ -1210,12 +675,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
       }),
     );
-  }, [data.tasks, filters]);
+  }, [data.tasks, filters, mineOwnerName]);
 
   const visibleTasks = useMemo(() => {
-    if (workspace === "mine") return filteredTasks.filter((task) => task.owner === "Volkan");
+    if (workspace === "mine") return filteredTasks.filter((task) => task.owner === mineOwnerName);
     return filteredTasks;
-  }, [filteredTasks, workspace]);
+  }, [filteredTasks, mineOwnerName, workspace]);
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerPrimaryAction: HeaderPrimaryAction | null = (() => {
@@ -1253,6 +718,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       };
     }
 
+    if (workspace === "projects") {
+      return {
+        label: "Neue Initiative",
+        onClick: () => setInitiativeDialogDefaults({}),
+      };
+    }
+
     if (workspace === "settings") {
       return {
         label: "Feedback erfassen",
@@ -1285,34 +757,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
       if (source === "seed") {
         try {
-          const changedTasks = Object.fromEntries(
-            nextData.tasks.map((item) => [
-              item.id,
-              {
-                status: item.status,
-                owner: item.owner,
-                assignee: item.assignee,
-                priority: item.priority,
-                packageId: item.packageId,
-                startDate: item.startDate,
-                endDate: item.endDate,
-                deadline: item.deadline,
-                note: item.note,
-                reviewStatus: item.reviewStatus,
-                scorePoints: item.scorePoints,
-                githubSyncStatus: item.githubSyncStatus,
-                sprintId: item.sprintId,
-                milestoneId: item.milestoneId,
-                dependsOn: item.dependsOn,
-                evidenceLink: item.evidenceLink,
-                selfDodChecked: item.selfDodChecked,
-                selfEvidenceChecked: item.selfEvidenceChecked,
-                selfDocumentedChecked: item.selfDocumentedChecked,
-                selfBlockersChecked: item.selfBlockersChecked,
-              },
-            ]),
-          );
-          window.localStorage.setItem(localStateKey, JSON.stringify(changedTasks));
+          persistLocalPlanningTasks(nextData.tasks);
         } catch {
           // UI remains usable even if browser storage is unavailable.
         }
@@ -1330,10 +775,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}`, {
           method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({
             status: patch.status,
             owner: patch.owner,
@@ -1368,6 +810,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
         }
+        if (patch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
+          syncTaskToGitHub({ ...task, ...patch }, { silent: true });
+        }
       } catch (error) {
         setData((current) => ({
           ...current,
@@ -1381,7 +826,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const createTask = (draft: NewTaskDraft) => {
     setSaveError("");
 
-    const owner = draft.owner || currentProfile?.name || data.profiles[0]?.name || "Volkan";
+    const owner = draft.owner || (draft.taskType === "proposal" ? "" : currentProfile?.name || data.profiles[0]?.name || "Volkan");
     const localTask: Task = {
       id: `local-${Date.now()}`,
       order: data.tasks.length + 1,
@@ -1459,10 +904,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch("/api/tasks", {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify(draft),
         });
 
@@ -1525,14 +967,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
           rememberGitHubProviderToken(session?.data.session?.provider_token);
-          const githubProviderToken = getRememberedGitHubProviderToken();
           const syncResponse = await fetch(`/api/tasks/${body.task.id}/sync-github`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-            },
+            headers: requestHeaders(token, { github: true }),
             body: JSON.stringify({ createIfMissing: true }),
           });
           const syncBody = (await syncResponse.json().catch(() => null)) as { error?: string; task?: Task } | null;
@@ -1551,6 +988,69 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           }));
         }
         setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.");
+      }
+    });
+  };
+
+  const saveInitiative = (draft: InitiativeDraft) => {
+    setSaveError("");
+
+    const localInitiative: Package = {
+      id: draft.id || `local-initiative-${Date.now()}`,
+      milestoneId: draft.milestoneId,
+      ownerId: draft.ownerId,
+      accountableProfileId: draft.accountableProfileId,
+      responsibleProfileIds: draft.responsibleProfileIds,
+      consultedProfileIds: draft.consultedProfileIds,
+      informedProfileIds: draft.informedProfileIds,
+      title: draft.title,
+      goal: draft.goal,
+      priority: draft.priority || "P2",
+      status: draft.status || "planned",
+      targetDate: draft.targetDate,
+      successCriteria: draft.successCriteria,
+      scopeConstraints: draft.scopeConstraints,
+      sortOrder: draft.id ? data.packages.find((pack) => pack.id === draft.id)?.sortOrder || data.packages.length + 1 : data.packages.length + 1,
+    };
+    const isEdit = Boolean(draft.id);
+
+    setData((current) => ({
+      ...current,
+      packages: isEdit
+        ? current.packages.map((pack) => (pack.id === draft.id ? { ...pack, ...localInitiative } : pack))
+        : [...current.packages, localInitiative],
+    }));
+    setInitiativeDialogDefaults(null);
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(isEdit ? `/api/initiatives/${draft.id}` : "/api/initiatives", {
+          method: isEdit ? "PATCH" : "POST",
+          headers: requestHeaders(token),
+          body: JSON.stringify(draft),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; initiative?: Package } | null;
+        if (!response.ok || !body?.initiative) throw new Error(body?.error || "Initiative konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          packages: isEdit
+            ? current.packages.map((pack) => (pack.id === draft.id ? body.initiative! : pack))
+            : current.packages.map((pack) => (pack.id === localInitiative.id ? body.initiative! : pack)),
+        }));
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          packages: isEdit
+            ? current.packages.map((pack) => (pack.id === draft.id ? data.packages.find((original) => original.id === draft.id) || pack : pack))
+            : current.packages.filter((pack) => pack.id !== localInitiative.id),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Initiative konnte nicht gespeichert werden.");
       }
     });
   };
@@ -1587,10 +1087,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch("/api/focus", {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({ taskId: task.id, profileId, focusDate: todayFocusDate, position, nextStep, status }),
         });
         const body = (await response.json().catch(() => null)) as { error?: string; focusItem?: TaskFocusItem } | null;
@@ -1624,9 +1121,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/focus?id=${encodeURIComponent(String(focusItem.id))}`, {
           method: "DELETE",
-          headers: {
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token, { json: false }),
         });
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         if (!response.ok) throw new Error(body?.error || "Fokus konnte nicht entfernt werden.");
@@ -2095,6 +1590,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     agenda: string;
     sprintId: string;
     meetingAt: string;
+    durationMinutes: number;
     profileIds: string[];
   }) => {
     setSaveError("");
@@ -2107,8 +1603,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       sprintId: payload.sprintId,
       title: payload.title,
       meetingAt: payload.meetingAt,
+      durationMinutes: payload.durationMinutes,
       status: "planned",
       agenda: payload.agenda,
+      googleCalendarSyncStatus: "not_synced",
     };
     const localAttendance: MeetingAttendance[] = payload.profileIds.map((profileId, index) => ({
       id: localMeetingId + index + 1,
@@ -2147,7 +1645,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           body: JSON.stringify(payload),
         });
 
-        const body = (await response.json().catch(() => null)) as { error?: string; meeting?: Meeting; attendance?: MeetingAttendance[] } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; meeting?: Meeting; attendance?: MeetingAttendance[]; calendarSync?: { status: "synced" | "skipped" | "failed"; htmlLink?: string; error?: string } } | null;
         if (!response.ok || !body?.meeting) throw new Error(body?.error || "Meeting konnte nicht vorgemerkt werden.");
 
         setData((current) => ({
@@ -2158,7 +1656,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             ...current.meetingAttendance.filter((item) => item.meetingId !== localMeetingId),
           ],
         }));
-        setMeetingCreateMessage(`Meeting vorgemerkt: ${body.meeting.title}`);
+        setMeetingCreateMessage(body.calendarSync?.status === "synced"
+          ? `Meeting angelegt und mit Google Kalender synchronisiert: ${body.meeting.title}`
+          : body.calendarSync?.status === "failed"
+            ? `Meeting angelegt. Google Kalender Sync fehlgeschlagen: ${body.calendarSync.error}`
+            : `Meeting in der App angelegt: ${body.meeting.title}`);
       } catch (error) {
         setData(previousData);
         setMeetingCreateMessage("");
@@ -2286,6 +1788,45 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       } catch (error) {
         setData(previousData);
         setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht gelöscht werden.");
+      }
+    });
+  };
+
+  const updateAvailability = (entry: AvailabilityEntry, patch: Partial<Omit<AvailabilityEntry, "id" | "source" | "externalId" | "externalCalendarId" | "syncedAt">>) => {
+    setSaveError("");
+
+    const updatedEntry: AvailabilityEntry = { ...entry, ...patch };
+    const previousData = data;
+    setData((current) => ({
+      ...current,
+      availability: current.availability.map((item) => (item.id === entry.id ? updatedEntry : item)),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch("/api/availability", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ id: entry.id, ...patch }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; availability?: AvailabilityEntry } | null;
+        if (!response.ok || !body?.availability) throw new Error(body?.error || "Verfügbarkeit konnte nicht aktualisiert werden.");
+
+        setData((current) => ({
+          ...current,
+          availability: current.availability.map((item) => (item.id === entry.id ? body.availability! : item)),
+        }));
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Verfügbarkeit konnte nicht aktualisiert werden.");
       }
     });
   };
@@ -2557,15 +2098,15 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}/review`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify({ decision: reviewStatus, points: scorePoints, checklist, comment }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         if (!response.ok) throw new Error(body?.error || "Review konnte nicht gespeichert werden.");
+        if (hasGitHubIssue(task) && githubProviderTokenAvailable) {
+          syncTaskToGitHub({ ...task, status: nextStatus, reviewStatus, scorePoints, scoreFinal }, { silent: true });
+        }
       } catch (error) {
         setData((current) => ({
           ...current,
@@ -2606,16 +2147,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/comments`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
           body: JSON.stringify({ comment }),
         });
 
@@ -2650,16 +2186,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     const session = await getBrowserSupabase()?.auth.getSession();
     const token = session?.data.session?.access_token;
     rememberGitHubProviderToken(session?.data.session?.provider_token);
-    const githubProviderToken = getRememberedGitHubProviderToken();
     const formData = new FormData();
     formData.append("file", file);
 
     const response = await fetch(`/api/tasks/${task.id}/attachments`, {
       method: "POST",
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-      },
+      headers: requestHeaders(token, { json: false, github: true }),
       body: formData,
     });
 
@@ -2696,16 +2228,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] } | null;
@@ -2739,7 +2266,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         });
       }
     });
-  }, [source, startTransition]);
+  }, [requestHeaders, source, startTransition]);
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -2788,10 +2315,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       try {
         const response = await fetch(`/api/tasks/${task.id}/blockers`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: requestHeaders(token),
           body: JSON.stringify(payload),
         });
 
@@ -2906,8 +2430,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
-  const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean } = {}) => {
-    setSaveError("");
+  const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean; silent?: boolean } = {}) => {
+    if (!options.silent) setSaveError("");
 
     const previousTask = task;
     setData((current) => ({
@@ -2928,16 +2452,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       try {
         const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
+          headers: requestHeaders(token, { github: true }),
           body: JSON.stringify({ createIfMissing: Boolean(options.createIfMissing) }),
         });
 
@@ -2954,7 +2473,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
         }));
-        setSaveError(message);
+        if (!options.silent) setSaveError(message);
       }
     });
   };
@@ -2985,17 +2504,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
 
       for (const task of queueTasks) {
         try {
           const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-              ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-            },
+            headers: requestHeaders(token, { github: true }),
             body: JSON.stringify({ createIfMissing: false }),
           });
 
@@ -3019,6 +2533,60 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     });
   };
 
+  const deleteTask = (task: Task) => {
+    if (!canManageTaskMeta) {
+      setSaveError("Nur CEO oder Deputy können Aufgaben löschen.");
+      return;
+    }
+    const confirmed = window.confirm(
+      hasGitHubIssue(task)
+        ? "Aufgabe aus der App löschen und das verknüpfte GitHub-Issue schließen?"
+        : "Aufgabe aus der App löschen?",
+    );
+    if (!confirmed) return;
+
+    setSaveError("");
+    const previousTask = task;
+    const previousRelations = data.taskRelations;
+    const previousComments = data.taskComments;
+    const previousActivity = data.taskActivity;
+
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id),
+      taskRelations: current.taskRelations.filter((relation) => relation.taskId !== task.id && relation.relatedTaskId !== task.id),
+      taskComments: current.taskComments.filter((comment) => comment.taskId !== task.id),
+      taskActivity: current.taskActivity.filter((activity) => activity.taskId !== task.id),
+    }));
+    closeTaskPanel();
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      rememberGitHubProviderToken(session?.data.session?.provider_token);
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}`, {
+          method: "DELETE",
+          headers: requestHeaders(token, { json: false, github: true }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (!response.ok) throw new Error(body?.error || "Aufgabe konnte nicht gelöscht werden.");
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          tasks: [previousTask, ...current.tasks],
+          taskRelations: previousRelations,
+          taskComments: previousComments,
+          taskActivity: previousActivity,
+        }));
+        setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht gelöscht werden.");
+      }
+    });
+  };
+
   const refreshGoogleChatStatus = useCallback(async () => {
     if (source !== "supabase") return;
 
@@ -3032,7 +2600,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         },
       });
       const body = (await response.json().catch(() => null)) as {
-        googleChat?: { webhookConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean };
+        googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: GoogleChatStatus["mode"] };
         googleChatConfigured?: boolean;
         pending?: number;
       } | null;
@@ -3040,8 +2608,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
       setGoogleChatStatus({
         webhookConfigured: Boolean(body.googleChat?.webhookConfigured ?? body.googleChatConfigured),
+        apiConfigured: Boolean(body.googleChat?.apiConfigured),
         deliveryEnabled: Boolean(body.googleChat?.deliveryEnabled),
         ready: Boolean(body.googleChat?.ready),
+        mode: body.googleChat?.mode || "not-configured",
         pending: body.pending || 0,
       });
     } catch {
@@ -3252,7 +2822,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const refreshPayload = await refreshResponse.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
         if (refreshResponse.ok && refreshPayload?.data) {
           const nextData = normalizePlanningData(refreshPayload.data);
-          protectedPlanningDataCache = nextData;
+          setProtectedPlanningDataCache(nextData);
           setData(nextData);
           setProtectedDataLoaded(true);
         }
@@ -3296,7 +2866,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           {authError && <p className="mt-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
           <div className="mt-6">
             {authChecked ? (
-              <AuthControl
+              <CurrentAuthControl
                 user={authUser}
                 error={authError}
                 busy={authBusy}
@@ -3330,7 +2900,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           </div>
           {authError && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
           <div className="mt-5">
-            <AuthControl
+            <CurrentAuthControl
               user={authUser}
               error={authError}
               busy={authBusy}
@@ -3407,9 +2977,23 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
               <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
-              <div className="mt-1 text-sm text-slate-500">{workspace === "planning" ? data.project.range : workspaceSubtitles[workspace]}</div>
+              <div className="mt-1 text-sm text-slate-500">
+                {workspace === "planning"
+                  ? data.project.range
+                  : workspace === "mine"
+                    ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
+                    : workspaceSubtitles[workspace]}
+              </div>
             </div>
             <div className="flex items-center gap-2">
+              {devRoleSwitchAvailable && (
+                <DevRoleSwitch
+                  profiles={data.profiles}
+                  actualProfile={actualProfile}
+                  value={devProfileId}
+                  onChange={setDevProfileId}
+                />
+              )}
               <NotificationInbox
                 notifications={unreadNotifications}
                 profiles={data.profiles}
@@ -3419,7 +3003,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 onDismiss={dismissNotification}
               />
               {authAvailable && (
-                <AuthControl
+                <CurrentAuthControl
                   user={authUser}
                   error={authError}
                   busy={authBusy}
@@ -3529,13 +3113,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                   value={filters.query}
                   onChange={(event) => setFilters({ ...filters, query: event.target.value })}
                   className="h-10 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
-                  placeholder="Nach Aufgabe, DoD oder Workstream suchen"
+                  placeholder="Nach Aufgabe, DoD, Workstream oder GitHub-Issue suchen"
                 />
               </label>
               <CustomSelect value={filters.owner} onChange={(value) => setFilters({ ...filters, owner: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))]} />
               <CustomSelect value={filters.status} onChange={(value) => setFilters({ ...filters, status: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} />
               <CustomSelect value={filters.priority} onChange={(value) => setFilters({ ...filters, priority: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))]} />
-              <CustomSelect value={filters.packageId} onChange={(value) => setFilters({ ...filters, packageId: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Group Commitments" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.id }))]} />
+              <CustomSelect value={filters.packageId} onChange={(value) => setFilters({ ...filters, packageId: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Initiativen" }, ...data.packages.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))]} />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {quickFilters.map((filter) => (
@@ -3555,7 +3139,30 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         )}
 
         <section className="px-4 pb-8 pt-4 lg:px-6">
-          {workspace === "projects" && <ProjectsOverview data={data} tasks={data.tasks} />}
+          {workspace === "projects" && (
+            <CurrentProjectsOverview
+              data={data}
+              tasks={data.tasks}
+              currentProfile={currentProfile}
+              canManageInitiatives={canManageTaskMeta}
+              onEditInitiative={(initiative) => setInitiativeDialogDefaults({
+                id: initiative.id,
+                title: initiative.title,
+                milestoneId: initiative.milestoneId || "",
+                ownerId: initiative.ownerId || "",
+                accountableProfileId: initiative.accountableProfileId || initiative.ownerId || "",
+                responsibleProfileIds: initiative.responsibleProfileIds?.length ? initiative.responsibleProfileIds : initiative.ownerId ? [initiative.ownerId] : [],
+                consultedProfileIds: initiative.consultedProfileIds || [],
+                informedProfileIds: initiative.informedProfileIds || [],
+                priority: initiative.priority,
+                status: initiative.status || "planned",
+                targetDate: initiative.targetDate || "",
+                goal: initiative.goal,
+                successCriteria: initiative.successCriteria || "",
+                scopeConstraints: initiative.scopeConstraints || "",
+              })}
+            />
+          )}
           {workspace === "execution" && (
             <ExecutionLayerOverview
               data={data}
@@ -3571,9 +3178,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onCreateTask={(draft) => setTaskDialogDefaults(draft)}
             />
           )}
-          {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}
+          {workspace === "tools" && <CurrentFmdToolsOverview tools={data.fmdTools} />}
           {workspace === "team" && (
-            <TeamOverview
+            <CurrentTeamOverview
               data={data}
               tasks={data.tasks}
               pending={isPending}
@@ -3584,7 +3191,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             />
           )}
           {workspace === "sprint" && (
-            <SprintScoreTableOverview
+            <CurrentSprintScoreTableOverview
               data={data}
               pending={isPending}
               onOpen={(task) => openTaskPanel(task.id)}
@@ -3602,7 +3209,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             />
           )}
           {workspace === "decisions" && (
-            <DecisionLogOverview
+            <CurrentDecisionLogOverview
               data={data}
               currentProfileId={currentProfile?.id || ""}
               pending={isPending}
@@ -3625,14 +3232,16 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             />
           )}
           {workspace === "meetings" && (
-            <MeetingFinderOverview
+            <CurrentMeetingFinderOverview
               data={data}
               pending={isPending}
               currentProfile={currentProfile}
               canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
+              canCreateMeeting={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy" || currentProfile?.platformRole === "founder"}
               calendarSyncMessage={calendarSyncMessage}
               meetingCreateMessage={meetingCreateMessage}
               onCreateAvailability={createAvailability}
+              onUpdateAvailability={updateAvailability}
               onDeleteAvailability={deleteAvailability}
               onSyncGoogleCalendar={syncGoogleCalendar}
               onCreateMeeting={createMeetingFromSlot}
@@ -3666,7 +3275,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           {filtersAvailable && (
           <>
           {view === "board" && (
-            <div className="flex gap-4 overflow-x-auto pb-3">
+            <div className="flex min-w-0 gap-4 overflow-x-auto pb-3">
               {taskStatuses.map((status) => {
                 const tasks = visibleTasks.filter((task) => normalizeStatus(task.status) === status);
                 return (
@@ -3681,9 +3290,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOverStatus(null);
                     }}
                     onDrop={(event) => dropTaskOnStatus(status, event)}
-                    className={`w-[360px] shrink-0 rounded-lg border bg-blue-50/60 transition ${dragOverStatus === status ? "border-blue-400 ring-2 ring-blue-200" : "border-blue-100"}`}
+                    className={`min-w-[360px] max-w-[360px] basis-[360px] shrink-0 grow-0 overflow-hidden rounded-lg border bg-blue-50/60 transition ${dragOverStatus === status ? "border-blue-400 ring-2 ring-blue-200" : "border-blue-100"}`}
                   >
-                    <div className="flex items-center justify-between border-b border-blue-100 px-4 py-3">
+                    <div className="flex min-w-0 items-center justify-between border-b border-blue-100 px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Circle size={15} className="text-blue-600" />
                         <h2 className="text-sm font-semibold text-slate-800">{status}</h2>
@@ -3693,13 +3302,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                         <Plus size={15} />
                       </button>
                     </div>
-                    <div className="grid gap-3 p-3">
+                    <div className="grid min-w-0 gap-3 p-3">
                       {tasks.length ? tasks.map((task) => (
                         <TaskCard
                           key={task.id}
                           task={task}
                           pack={packageById(data.packages, task.packageId)}
-                          ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
+                          ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
                           relations={data.taskRelations}
                           allTasks={data.tasks}
                           statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
@@ -3751,7 +3360,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                           <ChevronRight size={16} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
                         </span>
                         <span className="min-w-0">
-                          <span className="block text-xs font-semibold text-blue-700">{pack.id} · {pack.priority}</span>
+                          <span className="block text-xs font-semibold text-blue-700">{initiativeMetaLabel(pack)}</span>
                           <span className="mt-0.5 block text-base font-semibold text-slate-950">{pack.title}</span>
                           <span className="mt-1 block text-sm text-slate-500">{pack.goal}</span>
                         </span>
@@ -3765,7 +3374,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                             key={task.id}
                             task={task}
                             pack={pack}
-                            ownerProfile={data.profiles.find((profile) => profile.name === task.owner)}
+                            ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
                             relations={data.taskRelations}
                             allTasks={data.tasks}
                             statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
@@ -3786,7 +3395,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               <table className="min-w-[1320px] w-full border-collapse text-sm">
                 <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <tr>
-                    {["Status", "GitHub", "Owner", "Priorität", "Workstream", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Definition of Done"].map((head) => (
+                    {["Status", "GitHub", "Assignee", "Priorität", "Workstream", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Definition of Done"].map((head) => (
                       <th key={head} className="border-b border-slate-200 px-3 py-3">{head}</th>
                     ))}
                   </tr>
@@ -3811,7 +3420,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <CustomSelect value={task.owner} onChange={(value) => updateTask(task, { owner: value })} className="h-8 w-32 text-xs" options={data.profiles.map((profile) => ({ value: profile.name, label: profile.name }))} />
+                        <CustomSelect value={task.owner} onChange={(value) => updateTask(task, { owner: value })} className="h-8 w-36 text-xs" options={taskOwnerOptions(task.taskType, data.profiles)} />
                       </td>
                       <td className="px-3 py-3"><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${priorityTone(task.priority)}`}>{task.priority}</span></td>
                       <td className="px-3 py-3 text-slate-600">{task.workstream}</td>
@@ -3841,7 +3450,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           )}
 
           {view === "gantt" && (
-            <GanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
+            <CurrentGanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
           )}
           </>
           )}
@@ -3849,7 +3458,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       </main>
 
       {selectedTask && (
-        <TaskDetailPanel
+        <CurrentTaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
           pack={selectedPackage}
@@ -3881,12 +3490,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
           onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
+          onDelete={() => deleteTask(selectedTask)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
         />
       )}
       {taskDialogDefaults && (
-        <NewTaskDialog
+        <CurrentNewTaskDialog
           defaults={taskDialogDefaults}
           data={data}
           pending={isPending}
@@ -3894,8 +3504,17 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onCreate={createTask}
         />
       )}
+      {initiativeDialogDefaults && (
+        <InitiativeDialog
+          defaults={initiativeDialogDefaults}
+          data={data}
+          pending={isPending}
+          onClose={() => setInitiativeDialogDefaults(null)}
+          onSave={saveInitiative}
+        />
+      )}
       {feedbackDialogOpen && (
-        <FeedbackDialog
+        <CurrentFeedbackDialog
           pending={isPending}
           onClose={() => setFeedbackDialogOpen(false)}
           onSubmit={createFeedback}
@@ -3904,8 +3523,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     </div>
   );
 }
-
-function ExecutionLayerOverview({
+function LegacyExecutionLayerOverview({
   data,
   currentProfile,
   focusItems,
@@ -6546,6 +6164,8 @@ function MeetingFinderOverview({
       onCreateAvailability({
         profileId: normalizedWorkProfileId,
         type: "working_hours",
+        title: "Working hours",
+        blockerKind: "working_hours",
         weekday: Number(weekday),
         startDate: "",
         endDate: "",
@@ -6567,6 +6187,8 @@ function MeetingFinderOverview({
     onCreateAvailability({
       profileId: normalizedBlockerProfileId,
       type: blockerType,
+      title: blockerType === "vacation" ? "Vacation" : blockerType === "sick" ? "Sick leave" : "Busy",
+      blockerKind: blockerType === "vacation" ? "vacation" : blockerType === "sick" ? "sick" : "on_business",
       weekday: null,
       startDate: blockerStartDate,
       endDate: blockerEndDate || blockerStartDate,
@@ -7241,7 +6863,7 @@ function MeetingFinderOverview({
   );
 }
 
-function SettingsOverview({
+function LegacySettingsOverview({
   data,
   source,
   authAvailable,
@@ -8315,6 +7937,25 @@ function NewTaskDialog({
         </div>
       </form>
     </div>
+  );
+}
+
+function RelationshipInfo({ title }: { title: string }) {
+  const description = relationshipHelpText(title);
+  return (
+    <span className="group relative inline-flex">
+      <span
+        tabIndex={0}
+        title={description}
+        aria-label={`${title}: ${description}`}
+        className="grid h-5 w-5 cursor-help place-items-center rounded-full border border-slate-200 bg-white text-slate-400 outline-none transition hover:border-blue-200 hover:text-blue-600 focus:border-blue-300 focus:text-blue-700"
+      >
+        <CircleHelp size={13} />
+      </span>
+      <span className="pointer-events-none absolute left-1/2 top-6 z-20 hidden w-64 -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium leading-5 text-slate-700 shadow-lg group-hover:block group-focus-within:block">
+        {description}
+      </span>
+    </span>
   );
 }
 

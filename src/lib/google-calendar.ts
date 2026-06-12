@@ -24,9 +24,16 @@ type GoogleEventsResponse = {
   };
 };
 
+type GoogleEventWriteResponse = {
+  id?: string;
+  htmlLink?: string;
+  error?: {
+    message?: string;
+  };
+};
+
 const calendarScopes = [
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
 function base64Url(input: string | Buffer) {
@@ -101,4 +108,48 @@ export async function getGoogleCalendarEvents(subjectEmail: string, startDate: s
   }
 
   return body.items || [];
+}
+
+export async function createGoogleCalendarEvent(payload: {
+  organizerEmail: string;
+  attendeeEmails: string[];
+  title: string;
+  agenda: string;
+  startIso: string;
+  durationMinutes: number;
+}) {
+  if (!isGoogleCalendarSyncConfigured()) throw new Error("Google Calendar ist noch nicht konfiguriert.");
+  if (!payload.organizerEmail) throw new Error("Kein Google-Kalender für den Organizer hinterlegt.");
+
+  const token = await googleAccessToken(payload.organizerEmail);
+  const start = new Date(payload.startIso);
+  if (Number.isNaN(start.getTime())) throw new Error("Meeting-Zeitpunkt ist ungültig.");
+  const end = new Date(start.getTime() + payload.durationMinutes * 60 * 1000);
+  const uniqueAttendees = Array.from(new Set(payload.attendeeEmails.map((email) => email.trim()).filter(Boolean)));
+
+  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      summary: payload.title,
+      description: payload.agenda,
+      start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+      end: { dateTime: end.toISOString(), timeZone: "Europe/Berlin" },
+      attendees: uniqueAttendees.map((email) => ({ email })),
+    }),
+  });
+  const body = (await response.json().catch(() => ({}))) as GoogleEventWriteResponse;
+
+  if (!response.ok || !body.id) {
+    throw new Error(body.error?.message || "Google Calendar Event konnte nicht erstellt werden.");
+  }
+
+  return {
+    calendarId: payload.organizerEmail,
+    eventId: body.id,
+    htmlLink: body.htmlLink || "",
+  };
 }

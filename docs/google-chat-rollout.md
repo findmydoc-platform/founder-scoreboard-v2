@@ -1,6 +1,6 @@
 # Google Chat Rollout
 
-Stand: 2026-05-27
+Stand: 2026-05-29
 
 ## Ziel
 
@@ -8,11 +8,25 @@ Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben
 
 Operative Event Messages bleiben in der Applikation. Ein möglicher Google-Chat-Pfad über eine Pipeline ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
 
+## Phase 1: FounderOps-Gruppendigest
+
+Phase 1 aktiviert nur den Gruppenbereich-Digest. Der alte Google-Chat-Bereich `Founder Scoreboard` wird in Google Chat manuell zu `FounderOps` umbenannt. Der Incoming Webhook muss zu genau diesem `FounderOps`-Gruppenbereich gehören.
+
+Für Production/Pipeline werden in Phase 1 gesetzt:
+
+```bash
+APP_URL=https://founder-ops.findmydoc.eu
+GOOGLE_CHAT_WEBHOOK_URL=<Webhook des FounderOps-Gruppenbereichs>
+GOOGLE_CHAT_DELIVERY_ENABLED=true
+```
+
+Die Chat-API-Service-Account-Werte bleiben in Phase 1 leer. Private DMs und Chat-Kommandos sind spätere Phasen.
+
 ## Sicherheitsmodell
 
 Die Zustellung ist zweifach gesperrt:
 
-1. `GOOGLE_CHAT_WEBHOOK_URL` muss gesetzt sein.
+1. Entweder `GOOGLE_CHAT_WEBHOOK_URL` oder die Chat-API-Service-Account-Werte müssen gesetzt sein.
 2. `GOOGLE_CHAT_DELIVERY_ENABLED=true` muss gesetzt sein.
 
 Solange `GOOGLE_CHAT_DELIVERY_ENABLED=false` ist, sammelt die App Benachrichtigungen weiter in Supabase und zeigt sie in der App an. Der Versand an Google Chat bleibt aus.
@@ -21,14 +35,16 @@ Solange `GOOGLE_CHAT_DELIVERY_ENABLED=false` ist, sammelt die App Benachrichtigu
 
 ```bash
 GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
+GOOGLE_CHAT_PRIVATE_KEY=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
-Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für den echten Versand wird der Wert bewusst auf `true` gesetzt.
+Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für echte persönliche FounderOps-DMs werden `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, die Chat-API und pro Profil ein `profiles.google_chat_dm_space` im Format `spaces/...` benötigt. Der Webhook bleibt als Space-Digest-Fallback möglich.
 
 ## Bot-Branding und geplanter Endpoint
 
-Die Google-Chat-App soll unter dem Namen `FounderOps` geführt werden. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
+Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
 
 Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem GitHub-Actions-Deployment und Domain-Cutover dieser öffentliche HTTPS-Endpunkt vorgesehen:
 
@@ -46,34 +62,36 @@ Empfohlene Google-Chat-App-Felder:
 
 ## Rollout-Schritte
 
-1. Google-Chat-Space oder Zielkanal festlegen.
-2. Incoming Webhook in Google Chat erstellen und URL als `GOOGLE_CHAT_WEBHOOK_URL` setzen.
-3. `GOOGLE_CHAT_DELIVERY_ENABLED=false` lassen.
-4. App starten und in den Einstellungen prüfen, dass Google Chat als gesammelt, aber nicht versandbereit angezeigt wird.
-5. Benachrichtigung erzeugen, zum Beispiel Review anfragen oder Kommentar schreiben.
-6. `npm run verify:google-chat` ausführen.
-7. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
-8. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
-9. Einen einzelnen Digest senden und `notification_deliveries` prüfen.
-10. Danach erst die regelmäßige Zustellung planen.
+1. FounderOps in Google Cloud/Google Chat konfigurieren und die Chat API aktivieren.
+2. Service Account für die Chat-App bereitstellen und `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL` sowie `GOOGLE_CHAT_PRIVATE_KEY` setzen.
+3. FounderOps-Direktchat mit jedem Teammitglied öffnen und die DM-Spaces als `spaces/...` in `profiles.google_chat_dm_space` eintragen.
+4. `GOOGLE_CHAT_DELIVERY_ENABLED=false` lassen.
+5. App starten und in den Einstellungen prüfen, dass Google Chat als gesammelt, aber nicht versandbereit angezeigt wird.
+6. Benachrichtigung erzeugen, zum Beispiel Review anfragen oder Kommentar schreiben.
+7. `npm run verify:google-chat` ausführen.
+8. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
+9. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
+10. Einen einzelnen Digest senden und `notification_deliveries` prüfen.
+11. Danach erst die regelmäßige Zustellung planen.
 
 ## Profile und Präferenzen
 
-Die Profile enthalten Felder für spätere private Zustellung:
+Die Profile enthalten Felder für persönliche Zustellung:
 
 - `profiles.google_chat_user_id`
 - `profiles.google_chat_dm_space`
 - `profiles.notifications_enabled`
 
-Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in den Google-Chat-Digest darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Meeting-Rückmeldungen und Feedback.
+Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Meeting-Rückmeldungen und Feedback.
 
-## Offene Punkte für persönliche DMs
+## Zustelllogik
 
-1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` eintragen. Normale 1:1-Chats zwischen Teammitgliedern sind dafür nicht korrekt.
-2. `founderops.findmydoc.eu` auf die per GitHub Actions bereitgestellte App zeigen lassen.
-3. Die Route `/api/google-chat/events` über den GitHub-Actions-Deploy ausrollen und mit Google Chat testen, damit die Google-Chat-App Nachrichten und Installations-/Message-Events verarbeiten kann.
-4. Den Versand von reinem `GOOGLE_CHAT_WEBHOOK_URL`-Digest auf Google Chat API Versand an `spaces/{dmSpace}/messages` erweitern, damit persönliche DMs wirklich an die Profil-DM-Spaces gehen.
-5. Danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` erst nach einem kontrollierten Test aktivieren.
+Die App verarbeitet `notification_events` in `/api/notifications/deliver`.
+
+- Wenn Chat API konfiguriert ist und ein Profil `google_chat_dm_space` im Format `spaces/...` hat, sendet FounderOps persönlich an diesen DM-Space.
+- Wenn kein DM-Space vorhanden ist, aber ein Webhook gesetzt ist, kann ein Space-Digest als Fallback gesendet werden.
+- Wenn weder DM-Space noch Webhook verfügbar ist, wird der Zustellversuch als fehlgeschlagen in `notification_deliveries` protokolliert.
+- User- und Event-Präferenzen werden vor dem Versand ausgewertet.
 
 ## Rollback
 
@@ -86,4 +104,4 @@ Bei falscher Zustellung, zu vielen Meldungen oder Konfigurationsfehlern:
 
 ## Späterer Ausbau
 
-Incoming Webhooks senden nur in einen Space. Echte 1:1-Direktnachrichten brauchen später eine Google-Chat-App mit Chat API, OAuth/Service-Account-Konfiguration und sauberer Zuordnung von `profiles.google_chat_user_id` oder `profiles.google_chat_dm_space`.
+Incoming Webhooks senden nur in einen Space. Echte 1:1-Direktnachrichten laufen über die Google Chat API an die gespeicherten DM-Spaces. Google-Chat-Kommandos in `/api/google-chat/events` bleiben ein späterer Ausbau.

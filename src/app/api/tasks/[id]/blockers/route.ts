@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -17,9 +18,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { id } = await context.params;
   const payload = (await request.json()) as BlockerPayload;
-  const reason = typeof payload.reason === "string" ? payload.reason.trim().slice(0, 2000) : "";
-  const impact = typeof payload.impact === "string" ? payload.impact.trim().slice(0, 2000) : "";
-  const needsHelpFrom = typeof payload.needsHelpFrom === "string" ? payload.needsHelpFrom.trim().slice(0, 500) : "";
+  const reason = cleanText(payload.reason, 2000);
+  const impact = cleanText(payload.impact, 2000);
+  const needsHelpFrom = cleanText(payload.needsHelpFrom, 500);
 
   if (reason.length < 5) {
     return NextResponse.json({ error: "Blocker-Grund ist erforderlich." }, { status: 400 });
@@ -81,8 +82,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     entity_type: "task",
     entity_id: id,
     after_data: { reason, impact, needsHelpFrom, status: "Blockiert" },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

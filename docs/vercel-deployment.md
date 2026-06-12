@@ -1,6 +1,6 @@
 # GitHub Actions Deployment Workflow
 
-This project deploys only through GitHub Actions workflows. Operators do not run a local manual deploy flow. GitHub Actions drives the Vercel CLI directly.
+This project deploys only through GitHub Actions workflows. Operators do not run a local manual deploy flow. GitHub Actions owns the deployment workflow directly.
 
 ## Target
 
@@ -8,6 +8,7 @@ This project deploys only through GitHub Actions workflows. Operators do not run
 - Vercel project: `founder-ops`
 - Root directory: `.`
 - Current production URL: `https://founder-ops.findmydoc.eu`
+- Planned Google Chat app URL: `https://founderops.findmydoc.eu/api/google-chat/events`
 - GitHub Environments: `preview` and `production`
 
 ## GitHub Environment Secrets
@@ -20,7 +21,7 @@ VERCEL_ORG_ID=
 VERCEL_PROJECT_ID=
 ```
 
-The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the Vercel CLI step fails naturally.
+The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
 
 ## Runtime Environment
 
@@ -37,10 +38,12 @@ APP_URL=https://founder-ops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GOOGLE_CHAT_WEBHOOK_URL=
+GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
+GOOGLE_CHAT_PRIVATE_KEY=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
-`GOOGLE_CHAT_WEBHOOK_URL` is optional until Google Chat notifications should go live. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
+`GOOGLE_CHAT_WEBHOOK_URL` is optional as a Space-Digest fallback. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
 
 Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.
 
@@ -57,7 +60,7 @@ The preview workflow remains in the repository, but preview is not part of the f
 GitHub Actions executes the preview flow in this order:
 
 - Pull preview runtime variables with `vercel pull --yes --environment=preview`.
-- Build the preview deployment with `vercel deploy --target preview`.
+- Build and deploy the preview from the GitHub Actions preview job.
 - Publish the deployment URL to the workflow summary and the `preview` environment URL.
 
 Workflow: `.github/workflows/deploy-production.yml`
@@ -67,8 +70,8 @@ Production deploys are manual only through `workflow_dispatch`. A guard job reje
 GitHub Actions executes the production flow in this order:
 
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
-- Build the Vercel output with `vercel build --prod`.
-- Deploy the prebuilt output with `vercel deploy --prebuilt --prod`.
+- Build the production Vercel output from the GitHub Actions production job.
+- Deploy the prebuilt production output from the same GitHub Actions run.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
 `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
@@ -89,7 +92,7 @@ Before production login works, configure Supabase Auth:
 - Ensure every team profile has `github_login`.
 - Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
 
-## Local Readiness
+## Verification
 
 Run from the repository root:
 
@@ -97,9 +100,14 @@ Run from the repository root:
 npm test
 npm run lint
 npm run build
+npm run verify:release
 npm run verify:vercel-ready
 npm run vercel:build
 ```
+
+Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `npm audit --audit-level=moderate`.
+
+If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs, the workflow summary, and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
 
 If production Supabase env is present locally, also run:
 

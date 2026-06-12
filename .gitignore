@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .dev-server.log
+.codex-*.log
+.codex-*.png
+tmp-next-*.log
 
 # local browser profiles
 .playwright-mcp/
