@@ -26,7 +26,11 @@ jobs:
     name: Deploy Preview
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      github.event_name == 'push' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -38,37 +42,82 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Validate preview secrets
+        id: preview_guard
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          ready=true
+          reason=""
+
+          if [[ -z "$VERCEL_TOKEN" ]]; then
+            ready=false
+            reason="VERCEL_TOKEN missing"
+          elif [[ -z "$VERCEL_ORG_ID" ]]; then
+            ready=false
+            reason="VERCEL_ORG_ID missing"
+          elif [[ -z "$VERCEL_PROJECT_ID" ]]; then
+            ready=false
+            reason="VERCEL_PROJECT_ID missing"
+          fi
+
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js ${{ env.NODE_VERSION }}
+        if: steps.preview_guard.outputs.ready == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Install dependencies
+        if: steps.preview_guard.outputs.ready == 'true'
+        run: npm ci
+
       - name: Pull Vercel Environment Variables for Preview
+        if: steps.preview_guard.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
-      - name: Deploy to Vercel Preview
+      - name: Build Vercel Output
+        if: steps.preview_guard.outputs.ready == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="$VERCEL_TOKEN"
+
+      - name: Deploy Prebuilt Output to Vercel Preview
+        if: steps.preview_guard.outputs.ready == 'true'
         id: vercel_preview
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          npx vercel@${VERCEL_CLI_VERSION} deploy --target=preview --yes --token="$VERCEL_TOKEN" | tee vercel-deploy-output.txt
-          deployment_url="$(grep -Eo 'https://[[:alnum:].-]+\.vercel\.app' vercel-deploy-output.txt | tail -n 1)"
-          echo "deploymentUrl=${deployment_url}" >> "$GITHUB_OUTPUT"
+        run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh preview
 
       - name: Generate deployment summary
         if: always()
         env:
+          PREVIEW_READY: ${{ steps.preview_guard.outputs.ready }}
+          PREVIEW_REASON: ${{ steps.preview_guard.outputs.reason }}
           DEPLOYMENT_OUTCOME: ${{ steps.vercel_preview.outcome }}
           DEPLOYMENT_URL: ${{ steps.vercel_preview.outputs.deploymentUrl }}
         run: |
           {
             echo "## Preview Deployment Summary"
-            if [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
+            if [[ "$PREVIEW_READY" != "true" ]]; then
+              echo "- **Status**: Skipped"
+              echo "- **Reason**: preview secrets are missing"
+              if [[ -n "$PREVIEW_REASON" ]]; then
+                echo "- **Details**: ${PREVIEW_REASON}"
+              fi
+            elif [[ "$DEPLOYMENT_OUTCOME" == "success" ]]; then
               echo "- **Status**: Success"
               echo "- **URL**: ${DEPLOYMENT_URL}"
+            elif [[ "$DEPLOYMENT_OUTCOME" == "skipped" ]]; then
+              echo "- **Status**: Skipped"
+              echo "- **Reason**: preview secrets are missing"
             else
               echo "- **Status**: Failed"
             fi

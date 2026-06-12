@@ -56,11 +56,14 @@ Workflow: `.github/workflows/deploy-preview.yml`
 Preview deploys run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs.
 
 The preview workflow remains in the repository, but preview is not part of the first `founder-ops` rollout unless the `preview` GitHub Environment and Vercel Preview runtime variables are configured separately.
+If those preview secrets are missing, the pull request job stays skipped instead of failing the branch.
 
 GitHub Actions executes the preview flow in this order:
 
 - Pull preview runtime variables with `vercel pull --yes --environment=preview`.
-- Build and deploy the preview from the GitHub Actions preview job.
+- Build the preview Vercel output from the GitHub Actions preview job.
+- Copy only the prebuilt output and project metadata into a temporary runner directory that contains no `.git` folder.
+- Deploy the prebuilt preview output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `preview` environment URL.
 
 Workflow: `.github/workflows/deploy-production.yml`
@@ -71,10 +74,17 @@ GitHub Actions executes the production flow in this order:
 
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
-- Deploy the prebuilt production output from the same GitHub Actions run.
+- Copy only the prebuilt output and project metadata into a temporary runner directory that contains no `.git` folder.
+- Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
 `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
+
+## Vercel Hobby Private Repository Author Block
+
+For private repositories on the Vercel Hobby plan, Vercel can block deployments when it attributes the deployment to a Git commit author who does not have access to the Vercel team. If this happens, do not rotate `VERCEL_TOKEN`, do not rewrite Git history, and do not introduce a local deploy workaround. The pipeline must keep using GitHub Actions and deploy from the temporary prebuilt artifact directory that intentionally excludes Git metadata.
+
+AI agents handling this repository must inspect the GitHub Actions summary and the deployment inspection fields (`readyStateReason`, `errorMessage`, and `seatBlock`) before proposing changes. A `TEAM_ACCESS_REQUIRED` or commit-author access message is an artifact-staging problem unless the temporary directory is already proven to be Git-metadata-free.
 
 ## Observability
 

@@ -76,24 +76,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           REQUIRE_SUPABASE_AUTH: ${{ secrets.REQUIRE_SUPABASE_AUTH }}
           APP_URL: ${{ secrets.APP_URL }}
+          GITHUB_SYNC_OWNER: findmydoc-platform
+          GITHUB_SYNC_REPO: management
           GOOGLE_CHAT_DELIVERY_ENABLED: ${{ secrets.GOOGLE_CHAT_DELIVERY_ENABLED }}
-        run: |
-          npx vercel@${VERCEL_CLI_VERSION} deploy \
-            --prebuilt \
-            --prod \
-            --yes \
-            --token="$VERCEL_TOKEN" \
-            --env NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
-            --env NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
-            --env SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
-            --env REQUIRE_SUPABASE_AUTH="$REQUIRE_SUPABASE_AUTH" \
-            --env APP_URL="$APP_URL" \
-            --env GITHUB_SYNC_OWNER=findmydoc-platform \
-            --env GITHUB_SYNC_REPO=management \
-            --env GOOGLE_CHAT_DELIVERY_ENABLED="$GOOGLE_CHAT_DELIVERY_ENABLED" \
-            | tee vercel-deploy-output.txt
-          deployment_url="$(grep -Eo 'https://[[:alnum:].-]+\.vercel\.app' vercel-deploy-output.txt | tail -n 1)"
-          echo "deploymentUrl=${deployment_url}" >> "$GITHUB_OUTPUT"
+        run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh production
 
       - name: Generate deployment summary
         if: always()
