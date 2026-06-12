@@ -31,7 +31,7 @@ const requiredEnvKeys = [
 const vercelProjectFile = ".vercel/project.json";
 const project = "founder-ops";
 const rootDirectory = ".";
-const productionDomain = "founder-ops-beta.vercel.app";
+const productionDomain = "founder-ops.findmydoc.eu";
 const githubEnvironments = ["preview", "production"];
 
 async function read(path) {

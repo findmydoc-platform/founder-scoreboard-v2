@@ -903,7 +903,7 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(verify, /deploy-production\.yml/);
   assert.match(verify, /vercel\.json/);
   assert.match(verify, /githubEnvironments/);
-  assert.match(verify, /founder-ops-beta\.vercel\.app/);
+  assert.match(verify, /founder-ops\.findmydoc\.eu/);
   assert.match(verify, /localProjectLinked/);
   assert.match(verify, /\.github\/dependabot\.yml/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
@@ -958,7 +958,7 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(deployment, /vercel deploy --target preview/);
   assert.match(deployment, /vercel build --prod/);
   assert.match(deployment, /vercel deploy --prebuilt --prod/);
-  assert.match(deployment, /founder-ops-beta\.vercel\.app/);
+  assert.match(deployment, /founder-ops\.findmydoc\.eu/);
   assert.match(deployment, /npm run vercel:build/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
@@ -969,7 +969,7 @@ test("repo readiness includes the Vercel deployment pipeline gates", async () =>
   assert.match(skill, /preview/);
   assert.match(skill, /production/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(skill, /founder-ops-beta\.vercel\.app/);
+  assert.match(skill, /founder-ops\.findmydoc\.eu/);
   assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);

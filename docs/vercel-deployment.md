@@ -7,7 +7,7 @@ This project deploys through lean GitHub Actions workflows using the Vercel CLI 
 - GitHub repository: `findmydoc-platform/founder-scoreboard-v2`
 - Vercel project: `founder-ops`
 - Root directory: `.`
-- Current production URL: `https://founder-ops-beta.vercel.app`
+- Current production URL: `https://founder-ops.findmydoc.eu`
 - GitHub Environments: `preview` and `production`
 
 ## GitHub Environment Secrets
@@ -33,7 +33,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 REQUIRE_SUPABASE_AUTH=true
-APP_URL=https://founder-ops-beta.vercel.app
+APP_URL=https://founder-ops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GOOGLE_CHAT_WEBHOOK_URL=
