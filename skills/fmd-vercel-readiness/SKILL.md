@@ -36,6 +36,7 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
    - Deploy: GitHub Actions prebuilt preview deployment step from a Git-metadata-free temporary directory
    - Environment URL: `steps.vercel_preview.outputs.deploymentUrl`
    - Deployment URL and inspection details are written by the shared deploy script.
+   - Pull request jobs stay skipped when preview GitHub Environment secrets are not configured.
 
 2. Production workflow:
    - File: `.github/workflows/deploy-production.yml`

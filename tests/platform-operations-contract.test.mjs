@@ -111,6 +111,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /vercel-deploy-prebuilt\.sh/);
   assert.match(verify, /Git-metadata-free/);
   assert.match(verify, /TEAM_ACCESS_REQUIRED/);
+  assert.match(verify, /secrets\.VERCEL_TOKEN != ''/);
   assert.doesNotMatch(verify, /localProjectLinked/);
   assert.doesNotMatch(verify, /manualNextSteps/);
   assert.doesNotMatch(verify, /vercel link --yes --project founder-ops/);
@@ -144,6 +145,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /Git-metadata-free runner directory/);
   assert.match(deployment, /Vercel Hobby Private Repository Author Block/);
   assert.match(deployment, /readyStateReason/);
+  assert.match(deployment, /preview secrets are missing/);
   assert.doesNotMatch(deployment, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(deployment, /vercel login/);
   assert.doesNotMatch(deployment, /vercel inspect/);
@@ -155,6 +157,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(skill, /AI Guidance: Vercel Hobby Private Author Block/);
   assert.match(skill, /TEAM_ACCESS_REQUIRED/);
   assert.match(skill, /Git-metadata-free temporary directory/);
+  assert.match(skill, /Pull request jobs stay skipped when preview GitHub Environment secrets are not configured/);
   assert.doesNotMatch(skill, /Vercel CLI/);
   assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(skill, /vercel login/);

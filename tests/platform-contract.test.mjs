@@ -959,6 +959,9 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(previewWorkflow, /environment:[\s\S]*name: preview/);
   assert.match(previewWorkflow, /url: \$\{\{ steps\.vercel_preview\.outputs\.deploymentUrl \}\}/);
   assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+  assert.match(previewWorkflow, /secrets\.VERCEL_TOKEN != ''/);
+  assert.match(previewWorkflow, /secrets\.VERCEL_ORG_ID != ''/);
+  assert.match(previewWorkflow, /secrets\.VERCEL_PROJECT_ID != ''/);
   assert.match(previewWorkflow, /pull --yes --environment=preview/);
   assert.match(previewWorkflow, /Build Vercel Output/);
   assert.match(previewWorkflow, /build --target=preview/);
@@ -1015,6 +1018,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployment, /npm run vercel:build/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(deployment, /Operational event messages stay inside the application/);
+  assert.match(deployment, /preview secrets are missing/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /npm run verify:deploy/);
   assert.match(deployment, /GitHub Actions job logs/);

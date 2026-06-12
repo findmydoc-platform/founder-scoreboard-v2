@@ -56,6 +56,7 @@ Workflow: `.github/workflows/deploy-preview.yml`
 Preview deploys run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs.
 
 The preview workflow remains in the repository, but preview is not part of the first `founder-ops` rollout unless the `preview` GitHub Environment and Vercel Preview runtime variables are configured separately.
+If those preview secrets are missing, the pull request job stays skipped instead of failing the branch.
 
 GitHub Actions executes the preview flow in this order:
 

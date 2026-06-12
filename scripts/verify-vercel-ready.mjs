@@ -149,6 +149,9 @@ const previewWorkflow = await read(".github/workflows/deploy-preview.yml");
 for (const marker of [
   "branches: [main]",
   "github.event.pull_request.head.repo.full_name == github.repository",
+  "secrets.VERCEL_TOKEN != ''",
+  "secrets.VERCEL_ORG_ID != ''",
+  "secrets.VERCEL_PROJECT_ID != ''",
   "name: preview",
   "url: ${{ steps.vercel_preview.outputs.deploymentUrl }}",
   "pull --yes --environment=preview",
