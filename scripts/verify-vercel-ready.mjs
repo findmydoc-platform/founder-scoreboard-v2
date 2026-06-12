@@ -30,7 +30,6 @@ const requiredEnvKeys = [
   "GOOGLE_CHAT_DELIVERY_ENABLED",
 ];
 
-const vercelProjectFile = ".vercel/project.json";
 const project = "founder-ops";
 const rootDirectory = ".";
 const productionDomain = "founder-ops.findmydoc.eu";
@@ -91,12 +90,10 @@ for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) 
 
 const deploymentDoc = await read("docs/vercel-deployment.md");
 for (const marker of [
+  "GitHub Actions Deployment Workflow",
   "GitHub Actions",
   "deploy-preview.yml",
   "deploy-production.yml",
-  "vercel deploy --target preview",
-  "vercel build --prod",
-  "vercel deploy --prebuilt --prod",
   "GitHub Environments",
   "`preview`",
   "`production`",
@@ -106,15 +103,23 @@ for (const marker of [
   "Supabase Auth",
   "GOOGLE_CHAT_DELIVERY_ENABLED=false",
   productionDomain,
+  "Operational event messages stay inside the application",
   "GitHub OAuth App owned by `findmydoc-platform`",
   "Do not configure a shared `GITHUB_SYNC_TOKEN`",
+  "GitHub Actions job logs",
 ]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
 }
+for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
+  if (deploymentDoc.includes(banned)) failures.push(`docs/vercel-deployment.md must not include: ${banned}`);
+}
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["GitHub Actions", "Vercel CLI", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
+for (const marker of ["GitHub Actions", "GitHub Actions job logs", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
+}
+for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
+  if (skill.includes(banned)) failures.push(`fmd-vercel-readiness skill must not include: ${banned}`);
 }
 
 const workspaceRules = await read("AGENTS.md");
@@ -169,27 +174,19 @@ if (ciWorkflowPresent) {
   }
 }
 
-const localProjectLinked = existsSync(vercelProjectFile);
-const manualNextSteps = localProjectLinked
-  ? []
-  : ["vercel link --yes --project founder-ops"];
-
 if (failures.length) {
   console.error(`Vercel readiness failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
 
 console.log(JSON.stringify({
-  status: "ready-for-github-actions-vercel-pipeline",
+  status: "ready-for-github-actions-deployment",
   project,
   rootDirectory,
   productionDomain,
   googleChatDomain,
   githubEnvironments,
   requiredEnvKeys,
-  localProjectLinked,
-  vercelProjectFile,
-  manualNextSteps,
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],

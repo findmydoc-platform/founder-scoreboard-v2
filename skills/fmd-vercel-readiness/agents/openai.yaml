@@ -1,4 +1,4 @@
 interface:
-  display_name: "FMD Vercel Readiness"
-  short_description: "Prepare and verify Founder OPS Vercel CLI deployments."
-  default_prompt: "Make this Founder OPS project Vercel ready using the project deployment workflow."
+  display_name: "FMD GitHub Actions Deployment Readiness"
+  short_description: "Prepare and verify Founder OPS deployment workflows through GitHub Actions."
+  default_prompt: "Make this Founder OPS project deployment workflow ready using GitHub Actions."

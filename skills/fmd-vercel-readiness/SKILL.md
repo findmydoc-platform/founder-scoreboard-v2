@@ -1,24 +1,26 @@
 ---
 name: fmd-vercel-readiness
-description: Prepare, verify, and inspect the findmydoc Founder Scoreboard Vercel deployment pipeline through GitHub Actions and Vercel CLI.
+description: Prepare, verify, and inspect the findmydoc Founder Scoreboard deployment pipeline through GitHub Actions.
 ---
 
-# FMD Vercel Readiness
+# FMD GitHub Actions Deployment Readiness
 
 ## Purpose
 
-Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on Vercel Git auto-deploys. GitHub Actions runs Vercel CLI commands directly for the `founder-ops` Vercel project.
+Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, without relying on Vercel Git auto-deploys or any local manual deploy flow. GitHub Actions owns deploy flow and observability for the `founder-ops` project.
 
 ## Core Rules
 
 - Use GitHub Actions workflows for preview and production deploys.
 - Use GitHub Environments named `preview` and `production`.
 - Keep Vercel authentication secrets in the GitHub Environment, not repository-level secrets.
-- Do not pre-validate Vercel secrets in workflow scripts; let the Vercel CLI fail naturally.
+- Do not pre-validate deployment secrets in workflow scripts; let the workflow fail naturally.
 - Do not add separate deploy helper scripts unless the workflow becomes materially more complex.
 - Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the Google Chat rollout is explicitly enabled.
+- Never instruct operators to use a local manual deploy flow; GitHub Actions owns the deployment flow and observability.
+- Use GitHub Actions job logs and the deployment summary for deployment observability.
 - Do not expose `SUPABASE_SERVICE_ROLE_KEY`, Google Chat webhook URLs, Vercel tokens, or provider tokens in logs, docs, or client code.
 - Do not move domains, change DNS, rename projects, or deploy production unless the user explicitly asks for that action.
 
@@ -29,9 +31,9 @@ Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on 
    - Trigger: internal pull requests to `main` and manual `workflow_dispatch`
    - Environment: `preview`
    - Pull env: `vercel pull --yes --environment=preview`
-   - Deploy: `vercel deploy --target preview`
+   - Deploy: GitHub Actions preview deployment step
    - Environment URL: `steps.vercel_preview.outputs.deploymentUrl`
-   - Deployment URL is parsed inline from Vercel CLI output.
+   - Deployment URL is parsed inline from workflow output.
 
 2. Production workflow:
    - File: `.github/workflows/deploy-production.yml`
@@ -39,12 +41,12 @@ Keep the Founder Scoreboard Vercel deployment pipeline ready without relying on 
    - Branch guard: `refs/heads/main`
    - Environment: `production`
    - Pull env: `vercel pull --yes --environment=production`
-   - Build: `vercel build --prod`
-   - Deploy: `vercel deploy --prebuilt --prod`
+   - Build: GitHub Actions production build step
+   - Deploy: GitHub Actions prebuilt production deployment step
    - Environment URL: `steps.vercel_production.outputs.deploymentUrl`
-   - Deployment URL is parsed inline from Vercel CLI output.
+   - Deployment URL is parsed inline from workflow output.
 
-3. Vercel build:
+3. GitHub Actions build step:
    - `vercel.json` sets `installCommand` to `npm ci`.
    - `vercel.json` sets `buildCommand` to `npm run vercel:build`.
    - `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
@@ -90,11 +92,7 @@ npm run verify:vercel-ready
 npm run vercel:build
 ```
 
-Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures. If `npm run verify:vercel-ready` reports `localProjectLinked: false`, run:
-
-```bash
-vercel link --yes --project founder-ops
-```
+Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures. If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
 
 For production Supabase env validation, also run:
 
@@ -109,7 +107,7 @@ npm run verify:auth
 - Call `/api/health`.
 - Check login with GitHub.
 - Check task read/write as the CEO user.
-- Check Vercel logs for errors.
+- Check GitHub Actions job logs and the deployment summary for errors.
 
 ## References
 

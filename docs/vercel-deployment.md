@@ -1,6 +1,6 @@
-# Vercel Deployment Pipeline
+# GitHub Actions Deployment Workflow
 
-This project deploys through lean GitHub Actions workflows using the Vercel CLI directly. The repository does not rely on Vercel Git auto-deploys, helper deploy scripts, domain moves, DNS changes, or project renames.
+This project deploys only through GitHub Actions workflows. Operators do not run a local manual deploy flow. GitHub Actions owns the deployment workflow directly.
 
 ## Target
 
@@ -21,9 +21,9 @@ VERCEL_ORG_ID=
 VERCEL_PROJECT_ID=
 ```
 
-The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the Vercel CLI step fails naturally.
+The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
 
-## Vercel Runtime Environment
+## Runtime Environment
 
 Runtime app environment variables stay in the Vercel project environment and are pulled by the workflow with `vercel pull`.
 
@@ -45,23 +45,11 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 
 `GOOGLE_CHAT_WEBHOOK_URL` is optional as a Space-Digest fallback. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
 
+Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.
+
 Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, comments, and attachments must use the logged-in user's GitHub OAuth provider token from the active Supabase session, so GitHub shows the real actor.
 
-## Vercel Build
-
-Vercel uses `vercel.json` from the repository root:
-
-```json
-{
-  "framework": "nextjs",
-  "installCommand": "npm ci",
-  "buildCommand": "npm run vercel:build"
-}
-```
-
-`npm run vercel:build` runs `npm run verify:deploy` before `npm run build`. `verify:deploy` runs tests, Vercel readiness, Google Chat readiness, and lint.
-
-## Preview Pipeline
+## GitHub Actions Workflow Shape
 
 Workflow: `.github/workflows/deploy-preview.yml`
 
@@ -69,30 +57,28 @@ Preview deploys run for internal pull requests targeting `main` and for manual `
 
 The preview workflow remains in the repository, but preview is not part of the first `founder-ops` rollout unless the `preview` GitHub Environment and Vercel Preview runtime variables are configured separately.
 
-Core commands:
+GitHub Actions executes the preview flow in this order:
 
-```bash
-vercel pull --yes --environment=preview
-vercel deploy --target preview
-```
-
-Fork pull requests are skipped so environment secrets are not exposed. The workflow parses the deployment URL from the Vercel CLI output, writes it to `deploymentUrl`, and uses it as the GitHub Environment URL for `preview`.
-
-## Production Pipeline
+- Pull preview runtime variables with `vercel pull --yes --environment=preview`.
+- Build and deploy the preview from the GitHub Actions preview job.
+- Publish the deployment URL to the workflow summary and the `preview` environment URL.
 
 Workflow: `.github/workflows/deploy-production.yml`
 
 Production deploys are manual only through `workflow_dispatch`. A guard job rejects any run that is not on `refs/heads/main` before the protected `production` environment is requested.
 
-Core commands:
+GitHub Actions executes the production flow in this order:
 
-```bash
-vercel pull --yes --environment=production
-vercel build --prod
-vercel deploy --prebuilt --prod
-```
+- Pull production runtime variables with `vercel pull --yes --environment=production`.
+- Build the production Vercel output from the GitHub Actions production job.
+- Deploy the prebuilt production output from the same GitHub Actions run.
+- Publish the deployment URL to the workflow summary and the `production` environment URL.
 
-The workflow parses the deployment URL from the Vercel CLI output, writes it to `deploymentUrl`, and uses it as the GitHub Environment URL for `production`.
+`npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
+
+## Observability
+
+Use GitHub Actions job logs and the deployment summary to inspect deployment status. The workflow output URL is the operational source of truth for the deployed environment.
 
 ## Supabase Auth
 
@@ -106,7 +92,7 @@ Before production login works, configure Supabase Auth:
 - Ensure every team profile has `github_login`.
 - Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
 
-## Local Readiness
+## Verification
 
 Run from the repository root:
 
@@ -121,11 +107,7 @@ npm run vercel:build
 
 Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `npm audit --audit-level=moderate`.
 
-If `npm run verify:vercel-ready` reports `localProjectLinked: false`, link the local checkout to the Vercel project:
-
-```bash
-vercel link --yes --project founder-ops
-```
+If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs, the workflow summary, and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
 
 If production Supabase env is present locally, also run:
 
@@ -144,11 +126,6 @@ Check after a successful deployment:
 - CEO user can edit tasks.
 - Founder user cannot edit CEO-only metadata.
 - GitHub avatar images load.
-- Vercel logs show no production errors.
+- GitHub Actions job logs show no production errors.
 
-Useful commands:
-
-```bash
-vercel inspect <deployment-url>
-vercel logs <deployment-url> --since 1h --level error
-```
+Useful commands are not part of the operator flow anymore; use the GitHub Actions run and summary instead.

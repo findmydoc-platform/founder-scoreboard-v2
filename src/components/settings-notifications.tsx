@@ -140,7 +140,7 @@ export function SettingsNotificationsSection({
         </div>
         {!googleChatReady && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
-            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Chat API: {googleChatApiConfigured ? "gesetzt" : "fehlt"} · Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für persönliche DMs braucht die Umgebung `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, DM-Spaces in den Profilen und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+            Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Operative Event Messages bleiben in der App. Release-Details oder Deployment-Zusammenfassungen gehen nur bewusst über die Pipeline raus. Chat API: {googleChatApiConfigured ? "gesetzt" : "fehlt"} · Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für persönliche DMs braucht die Umgebung `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, DM-Spaces in den Profilen und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
           </div>
         )}
         {googleChatReady && (

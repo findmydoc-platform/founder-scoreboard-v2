@@ -6,6 +6,8 @@ Stand: 2026-05-29
 
 Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Decisions, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
 
+Operative Event Messages bleiben in der Applikation. Ein möglicher Google-Chat-Pfad über eine Pipeline ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
+
 ## Phase 1: FounderOps-Gruppendigest
 
 Phase 1 aktiviert nur den Gruppenbereich-Digest. Der alte Google-Chat-Bereich `Founder Scoreboard` wird in Google Chat manuell zu `FounderOps` umbenannt. Der Incoming Webhook muss zu genau diesem `FounderOps`-Gruppenbereich gehören.
@@ -42,15 +44,15 @@ Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für e
 
 ## Bot-Branding und geplanter Endpoint
 
-Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, Vercel- und Dokumentationsänderungen nicht weitergeführt werden.
+Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
 
-Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem Vercel-Setup dieser öffentliche HTTPS-Endpunkt vorgesehen:
+Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem GitHub-Actions-Deployment und Domain-Cutover dieser öffentliche HTTPS-Endpunkt vorgesehen:
 
 ```text
-https://founder-ops.findmydoc.eu/api/google-chat/events
+https://founderops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founder-ops.findmydoc.eu` auf die Vercel-App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
+Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die per GitHub Actions bereitgestellte App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
 
 Empfohlene Google-Chat-App-Felder:
 
