@@ -958,6 +958,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(vercelJson, /"buildCommand": "npm run vercel:build"/);
   assert.match(previewWorkflow, /environment:[\s\S]*name: preview/);
   assert.match(previewWorkflow, /url: \$\{\{ steps\.vercel_preview\.outputs\.deploymentUrl \}\}/);
+  assert.match(previewWorkflow, /github\.event_name == 'push'/);
   assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(previewWorkflow, /secrets\.VERCEL_TOKEN != ''/);
   assert.match(previewWorkflow, /secrets\.VERCEL_ORG_ID != ''/);

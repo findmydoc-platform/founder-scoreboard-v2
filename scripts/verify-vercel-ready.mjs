@@ -148,6 +148,7 @@ for (const marker of ["provider_token", "Never persist or log provider tokens"])
 const previewWorkflow = await read(".github/workflows/deploy-preview.yml");
 for (const marker of [
   "branches: [main]",
+  "github.event_name == 'push'",
   "github.event.pull_request.head.repo.full_name == github.repository",
   "secrets.VERCEL_TOKEN != ''",
   "secrets.VERCEL_ORG_ID != ''",
