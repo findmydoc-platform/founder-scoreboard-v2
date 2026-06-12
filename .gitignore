@@ -32,6 +32,7 @@ yarn-error.log*
 .dev-server.log
 
 # local browser profiles
+.playwright-mcp/
 .chrome-profile/
 .chrome-smoke-profile/
 .codex-splitwise-extracted/
