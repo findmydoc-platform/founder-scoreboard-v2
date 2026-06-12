@@ -27,9 +27,10 @@ if (existsSync(envPath)) {
 const envExample = await readFile(".env.example", "utf8");
 const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
 const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
-const settingsUi = await readFile("src/components/planning-app.tsx", "utf8");
+const settingsUi = await readFile("src/components/settings-notifications.tsx", "utf8");
 const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
 const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
+const googleChat = await readFile("src/lib/google-chat.ts", "utf8");
 
 function googleChatDeliveryStatus() {
   const webhookConfigured = Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
@@ -48,10 +49,15 @@ const requiredChecks = [
   ["env example contains chat api service account", envExample.includes("GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=")],
   ["env example contains chat api private key", envExample.includes("GOOGLE_CHAT_PRIVATE_KEY=")],
   ["env example contains delivery gate", envExample.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
+  ["env example documents phase 1 app url", envExample.includes("APP_URL=https://founder-ops.findmydoc.eu")],
   ["rollout documents disabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
   ["rollout documents enabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=true")],
+  ["rollout documents phase 1 group digest", rollout.includes("Phase 1: FounderOps-Gruppendigest")],
+  ["rollout documents phase 1 production app url", rollout.includes("APP_URL=https://founder-ops.findmydoc.eu")],
   ["rollout documents preferences", rollout.includes("notification_preferences")],
   ["rollout documents rollback", rollout.includes("Rollback")],
+  ["digest card uses FounderOps button", googleChat.includes("FounderOps öffnen")],
+  ["digest card avoids old Scoreboard button", !googleChat.includes("Scoreboard öffnen")],
   ["next-step links rollout", nextStep.includes("docs/google-chat-rollout.md")],
   ["settings UI explains readiness", settingsUi.includes("googleChatReady")],
   ["delivery route is gated", deliverRoute.includes("googleChatDeliveryStatus")],

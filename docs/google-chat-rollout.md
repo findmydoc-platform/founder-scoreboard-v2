@@ -6,6 +6,20 @@ Stand: 2026-05-29
 
 Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Decisions, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
 
+## Phase 1: FounderOps-Gruppendigest
+
+Phase 1 aktiviert nur den Gruppenbereich-Digest. Der alte Google-Chat-Bereich `Founder Scoreboard` wird in Google Chat manuell zu `FounderOps` umbenannt. Der Incoming Webhook muss zu genau diesem `FounderOps`-Gruppenbereich gehören.
+
+Für Production/Pipeline werden in Phase 1 gesetzt:
+
+```bash
+APP_URL=https://founder-ops.findmydoc.eu
+GOOGLE_CHAT_WEBHOOK_URL=<Webhook des FounderOps-Gruppenbereichs>
+GOOGLE_CHAT_DELIVERY_ENABLED=true
+```
+
+Die Chat-API-Service-Account-Werte bleiben in Phase 1 leer. Private DMs und Chat-Kommandos sind spätere Phasen.
+
 ## Sicherheitsmodell
 
 Die Zustellung ist zweifach gesperrt:
@@ -33,10 +47,10 @@ Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`
 Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem Vercel-Setup dieser öffentliche HTTPS-Endpunkt vorgesehen:
 
 ```text
-https://founderops.findmydoc.eu/api/google-chat/events
+https://founder-ops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die Vercel-App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
+Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founder-ops.findmydoc.eu` auf die Vercel-App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
 
 Empfohlene Google-Chat-App-Felder:
 

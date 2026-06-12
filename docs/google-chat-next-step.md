@@ -40,7 +40,7 @@ Wichtig: Ein Incoming Webhook sendet nur in den konfigurierten Space. Für echte
 Die Chat-App/Bot-Anzeige heißt `FounderOps`. Der geplante Google-Chat-App-Endpoint nach Vercel-Deployment und Domain-Cutover ist:
 
 ```text
-https://founderops.findmydoc.eu/api/google-chat/events
+https://founder-ops.findmydoc.eu/api/google-chat/events
 ```
 
 Vorherige Namen wie `Founder Scoreboard Bot` oder `Founders CoreBot` gelten als Altbezeichnungen.
@@ -61,7 +61,7 @@ Erledigt:
 
 Noch offen:
 
-1. `founderops.findmydoc.eu` auf Vercel schalten und `/api/google-chat/events` im Deployment testen.
+1. `founder-ops.findmydoc.eu` auf Vercel schalten und `/api/google-chat/events` im Deployment testen.
 2. Google Chat API in Google Cloud aktivieren.
 3. Service-Account-Werte als Deployment-ENV setzen.
 4. Von jedem Teammitglied den FounderOps-DM-Space einsammeln und in den Profilen speichern.

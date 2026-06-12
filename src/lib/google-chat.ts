@@ -81,7 +81,7 @@ export function formatGoogleChatDigestCard(events: GoogleChatDigestEvent[], appU
     const actor = event.actorName ? ` · von ${event.actorName}` : "";
     return `<b>${digestTypeLabel(event.type)}:</b> ${event.title}${target}${actor}`;
   }).join("\n");
-  const overflow = events.length > 8 ? `\n\n+ ${events.length - 8} weitere Hinweise im Scoreboard` : "";
+  const overflow = events.length > 8 ? `\n\n+ ${events.length - 8} weitere Hinweise in FounderOps` : "";
 
   return {
     cardsV2: [{
@@ -106,7 +106,7 @@ export function formatGoogleChatDigestCard(events: GoogleChatDigestEvent[], appU
             widgets: [{
               buttonList: {
                 buttons: [{
-                  text: "Scoreboard öffnen",
+                  text: "FounderOps öffnen",
                   onClick: { openLink: { url: appUrl } },
                 }],
               },
