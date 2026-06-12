@@ -22,6 +22,88 @@ GOOGLE_CHAT_DELIVERY_ENABLED=true
 
 Die Chat-API-Service-Account-Werte bleiben in Phase 1 leer. Private DMs und Chat-Kommandos sind spätere Phasen.
 
+## Phase 2: Externe Pipeline
+
+Phase 2 automatisiert den Gruppenbereich-Digest ohne LLM-Antworten. Sebastian betreibt eine externe Pipeline, die werktags um `09:00 Europe/Berlin` den bestehenden Delivery-Endpunkt auslöst.
+
+Pipeline-Request:
+
+```http
+POST https://founder-ops.findmydoc.eu/api/notifications/deliver
+x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
+content-type: application/json
+
+{ "limit": 20 }
+```
+
+Zusätzlicher Production-/Pipeline-Wert:
+
+```bash
+FOUNDEROPS_DELIVERY_SECRET=<random secret>
+```
+
+Der Header-Secret ist nur für die externe Pipeline gedacht. Der manuelle Button in den Einstellungen nutzt weiter die normale Operational-Lead-Session. Wenn der Header fehlt, ungültig ist oder `GOOGLE_CHAT_DELIVERY_ENABLED=false` bleibt, wird kein Google-Chat-Versand ausgeführt.
+
+Im Repository ist dafür `.github/workflows/google-chat-digest.yml` vorgesehen. Der Workflow läuft werktags per GitHub Actions Schedule und kann manuell mit `workflow_dispatch` gestartet werden.
+
+## Phase 3: Automatische Fokus-Reminder
+
+Phase 3 erzeugt vor dem Versand automatisch wichtige Business-Hinweise als `notification_events`. Der Gruppenchat bekommt weiterhin nur den bestehenden FounderOps-Digest; es gibt keine freien Bot-Antworten und keine privaten DMs.
+
+Pipeline-Reihenfolge:
+
+```http
+POST https://founder-ops.findmydoc.eu/api/notifications/generate-digest
+x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
+content-type: application/json
+
+{ "limit": 20 }
+```
+
+Danach:
+
+```http
+POST https://founder-ops.findmydoc.eu/api/notifications/deliver
+x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>
+content-type: application/json
+
+{ "limit": 20 }
+```
+
+Der Generator unterstützt für trockene Tests zusätzlich `{ "limit": 20, "dryRun": true }`. Dann werden Kandidaten und Dedupe-Keys zurückgegeben, aber keine `notification_events` geschrieben.
+
+Erzeugte Reminder:
+
+- offene Reviews
+- Nacharbeit
+- offene Blocker
+- offene Aufgabenvorschläge
+- offene Decision-Bestätigungen
+- fällige oder überfällige Sprint-Reviews
+- überfällige Deliverables
+
+Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag über `notification_events.dedupe_key` höchstens einmal erzeugt. `task.comment` bleibt weiterhin nur In-App.
+
+Sebastian-/Rresta-Übergabepaket:
+
+```text
+GitHub Environment: production
+Secret: FOUNDEROPS_DELIVERY_SECRET=<random secret>
+
+Vercel Production Runtime:
+APP_URL=https://founder-ops.findmydoc.eu
+GOOGLE_CHAT_WEBHOOK_URL=<neuer oder sicher übergebener FounderOps-Bot Webhook>
+GOOGLE_CHAT_DELIVERY_ENABLED=true
+FOUNDEROPS_DELIVERY_SECRET=<gleiches random secret>
+
+Workflow:
+.github/workflows/google-chat-digest.yml
+Schedule: werktags 09:00 Europe/Berlin Sommerzeit via 07:00 UTC
+Manual run: workflow_dispatch mit optionalem limit, Standard 20
+Step 1: /api/notifications/generate-digest
+Step 2: /api/notifications/deliver
+```
+
 ## Sicherheitsmodell
 
 Die Zustellung ist zweifach gesperrt:
@@ -38,6 +120,7 @@ GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_CHAT_PRIVATE_KEY=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
+FOUNDEROPS_DELIVERY_SECRET=
 ```
 
 Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für echte persönliche FounderOps-DMs werden `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, die Chat-API und pro Profil ein `profiles.google_chat_dm_space` im Format `spaces/...` benötigt. Der Webhook bleibt als Space-Digest-Fallback möglich.
@@ -86,7 +169,7 @@ Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein 
 
 ## Zustelllogik
 
-Die App verarbeitet `notification_events` in `/api/notifications/deliver`.
+Die App erzeugt automatische Fokus-Reminder in `/api/notifications/generate-digest` und verarbeitet `notification_events` anschließend in `/api/notifications/deliver`.
 
 - Wenn Chat API konfiguriert ist und ein Profil `google_chat_dm_space` im Format `spaces/...` hat, sendet FounderOps persönlich an diesen DM-Space.
 - Wenn kein DM-Space vorhanden ist, aber ein Webhook gesetzt ist, kann ein Space-Digest als Fallback gesendet werden.

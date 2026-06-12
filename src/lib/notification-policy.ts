@@ -4,7 +4,9 @@ export const googleChatDigestEventTypes = [
   "task.review_requested",
   "task.review_rework",
   "task.review_completed",
+  "task.deadline_overdue",
   "sprint.task_carried_over",
+  "sprint.review_due",
   "decision.confirmation_requested",
   "meeting.attendance_updated",
   "feedback.bug_reported",
@@ -19,7 +21,9 @@ export function notificationEventLabel(eventType: string) {
   if (eventType === "task.review_requested") return "Review angefragt";
   if (eventType === "task.review_rework") return "Nacharbeit erforderlich";
   if (eventType === "task.review_completed") return "Review abgeschlossen";
+  if (eventType === "task.deadline_overdue") return "Überfällig";
   if (eventType === "sprint.task_carried_over") return "Carry-over";
+  if (eventType === "sprint.review_due") return "Sprint-Review fällig";
   if (eventType === "decision.confirmation_requested") return "Decision-Bestätigung";
   if (eventType === "meeting.attendance_updated") return "Meeting-Rückmeldung";
   if (eventType === "feedback.bug_reported") return "Bug gemeldet";

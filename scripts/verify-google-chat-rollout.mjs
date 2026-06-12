@@ -31,6 +31,7 @@ const settingsUi = await readFile("src/components/settings-notifications.tsx", "
 const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
 const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
 const googleChat = await readFile("src/lib/google-chat.ts", "utf8");
+const digestWorkflow = await readFile(".github/workflows/google-chat-digest.yml", "utf8");
 
 function googleChatDeliveryStatus() {
   const webhookConfigured = Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
@@ -49,10 +50,16 @@ const requiredChecks = [
   ["env example contains chat api service account", envExample.includes("GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=")],
   ["env example contains chat api private key", envExample.includes("GOOGLE_CHAT_PRIVATE_KEY=")],
   ["env example contains delivery gate", envExample.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
+  ["env example contains pipeline secret", envExample.includes("FOUNDEROPS_DELIVERY_SECRET=")],
   ["env example documents phase 1 app url", envExample.includes("APP_URL=https://founder-ops.findmydoc.eu")],
+  ["env example documents pipeline header", envExample.includes("x-founderops-delivery-secret")],
   ["rollout documents disabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
   ["rollout documents enabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=true")],
   ["rollout documents phase 1 group digest", rollout.includes("Phase 1: FounderOps-Gruppendigest")],
+  ["rollout documents phase 2 external pipeline", rollout.includes("Phase 2: Externe Pipeline")],
+  ["rollout documents weekday schedule", rollout.includes("09:00 Europe/Berlin")],
+  ["rollout documents delivery secret", rollout.includes("FOUNDEROPS_DELIVERY_SECRET")],
+  ["rollout documents rresta handoff package", rollout.includes("Sebastian-/Rresta-Übergabepaket")],
   ["rollout documents phase 1 production app url", rollout.includes("APP_URL=https://founder-ops.findmydoc.eu")],
   ["rollout documents preferences", rollout.includes("notification_preferences")],
   ["rollout documents rollback", rollout.includes("Rollback")],
@@ -66,6 +73,10 @@ const requiredChecks = [
   ["settings UI explains readiness", settingsUi.includes("googleChatReady")],
   ["settings UI keeps operational events in app", settingsUi.includes("Operative Event Messages bleiben in der App")],
   ["delivery route is gated", deliverRoute.includes("googleChatDeliveryStatus")],
+  ["delivery route supports pipeline secret header", deliverRoute.includes("x-founderops-delivery-secret") && deliverRoute.includes("FOUNDEROPS_DELIVERY_SECRET")],
+  ["github digest workflow exists", digestWorkflow.includes("name: Google Chat Digest")],
+  ["github digest workflow uses weekday schedule", digestWorkflow.includes("cron: \"0 7 * * 1-5\"")],
+  ["github digest workflow uses secret header", digestWorkflow.includes("x-founderops-delivery-secret") && digestWorkflow.includes("FOUNDEROPS_DELIVERY_SECRET")],
   ["delivery route supports direct dm spaces", deliverRoute.includes("sendGoogleChatSpaceDigest") && deliverRoute.includes("isGoogleChatDmSpace")],
   ["chat event route exists", eventRoute.includes("FounderOps Google Chat Events")],
   ["chat event route stays gated", eventRoute.includes("googleChatDeliveryStatus")],

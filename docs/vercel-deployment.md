@@ -10,6 +10,7 @@ This project deploys only through GitHub Actions workflows. Operators do not run
 - Current production URL: `https://founder-ops.findmydoc.eu`
 - Planned Google Chat app URL: `https://founderops.findmydoc.eu/api/google-chat/events`
 - GitHub Environments: `preview` and `production`
+- Do not assign or move a domain before the user explicitly confirms the final cutover.
 
 ## GitHub Environment Secrets
 
@@ -41,9 +42,14 @@ GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_CHAT_PRIVATE_KEY=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
+FOUNDEROPS_DELIVERY_SECRET=
 ```
 
-`GOOGLE_CHAT_WEBHOOK_URL` is optional as a Space-Digest fallback. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase. Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the rollout in `docs/google-chat-rollout.md` is completed and tested.
+For Phase 1, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of Phase 1.
+
+For Phase 2, Sebastian's external pipeline calls `POST https://founder-ops.findmydoc.eu/api/notifications/deliver` on weekdays at `09:00 Europe/Berlin` with header `x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>` and body `{ "limit": 20 }`.
+
+The repository also contains `.github/workflows/google-chat-digest.yml` for this job. It runs against the `production` GitHub Environment and requires `FOUNDEROPS_DELIVERY_SECRET` there. Vercel Production must use the same `FOUNDEROPS_DELIVERY_SECRET` plus `GOOGLE_CHAT_WEBHOOK_URL` and `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
 
 Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.
 

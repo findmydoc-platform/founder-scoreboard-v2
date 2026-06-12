@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { requireOperationalLead } from "@/lib/authz";
 import {
   googleChatDeliveryStatus,
@@ -43,10 +44,33 @@ type DeliveryRow = {
   payload: GoogleChatDigestEvent;
 };
 
+const pipelineSecretHeader = "x-founderops-delivery-secret";
+
 function safeLimit(value: unknown) {
   const limit = Number(value || 20);
   if (!Number.isFinite(limit)) return 20;
   return Math.max(1, Math.min(50, Math.round(limit)));
+}
+
+function secretsMatch(provided: string, expected: string) {
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+  return providedBuffer.length === expectedBuffer.length && timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
+async function authorizeDeliveryTrigger(request: NextRequest) {
+  const providedSecret = request.headers.get(pipelineSecretHeader)?.trim() || "";
+  if (providedSecret) {
+    const expectedSecret = process.env.FOUNDEROPS_DELIVERY_SECRET?.trim() || "";
+    if (!expectedSecret || !secretsMatch(providedSecret, expectedSecret)) {
+      return { ok: false as const, status: 401, error: "Ungültiger Delivery-Secret." };
+    }
+    return { ok: true as const, mode: "pipeline" as const };
+  }
+
+  const permission = await requireOperationalLead(request);
+  if (!permission.ok) return { ok: false as const, status: permission.status, error: permission.error };
+  return { ok: true as const, mode: "user" as const };
 }
 
 function statusCodeForError(errorMessage: string) {
@@ -119,7 +143,7 @@ export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
   if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
 
-  const permission = await requireOperationalLead(request);
+  const permission = await authorizeDeliveryTrigger(request);
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
 
   const payload = (await request.json().catch(() => ({}))) as { limit?: number };

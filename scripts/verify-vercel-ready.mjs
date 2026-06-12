@@ -13,6 +13,7 @@ const requiredFiles = [
   ".github/workflows/deploy-preview.yml",
   ".github/workflows/deploy-production.yml",
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
+  ".github/workflows/google-chat-digest.yml",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -29,6 +30,7 @@ const requiredEnvKeys = [
   "GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL",
   "GOOGLE_CHAT_PRIVATE_KEY",
   "GOOGLE_CHAT_DELIVERY_ENABLED",
+  "FOUNDEROPS_DELIVERY_SECRET",
 ];
 
 const project = "founder-ops";
@@ -163,6 +165,7 @@ for (const marker of [
 }
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+const googleChatDigestWorkflow = await read(".github/workflows/google-chat-digest.yml");
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
 }
@@ -205,6 +208,19 @@ for (const marker of [
   if (!deployScript.includes(marker)) failures.push(`vercel-deploy-prebuilt.sh missing: ${marker}`);
 }
 
+for (const marker of [
+  "name: Google Chat Digest",
+  "cron: \"0 7 * * 1-5\"",
+  "workflow_dispatch",
+  "name: production",
+  "FOUNDEROPS_DELIVERY_SECRET",
+  "x-founderops-delivery-secret",
+  "https://founder-ops.findmydoc.eu/api/notifications/generate-digest",
+  "https://founder-ops.findmydoc.eu/api/notifications/deliver",
+]) {
+  if (!googleChatDigestWorkflow.includes(marker)) failures.push(`google-chat-digest.yml missing: ${marker}`);
+}
+
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
 if (ciWorkflowPresent) {
   const ci = await read(".github/workflows/ci.yml");
@@ -229,7 +245,7 @@ console.log(JSON.stringify({
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
-    workflows: ["deploy-preview", "deploy-production"],
+    workflows: ["deploy-preview", "deploy-production", "google-chat-digest"],
     healthRoute: true,
     deploymentDoc: true,
     skill: "fmd-vercel-readiness",

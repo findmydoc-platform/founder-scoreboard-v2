@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 
 test("google chat delivery is outbox based and webhook gated", async () => {
   const migration = await readFile("supabase/0008_google_chat_delivery.sql", "utf8");
+  const dedupeMigration = await readFile("supabase/0030_notification_digest_dedupe.sql", "utf8");
   const route = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
+  const generatorRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
@@ -16,9 +18,28 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(migration, /google_chat_user_id/);
   assert.match(migration, /google_chat_dm_space/);
   assert.match(migration, /notification_preferences/);
+  assert.match(dedupeMigration, /add column if not exists dedupe_key/);
+  assert.match(dedupeMigration, /notification_events_dedupe_key_uidx/);
+  assert.match(dedupeMigration, /where dedupe_key is not null/);
   assert.match(route, /requireOperationalLead/);
+  assert.match(route, /x-founderops-delivery-secret/);
+  assert.match(route, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(route, /timingSafeEqual/);
+  assert.match(route, /Ungültiger Delivery-Secret/);
   assert.match(route, /notification_events/);
   assert.match(route, /notification_deliveries/);
+  assert.match(generatorRoute, /requireOperationalLead/);
+  assert.match(generatorRoute, /x-founderops-delivery-secret/);
+  assert.match(generatorRoute, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(generatorRoute, /timingSafeEqual/);
+  assert.match(generatorRoute, /Ungültiger Delivery-Secret/);
+  assert.match(generatorRoute, /dryRun/);
+  assert.match(generatorRoute, /dedupeKey/);
+  assert.match(generatorRoute, /Europe\/Berlin/);
+  assert.match(generatorRoute, /task\.deadline_overdue/);
+  assert.match(generatorRoute, /sprint\.review_due/);
+  assert.match(generatorRoute, /decision\.confirmation_requested/);
+  assert.doesNotMatch(generatorRoute, /task\.comment/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
   assert.match(chat, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL/);
   assert.match(chat, /GOOGLE_CHAT_PRIVATE_KEY/);
@@ -26,6 +47,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(chat, /googleChatDeliveryStatus/);
   assert.match(chat, /formatGoogleChatMessage/);
   assert.match(chat, /formatGoogleChatDigestCard/);
+  assert.match(chat, /FounderOps: Fokus-Digest/);
+  assert.match(chat, /FounderOps öffnen/);
+  assert.doesNotMatch(chat, /Scoreboard öffnen/);
   assert.match(chat, /sendGoogleChatSpaceDigest/);
   assert.match(chat, /https:\/\/www\.googleapis\.com\/auth\/chat\.bot/);
   assert.match(route, /shouldSendToGoogleChatDigest/);
@@ -37,6 +61,8 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /notification_deliveries/);
   assert.match(policy, /task\.review_rework/);
   assert.match(policy, /task\.review_completed/);
+  assert.match(policy, /task\.deadline_overdue/);
+  assert.match(policy, /sprint\.review_due/);
   assert.match(policy, /meeting\.attendance_updated/);
   assert.match(policy, /feedback\.bug_reported/);
   assert.match(policy, /feedback\.feature_requested/);
@@ -64,14 +90,25 @@ test("google chat rollout is documented and verified before delivery activation"
   const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
   const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
   const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
+  const digestWorkflow = await readFile(".github/workflows/google-chat-digest.yml", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
   assert.match(envExample, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=/);
   assert.match(envExample, /GOOGLE_CHAT_PRIVATE_KEY=/);
   assert.match(envExample, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(envExample, /FOUNDEROPS_DELIVERY_SECRET=/);
+  assert.match(envExample, /x-founderops-delivery-secret/);
+  assert.match(envExample, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
+  assert.match(rollout, /Phase 1: FounderOps-Gruppendigest/);
+  assert.match(rollout, /Phase 2: Externe Pipeline/);
+  assert.match(rollout, /09:00 Europe\/Berlin/);
+  assert.match(rollout, /x-founderops-delivery-secret/);
+  assert.match(rollout, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(rollout, /Sebastian-\/Rresta-Übergabepaket/);
+  assert.match(rollout, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /notification_preferences/);
   assert.match(rollout, /profiles\.google_chat_dm_space/);
   assert.match(rollout, /spaces\/\.\.\./);
@@ -81,6 +118,21 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(nextStep, /\/api\/google-chat\/events/);
   assert.match(script, /googleChatDeliveryStatus/);
   assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
+  assert.match(script, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(script, /x-founderops-delivery-secret/);
+  assert.match(digestWorkflow, /name: Google Chat Digest/);
+  assert.match(digestWorkflow, /cron: "0 7 \* \* 1-5"/);
+  assert.match(digestWorkflow, /workflow_dispatch/);
+  assert.match(digestWorkflow, /name: production/);
+  assert.match(digestWorkflow, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(digestWorkflow, /x-founderops-delivery-secret/);
+  assert.match(digestWorkflow, /Generate focus reminders/);
+  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/generate-digest/);
+  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/deliver/);
+  assert.ok(
+    digestWorkflow.indexOf("/api/notifications/generate-digest") < digestWorkflow.indexOf("/api/notifications/deliver"),
+    "workflow must generate reminders before delivery",
+  );
   assert.match(script, /chat event route exists/);
   assert.match(eventRoute, /FounderOps Google Chat Events/);
   assert.match(eventRoute, /googleChatDeliveryStatus/);
@@ -118,9 +170,10 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.doesNotMatch(verify, /vercel link --yes --project founder-ops/);
   assert.match(verify, /\.github\/dependabot\.yml/);
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
+  assert.match(verify, /FOUNDEROPS_DELIVERY_SECRET/);
   assert.match(verify, /verify:google-chat/);
   assert.match(verify, /GITHUB_SYNC_TOKEN/);
-  assert.match(verify, /founderops\.findmydoc\.eu/);
+  assert.match(verify, /founder-ops\.findmydoc\.eu/);
   assert.match(pkg, /verify:release/);
   assert.match(pkg, /verify:deploy/);
   assert.match(pkg, /node --test tests\/\*\.test\.mjs/);
@@ -139,7 +192,10 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /npm audit --audit-level=moderate/);
   assert.match(deployment, /Run `npm run build` as its own command/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(deployment, /founderops\.findmydoc\.eu/);
+  assert.match(deployment, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(deployment, /09:00 Europe\/Berlin/);
+  assert.match(deployment, /x-founderops-delivery-secret/);
+  assert.match(deployment, /founder-ops\.findmydoc\.eu/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /npm run verify:deploy/);
   assert.match(deployment, /GitHub Actions job logs/);
@@ -154,7 +210,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(skill, /GitHub Actions/);
   assert.match(skill, /GitHub Actions job logs/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(skill, /founderops\.findmydoc\.eu/);
+  assert.match(skill, /founder-ops\.findmydoc\.eu/);
   assert.match(skill, /AI Guidance: Vercel Hobby Private Author Block/);
   assert.match(skill, /TEAM_ACCESS_REQUIRED/);
   assert.match(skill, /Git-metadata-free temporary directory/);
@@ -195,6 +251,7 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(health, /counts\.tasks >= expected\.tasksMin/);
   assert.match(health, /schemaReady/);
   assert.match(verify, /0008_google_chat_delivery\.sql/);
+  assert.match(verify, /notification_events\.dedupe_key/);
   assert.match(verify, /0009_sprint_carryover\.sql/);
   assert.match(verify, /notificationDeliveries/);
   assert.match(operational, /Founder Planning/);

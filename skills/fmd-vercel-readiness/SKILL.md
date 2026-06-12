@@ -18,6 +18,8 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
 - Do not add separate deploy helper scripts unless the workflow becomes materially more complex.
 - Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
 - Deploy prebuilt output from a temporary GitHub Actions runner directory that contains `.vercel/output` and `.vercel/project.json`, but no `.git` folder.
+- Treat deleting the old Vercel project and moving domains as destructive production operations. Prepare commands and checks, but require explicit user confirmation before running them.
+- Confirm the final cutover before modifying DNS or Vercel domains. The planned production domain is `founder-ops.findmydoc.eu`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the Google Chat rollout is explicitly enabled.
 - Never instruct operators to use a local manual deploy flow; GitHub Actions owns the deployment flow and observability.
