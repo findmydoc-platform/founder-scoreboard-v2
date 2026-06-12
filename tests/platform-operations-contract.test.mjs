@@ -108,6 +108,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /ready-for-github-actions-deployment/);
   assert.match(verify, /GitHub Actions Deployment Workflow/);
   assert.match(verify, /GitHub Actions job logs/);
+  assert.match(verify, /vercel-deploy-prebuilt\.sh/);
+  assert.match(verify, /Git-metadata-free/);
+  assert.match(verify, /TEAM_ACCESS_REQUIRED/);
   assert.doesNotMatch(verify, /localProjectLinked/);
   assert.doesNotMatch(verify, /manualNextSteps/);
   assert.doesNotMatch(verify, /vercel link --yes --project founder-ops/);
@@ -138,6 +141,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /npm run verify:deploy/);
   assert.match(deployment, /GitHub Actions job logs/);
+  assert.match(deployment, /Git-metadata-free runner directory/);
+  assert.match(deployment, /Vercel Hobby Private Repository Author Block/);
+  assert.match(deployment, /readyStateReason/);
   assert.doesNotMatch(deployment, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(deployment, /vercel login/);
   assert.doesNotMatch(deployment, /vercel inspect/);
@@ -146,6 +152,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(skill, /GitHub Actions job logs/);
   assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(skill, /founderops\.findmydoc\.eu/);
+  assert.match(skill, /AI Guidance: Vercel Hobby Private Author Block/);
+  assert.match(skill, /TEAM_ACCESS_REQUIRED/);
+  assert.match(skill, /Git-metadata-free temporary directory/);
   assert.doesNotMatch(skill, /Vercel CLI/);
   assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
   assert.doesNotMatch(skill, /vercel login/);

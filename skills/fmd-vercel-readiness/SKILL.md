@@ -17,6 +17,7 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
 - Do not pre-validate deployment secrets in workflow scripts; let the workflow fail naturally.
 - Do not add separate deploy helper scripts unless the workflow becomes materially more complex.
 - Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
+- Deploy prebuilt output from a temporary GitHub Actions runner directory that contains `.vercel/output` and `.vercel/project.json`, but no `.git` folder.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
 - Keep `GOOGLE_CHAT_DELIVERY_ENABLED=false` until the Google Chat rollout is explicitly enabled.
 - Never instruct operators to use a local manual deploy flow; GitHub Actions owns the deployment flow and observability.
@@ -31,9 +32,10 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
    - Trigger: internal pull requests to `main` and manual `workflow_dispatch`
    - Environment: `preview`
    - Pull env: `vercel pull --yes --environment=preview`
-   - Deploy: GitHub Actions preview deployment step
+   - Build: GitHub Actions preview build step
+   - Deploy: GitHub Actions prebuilt preview deployment step from a Git-metadata-free temporary directory
    - Environment URL: `steps.vercel_preview.outputs.deploymentUrl`
-   - Deployment URL is parsed inline from workflow output.
+   - Deployment URL and inspection details are written by the shared deploy script.
 
 2. Production workflow:
    - File: `.github/workflows/deploy-production.yml`
@@ -42,9 +44,9 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
    - Environment: `production`
    - Pull env: `vercel pull --yes --environment=production`
    - Build: GitHub Actions production build step
-   - Deploy: GitHub Actions prebuilt production deployment step
+   - Deploy: GitHub Actions prebuilt production deployment step from a Git-metadata-free temporary directory
    - Environment URL: `steps.vercel_production.outputs.deploymentUrl`
-   - Deployment URL is parsed inline from workflow output.
+   - Deployment URL and inspection details are written by the shared deploy script.
 
 3. GitHub Actions build step:
    - `vercel.json` sets `installCommand` to `npm ci`.
@@ -93,6 +95,12 @@ npm run vercel:build
 ```
 
 Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures. If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
+
+## AI Guidance: Vercel Hobby Private Author Block
+
+If Vercel blocks a GitHub Actions deployment because the commit author does not have access to the Vercel team, do not assume the token is wrong first. Check the workflow summary inspection fields: `readyStateReason`, `errorMessage`, and `seatBlock`.
+
+For `TEAM_ACCESS_REQUIRED` or commit-author access messages, keep GitHub Actions as the only deploy path and verify that the shared deploy script stages only `.vercel/output` plus `.vercel/project.json` under `$RUNNER_TEMP`, with no `.git` directory. Do not suggest local deployment, Git history rewriting, or metadata spoofing unless the artifact staging fix is already proven not to remove Vercel's Git attribution.
 
 For production Supabase env validation, also run:
 

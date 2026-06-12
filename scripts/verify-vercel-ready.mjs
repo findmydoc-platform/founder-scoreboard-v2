@@ -12,6 +12,7 @@ const requiredFiles = [
   ".github/dependabot.yml",
   ".github/workflows/deploy-preview.yml",
   ".github/workflows/deploy-production.yml",
+  ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -107,6 +108,10 @@ for (const marker of [
   "GitHub OAuth App owned by `findmydoc-platform`",
   "Do not configure a shared `GITHUB_SYNC_TOKEN`",
   "GitHub Actions job logs",
+  "Git-metadata-free runner directory",
+  "Vercel Hobby Private Repository Author Block",
+  "readyStateReason",
+  "seatBlock",
 ]) {
   if (!deploymentDoc.includes(marker)) failures.push(`docs/vercel-deployment.md missing: ${marker}`);
 }
@@ -115,7 +120,20 @@ for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel bu
 }
 
 const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of ["GitHub Actions", "GitHub Actions job logs", "REQUIRE_SUPABASE_AUTH=true", "GOOGLE_CHAT_DELIVERY_ENABLED=false", "preview", "production", productionDomain]) {
+for (const marker of [
+  "GitHub Actions",
+  "GitHub Actions job logs",
+  "REQUIRE_SUPABASE_AUTH=true",
+  "GOOGLE_CHAT_DELIVERY_ENABLED=false",
+  "preview",
+  "production",
+  productionDomain,
+  "Git-metadata-free temporary directory",
+  "AI Guidance: Vercel Hobby Private Author Block",
+  "TEAM_ACCESS_REQUIRED",
+  "readyStateReason",
+  "seatBlock",
+]) {
   if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
 }
 for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
@@ -134,8 +152,9 @@ for (const marker of [
   "name: preview",
   "url: ${{ steps.vercel_preview.outputs.deploymentUrl }}",
   "pull --yes --environment=preview",
-  "deploy --target=preview",
-  "deploymentUrl=",
+  "Build Vercel Output",
+  "build --target=preview",
+  "vercel-deploy-prebuilt.sh preview",
 ]) {
   if (!previewWorkflow.includes(marker)) failures.push(`deploy-preview.yml missing: ${marker}`);
 }
@@ -154,16 +173,33 @@ for (const marker of [
   "url: ${{ steps.vercel_production.outputs.deploymentUrl }}",
   "pull --yes --environment=production",
   "build --prod",
-  "deploy \\",
-  "--prebuilt",
-  "--prod",
-  "--env NEXT_PUBLIC_SUPABASE_URL",
-  "--env SUPABASE_SERVICE_ROLE_KEY",
-  "--env APP_URL",
-  "--env GITHUB_SYNC_OWNER=findmydoc-platform",
-  "deploymentUrl=",
+  "vercel-deploy-prebuilt.sh production",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "APP_URL",
+  "GITHUB_SYNC_OWNER: findmydoc-platform",
 ]) {
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
+}
+
+const deployScript = await read(".github/scripts/deploy/vercel-deploy-prebuilt.sh");
+for (const marker of [
+  "RUNNER_TEMP",
+  ".vercel/output",
+  ".vercel/project.json",
+  "Refusing to deploy: staging directory contains Git metadata.",
+  "--prebuilt",
+  "--no-wait",
+  "--target=preview",
+  "--prod",
+  "inspect",
+  "readyStateReason",
+  "errorMessage",
+  "seatBlock",
+  "TEAM_ACCESS_REQUIRED",
+  "deploymentUrl=",
+]) {
+  if (!deployScript.includes(marker)) failures.push(`vercel-deploy-prebuilt.sh missing: ${marker}`);
 }
 
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
