@@ -17,7 +17,7 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
 - Do not pre-validate deployment secrets in workflow scripts; let the workflow fail naturally.
 - Do not add separate deploy helper scripts unless the workflow becomes materially more complex.
 - Keep runtime app env in Vercel project environments and pull it with `vercel pull`.
-- Deploy prebuilt output from a temporary GitHub Actions runner directory that contains `.vercel/output`, `.vercel/project.json`, `.next` build metadata, package manifests, and installed `node_modules`, but no `.git` folder.
+- Deploy prebuilt output from a temporary GitHub Actions runner directory created from `git archive HEAD`, plus `.vercel/output`, `.vercel/project.json`, `.next` build metadata, package manifests, and installed `node_modules`, but no `.git` folder.
 - Treat deleting the old Vercel project and moving domains as destructive production operations. Prepare commands and checks, but require explicit user confirmation before running them.
 - Confirm the final cutover before modifying DNS or Vercel domains. The planned production domain is `founder-ops.findmydoc.eu`.
 - Keep `REQUIRE_SUPABASE_AUTH=true` for production. Seed/local fallback is only for local development.
@@ -103,7 +103,7 @@ Run `npm run build` as its own command before `npm run verify:release` when diag
 
 If Vercel blocks a GitHub Actions deployment because the commit author does not have access to the Vercel team, do not assume the token is wrong first. Check the workflow summary inspection fields: `readyStateReason`, `errorMessage`, and `seatBlock`.
 
-For `TEAM_ACCESS_REQUIRED` or commit-author access messages, keep GitHub Actions as the only deploy path and verify that the shared deploy script stages `.vercel/output`, `.vercel/project.json`, `.next` build metadata, package manifests, and installed `node_modules` under `$RUNNER_TEMP`, with no `.git` directory. Do not suggest local deployment, Git history rewriting, or metadata spoofing unless the artifact staging fix is already proven not to remove Vercel's Git attribution.
+For `TEAM_ACCESS_REQUIRED` or commit-author access messages, keep GitHub Actions as the only deploy path and verify that the shared deploy script stages tracked project files via `git archive HEAD`, `.vercel/output`, `.vercel/project.json`, `.next` build metadata, package manifests, and installed `node_modules` under `$RUNNER_TEMP`, with no `.git` directory. Do not suggest local deployment, Git history rewriting, or metadata spoofing unless the artifact staging fix is already proven not to remove Vercel's Git attribution.
 
 For production Supabase env validation, also run:
 

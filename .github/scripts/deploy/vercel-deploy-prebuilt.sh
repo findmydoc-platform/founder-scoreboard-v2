@@ -81,6 +81,7 @@ trap 'rm -f "${deploy_output_file}" "${deploy_error_file}" "${inspect_output_fil
 
 rm -rf "${staging_dir}"
 mkdir -p "${staging_dir}/.vercel"
+git archive HEAD | tar -x -C "${staging_dir}"
 cp -R ".vercel/output" "${staging_dir}/.vercel/output"
 cp ".vercel/project.json" "${staging_dir}/.vercel/project.json"
 cp "package.json" "${staging_dir}/package.json"

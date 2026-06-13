@@ -989,6 +989,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(productionWorkflow, /APP_URL/);
   assert.match(productionWorkflow, /GITHUB_SYNC_OWNER: findmydoc-platform/);
   assert.match(deployScript, /RUNNER_TEMP/);
+  assert.match(deployScript, /git archive HEAD/);
   assert.match(deployScript, /\.vercel\/output/);
   assert.match(deployScript, /\.vercel\/project\.json/);
   assert.match(deployScript, /node_modules is missing/);

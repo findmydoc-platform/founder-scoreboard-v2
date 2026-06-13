@@ -191,6 +191,7 @@ for (const marker of [
 const deployScript = await read(".github/scripts/deploy/vercel-deploy-prebuilt.sh");
 for (const marker of [
   "RUNNER_TEMP",
+  "git archive HEAD",
   ".vercel/output",
   ".vercel/project.json",
   "package.json",
