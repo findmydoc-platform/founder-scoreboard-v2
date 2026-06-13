@@ -3,13 +3,12 @@ import { timingSafeEqual } from "node:crypto";
 import { requireOperationalLead } from "@/lib/authz";
 import {
   googleChatDeliveryStatus,
-  googleChatTarget,
   isGoogleChatDmSpace,
   sendGoogleChatDigest,
   sendGoogleChatSpaceDigest,
   type GoogleChatDigestEvent,
 } from "@/lib/google-chat";
-import { shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
+import { shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
 import { getServerSupabase } from "@/lib/supabase";
 
 type NotificationRow = {
@@ -223,10 +222,7 @@ export async function POST(request: NextRequest) {
   for (const row of events as NotificationRow[]) {
     const actor = row.actor_profile_id ? profiles.get(row.actor_profile_id) : null;
     const recipient = row.recipient_profile_id ? profiles.get(row.recipient_profile_id) : null;
-    const target = googleChatTarget(recipient ? {
-      googleChatDmSpace: recipient.google_chat_dm_space || "",
-      googleChatUserId: recipient.google_chat_user_id || "",
-    } : null);
+    const target = recipient?.google_chat_dm_space || "founder-ops-space";
     const deliveryEvent: GoogleChatDigestEvent = {
       id: row.id,
       type: row.type,
@@ -274,20 +270,34 @@ export async function POST(request: NextRequest) {
 
   const appUrl = appUrlFromRequest(request);
   const deliveredAt = new Date().toISOString();
+  const directDmCandidateRows = deliverableRows.filter(({ row }) =>
+    Boolean(row.recipient_profile_id) && shouldSendToGoogleChatDm(row.type),
+  );
   const directDmRows = deliveryStatus.apiConfigured
-    ? deliverableRows.filter(({ target }) => isGoogleChatDmSpace(target))
+    ? directDmCandidateRows.filter(({ target }) => isGoogleChatDmSpace(target))
     : [];
+  const undeliverableDmRows = directDmCandidateRows.filter(({ target }) =>
+    !deliveryStatus.apiConfigured || !isGoogleChatDmSpace(target),
+  );
   const webhookRows = deliveryStatus.webhookConfigured
-    ? deliverableRows.filter(({ target }) => !deliveryStatus.apiConfigured || !isGoogleChatDmSpace(target))
+    ? deliverableRows.filter(({ row }) => !row.recipient_profile_id || !shouldSendToGoogleChatDm(row.type))
     : [];
-  const undeliverableRows = deliverableRows.filter(({ target }) =>
-    deliveryStatus.apiConfigured && !deliveryStatus.webhookConfigured && !isGoogleChatDmSpace(target),
+  const undeliverableWebhookRows = deliverableRows.filter(({ row }) =>
+    !row.recipient_profile_id && !deliveryStatus.webhookConfigured,
   );
 
-  if (undeliverableRows.length) {
-    const error = "Kein Google-Chat-DM-Space im Profil hinterlegt.";
-    await insertDeliveryRows(supabase, undeliverableRows, "failed", 0, { error });
-    results.push(...undeliverableRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error })));
+  if (undeliverableDmRows.length) {
+    const error = deliveryStatus.apiConfigured
+      ? "Kein gültiger Google-Chat-DM-Space im Empfängerprofil hinterlegt; persönliche Action-Items werden nicht in den Gruppenchat umgeleitet."
+      : "Google-Chat-API ist für persönliche DMs nicht konfiguriert.";
+    await insertDeliveryRows(supabase, undeliverableDmRows, "failed", 0, { error, deliveryMode: "direct_dm" });
+    results.push(...undeliverableDmRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error })));
+  }
+
+  if (undeliverableWebhookRows.length) {
+    const error = "GOOGLE_CHAT_WEBHOOK_URL ist nicht gesetzt.";
+    await insertDeliveryRows(supabase, undeliverableWebhookRows, "failed", 0, { error, deliveryMode: "webhook_digest" });
+    results.push(...undeliverableWebhookRows.map(({ row }) => ({ eventId: row.id, status: "failed" as const, error })));
   }
 
   if (directDmRows.length) {

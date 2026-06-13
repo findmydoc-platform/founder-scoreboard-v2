@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDate } from "@/lib/display";
-import { notificationChannelLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
+import { notificationChannelLabel, shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
 import type { PlanningData } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
@@ -34,9 +34,11 @@ export function SettingsNotificationsSection({
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
   const googleChatDigestNotifications = pendingNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
+  const googleChatDmNotifications = pendingNotifications.filter((event) => event.recipientProfileId && shouldSendToGoogleChatDm(event.type));
   const inAppOnlyNotifications = pendingNotifications.filter((event) => !shouldSendToGoogleChatDigest(event.type));
   const failedDigestNotifications = failedNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
+  const googleChatDmReadyProfiles = data.profiles.filter((profile) => /^spaces\/[A-Za-z0-9_-]+$/.test(profile.googleChatDmSpace || "")).length;
   const googleChatReady = Boolean(googleChatStatus?.ready);
   const googleChatWebhookConfigured = Boolean(googleChatStatus?.webhookConfigured);
   const googleChatApiConfigured = Boolean(googleChatStatus?.apiConfigured);
@@ -145,13 +147,18 @@ export function SettingsNotificationsSection({
         )}
         {googleChatReady && (
           <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800">
-            Google Chat ist versandbereit. Aktiver Modus: {googleChatModeLabel}. Persönliche DMs werden nur an Profile mit `spaces/...` in der Google-Chat-DM-Space gesendet.
+            Google Chat ist versandbereit. Aktiver Modus: {googleChatModeLabel}. Persönliche DMs werden nur an Profile mit gültigem `spaces/...` gesendet; fehlende DM-Spaces werden als Zustellfehler protokolliert und nicht in den Gruppenchat umgeleitet.
           </div>
         )}
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chat-Digest</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDigestNotifications.length}</div>
+          </div>
+          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Private DMs</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDmNotifications.length}</div>
+            <div className="mt-1 text-xs text-slate-500">{googleChatDmReadyProfiles}/{data.profiles.length} Profile bereit</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nur In-App</div>

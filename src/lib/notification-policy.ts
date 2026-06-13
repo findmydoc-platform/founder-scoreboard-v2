@@ -13,7 +13,16 @@ export const googleChatDigestEventTypes = [
   "feedback.feature_requested",
 ] as const;
 
+export const googleChatDirectDmEventTypes = [
+  "task.blocker_reported",
+  "task.review_requested",
+  "task.review_rework",
+  "task.deadline_overdue",
+  "decision.confirmation_requested",
+] as const;
+
 export type GoogleChatDigestEventType = (typeof googleChatDigestEventTypes)[number];
+export type GoogleChatDirectDmEventType = (typeof googleChatDirectDmEventTypes)[number];
 
 export function notificationEventLabel(eventType: string) {
   if (eventType === "task.blocker_reported") return "Blocker gemeldet";
@@ -33,6 +42,10 @@ export function notificationEventLabel(eventType: string) {
 
 export function shouldSendToGoogleChatDigest(eventType: string) {
   return googleChatDigestEventTypes.includes(eventType as (typeof googleChatDigestEventTypes)[number]);
+}
+
+export function shouldSendToGoogleChatDm(eventType: string) {
+  return googleChatDirectDmEventTypes.includes(eventType as (typeof googleChatDirectDmEventTypes)[number]);
 }
 
 export function notificationChannelLabel(eventType: string) {

@@ -197,12 +197,12 @@ export async function POST(request: NextRequest) {
       candidates.push({
         type: "task.review_rework",
         actorProfileId: task.owner,
-        recipientProfileId: null,
+        recipientProfileId: task.owner,
         entityType: "task",
         entityId: task.id,
         title: `Nacharbeit offen: ${task.title}`,
         body: taskBody(task, "Für dieses Deliverable ist Nacharbeit offen."),
-        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today),
+        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today, task.owner || groupRecipient),
       });
     }
 
@@ -223,12 +223,12 @@ export async function POST(request: NextRequest) {
       candidates.push({
         type: "task.deadline_overdue",
         actorProfileId: task.owner,
-        recipientProfileId: null,
+        recipientProfileId: task.owner,
         entityType: "task",
         entityId: task.id,
         title: `Überfällig: ${task.title}`,
         body: taskBody(task, `Zieltermin war ${task.end_date}. Bitte Status, Review oder Blocker klären.`),
-        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today),
+        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, task.owner || groupRecipient),
       });
     }
   }
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
     const required = decision.required_profile_ids || [];
     const confirmed = confirmedByDecision.get(decision.id) || new Set<string>();
     const missing = required.filter((profileId) => !confirmed.has(profileId));
-    if (!required.length || missing.length) {
+    if (!required.length) {
       candidates.push({
         type: "decision.confirmation_requested",
         actorProfileId: null,
@@ -261,6 +261,18 @@ export async function POST(request: NextRequest) {
         title: `Decision wartet auf Bestätigung: ${decision.title}`,
         body: decision.context || "Diese Decision ist offen für Bestätigung.",
         dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today),
+      });
+    }
+    for (const profileId of missing) {
+      candidates.push({
+        type: "decision.confirmation_requested",
+        actorProfileId: null,
+        recipientProfileId: profileId,
+        entityType: "decision",
+        entityId: String(decision.id),
+        title: `Decision wartet auf Bestätigung: ${decision.title}`,
+        body: decision.context || "Diese Decision ist offen für Bestätigung.",
+        dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today, profileId),
       });
     }
   }

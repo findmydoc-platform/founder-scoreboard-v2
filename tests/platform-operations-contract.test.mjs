@@ -39,6 +39,8 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(generatorRoute, /task\.deadline_overdue/);
   assert.match(generatorRoute, /sprint\.review_due/);
   assert.match(generatorRoute, /decision\.confirmation_requested/);
+  assert.match(generatorRoute, /recipientProfileId: task\.owner/);
+  assert.match(generatorRoute, /recipientProfileId: profileId/);
   assert.doesNotMatch(generatorRoute, /task\.comment/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
   assert.match(chat, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL/);
@@ -56,12 +58,17 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /googleChatDeliveryStatus/);
   assert.match(route, /isGoogleChatDmSpace/);
   assert.match(route, /deliveryMode: "direct_dm"/);
+  assert.match(route, /shouldSendToGoogleChatDm/);
+  assert.match(route, /Kein gültiger Google-Chat-DM-Space/);
+  assert.match(route, /nicht in den Gruppenchat/);
   assert.match(route, /notification_preferences/);
   assert.match(route, /Google-Chat-Präferenz/);
   assert.match(route, /notification_deliveries/);
   assert.match(policy, /task\.review_rework/);
   assert.match(policy, /task\.review_completed/);
   assert.match(policy, /task\.deadline_overdue/);
+  assert.match(policy, /googleChatDirectDmEventTypes/);
+  assert.match(policy, /shouldSendToGoogleChatDm/);
   assert.match(policy, /sprint\.review_due/);
   assert.match(policy, /meeting\.attendance_updated/);
   assert.match(policy, /feedback\.bug_reported/);
@@ -104,6 +111,7 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
   assert.match(rollout, /Phase 1: FounderOps-Gruppendigest/);
   assert.match(rollout, /Phase 2: Externe Pipeline/);
+  assert.match(rollout, /Phase 4: Persönliche FounderOps-DMs/);
   assert.match(rollout, /09:00 Europe\/Berlin/);
   assert.match(rollout, /x-founderops-delivery-secret/);
   assert.match(rollout, /FOUNDEROPS_DELIVERY_SECRET/);
@@ -114,7 +122,10 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /spaces\/\.\.\./);
   assert.match(rollout, /Rollback/);
   assert.match(rollout, /\/api\/google-chat\/events/);
+  assert.match(rollout, /https:\/\/founder-ops\.findmydoc\.eu\/api\/google-chat\/events/);
+  assert.match(rollout, /keinen Gruppenchat-Fallback/);
   assert.match(nextStep, /docs\/google-chat-rollout\.md/);
+  assert.match(nextStep, /keinen Gruppenchat-Fallback/);
   assert.match(nextStep, /\/api\/google-chat\/events/);
   assert.match(script, /googleChatDeliveryStatus/);
   assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);

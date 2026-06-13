@@ -8,7 +8,7 @@ This project deploys only through GitHub Actions workflows. Operators do not run
 - Vercel project: `founder-ops`
 - Root directory: `.`
 - Current production URL: `https://founder-ops.findmydoc.eu`
-- Planned Google Chat app URL: `https://founderops.findmydoc.eu/api/google-chat/events`
+- Google Chat app URL: `https://founder-ops.findmydoc.eu/api/google-chat/events`
 - GitHub Environments: `preview` and `production`
 - Do not assign or move a domain before the user explicitly confirms the final cutover.
 
@@ -48,6 +48,8 @@ FOUNDEROPS_DELIVERY_SECRET=
 For Phase 1, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of Phase 1.
 
 For Phase 2, Sebastian's external pipeline calls `POST https://founder-ops.findmydoc.eu/api/notifications/deliver` on weekdays at `09:00 Europe/Berlin` with header `x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>` and body `{ "limit": 20 }`.
+
+For Phase 4, private FounderOps DMs use the Google Chat API and are limited to personal action items. Missing or invalid `profiles.google_chat_dm_space` values are logged as failed `direct_dm` deliveries and are not redirected into the group webhook.
 
 The repository also contains `.github/workflows/google-chat-digest.yml` for this job. It runs against the `production` GitHub Environment and requires `FOUNDEROPS_DELIVERY_SECRET` there. Vercel Production must use the same `FOUNDEROPS_DELIVERY_SECRET` plus `GOOGLE_CHAT_WEBHOOK_URL` and `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
 

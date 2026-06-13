@@ -125,17 +125,31 @@ FOUNDEROPS_DELIVERY_SECRET=
 
 Für den lokalen Trockenlauf bleibt `GOOGLE_CHAT_DELIVERY_ENABLED=false`. Für echte persönliche FounderOps-DMs werden `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, die Chat-API und pro Profil ein `profiles.google_chat_dm_space` im Format `spaces/...` benötigt. Der Webhook bleibt als Space-Digest-Fallback möglich.
 
+## Phase 4: Persönliche FounderOps-DMs
+
+Phase 4 aktiviert nur ausgehende persönliche Google-Chat-DMs für klare Action-Items. Es gibt weiterhin keine Google-Chat-Kommandos, keine Dialoge und keine LLM-generierten Antworten.
+
+Persönliche DMs sind erlaubt für:
+
+- `task.review_requested`
+- `task.review_rework`
+- `task.blocker_reported`
+- `task.deadline_overdue`
+- `decision.confirmation_requested`
+
+`task.comment`, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
+
 ## Bot-Branding und geplanter Endpoint
 
 Die Google-Chat-App heißt `FounderOps`. Frühere Namen wie `Founder Scoreboard`, `Founder Scoreboard Bot` oder `Founders CoreBot` sind Altbezeichnungen und sollen bei neuen Google-Cloud-, Google-Chat-, GitHub-Actions- und Dokumentationsänderungen nicht weitergeführt werden.
 
-Für die spätere Chat-App-Konfiguration in Google Cloud ist nach dem GitHub-Actions-Deployment und Domain-Cutover dieser öffentliche HTTPS-Endpunkt vorgesehen:
+Für die Chat-App-Konfiguration in Google Cloud ist nach dem erfolgreichen GitHub-Actions-Deployment dieser öffentliche HTTPS-Endpunkt vorgesehen:
 
 ```text
-https://founderops.findmydoc.eu/api/google-chat/events
+https://founder-ops.findmydoc.eu/api/google-chat/events
 ```
 
-Dieser Endpoint ist im Code als sichere Vorschau-Route vorbereitet. Er darf erst als produktive Google-Chat-App-URL verwendet werden, wenn `founderops.findmydoc.eu` auf die per GitHub Actions bereitgestellte App zeigt, das Deployment die Route `/api/google-chat/events` enthält und die Zustellung bewusst aktiviert wurde.
+Dieser Endpoint ist im Code als sichere Empfangsroute vorbereitet. In Phase 4 bestätigt er Erreichbarkeit und nimmt Google-Chat-Events an, aktiviert aber keine Chat-Kommandos.
 
 Empfohlene Google-Chat-App-Felder:
 
@@ -154,8 +168,29 @@ Empfohlene Google-Chat-App-Felder:
 7. `npm run verify:google-chat` ausführen.
 8. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
 9. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
-10. Einen einzelnen Digest senden und `notification_deliveries` prüfen.
+10. Einen einzelnen Digest oder eine persönliche Test-DM senden und `notification_deliveries` prüfen.
 11. Danach erst die regelmäßige Zustellung planen.
+
+Sebastian-/Rresta-Paket für Phase 4:
+
+```text
+Google Cloud:
+- Google Chat API aktivieren
+- FounderOps Chat-App mit Endpoint https://founder-ops.findmydoc.eu/api/google-chat/events konfigurieren
+- Service Account für Chat API bereitstellen
+
+Vercel Production Runtime:
+GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=<service-account-email>
+GOOGLE_CHAT_PRIVATE_KEY=<service-account-private-key mit \n>
+GOOGLE_CHAT_DELIVERY_ENABLED=true
+
+Supabase:
+profiles.google_chat_dm_space je Person im Format spaces/...
+
+Smoke:
+POST /api/notifications/deliver mit x-founderops-delivery-secret
+Erwartung: notification_deliveries.status=sent und payload.deliveryMode=direct_dm
+```
 
 ## Profile und Präferenzen
 
@@ -172,8 +207,8 @@ Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein 
 Die App erzeugt automatische Fokus-Reminder in `/api/notifications/generate-digest` und verarbeitet `notification_events` anschließend in `/api/notifications/deliver`.
 
 - Wenn Chat API konfiguriert ist und ein Profil `google_chat_dm_space` im Format `spaces/...` hat, sendet FounderOps persönlich an diesen DM-Space.
-- Wenn kein DM-Space vorhanden ist, aber ein Webhook gesetzt ist, kann ein Space-Digest als Fallback gesendet werden.
-- Wenn weder DM-Space noch Webhook verfügbar ist, wird der Zustellversuch als fehlgeschlagen in `notification_deliveries` protokolliert.
+- Wenn ein persönliches Action-Item keinen gültigen DM-Space hat, wird der Zustellversuch als fehlgeschlagen in `notification_deliveries` protokolliert.
+- Der Webhook bleibt nur für Gruppen-Digests und wird nicht als Fallback für fehlende persönliche DM-Spaces genutzt.
 - User- und Event-Präferenzen werden vor dem Versand ausgewertet.
 
 ## Rollback

@@ -42,7 +42,7 @@ Wichtig: Ein Incoming Webhook sendet nur in den konfigurierten Space. Für echte
 Die Chat-App/Bot-Anzeige soll `FounderOps` heißen. Der geplante Google-Chat-App-Endpoint nach GitHub-Actions-Deployment und Domain-Cutover ist:
 
 ```text
-https://founderops.findmydoc.eu/api/google-chat/events
+https://founder-ops.findmydoc.eu/api/google-chat/events
 ```
 
 Vorherige Namen wie `Founder Scoreboard Bot` oder `Founders CoreBot` gelten als Altbezeichnungen und sollen bei neuen Konfigurations- oder Codeänderungen nicht weiterverwendet werden.
@@ -59,7 +59,7 @@ Erledigt:
 6. Einstellungen zeigen Google Chat, Zustellstatus, Fehler und persönliche Event-Präferenzen.
 7. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet.
 8. `/api/notifications/deliver` kann bei aktivierter Chat API persönliche FounderOps-DMs an `profiles.google_chat_dm_space` senden.
-9. Ohne DM-Space wird sauber in `notification_deliveries` protokolliert oder bei gesetztem Webhook in den Space-Digest zurückgefallen.
+9. Ohne DM-Space wird sauber in `notification_deliveries` protokolliert; es gibt keinen Gruppenchat-Fallback für persönliche Action-Items.
 
 Noch offen:
 
@@ -71,7 +71,7 @@ Noch offen:
 ## Offene Punkte für persönliche DMs
 
 1. Von jedem Teammitglied die `FounderOps`-Direktchat-URL einsammeln und als `spaces/...` in `profiles.google_chat_dm_space` speichern.
-2. `founderops.findmydoc.eu` auf die per GitHub Actions deployte App schalten und `/api/google-chat/events` im Deployment testen.
+2. `founder-ops.findmydoc.eu/api/google-chat/events` im Deployment testen.
 3. Private DM-Zustellung über Google Chat API an `spaces/{dmSpace}/messages` ergänzen; der bestehende Webhook-Digest sendet nicht automatisch in persönliche DMs.
 
 ## Nicht vergessen
