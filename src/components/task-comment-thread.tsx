@@ -81,7 +81,7 @@ export function TaskCommentThread({
   const timeline = buildTimeline(comments, externalComments, visibleActivities);
 
   return (
-    <section className="rounded-lg border border-slate-200 p-4">
+    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">

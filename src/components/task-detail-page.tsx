@@ -288,65 +288,114 @@ export function TaskDetailPage({
 
       <TaskDetailHeader title={task.title} status={meta.status} priority={meta.priority} hours={task.hours} />
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-5">
-          <TaskBriefSection
-            task={task}
-            brief={meta}
-            creatorProfile={creatorProfile}
-            ownerProfile={ownerProfile}
-            owner={meta.owner}
-            editing={briefEditing}
-            onEdit={() => setBriefEditing(true)}
-            onCancel={() => {
-              setBriefEditing(false);
-              setMeta((current) => ({ ...current, ...buildTaskBriefDraft(task) }));
-            }}
-            onSave={() => {
-              updateTask({
-                problemStatement: meta.problemStatement,
-                intendedOutcome: meta.intendedOutcome,
-                scopeConstraints: meta.scopeConstraints,
-                acceptanceCriteria: meta.acceptanceCriteria,
-                evidenceRequired: meta.evidenceRequired,
-                definitionOfDone: meta.definitionOfDone,
-              });
-              setBriefEditing(false);
-            }}
-            onBriefChange={(patch) => setMeta((current) => ({ ...current, ...patch }))}
-            onChecklistChange={(patch) => {
-              setMeta((current) => ({ ...current, ...patch }));
-              updateTask(patch);
-            }}
-          >
+      <div className="mx-auto max-w-7xl px-6 py-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid min-w-0 gap-5">
+            <TaskBriefSection
+              task={task}
+              brief={meta}
+              creatorProfile={creatorProfile}
+              ownerProfile={ownerProfile}
+              owner={meta.owner}
+              editing={briefEditing}
+              onEdit={() => setBriefEditing(true)}
+              onCancel={() => {
+                setBriefEditing(false);
+                setMeta((current) => ({ ...current, ...buildTaskBriefDraft(task) }));
+              }}
+              onSave={() => {
+                updateTask({
+                  problemStatement: meta.problemStatement,
+                  intendedOutcome: meta.intendedOutcome,
+                  scopeConstraints: meta.scopeConstraints,
+                  acceptanceCriteria: meta.acceptanceCriteria,
+                  evidenceRequired: meta.evidenceRequired,
+                  definitionOfDone: meta.definitionOfDone,
+                });
+                setBriefEditing(false);
+              }}
+              onBriefChange={(patch) => setMeta((current) => ({ ...current, ...patch }))}
+              onChecklistChange={(patch) => {
+                setMeta((current) => ({ ...current, ...patch }));
+                updateTask(patch);
+              }}
+            >
 
-            <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
-              <TaskEvidenceLinkSection
-                evidenceLink={meta.evidenceLink}
-                onEvidenceLinkChange={(evidenceLink) => setMeta((current) => ({ ...current, evidenceLink }))}
-                onEvidenceLinkSave={() => updateTask({ evidenceLink: meta.evidenceLink })}
-              />
-              <TaskContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
-              <TaskRelationshipsSection
-                waitsOn={waitsOn}
-                blocks={blocks}
-                related={related}
-                dependsOn={meta.dependsOn}
-                relationDraft={relationDraft}
-                relationTargetOptions={relationTargetOptions}
-                canManageTaskMeta={canManageTaskMeta}
-                pending={isPending}
-                onRemoveRelation={removeRelation}
-                onDependsOnChange={(dependsOn) => setMeta((current) => ({ ...current, dependsOn }))}
-                onDependsOnSave={() => updateTask({ dependsOn: meta.dependsOn })}
-                onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
-                onAddRelation={addRelation}
-              />
-            </div>
-          </TaskBriefSection>
+              <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
+                <TaskEvidenceLinkSection
+                  evidenceLink={meta.evidenceLink}
+                  onEvidenceLinkChange={(evidenceLink) => setMeta((current) => ({ ...current, evidenceLink }))}
+                  onEvidenceLinkSave={() => updateTask({ evidenceLink: meta.evidenceLink })}
+                />
+                <TaskContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
+                <TaskRelationshipsSection
+                  waitsOn={waitsOn}
+                  blocks={blocks}
+                  related={related}
+                  dependsOn={meta.dependsOn}
+                  relationDraft={relationDraft}
+                  relationTargetOptions={relationTargetOptions}
+                  canManageTaskMeta={canManageTaskMeta}
+                  pending={isPending}
+                  onRemoveRelation={removeRelation}
+                  onDependsOnChange={(dependsOn) => setMeta((current) => ({ ...current, dependsOn }))}
+                  onDependsOnSave={() => updateTask({ dependsOn: meta.dependsOn })}
+                  onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
+                  onAddRelation={addRelation}
+                />
+              </div>
+            </TaskBriefSection>
 
-          <TaskSubIssuesSection subIssues={subIssues} />
+            <TaskSubIssuesSection subIssues={subIssues} />
 
+          </div>
+
+          <aside className="grid content-start gap-5">
+            <TaskDetailsCard
+              task={task}
+              meta={meta}
+              detailsDraft={detailsDraft}
+              creatorProfile={creatorProfile}
+              ownerProfile={ownerProfile}
+              currentPackage={currentPackage}
+              currentSprint={currentSprint}
+              currentMilestone={currentMilestone}
+              canManageTaskMeta={canManageTaskMeta}
+              detailsEditing={detailsEditing}
+              pending={isPending}
+              saveState={saveState}
+              packages={packages}
+              profiles={profiles}
+              sprints={sprints}
+              milestones={milestones}
+              onStatusChange={(status) => updateTask({ status })}
+              onDetailsDraftChange={setDetailsDraft}
+              onDetailsPackageChange={setDetailsPackage}
+              onDetailsMilestoneChange={setDetailsMilestone}
+              onStartEditing={() => {
+                setDetailsEditSnapshot(detailsDraft);
+                setDetailsEditing(true);
+              }}
+              onCancelEditing={resetDetailsDraft}
+              onSaveDetails={saveDetailsDraft}
+            />
+
+            <TaskBlockerCard blockers={blockers} openBlockerCount={openBlockers.length} profileName={profileName} />
+
+            <TaskGitHubSyncCard
+              taskType={task.taskType}
+              githubState={githubState}
+              canSyncExistingGitHubIssue={canSyncExistingGitHubIssue}
+              pending={isPending}
+              githubProviderTokenAvailable={githubProviderTokenAvailable}
+              onSyncGitHub={() => syncGitHub()}
+              onCreateGitHubIssue={() => syncGitHub({ createIfMissing: true })}
+              onReconnectGitHub={reconnectGitHub}
+            />
+          </aside>
+        </div>
+
+        <div className="mt-5 min-w-0">
           <TaskCommentThread
             comments={taskComments}
             externalComments={taskExternalComments}
@@ -361,54 +410,9 @@ export function TaskDetailPage({
             description="Laufende Abstimmungen, Nachfragen und Updates zur Aufgabe."
             onAddComment={addComment}
           />
-          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
         </div>
-
-        <aside className="grid content-start gap-5">
-          <TaskDetailsCard
-            task={task}
-            meta={meta}
-            detailsDraft={detailsDraft}
-            creatorProfile={creatorProfile}
-            ownerProfile={ownerProfile}
-            currentPackage={currentPackage}
-            currentSprint={currentSprint}
-            currentMilestone={currentMilestone}
-            canManageTaskMeta={canManageTaskMeta}
-            detailsEditing={detailsEditing}
-            pending={isPending}
-            saveState={saveState}
-            packages={packages}
-            profiles={profiles}
-            sprints={sprints}
-            milestones={milestones}
-            onStatusChange={(status) => updateTask({ status })}
-            onDetailsDraftChange={setDetailsDraft}
-            onDetailsPackageChange={setDetailsPackage}
-            onDetailsMilestoneChange={setDetailsMilestone}
-            onStartEditing={() => {
-              setDetailsEditSnapshot(detailsDraft);
-              setDetailsEditing(true);
-            }}
-            onCancelEditing={resetDetailsDraft}
-            onSaveDetails={saveDetailsDraft}
-          />
-
-          <TaskBlockerCard blockers={blockers} openBlockerCount={openBlockers.length} profileName={profileName} />
-
-          <TaskGitHubSyncCard
-            taskType={task.taskType}
-            githubState={githubState}
-            canSyncExistingGitHubIssue={canSyncExistingGitHubIssue}
-            pending={isPending}
-            githubProviderTokenAvailable={githubProviderTokenAvailable}
-            onSyncGitHub={() => syncGitHub()}
-            onCreateGitHubIssue={() => syncGitHub({ createIfMissing: true })}
-            onReconnectGitHub={reconnectGitHub}
-          />
-        </aside>
+        {error && <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
       </div>
     </main>
   );
 }
-
