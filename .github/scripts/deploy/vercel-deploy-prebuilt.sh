@@ -52,6 +52,11 @@ if [[ ! -f ".vercel/project.json" ]]; then
   exit 1
 fi
 
+if [[ ! -d "node_modules" ]]; then
+  echo "node_modules is missing. Run npm ci before deploying prebuilt output." >&2
+  exit 1
+fi
+
 if ! [[ "${max_inspect_attempts}" =~ ^[0-9]+$ ]] || [[ "${max_inspect_attempts}" -lt 1 ]]; then
   echo "VERCEL_INSPECT_MAX_ATTEMPTS must be a positive integer." >&2
   exit 1
@@ -73,6 +78,9 @@ rm -rf "${staging_dir}"
 mkdir -p "${staging_dir}/.vercel"
 cp -R ".vercel/output" "${staging_dir}/.vercel/output"
 cp ".vercel/project.json" "${staging_dir}/.vercel/project.json"
+cp "package.json" "${staging_dir}/package.json"
+cp "package-lock.json" "${staging_dir}/package-lock.json"
+cp -R "node_modules" "${staging_dir}/node_modules"
 
 if [[ -d "${staging_dir}/.git" ]] || find "${staging_dir}" -type d -name ".git" -print -quit | grep -q .; then
   echo "Refusing to deploy: staging directory contains Git metadata." >&2

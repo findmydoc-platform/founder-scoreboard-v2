@@ -991,6 +991,9 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployScript, /RUNNER_TEMP/);
   assert.match(deployScript, /\.vercel\/output/);
   assert.match(deployScript, /\.vercel\/project\.json/);
+  assert.match(deployScript, /node_modules is missing/);
+  assert.match(deployScript, /package-lock\.json/);
+  assert.match(deployScript, /node_modules/);
   assert.match(deployScript, /Refusing to deploy: staging directory contains Git metadata\./);
   assert.match(deployScript, /--prebuilt/);
   assert.match(deployScript, /--no-wait/);

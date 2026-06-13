@@ -162,6 +162,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /GitHub Actions job logs/);
   assert.match(verify, /vercel-deploy-prebuilt\.sh/);
   assert.match(verify, /Git-metadata-free/);
+  assert.match(verify, /node_modules/);
   assert.match(verify, /TEAM_ACCESS_REQUIRED/);
   assert.match(verify, /github\.event_name == 'push'/);
   assert.match(verify, /Validate preview secrets/);

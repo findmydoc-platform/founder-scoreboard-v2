@@ -68,7 +68,7 @@ GitHub Actions executes the preview flow in this order:
 
 - Pull preview runtime variables with `vercel pull --yes --environment=preview`.
 - Build the preview Vercel output from the GitHub Actions preview job.
-- Copy only the prebuilt output and project metadata into a temporary runner directory that contains no `.git` folder.
+- Copy the prebuilt output, project metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt preview output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `preview` environment URL.
 
@@ -80,7 +80,7 @@ GitHub Actions executes the production flow in this order:
 
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
-- Copy only the prebuilt output and project metadata into a temporary runner directory that contains no `.git` folder.
+- Copy the prebuilt output, project metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
