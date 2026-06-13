@@ -69,8 +69,11 @@ export type Task = {
   description: string;
   status: string;
   priority: string;
+  ownerId?: string;
   owner: string;
+  assigneeId?: string;
   assignee: string;
+  createdById?: string;
   createdBy?: string;
   workstream: string;
   packageId: string;
@@ -116,6 +119,8 @@ export type Task = {
   selfDocumentedChecked?: boolean;
   selfBlockersChecked?: boolean;
 };
+
+export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;
 
 export type Sprint = {
   id: string;
@@ -385,6 +390,12 @@ export type PlanningData = {
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];
   availability: AvailabilityEntry[];
+};
+
+export type PlanningDataResponse = {
+  data: PlanningData;
+  source: "seed" | "supabase";
+  currentProfile: AuthenticatedProfile | null;
 };
 
 export type ViewMode = "board" | "structure" | "table" | "gantt";

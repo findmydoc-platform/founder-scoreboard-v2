@@ -1,4 +1,4 @@
-import { founderScore } from "@/lib/platform";
+import { founderScore, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { CommitmentLevel, PlanningData, Profile, Sprint } from "@/lib/types";
 
@@ -48,7 +48,7 @@ export function buildSprintScoreViewModel({
   const unassignedTasks = data.tasks.filter((task) => !task.sprintId);
   const scoreRows = data.profiles.map((profile: Profile) => {
     const row = founderScore(sprintTasks, profile);
-    const profileTasks = sprintTasks.filter((task) => task.owner === profile.name);
+    const profileTasks = sprintTasks.filter((task) => taskBelongsToProfile(task, profile));
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
     return {
       ...row,

@@ -7,5 +7,5 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const result = await getPlanningData();
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, currentProfile: auth.profile });
 }

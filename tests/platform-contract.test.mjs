@@ -342,6 +342,7 @@ test("github oauth prepares user-based sync without storing provider tokens", as
 test("strict auth gates planning data until a valid session is present", async () => {
   const page = await readFile("src/app/page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const authz = await readFile("src/lib/authz.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const authControl = await readFile("src/components/auth-control.tsx", "utf8");
   const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
@@ -349,7 +350,14 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /emptyPlanningData/);
   assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(api, /currentProfile: auth\.profile/);
+  assert.match(authz, /auth_user_id/);
+  assert.match(authz, /ilike\("github_login", githubLogin\)/);
+  assert.match(authz, /unterschiedliche Teamprofile/);
+  assert.doesNotMatch(authz, /\.or\(`auth_user_id/);
   assert.match(authHook, /Du bist abgemeldet/);
+  assert.match(authHook, /serverCurrentProfile/);
+  assert.match(authHook, /authUserId/);
   assert.match(ui, /<AppBrand \/>/);
   assert.doesNotMatch(ui, /ShieldCheck/);
   assert.match(ui, /variant="gate"/);

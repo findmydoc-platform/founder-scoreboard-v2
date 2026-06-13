@@ -271,10 +271,13 @@ test("header actions are workspace aware", async () => {
 test("mine workspace follows the effective current profile", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
-  assert.match(ui, /const mineOwnerName = currentProfile\?\.name \|\| "Volkan"/);
-  assert.match(ui, /filters\.quick === "mine" && task\.owner === mineOwnerName/);
-  assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === mineOwnerName\)/);
+  assert.match(ui, /serverCurrentProfile/);
+  assert.match(ui, /serverCurrentProfile\.id/);
+  assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
+  assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => taskBelongsToProfile\(task, currentProfile\)\)/);
   assert.match(ui, /Fokus auf die Aufgaben von \$\{mineOwnerName\}/);
+  assert.doesNotMatch(ui, /currentProfile\?\.name \|\| "Volkan"/);
+  assert.doesNotMatch(ui, /currentProfile\?\.id \|\| "volkan"/);
   assert.doesNotMatch(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === "Volkan"\)/);
 });
 

@@ -68,6 +68,9 @@ export function mapMilestone(row: DbMilestone): Milestone {
 }
 
 export function mapTask(row: DbTask, profiles: Profile[]): Task {
+  const ownerId = row.owner || "";
+  const assigneeId = row.assignee || "";
+  const createdById = row.created_by || "";
   const owner = profiles.find((profile) => profile.id === row.owner)?.name || row.owner || "";
   const assignee = profiles.find((profile) => profile.id === row.assignee)?.name || row.assignee || owner;
   const createdBy = profiles.find((profile) => profile.id === row.created_by)?.name || row.created_by || "";
@@ -79,8 +82,11 @@ export function mapTask(row: DbTask, profiles: Profile[]): Task {
     description: row.description || "",
     status: row.status,
     priority: row.priority,
+    ownerId,
     owner,
+    assigneeId,
     assignee,
+    createdById,
     createdBy,
     workstream: row.workstream || "",
     packageId: row.package_id || "",

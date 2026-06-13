@@ -75,8 +75,14 @@ export function calculateTaskScore(task: Task) {
   return task.scoreFinal ? task.scorePoints : 0;
 }
 
+export function taskBelongsToProfile(task: Pick<Task, "owner" | "ownerId">, profile?: Pick<Profile, "id" | "name"> | null) {
+  if (!profile) return false;
+  if (task.ownerId) return task.ownerId === profile.id;
+  return task.owner === profile.name;
+}
+
 export function founderScore(tasks: Task[], profile: Profile) {
-  const owned = tasks.filter((task) => task.owner === profile.name);
+  const owned = tasks.filter((task) => taskBelongsToProfile(task, profile));
   return {
     profile,
     committed: owned.length,
