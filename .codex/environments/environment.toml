@@ -1,0 +1,65 @@
+version = 1
+name = "founder-scoreboard"
+
+[setup]
+script = "rtk npm install"
+
+[[actions]]
+name = "Run app"
+icon = "run"
+command = "rtk npm run dev -- --hostname 127.0.0.1 --port 3000"
+
+[[actions]]
+name = "Run app 3002"
+icon = "run"
+command = "rtk npm run dev -- --hostname 127.0.0.1 --port 3002"
+
+[[actions]]
+name = "Test"
+icon = "test"
+command = "rtk npm test"
+
+[[actions]]
+name = "Lint"
+icon = "test"
+command = "rtk npm run lint"
+
+[[actions]]
+name = "Build"
+icon = "test"
+command = "rtk npm run build"
+
+[[actions]]
+name = "Validate"
+icon = "test"
+command = "rtk npm test && rtk npm run lint && rtk npm run build"
+
+[[actions]]
+name = "Verify auth"
+icon = "test"
+command = "rtk npm run verify:auth"
+
+[[actions]]
+name = "Verify Supabase"
+icon = "test"
+command = "rtk npm run verify:supabase"
+
+[[actions]]
+name = "Verify operational"
+icon = "test"
+command = "rtk npm run verify:operational"
+
+[[actions]]
+name = "Verify release"
+icon = "test"
+command = "rtk npm run verify:release"
+
+[[actions]]
+name = "Health check"
+icon = "tool"
+command = "rtk curl -fsS http://localhost:3000/api/health"
+
+[[actions]]
+name = "Git status"
+icon = "tool"
+command = "rtk git status --short --branch"
