@@ -40,6 +40,7 @@ import { FmdToolsOverview as CurrentFmdToolsOverview } from "@/components/fmd-to
 import { GanttView as CurrentGanttView } from "@/components/gantt-view";
 import { persistLocalPlanningTasks, useLocalPlanningState } from "@/hooks/use-local-planning-state";
 import { setProtectedPlanningDataCache, usePlanningAuth } from "@/hooks/use-planning-auth";
+import { usePlanningRequestContext } from "@/hooks/use-planning-request-context";
 import { usePlanningWorkspace } from "@/hooks/use-planning-workspace";
 import { InitiativeDialog, type InitiativeDraft } from "@/components/initiative-dialog";
 import { NewTaskDialog as CurrentNewTaskDialog, type NewTaskDraft } from "@/components/new-task-dialog";
@@ -56,14 +57,14 @@ import { TaskDetailPanel as CurrentTaskDetailPanel } from "@/components/task-det
 import { TeamOverview as CurrentTeamOverview } from "@/components/team-overview";
 import { dateRange, focusStatusLabel, formatDate, initiativeMetaLabel, initiativeOptionLabel, relationshipHelpText, relationTypeLabel, taskOwnerOptions } from "@/lib/display";
 import { decisionStatusLabel } from "@/lib/execution-layer-view-model";
-import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
+import { rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskBelongsToProfile, taskRelationsFor } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -106,6 +107,10 @@ function normalizePlanningData(data: PlanningData): PlanningData {
     tasks: data.tasks || [],
     sprints: data.sprints || [],
     sprintCommitments: data.sprintCommitments || [],
+    founderSprintScores: data.founderSprintScores || [],
+    founderStrikeStates: data.founderStrikeStates || [],
+    strikeEvents: data.strikeEvents || [],
+    scoreObjections: data.scoreObjections || [],
     decisions: data.decisions || [],
     decisionComments: data.decisionComments || [],
     taskComments: data.taskComments || [],
@@ -127,11 +132,37 @@ function normalizePlanningData(data: PlanningData): PlanningData {
   };
 }
 
-function isLocalDevHost() {
-  if (typeof window === "undefined") return false;
-  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+function mapScoreObjectionResponse(row: {
+  id: number;
+  sprint_id: string;
+  profile_id: string;
+  founder_sprint_score_id: number | null;
+  status: ScoreObjection["status"];
+  comment: string;
+  resolution_comment?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  second_reviewer_profile_id?: string | null;
+  second_review_decision?: string | null;
+  second_reviewed_at?: string | null;
+  created_at: string;
+}): ScoreObjection {
+  return {
+    id: row.id,
+    sprintId: row.sprint_id,
+    profileId: row.profile_id,
+    founderSprintScoreId: row.founder_sprint_score_id,
+    status: row.status,
+    comment: row.comment,
+    resolutionComment: row.resolution_comment || "",
+    reviewedBy: row.reviewed_by || "",
+    reviewedAt: row.reviewed_at || "",
+    secondReviewerProfileId: row.second_reviewer_profile_id || "",
+    secondReviewDecision: row.second_review_decision || "",
+    secondReviewedAt: row.second_reviewed_at || "",
+    createdAt: row.created_at,
+  };
 }
-
 
 const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
   { id: "board", label: "Board", icon: Columns3 },
@@ -236,7 +267,6 @@ const profileColorOptions = [
   { value: "#64748b", label: "Schiefer" },
 ];
 
-const devProfileStateKey = "fmd-planning-dev-profile-v1";
 function profileColor(profile?: Pick<Profile, "color"> | null) {
   return profile?.color || "#64748b";
 }
@@ -528,7 +558,6 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [devProfileId, setDevProfileId] = useState("");
   const [saveError, setSaveError] = useState("");
   const [commentImportNotice, setCommentImportNotice] = useState("");
   const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
@@ -588,11 +617,20 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const selectedTaskBlockers = selectedTask ? data.taskBlockers.filter((blocker) => blocker.taskId === selectedTask.id) : [];
   const fullTaskView = searchParams.get("view") === "full";
   const authAvailable = hasSupabaseEnv();
-  const serverProfile = serverCurrentProfile ? data.profiles.find((profile) => profile.id === serverCurrentProfile.id) || null : null;
-  const actualProfile = serverProfile;
-  const devRoleSwitchAvailable = source === "supabase" && process.env.NODE_ENV !== "production" && isLocalDevHost() && (actualProfile?.platformRole === "ceo" || actualProfile?.platformRole === "deputy");
-  const devProfile = devRoleSwitchAvailable && devProfileId ? data.profiles.find((profile) => profile.id === devProfileId) || null : null;
-  const currentProfile = devProfile || actualProfile;
+  const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
+  const {
+    actualProfile,
+    currentProfile,
+    devProfileId,
+    setDevProfileId,
+    devRoleSwitchAvailable,
+    requestHeaders,
+  } = usePlanningRequestContext({
+    source,
+    profiles: data.profiles,
+    currentGithubLogin,
+    currentProfileId: serverCurrentProfile?.id || "",
+  });
   const mineOwnerName = currentProfile?.name || "deinem Profil";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const unreadNotifications = useMemo(() => {
@@ -609,17 +647,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       .filter((item) => item.profileId === profileId && item.focusDate === todayFocusDate)
       .sort((left, right) => left.position - right.position)
       .slice(0, 3);
-  }, [currentProfile, data.taskFocusItems, todayFocusDate]);
-  const requestHeaders = useCallback((token?: string, options: { json?: boolean; github?: boolean } = { json: true }) => {
-    const githubProviderToken = options.github ? getRememberedGitHubProviderToken() : "";
-    return {
-      ...(options.json !== false ? { "content-type": "application/json" } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(devRoleSwitchAvailable && devProfileId ? { "x-fmd-dev-profile-id": devProfileId } : {}),
-      ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-    };
-  }, [devProfileId, devRoleSwitchAvailable]);
-
+  }, [currentProfile?.id, data.taskFocusItems, todayFocusDate]);
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
     router.push(`/tasks/${encodeURIComponent(taskId)}`);
@@ -635,22 +663,6 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       }
     }
   }, [pathname, router]);
-
-  useEffect(() => {
-    const storedDevProfile = window.localStorage.getItem(devProfileStateKey) || "";
-    if (storedDevProfile) window.queueMicrotask(() => setDevProfileId(storedDevProfile));
-  }, []);
-
-  useEffect(() => {
-    if (!devRoleSwitchAvailable && devProfileId) {
-      window.queueMicrotask(() => setDevProfileId(""));
-      window.localStorage.removeItem(devProfileStateKey);
-      return;
-    }
-    if (!devRoleSwitchAvailable) return;
-    if (devProfileId) window.localStorage.setItem(devProfileStateKey, devProfileId);
-    else window.localStorage.removeItem(devProfileStateKey);
-  }, [devProfileId, devRoleSwitchAvailable]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -2812,6 +2824,89 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
   const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;
 
+  const createScoreObjection = (sprint: Sprint, comment: string) => {
+    if (!currentProfile) {
+      setSaveError("GitHub-User ist keinem Teamprofil zugeordnet.");
+      return;
+    }
+    setSaveError("");
+
+    const localObjection: ScoreObjection = {
+      id: Date.now(),
+      sprintId: sprint.id,
+      profileId: currentProfile.id,
+      founderSprintScoreId: null,
+      status: "open",
+      comment,
+      resolutionComment: "",
+      reviewedBy: "",
+      reviewedAt: "",
+      secondReviewerProfileId: "",
+      secondReviewDecision: "",
+      secondReviewedAt: "",
+      createdAt: new Date().toISOString(),
+    };
+    const previousData = data;
+    setData((current) => ({ ...current, scoreObjections: [localObjection, ...current.scoreObjections] }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch(`/api/sprints/${sprint.id}/score-objections`, {
+          method: "POST",
+          headers: requestHeaders(token),
+          body: JSON.stringify({ comment }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; objection?: Parameters<typeof mapScoreObjectionResponse>[0] } | null;
+        if (!response.ok || !body?.objection) throw new Error(body?.error || "Score-Einwand konnte nicht gespeichert werden.");
+        const saved = mapScoreObjectionResponse(body.objection);
+        setData((current) => ({
+          ...current,
+          scoreObjections: current.scoreObjections.map((item) => (item.id === localObjection.id ? saved : item)),
+        }));
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Score-Einwand konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const reviewScoreObjection = (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => {
+    setSaveError("");
+    const previousData = data;
+    setData((current) => ({
+      ...current,
+      scoreObjections: current.scoreObjections.map((item) => (item.id === objectionId ? { ...item, status, reviewedBy: currentProfile?.id || "", reviewedAt: new Date().toISOString() } : item)),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      try {
+        const response = await fetch(`/api/sprints/${sprint.id}/score-objections`, {
+          method: "PATCH",
+          headers: requestHeaders(token),
+          body: JSON.stringify({ objectionId, status, resolutionComment: status === "accepted" ? "Einwand angenommen." : "Einwand geprüft." }),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; objection?: Parameters<typeof mapScoreObjectionResponse>[0] } | null;
+        if (!response.ok || !body?.objection) throw new Error(body?.error || "Score-Einwand konnte nicht geprüft werden.");
+        const saved = mapScoreObjectionResponse(body.objection);
+        setData((current) => ({
+          ...current,
+          scoreObjections: current.scoreObjections.map((item) => (item.id === saved.id ? saved : item)),
+        }));
+      } catch (error) {
+        setData(previousData);
+        setSaveError(error instanceof Error ? error.message : "Score-Einwand konnte nicht geprüft werden.");
+      }
+    });
+  };
+
   const lockSprint = (sprintId: string) => {
     setSaveError("");
     setSprintLockMessage("");
@@ -2833,14 +2928,16 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const response = await fetch(`/api/sprints/${sprintId}/lock`, {
           method: "POST",
           headers: {
+            "content-type": "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           },
+          body: JSON.stringify({ finalizeNow: true }),
         });
 
-        const body = (await response.json().catch(() => null)) as { error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string } } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } } | null;
         if (!response.ok) throw new Error(body?.error || "Sprint konnte nicht gelockt werden.");
         if (body?.carryover) {
-          setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt.`);
+          setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
         }
         const refreshResponse = await fetch("/api/planning-data", {
           headers: {
@@ -3230,6 +3327,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onUpdateSprint={updateSprint}
               onUpdateCommitment={updateSprintCommitment}
               onUpdateMeetingAttendance={updateMeetingAttendance}
+              onCreateScoreObjection={createScoreObjection}
+              onReviewScoreObjection={reviewScoreObjection}
               onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
               currentProfile={currentProfile}
               canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}

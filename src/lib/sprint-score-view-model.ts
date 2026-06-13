@@ -1,4 +1,5 @@
 import { founderScore, taskBelongsToProfile } from "@/lib/platform";
+import { computeFounderSprintScore } from "@/lib/founderops-scoring";
 import { normalizeStatus } from "@/lib/status";
 import type { CommitmentLevel, PlanningData, Profile, Sprint } from "@/lib/types";
 
@@ -50,6 +51,16 @@ export function buildSprintScoreViewModel({
     const row = founderScore(sprintTasks, profile);
     const profileTasks = sprintTasks.filter((task) => taskBelongsToProfile(task, profile));
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
+    const sprintMeetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id) : [];
+    const persistedScore = data.founderSprintScores.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
+    const computedScore = computeFounderSprintScore({
+      profile,
+      tasks: sprintTasks,
+      commitment,
+      meetings: sprintMeetings,
+      meetingAttendance: data.meetingAttendance,
+    });
+    const strikeState = data.founderStrikeStates.find((item) => item.profileId === profile.id);
     return {
       ...row,
       commitment: commitment || {
@@ -64,10 +75,14 @@ export function buildSprintScoreViewModel({
       blocked: profileTasks.filter((task) => normalizeStatus(task.status) === "Blockiert").length,
       active: profileTasks.filter((task) => normalizeStatus(task.status) === "In Arbeit").length,
       finalScore: profileTasks.filter((task) => task.scoreFinal).length,
+      v21Score: persistedScore || computedScore,
+      strikeState,
+      openScoreObjections: data.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.profileId === profile.id && item.status === "open").length,
     };
   });
   const reviewTasks = sprintTasks.filter((task) => task.reviewStatus !== "not_requested" || task.status === "Review");
-  const meeting = sprint ? data.meetings.find((item) => item.sprintId === sprint.id) : undefined;
+  const meetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id).sort((a, b) => a.meetingAt.localeCompare(b.meetingAt)) : [];
+  const meeting = meetings[0];
   const finalScores = sprintTasks.filter((task) => task.scoreFinal).length;
   const openScores = sprintTasks.filter((task) => !task.scoreFinal).length;
   const sprintHasTasks = sprintTasks.length > 0;
@@ -82,6 +97,7 @@ export function buildSprintScoreViewModel({
     scoreRows,
     reviewTasks,
     meeting,
+    meetings,
     finalScores,
     openScores,
     sprintHasTasks,

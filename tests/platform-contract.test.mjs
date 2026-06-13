@@ -285,6 +285,7 @@ test("story writing skill protects approved stories and enforces template guardr
 
 test("github oauth prepares user-based sync without storing provider tokens", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const requestContext = await readFile("src/hooks/use-planning-request-context.ts", "utf8");
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
   const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
   const githubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
@@ -300,7 +301,8 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.match(authHook, /signInWithOAuth/);
   assert.match(authHook, /scopes: "repo read:user user:email"/);
   assert.match(authHook, /provider_token/);
-  assert.match(ui, /x-github-provider-token/);
+  assert.match(ui, /usePlanningRequestContext/);
+  assert.match(requestContext, /x-github-provider-token/);
   assert.match(detail, /x-github-provider-token/);
   assert.match(supabase, /persistSession: true/);
   assert.match(supabase, /autoRefreshToken: true/);
@@ -308,7 +310,7 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.match(authHook, /supabase\.auth\.refreshSession\(\)/);
   assert.match(authHook, /visibilitychange/);
   assert.match(authHook, /5 \* 60 \* 1000/);
-  assert.match(ui, /getRememberedGitHubProviderToken/);
+  assert.match(requestContext, /getRememberedGitHubProviderToken/);
   assert.match(authHook, /clearRememberedGitHubProviderToken/);
   assert.match(detail, /getRememberedGitHubProviderToken/);
   assert.match(ui, /GitHub-Rechte erneuern/);

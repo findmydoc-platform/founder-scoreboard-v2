@@ -22,6 +22,8 @@ export function SprintScoreTableOverview({
   onUpdateSprint,
   onUpdateCommitment,
   onUpdateMeetingAttendance,
+  onCreateScoreObjection,
+  onReviewScoreObjection,
   onAssignSprint,
   currentProfile,
   canManageSprint,
@@ -43,6 +45,8 @@ export function SprintScoreTableOverview({
   onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
+  onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
+  onReviewScoreObjection: (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
   currentProfile: Profile | null;
   canManageSprint: boolean;
@@ -52,6 +56,7 @@ export function SprintScoreTableOverview({
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [selectedReviewTaskId, setSelectedReviewTaskId] = useState("");
   const [reviewComment, setReviewComment] = useState("");
+  const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
   const [reviewChecklist, setReviewChecklist] = useState({
     acceptanceCriteriaMet: false,
     evidenceProvided: false,
@@ -74,13 +79,14 @@ export function SprintScoreTableOverview({
     unassignedTasks,
     scoreRows,
     reviewTasks,
-    meeting,
+    meetings,
     finalScores,
     openScores,
     sprintHasTasks,
     sprintIsCurrent,
   } = buildSprintScoreViewModel({ data, selectedSprintId });
   const selectedReviewTask = reviewTasks.find((task) => task.id === selectedReviewTaskId) || reviewTasks[0];
+  const openObjections = data.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.status === "open");
   const sprintControlsDisabled = pending || !canManageSprint;
   const sprintStatusLabel: Record<Sprint["status"], string> = {
     planning: "Planung",
@@ -186,12 +192,17 @@ export function SprintScoreTableOverview({
             {sprintLockMessage}
           </div>
         )}
+        {openObjections.length > 0 && (
+          <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            {openObjections.length} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.
+          </div>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <div>
-            <h2 className="text-base font-semibold text-slate-950">Founder Scoreboard</h2>
+            <h2 className="text-base font-semibold text-slate-950">FounderOps Score v2.1</h2>
             <p className="text-xs text-slate-500">{sprintStatusLabel[sprint.status]} · {formatDate(sprint.startDate)} bis {formatDate(sprint.endDate)}</p>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${sprint.scoreLocked ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
@@ -209,7 +220,11 @@ export function SprintScoreTableOverview({
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Workflow</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Final</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Punkte</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Delivery</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Form / Review-Reife</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Weekly</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">20 Punkte</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Strike</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Offen</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Aufwand</th>
               </tr>
@@ -239,8 +254,20 @@ export function SprintScoreTableOverview({
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.active} aktiv · {row.blocked} blockiert</td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.reviewReady}</td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.finalScore}</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-lg font-semibold text-slate-950">{row.finalPoints}</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.openScore}</td>
+                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.deliveryPoints}/12</td>
+                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.formPoints}/4</td>
+                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.weeklyPoints}/4</td>
+                  <td className="border-b border-slate-100 px-3 py-3">
+                    <div className="text-lg font-semibold text-slate-950">{row.v21Score.totalPoints}/20</div>
+                    <div className={`text-xs font-semibold ${row.v21Score.awayNeutral ? "text-blue-700" : row.v21Score.fulfilled ? "text-emerald-700" : "text-amber-700"}`}>
+                      {row.v21Score.awayNeutral ? "Away-neutral" : row.v21Score.fulfilled ? "erfüllt" : "nicht erfüllt"}
+                    </div>
+                  </td>
+                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <div className="font-semibold text-slate-900">{row.strikeState?.strikeLevel ?? 0}/3</div>
+                    <div className="text-xs text-slate-500">{row.strikeState?.fulfilledResetStreak ? `${row.strikeState.fulfilledResetStreak} Reset-Sprint` : "kein Reset offen"}</div>
+                  </td>
+                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.openScore} Score · {row.openScoreObjections} Einwand</td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.hours}h</td>
                 </tr>
               ))}
@@ -251,12 +278,63 @@ export function SprintScoreTableOverview({
 
       <SprintMeetingAttendanceSection
         data={data}
-        meeting={meeting}
+        meetings={meetings}
         pending={pending}
         currentProfile={currentProfile}
         canManageSprint={canManageSprint}
         onUpdateMeetingAttendance={onUpdateMeetingAttendance}
       />
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
+            <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Lock geprüft sein. Es gibt maximal einen Zweitreview.</p>
+          </div>
+          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{openObjections.length} offen</span>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {data.scoreObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
+            const profile = data.profiles.find((item) => item.id === objection.profileId);
+            return (
+              <div key={objection.id} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-slate-900">{profile?.name || objection.profileId} · {objection.status}</span>
+                  {canManageSprint && objection.status === "open" && (
+                    <div className="flex gap-2">
+                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "reviewed")} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Geprüft</button>
+                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "dismissed")} className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 disabled:opacity-50">Ablehnen</button>
+                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "accepted")} className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:opacity-50">Annehmen</button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-slate-700">{objection.comment}</p>
+                {objection.secondReviewerProfileId && <p className="text-xs text-slate-500">Zweitreview: {objection.secondReviewerProfileId}</p>}
+              </div>
+            );
+          })}
+          {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch keine Score-Einwände.</div>}
+        </div>
+        {!sprint.scoreLocked && currentProfile && (
+          <form
+            className="mt-3 flex flex-col gap-2 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!scoreObjectionDraft.trim()) return;
+              onCreateScoreObjection(sprint, scoreObjectionDraft);
+              setScoreObjectionDraft("");
+            }}
+          >
+            <input
+              value={scoreObjectionDraft}
+              onChange={(event) => setScoreObjectionDraft(event.target.value)}
+              className="h-9 flex-1 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+              placeholder="Sachlich begründeten Score-Einwand einreichen"
+            />
+            <button type="submit" disabled={pending || !scoreObjectionDraft.trim()} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Einwand speichern</button>
+          </form>
+        )}
+      </section>
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
@@ -346,7 +424,7 @@ export function SprintScoreTableOverview({
             <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">CEO Review-Blatt</div>
             <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>
             <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)}</p>
-            <p className="mt-2 text-xs leading-5 text-blue-800">CEO-Punkte entstehen nur hier im Review-Blatt. Das Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score.</p>
+            <p className="mt-2 text-xs leading-5 text-blue-800">Review-Rohpunkte entstehen nur hier im Review-Blatt. Der Sprint-Gesamtscore wird später als 20-Punkte-Modell finalisiert.</p>
           </div>
           <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
@@ -381,7 +459,7 @@ export function SprintScoreTableOverview({
             </div>
             <div className="grid content-start gap-3">
               <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
+                Review-Rohpunkte: vier Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
               </div>
               {reviewChecklistItems.map(([key, label, pointsLabel]) => (
                 <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm text-slate-700">
@@ -397,7 +475,7 @@ export function SprintScoreTableOverview({
                 </label>
               ))}
               <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Automatische CEO-Punkte
+                Automatische Review-Rohpunkte
                 <input
                   type="number"
                   min={0}

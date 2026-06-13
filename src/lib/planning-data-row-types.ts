@@ -1,4 +1,4 @@
-import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, Sprint, SprintCommitment, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -132,6 +132,58 @@ export type DbSprintCommitment = {
   commitment_level: SprintCommitment["commitmentLevel"];
   weekly_hours: number;
   note: string | null;
+};
+
+export type DbFounderSprintScore = {
+  id: number;
+  sprint_id: string;
+  profile_id: string;
+  delivery_points: number;
+  form_points: number;
+  weekly_points: number;
+  total_points: number;
+  fulfilled: boolean;
+  away_neutral: boolean;
+  finalized_at: string;
+  finalized_by: string | null;
+  reason_summary: string | null;
+};
+
+export type DbFounderStrikeState = {
+  id: number;
+  profile_id: string;
+  strike_level: number;
+  fulfilled_reset_streak: number;
+  last_evaluated_sprint_id: string | null;
+  updated_at: string;
+};
+
+export type DbStrikeEvent = {
+  id: number;
+  profile_id: string;
+  sprint_id: string;
+  event_type: StrikeEvent["eventType"];
+  previous_strike_level: number;
+  next_strike_level: number;
+  reason: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type DbScoreObjection = {
+  id: number;
+  sprint_id: string;
+  profile_id: string;
+  founder_sprint_score_id: number | null;
+  status: ScoreObjection["status"];
+  comment: string;
+  resolution_comment: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  second_reviewer_profile_id: string | null;
+  second_review_decision: string | null;
+  second_reviewed_at: string | null;
+  created_at: string;
 };
 
 export type DbAvailability = {

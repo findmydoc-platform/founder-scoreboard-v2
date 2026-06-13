@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 test("dev role switch is local-only and flows through API authorization", async () => {
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const requestContext = await readFile("src/hooks/use-planning-request-context.ts", "utf8");
   const devSwitch = await readFile("src/components/dev-role-switch.tsx", "utf8");
 
   assert.match(authz, /x-fmd-dev-profile-id/);
@@ -12,10 +13,13 @@ test("dev role switch is local-only and flows through API authorization", async 
   assert.match(authz, /localhost\|127\\\.0\\\.0\\\.1\|\\\[::1\\\]/);
   assert.match(authz, /isOperationalLeadRole\(profile\.platform_role\)/);
   assert.match(ui, /DevRoleSwitch/);
+  assert.match(ui, /usePlanningRequestContext/);
   assert.match(devSwitch, /Dev-Ansicht/);
   assert.match(devSwitch, /roleLabel\(effectiveProfile\)/);
-  assert.match(ui, /x-fmd-dev-profile-id/);
-  assert.match(ui, /devProfileStateKey/);
+  assert.match(requestContext, /x-fmd-dev-profile-id/);
+  assert.match(requestContext, /devProfileStateKey/);
+  assert.match(requestContext, /process\.env\.NODE_ENV !== "production"/);
+  assert.match(requestContext, /isLocalDevHost\(\)/);
 });
 
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
@@ -126,6 +130,55 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(sprintUi, /Evidence Required/);
   assert.match(sprintUi, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
+});
+
+test("founderops v2.1 computes 20 point sprint scores strikes and objections", async () => {
+  const scoring = await readFile("src/lib/founderops-scoring.ts", "utf8");
+  const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
+  const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+  const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const meetingUi = await readFile("src/components/sprint-meeting-attendance-section.tsx", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
+
+  assert.match(scoring, /deliveryPoints/);
+  assert.match(scoring, /formPoints/);
+  assert.match(scoring, /weeklyPoints/);
+  assert.match(scoring, /total >= 12/);
+  assert.match(scoring, /commitment\?\.commitmentLevel === "Away"/);
+  assert.match(scoring, /task\.taskType === "deliverable"/);
+  assert.match(scoring, /governance_review_required/);
+  assert.match(migration, /create table if not exists founder_sprint_scores/);
+  assert.match(migration, /create table if not exists founder_strike_state/);
+  assert.match(migration, /create table if not exists strike_events/);
+  assert.match(migration, /create table if not exists score_objections/);
+  assert.match(migration, /Weekly 1/);
+  assert.match(migration, /Weekly 2/);
+  assert.match(route, /computeFounderSprintScore/);
+  assert.match(route, /computeStrikeTransition/);
+  assert.match(route, /Offene Score-Einwände/);
+  assert.match(route, /Reviewfrist läuft noch/);
+  assert.match(route, /founder_sprint_scores/);
+  assert.match(route, /founder_strike_state/);
+  assert.match(route, /strike_events/);
+  assert.match(objectionRoute, /score_objections/);
+  assert.match(objectionRoute, /second_reviewer_profile_id/);
+  assert.match(ui, /FounderOps Score v2\.1/);
+  assert.match(ui, /20 Punkte/);
+  assert.match(ui, /Delivery/);
+  assert.match(ui, /Form \/ Review-Reife/);
+  assert.match(ui, /Weekly/);
+  assert.match(ui, /Strike/);
+  assert.match(ui, /Score-Einwände/);
+  assert.match(meetingUi, /Weekly Updates/);
+  assert.match(meetingUi, /max\. 2 je Weekly, 4 je Sprint/);
+  assert.doesNotMatch(meetingUi, /Biweekly/);
+  assert.match(data, /founderSprintScores/);
+  assert.match(data, /founderStrikeStates/);
+  assert.match(data, /scoreObjections/);
+  assert.match(verify, /founder_sprint_scores/);
+  assert.match(verify, /strike_events/);
 });
 
 test("sprint lock freezes open scores and closes the sprint", async () => {
@@ -352,10 +405,10 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
   assert.match(sprintUi, /Review-Blatt/);
   assert.match(sprintUi, /CEO Review-Blatt/);
-  assert.match(sprintUi, /Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score/);
+  assert.match(sprintUi, /Review-Rohpunkte/);
   assert.match(sprintUi, /reviewChecklistScore/);
-  assert.match(sprintUi, /Automatische CEO-Punkte/);
-  assert.match(sprintUi, /Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte/);
+  assert.match(sprintUi, /20 Punkte/);
+  assert.match(sprintUi, /Form \/ Review-Reife/);
   assert.match(reviewRoute, /checklistPoints/);
   assert.match(reviewRoute, /acceptanceCriteriaMet/);
 });

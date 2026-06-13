@@ -17,9 +17,9 @@ const statuses = new Set(["pending", "present", "excused", "late_excused", "unex
 const founderSelfReportStatuses = new Set(["pending", "excused", "late_excused"]);
 
 function defaultPoints(status: MeetingAttendanceStatus, reasonAccepted: boolean, writtenUpdate: string) {
-  if (status === "present") return 4;
-  if (status === "excused") return Math.min(4, (reasonAccepted ? 2 : 0) + (writtenUpdate.trim() ? 2 : 0));
-  if (status === "late_excused") return Math.min(3, (reasonAccepted ? 1 : 0) + (writtenUpdate.trim() ? 2 : 0));
+  if (status === "present") return 2;
+  if (status === "excused") return Math.min(2, (reasonAccepted ? 1 : 0) + (writtenUpdate.trim() ? 1 : 0));
+  if (status === "late_excused") return Math.min(2, (reasonAccepted ? 1 : 0) + (writtenUpdate.trim() ? 1 : 0));
   return 0;
 }
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const reasonAccepted = isLead ? Boolean(payload.reasonAccepted) : false;
   const points = isLead && payload.points !== undefined
-    ? Math.max(0, Math.min(4, Math.round(Number(payload.points))))
+    ? Math.max(0, Math.min(2, Math.round(Number(payload.points))))
     : isLead ? defaultPoints(status, reasonAccepted, writtenUpdate) : 0;
 
   const { data: meeting, error: meetingError } = await supabase

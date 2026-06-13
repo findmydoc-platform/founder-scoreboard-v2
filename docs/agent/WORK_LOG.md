@@ -77,3 +77,10 @@
 - Changes: Extracted seed-mode local task override loading and persistence into `src/hooks/use-local-planning-state.ts`; `planning-app.tsx` now calls the hook and a named persistence helper.
 - Files: `src/components/planning-app.tsx`, `src/hooks/use-local-planning-state.ts`, `tests/platform-operations-contract.test.mjs`.
 - Follow-up: `planning-app.tsx` remains the only 500+ line hotspot at 3435 lines. Next safe active slice is likely request header/dev-profile state or a contained mutation group; keep auth role handling separated from non-auth UI state.
+
+## 2026-06-11 - Planning App Request Context Hook Refactor
+
+- Scope: Phase 4.15 Level 3 security-boundary refactor for `src/components/planning-app.tsx`.
+- Changes: Extracted local dev-profile override state, current/effective profile derivation, and shared request header assembly into `src/hooks/use-planning-request-context.ts`.
+- Files: `src/components/planning-app.tsx`, `src/hooks/use-planning-request-context.ts`, `tests/platform-planning-workflow-contract.test.mjs`, `tests/platform-github-contract.test.mjs`.
+- Follow-up: `planning-app.tsx` remains the only 500+ line hotspot at 3410 lines. Next safe active slice should avoid auth/header boundaries unless there is a focused security contract; mutation groups are likely the next practical target.

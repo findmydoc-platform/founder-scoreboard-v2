@@ -94,3 +94,11 @@
 - Browser: Local production smoke with `REQUIRE_SUPABASE_AUTH=false` on `/?workspace=planning` returned HTTP 200/title `findmydoc Planning`, showed project/Board UI, and displayed the expected local/Postgres persistence status text.
 - Result: Passed.
 - Residual risk: The browser smoke was read-only. Local write persistence is covered by the new contract test around the persistence helper and existing task update flow checks.
+
+## 2026-06-11 - Planning App Request Context Hook Refactor
+
+- Scope: Level 3 security-boundary refactor for dev-profile override and GitHub provider-token request header assembly, with no intended API, authz, database, role, or token persistence behavior change.
+- Commands: focused dev-role/GitHub OAuth contract tests, `npx tsc --noEmit --pretty false`, `npm test`, `npm run lint`, `npm run build`, `npm run verify:auth`, `npm run verify:supabase`, `npm run audit:stewardship`, UTF-8/mojibake scan for edited files, `git diff --check`.
+- Browser: Local production smoke with `REQUIRE_SUPABASE_AUTH=false` on settings/planning returned HTTP 200/title `findmydoc Planning`; settings showed Session/GitHub User-Token/Teamzugriff status and planning showed Board/Struktur.
+- Result: Passed.
+- Residual risk: Browser smoke was read-only and did not exercise live GitHub OAuth or a dev-profile API mutation. Header behavior is covered by focused contract tests and the server-side `authz.ts` guard remains unchanged.

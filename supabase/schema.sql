@@ -111,6 +111,60 @@ create table if not exists decision_task_links (
   unique (decision_id, task_id)
 );
 
+create table if not exists founder_sprint_scores (
+  id bigint generated always as identity primary key,
+  sprint_id text not null references sprints(id) on delete cascade,
+  profile_id text not null references profiles(id) on delete cascade,
+  delivery_points integer not null default 0 check (delivery_points between 0 and 12),
+  form_points integer not null default 0 check (form_points between 0 and 4),
+  weekly_points integer not null default 0 check (weekly_points between 0 and 4),
+  total_points integer not null default 0 check (total_points between 0 and 20),
+  fulfilled boolean not null default false,
+  away_neutral boolean not null default false,
+  finalized_at timestamptz not null default now(),
+  finalized_by text references profiles(id) on delete set null,
+  reason_summary text not null default '',
+  unique (sprint_id, profile_id)
+);
+
+create table if not exists founder_strike_state (
+  id bigint generated always as identity primary key,
+  profile_id text not null unique references profiles(id) on delete cascade,
+  strike_level integer not null default 0 check (strike_level between 0 and 3),
+  fulfilled_reset_streak integer not null default 0 check (fulfilled_reset_streak >= 0),
+  last_evaluated_sprint_id text references sprints(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists strike_events (
+  id bigint generated always as identity primary key,
+  profile_id text not null references profiles(id) on delete cascade,
+  sprint_id text not null references sprints(id) on delete cascade,
+  event_type text not null check (event_type in ('strike_added', 'strike_reset', 'away_neutral', 'fulfilled_no_change', 'governance_review_required')),
+  previous_strike_level integer not null default 0 check (previous_strike_level between 0 and 3),
+  next_strike_level integer not null default 0 check (next_strike_level between 0 and 3),
+  reason text not null default '',
+  created_at timestamptz not null default now(),
+  created_by text references profiles(id) on delete set null
+);
+
+create table if not exists score_objections (
+  id bigint generated always as identity primary key,
+  sprint_id text not null references sprints(id) on delete cascade,
+  profile_id text not null references profiles(id) on delete cascade,
+  founder_sprint_score_id bigint references founder_sprint_scores(id) on delete set null,
+  status text not null default 'open' check (status in ('open', 'reviewed', 'dismissed', 'accepted')),
+  comment text not null,
+  resolution_comment text not null default '',
+  reviewed_by text references profiles(id) on delete set null,
+  reviewed_at timestamptz,
+  second_reviewer_profile_id text references profiles(id) on delete set null,
+  second_review_decision text,
+  second_reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
   create index if not exists packages_project_id_idx on packages(project_id);
   create index if not exists packages_owner_id_idx on packages(owner_id);
@@ -128,10 +182,16 @@ create index if not exists task_focus_items_profile_date_idx on task_focus_items
 create index if not exists task_focus_items_task_idx on task_focus_items(task_id);
 create index if not exists decision_task_links_decision_idx on decision_task_links(decision_id);
 create index if not exists decision_task_links_task_idx on decision_task_links(task_id);
+create index if not exists founder_sprint_scores_sprint_idx on founder_sprint_scores(sprint_id);
+create index if not exists founder_sprint_scores_profile_idx on founder_sprint_scores(profile_id);
+create index if not exists strike_events_profile_sprint_idx on strike_events(profile_id, sprint_id);
+create index if not exists strike_events_type_idx on strike_events(event_type);
+create index if not exists score_objections_sprint_status_idx on score_objections(sprint_id, status);
+create index if not exists score_objections_profile_idx on score_objections(profile_id);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links to authenticated, service_role;
-grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links to authenticated, service_role;
+grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections to authenticated, service_role;
+grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections to authenticated, service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 create or replace function public.current_profile_role()
@@ -154,6 +214,10 @@ alter table task_notes enable row level security;
 alter table task_activity enable row level security;
 alter table task_focus_items enable row level security;
 alter table decision_task_links enable row level security;
+alter table founder_sprint_scores enable row level security;
+alter table founder_strike_state enable row level security;
+alter table strike_events enable row level security;
+alter table score_objections enable row level security;
 
 drop policy if exists "profiles_select_team" on profiles;
 create policy "profiles_select_team" on profiles for select to authenticated using (auth.uid() is not null);

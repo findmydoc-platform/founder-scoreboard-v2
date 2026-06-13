@@ -1,5 +1,5 @@
-import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
-import type { DbProfile, DbPackage, DbMilestone, DbTask, DbSprint, DbDecision, DbSprintCommitment, DbAvailability, DbAuditEntry, DbDecisionComment, DbTaskComment, DbTaskExternalComment, DbTaskBlocker, DbTaskRelation, DbTaskActivity, DbTaskFocusItem, DbDecisionTaskLink, DbNotificationEvent, DbNotificationDelivery, DbNotificationPreference, DbFeedbackItem, DbFmdTool, DbMeeting, DbMeetingAttendance } from "./planning-data-row-types";
+import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderSprintScore, FounderStrikeState, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { DbProfile, DbPackage, DbMilestone, DbTask, DbSprint, DbDecision, DbSprintCommitment, DbAvailability, DbAuditEntry, DbDecisionComment, DbTaskComment, DbTaskExternalComment, DbTaskBlocker, DbTaskRelation, DbTaskActivity, DbTaskFocusItem, DbDecisionTaskLink, DbNotificationEvent, DbNotificationDelivery, DbNotificationPreference, DbFeedbackItem, DbFmdTool, DbMeeting, DbMeetingAttendance, DbFounderSprintScore, DbFounderStrikeState, DbStrikeEvent, DbScoreObjection } from "./planning-data-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
   volkan: "#22c55e",
@@ -168,6 +168,66 @@ export function mapSprintCommitment(row: DbSprintCommitment): SprintCommitment {
     commitmentLevel: row.commitment_level,
     weeklyHours: row.weekly_hours,
     note: row.note || "",
+  };
+}
+
+export function mapFounderSprintScore(row: DbFounderSprintScore): FounderSprintScore {
+  return {
+    id: row.id,
+    sprintId: row.sprint_id,
+    profileId: row.profile_id,
+    deliveryPoints: row.delivery_points,
+    formPoints: row.form_points,
+    weeklyPoints: row.weekly_points,
+    totalPoints: row.total_points,
+    fulfilled: row.fulfilled,
+    awayNeutral: row.away_neutral,
+    finalizedAt: row.finalized_at,
+    finalizedBy: row.finalized_by || "",
+    reasonSummary: row.reason_summary || "",
+  };
+}
+
+export function mapFounderStrikeState(row: DbFounderStrikeState): FounderStrikeState {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    strikeLevel: row.strike_level,
+    fulfilledResetStreak: row.fulfilled_reset_streak,
+    lastEvaluatedSprintId: row.last_evaluated_sprint_id || "",
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapStrikeEvent(row: DbStrikeEvent): StrikeEvent {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    sprintId: row.sprint_id,
+    eventType: row.event_type,
+    previousStrikeLevel: row.previous_strike_level,
+    nextStrikeLevel: row.next_strike_level,
+    reason: row.reason || "",
+    createdAt: row.created_at,
+    createdBy: row.created_by || "",
+  };
+}
+
+export function mapScoreObjection(row: DbScoreObjection): ScoreObjection {
+  return {
+    id: row.id,
+    sprintId: row.sprint_id,
+    profileId: row.profile_id,
+    founderSprintScoreId: row.founder_sprint_score_id,
+    status: row.status,
+    comment: row.comment,
+    resolutionComment: row.resolution_comment || "",
+    reviewedBy: row.reviewed_by || "",
+    reviewedAt: row.reviewed_at || "",
+    secondReviewerProfileId: row.second_reviewer_profile_id || "",
+    secondReviewDecision: row.second_review_decision || "",
+    secondReviewedAt: row.second_reviewed_at || "",
+    createdAt: row.created_at,
   };
 }
 

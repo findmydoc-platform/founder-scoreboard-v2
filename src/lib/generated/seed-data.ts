@@ -2062,6 +2062,10 @@ export const seedData: PlanningData = {
     }
   ],
   "sprintCommitments": [],
+  "founderSprintScores": [],
+  "founderStrikeStates": [],
+  "strikeEvents": [],
+  "scoreObjections": [],
   "milestones": [],
   "decisions": [],
   "decisionComments": [],

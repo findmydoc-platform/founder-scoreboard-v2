@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
+import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
 import { getServerSupabase } from "@/lib/supabase";
+import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
 
 type TaskRow = {
   id: string;
@@ -39,6 +41,7 @@ type TaskRow = {
   acceptance_criteria: unknown;
   evidence_required: string | null;
   dod_template_version: string | null;
+  sprint_outcome: string | null;
 };
 
 function normalizeStatus(value: string) {
@@ -70,17 +73,32 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const permission = await requireOperationalLead(request);
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  const payload = (await request.json().catch(() => ({}))) as { finalizeNow?: boolean };
 
   const { id } = await context.params;
 
   const { data: sprint, error: sprintError } = await supabase
     .from("sprints")
-    .select("id,name,start_date,end_date,score_locked")
+    .select("id,name,start_date,end_date,review_due_at,score_locked")
     .eq("id", id)
     .single();
 
   if (sprintError || !sprint) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
   if (sprint.score_locked) return NextResponse.json({ error: "Sprint ist bereits gelockt." }, { status: 409 });
+
+  const { count: openObjections, error: objectionError } = await supabase
+    .from("score_objections")
+    .select("*", { count: "exact", head: true })
+    .eq("sprint_id", id)
+    .eq("status", "open");
+  if (objectionError) return NextResponse.json({ error: objectionError.message }, { status: 500 });
+  if ((openObjections || 0) > 0) {
+    return NextResponse.json({ error: "Offene Score-Einwände müssen vor dem Sprint-Lock geprüft werden." }, { status: 409 });
+  }
+
+  if (sprint.review_due_at && new Date(sprint.review_due_at).getTime() > Date.now() && !payload.finalizeNow) {
+    return NextResponse.json({ error: "Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen." }, { status: 409 });
+  }
 
   const { data: nextSprint } = await supabase
     .from("sprints")
@@ -93,7 +111,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
-    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version")
+    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
   if (tasksError) return NextResponse.json({ error: tasksError.message }, { status: 500 });
@@ -212,6 +230,149 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (freezeError) return NextResponse.json({ error: freezeError.message }, { status: 500 });
 
+  const [
+    profileResult,
+    commitmentResult,
+    meetingResult,
+    attendanceResult,
+    strikeStateResult,
+  ] = await Promise.all([
+    supabase.from("profiles").select("id,name,role,platform_role,weekly_capacity"),
+    supabase.from("sprint_commitments").select("id,sprint_id,profile_id,commitment_level,weekly_hours,note").eq("sprint_id", id),
+    supabase.from("meetings").select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda").eq("sprint_id", id).order("meeting_at"),
+    supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at"),
+    supabase.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at"),
+  ]);
+
+  if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
+  if (commitmentResult.error) return NextResponse.json({ error: commitmentResult.error.message }, { status: 500 });
+  if (meetingResult.error) return NextResponse.json({ error: meetingResult.error.message }, { status: 500 });
+  if (attendanceResult.error) return NextResponse.json({ error: attendanceResult.error.message }, { status: 500 });
+  if (strikeStateResult.error) return NextResponse.json({ error: strikeStateResult.error.message }, { status: 500 });
+
+  const profiles = (profileResult.data || []).map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    role: profile.role || "member",
+    platformRole: profile.platform_role || "founder",
+    orgRole: "",
+    githubLogin: "",
+    weeklyCapacity: profile.weekly_capacity || 0,
+  })) as Profile[];
+  const profileNameById = new Map(profiles.map((profile) => [profile.id, profile.name]));
+  const scoringTasks = sprintTasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    owner: task.owner ? profileNameById.get(task.owner) || task.owner : "",
+    reviewStatus: (task.review_status || "not_requested") as Task["reviewStatus"],
+    scorePoints: Number(task.score_points || 0),
+    scoreFinal: Boolean(task.score_final),
+    taskType: (task.task_type || "deliverable") as Task["taskType"],
+    scoreRelevant: task.score_relevant !== false,
+    definitionOfDone: task.definition_of_done || "",
+    evidenceLink: task.evidence_link || "",
+    githubIssueUrl: task.github_issue_url || "",
+    issueUrl: task.issue_url || "",
+    sprintOutcome: (task.sprint_outcome || "") as Task["sprintOutcome"],
+  })) as Task[];
+  const commitments = (commitmentResult.data || []).map((commitment) => ({
+    id: commitment.id,
+    sprintId: commitment.sprint_id,
+    profileId: commitment.profile_id,
+    commitmentLevel: commitment.commitment_level,
+    weeklyHours: commitment.weekly_hours,
+    note: commitment.note || "",
+  })) as SprintCommitment[];
+  const meetings = (meetingResult.data || []).map((meeting) => ({
+    id: meeting.id,
+    sprintId: meeting.sprint_id,
+    title: meeting.title,
+    meetingAt: meeting.meeting_at,
+    durationMinutes: meeting.duration_minutes || 60,
+    status: meeting.status,
+    agenda: meeting.agenda || "",
+  })) as Meeting[];
+  const meetingAttendance = (attendanceResult.data || []).map((attendance) => ({
+    id: attendance.id,
+    meetingId: attendance.meeting_id,
+    profileId: attendance.profile_id,
+    status: attendance.status,
+    absenceReason: attendance.absence_reason || "",
+    reasonAccepted: attendance.reason_accepted,
+    writtenUpdate: attendance.written_update || "",
+    points: attendance.points,
+    createdAt: attendance.created_at,
+    updatedAt: attendance.updated_at,
+  })) as MeetingAttendance[];
+  const strikeStateByProfile = new Map((strikeStateResult.data || []).map((state) => [state.profile_id, state]));
+  const scoreRows = [];
+  const strikeStateRows = [];
+  const strikeEvents = [];
+  const now = new Date().toISOString();
+
+  for (const profile of profiles) {
+    const score = computeFounderSprintScore({
+      profile,
+      tasks: scoringTasks,
+      commitment: commitments.find((item) => item.profileId === profile.id),
+      meetings,
+      meetingAttendance,
+    });
+    const state = strikeStateByProfile.get(profile.id);
+    const transition = computeStrikeTransition(score, state ? {
+      strikeLevel: state.strike_level,
+      fulfilledResetStreak: state.fulfilled_reset_streak,
+    } : null);
+
+    scoreRows.push({
+      sprint_id: id,
+      profile_id: profile.id,
+      delivery_points: score.deliveryPoints,
+      form_points: score.formPoints,
+      weekly_points: score.weeklyPoints,
+      total_points: score.totalPoints,
+      fulfilled: score.fulfilled,
+      away_neutral: score.awayNeutral,
+      finalized_at: now,
+      finalized_by: permission.profile?.id || null,
+      reason_summary: score.reasonSummary,
+    });
+
+    strikeStateRows.push({
+      profile_id: profile.id,
+      strike_level: transition.nextStrikeLevel,
+      fulfilled_reset_streak: transition.fulfilledResetStreak,
+      last_evaluated_sprint_id: id,
+      updated_at: now,
+    });
+
+    strikeEvents.push({
+      profile_id: profile.id,
+      sprint_id: id,
+      event_type: transition.eventType,
+      previous_strike_level: transition.previousStrikeLevel,
+      next_strike_level: transition.nextStrikeLevel,
+      reason: transition.reason,
+      created_by: permission.profile?.id || null,
+    });
+  }
+
+  if (scoreRows.length) {
+    const { error: scoreError } = await supabase.from("founder_sprint_scores").upsert(scoreRows, { onConflict: "sprint_id,profile_id" });
+    if (scoreError) return NextResponse.json({ error: scoreError.message }, { status: 500 });
+  }
+
+  if (strikeStateRows.length) {
+    const { error: strikeStateError } = await supabase.from("founder_strike_state").upsert(strikeStateRows, { onConflict: "profile_id" });
+    if (strikeStateError) return NextResponse.json({ error: strikeStateError.message }, { status: 500 });
+  }
+
+  if (strikeEvents.length) {
+    const { error: strikeError } = await supabase.from("strike_events").insert(strikeEvents);
+    if (strikeError) return NextResponse.json({ error: strikeError.message }, { status: 500 });
+  }
+
   const { error: updateError } = await supabase
     .from("sprints")
     .update({ score_locked: true, status: "closed", updated_at: new Date().toISOString() })
@@ -230,6 +391,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       evaluatedTasks: carryoverTasks.length,
       carryoverCreated: carryoverInserts.length,
       nextSprintId: nextSprint?.id || null,
+      founderScores: scoreRows.length,
+      strikeEvents: strikeEvents.length,
     },
     request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
     user_agent: request.headers.get("user-agent"),
@@ -242,6 +405,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       nextSprintId: nextSprint?.id || "",
       created: carryoverInserts.length,
       evaluated: carryoverTasks.length,
+    },
+    scoring: {
+      scores: scoreRows.length,
+      strikeEvents: strikeEvents.length,
+      governanceReviews: strikeEvents.filter((event) => event.event_type === "governance_review_required").length,
     },
   });
 }

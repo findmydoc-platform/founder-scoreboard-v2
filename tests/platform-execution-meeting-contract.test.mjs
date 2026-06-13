@@ -174,7 +174,7 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(types, /TaskType = "deliverable" \| "proposal" \| "sub_issue"/);
 });
 
-test("biweekly meeting attendance has scoring, absence reasons and updates", async () => {
+test("weekly meeting attendance has scoring, absence reasons and updates", async () => {
   const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
@@ -194,11 +194,12 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
   assert.match(route, /lead_review/);
   assert.match(data, /meetingAttendance/);
   assert.match(sprintUi, /SprintMeetingAttendanceSection/);
-  assert.match(sprintMeetingUi, /Biweekly Meeting & Updates/);
+  assert.match(sprintMeetingUi, /Weekly Updates/);
+  assert.match(sprintMeetingUi, /max\. 2 je Weekly, 4 je Sprint/);
   assert.match(sprintMeetingUi, /Triftiger Grund/);
   assert.match(sprintMeetingUi, /eigene Rückmeldung/);
   assert.match(sprintMeetingUi, /canScoreAttendance/);
-  assert.match(sprintMeetingUi, /max\. 4 Punkte/);
+  assert.match(sprintMeetingUi, /\[0, 1, 2\]/);
   assert.match(types, /MeetingAttendanceStatus/);
 });
 

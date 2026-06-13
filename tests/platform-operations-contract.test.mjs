@@ -329,7 +329,7 @@ test("mine workspace follows the effective current profile", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 
   assert.match(ui, /serverCurrentProfile/);
-  assert.match(ui, /serverCurrentProfile\.id/);
+  assert.match(ui, /currentProfileId: serverCurrentProfile\?\.id/);
   assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => taskBelongsToProfile\(task, currentProfile\)\)/);
   assert.match(ui, /Fokus auf die Aufgaben von \$\{mineOwnerName\}/);

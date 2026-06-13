@@ -3,6 +3,8 @@ export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
 export type GitHubSyncStatus = "not_synced" | "synced" | "pending" | "failed";
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
+export type StrikeEventType = "strike_added" | "strike_reset" | "away_neutral" | "fulfilled_no_change" | "governance_review_required";
+export type ScoreObjectionStatus = "open" | "reviewed" | "dismissed" | "accepted";
 export type TaskType = "deliverable" | "proposal" | "sub_issue";
 export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
 
@@ -139,6 +141,58 @@ export type SprintCommitment = {
   commitmentLevel: CommitmentLevel;
   weeklyHours: number;
   note: string;
+};
+
+export type FounderSprintScore = {
+  id: number;
+  sprintId: string;
+  profileId: string;
+  deliveryPoints: number;
+  formPoints: number;
+  weeklyPoints: number;
+  totalPoints: number;
+  fulfilled: boolean;
+  awayNeutral: boolean;
+  finalizedAt: string;
+  finalizedBy: string;
+  reasonSummary: string;
+};
+
+export type FounderStrikeState = {
+  id: number;
+  profileId: string;
+  strikeLevel: number;
+  fulfilledResetStreak: number;
+  lastEvaluatedSprintId: string;
+  updatedAt: string;
+};
+
+export type StrikeEvent = {
+  id: number;
+  profileId: string;
+  sprintId: string;
+  eventType: StrikeEventType;
+  previousStrikeLevel: number;
+  nextStrikeLevel: number;
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+};
+
+export type ScoreObjection = {
+  id: number;
+  sprintId: string;
+  profileId: string;
+  founderSprintScoreId: number | null;
+  status: ScoreObjectionStatus;
+  comment: string;
+  resolutionComment: string;
+  reviewedBy: string;
+  reviewedAt: string;
+  secondReviewerProfileId: string;
+  secondReviewDecision: string;
+  secondReviewedAt: string;
+  createdAt: string;
 };
 
 export type Decision = {
@@ -372,6 +426,10 @@ export type PlanningData = {
   tasks: Task[];
   sprints: Sprint[];
   sprintCommitments: SprintCommitment[];
+  founderSprintScores: FounderSprintScore[];
+  founderStrikeStates: FounderStrikeState[];
+  strikeEvents: StrikeEvent[];
+  scoreObjections: ScoreObjection[];
   decisions: Decision[];
   decisionComments: DecisionComment[];
   taskComments: TaskComment[];

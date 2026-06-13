@@ -6,6 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Founder Scoreboard v2 Rules
 
+- Brand spelling is `findmydoc` in all user-facing copy and documentation. Do not write `FindMyDoc`, `Find My Doc`, or other capitalization variants unless quoting an external source or a technical identifier that already uses another spelling.
 - When the user asks to start "Localhost", "den Localhost", or the "Dev-Server" without naming another project, this means the new FounderOps app in this `fmd-planning/` directory. Start this Next.js app, not the legacy static dashboard in `../docs/findmydoc/dashboard-server.mjs`.
 - If `3000` or `3001` are already occupied by other projects, use a free app port such as `3002`. Verify the page responds with the title `findmydoc Planning` before reporting the URL.
 - Never report the old static dashboard URL `http://localhost:3005` as the FounderOps app unless the user explicitly asks for the old findmydoc Founder Task Dashboard.
@@ -16,8 +17,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Decision Log entries are CEO-editable only. Deputies may operate sprint/task workflows, but must not edit CEO decisions.
 - GitHub Issues are a one-way backup from the app to `findmydoc-platform/management`; do not make GitHub the source of truth without a new plan.
 - GitHub CLI access for this project must use the FindMyDoc account/config only: run GitHub commands through `scripts/gh-fmd.ps1`, which pins `GH_CONFIG_DIR` to the local FindMyDoc CLI config and avoids accidentally using a private GitHub account.
+- Git and GitHub identity for this project is a hard compliance boundary: commits and GitHub operations must use `Mehmet Volkan Kablan <mehmetvolkan.kablan@findmydoc.eu>` and GitHub user `MehmetVolkan`, regardless of any global Git or `gh` configuration. Never use `mehmetkablan93-byte`, `mehmetkablan93@gmail.com`, or other private GitHub credentials for this repository.
 - User-triggered GitHub comments, attachments, and issue updates should use the logged-in GitHub user's Supabase `provider_token` when available. Never persist or log provider tokens.
-- Google Chat bot branding is `FounderOps`. The planned public Chat app event endpoint after GitHub Actions deployment and domain cutover is `https://founderops.findmydoc.eu/api/google-chat/events`; keep this decision aligned with `docs/google-chat-rollout.md`. Personal Google Chat DMs are not complete until GitHub Actions deployment, `/api/google-chat/events`, and Chat API delivery to `profiles.google_chat_dm_space` are implemented.
+- Google Chat bot branding is `FounderOps`. The planned public Chat app event endpoint after GitHub Actions deployment and domain cutover is `https://founder-ops.findmydoc.eu/api/google-chat/events`; keep this decision aligned with `docs/google-chat-rollout.md`. Personal Google Chat DMs are not complete until GitHub Actions deployment, `/api/google-chat/events`, and Chat API delivery to `profiles.google_chat_dm_space` are implemented.
 - Planning hierarchy is fixed: `Epic / Milestone -> Initiative -> Deliverable -> Sub-Issue`; Sprint is a time container, not a parent level. Keep `docs/planning-hierarchy.md`, Supabase, UI, GitHub sync, and tests aligned.
 - Milestone management is a core workflow: keep the `milestones` table, `packages.milestone_id`, task assignment, GitHub mapping, and UI CRUD in sync when expanding this area.
 - New deliverables use `docs/task-template-v2.md`: keep Problem Statement, Intended Outcome, Acceptance Criteria, Evidence, and Definition of Done separate.
