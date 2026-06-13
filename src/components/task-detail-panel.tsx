@@ -127,68 +127,72 @@ export function TaskDetailPanel({
     />
     <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
       <TaskDetailPanelHeader task={task} onClose={onClose} />
-      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <main className="grid min-w-0 gap-4">
-          <TaskDetailPanelBriefSection task={task} onUpdate={onUpdate} />
-          <TaskDetailPanelContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
-          <TaskDetailPanelDependenciesSection
+      <div className="p-5">
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <main className="grid min-w-0 gap-4">
+            <TaskDetailPanelBriefSection task={task} onUpdate={onUpdate} />
+            <TaskDetailPanelContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
+            <TaskDetailPanelDependenciesSection
+              task={task}
+              relationshipGroups={relationshipGroups}
+              relationDraft={relationDraft}
+              relationTargetOptions={relationTargetOptions}
+              canManageTaskMeta={canManageTaskMeta}
+              pending={pending}
+              onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
+              onAddRelation={(draft) => {
+                onAddRelation(draft);
+                setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
+              }}
+              onRemoveRelation={onRemoveRelation}
+            />
+            <TaskDetailPanelSubIssuesSection subIssues={subIssues} onCreateSubIssue={onCreateSubIssue} />
+            <TaskDetailPanelBlockerSection
+              blockers={blockers}
+              blockerDraft={blockerDraft}
+              pending={pending}
+              profileName={profileName}
+              onBlockerDraftChange={(patch) => setBlockerDraft((current) => ({ ...current, ...patch }))}
+              onReportBlocker={(draft) => {
+                onReportBlocker(draft);
+                setBlockerDraft({ reason: "", impact: "", needsHelpFrom: "" });
+              }}
+            />
+
+            <TaskDetailPanelNotesSection task={task} pending={pending} onUpdate={onUpdate} />
+          </main>
+
+          <TaskDetailPanelSidebar
             task={task}
-            relationshipGroups={relationshipGroups}
-            relationDraft={relationDraft}
-            relationTargetOptions={relationTargetOptions}
+            pack={pack}
+            teamProfiles={teamProfiles}
+            packages={packages}
+            sprints={sprints}
+            milestones={milestones}
             canManageTaskMeta={canManageTaskMeta}
             pending={pending}
-            onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
-            onAddRelation={(draft) => {
-              onAddRelation(draft);
-              setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
-            }}
-            onRemoveRelation={onRemoveRelation}
+            githubProviderTokenAvailable={githubProviderTokenAvailable}
+            onUpdate={onUpdate}
+            onReconnectGitHub={onReconnectGitHub}
+            onSyncGitHub={onSyncGitHub}
+            onDelete={onDelete}
           />
-          <TaskDetailPanelSubIssuesSection subIssues={subIssues} onCreateSubIssue={onCreateSubIssue} />
-          <TaskDetailPanelBlockerSection
-            blockers={blockers}
-            blockerDraft={blockerDraft}
+        </div>
+
+        <div className="mt-5 min-w-0">
+          <TaskCommentThread
+            comments={comments}
+            externalComments={externalComments}
+            activities={activities}
+            notice={commentImportNotice}
+            profiles={teamProfiles}
             pending={pending}
-            profileName={profileName}
-            onBlockerDraftChange={(patch) => setBlockerDraft((current) => ({ ...current, ...patch }))}
-            onReportBlocker={(draft) => {
-              onReportBlocker(draft);
-              setBlockerDraft({ reason: "", impact: "", needsHelpFrom: "" });
-            }}
+            importPending={commentImportPending}
+            onImportGitHubComments={onImportGitHubComments}
+            onUploadAttachment={onUploadAttachment}
+            onAddComment={onAddComment}
           />
-
-        <TaskCommentThread
-          comments={comments}
-          externalComments={externalComments}
-          activities={activities}
-          notice={commentImportNotice}
-          profiles={teamProfiles}
-          pending={pending}
-          importPending={commentImportPending}
-          onImportGitHubComments={onImportGitHubComments}
-          onUploadAttachment={onUploadAttachment}
-          onAddComment={onAddComment}
-        />
-
-        <TaskDetailPanelNotesSection task={task} pending={pending} onUpdate={onUpdate} />
-        </main>
-
-        <TaskDetailPanelSidebar
-          task={task}
-          pack={pack}
-          teamProfiles={teamProfiles}
-          packages={packages}
-          sprints={sprints}
-          milestones={milestones}
-          canManageTaskMeta={canManageTaskMeta}
-          pending={pending}
-          githubProviderTokenAvailable={githubProviderTokenAvailable}
-          onUpdate={onUpdate}
-          onReconnectGitHub={onReconnectGitHub}
-          onSyncGitHub={onSyncGitHub}
-          onDelete={onDelete}
-        />
+        </div>
       </div>
     </aside>
     </>

@@ -133,12 +133,12 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
   const profileById = (profileId: string) => profiles.find((profile) => profile.id === profileId);
 
   return (
-    <div className="mt-3 grid gap-2">
+    <div className="mt-3 grid min-w-0 gap-2">
       {items.map((item) => (
         item.type === "comment" ? (
-          <article key={item.id} className="flex gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+          <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
             <ProfileAvatar profile={profileById(item.profileId)} />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                 <span className="font-semibold text-slate-700">{profileName(item.profileId)}</span>
                 <span>{formatDateTime(item.createdAt)}</span>
@@ -147,7 +147,7 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
             </div>
           </article>
         ) : item.type === "github-comment" ? (
-          <article key={item.id} className="flex gap-3 rounded-md border border-slate-100 bg-white px-3 py-2 text-sm">
+          <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-white px-3 py-2 text-sm">
             <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
               {item.authorAvatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -156,7 +156,7 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
                 item.authorLogin.slice(0, 1).toUpperCase() || "G"
               )}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
                   <GitBranch size={13} />
@@ -176,11 +176,11 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
           const activity = describeActivity(item.message);
           const Icon = activity.icon;
           return (
-            <article key={item.id} className="flex gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+            <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
               <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border ${activityToneClass(activity.tone)}`}>
                 <Icon size={15} />
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">{activity.title}</span>
                   <span className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>

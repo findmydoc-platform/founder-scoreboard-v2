@@ -388,11 +388,16 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /CommentBody/);
   assert.match(thread, /TaskCommentComposer/);
   assert.match(githubCommentImage, /<img\b/);
-  assert.match(commentBody, /user-attachments\/assets/);
+  assert.match(commentBody, /react-markdown/);
+  assert.match(commentBody, /remark-gfm/);
+  assert.match(commentBody, /remark-breaks/);
   assert.match(commentBody, /GitHubCommentImage/);
+  assert.match(commentBody, /overflow-x-auto/);
+  assert.match(commentBody, /\[overflow-wrap:anywhere\]/);
+  assert.match(commentBody, /skipHtml/);
   assert.match(githubCommentImage, /\/api\/github-assets\?url=/);
   assert.match(githubCommentImage, /URL\.createObjectURL/);
-  assert.match(commentBody, /decodeHtmlEntities/);
+  assert.match(commentBody, /safeHref/);
   assert.match(githubCommentImage, /useState\(false\)/);
   assert.match(githubCommentImage, /loadViaProxy/);
   assert.match(githubCommentImage, /if \(!isGitHubAsset \|\| proxyAttempted\)/);

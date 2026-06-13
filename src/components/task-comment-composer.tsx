@@ -47,7 +47,7 @@ export function TaskCommentComposer({ pending = false, onAddComment, onUploadAtt
         placeholder="Kommentar, Nachfrage oder kurzes Arbeitsupdate"
       />
       {showCommentPreview && (
-        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <div className="mt-2 min-w-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-3">
           <div className="mb-2 text-xs font-semibold text-slate-500">Vorschau</div>
           {renderPreview(newComment)}
         </div>
