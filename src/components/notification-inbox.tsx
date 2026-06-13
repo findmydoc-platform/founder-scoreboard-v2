@@ -63,7 +63,7 @@ export function NotificationInbox({
       </button>
 
       {open && (
-        <section className="absolute right-0 top-11 z-50 w-[min(92vw,380px)] rounded-lg border border-slate-200 bg-white shadow-xl">
+        <section className="fixed inset-x-4 top-20 z-50 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[min(92vw,380px)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
@@ -71,7 +71,7 @@ export function NotificationInbox({
             </div>
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{unreadCount}</span>
           </div>
-          <div className="max-h-[420px] overflow-y-auto p-2">
+          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
             {notifications.length ? notifications.slice(0, 12).map((event) => {
               const actorName = profiles.find((profile) => profile.id === event.actorProfileId)?.name || "";
               return (

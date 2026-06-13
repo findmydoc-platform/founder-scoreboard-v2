@@ -3130,8 +3130,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               </button>
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 lg:px-6">
-            <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 lg:items-center lg:px-6">
+            <div className="min-w-0 max-w-full">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
               <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
               <div className="mt-1 text-sm text-slate-500">
@@ -3142,7 +3142,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                     : workspaceSubtitles[workspace]}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:px-0">
               {devRoleSwitchAvailable && (
                 <DevRoleSwitch
                   profiles={data.profiles}
@@ -3172,7 +3172,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               <button
                 type="button"
                 onClick={() => setFeedbackDialogOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
               >
                 <MessageSquare size={16} />
                 Feedback
@@ -3181,7 +3181,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 <button
                   type="button"
                   onClick={headerPrimaryAction.onClick}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                  className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
                 >
                   <Plus size={16} />
                   {headerPrimaryAction.label}
@@ -3191,7 +3191,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 <button
                   type="button"
                   onClick={() => setShowFilters((value) => !value)}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+                  className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
                 >
                   <Filter size={16} />
                   Filter
@@ -3451,7 +3451,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOverStatus(null);
                     }}
                     onDrop={(event) => dropTaskOnStatus(status, event)}
-                    className={`min-w-[360px] max-w-[360px] basis-[360px] shrink-0 grow-0 overflow-hidden rounded-lg border bg-blue-50/60 transition ${dragOverStatus === status ? "border-blue-400 ring-2 ring-blue-200" : "border-blue-100"}`}
+                    className={`min-w-[min(360px,calc(100vw-2rem))] max-w-[min(360px,calc(100vw-2rem))] basis-[min(360px,calc(100vw-2rem))] shrink-0 grow-0 overflow-hidden rounded-lg border bg-blue-50/60 transition ${dragOverStatus === status ? "border-blue-400 ring-2 ring-blue-200" : "border-blue-100"}`}
                   >
                     <div className="flex min-w-0 items-center justify-between border-b border-blue-100 px-4 py-3">
                       <div className="flex items-center gap-2">
