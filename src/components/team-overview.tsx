@@ -4,7 +4,7 @@ import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
 import { formatDate } from "@/lib/display";
 import { googleChatDigestEventTypes, notificationEventLabel } from "@/lib/notification-policy";
-import { roleLabel } from "@/lib/platform";
+import { roleLabel, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, PlatformRole, Profile, Task } from "@/lib/types";
 
@@ -92,7 +92,7 @@ export function TeamOverview({
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {data.profiles.map((profile) => {
-        const ownedTasks = tasks.filter((task) => task.owner === profile.name);
+        const ownedTasks = tasks.filter((task) => taskBelongsToProfile(task, profile));
         const openTasks = ownedTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
         const highPriority = ownedTasks.filter((task) => ["P0", "P1"].includes(task.priority));
         const load = ownedTasks.reduce((sum, task) => sum + task.hours, 0);
@@ -146,7 +146,7 @@ export function TeamOverview({
                       onUpdateProfile(profile, {
                         platformRole,
                         orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : platformRole === "deputy" ? "Deputy" : "Viewer",
-                        deputyFor: platformRole === "deputy" ? profile.deputyFor || "volkan" : "",
+                        deputyFor: platformRole === "deputy" ? profile.deputyFor || data.profiles.find((item) => item.platformRole === "ceo")?.id || "" : "",
                         deputyActiveFrom: platformRole === "deputy" ? profile.deputyActiveFrom : "",
                         deputyActiveUntil: platformRole === "deputy" ? profile.deputyActiveUntil : "",
                       });

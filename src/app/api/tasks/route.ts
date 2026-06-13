@@ -164,6 +164,12 @@ export async function POST(request: NextRequest) {
   const { data: created, error: insertError } = await supabase.from("tasks").insert(insert).select("*").single();
   if (insertError || !created) return NextResponse.json({ error: insertError?.message || "Aufgabe konnte nicht erstellt werden." }, { status: 500 });
 
+  const profileIds = [...new Set([created.owner, created.assignee, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
+  const { data: profileRows } = profileIds.length
+    ? await supabase.from("profiles").select("id,name").in("id", profileIds)
+    : { data: [] };
+  const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+
   await supabase.from("task_activity").insert({
     task_id: id,
     message: taskType === "proposal" ? "Aufgabenvorschlag erstellt" : taskType === "sub_issue" ? "Sub-Issue erstellt" : "Deliverable erstellt",
@@ -201,9 +207,12 @@ export async function POST(request: NextRequest) {
     description: created.description || "",
     status: created.status,
     priority: created.priority,
-    owner: payload.owner || (taskType === "proposal" ? "" : permission.profile?.name || ""),
-    assignee: payload.owner || (taskType === "proposal" ? "" : permission.profile?.name || ""),
-    createdBy: permission.profile?.name || "",
+    ownerId: created.owner || "",
+    owner: profileNameById.get(created.owner || "") || created.owner || "",
+    assigneeId: created.assignee || "",
+    assignee: profileNameById.get(created.assignee || "") || created.assignee || "",
+    createdById: created.created_by || "",
+    createdBy: profileNameById.get(created.created_by || "") || created.created_by || "",
     workstream: created.workstream || "",
     packageId: created.package_id || "",
     deadline: created.deadline || "",

@@ -39,7 +39,7 @@ import { FeedbackDialog as CurrentFeedbackDialog, type FeedbackDraft } from "@/c
 import { FmdToolsOverview as CurrentFmdToolsOverview } from "@/components/fmd-tools-overview";
 import { GanttView as CurrentGanttView } from "@/components/gantt-view";
 import { persistLocalPlanningTasks, useLocalPlanningState } from "@/hooks/use-local-planning-state";
-import { getProtectedPlanningDataCache, setProtectedPlanningDataCache, usePlanningAuth } from "@/hooks/use-planning-auth";
+import { setProtectedPlanningDataCache, usePlanningAuth } from "@/hooks/use-planning-auth";
 import { usePlanningWorkspace } from "@/hooks/use-planning-workspace";
 import { InitiativeDialog, type InitiativeDraft } from "@/components/initiative-dialog";
 import { NewTaskDialog as CurrentNewTaskDialog, type NewTaskDraft } from "@/components/new-task-dialog";
@@ -58,12 +58,12 @@ import { dateRange, focusStatusLabel, formatDate, initiativeMetaLabel, initiativ
 import { decisionStatusLabel } from "@/lib/execution-layer-view-model";
 import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
-import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskRelationsFor } from "@/lib/platform";
+import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskBelongsToProfile, taskRelationsFor } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -239,6 +239,22 @@ const profileColorOptions = [
 const devProfileStateKey = "fmd-planning-dev-profile-v1";
 function profileColor(profile?: Pick<Profile, "color"> | null) {
   return profile?.color || "#64748b";
+}
+
+function profileForOwnerValue(profiles: Profile[], value?: string) {
+  return profiles.find((profile) => profile.id === value || profile.name === value) || null;
+}
+
+function taskOwnerPatch(ownerValue: string, profiles: Profile[]): Partial<Task> {
+  const profile = profileForOwnerValue(profiles, ownerValue);
+  const ownerId = profile?.id || "";
+  const owner = profile?.name || ownerValue || "";
+  return {
+    ownerId,
+    owner,
+    assigneeId: ownerId,
+    assignee: owner,
+  };
 }
 
 function parseIsoDate(value: string) {
@@ -497,9 +513,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const autoImportedGitHubCommentsRef = useRef<Set<string>>(new Set());
   const optimisticAvailabilityIdRef = useRef(-1);
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
-  const initialClientData = useMemo(() => {
-    return authRequired && source === "supabase" && getProtectedPlanningDataCache() ? getProtectedPlanningDataCache()! : safeInitialData;
-  }, [authRequired, safeInitialData, source]);
+  const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
   const { localStateLoaded } = useLocalPlanningState({ source, setData });
   const { workspace, setWorkspace } = usePlanningWorkspace();
@@ -545,6 +559,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const clearSelectedTask = useCallback(() => setSelectedTaskId(null), []);
   const {
     authUser,
+    serverCurrentProfile,
     authChecked,
     protectedDataLoaded,
     setProtectedDataLoaded,
@@ -573,12 +588,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const selectedTaskBlockers = selectedTask ? data.taskBlockers.filter((blocker) => blocker.taskId === selectedTask.id) : [];
   const fullTaskView = searchParams.get("view") === "full";
   const authAvailable = hasSupabaseEnv();
-  const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
-  const actualProfile = data.profiles.find((profile) => profile.githubLogin === currentGithubLogin) || null;
+  const serverProfile = serverCurrentProfile ? data.profiles.find((profile) => profile.id === serverCurrentProfile.id) || null : null;
+  const actualProfile = serverProfile;
   const devRoleSwitchAvailable = source === "supabase" && process.env.NODE_ENV !== "production" && isLocalDevHost() && (actualProfile?.platformRole === "ceo" || actualProfile?.platformRole === "deputy");
   const devProfile = devRoleSwitchAvailable && devProfileId ? data.profiles.find((profile) => profile.id === devProfileId) || null : null;
   const currentProfile = devProfile || actualProfile;
-  const mineOwnerName = currentProfile?.name || "Volkan";
+  const mineOwnerName = currentProfile?.name || "deinem Profil";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
@@ -588,12 +603,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const hygieneAlerts = useMemo(() => buildHygieneAlerts(data), [data]);
   const todayFocusDate = currentIsoDate();
   const currentProfileFocusItems = useMemo(() => {
-    const profileId = currentProfile?.id || "volkan";
+    if (!currentProfile) return [];
+    const profileId = currentProfile.id;
     return data.taskFocusItems
       .filter((item) => item.profileId === profileId && item.focusDate === todayFocusDate)
       .sort((left, right) => left.position - right.position)
       .slice(0, 3);
-  }, [currentProfile?.id, data.taskFocusItems, todayFocusDate]);
+  }, [currentProfile, data.taskFocusItems, todayFocusDate]);
   const requestHeaders = useCallback((token?: string, options: { json?: boolean; github?: boolean } = { json: true }) => {
     const githubProviderToken = options.github ? getRememberedGitHubProviderToken() : "";
     return {
@@ -665,7 +681,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
         const matchesQuick =
           !filters.quick ||
-          (filters.quick === "mine" && task.owner === mineOwnerName) ||
+          (filters.quick === "mine" && taskBelongsToProfile(task, currentProfile)) ||
           (filters.quick === "open" && normalized === "Offen") ||
           (filters.quick === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn))) ||
           (filters.quick === "week" && isThisWeek(task)) ||
@@ -675,12 +691,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
       }),
     );
-  }, [data.tasks, filters, mineOwnerName]);
+  }, [currentProfile, data.tasks, filters]);
 
   const visibleTasks = useMemo(() => {
-    if (workspace === "mine") return filteredTasks.filter((task) => task.owner === mineOwnerName);
+    if (workspace === "mine") return filteredTasks.filter((task) => taskBelongsToProfile(task, currentProfile));
     return filteredTasks;
-  }, [filteredTasks, mineOwnerName, workspace]);
+  }, [currentProfile, filteredTasks, workspace]);
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerPrimaryAction: HeaderPrimaryAction | null = (() => {
@@ -739,9 +755,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
+    const normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
+      ? { ...patch, ...taskOwnerPatch(patch.ownerId || patch.owner || "", data.profiles) }
+      : patch;
 
-    if (patch.status && !canManageTaskMeta) {
-      const guardedMessage = founderStatusGuardMessage(patch.status as TaskStatus);
+    if (normalizedPatch.status && !canManageTaskMeta) {
+      const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus);
       if (guardedMessage) {
         setStatusGuardNotice(guardedMessage);
         setStatusGuardTaskId(task.id);
@@ -752,7 +771,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setData((current) => {
       const nextData = {
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...patch, githubSyncStatus: patch.githubSyncStatus || "not_synced", githubSyncError: patch.githubSyncStatus ? item.githubSyncError : "" } : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubSyncStatus: normalizedPatch.githubSyncStatus || "not_synced", githubSyncError: normalizedPatch.githubSyncStatus ? item.githubSyncError : "" } : item)),
       };
 
       if (source === "seed") {
@@ -777,26 +796,26 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           method: "PATCH",
           headers: requestHeaders(token),
           body: JSON.stringify({
-            status: patch.status,
-            owner: patch.owner,
-            priority: patch.priority,
-            packageId: patch.packageId,
-            startDate: patch.startDate,
-            endDate: patch.endDate,
-            deadline: patch.deadline,
-            note: patch.note,
-            reviewStatus: patch.reviewStatus,
-            scorePoints: patch.scorePoints,
-            scoreFinal: patch.scoreFinal,
-            githubSyncStatus: patch.githubSyncStatus,
-            sprintId: patch.sprintId,
-            milestoneId: patch.milestoneId,
-            dependsOn: patch.dependsOn,
-            evidenceLink: patch.evidenceLink,
-            selfDodChecked: patch.selfDodChecked,
-            selfEvidenceChecked: patch.selfEvidenceChecked,
-            selfDocumentedChecked: patch.selfDocumentedChecked,
-            selfBlockersChecked: patch.selfBlockersChecked,
+            status: normalizedPatch.status,
+            owner: normalizedPatch.ownerId || normalizedPatch.owner,
+            priority: normalizedPatch.priority,
+            packageId: normalizedPatch.packageId,
+            startDate: normalizedPatch.startDate,
+            endDate: normalizedPatch.endDate,
+            deadline: normalizedPatch.deadline,
+            note: normalizedPatch.note,
+            reviewStatus: normalizedPatch.reviewStatus,
+            scorePoints: normalizedPatch.scorePoints,
+            scoreFinal: normalizedPatch.scoreFinal,
+            githubSyncStatus: normalizedPatch.githubSyncStatus,
+            sprintId: normalizedPatch.sprintId,
+            milestoneId: normalizedPatch.milestoneId,
+            dependsOn: normalizedPatch.dependsOn,
+            evidenceLink: normalizedPatch.evidenceLink,
+            selfDodChecked: normalizedPatch.selfDodChecked,
+            selfEvidenceChecked: normalizedPatch.selfEvidenceChecked,
+            selfDocumentedChecked: normalizedPatch.selfDocumentedChecked,
+            selfBlockersChecked: normalizedPatch.selfBlockersChecked,
           }),
         });
 
@@ -810,8 +829,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
         }
-        if (patch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
-          syncTaskToGitHub({ ...task, ...patch }, { silent: true });
+        if (normalizedPatch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
+          syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {
         setData((current) => ({
@@ -826,7 +845,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const createTask = (draft: NewTaskDraft) => {
     setSaveError("");
 
-    const owner = draft.owner || (draft.taskType === "proposal" ? "" : currentProfile?.name || data.profiles[0]?.name || "Volkan");
+    const ownerProfile = profileForOwnerValue(data.profiles, draft.owner || currentProfile?.id || "");
+    const ownerId = draft.taskType === "proposal" && !draft.owner ? "" : ownerProfile?.id || "";
+    const owner = ownerId ? ownerProfile?.name || "" : "";
     const localTask: Task = {
       id: `local-${Date.now()}`,
       order: data.tasks.length + 1,
@@ -840,8 +861,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       dodTemplateVersion: "founder-deliverable-v2",
       status: draft.taskType === "proposal" ? "Vorschlag" : draft.status || "Offen",
       priority: draft.priority || "P2",
+      ownerId,
       owner,
+      assigneeId: ownerId,
       assignee: owner,
+      createdById: currentProfile?.id || "",
       workstream: draft.workstream,
       packageId: draft.packageId,
       milestoneId: draft.milestoneId,
@@ -905,7 +929,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         const response = await fetch("/api/tasks", {
           method: "POST",
           headers: requestHeaders(token),
-          body: JSON.stringify(draft),
+          body: JSON.stringify({ ...draft, owner: ownerId || draft.owner }),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string; task?: Task } | null;
@@ -1057,7 +1081,11 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
   const upsertFocusItem = (task: Task, nextStep: string, status: TaskFocusItem["status"] = "planned") => {
     setSaveError("");
-    const profileId = currentProfile?.id || "volkan";
+    if (!currentProfile) {
+      setSaveError("Profil konnte nicht bestimmt werden. Bitte erneut anmelden.");
+      return;
+    }
+    const profileId = currentProfile.id;
     const existing = data.taskFocusItems.find((item) => item.profileId === profileId && item.taskId === task.id && item.focusDate === todayFocusDate);
     const position = existing?.position || Math.min(currentProfileFocusItems.length + 1, 3);
     const localItem: TaskFocusItem = {
@@ -2819,10 +2847,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           },
         });
-        const refreshPayload = await refreshResponse.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
-        if (refreshResponse.ok && refreshPayload?.data) {
+        const refreshPayload = await refreshResponse.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
+        if (refreshResponse.ok && refreshPayload?.data && authUser?.id) {
           const nextData = normalizePlanningData(refreshPayload.data);
-          setProtectedPlanningDataCache(nextData);
+          setProtectedPlanningDataCache({ authUserId: authUser.id, data: nextData, currentProfile: refreshPayload.currentProfile || serverCurrentProfile });
           setData(nextData);
           setProtectedDataLoaded(true);
         }
@@ -4199,7 +4227,7 @@ function TeamOverview({
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {data.profiles.map((profile) => {
-        const ownedTasks = tasks.filter((task) => task.owner === profile.name);
+        const ownedTasks = tasks.filter((task) => taskBelongsToProfile(task, profile));
         const openTasks = ownedTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
         const highPriority = ownedTasks.filter((task) => ["P0", "P1"].includes(task.priority));
         const load = ownedTasks.reduce((sum, task) => sum + task.hours, 0);
@@ -4253,7 +4281,7 @@ function TeamOverview({
                       onUpdateProfile(profile, {
                         platformRole,
                         orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : platformRole === "deputy" ? "Deputy" : "Viewer",
-                        deputyFor: platformRole === "deputy" ? profile.deputyFor || "volkan" : "",
+                        deputyFor: platformRole === "deputy" ? profile.deputyFor || data.profiles.find((item) => item.platformRole === "ceo")?.id || "" : "",
                         deputyActiveFrom: platformRole === "deputy" ? profile.deputyActiveFrom : "",
                         deputyActiveUntil: platformRole === "deputy" ? profile.deputyActiveUntil : "",
                       });
@@ -4510,7 +4538,7 @@ function SprintScoreTableOverview({
   const unassignedTasks = data.tasks.filter((task) => !task.sprintId);
   const scoreRows = data.profiles.map((profile) => {
     const row = founderScore(sprintTasks, profile);
-    const profileTasks = sprintTasks.filter((task) => task.owner === profile.name);
+    const profileTasks = sprintTasks.filter((task) => taskBelongsToProfile(task, profile));
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
     return {
       ...row,
@@ -7677,7 +7705,7 @@ function NewTaskDialog({
   onCreate: (draft: NewTaskDraft) => void;
 }) {
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
-  const defaultOwner = defaults.owner || data.profiles[0]?.name || "Volkan";
+  const defaultOwner = defaults.owner || data.profiles[0]?.name || "";
   const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const groupCommitments = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({

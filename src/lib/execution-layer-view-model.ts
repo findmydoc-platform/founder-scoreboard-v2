@@ -1,4 +1,4 @@
-import { hasOpenWaitingRelation, isOperationalLeadRole } from "@/lib/platform";
+import { hasOpenWaitingRelation, isOperationalLeadRole, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile, TaskFocusItem } from "@/lib/types";
 
@@ -62,10 +62,9 @@ export function buildExecutionLayerViewModel({
 }) {
   const taskById = new Map(data.tasks.map((task) => [task.id, task]));
   const isOperationalLead = isOperationalLeadRole(currentProfile?.platformRole);
-  const executionOwnerName = currentProfile?.name || "";
-  const executionTasks = isOperationalLead || !executionOwnerName
+  const executionTasks = isOperationalLead
     ? data.tasks
-    : data.tasks.filter((task) => task.owner === executionOwnerName);
+    : data.tasks.filter((task) => taskBelongsToProfile(task, currentProfile));
   const executionTaskIds = new Set(executionTasks.map((task) => task.id));
   const openTasks = executionTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
   const focusStatusCounts = focusItems.reduce<Record<TaskFocusItem["status"], number>>((counts, item) => {

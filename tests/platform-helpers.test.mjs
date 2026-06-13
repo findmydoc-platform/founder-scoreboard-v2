@@ -27,3 +27,15 @@ test("platform role helpers keep operational lead boundary explicit", async () =
   assert.equal(isOperationalLeadRole(null), false);
   assert.equal(isOperationalLeadRole(undefined), false);
 });
+
+test("task ownership uses profile id before display name fallback", async () => {
+  const { taskBelongsToProfile } = await loadPlatformHelpers();
+  const sebastian = { id: "sebastian", name: "Sebastian" };
+  const volkan = { id: "volkan", name: "Volkan" };
+
+  assert.equal(taskBelongsToProfile({ ownerId: "sebastian", owner: "Volkan" }, sebastian), true);
+  assert.equal(taskBelongsToProfile({ ownerId: "volkan", owner: "Sebastian" }, sebastian), false);
+  assert.equal(taskBelongsToProfile({ owner: "Sebastian" }, sebastian), true);
+  assert.equal(taskBelongsToProfile({ owner: "Volkan" }, sebastian), false);
+  assert.equal(taskBelongsToProfile({ ownerId: "volkan", owner: "Volkan" }, volkan), true);
+});

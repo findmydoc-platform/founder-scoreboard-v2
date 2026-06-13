@@ -81,7 +81,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(executionViewModel, /executionTasks = isOperationalLead/);
   assert.match(executionViewModel, /executionTaskIds/);
   assert.match(executionViewModel, /item\.profileId === currentProfile\?\.id/);
-  assert.match(executionViewModel, /task\.owner === executionOwnerName/);
+  assert.match(executionViewModel, /taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(executionUi, /Fokus-Verlauf/);
   assert.match(executionUi, /Tagesabschluss/);
   assert.match(executionUi, /Abschlussquote/);

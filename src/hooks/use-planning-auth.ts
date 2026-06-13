@@ -2,16 +2,22 @@ import type { User } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 import { clearRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { getBrowserSupabase } from "@/lib/supabase";
-import type { PlanningData } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningData, PlanningDataResponse } from "@/lib/types";
 
-let protectedPlanningDataCache: PlanningData | null = null;
+type ProtectedPlanningDataCache = {
+  authUserId: string;
+  data: PlanningData;
+  currentProfile: AuthenticatedProfile | null;
+};
+
+let protectedPlanningDataCache: ProtectedPlanningDataCache | null = null;
 
 export function getProtectedPlanningDataCache() {
   return protectedPlanningDataCache;
 }
 
-export function setProtectedPlanningDataCache(data: PlanningData | null) {
-  protectedPlanningDataCache = data;
+export function setProtectedPlanningDataCache(cache: ProtectedPlanningDataCache | null) {
+  protectedPlanningDataCache = cache;
 }
 
 type UsePlanningAuthOptions = {
@@ -36,7 +42,8 @@ export function usePlanningAuth({
   const protectedDataUserIdRef = useRef("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(!authRequired);
-  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || (source === "supabase" && Boolean(protectedPlanningDataCache)));
+  const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired);
+  const [serverCurrentProfile, setServerCurrentProfile] = useState<AuthenticatedProfile | null>(null);
   const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
@@ -88,6 +95,7 @@ export function usePlanningAuth({
         setGithubProviderTokenAvailable(false);
         protectedDataUserIdRef.current = "";
         protectedPlanningDataCache = null;
+        setServerCurrentProfile(null);
         setData(safeInitialData);
         setProtectedDataLoaded(false);
         onSignedOut();
@@ -118,6 +126,21 @@ export function usePlanningAuth({
     let active = true;
     const authUserId = authUser.id;
 
+    if (protectedPlanningDataCache?.authUserId === authUserId) {
+      const cached = protectedPlanningDataCache;
+      queueMicrotask(() => {
+        if (!active) return;
+        protectedDataUserIdRef.current = authUserId;
+        setServerCurrentProfile(cached.currentProfile);
+        setData(cached.data);
+        setProtectedDataLoaded(true);
+        setAuthError("");
+      });
+      return () => {
+        active = false;
+      };
+    }
+
     async function loadProtectedPlanningData() {
       if (!taskCount) setProtectedDataLoaded(false);
       const session = await getBrowserSupabase()?.auth.getSession();
@@ -136,11 +159,12 @@ export function usePlanningAuth({
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null) as { data?: PlanningData; error?: string } | null;
+        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
 
         if (!active) return;
-        if (!response.ok || !payload?.data) {
+        if (!response.ok || !payload?.data || !payload.currentProfile) {
           protectedDataUserIdRef.current = "";
+          setServerCurrentProfile(null);
           setData(safeInitialData);
           setProtectedDataLoaded(false);
           setAuthError(payload?.error || "Planungsdaten konnten nicht geladen werden.");
@@ -149,13 +173,15 @@ export function usePlanningAuth({
 
         protectedDataUserIdRef.current = authUserId;
         const nextData = normalizePlanningData(payload.data);
-        protectedPlanningDataCache = nextData;
+        protectedPlanningDataCache = { authUserId, data: nextData, currentProfile: payload.currentProfile };
+        setServerCurrentProfile(payload.currentProfile);
         setData(nextData);
         setProtectedDataLoaded(true);
         setAuthError("");
       } catch (error) {
         if (!active) return;
         protectedDataUserIdRef.current = "";
+        setServerCurrentProfile(null);
         setProtectedDataLoaded(false);
         setAuthError(error instanceof DOMException && error.name === "AbortError" ? "Planungsdaten konnten nicht geladen werden: Zeitüberschreitung." : "Planungsdaten konnten nicht geladen werden.");
       } finally {
@@ -212,6 +238,7 @@ export function usePlanningAuth({
 
     protectedDataUserIdRef.current = "";
     protectedPlanningDataCache = null;
+    setServerCurrentProfile(null);
     setAuthUser(null);
     setGithubProviderTokenAvailable(false);
     setData(safeInitialData);
@@ -223,6 +250,7 @@ export function usePlanningAuth({
 
   return {
     authUser,
+    serverCurrentProfile,
     authChecked,
     protectedDataLoaded,
     setProtectedDataLoaded,

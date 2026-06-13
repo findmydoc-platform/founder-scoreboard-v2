@@ -1,10 +1,17 @@
 import type { NextRequest } from "next/server";
 import { isOperationalLeadRole } from "./platform";
 import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
-import type { PlatformRole, Profile } from "./types";
+import type { AuthenticatedProfile, PlatformRole } from "./types";
+
+type AuthzProfileRow = {
+  id: string;
+  name: string;
+  platform_role: PlatformRole;
+  github_login: string | null;
+};
 
 export type AuthzResult =
-  | { ok: true; profile: Pick<Profile, "id" | "name" | "platformRole" | "githubLogin"> | null }
+  | { ok: true; profile: AuthenticatedProfile | null }
   | { ok: false; status: number; error: string };
 
 export function bearerToken(request: NextRequest) {
@@ -17,6 +24,15 @@ function devProfileOverrideAllowed(request: NextRequest) {
   if (process.env.NODE_ENV === "production") return false;
   const host = request.headers.get("host") || "";
   return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
+}
+
+function mapAuthzProfile(profile: AuthzProfileRow): AuthenticatedProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    platformRole: profile.platform_role,
+    githubLogin: profile.github_login || "",
+  };
 }
 
 export async function requirePlatformRole(
@@ -34,15 +50,34 @@ export async function requirePlatformRole(
 
   const githubLogin = String(userResult.user.user_metadata?.user_name || userResult.user.user_metadata?.preferred_username || "");
 
-  const profileQuery = supabase
+  const authProfileResult = await supabase
     .from("profiles")
     .select("id,name,platform_role,github_login")
-    .or(`auth_user_id.eq.${userResult.user.id}${githubLogin ? `,github_login.eq.${githubLogin}` : ""}`)
-    .limit(1)
-    .single();
+    .eq("auth_user_id", userResult.user.id)
+    .maybeSingle<AuthzProfileRow>();
+  if (authProfileResult.error) return { ok: false, status: 403, error: "Teamprofil konnte nicht eindeutig geprüft werden." };
 
-  const { data: profile, error: profileError } = await profileQuery;
-  if (profileError || !profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
+  let githubProfile: AuthzProfileRow | null = null;
+  if (githubLogin) {
+    const githubProfileResult = await supabase
+      .from("profiles")
+      .select("id,name,platform_role,github_login")
+      .ilike("github_login", githubLogin)
+      .limit(2)
+      .returns<AuthzProfileRow[]>();
+    if (githubProfileResult.error) return { ok: false, status: 403, error: "GitHub-Profilzuordnung konnte nicht geprüft werden." };
+    if ((githubProfileResult.data || []).length > 1) {
+      return { ok: false, status: 403, error: "GitHub-Login ist mehreren Teamprofilen zugeordnet." };
+    }
+    githubProfile = githubProfileResult.data?.[0] || null;
+  }
+
+  if (authProfileResult.data && githubProfile && authProfileResult.data.id !== githubProfile.id) {
+    return { ok: false, status: 403, error: "Session-Profil und GitHub-Profil verweisen auf unterschiedliche Teamprofile." };
+  }
+
+  const profile = authProfileResult.data || githubProfile;
+  if (!profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
   let effectiveProfile = profile;
   const devProfileId = request.headers.get("x-fmd-dev-profile-id")?.trim() || "";
   const canUseDevProfile = isOperationalLeadRole(profile.platform_role);
@@ -52,7 +87,7 @@ export async function requirePlatformRole(
       .from("profiles")
       .select("id,name,platform_role,github_login")
       .eq("id", devProfileId)
-      .single();
+      .single<AuthzProfileRow>();
 
     if (overrideError || !overrideProfile) return { ok: false, status: 403, error: "Dev-Testprofil wurde nicht gefunden." };
     effectiveProfile = overrideProfile;
@@ -64,12 +99,7 @@ export async function requirePlatformRole(
 
   return {
     ok: true,
-    profile: {
-      id: effectiveProfile.id,
-      name: effectiveProfile.name,
-      platformRole: effectiveProfile.platform_role,
-      githubLogin: effectiveProfile.github_login || "",
-    },
+    profile: mapAuthzProfile(effectiveProfile),
   };
 }
 
