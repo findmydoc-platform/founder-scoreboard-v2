@@ -882,6 +882,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /notification_events/);
   assert.match(route, /notification_deliveries/);
+  assert.match(route, /eventIds/);
+  assert.match(route, /testDelivery/);
+  assert.match(route, /FounderOps Testnachricht/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
   assert.match(chat, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(chat, /googleChatDeliveryStatus/);
@@ -930,6 +933,8 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
   assert.match(rollout, /notification_preferences/);
   assert.match(rollout, /Phase 4: Persönliche FounderOps-DMs/);
+  assert.match(rollout, /Phase 5: Betrieb und Kontrolle/);
+  assert.match(rollout, /testDelivery=direct_dm/);
   assert.match(rollout, /https:\/\/founder-ops\.findmydoc\.eu\/api\/google-chat\/events/);
   assert.match(rollout, /keinen Gruppenchat-Fallback/);
   assert.match(rollout, /Rollback/);

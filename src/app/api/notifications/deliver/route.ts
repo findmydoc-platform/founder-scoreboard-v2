@@ -44,11 +44,27 @@ type DeliveryRow = {
 };
 
 const pipelineSecretHeader = "x-founderops-delivery-secret";
+const maxExplicitEventIds = 20;
+
+type DeliveryRequestPayload = {
+  limit?: number;
+  eventIds?: unknown;
+  testDelivery?: "webhook_digest" | "direct_dm";
+  profileId?: string;
+};
 
 function safeLimit(value: unknown) {
   const limit = Number(value || 20);
   if (!Number.isFinite(limit)) return 20;
   return Math.max(1, Math.min(50, Math.round(limit)));
+}
+
+function safeEventIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const ids = [...new Set(value
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item > 0))];
+  return ids.slice(0, maxExplicitEventIds);
 }
 
 function secretsMatch(provided: string, expected: string) {
@@ -69,7 +85,7 @@ async function authorizeDeliveryTrigger(request: NextRequest) {
 
   const permission = await requireOperationalLead(request);
   if (!permission.ok) return { ok: false as const, status: permission.status, error: permission.error };
-  return { ok: true as const, mode: "user" as const };
+  return { ok: true as const, mode: "user" as const, profile: permission.profile };
 }
 
 function statusCodeForError(errorMessage: string) {
@@ -87,6 +103,39 @@ function appUrlFromRequest(request: NextRequest) {
   const proto = request.headers.get("x-forwarded-proto") || "http";
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
   return `${proto}://${host}`;
+}
+
+async function createTestEvent(
+  supabase: ReturnType<typeof getServerSupabase>,
+  payload: DeliveryRequestPayload,
+  actorProfileId?: string | null,
+) {
+  if (!supabase || !payload.testDelivery) return null;
+  const directDm = payload.testDelivery === "direct_dm";
+  const recipientProfileId = directDm ? String(payload.profileId || "").trim() : "";
+  if (directDm && !recipientProfileId) {
+    throw new Error("Für eine Test-DM muss ein Profil ausgewählt werden.");
+  }
+
+  const { data, error } = await supabase
+    .from("notification_events")
+    .insert({
+      type: directDm ? "task.review_requested" : "task.blocker_reported",
+      actor_profile_id: actorProfileId || null,
+      recipient_profile_id: recipientProfileId || null,
+      entity_type: "google_chat_test",
+      entity_id: directDm ? `dm-${recipientProfileId}` : "founderops-digest",
+      title: "FounderOps Testnachricht",
+      body: directDm
+        ? "Kontrollierter Test der persönlichen FounderOps-DM-Zustellung."
+        : "Kontrollierter Test des FounderOps-Gruppendigest.",
+      status: "pending",
+    })
+    .select("id")
+    .single<{ id: number }>();
+
+  if (error) throw new Error(error.message);
+  return data?.id || null;
 }
 
 async function insertDeliveryRows(
@@ -145,8 +194,9 @@ export async function POST(request: NextRequest) {
   const permission = await authorizeDeliveryTrigger(request);
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
 
-  const payload = (await request.json().catch(() => ({}))) as { limit?: number };
+  const payload = (await request.json().catch(() => ({}))) as DeliveryRequestPayload;
   const limit = safeLimit(payload.limit);
+  let requestedEventIds = safeEventIds(payload.eventIds);
   const deliveryStatus = googleChatDeliveryStatus();
 
   if (!deliveryStatus.ready) {
@@ -162,12 +212,25 @@ export async function POST(request: NextRequest) {
     }, { status: 424 });
   }
 
-  const { data: events, error: eventError } = await supabase
+  if (payload.testDelivery) {
+    try {
+      const testEventId = await createTestEvent(supabase, payload, permission.mode === "user" ? permission.profile?.id : null);
+      requestedEventIds = testEventId ? [testEventId] : requestedEventIds;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Testnachricht konnte nicht vorbereitet werden.";
+      return NextResponse.json({ error: message, sent: 0, failed: 0, skipped: 0 }, { status: 400 });
+    }
+  }
+
+  let eventQuery = supabase
     .from("notification_events")
     .select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,created_at")
     .eq("status", "pending")
-    .order("created_at", { ascending: true })
-    .limit(limit);
+    .order("created_at", { ascending: true });
+
+  eventQuery = requestedEventIds.length ? eventQuery.in("id", requestedEventIds).limit(requestedEventIds.length) : eventQuery.limit(limit);
+
+  const { data: events, error: eventError } = await eventQuery;
 
   if (eventError) return NextResponse.json({ error: eventError.message }, { status: 500 });
   if (!events?.length) return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });

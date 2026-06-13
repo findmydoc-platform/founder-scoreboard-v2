@@ -316,6 +316,10 @@ export type DbNotificationDelivery = {
   status: NotificationDelivery["status"];
   attempts: number;
   target: string | null;
+  payload: {
+    deliveryMode?: "direct_dm" | "webhook_digest";
+    digestSize?: number;
+  } | null;
   last_error: string | null;
   delivered_at: string | null;
   created_at: string;

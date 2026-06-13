@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   if (eventType === "MESSAGE") {
     return NextResponse.json({
       text: status.ready
-        ? "FounderOps hat deine Nachricht erhalten. Direkte Chat-Kommandos werden schrittweise aktiviert."
+        ? "FounderOps hat deine Nachricht erhalten. Aktive Chat-Kommandos sind in Phase 5 nicht aktiviert."
         : "FounderOps ist erreichbar. Die persönliche Google-Chat-Zustellung bleibt bis zum finalen Rollout deaktiviert.",
     });
   }
@@ -70,6 +70,6 @@ export async function POST(request: NextRequest) {
     space: safeString(payload.space?.name, ""),
     sender: safeString(payload.message?.sender?.displayName, ""),
     handled: false,
-    message: "Event empfangen; aktive Google-Chat-Automationen bleiben bis zum Rollout deaktiviert.",
+    message: "Event empfangen; aktive Google-Chat-Kommandos bleiben in Phase 5 deaktiviert.",
   });
 }

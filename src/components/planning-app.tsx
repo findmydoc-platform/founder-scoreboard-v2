@@ -64,7 +64,7 @@ import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-v
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -2667,7 +2667,22 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     return () => window.clearTimeout(timeout);
   }, [refreshGoogleChatStatus, workspace]);
 
-  const dispatchNotifications = () => {
+  const refreshPlanningData = useCallback(async (token?: string) => {
+    if (source !== "supabase" || !authUser?.id) return;
+    const refreshResponse = await fetch("/api/planning-data", {
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    const refreshPayload = await refreshResponse.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
+    if (!refreshResponse.ok || !refreshPayload?.data) return;
+    const nextData = normalizePlanningData(refreshPayload.data);
+    setProtectedPlanningDataCache({ authUserId: authUser.id, data: nextData, currentProfile: refreshPayload.currentProfile || serverCurrentProfile });
+    setData(nextData);
+    setProtectedDataLoaded(true);
+  }, [authUser, serverCurrentProfile, setProtectedDataLoaded, source]);
+
+  const runNotificationDelivery = useCallback((payload: Record<string, unknown>, fallbackError: string) => {
     setSaveError("");
     setNotificationDispatchMessage("");
 
@@ -2687,19 +2702,36 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             "content-type": "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ limit: 20 }),
+          body: JSON.stringify(payload),
         });
 
         const body = (await response.json().catch(() => null)) as { error?: string; sent?: number; failed?: number; skipped?: number } | null;
+        if (!response.ok && !body?.error) throw new Error(fallbackError);
         if (!response.ok) throw new Error(body?.error || "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
 
         setNotificationDispatchMessage(`${body?.sent || 0} gesendet, ${body?.failed || 0} fehlgeschlagen, ${body?.skipped || 0} übersprungen.`);
         await refreshGoogleChatStatus();
+        await refreshPlanningData(token);
       } catch (error) {
         setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
       }
       });
-    };
+  }, [refreshGoogleChatStatus, refreshPlanningData, source]);
+
+  const dispatchNotifications = () => {
+    runNotificationDelivery({ limit: 20 }, "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
+  };
+
+  const retryNotificationDelivery = (delivery: NotificationDelivery) => {
+    runNotificationDelivery({ eventIds: [delivery.eventId], limit: 1 }, "Google-Chat-Retry konnte nicht ausgeführt werden.");
+  };
+
+  const sendGoogleChatTest = (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => {
+    runNotificationDelivery(
+      { testDelivery, ...(profileId ? { profileId } : {}), limit: 1 },
+      "Google-Chat-Testversand konnte nicht ausgeführt werden.",
+    );
+  };
 
   const createFeedback = (draft: FeedbackDraft) => {
     if (!currentProfile) {
@@ -3392,6 +3424,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onUpdateSprintPlanning={setSprintPlanningOptions}
               onCreateSprintPlan={createSprintPlan}
               onDispatchNotifications={dispatchNotifications}
+              onRetryNotificationDelivery={retryNotificationDelivery}
+              onSendGoogleChatTest={sendGoogleChatTest}
               onReconnectGitHub={signIn}
               onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
               onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}

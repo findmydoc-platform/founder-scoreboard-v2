@@ -70,7 +70,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
     supabase.from("task_focus_items").select("id,profile_id,task_id,focus_date,position,next_step,status,created_at,updated_at").order("focus_date", { ascending: false }).order("position").limit(500),
     supabase.from("decision_task_links").select("id,decision_id,task_id,link_type,note,created_by,created_at").order("created_at", { ascending: false }).limit(500),
     supabase.from("notification_events").select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,created_at").order("created_at", { ascending: false }).limit(100),
-    supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
+    supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
     supabase.from("feedback_items").select("id,type,status,severity,profile_id,title,description,page_url,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,sort_order").order("sort_order"),

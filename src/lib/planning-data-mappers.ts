@@ -377,6 +377,7 @@ export function mapNotificationEvent(row: DbNotificationEvent): NotificationEven
 }
 
 export function mapNotificationDelivery(row: DbNotificationDelivery): NotificationDelivery {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : null;
   return {
     id: row.id,
     eventId: row.event_id,
@@ -385,6 +386,8 @@ export function mapNotificationDelivery(row: DbNotificationDelivery): Notificati
     attempts: row.attempts,
     target: row.target || "",
     lastError: row.last_error || "",
+    deliveryMode: payload?.deliveryMode || "",
+    digestSize: Number(payload?.digestSize || 0),
     deliveredAt: row.delivered_at || "",
     createdAt: row.created_at,
   };

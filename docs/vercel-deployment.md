@@ -51,6 +51,8 @@ For Phase 2, Sebastian's external pipeline calls `POST https://founder-ops.findm
 
 For Phase 4, private FounderOps DMs use the Google Chat API and are limited to personal action items. Missing or invalid `profiles.google_chat_dm_space` values are logged as failed `direct_dm` deliveries and are not redirected into the group webhook.
 
+For Phase 5, use the Settings delivery cockpit after every secret change or deployment. Check readiness, send `testDelivery=webhook_digest`, send `testDelivery=direct_dm` to one profile with a valid `spaces/...`, and use `eventIds` retry only for failed pending events. Rollback remains `GOOGLE_CHAT_DELIVERY_ENABLED=false`.
+
 The repository also contains `.github/workflows/google-chat-digest.yml` for this job. It runs against the `production` GitHub Environment and requires `FOUNDEROPS_DELIVERY_SECRET` there. Vercel Production must use the same `FOUNDEROPS_DELIVERY_SECRET` plus `GOOGLE_CHAT_WEBHOOK_URL` and `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
 
 Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.

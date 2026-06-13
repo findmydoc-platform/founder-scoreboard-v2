@@ -211,6 +211,24 @@ Die App erzeugt automatische Fokus-Reminder in `/api/notifications/generate-dige
 - Der Webhook bleibt nur für Gruppen-Digests und wird nicht als Fallback für fehlende persönliche DM-Spaces genutzt.
 - User- und Event-Präferenzen werden vor dem Versand ausgewertet.
 
+## Phase 5: Betrieb und Kontrolle
+
+Phase 5 ergänzt kein Chat-Kommando und keine LLM-Antwort. Die Einstellungen zeigen ein Delivery-Monitoring mit Readiness, `direct_dm`/`webhook_digest`, Ziel, Attempts, Fehlertext und Retry.
+
+- `POST /api/notifications/deliver` akzeptiert optional `eventIds` für kontrollierten Retry einzelner pending Events.
+- `eventIds` ist auf maximal 20 IDs begrenzt; bereits erfolgreich gesendete Events werden nicht doppelt gesendet.
+- `testDelivery=webhook_digest` erzeugt eine kontrollierte FounderOps-Testnachricht für den Gruppenbereich.
+- `testDelivery=direct_dm` benötigt `profileId` und sendet nur an ein Profil mit gültigem `profiles.google_chat_dm_space`.
+- Fehlende DM-Spaces bleiben `failed/direct_dm`; es gibt weiterhin keinen Gruppenchat-Fallback.
+
+Smoke nach Sebastian/Rresta-Secret-Setzung:
+
+1. Settings öffnen und Readiness prüfen.
+2. `Test-Digest senden` klicken und den FounderOps-Gruppenbereich prüfen.
+3. `Test-DM` für ein Profil mit `spaces/...` senden.
+4. Eine fehlende DM-Space-Konfiguration kontrolliert prüfen: `failed`, `deliveryMode=direct_dm`, kein Gruppenchat-Fallback.
+5. Profil korrigieren und `Erneut senden` nutzen.
+
 ## Rollback
 
 Bei falscher Zustellung, zu vielen Meldungen oder Konfigurationsfehlern:

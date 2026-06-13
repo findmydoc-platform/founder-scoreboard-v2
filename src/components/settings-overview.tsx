@@ -3,7 +3,7 @@
 import { SettingsNotificationsSection } from "@/components/settings-notifications";
 import { GitHubSyncQueueSection, ProductionReadinessSection, SetupChecklistSection, SystemStatusSection } from "@/components/settings-readiness";
 import { SprintPlanningSection, type SprintPlanningOptions } from "@/components/settings-sprint-planning";
-import type { PlanningData, Task } from "@/lib/types";
+import type { NotificationDelivery, PlanningData, Task } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -29,6 +29,8 @@ export function SettingsOverview({
   onUpdateSprintPlanning,
   onCreateSprintPlan,
   onDispatchNotifications,
+  onRetryNotificationDelivery,
+  onSendGoogleChatTest,
   onReconnectGitHub,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
@@ -49,6 +51,8 @@ export function SettingsOverview({
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
   onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
+  onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
+  onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
   onReconnectGitHub: () => void;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
@@ -86,6 +90,8 @@ export function SettingsOverview({
         googleChatStatus={googleChatStatus}
         onSelectFeedback={onSelectFeedback}
         onDispatchNotifications={onDispatchNotifications}
+        onRetryNotificationDelivery={onRetryNotificationDelivery}
+        onSendGoogleChatTest={onSendGoogleChatTest}
       />
       <SprintPlanningSection
         pending={pending}

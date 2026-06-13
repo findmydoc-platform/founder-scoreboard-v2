@@ -28,6 +28,10 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /Ungültiger Delivery-Secret/);
   assert.match(route, /notification_events/);
   assert.match(route, /notification_deliveries/);
+  assert.match(route, /eventIds/);
+  assert.match(route, /maxExplicitEventIds/);
+  assert.match(route, /testDelivery/);
+  assert.match(route, /FounderOps Testnachricht/);
   assert.match(generatorRoute, /requireOperationalLead/);
   assert.match(generatorRoute, /x-founderops-delivery-secret/);
   assert.match(generatorRoute, /FOUNDEROPS_DELIVERY_SECRET/);
@@ -89,6 +93,11 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(settingsNotificationsUi, /notificationChannelLabel/);
   assert.match(settingsNotificationsUi, /Keine Benachrichtigung wartet auf den Google-Chat-Digest/);
   assert.match(settingsNotificationsUi, /Digest senden/);
+  assert.match(settingsNotificationsUi, /Delivery-Monitoring/);
+  assert.match(settingsNotificationsUi, /Erneut senden/);
+  assert.match(settingsNotificationsUi, /Test-Digest senden/);
+  assert.match(settingsNotificationsUi, /Test-DM/);
+  assert.match(settingsNotificationsUi, /direct_dm/);
 });
 
 test("google chat rollout is documented and verified before delivery activation", async () => {
@@ -112,6 +121,9 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /Phase 1: FounderOps-Gruppendigest/);
   assert.match(rollout, /Phase 2: Externe Pipeline/);
   assert.match(rollout, /Phase 4: Persönliche FounderOps-DMs/);
+  assert.match(rollout, /Phase 5: Betrieb und Kontrolle/);
+  assert.match(rollout, /eventIds/);
+  assert.match(rollout, /testDelivery=direct_dm/);
   assert.match(rollout, /09:00 Europe\/Berlin/);
   assert.match(rollout, /x-founderops-delivery-secret/);
   assert.match(rollout, /FOUNDEROPS_DELIVERY_SECRET/);

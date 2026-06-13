@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { formatDate } from "@/lib/display";
 import { notificationChannelLabel, shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
-import type { PlanningData } from "@/lib/types";
+import type { NotificationDelivery, PlanningData } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
   ready: boolean;
@@ -11,6 +12,8 @@ type GoogleChatStatusSummary = {
   deliveryEnabled: boolean;
   mode: "space-webhook" | "direct-dm" | "not-configured";
 };
+
+type DeliveryFilter = "all" | "failed" | "sent" | "direct_dm" | "webhook_digest";
 
 export function SettingsNotificationsSection({
   data,
@@ -21,6 +24,8 @@ export function SettingsNotificationsSection({
   googleChatStatus,
   onSelectFeedback,
   onDispatchNotifications,
+  onRetryNotificationDelivery,
+  onSendGoogleChatTest,
 }: {
   data: PlanningData;
   pending: boolean;
@@ -30,15 +35,25 @@ export function SettingsNotificationsSection({
   googleChatStatus: GoogleChatStatusSummary | null;
   onSelectFeedback: (id: number) => void;
   onDispatchNotifications: () => void;
+  onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
+  onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
 }) {
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
   const googleChatDigestNotifications = pendingNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
   const googleChatDmNotifications = pendingNotifications.filter((event) => event.recipientProfileId && shouldSendToGoogleChatDm(event.type));
   const inAppOnlyNotifications = pendingNotifications.filter((event) => !shouldSendToGoogleChatDigest(event.type));
   const failedDigestNotifications = failedNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
+  const dmReadyProfiles = data.profiles.filter((profile) => /^spaces\/[A-Za-z0-9_-]+$/.test(profile.googleChatDmSpace || ""));
+  const googleChatDmReadyProfiles = dmReadyProfiles.length;
+  const failedDirectDmDeliveries = data.notificationDeliveries.filter((delivery) => delivery.status === "failed" && delivery.deliveryMode === "direct_dm");
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
-  const googleChatDmReadyProfiles = data.profiles.filter((profile) => /^spaces\/[A-Za-z0-9_-]+$/.test(profile.googleChatDmSpace || "")).length;
+  const filteredDeliveries = data.notificationDeliveries.filter((delivery) => {
+    if (deliveryFilter === "all") return true;
+    if (deliveryFilter === "failed" || deliveryFilter === "sent") return delivery.status === deliveryFilter;
+    return delivery.deliveryMode === deliveryFilter;
+  }).slice(0, 12);
   const googleChatReady = Boolean(googleChatStatus?.ready);
   const googleChatWebhookConfigured = Boolean(googleChatStatus?.webhookConfigured);
   const googleChatApiConfigured = Boolean(googleChatStatus?.apiConfigured);
@@ -131,14 +146,36 @@ export function SettingsNotificationsSection({
             <h2 className="text-base font-semibold text-slate-950">Notification-Ausgang</h2>
             <p className="mt-1 text-sm text-slate-500">Google Chat bekommt nur wichtige Sammelmeldungen. Persönliche Hinweise bleiben oben in der Notification-Inbox.</p>
           </div>
-          <button
-            type="button"
-            disabled={pending || !googleChatReady || !googleChatDigestNotifications.length}
-            onClick={onDispatchNotifications}
-            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Digest senden
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={pending || !googleChatReady || !googleChatDigestNotifications.length}
+              onClick={onDispatchNotifications}
+              className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Digest senden
+            </button>
+            <button
+              type="button"
+              disabled={pending || !googleChatWebhookConfigured || !googleChatDeliveryEnabled}
+              onClick={() => onSendGoogleChatTest("webhook_digest")}
+              className="h-9 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Test-Digest senden
+            </button>
+            {dmReadyProfiles.slice(0, 3).map((profile) => (
+              <button
+                key={profile.id}
+                type="button"
+                disabled={pending || !googleChatApiConfigured || !googleChatDeliveryEnabled}
+                onClick={() => onSendGoogleChatTest("direct_dm", profile.id)}
+                className="h-9 max-w-48 truncate rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                title={`Test-DM an ${profile.name}`}
+              >
+                Test-DM: {profile.name}
+              </button>
+            ))}
+          </div>
         </div>
         {!googleChatReady && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
@@ -150,7 +187,7 @@ export function SettingsNotificationsSection({
             Google Chat ist versandbereit. Aktiver Modus: {googleChatModeLabel}. Persönliche DMs werden nur an Profile mit gültigem `spaces/...` gesendet; fehlende DM-Spaces werden als Zustellfehler protokolliert und nicht in den Gruppenchat umgeleitet.
           </div>
         )}
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chat-Digest</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDigestNotifications.length}</div>
@@ -167,6 +204,10 @@ export function SettingsNotificationsSection({
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fehler</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{failedDigestNotifications.length}</div>
+          </div>
+          <div className="rounded-md bg-red-50 px-3 py-2 text-sm">
+            <div className="text-xs font-semibold uppercase tracking-wide text-red-700">DM-Fehler</div>
+            <div className="mt-1 text-2xl font-semibold text-red-900">{failedDirectDmDeliveries.length}</div>
           </div>
         </div>
         {notificationDispatchMessage && (
@@ -200,6 +241,58 @@ export function SettingsNotificationsSection({
             ))}
           </div>
         )}
+        <div className="mt-4 grid gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Delivery-Monitoring</div>
+            <div className="flex flex-wrap gap-1">
+              {(["all", "failed", "sent", "direct_dm", "webhook_digest"] as DeliveryFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setDeliveryFilter(filter)}
+                  className={`h-7 rounded-md border px-2 text-xs font-semibold ${deliveryFilter === filter ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  {filter === "all" ? "alle" : filter}
+                </button>
+              ))}
+            </div>
+          </div>
+          {filteredDeliveries.map((delivery) => (
+            <div key={delivery.id} className="grid gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="min-w-0">
+                <div className="flex flex-wrap gap-2">
+                  <span className="font-semibold text-slate-800">Event #{delivery.eventId}</span>
+                  <span>{delivery.channel}</span>
+                  <span>{delivery.deliveryMode || "ohne Modus"}</span>
+                  <span>{delivery.digestSize ? `${delivery.digestSize} Hinweis${delivery.digestSize === 1 ? "" : "e"}` : "Einzelversuch"}</span>
+                  <span>{formatDate(delivery.createdAt)}</span>
+                </div>
+                <div className="mt-1 truncate">{delivery.target || "kein Ziel"}</div>
+                {delivery.lastError && <div className="mt-1 line-clamp-2 text-red-700">{delivery.lastError}</div>}
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <span className={`rounded-full border px-2 py-1 font-semibold ${delivery.status === "sent" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : delivery.status === "failed" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                  {delivery.status}
+                </span>
+                {delivery.status === "failed" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => onRetryNotificationDelivery(delivery)}
+                    className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Erneut senden
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {!filteredDeliveries.length && (
+            <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+              Keine Zustellversuche für diesen Filter.
+            </div>
+          )}
+        </div>
       </section>
     </>
   );

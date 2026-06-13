@@ -309,6 +309,8 @@ export type NotificationDelivery = {
   attempts: number;
   target: string;
   lastError: string;
+  deliveryMode: "direct_dm" | "webhook_digest" | "";
+  digestSize: number;
   deliveredAt: string;
   createdAt: string;
 };
