@@ -196,6 +196,7 @@ for (const marker of [
   "package.json",
   "package-lock.json",
   "node_modules",
+  ".next/package.json",
   "Refusing to deploy: staging directory contains Git metadata.",
   "--prebuilt",
   "--no-wait",

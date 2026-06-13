@@ -994,6 +994,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployScript, /node_modules is missing/);
   assert.match(deployScript, /package-lock\.json/);
   assert.match(deployScript, /node_modules/);
+  assert.match(deployScript, /\.next\/package\.json is missing/);
+  assert.match(deployScript, /\.next/);
   assert.match(deployScript, /Refusing to deploy: staging directory contains Git metadata\./);
   assert.match(deployScript, /--prebuilt/);
   assert.match(deployScript, /--no-wait/);
