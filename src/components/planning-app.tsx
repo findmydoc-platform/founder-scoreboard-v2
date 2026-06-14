@@ -3142,7 +3142,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                     : workspaceSubtitles[workspace]}
               </div>
             </div>
-            <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:px-0">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
               {devRoleSwitchAvailable && (
                 <DevRoleSwitch
                   profiles={data.profiles}
@@ -3200,7 +3200,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             </div>
           </div>
 
-          {filtersAvailable && <div className="flex items-center gap-2 overflow-x-auto px-4 pb-3 lg:px-6">
+          {filtersAvailable && <div className="flex flex-wrap items-center gap-2 px-4 pb-3 lg:px-6">
             {viewTabs.map((tab) => {
               const Icon = tab.icon;
               const active = view === tab.id;
@@ -3295,7 +3295,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           </section>
         )}
 
-        <section className="px-4 pb-8 pt-4 lg:px-6">
+        <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
           {workspace === "projects" && (
             <CurrentProjectsOverview
               data={data}
@@ -3974,12 +3974,12 @@ function LegacyExecutionLayerOverview({
 
         <div className="mt-5 border-t border-slate-100 pt-4">
           <h3 className="text-sm font-semibold text-slate-950">Vorschläge für heute</h3>
-          <div className="mt-3 grid gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3">
             {suggestedTasks.map((task) => (
-              <article key={task.id} className="rounded-md border border-slate-200 p-3">
+              <article key={task.id} className="w-full min-w-0 rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <button type="button" onClick={() => onOpenTask(task)} className="truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                    <button type="button" onClick={() => onOpenTask(task)} className="block w-full truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
                       {task.title}
                     </button>
                     <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">

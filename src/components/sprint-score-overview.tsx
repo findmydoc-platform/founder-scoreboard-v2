@@ -104,8 +104,8 @@ export function SprintScoreTableOverview({
   }
 
   return (
-    <div className="grid gap-4">
-      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="grid min-w-0 gap-4">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Sprint
@@ -199,7 +199,7 @@ export function SprintScoreTableOverview({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">FounderOps Score v2.1</h2>
@@ -285,7 +285,7 @@ export function SprintScoreTableOverview({
         onUpdateMeetingAttendance={onUpdateMeetingAttendance}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
@@ -336,7 +336,7 @@ export function SprintScoreTableOverview({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
           <h2 className="text-base font-semibold text-slate-950">Sprint-Aufgaben</h2>
         </div>
