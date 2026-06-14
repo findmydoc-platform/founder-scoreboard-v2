@@ -297,7 +297,7 @@ export function MeetingFinderOverview({
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[430px_1fr]">
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,430px)_minmax(0,1fr)]">
       <MeetingSlotSearchSection
         workingHoursCount={workingHours.length}
         blockersCount={blockers.length}
@@ -335,7 +335,7 @@ export function MeetingFinderOverview({
         onToggleParticipant={toggleParticipant}
         onReserveSlot={reserveSlot}
       />
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
         <MeetingCalendarToolbar
           calendarView={calendarView}
           calendarTitle={calendarTitle}

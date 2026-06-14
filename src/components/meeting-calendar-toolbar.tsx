@@ -34,7 +34,7 @@ export function MeetingCalendarToolbar({
 }) {
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button
             type="button"
@@ -66,7 +66,7 @@ export function MeetingCalendarToolbar({
             <p className="text-xs text-slate-500">{calendarSubtitle}</p>
           </div>
         </div>
-        <div className="w-36">
+        <div className="w-full sm:w-36">
           <CustomSelect
             value={calendarView}
             onChange={(value) => onCalendarViewChange(value as CalendarView)}
