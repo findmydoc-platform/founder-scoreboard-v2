@@ -15,6 +15,7 @@ import {
   Maximize2,
   Link2,
   ListTree,
+  Menu,
   MessageSquare,
   Plus,
   Search,
@@ -569,6 +570,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [meetingCreateMessage, setMeetingCreateMessage] = useState("");
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
   const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
     firstSprintNumber: 2,
@@ -3108,6 +3110,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser?.email || ""}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
       />
 
       <main className="lg:pl-16">
@@ -3131,15 +3135,26 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             </div>
           )}
           <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 lg:items-center lg:px-6">
-            <div className="min-w-0 max-w-full">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
-              <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
-              <div className="mt-1 text-sm text-slate-500">
-                {workspace === "planning"
-                  ? data.project.range
-                  : workspace === "mine"
-                    ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
-                    : workspaceSubtitles[workspace]}
+            <div className="flex min-w-0 max-w-full items-start gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 lg:hidden"
+                aria-label="Navigation öffnen"
+                aria-expanded={mobileNavOpen}
+              >
+                <Menu size={19} />
+              </button>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
+                <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
+                <div className="mt-1 text-sm text-slate-500">
+                  {workspace === "planning"
+                    ? data.project.range
+                    : workspace === "mine"
+                      ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
+                      : workspaceSubtitles[workspace]}
+                </div>
               </div>
             </div>
             <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:px-0">
