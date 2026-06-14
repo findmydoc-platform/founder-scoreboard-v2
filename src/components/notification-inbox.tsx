@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { formatDate } from "@/lib/display";
 import type { NotificationEvent, Profile } from "@/lib/types";
 
@@ -44,13 +45,35 @@ export function NotificationInbox({
   onOpen: (event: NotificationEvent) => void;
   onDismiss: (eventId: number) => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.length;
 
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target)) onToggle();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onToggle();
+    };
+
+    window.addEventListener("pointerdown", closeOnOutside);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutside);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open, onToggle]);
+
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className="relative grid h-9 w-9 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
         aria-label="Benachrichtigungen"
       >

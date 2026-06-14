@@ -450,6 +450,35 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
 });
 
+test("founders can only move or change status for their own tasks", async () => {
+  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const app = await readFile("src/components/planning-app.tsx", "utf8");
+  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
+  const detailPanel = await readFile("src/components/task-detail-panel.tsx", "utf8");
+  const detailSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+
+  assert.match(route, /taskOwnedByProfile/);
+  assert.match(route, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
+  assert.match(app, /canChangeTaskStatus/);
+  assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
+  assert.match(app, /onDragStart=\{canUpdateStatus \? startTaskDrag : undefined\}/);
+  assert.match(taskCard, /statusDisabled/);
+  assert.match(detailPanel, /canChangeTaskStatus/);
+  assert.match(detailSidebar, /disabled=\{!canChangeTaskStatus\}/);
+});
+
+test("header overlays close on outside click and escape", async () => {
+  const notifications = await readFile("src/components/notification-inbox.tsx", "utf8");
+  const feedback = await readFile("src/components/feedback-dialog.tsx", "utf8");
+
+  assert.match(notifications, /rootRef/);
+  assert.match(notifications, /pointerdown/);
+  assert.match(notifications, /keydown/);
+  assert.match(feedback, /onPointerDown/);
+  assert.match(feedback, /event\.target === event\.currentTarget/);
+  assert.match(feedback, /Escape/);
+});
+
 test("decision confirmation can lock decisions after required confirmations", async () => {
   const route = await readFile("src/app/api/decisions/[id]/confirm/route.ts", "utf8");
 
@@ -528,6 +557,7 @@ test("notification preferences are editable per profile and event type", async (
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(route, /requireFounder/);
@@ -538,8 +568,10 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(data, /notificationPreferenceResult/);
   assert.match(data, /mapNotificationPreference/);
   assert.match(types, /export type NotificationPreference/);
-  assert.match(ui, /Google-Chat-Events/);
-  assert.match(ui, /onUpdateNotificationPreference/);
+  assert.match(teamUi, /Google-Chat-Events/);
+  assert.match(teamUi, /onSaveProfileSettings/);
+  assert.match(teamUi, /Ungespeicherte Änderungen/);
+  assert.match(teamUi, /Speichern/);
   assert.match(ui, /notificationEventLabel/);
   assert.match(policy, /GoogleChatDigestEventType/);
   assert.match(policy, /Review angefragt/);

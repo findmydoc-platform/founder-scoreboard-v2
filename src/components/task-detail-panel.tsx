@@ -46,6 +46,7 @@ export function TaskDetailPanel({
   decisionTaskLinks,
   focusItems,
   canManageTaskMeta,
+  canChangeTaskStatus = canManageTaskMeta,
   allTasks,
   relations,
   pending,
@@ -80,6 +81,7 @@ export function TaskDetailPanel({
   decisionTaskLinks: DecisionTaskLink[];
   focusItems: TaskFocusItem[];
   canManageTaskMeta: boolean;
+  canChangeTaskStatus?: boolean;
   allTasks: Task[];
   relations: TaskRelation[];
   pending: boolean;
@@ -170,6 +172,7 @@ export function TaskDetailPanel({
             sprints={sprints}
             milestones={milestones}
             canManageTaskMeta={canManageTaskMeta}
+            canChangeTaskStatus={canChangeTaskStatus}
             pending={pending}
             githubProviderTokenAvailable={githubProviderTokenAvailable}
             onUpdate={onUpdate}

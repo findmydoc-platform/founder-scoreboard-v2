@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { CustomSelect } from "@/components/custom-select";
 
@@ -28,8 +28,21 @@ export function FeedbackDialog({
   });
   const canSubmit = draft.title.trim().length >= 3 && draft.description.trim().length >= 10;
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-6">
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-6"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <form
         className="w-full max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
         onSubmit={(event) => {

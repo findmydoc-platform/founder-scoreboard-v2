@@ -71,6 +71,12 @@ function profileId(value?: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function taskOwnedByProfile(task: { owner?: string | null }, profile?: { id?: string; name?: string } | null) {
+  if (!profile || !task.owner) return false;
+  const owner = task.owner;
+  return owner === profile.id || owner === profile.name || owner === profileId(profile.name);
+}
+
 type CurrentTaskForActivity = {
   task_type?: string | null;
   status?: string | null;
@@ -139,6 +145,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,title,task_type,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
+  if (!currentTask) {
+    return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  }
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const restrictedFields = [
     payload.owner !== undefined ? "Owner" : "",
@@ -157,6 +166,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.status) {
     if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
       return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
+    }
+    if (!isOperationalLead && !taskOwnedByProfile(currentTask, permission.profile)) {
+      return NextResponse.json({ error: "Founder können nur den Status ihrer eigenen Aufgaben ändern." }, { status: 403 });
     }
     if (!isOperationalLead && payload.status === "Erledigt") {
       return NextResponse.json({ error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt." }, { status: 403 });

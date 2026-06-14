@@ -16,6 +16,7 @@ type Props = {
   sprints: Sprint[];
   milestones: Milestone[];
   canManageTaskMeta: boolean;
+  canChangeTaskStatus?: boolean;
   pending: boolean;
   githubProviderTokenAvailable: boolean;
   onUpdate: (patch: Partial<Task>) => void;
@@ -32,6 +33,7 @@ export function TaskDetailPanelSidebar({
   sprints,
   milestones,
   canManageTaskMeta,
+  canChangeTaskStatus = canManageTaskMeta,
   pending,
   githubProviderTokenAvailable,
   onUpdate,
@@ -70,7 +72,7 @@ export function TaskDetailPanelSidebar({
         <div className="mt-3 grid gap-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Status
-            <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={statusOptions.map((status) => ({ value: status, label: status }))} />
+            <CustomSelect value={normalizeStatus(task.status)} disabled={!canChangeTaskStatus} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
           </label>
           {canManageTaskMeta ? (
             <>

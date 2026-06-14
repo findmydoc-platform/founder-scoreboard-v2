@@ -330,7 +330,6 @@ test("notification preferences are editable per profile and event type", async (
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
@@ -343,7 +342,9 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(dataMappers, /mapNotificationPreference/);
   assert.match(types, /export type NotificationPreference/);
   assert.match(teamUi, /Google-Chat-Events/);
-  assert.match(ui, /onUpdateNotificationPreference/);
+  assert.match(teamUi, /onSaveProfileSettings/);
+  assert.match(teamUi, /Ungespeicherte Änderungen/);
+  assert.match(teamUi, /Speichern/);
   assert.match(teamUi, /notificationEventLabel/);
   assert.match(policy, /GoogleChatDigestEventType/);
   assert.match(policy, /Review angefragt/);
