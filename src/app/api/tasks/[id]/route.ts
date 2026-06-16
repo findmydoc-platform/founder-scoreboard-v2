@@ -81,6 +81,9 @@ type CurrentTaskForActivity = {
   task_type?: string | null;
   status?: string | null;
   review_status?: string | null;
+  review_owner_profile_id?: string | null;
+  review_requested_at?: string | null;
+  score_final?: boolean | null;
   owner?: string | null;
   priority?: string | null;
   sprint_id?: string | null;
@@ -142,7 +145,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: Record<string, string | number | boolean | null> = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,owner,status,review_status,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -177,10 +180,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return NextResponse.json({ error: "Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden." }, { status: 403 });
     }
     update.status = payload.status;
-    if (!isOperationalLead && payload.status === "Review") {
-      update.review_status = "requested";
-      update.score_final = false;
-    }
   }
 
   if (payload.priority) {
@@ -273,6 +272,31 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.score_final = Boolean(payload.scoreFinal);
   }
 
+  const startsReviewRequest = payload.status === "Review" || payload.reviewStatus === "requested";
+  if (startsReviewRequest) {
+    if (currentTask.score_final) {
+      return NextResponse.json({ error: "Final bewertete Aufgaben können nicht erneut in Review gegeben werden." }, { status: 409 });
+    }
+
+    const reviewPackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
+    let reviewOwnerProfileId = "";
+    if (reviewPackageId) {
+      const { data: initiative, error: initiativeError } = await supabase
+        .from("packages")
+        .select("owner_id,accountable_profile_id")
+        .eq("id", reviewPackageId)
+        .maybeSingle();
+      if (initiativeError) return NextResponse.json({ error: initiativeError.message }, { status: 500 });
+      reviewOwnerProfileId = initiative?.accountable_profile_id || initiative?.owner_id || "";
+    }
+
+    update.status = "Review";
+    update.review_status = "requested";
+    update.score_final = false;
+    update.review_owner_profile_id = reviewOwnerProfileId || null;
+    update.review_requested_at = new Date().toISOString();
+  }
+
   if (payload.githubSyncStatus) {
     if (!syncStatuses.has(payload.githubSyncStatus)) {
       return NextResponse.json({ error: "Ungültiger GitHub-Sync-Status." }, { status: 400 });
@@ -332,24 +356,40 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {
-    const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
-    const notifications = (leads || [])
-      .filter((lead) => lead.id !== permission.profile?.id)
-      .map((lead) => ({
+    const reviewOwnerProfileId = typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "";
+    const recipients = reviewOwnerProfileId
+      ? [{ id: reviewOwnerProfileId }]
+      : (await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"])).data || [];
+    const notifications = recipients
+      .filter((recipient) => recipient.id !== permission.profile?.id)
+      .map((recipient) => ({
         type: "task.review_requested",
         actor_profile_id: permission.profile?.id || null,
-        recipient_profile_id: lead.id,
+        recipient_profile_id: recipient.id,
         entity_type: "task",
         entity_id: id,
         title: `Review angefragt: ${currentTask.title}`,
-        body: "Founder hat die Aufgabe zur Review eingereicht.",
+        body: reviewOwnerProfileId
+          ? "Diese Aufgabe wartet auf deine Accountable-Review."
+          : "Diese Aufgabe wartet auf Review, hat aber keinen Review Owner.",
       }));
     if (notifications.length) {
       await supabase.from("notification_events").insert(notifications);
     }
   }
 
-  return NextResponse.json({ ok: true, activities });
+  return NextResponse.json({
+    ok: true,
+    activities,
+    task: startsReviewRequest ? {
+      id,
+      status: "Review",
+      reviewStatus: "requested",
+      scoreFinal: false,
+      reviewOwnerProfileId: update.review_owner_profile_id || "",
+      reviewRequestedAt: update.review_requested_at || "",
+    } : undefined,
+  });
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {

@@ -78,6 +78,8 @@ export type DbTask = {
   sprint_id: string | null;
   milestone_id: string | null;
   review_status: Task["reviewStatus"] | null;
+  review_owner_profile_id: string | null;
+  review_requested_at: string | null;
   score_points: number | null;
   score_final: boolean | null;
   github_repo: string | null;

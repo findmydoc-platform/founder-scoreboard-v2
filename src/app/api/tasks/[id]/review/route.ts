@@ -1,6 +1,6 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
+import { requireFounder, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
 type ReviewPayload = {
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const supabase = getServerSupabase();
   if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  const founderPermission = await requireFounder(request);
+  if (!founderPermission.ok) return NextResponse.json({ error: founderPermission.error }, { status: founderPermission.status });
 
   const { id } = await context.params;
   const payload = (await request.json()) as ReviewPayload;
@@ -54,11 +54,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,sprint_id,title,status,owner")
+    .select("id,sprint_id,title,status,owner,review_owner_profile_id")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  const permission = await requireTaskReviewer(request, task, founderPermission);
+  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
 
   if (task.sprint_id) {
     const { data: sprint, error: sprintError } = await supabase
@@ -81,6 +83,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       score_points: points,
       score_final: scoreFinal,
       status: nextStatus,
+      review_owner_profile_id: null,
+      review_requested_at: null,
       github_sync_status: "not_synced",
       github_sync_error: null,
     })
@@ -143,6 +147,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       reviewStatus: decision,
       scorePoints: points,
       scoreFinal,
+      reviewOwnerProfileId: "",
+      reviewRequestedAt: "",
       githubSyncStatus: "not_synced",
     },
   });

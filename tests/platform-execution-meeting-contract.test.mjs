@@ -60,6 +60,11 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(sidebar, /Execution/);
   assert.match(ui, /ExecutionLayerOverview/);
   assert.match(executionUi, /Heute-Fokus/);
+  assert.match(executionUi, /Meine Reviews/);
+  assert.match(executionUi, /Team-Reviews/);
+  assert.match(executionUi, /Ohne Review Owner/);
+  assert.match(executionViewModel, /myReviewTasks/);
+  assert.match(executionViewModel, /teamReviewTasks/);
   assert.match(executionUi, /Hygiene Alerts/);
   assert.match(executionUi, /Decision-Folgearbeit/);
   assert.match(executionUi, /followUpCounts/);

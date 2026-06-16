@@ -60,6 +60,9 @@ create table if not exists tasks (
   updated_at timestamptz not null default now()
 );
 
+alter table tasks add column if not exists review_owner_profile_id text references profiles(id) on delete set null;
+alter table tasks add column if not exists review_requested_at timestamptz;
+
 create table if not exists task_dependencies (
   id bigint generated always as identity primary key,
   task_id text not null references tasks(id) on delete cascade,
@@ -175,6 +178,8 @@ create index if not exists tasks_project_id_idx on tasks(project_id);
 create index if not exists tasks_package_id_idx on tasks(package_id);
 create index if not exists tasks_status_idx on tasks(status);
 create index if not exists tasks_owner_idx on tasks(owner);
+create index if not exists tasks_review_owner_profile_id_idx on tasks(review_owner_profile_id);
+create index if not exists tasks_review_requested_at_idx on tasks(review_requested_at);
 create index if not exists task_dependencies_task_id_idx on task_dependencies(task_id);
 create index if not exists task_links_task_id_idx on task_links(task_id);
 create index if not exists task_activity_task_id_idx on task_activity(task_id);

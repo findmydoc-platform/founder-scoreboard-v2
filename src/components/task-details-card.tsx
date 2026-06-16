@@ -80,6 +80,9 @@ export function TaskDetailsCard({
   onCancelEditing,
   onSaveDetails,
 }: Props) {
+  const reviewOwnerProfile = profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
+  const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between gap-3">
@@ -194,6 +197,10 @@ export function TaskDetailsCard({
         <div className="border-t border-slate-100 pt-3">
           <div className="text-xs font-semibold text-slate-500">Review</div>
           <div className="mt-1 text-sm font-semibold text-slate-800">{reviewLabel(task.reviewStatus)}</div>
+          <div className="mt-1 text-xs text-slate-500">
+            {reviewOwnerProfile?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}
+            {selfReview ? " · Self-Review" : ""}
+          </div>
         </div>
         <div>
           <div className="text-xs font-semibold text-slate-500">Score</div>

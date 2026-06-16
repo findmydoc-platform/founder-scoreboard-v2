@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { AlertTriangle, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -88,6 +88,11 @@ export function SprintScoreTableOverview({
   const selectedReviewTask = reviewTasks.find((task) => task.id === selectedReviewTaskId) || reviewTasks[0];
   const openObjections = data.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.status === "open");
   const sprintControlsDisabled = pending || !canManageSprint;
+  const canReviewTask = (task: Task) => Boolean(currentProfile && (canManageSprint || task.reviewOwnerProfileId === currentProfile.id));
+  const reviewOwnerName = (task: Task) => task.reviewOwnerProfileId
+    ? data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId)?.name || task.reviewOwnerProfileId
+    : "Ohne Review Owner";
+  const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
   const sprintStatusLabel: Record<Sprint["status"], string> = {
     planning: "Planung",
     active: "Aktiv",
@@ -375,7 +380,10 @@ export function SprintScoreTableOverview({
                   <td className="border-b border-slate-100 px-3 py-3">
                     <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className={`h-8 w-32 text-xs font-semibold ${statusTone(normalizeStatus(task.status))}`} options={taskStatuses.map((status) => ({ value: status, label: status }))} />
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{reviewLabel(task.reviewStatus)}</td>
+                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <div>{reviewLabel(task.reviewStatus)}</div>
+                    <div className="mt-1 text-xs text-slate-500">{reviewOwnerName(task)}{isSelfReview(task) ? " · Self-Review" : ""}</div>
+                  </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                     {task.scorePoints} {task.scoreFinal ? "final" : "offen"}
                   </td>
@@ -391,7 +399,7 @@ export function SprintScoreTableOverview({
                       {task.reviewStatus !== "not_requested" || normalizeStatus(task.status) === "Review" ? (
                         <button
                           type="button"
-                          disabled={pending || sprint.scoreLocked || task.scoreFinal}
+                          disabled={pending || sprint.scoreLocked || task.scoreFinal || !canReviewTask(task)}
                           onClick={() => {
                             setSelectedReviewTaskId(task.id);
                             setReviewComment("");
@@ -421,9 +429,9 @@ export function SprintScoreTableOverview({
       {selectedReviewTask && (
         <section className="rounded-lg border border-blue-200 bg-white shadow-sm">
           <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">CEO Review-Blatt</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Accountable Review-Blatt</div>
             <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>
-            <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)}</p>
+            <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)} · {reviewOwnerName(selectedReviewTask)}{isSelfReview(selectedReviewTask) ? " · Self-Review" : ""}</p>
             <p className="mt-2 text-xs leading-5 text-blue-800">Review-Rohpunkte entstehen nur hier im Review-Blatt. Der Sprint-Gesamtscore wird später als 20-Punkte-Modell finalisiert.</p>
           </div>
           <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -490,9 +498,9 @@ export function SprintScoreTableOverview({
                 Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.
               </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "accepted", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "partial", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal} onClick={() => onReview(selectedReviewTask, "changes_requested", 0, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Nacharbeit</button>
+                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "accepted", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
+                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "partial", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
+                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "changes_requested", 0, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Nacharbeit</button>
               </div>
             </div>
           </div>

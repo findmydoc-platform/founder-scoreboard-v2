@@ -462,6 +462,11 @@ function founderTaskOwnershipGuardMessage() {
   return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
 }
 
+function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Package[]) {
+  const initiative = packages.find((item) => item.id === task.packageId);
+  return initiative?.accountableProfileId || initiative?.ownerId || "";
+}
+
 type HygieneAlert = {
   id: string;
   severity: "critical" | "warning" | "info";
@@ -774,9 +779,25 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
-    const normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
+    let normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
       ? { ...patch, ...taskOwnerPatch(patch.ownerId || patch.owner || "", data.profiles) }
       : patch;
+
+    if (normalizedPatch.status === "Review" || normalizedPatch.reviewStatus === "requested") {
+      if (task.scoreFinal) {
+        setSaveError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.");
+        return;
+      }
+      const nextTask = { ...task, ...normalizedPatch };
+      normalizedPatch = {
+        ...normalizedPatch,
+        status: "Review",
+        reviewStatus: "requested",
+        scoreFinal: false,
+        reviewOwnerProfileId: reviewOwnerForTask(nextTask, data.packages),
+        reviewRequestedAt: new Date().toISOString(),
+      };
+    }
 
     if (normalizedPatch.status && !canChangeTaskStatus(task)) {
       setStatusGuardNotice(founderTaskOwnershipGuardMessage());
@@ -844,7 +865,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           }),
         });
 
-        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[] } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[]; task?: Partial<Task> } | null;
         if (!response.ok) {
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         }
@@ -852,6 +873,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           setData((current) => ({
             ...current,
             taskActivity: [...body.activities!, ...current.taskActivity],
+          }));
+        }
+        if (body?.task) {
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         }
         if (normalizedPatch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
@@ -2142,7 +2169,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setData((current) => ({
       ...current,
       tasks: current.tasks.map((item) =>
-        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal } : item,
+        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal, reviewOwnerProfileId: "", reviewRequestedAt: "" } : item,
       ),
     }));
 

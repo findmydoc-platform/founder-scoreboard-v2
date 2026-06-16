@@ -110,6 +110,8 @@ export function mapTask(row: DbTask, profiles: Profile[]): Task {
     sprintId: row.sprint_id || "sprint-1",
     milestoneId: row.milestone_id || "",
     reviewStatus: row.review_status || "not_requested",
+    reviewOwnerProfileId: row.review_owner_profile_id || "",
+    reviewRequestedAt: row.review_requested_at || "",
     scorePoints: row.score_points || 0,
     scoreFinal: Boolean(row.score_final),
     githubRepo: row.github_repo || "findmydoc-platform/management",

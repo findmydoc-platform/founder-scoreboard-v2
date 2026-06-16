@@ -50,6 +50,7 @@ const schemaChecks = [
   { name: "notification_events.dedupe_key", table: "notification_events", select: "id,dedupe_key" },
   { name: "notification_deliveries.payload", table: "notification_deliveries", select: "id,target,payload" },
   { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },
+  { name: "tasks.accountable_review", table: "tasks", select: "id,review_owner_profile_id,review_requested_at" },
   { name: "sprint_commitments", table: "sprint_commitments", select: "id,sprint_id,profile_id,commitment_level,weekly_hours,note" },
   { name: "founder_sprint_scores", table: "founder_sprint_scores", select: "id,sprint_id,profile_id,delivery_points,form_points,weekly_points,total_points,fulfilled,away_neutral,finalized_at,finalized_by,reason_summary" },
   { name: "founder_strike_state", table: "founder_strike_state", select: "id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at" },

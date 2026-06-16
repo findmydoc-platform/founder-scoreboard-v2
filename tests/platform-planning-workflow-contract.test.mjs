@@ -111,12 +111,24 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(authHook, /\/api\/planning-data/);
 });
 
-test("task review uses operational lead route and keeps rework non-final", async () => {
+test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const authz = await readFile("src/lib/authz.ts", "utf8");
+  const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
-  assert.match(route, /requireOperationalLead/);
+  assert.match(migration, /review_owner_profile_id/);
+  assert.match(migration, /review_requested_at/);
+  assert.match(authz, /requireTaskReviewer/);
+  assert.match(authz, /review_owner_profile_id/);
+  assert.match(taskRoute, /accountable_profile_id/);
+  assert.match(taskRoute, /update\.review_owner_profile_id/);
+  assert.match(taskRoute, /task\.review_requested/);
+  assert.match(route, /requireTaskReviewer/);
+  assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
@@ -126,7 +138,7 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
   assert.match(sprintUi, /CEO-Score/);
-  assert.match(sprintUi, /Nächster Schritt/);
+  assert.match(appUi, /Nächster Schritt/);
   assert.match(sprintUi, /Evidence Required/);
   assert.match(sprintUi, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
@@ -388,7 +400,7 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   assert.match(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
-  assert.match(sprintUi, /CEO Review-Blatt/);
+  assert.match(sprintUi, /Accountable Review-Blatt/);
   assert.match(sprintUi, /Review anfragen/);
 });
 
@@ -405,7 +417,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.doesNotMatch(sprintUi, /Founder-Arbeitsstand/);
   assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
   assert.match(sprintUi, /Review-Blatt/);
-  assert.match(sprintUi, /CEO Review-Blatt/);
+  assert.match(sprintUi, /Accountable Review-Blatt/);
   assert.match(sprintUi, /Review-Rohpunkte/);
   assert.match(sprintUi, /reviewChecklistScore/);
   assert.match(sprintUi, /20 Punkte/);

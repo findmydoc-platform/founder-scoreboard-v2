@@ -370,12 +370,14 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(ui, /\/api\/planning-data/);
 });
 
-test("task review uses operational lead route and keeps rework non-final", async () => {
+test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
-  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /requireTaskReviewer/);
+  assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
@@ -385,7 +387,7 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
   assert.match(ui, /CEO-Score/);
-  assert.match(ui, /Nächster Schritt/);
+  assert.match(appUi, /Nächster Schritt/);
   assert.match(ui, /Evidence Required/);
   assert.match(ui, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
@@ -403,7 +405,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
 test("sprint lock creates carryover for unfinished deliverables", async () => {
   const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /original_sprint_id/);
@@ -417,7 +420,7 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(route, /missed_uncommunicated/);
   assert.match(route, /accepted_carryover/);
   assert.match(route, /sprint\.task_carried_over/);
-  assert.match(ui, /Sprint-Verlauf/);
+  assert.match(panelSidebar, /Sprint-Verlauf/);
   assert.match(ui, /Carry-over/);
   assert.match(types, /carryoverReason/);
 });
@@ -425,7 +428,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
 test("sprint configuration is operational-lead only and audited", async () => {
   const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
   const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -434,9 +438,9 @@ test("sprint configuration is operational-lead only and audited", async () => {
   assert.match(route, /Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden/);
   assert.match(route, /sprint.update/);
   assert.match(planRoute, /protectedSprintIds/);
-  assert.match(ui, /findCurrentSprint/);
-  assert.match(ui, /Aktueller Sprint/);
-  assert.match(ui, /Zeitraum geschützt/);
+  assert.match(sprintUi, /findCurrentSprint/);
+  assert.match(sprintUi, /Aktueller Sprint/);
+  assert.match(sprintUi, /Zeitraum gesch/);
   assert.match(ui, /current: currentSprint\?\.id === item\.id/);
   assert.match(ui, /locked: data\.tasks\.some/);
   assert.doesNotMatch(ui, /· aktuell|· geschützt/);
@@ -607,13 +611,13 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const status = await readFile("src/lib/status.ts", "utf8");
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.match(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
-  assert.match(ui, /CEO Review-Blatt/);
+  assert.match(ui, /Accountable Review-Blatt/);
   assert.match(ui, /Review anfragen/);
 });
 
@@ -621,7 +625,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);
@@ -630,11 +634,11 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.doesNotMatch(ui, /Founder-Arbeitsstand/);
   assert.doesNotMatch(ui, /Selbstkontrolle ohne Punkte/);
   assert.match(ui, /Review-Blatt/);
-  assert.match(ui, /CEO Review-Blatt/);
-  assert.match(ui, /Founder-Arbeitsblatt bleibt Arbeitsstand ohne Score/);
+  assert.match(ui, /Accountable Review-Blatt/);
+  assert.match(ui, /Review-Rohpunkte/);
   assert.match(ui, /reviewChecklistScore/);
-  assert.match(ui, /Automatische CEO-Punkte/);
-  assert.match(ui, /Punkteformel: vier CEO-Kriterien ergeben je 2,5 Punkte/);
+  assert.match(ui, /Automatische Review-Rohpunkte/);
+  assert.match(ui, /vier Kriterien ergeben je 2,5 Punkte/);
   assert.match(reviewRoute, /checklistPoints/);
   assert.match(reviewRoute, /acceptanceCriteriaMet/);
 });

@@ -42,6 +42,8 @@ export function TaskDetailPanelSidebar({
   onDelete,
 }: Props) {
   const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
+  const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
+  const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
   const creatorProfile = teamProfiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
     || teamProfiles.find((profile) => profile.platformRole === "ceo")
     || ownerProfile;
@@ -175,6 +177,16 @@ export function TaskDetailPanelSidebar({
           <div>
             <div className="text-xs font-semibold text-slate-500">Review</div>
             <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slate-500">Review Owner</div>
+            <div className="mt-1">
+              {reviewOwnerProfile?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}
+              {selfReview ? <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Self-Review</span> : null}
+            </div>
+            {task.reviewRequestedAt ? (
+              <div className="mt-1 text-xs text-slate-500">Angefragt am {new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(task.reviewRequestedAt))}</div>
+            ) : null}
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500">Erstellt von</div>

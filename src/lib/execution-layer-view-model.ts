@@ -1,6 +1,6 @@
 import { hasOpenWaitingRelation, isOperationalLeadRole, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, Profile, TaskFocusItem } from "@/lib/types";
+import type { PlanningData, Profile, Task, TaskFocusItem } from "@/lib/types";
 
 export type HygieneAlert = {
   id: string;
@@ -16,6 +16,10 @@ export type HygieneAlert = {
 
 export type HygieneAlertSeverityFilter = "all" | HygieneAlert["severity"];
 export type HygieneAlertAreaFilter = "all" | HygieneAlert["area"];
+
+function isOpenReviewTask(task: Task) {
+  return !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
+}
 
 export function currentIsoDate() {
   const date = new Date();
@@ -91,10 +95,17 @@ export function buildExecutionLayerViewModel({
     : 0;
   const executionMetrics = {
     criticalAlerts: hygieneAlerts.filter((alert) => alert.severity === "critical" && (isOperationalLead || !alert.taskId || executionTaskIds.has(alert.taskId))).length,
-    reviewQueue: executionTasks.filter((task) => normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested").length,
+    reviewQueue: executionTasks.filter(isOpenReviewTask).length,
     openBlockers: executionTasks.filter((task) => normalizeStatus(task.status) === "Blockiert" || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length,
     decisionsWithoutTasks: data.decisions.filter((decision) => decision.status === "locked" && !data.decisionTaskLinks.some((link) => link.decisionId === decision.id)).length,
   };
+  const openReviewTasks = data.tasks
+    .filter(isOpenReviewTask)
+    .sort((left, right) => (left.reviewRequestedAt || "").localeCompare(right.reviewRequestedAt || "") || priorityScore(left.priority) - priorityScore(right.priority));
+  const myReviewTasks = openReviewTasks.filter((task) => task.reviewOwnerProfileId === currentProfile?.id);
+  const teamReviewTasks = isOperationalLead ? openReviewTasks : myReviewTasks;
+  const reviewTasksWithoutOwner = teamReviewTasks.filter((task) => !task.reviewOwnerProfileId);
+  const overdueReviewTasks = teamReviewTasks.filter((task) => task.reviewRequestedAt && task.reviewRequestedAt.slice(0, 10) < addDaysIso(today, -2));
   const suggestedTasks = [...openTasks]
     .sort((left, right) => {
       const leftBlocked = hasOpenWaitingRelation(left.id, data.tasks, data.taskRelations) ? -1 : 0;
@@ -126,6 +137,10 @@ export function buildExecutionLayerViewModel({
     focusHistoryDates,
     teamFocusCoverage,
     executionMetrics,
+    myReviewTasks,
+    teamReviewTasks,
+    reviewTasksWithoutOwner,
+    overdueReviewTasks,
     suggestedTasks,
     filteredAlerts,
     visibleAlerts,
