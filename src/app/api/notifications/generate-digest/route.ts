@@ -12,6 +12,7 @@ type TaskRow = {
   owner: string | null;
   end_date: string | null;
   review_status: string | null;
+  review_owner_profile_id: string | null;
   task_type: string | null;
   score_relevant: boolean | null;
   score_final: boolean | null;
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id,title,description,status,priority,owner,end_date,review_status,task_type,score_relevant,score_final")
+      .select("id,title,description,status,priority,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
     supabase
@@ -181,15 +182,16 @@ export async function POST(request: NextRequest) {
     if (isDoneTask(task)) continue;
 
     if (task.review_status === "requested") {
+      const reviewOwnerProfileId = task.review_owner_profile_id || null;
       candidates.push({
         type: "task.review_requested",
         actorProfileId: task.owner,
-        recipientProfileId: null,
+        recipientProfileId: reviewOwnerProfileId,
         entityType: "task",
         entityId: task.id,
         title: `Review offen: ${task.title}`,
-        body: taskBody(task, "Dieses Deliverable wartet auf Review."),
-        dedupeKey: dedupeKey("task.review_requested", "task", task.id, today),
+        body: taskBody(task, reviewOwnerProfileId ? "Dieses Deliverable wartet auf deine Accountable-Review." : "Dieses Deliverable wartet auf Review, hat aber keinen Review Owner."),
+        dedupeKey: dedupeKey("task.review_requested", "task", task.id, today, reviewOwnerProfileId || groupRecipient),
       });
     }
 

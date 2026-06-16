@@ -127,6 +127,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /update\.review_owner_profile_id/);
   assert.match(taskRoute, /task\.review_requested/);
+  assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
+  assert.match(taskRoute, /deine Accountable-Review/);
   assert.match(route, /requireTaskReviewer/);
   assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);

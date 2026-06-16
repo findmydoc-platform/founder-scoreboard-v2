@@ -361,7 +361,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ? [{ id: reviewOwnerProfileId }]
       : (await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"])).data || [];
     const notifications = recipients
-      .filter((recipient) => recipient.id !== permission.profile?.id)
       .map((recipient) => ({
         type: "task.review_requested",
         actor_profile_id: permission.profile?.id || null,

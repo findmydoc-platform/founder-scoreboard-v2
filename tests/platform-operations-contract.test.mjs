@@ -43,6 +43,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(generatorRoute, /task\.deadline_overdue/);
   assert.match(generatorRoute, /sprint\.review_due/);
   assert.match(generatorRoute, /decision\.confirmation_requested/);
+  assert.match(generatorRoute, /review_owner_profile_id/);
+  assert.match(generatorRoute, /recipientProfileId: reviewOwnerProfileId/);
+  assert.match(generatorRoute, /deine Accountable-Review/);
   assert.match(generatorRoute, /recipientProfileId: task\.owner/);
   assert.match(generatorRoute, /recipientProfileId: profileId/);
   assert.doesNotMatch(generatorRoute, /task\.comment/);
