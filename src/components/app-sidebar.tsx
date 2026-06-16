@@ -10,6 +10,7 @@ import {
   Settings,
   Target,
   Users,
+  WandSparkles,
   Wrench,
   X,
 } from "lucide-react";
@@ -17,12 +18,13 @@ import Link from "next/link";
 import { forwardRef, useEffect } from "react";
 import { AppBrand } from "@/components/app-brand";
 
-export type AppWorkspace = "planning" | "execution" | "mine" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings";
+export type AppWorkspace = "planning" | "execution" | "mine" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings" | "ceo-intake";
 
 export const appNavItems = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/" },
   { id: "execution", label: "Execution", icon: Target, href: "/?workspace=execution" },
   { id: "mine", label: "Meine Aufgaben", icon: CheckCircle2, href: "/?workspace=mine" },
+  { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/?workspace=ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/?workspace=sprint" },
   { id: "decisions", label: "Decision Log", icon: FileText, href: "/?workspace=decisions" },
   { id: "meetings", label: "Meeting Finder", icon: CalendarDays, href: "/?workspace=meetings" },
@@ -30,7 +32,7 @@ export const appNavItems = [
   { id: "tools", label: "FMD-Tools", icon: Wrench, href: "/?workspace=tools" },
   { id: "team", label: "Team", icon: Users, href: "/?workspace=team" },
   { id: "settings", label: "Einstellungen", icon: Settings, href: "/?workspace=settings" },
-] satisfies Array<{ id: AppWorkspace; label: string; icon: typeof LayoutDashboard; href: string }>;
+] satisfies Array<{ id: AppWorkspace; label: string; icon: typeof LayoutDashboard; href: string; ceoOnly?: boolean }>;
 
 type AppSidebarProps = {
   activeWorkspace?: AppWorkspace;
@@ -39,6 +41,7 @@ type AppSidebarProps = {
   localStateLoaded?: boolean;
   authAvailable?: boolean;
   authUserEmail?: string;
+  currentPlatformRole?: string;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   onMouseLeave?: () => void;
@@ -83,6 +86,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
   localStateLoaded = true,
   authAvailable = false,
   authUserEmail = "",
+  currentPlatformRole = "",
   mobileOpen = false,
   onMobileClose,
   onMouseLeave,
@@ -131,6 +135,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       </Link>
     );
   };
+  const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
 
   return (
     <>
@@ -143,7 +148,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
           <AppBrand textClassName="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100" />
         </div>
         <nav className="space-y-1 px-3 py-4" aria-label="Hauptnavigation">
-          {appNavItems.map((item) => renderNavItem(item, "desktop"))}
+          {visibleNavItems.map((item) => renderNavItem(item, "desktop"))}
         </nav>
         <DataSourceCard
           source={source}
@@ -165,7 +170,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
               </button>
             </div>
             <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Mobile Hauptnavigation">
-              {appNavItems.map((item) => renderNavItem(item, "mobile"))}
+              {visibleNavItems.map((item) => renderNavItem(item, "mobile"))}
             </nav>
             <DataSourceCard
               source={source}

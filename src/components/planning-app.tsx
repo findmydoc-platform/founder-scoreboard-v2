@@ -30,6 +30,7 @@ import type { User } from "@supabase/supabase-js";
 import { AppBrand } from "@/components/app-brand";
 import { AppSidebar, type AppWorkspace } from "@/components/app-sidebar";
 import { AuthControl as CurrentAuthControl } from "@/components/auth-control";
+import { CeoTaskIntake } from "@/components/ceo-task-intake";
 import { CommentBody } from "@/components/task-comment-body";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
@@ -183,6 +184,7 @@ const workspaceLabels: Record<Workspace, string> = {
   tools: "FMD-Tools",
   team: "Team",
   settings: "Einstellungen",
+  "ceo-intake": "CEO Intake",
 };
 
 const workspaceSubtitles: Record<Workspace, string> = {
@@ -196,6 +198,7 @@ const workspaceSubtitles: Record<Workspace, string> = {
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
+  "ceo-intake": "CEO-only Task Intake für Codex-generierte Aufgaben.",
 };
 
 const planningWorkspaces: Workspace[] = ["planning", "mine"];
@@ -645,6 +648,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   });
   const mineOwnerName = currentProfile?.name || "deinem Profil";
   const currentProfileId = currentProfile?.id || "";
+  const canUseCeoIntake = currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
   const canChangeTaskStatus = (task: Task) => canManageTaskMeta || taskBelongsToProfile(task, currentProfile);
   const unreadNotifications = useMemo(() => {
@@ -683,6 +687,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setWorkspace("sprint");
     if (pathname?.startsWith("/tasks/")) router.push("/");
   }, [pathname, router, setWorkspace]);
+
+  useEffect(() => {
+    if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
+      setWorkspace("planning");
+    }
+  }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -3162,6 +3172,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser?.email || ""}
+        currentPlatformRole={currentProfile?.platformRole || ""}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
       />
@@ -3363,6 +3374,29 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
         )}
 
         <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
+          {workspace === "ceo-intake" && canUseCeoIntake && (
+            <CeoTaskIntake
+              source={source}
+              profiles={data.profiles}
+              packages={data.packages}
+              sprints={data.sprints}
+              requestHeaders={requestHeaders}
+              onTasksCreated={(tasks) => {
+                setData((current) => ({
+                  ...current,
+                  tasks: sortTasks([...current.tasks, ...tasks]),
+                }));
+              }}
+            />
+          )}
+          {workspace === "ceo-intake" && !canUseCeoIntake && (
+            <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Assignee haben hier keinen Zugriff.
+              </p>
+            </section>
+          )}
           {workspace === "projects" && (
             <CurrentProjectsOverview
               data={data}
