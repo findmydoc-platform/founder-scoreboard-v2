@@ -560,6 +560,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [view, setView] = useState<ViewMode>("board");
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
+  const [focusedReviewTaskId, setFocusedReviewTaskId] = useState("");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -675,6 +676,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       }
     }
   }, [pathname, router]);
+
+  const openReviewSheet = useCallback((task: Task) => {
+    setSelectedTaskId(null);
+    setFocusedReviewTaskId(task.id);
+    setWorkspace("sprint");
+    if (pathname?.startsWith("/tasks/")) router.push("/");
+  }, [pathname, router, setWorkspace]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -3421,6 +3429,8 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               currentProfile={currentProfile}
               canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
               sprintLockMessage={sprintLockMessage}
+              focusedReviewTaskId={focusedReviewTaskId}
+              onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
             />
           )}
           {workspace === "decisions" && (
@@ -3717,6 +3727,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
           onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
+          onOpenReview={() => openReviewSheet(selectedTask)}
           onDelete={() => deleteTask(selectedTask)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}

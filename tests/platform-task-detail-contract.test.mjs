@@ -82,6 +82,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelSidebarSection, /Planung/);
   assert.match(panelSidebarSection, /Review & Historie/);
   assert.match(panelSidebarSection, /Review Owner/);
+  assert.match(panelSidebarSection, /Zum Review-Blatt/);
   assert.match(panelSidebarSection, /Self-Review/);
   assert.match(panelSidebarSection, /GitHub/);
   assert.match(panelSidebarSection, /Aufgabe löschen/);

@@ -28,6 +28,8 @@ export function SprintScoreTableOverview({
   currentProfile,
   canManageSprint,
   sprintLockMessage,
+  focusedReviewTaskId = "",
+  onFocusedReviewTaskHandled,
 }: {
   data: PlanningData;
   pending: boolean;
@@ -51,6 +53,8 @@ export function SprintScoreTableOverview({
   currentProfile: Profile | null;
   canManageSprint: boolean;
   sprintLockMessage: string;
+  focusedReviewTaskId?: string;
+  onFocusedReviewTaskHandled?: () => void;
 }) {
   const currentSprint = findCurrentSprint(data.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
@@ -71,6 +75,20 @@ export function SprintScoreTableOverview({
       window.queueMicrotask(() => setSelectedSprintId(nextSprintId));
     }
   }, [data.sprints, selectedSprintId]);
+
+  useEffect(() => {
+    if (!focusedReviewTaskId) return;
+    const focusedTask = data.tasks.find((task) => task.id === focusedReviewTaskId);
+    if (!focusedTask) return;
+    if (focusedTask.sprintId && focusedTask.sprintId !== selectedSprintId && data.sprints.some((sprint) => sprint.id === focusedTask.sprintId)) {
+      window.queueMicrotask(() => setSelectedSprintId(focusedTask.sprintId));
+      return;
+    }
+    window.queueMicrotask(() => {
+      setSelectedReviewTaskId(focusedReviewTaskId);
+      onFocusedReviewTaskHandled?.();
+    });
+  }, [data.sprints, data.tasks, focusedReviewTaskId, onFocusedReviewTaskHandled, selectedSprintId]);
 
   const {
     sprint,

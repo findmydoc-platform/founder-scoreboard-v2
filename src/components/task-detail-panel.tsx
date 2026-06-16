@@ -60,6 +60,7 @@ export function TaskDetailPanel({
   onCreateSubIssue,
   onReconnectGitHub,
   onSyncGitHub,
+  onOpenReview,
   onDelete,
   onAddRelation,
   onRemoveRelation,
@@ -95,6 +96,7 @@ export function TaskDetailPanel({
   onCreateSubIssue: () => void;
   onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onOpenReview: () => void;
   onDelete: () => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -178,6 +180,7 @@ export function TaskDetailPanel({
             onUpdate={onUpdate}
             onReconnectGitHub={onReconnectGitHub}
             onSyncGitHub={onSyncGitHub}
+            onOpenReview={onOpenReview}
             onDelete={onDelete}
           />
         </div>

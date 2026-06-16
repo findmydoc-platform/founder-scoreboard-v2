@@ -116,12 +116,16 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
+  const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
   const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
   assert.match(migration, /review_owner_profile_id/);
   assert.match(migration, /review_requested_at/);
+  assert.match(backfillMigration, /review_owner_profile_id is null/);
+  assert.match(backfillMigration, /accountable_profile_id/);
+  assert.match(backfillMigration, /review_status = 'requested' or task\.status = 'Review'/);
   assert.match(authz, /requireTaskReviewer/);
   assert.match(authz, /review_owner_profile_id/);
   assert.match(taskRoute, /accountable_profile_id/);
@@ -129,6 +133,9 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /task\.review_requested/);
   assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
   assert.match(taskRoute, /deine Accountable-Review/);
+  assert.match(appUi, /openReviewSheet/);
+  assert.match(sprintUi, /focusedReviewTaskId/);
+  assert.match(sprintUi, /setSelectedReviewTaskId\(focusedReviewTaskId\)/);
   assert.match(route, /requireTaskReviewer/);
   assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);

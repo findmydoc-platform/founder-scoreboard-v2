@@ -22,6 +22,7 @@ type Props = {
   onUpdate: (patch: Partial<Task>) => void;
   onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onOpenReview: () => void;
   onDelete: () => void;
 };
 
@@ -39,6 +40,7 @@ export function TaskDetailPanelSidebar({
   onUpdate,
   onReconnectGitHub,
   onSyncGitHub,
+  onOpenReview,
   onDelete,
 }: Props) {
   const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
@@ -51,6 +53,7 @@ export function TaskDetailPanelSidebar({
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
   const canSyncExistingGitHubIssue = hasGitHubIssue(task);
+  const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = canManageTaskMeta
     ? taskStatuses
     : normalizeStatus(task.status) === "Nacharbeit"
@@ -177,6 +180,16 @@ export function TaskDetailPanelSidebar({
           <div>
             <div className="text-xs font-semibold text-slate-500">Review</div>
             <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
+            {reviewOpen ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onOpenReview}
+                className="mt-2 h-8 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Zum Review-Blatt
+              </button>
+            ) : null}
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500">Review Owner</div>
