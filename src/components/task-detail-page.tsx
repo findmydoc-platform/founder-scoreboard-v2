@@ -201,9 +201,17 @@ export function TaskDetailPage({
           },
           body: JSON.stringify(patch),
         });
-        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[] } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[]; task?: Partial<Task> } | null;
         if (!response.ok) throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         if (body?.activities?.length) appendTaskActivities(body.activities);
+        if (body?.task) {
+          setMeta((current) => ({
+            ...current,
+            ...(body.task?.status ? { status: body.task.status } : {}),
+            ...(body.task?.reviewStatus ? { reviewStatus: body.task.reviewStatus } : {}),
+            ...(body.task?.reviewOwnerProfileId !== undefined ? { reviewOwnerProfileId: body.task.reviewOwnerProfileId || "" } : {}),
+          }));
+        }
         setSaveState("Gespeichert");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Änderung konnte nicht gespeichert werden.");
@@ -231,7 +239,8 @@ export function TaskDetailPage({
   };
 
   const saveDetailsDraft = () => {
-    updateTask(detailsDraft);
+    const { reviewOwnerProfileId, ...detailsWithoutReviewOwner } = detailsDraft;
+    updateTask(currentRole === "ceo" ? { ...detailsWithoutReviewOwner, reviewOwnerProfileId } : detailsWithoutReviewOwner);
     setDetailsEditSnapshot(null);
     setDetailsEditing(false);
   };
@@ -361,6 +370,7 @@ export function TaskDetailPage({
               currentSprint={currentSprint}
               currentMilestone={currentMilestone}
               canManageTaskMeta={canManageTaskMeta}
+              canManageReviewOwner={currentRole === "ceo"}
               detailsEditing={detailsEditing}
               pending={isPending}
               saveState={saveState}

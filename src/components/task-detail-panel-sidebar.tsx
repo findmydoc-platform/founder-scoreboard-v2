@@ -16,6 +16,7 @@ type Props = {
   sprints: Sprint[];
   milestones: Milestone[];
   canManageTaskMeta: boolean;
+  canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
   pending: boolean;
   githubProviderTokenAvailable: boolean;
@@ -34,6 +35,7 @@ export function TaskDetailPanelSidebar({
   sprints,
   milestones,
   canManageTaskMeta,
+  canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
   pending,
   githubProviderTokenAvailable,
@@ -193,10 +195,20 @@ export function TaskDetailPanelSidebar({
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500">Review Owner</div>
-            <div className="mt-1">
-              {reviewOwnerProfile?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}
-              {selfReview ? <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Self-Review</span> : null}
-            </div>
+            {canManageReviewOwner ? (
+              <CustomSelect
+                value={task.reviewOwnerProfileId || ""}
+                onChange={(value) => onUpdate({ reviewOwnerProfileId: value })}
+                className="mt-1 h-9 text-sm"
+                options={[{ value: "", label: "Ohne Review Owner" }, ...teamProfiles.map((profile) => ({ value: profile.id, label: profile.name }))]}
+              />
+            ) : (
+              <div className="mt-1">
+                {reviewOwnerProfile?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}
+                {selfReview ? <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Self-Review</span> : null}
+              </div>
+            )}
+            {!canManageReviewOwner ? <div className="mt-1 text-[11px] text-slate-400">Nur CEO kann den Review Owner ändern.</div> : null}
             {task.reviewRequestedAt ? (
               <div className="mt-1 text-xs text-slate-500">Angefragt am {new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(task.reviewRequestedAt))}</div>
             ) : null}

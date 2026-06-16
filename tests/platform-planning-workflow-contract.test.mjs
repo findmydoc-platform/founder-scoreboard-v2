@@ -114,9 +114,11 @@ test("strict auth gates planning data until a valid session is present", async (
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const createTaskRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
+  const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
   const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
@@ -126,10 +128,16 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(backfillMigration, /review_owner_profile_id is null/);
   assert.match(backfillMigration, /accountable_profile_id/);
   assert.match(backfillMigration, /review_status = 'requested' or task\.status = 'Review'/);
+  assert.match(plannedOwnerBackfillMigration, /review_owner_profile_id is null/);
+  assert.match(plannedOwnerBackfillMigration, /coalesce\(package\.accountable_profile_id, package\.owner_id\)/);
   assert.match(authz, /requireTaskReviewer/);
   assert.match(authz, /review_owner_profile_id/);
+  assert.match(createTaskRoute, /review_owner_profile_id: reviewOwnerProfileId/);
+  assert.match(createTaskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /update\.review_owner_profile_id/);
+  assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
+  assert.match(taskRoute, /payload\.reviewOwnerProfileId !== undefined && permission\.profile\?\.platformRole !== "ceo"/);
   assert.match(taskRoute, /task\.review_requested/);
   assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
   assert.match(taskRoute, /deine Accountable-Review/);

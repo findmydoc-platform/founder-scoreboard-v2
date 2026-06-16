@@ -859,6 +859,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
             deadline: normalizedPatch.deadline,
             note: normalizedPatch.note,
             reviewStatus: normalizedPatch.reviewStatus,
+            reviewOwnerProfileId: normalizedPatch.reviewOwnerProfileId,
             scorePoints: normalizedPatch.scorePoints,
             scoreFinal: normalizedPatch.scoreFinal,
             githubSyncStatus: normalizedPatch.githubSyncStatus,
@@ -942,6 +943,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       endDate: draft.endDate,
       sprintId: draft.taskType === "proposal" || draft.taskType === "sub_issue" ? "" : draft.sprintId,
       reviewStatus: "not_requested",
+      reviewOwnerProfileId: reviewOwnerForTask({ packageId: draft.packageId }, data.packages),
       scorePoints: 0,
       scoreFinal: false,
       githubRepo: "findmydoc-platform/management",
@@ -3712,6 +3714,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           decisionTaskLinks={data.decisionTaskLinks}
           focusItems={data.taskFocusItems}
           canManageTaskMeta={canManageTaskMeta}
+          canManageReviewOwner={currentProfile?.platformRole === "ceo"}
           canChangeTaskStatus={canChangeTaskStatus(selectedTask)}
           allTasks={data.tasks}
           relations={data.taskRelations}

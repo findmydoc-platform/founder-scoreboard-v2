@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const packageId = payload.packageId || null;
   let milestoneId = payload.milestoneId || null;
-  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null } | null = null;
+  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null; accountable_profile_id?: string | null } | null = null;
   const startDate = payload.startDate || null;
   const endDate = payload.endDate || null;
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
   if (packageId) {
     const { data: initiativeRow, error: initiativeError } = await supabase
       .from("packages")
-      .select("id,milestone_id,owner_id")
+      .select("id,milestone_id,owner_id,accountable_profile_id")
       .eq("id", packageId)
       .maybeSingle();
     if (initiativeError || !initiativeRow) {
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
   const status = taskType === "proposal" ? "Vorschlag" : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
   const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
   const owner = profileId(payload.owner) || (taskType === "proposal" ? null : permission.profile?.id || null);
+  const reviewOwnerProfileId = packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && (!packageId || !payload.sprintId)) {
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
     definition_of_done: cleanText(payload.definitionOfDone, 4000),
     sprint_id: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,
     review_status: "not_requested",
+    review_owner_profile_id: reviewOwnerProfileId,
     score_points: 0,
     score_final: false,
     github_repo: "findmydoc-platform/management",
@@ -235,6 +237,8 @@ export async function POST(request: NextRequest) {
     sprintId: created.sprint_id || "",
     milestoneId: created.milestone_id || "",
     reviewStatus: created.review_status || "not_requested",
+    reviewOwnerProfileId: created.review_owner_profile_id || "",
+    reviewRequestedAt: created.review_requested_at || "",
     scorePoints: created.score_points || 0,
     scoreFinal: Boolean(created.score_final),
     githubRepo: created.github_repo || "findmydoc-platform/management",

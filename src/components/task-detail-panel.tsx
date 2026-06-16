@@ -46,6 +46,7 @@ export function TaskDetailPanel({
   decisionTaskLinks,
   focusItems,
   canManageTaskMeta,
+  canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
   allTasks,
   relations,
@@ -82,6 +83,7 @@ export function TaskDetailPanel({
   decisionTaskLinks: DecisionTaskLink[];
   focusItems: TaskFocusItem[];
   canManageTaskMeta: boolean;
+  canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
   allTasks: Task[];
   relations: TaskRelation[];
@@ -174,6 +176,7 @@ export function TaskDetailPanel({
             sprints={sprints}
             milestones={milestones}
             canManageTaskMeta={canManageTaskMeta}
+            canManageReviewOwner={canManageReviewOwner}
             canChangeTaskStatus={canChangeTaskStatus}
             pending={pending}
             githubProviderTokenAvailable={githubProviderTokenAvailable}

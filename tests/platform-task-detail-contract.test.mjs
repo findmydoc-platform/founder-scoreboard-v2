@@ -82,6 +82,9 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelSidebarSection, /Planung/);
   assert.match(panelSidebarSection, /Review & Historie/);
   assert.match(panelSidebarSection, /Review Owner/);
+  assert.match(panelSidebarSection, /canManageReviewOwner/);
+  assert.match(panelSidebarSection, /onUpdate\(\{ reviewOwnerProfileId: value \}\)/);
+  assert.match(panelSidebarSection, /Nur CEO kann den Review Owner ändern/);
   assert.match(panelSidebarSection, /Zum Review-Blatt/);
   assert.match(panelSidebarSection, /Self-Review/);
   assert.match(panelSidebarSection, /GitHub/);
@@ -208,6 +211,9 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(detailsCard, /Meilenstein/);
   assert.match(detailsCard, /Erstellt von/);
   assert.match(detailsCard, /Assignee/);
+  assert.match(detailsCard, /canManageReviewOwner/);
+  assert.match(detailsCard, /reviewOwnerProfileId/);
+  assert.match(detailsCard, /Nur CEO kann den Review Owner ändern/);
   assert.match(detailsCard, /availableStatusOptions/);
   assert.match(detailsCard, /CustomDatePicker/);
   assert.match(detailsCard, /Bearbeiten/);

@@ -8,6 +8,7 @@ import { taskStatuses } from "@/lib/status";
 type UpdatePayload = {
   status?: string;
   owner?: string;
+  reviewOwnerProfileId?: string;
   priority?: string;
   problemStatement?: string;
   intendedOutcome?: string;
@@ -109,6 +110,9 @@ function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForAc
   if (payload.reviewStatus && currentTask?.review_status && payload.reviewStatus !== currentTask.review_status) {
     messages.push(`Review geändert: ${currentTask.review_status} → ${payload.reviewStatus}`);
   }
+  if (payload.reviewOwnerProfileId !== undefined && payload.reviewOwnerProfileId !== currentTask?.review_owner_profile_id) {
+    messages.push(`Review Owner geändert: ${formatChange(currentTask?.review_owner_profile_id, payload.reviewOwnerProfileId)}`);
+  }
   if (payload.owner !== undefined && payload.owner !== currentTask?.owner) messages.push(`Owner geändert: ${formatChange(currentTask?.owner, payload.owner)}`);
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
@@ -166,6 +170,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: `Diese Felder sind geschützt: ${restrictedFields.join(", ")}.` }, { status: 403 });
   }
 
+  if (payload.reviewOwnerProfileId !== undefined && permission.profile?.platformRole !== "ceo") {
+    return NextResponse.json({ error: "Nur der CEO kann den Review Owner ändern." }, { status: 403 });
+  }
+
   if (payload.status) {
     if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
       return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
@@ -207,12 +215,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (nextPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
         .from("packages")
-        .select("id,milestone_id")
+        .select("id,milestone_id,owner_id,accountable_profile_id")
         .eq("id", nextPackageId)
         .single();
       if (initiativeError || !initiative) return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
       update.package_id = nextPackageId;
       if (payload.milestoneId === undefined) update.milestone_id = initiative.milestone_id || null;
+      if (payload.reviewOwnerProfileId === undefined && !currentTask.review_owner_profile_id) {
+        update.review_owner_profile_id = initiative.accountable_profile_id || initiative.owner_id || null;
+      }
     } else {
       update.package_id = null;
     }
@@ -272,6 +283,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.score_final = Boolean(payload.scoreFinal);
   }
 
+  if (payload.reviewOwnerProfileId !== undefined) {
+    const nextReviewOwner = profileId(payload.reviewOwnerProfileId);
+    if (nextReviewOwner) {
+      const { data: reviewOwner, error: reviewOwnerError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", nextReviewOwner)
+        .single();
+      if (reviewOwnerError || !reviewOwner) return NextResponse.json({ error: "Review Owner wurde nicht gefunden." }, { status: 404 });
+    }
+    update.review_owner_profile_id = nextReviewOwner || null;
+  }
+
   const startsReviewRequest = payload.status === "Review" || payload.reviewStatus === "requested";
   if (startsReviewRequest) {
     if (currentTask.score_final) {
@@ -293,7 +317,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.status = "Review";
     update.review_status = "requested";
     update.score_final = false;
-    update.review_owner_profile_id = reviewOwnerProfileId || null;
+    update.review_owner_profile_id = typeof payload.reviewOwnerProfileId === "string" ? profileId(payload.reviewOwnerProfileId) || null : reviewOwnerProfileId || null;
     update.review_requested_at = new Date().toISOString();
   }
 
@@ -377,17 +401,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
+  const taskPatch = startsReviewRequest || update.review_owner_profile_id !== undefined ? {
+    id,
+    ...(update.status ? { status: String(update.status) } : {}),
+    ...(update.review_status ? { reviewStatus: String(update.review_status) } : {}),
+    ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
+    reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
+    ...(update.review_requested_at ? { reviewRequestedAt: String(update.review_requested_at) } : {}),
+  } : undefined;
+
   return NextResponse.json({
     ok: true,
     activities,
-    task: startsReviewRequest ? {
-      id,
-      status: "Review",
-      reviewStatus: "requested",
-      scoreFinal: false,
-      reviewOwnerProfileId: update.review_owner_profile_id || "",
-      reviewRequestedAt: update.review_requested_at || "",
-    } : undefined,
+    task: taskPatch,
   });
 }
 
