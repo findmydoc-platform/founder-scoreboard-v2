@@ -106,11 +106,12 @@ Before production login works, configure Supabase Auth:
 
 - Enable GitHub provider.
 - Add the production app URL as Site URL.
-- Add the production app URL as an allowed redirect URL.
+- Add the production app URL and `/auth/callback` as allowed redirect URLs.
 - Keep the GitHub OAuth App owned by `findmydoc-platform`, not a personal account.
 - The GitHub OAuth App callback remains the Supabase callback URL, for example `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
 - Ensure every team profile has `github_login`.
 - Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
+- Keep the runtime aligned with `docs/auth-flow.md`: Supabase session cookies are SSR-managed, planning data is loaded only after server-side role authorization, and GitHub provider tokens are not persisted.
 
 ## Verification
 
@@ -143,6 +144,8 @@ Check after a successful deployment:
 - Deployment URL opens.
 - `/api/health` returns `200` and `status: "ready"`.
 - GitHub login works.
+- Reload with a valid session shows either the app or a loading shell, not the login gate.
+- GitHub reconnect is available from the central header/notification area when a provider token is missing.
 - CEO user can edit tasks.
 - Founder user cannot edit CEO-only metadata.
 - GitHub avatar images load.

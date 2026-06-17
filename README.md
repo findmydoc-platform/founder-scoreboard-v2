@@ -48,7 +48,11 @@ Mit `REQUIRE_SUPABASE_AUTH=true` verlangt die API für Schreibzugriffe eine gül
 
 ## Login-Ablauf
 
-Sobald `NEXT_PUBLIC_SUPABASE_URL` und `NEXT_PUBLIC_SUPABASE_ANON_KEY` gesetzt sind, zeigt die App im Projektkopf einen Team-Login. Die Anmeldung nutzt Supabase GitHub OAuth. Nach erfolgreicher Anmeldung sendet das Frontend den Supabase Access Token bei Aufgabenänderungen an die API.
+Sobald `NEXT_PUBLIC_SUPABASE_URL` und `NEXT_PUBLIC_SUPABASE_ANON_KEY` gesetzt sind, nutzt die App Supabase GitHub OAuth. Mit `REQUIRE_SUPABASE_AUTH=true` prüft der Server die Supabase-Session und `profiles.platform_role`, bevor Planungsdaten geladen oder gerendert werden. Ein Reload mit gültiger Session zeigt deshalb nur einen Ladezustand oder direkt die App, nicht zuerst den Login-Screen.
+
+GitHub-Schreibaktionen verwenden weiterhin den eingeloggten GitHub-User-Token aus der aktiven Supabase OAuth Session. Dieser Provider-Token bleibt nur im Browser-Speicher und wird nicht persistiert. Wenn GitHub-Rechte erneut benötigt werden, erscheint die Aktion zentral im Header/Benachrichtigungsbereich statt in jeder einzelnen GitHub-Karte.
+
+Der technische Ablauf mit Mermaid-Diagrammen steht in `docs/auth-flow.md`.
 
 Für produktiven Teamzugriff:
 
@@ -56,6 +60,7 @@ Für produktiven Teamzugriff:
 2. Die jeweiligen GitHub-Logins in `profiles.github_login` eintragen.
 3. Die Rolle in `profiles.platform_role` auf `ceo`, `founder`, `deputy` oder `viewer` setzen.
 4. `REQUIRE_SUPABASE_AUTH=true` aktivieren.
+5. Supabase Redirect URLs für `/auth/callback` und die Produktionsdomain freigeben.
 
 Als Vorlage für die Zuordnung gibt es `supabase/profile-auth-map.example.sql`.
 
