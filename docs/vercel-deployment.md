@@ -78,7 +78,7 @@ GitHub Actions executes the preview flow in this order:
 
 Workflow: `.github/workflows/deploy-production.yml`
 
-Production deploys are manual only through `workflow_dispatch`. A guard job rejects any run that is not on `refs/heads/main` before the protected `production` environment is requested.
+Production deploys start automatically on every push to `main`, which includes merges into `main`. Manual `workflow_dispatch` remains available. A guard job rejects any run that is not on `refs/heads/main` before the protected `production` environment is requested.
 
 GitHub Actions executes the production flow in this order:
 
