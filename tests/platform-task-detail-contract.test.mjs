@@ -31,6 +31,9 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /searchParams\.get\("view"\) === "full"/);
   assert.match(ui, /openTaskPanel/);
   assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+  assert.match(ui, /openReviewSheet/);
+  assert.match(ui, /reviewTask=\$\{encodeURIComponent\(task\.id\)\}/);
+  assert.match(ui, /#accountable-review-sheet/);
   assert.match(ui, /router\.back\(\)/);
   assert.match(ui, /event\.key !== "Backspace"/);
   assert.match(ui, /TaskDetailPanel/);
@@ -86,6 +89,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelSidebarSection, /onUpdate\(\{ reviewOwnerProfileId: value \}\)/);
   assert.match(panelSidebarSection, /Nur CEO kann den Review Owner ändern/);
   assert.match(panelSidebarSection, /Zum Review-Blatt/);
+  assert.match(panelSidebarSection, /onOpenReview/);
   assert.match(panelSidebarSection, /Self-Review/);
   assert.match(panelSidebarSection, /GitHub/);
   assert.match(panelSidebarSection, /Aufgabe löschen/);

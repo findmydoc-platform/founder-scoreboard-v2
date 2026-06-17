@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { AlertTriangle, Lock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CustomSelect } from "@/components/custom-select";
 import { SprintMeetingAttendanceSection } from "@/components/sprint-meeting-attendance-section";
 import { GitHubMissingBadge } from "@/components/task-card";
@@ -68,6 +68,20 @@ export function SprintScoreTableOverview({
     blockerHandled: false,
   });
   const reviewScore = reviewChecklistScore(reviewChecklist);
+  const resetReviewForm = useCallback(() => {
+    setReviewComment("");
+    setReviewChecklist({ acceptanceCriteriaMet: false, evidenceProvided: false, communicationClear: false, blockerHandled: false });
+  }, []);
+  const scrollToReviewSheet = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById("accountable-review-sheet")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+  const selectReviewTask = useCallback((taskId: string) => {
+    setSelectedReviewTaskId(taskId);
+    resetReviewForm();
+    scrollToReviewSheet();
+  }, [resetReviewForm, scrollToReviewSheet]);
   useEffect(() => {
     if (!data.sprints.length) return;
     if (!selectedSprintId || !data.sprints.some((item) => item.id === selectedSprintId)) {
@@ -85,10 +99,10 @@ export function SprintScoreTableOverview({
       return;
     }
     window.queueMicrotask(() => {
-      setSelectedReviewTaskId(focusedReviewTaskId);
+      selectReviewTask(focusedReviewTaskId);
       onFocusedReviewTaskHandled?.();
     });
-  }, [data.sprints, data.tasks, focusedReviewTaskId, onFocusedReviewTaskHandled, selectedSprintId]);
+  }, [data.sprints, data.tasks, focusedReviewTaskId, onFocusedReviewTaskHandled, selectedReviewTaskId, selectReviewTask, selectedSprintId]);
 
   const {
     sprint,
@@ -418,11 +432,7 @@ export function SprintScoreTableOverview({
                         <button
                           type="button"
                           disabled={pending || sprint.scoreLocked || task.scoreFinal || !canReviewTask(task)}
-                          onClick={() => {
-                            setSelectedReviewTaskId(task.id);
-                            setReviewComment("");
-                            setReviewChecklist({ acceptanceCriteriaMet: false, evidenceProvided: false, communicationClear: false, blockerHandled: false });
-                          }}
+                          onClick={() => selectReviewTask(task.id)}
                           className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Review-Blatt
@@ -445,7 +455,7 @@ export function SprintScoreTableOverview({
       </section>
 
       {selectedReviewTask && (
-        <section className="rounded-lg border border-blue-200 bg-white shadow-sm">
+        <section id="accountable-review-sheet" className="scroll-mt-24 rounded-lg border border-blue-200 bg-white shadow-sm">
           <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Accountable Review-Blatt</div>
             <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>

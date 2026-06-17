@@ -563,7 +563,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [view, setView] = useState<ViewMode>("board");
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
-  const [focusedReviewTaskId, setFocusedReviewTaskId] = useState("");
+  const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(searchParams.get("reviewTask") || "");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -685,7 +685,12 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setSelectedTaskId(null);
     setFocusedReviewTaskId(task.id);
     setWorkspace("sprint");
-    if (pathname?.startsWith("/tasks/")) router.push("/");
+    const reviewUrl = `/?workspace=sprint&reviewTask=${encodeURIComponent(task.id)}#accountable-review-sheet`;
+    if (pathname?.startsWith("/tasks/")) {
+      router.push(reviewUrl);
+    } else {
+      router.push(reviewUrl);
+    }
   }, [pathname, router, setWorkspace]);
 
   useEffect(() => {

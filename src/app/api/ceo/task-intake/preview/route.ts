@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { buildTaskIntakePreview, parseTaskIntakePayload } from "@/lib/task-intake";
-import { loadTaskIntakeContext } from "../context";
+import { loadTaskIntakeContext } from "@/lib/task-intake-context";
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();

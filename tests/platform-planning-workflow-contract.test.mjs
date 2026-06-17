@@ -143,7 +143,9 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /deine Accountable-Review/);
   assert.match(appUi, /openReviewSheet/);
   assert.match(sprintUi, /focusedReviewTaskId/);
-  assert.match(sprintUi, /setSelectedReviewTaskId\(focusedReviewTaskId\)/);
+  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
+  assert.match(sprintUi, /accountable-review-sheet/);
+  assert.match(sprintUi, /scrollIntoView/);
   assert.match(route, /requireTaskReviewer/);
   assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);
@@ -419,6 +421,10 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
   assert.match(sprintUi, /Accountable Review-Blatt/);
   assert.match(sprintUi, /Review anfragen/);
+  assert.match(sprintUi, /focusedReviewTaskId/);
+  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
+  assert.match(sprintUi, /accountable-review-sheet/);
+  assert.match(sprintUi, /scrollIntoView/);
 });
 
 test("founder self checklist is separate from CEO scoring", async () => {
