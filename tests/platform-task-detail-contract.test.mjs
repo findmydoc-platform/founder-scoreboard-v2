@@ -32,8 +32,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /openTaskPanel/);
   assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
   assert.match(ui, /openReviewSheet/);
-  assert.match(ui, /reviewTask=\$\{encodeURIComponent\(task\.id\)\}/);
-  assert.match(ui, /#accountable-review-sheet/);
+  assert.match(ui, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(ui, /router\.back\(\)/);
   assert.match(ui, /event\.key !== "Backspace"/);
   assert.match(ui, /TaskDetailPanel/);

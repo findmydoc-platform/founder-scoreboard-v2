@@ -373,6 +373,7 @@ test("strict auth gates planning data until a valid session is present", async (
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
   const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
@@ -388,8 +389,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
   assert.match(ui, /CEO-Score/);
   assert.match(appUi, /Nächster Schritt/);
-  assert.match(ui, /Evidence Required/);
-  assert.match(ui, /Definition of Done Snapshot/);
+  assert.match(reviewSheet, /Evidence Required/);
+  assert.match(reviewSheet, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
 });
 
@@ -612,12 +613,13 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
   const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.match(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
-  assert.match(ui, /Accountable Review-Blatt/);
+  assert.match(reviewSheet, /Accountable Review-Blatt/);
   assert.match(ui, /Review anfragen/);
 });
 
@@ -626,6 +628,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);
@@ -633,12 +636,12 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.doesNotMatch(ui, /Founder-Arbeitsstand/);
   assert.doesNotMatch(ui, /Selbstkontrolle ohne Punkte/);
-  assert.match(ui, /Review-Blatt/);
-  assert.match(ui, /Accountable Review-Blatt/);
-  assert.match(ui, /Review-Rohpunkte/);
-  assert.match(ui, /reviewChecklistScore/);
-  assert.match(ui, /Automatische Review-Rohpunkte/);
-  assert.match(ui, /vier Kriterien ergeben je 2,5 Punkte/);
+  assert.match(reviewSheet, /Review-Blatt/);
+  assert.match(reviewSheet, /Accountable Review-Blatt/);
+  assert.match(reviewSheet, /Review-Rohpunkte/);
+  assert.match(reviewSheet, /reviewChecklistScore/);
+  assert.match(reviewSheet, /Automatische Review-Rohpunkte/);
+  assert.match(reviewSheet, /vier Kriterien ergeben je 2,5 Punkte/);
   assert.match(reviewRoute, /checklistPoints/);
   assert.match(reviewRoute, /acceptanceCriteriaMet/);
 });

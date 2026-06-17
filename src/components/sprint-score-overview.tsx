@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { CustomSelect } from "@/components/custom-select";
 import { SprintMeetingAttendanceSection } from "@/components/sprint-meeting-attendance-section";
 import { GitHubMissingBadge } from "@/components/task-card";
+import { TaskReviewSheet } from "@/components/task-review-sheet";
 import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel, roleLabel } from "@/lib/platform";
-import { buildSprintScoreViewModel, findCurrentSprint, reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
+import { buildSprintScoreViewModel, findCurrentSprint } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, statusTone, taskStatuses } from "@/lib/status";
 import type { CommitmentLevel, Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
@@ -16,6 +17,7 @@ export function SprintScoreTableOverview({
   pending,
   onOpen,
   onReview,
+  onReopenReview,
   onRequestReview,
   onChangeStatus,
   onLockSprint,
@@ -41,6 +43,7 @@ export function SprintScoreTableOverview({
     checklist?: { acceptanceCriteriaMet?: boolean; dodMet?: boolean; evidenceProvided?: boolean; communicationClear?: boolean; blockerHandled?: boolean },
     comment?: string,
   ) => void;
+  onReopenReview: (task: Task) => void;
   onRequestReview: (task: Task) => void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onLockSprint: (sprintId: string) => void;
@@ -59,19 +62,7 @@ export function SprintScoreTableOverview({
   const currentSprint = findCurrentSprint(data.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [selectedReviewTaskId, setSelectedReviewTaskId] = useState("");
-  const [reviewComment, setReviewComment] = useState("");
   const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");
-  const [reviewChecklist, setReviewChecklist] = useState({
-    acceptanceCriteriaMet: false,
-    evidenceProvided: false,
-    communicationClear: false,
-    blockerHandled: false,
-  });
-  const reviewScore = reviewChecklistScore(reviewChecklist);
-  const resetReviewForm = useCallback(() => {
-    setReviewComment("");
-    setReviewChecklist({ acceptanceCriteriaMet: false, evidenceProvided: false, communicationClear: false, blockerHandled: false });
-  }, []);
   const scrollToReviewSheet = useCallback(() => {
     window.requestAnimationFrame(() => {
       document.getElementById("accountable-review-sheet")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -79,9 +70,8 @@ export function SprintScoreTableOverview({
   }, []);
   const selectReviewTask = useCallback((taskId: string) => {
     setSelectedReviewTaskId(taskId);
-    resetReviewForm();
     scrollToReviewSheet();
-  }, [resetReviewForm, scrollToReviewSheet]);
+  }, [scrollToReviewSheet]);
   useEffect(() => {
     if (!data.sprints.length) return;
     if (!selectedSprintId || !data.sprints.some((item) => item.id === selectedSprintId)) {
@@ -455,84 +445,15 @@ export function SprintScoreTableOverview({
       </section>
 
       {selectedReviewTask && (
-        <section id="accountable-review-sheet" className="scroll-mt-24 rounded-lg border border-blue-200 bg-white shadow-sm">
-          <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Accountable Review-Blatt</div>
-            <h2 className="mt-1 text-base font-semibold text-slate-950">{selectedReviewTask.title}</h2>
-            <p className="mt-1 text-xs text-slate-600">{selectedReviewTask.owner} · {selectedReviewTask.priority} · {selectedReviewTask.hours}h · {reviewLabel(selectedReviewTask.reviewStatus)} · {reviewOwnerName(selectedReviewTask)}{isSelfReview(selectedReviewTask) ? " · Self-Review" : ""}</p>
-            <p className="mt-2 text-xs leading-5 text-blue-800">Review-Rohpunkte entstehen nur hier im Review-Blatt. Der Sprint-Gesamtscore wird später als 20-Punkte-Modell finalisiert.</p>
-          </div>
-          <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="grid gap-3">
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Problem Statement</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{selectedReviewTask.problemStatement || selectedReviewTask.description || "Kein Problem Statement hinterlegt."}</p>
-              </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Intended Outcome</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{selectedReviewTask.intendedOutcome || "Kein Intended Outcome hinterlegt."}</p>
-              </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Acceptance Criteria</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{selectedReviewTask.acceptanceCriteria || selectedReviewTask.definitionOfDone || "Keine Acceptance Criteria hinterlegt."}</p>
-              </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Definition of Done Snapshot</div>
-                <p className="mt-1 text-sm leading-6 text-slate-700">{selectedReviewTask.definitionOfDone || "Keine Definition of Done hinterlegt."}</p>
-              </div>
-              <div className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Evidence Required / Abhängigkeiten</div>
-                <p className="mt-1 text-sm leading-6 text-slate-700">{selectedReviewTask.evidenceRequired || "Kein erwarteter Nachweis hinterlegt."}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-700">{selectedReviewTask.evidenceLink || selectedReviewTask.issueUrl || "Noch kein Evidence-Link hinterlegt."}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-700">{selectedReviewTask.dependsOn || "Keine harte Abhängigkeit erfasst."}</p>
-              </div>
-              <textarea
-                value={reviewComment}
-                onChange={(event) => setReviewComment(event.target.value)}
-                className="min-h-24 w-full resize-y rounded-md border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-blue-400"
-                placeholder="Review-Kommentar oder Nacharbeit beschreiben"
-              />
-            </div>
-            <div className="grid content-start gap-3">
-              <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                Review-Rohpunkte: vier Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
-              </div>
-              {reviewChecklistItems.map(([key, label, pointsLabel]) => (
-                <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm text-slate-700">
-                  <span>
-                    <span className="block">{label}</span>
-                    <span className="text-xs text-slate-500">{pointsLabel}</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(reviewChecklist[key as keyof typeof reviewChecklist])}
-                    onChange={(event) => setReviewChecklist((current) => ({ ...current, [key]: event.target.checked }))}
-                  />
-                </label>
-              ))}
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Automatische Review-Rohpunkte
-                <input
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={reviewScore}
-                  readOnly
-                  className="h-9 rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800"
-                />
-                <span className="text-[11px] font-normal text-slate-500">Berechnet aus den abgehakten Review-Kriterien.</span>
-              </label>
-              <p className="text-[11px] leading-5 text-slate-500">
-                Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "accepted", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "partial", reviewScore, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
-                <button type="button" disabled={pending || sprint.scoreLocked || selectedReviewTask.scoreFinal || !canReviewTask(selectedReviewTask)} onClick={() => onReview(selectedReviewTask, "changes_requested", 0, reviewChecklist, reviewComment)} className="h-9 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Nacharbeit</button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <TaskReviewSheet
+          task={selectedReviewTask}
+          reviewOwnerName={`${reviewOwnerName(selectedReviewTask)}${isSelfReview(selectedReviewTask) ? " · Self-Review" : ""}`}
+          canReview={!sprint.scoreLocked && !selectedReviewTask.scoreFinal && canReviewTask(selectedReviewTask)}
+          canReopen={!sprint.scoreLocked && selectedReviewTask.scoreFinal && canReviewTask(selectedReviewTask)}
+          pending={pending}
+          onReview={onReview}
+          onReopen={onReopenReview}
+        />
       )}
 
       {otherTasks.length > 0 && (

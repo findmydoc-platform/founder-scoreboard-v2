@@ -49,6 +49,8 @@ import { NewTaskDialog as CurrentNewTaskDialog, type NewTaskDraft } from "@/comp
 import { MeetingFinderOverview as CurrentMeetingFinderOverview } from "@/components/meeting-finder-overview";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { ProjectsOverview as CurrentProjectsOverview } from "@/components/projects-overview";
+import { ReviewDetailPage } from "@/components/review-detail-page";
+import { ReviewWorkspaceOverview } from "@/components/review-workspace-overview";
 import { SettingsOverview } from "@/components/settings-overview";
 import { SprintScoreTableOverview as CurrentSprintScoreTableOverview } from "@/components/sprint-score-overview";
 import type { SprintPlanningOptions } from "@/components/settings-sprint-planning";
@@ -62,6 +64,7 @@ import { decisionStatusLabel } from "@/lib/execution-layer-view-model";
 import { rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskBelongsToProfile, taskRelationsFor } from "@/lib/platform";
+import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/lib/review-workspace-view-model";
 import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
@@ -73,6 +76,7 @@ type Props = {
   source: "seed" | "supabase";
   authRequired: boolean;
   initialTaskId?: string;
+  initialReviewTaskId?: string;
 };
 
 type Filters = {
@@ -177,6 +181,7 @@ const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   execution: "Execution",
   mine: "Meine Aufgaben",
+  reviews: "Reviews",
   sprint: "Sprint & Score",
   decisions: "Decision Log",
   meetings: "Meeting Finder",
@@ -191,6 +196,7 @@ const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
   mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
+  reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
@@ -548,7 +554,7 @@ function buildHygieneAlerts(data: PlanningData) {
   return alerts;
 }
 
-export function PlanningApp({ initialData, source, authRequired, initialTaskId = "" }: Props) {
+export function PlanningApp({ initialData, source, authRequired, initialTaskId = "", initialReviewTaskId = "" }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -564,6 +570,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
   const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(searchParams.get("reviewTask") || "");
+  const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>("open");
+  const [reviewOwnerFilter, setReviewOwnerFilter] = useState<ReviewOwnerFilter>("mine");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -624,6 +633,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   });
 
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
+  const selectedReviewDetailTask = data.tasks.find((task) => task.id === selectedReviewDetailTaskId) || null;
   const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
   const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
   const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
@@ -684,14 +694,9 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
   const openReviewSheet = useCallback((task: Task) => {
     setSelectedTaskId(null);
     setFocusedReviewTaskId(task.id);
-    setWorkspace("sprint");
-    const reviewUrl = `/?workspace=sprint&reviewTask=${encodeURIComponent(task.id)}#accountable-review-sheet`;
-    if (pathname?.startsWith("/tasks/")) {
-      router.push(reviewUrl);
-    } else {
-      router.push(reviewUrl);
-    }
-  }, [pathname, router, setWorkspace]);
+    setWorkspace("reviews");
+    router.push(`/reviews/${encodeURIComponent(task.id)}`);
+  }, [router, setWorkspace]);
 
   useEffect(() => {
     if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
@@ -2194,7 +2199,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     setData((current) => ({
       ...current,
       tasks: current.tasks.map((item) =>
-        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal, reviewOwnerProfileId: "", reviewRequestedAt: "" } : item,
+        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal, reviewRequestedAt: "" } : item,
       ),
     }));
 
@@ -2222,6 +2227,45 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
         }));
         setSaveError(error instanceof Error ? error.message : "Review konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const reopenReviewTask = (task: Task) => {
+    setSaveError("");
+    const previousTask = task;
+    const reviewRequestedAt = new Date().toISOString();
+
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) =>
+        item.id === task.id ? { ...item, status: "Review", reviewStatus: "requested", scoreFinal: false, scorePoints: 0, reviewRequestedAt } : item,
+      ),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/review/reopen`, {
+          method: "POST",
+          headers: requestHeaders(token),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+        if (!response.ok || !body?.task) throw new Error(body?.error || "Review konnte nicht wieder geöffnet werden.");
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+        }));
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Review konnte nicht wieder geöffnet werden.");
       }
     });
   };
@@ -3158,6 +3202,20 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     );
   }
 
+  if (selectedReviewDetailTaskId) {
+    return (
+      <ReviewDetailPage
+        data={data}
+        task={selectedReviewDetailTask}
+        currentProfile={currentProfile}
+        pending={isPending}
+        source={source}
+        onReview={reviewTask}
+        onReopen={reopenReviewTask}
+      />
+    );
+  }
+
   if (fullTaskView && selectedTask) {
     return (
       <TaskDetailPage
@@ -3458,6 +3516,16 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onCreateTask={(draft) => setTaskDialogDefaults(draft)}
             />
           )}
+          {workspace === "reviews" && (
+            <ReviewWorkspaceOverview
+              data={data}
+              currentProfile={currentProfile}
+              statusFilter={reviewStatusFilter}
+              ownerFilter={reviewOwnerFilter}
+              onStatusFilterChange={setReviewStatusFilter}
+              onOwnerFilterChange={setReviewOwnerFilter}
+            />
+          )}
           {workspace === "tools" && <CurrentFmdToolsOverview tools={data.fmdTools} />}
           {workspace === "team" && (
             <CurrentTeamOverview
@@ -3475,6 +3543,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               pending={isPending}
               onOpen={(task) => openTaskPanel(task.id)}
               onReview={reviewTask}
+              onReopenReview={reopenReviewTask}
               onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
               onChangeStatus={(task, status) => updateTask(task, { status })}
               onLockSprint={lockSprint}
