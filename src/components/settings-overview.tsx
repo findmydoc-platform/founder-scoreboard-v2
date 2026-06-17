@@ -31,7 +31,6 @@ export function SettingsOverview({
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
-  onReconnectGitHub,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
   onSelectFeedback,
@@ -53,7 +52,6 @@ export function SettingsOverview({
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
-  onReconnectGitHub: () => void;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
   onSelectFeedback: (id: number) => void;
@@ -67,16 +65,13 @@ export function SettingsOverview({
         authAvailable={authAvailable}
         authUserEmail={authUserEmail}
         githubProviderTokenAvailable={githubProviderTokenAvailable}
-        pending={pending}
         googleChatReady={googleChatReady}
-        onReconnectGitHub={onReconnectGitHub}
       />
       <ProductionReadinessSection />
       <SetupChecklistSection />
       <GitHubSyncQueueSection
         tasks={data.tasks}
         pending={pending}
-        authUserEmail={authUserEmail}
         githubProviderTokenAvailable={githubProviderTokenAvailable}
         onSyncLinkedGitHubTasks={onSyncLinkedGitHubTasks}
         onCreateGitHubIssue={onCreateGitHubIssue}

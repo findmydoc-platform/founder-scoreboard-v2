@@ -2,6 +2,7 @@
 
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { normalizeStatus, priorityTone, statusTone } from "@/lib/status";
 import type { Task } from "@/lib/types";
 
@@ -10,9 +11,10 @@ type Props = {
   status: Task["status"];
   priority: Task["priority"];
   hours: Task["hours"];
+  actions?: ReactNode;
 };
 
-export function TaskDetailHeader({ title, status, priority, hours }: Props) {
+export function TaskDetailHeader({ title, status, priority, hours, actions }: Props) {
   const normalizedStatus = normalizeStatus(status);
 
   return (
@@ -26,7 +28,8 @@ export function TaskDetailHeader({ title, status, priority, hours }: Props) {
           <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabendetail</div>
           <h1 className="mt-1 max-w-4xl text-2xl font-semibold tracking-tight text-slate-950">{title}</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(normalizedStatus)}`}>{normalizedStatus}</span>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityTone(priority)}`}>{priority}</span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">{hours}h</span>

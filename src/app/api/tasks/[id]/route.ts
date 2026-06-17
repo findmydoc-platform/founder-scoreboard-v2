@@ -363,7 +363,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     try {
       const token = await matchingGitHubToken(request, permission.profile);
       if (!token) {
-        return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte GitHub-Rechte erneuern und dann erneut löschen." }, { status: 409 });
+        return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte die GitHub-Verbindung im Header erneuern und dann erneut löschen." }, { status: 409 });
       }
       await archiveGitHubIssue(issueNumber, token);
       githubClosed = true;
@@ -389,4 +389,3 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   return NextResponse.json({ ok: true, deletedTaskId: id, githubClosed });
 }
-

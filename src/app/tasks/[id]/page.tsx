@@ -1,6 +1,7 @@
 import { PlanningApp } from "@/components/planning-app";
 import { TaskDetailPage } from "@/components/task-detail-page";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
+import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
 type Props = {
@@ -12,7 +13,24 @@ export default async function TaskPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { view } = await searchParams;
   if (hasSupabaseEnv() && requiresSupabaseAuth()) {
-    return <PlanningApp key={id} initialData={emptyPlanningData} source="supabase" authRequired initialTaskId={id} />;
+    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
+    if (!auth.ok) {
+      return <PlanningApp key={id} initialData={emptyPlanningData} source="supabase" authRequired initialTaskId={id} initialAuthUser={auth.user} initialAuthError={auth.error} />;
+    }
+
+    const { data, source } = await getPlanningData();
+    return (
+      <PlanningApp
+        key={id}
+        initialData={data}
+        source={source}
+        authRequired
+        initialTaskId={id}
+        initialAuthUser={auth.user}
+        initialCurrentProfile={auth.profile}
+        initialProtectedDataLoaded
+      />
+    );
   }
 
   const { data, source } = await getPlanningData();
