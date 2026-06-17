@@ -185,6 +185,7 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(app, /ReviewWorkspaceOverview/);
   assert.match(app, /reviewStatusFilter/);
   assert.match(app, /reviewOwnerFilter/);
+  assert.match(app, /useState<ReviewOwnerFilter>\("all"\)/);
   assert.match(app, /initialReviewTaskId/);
   assert.match(app, /ReviewDetailPage/);
   assert.match(app, /reopenReviewTask/);
