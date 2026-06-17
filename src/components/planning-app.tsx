@@ -832,7 +832,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
       }
     }
 
-    setData((current) => {
+    applyPlanningDataUpdate((current) => {
       const nextData = {
         ...current,
         tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubSyncStatus: normalizedPatch.githubSyncStatus || "not_synced", githubSyncError: normalizedPatch.githubSyncStatus ? item.githubSyncError : "" } : item)),
@@ -889,7 +889,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         }
         if (body?.activities?.length) {
-          setData((current) => ({
+          applyPlanningDataUpdate((current) => ({
             ...current,
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
@@ -904,7 +904,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {
-        setData((current) => ({
+        applyPlanningDataUpdate((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? task : item)),
         }));
@@ -2730,6 +2730,23 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [refreshGoogleChatStatus, workspace]);
+
+  // Task detail route changes remount the planning app. Keep the authenticated
+  // in-memory cache aligned with optimistic task edits so the board does not
+  // briefly snap back to stale state after closing the detail panel.
+  const applyPlanningDataUpdate = useCallback((updater: (current: PlanningData) => PlanningData) => {
+    setData((current) => {
+      const nextData = updater(current);
+      if (source === "supabase" && authUser?.id) {
+        setProtectedPlanningDataCache({
+          authUserId: authUser.id,
+          data: nextData,
+          currentProfile: serverCurrentProfile,
+        });
+      }
+      return nextData;
+    });
+  }, [authUser, serverCurrentProfile, source]);
 
   const refreshPlanningData = useCallback(async (token?: string) => {
     if (source !== "supabase" || !authUser?.id) return;
