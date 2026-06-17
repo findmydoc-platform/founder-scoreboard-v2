@@ -271,6 +271,13 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(projectsOverview, /Aktives Projekt/);
   assert.match(projectsOverview, /Erfolgskriterien/);
   assert.match(projectsOverview, /onEditInitiative/);
+  assert.match(projectsOverview, /openMilestoneIds/);
+  assert.match(projectsOverview, /openInitiativeIds/);
+  assert.match(projectsOverview, /aria-expanded=\{isMilestoneOpen\}/);
+  assert.match(projectsOverview, /InitiativeTreeItem/);
+  assert.match(projectsOverview, /DeliverableTable/);
+  assert.match(projectsOverview, /taskOwnerLabel/);
+  assert.match(projectsOverview, /\/tasks\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(display, /initiativeMetaLabel/);
   assert.match(ui, /Initiative/);
   assert.match(ui, /InitiativeDialog/);
