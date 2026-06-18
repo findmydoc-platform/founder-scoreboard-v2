@@ -30,6 +30,17 @@ Improve maintainability through small, behavior-preserving changes. Prefer code 
 - Do not "clean up" auth, RLS, provider-token, role, or session code without also using `fmd-planning-security`.
 - Do not change native control policy; use `fmd-custom-controls` for selects, filters, menus, calendars, and date pickers.
 
+## Feature-first Atomic Design
+
+- Keep feature UI under `src/features/<domain>/{atoms,molecules,organisms,templates,hooks,model}`. Use `src/shared` only for domain-neutral primitives that make sense without Founder Scoreboard planning vocabulary.
+- Put tiny display-only controls in `atoms`, composed UI sections in `molecules`, workflow-sized sections in `organisms`, and page/workspace shells in `templates`.
+- Put local state orchestration, browser state, API calls, mutations, auth/role decisions, and side effects in `hooks`; put pure derived data, status mapping, sorting, filtering, and view-model builders in `model`.
+- Do not create compatibility re-export shims from old global paths. Move call sites to the new feature or shared path in the same patch.
+- Do not create new `src/components` or `src/hooks` directories, and do not import from `@/components`, `@/hooks`, `src/components`, or `src/hooks`.
+- Do not move domain-specific components into `src/shared`: names or props centered on Task, Sprint, Meeting, Decision, Founder, Milestone, GitHub issue, review, or planning workflow semantics belong in a feature.
+- Avoid growing large JSX shells with fetch, mutation, auth, role, or view-model logic. Extract behavior into hooks/model first, then split render sections.
+- `src/features/planning/hooks/use-planning-app-controller.ts` is a known controller hotspot. Do not enlarge it casually; split it only in a dedicated, separately planned controller refactor.
+
 ## Code Smells To Prioritize
 
 - Components that mix data fetching, mutation orchestration, filtering, modal state, and large JSX sections in one file.
