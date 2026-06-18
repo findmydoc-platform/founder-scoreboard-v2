@@ -127,6 +127,7 @@ export function TaskCommentThread({
       <TaskCommentTimeline items={timeline} profiles={profiles} />
       <TaskCommentComposer
         pending={pending}
+        profiles={profiles}
         onAddComment={onAddComment}
         onUploadAttachment={onUploadAttachment}
         renderPreview={(value) => <CommentBody value={value} />}

@@ -325,6 +325,9 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const commentComposer = await readFile("src/components/task-comment-composer.tsx", "utf8");
   const commentTimeline = await readFile("src/components/task-comment-timeline.tsx", "utf8");
   const githubCommentImage = await readFile("src/components/github-comment-image.tsx", "utf8");
+  const mentions = await readFile("src/lib/mentions.ts", "utf8");
+  const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const googleChat = await readFile("src/lib/google-chat.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists task_comments/);
@@ -341,7 +344,16 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(data, /task_activity/);
   assert.match(data, /notificationEvents/);
   assert.match(commentsRoute, /task.comment/);
+  assert.match(commentsRoute, /mentionedProfileIds/);
+  assert.match(commentsRoute, /task.mention/);
+  assert.match(commentsRoute, /Du wurdest erwähnt/);
   assert.match(commentsRoute, /Kommentar hinzugefügt/);
+  assert.match(mentions, /githubLogin/);
+  assert.match(notificationPolicy, /task\.mention/);
+  assert.match(notificationPolicy, /Erwähnung/);
+  assert.match(googleChat, /eventUrl/);
+  assert.match(googleChat, /\/tasks\/\$\{encodeURIComponent\(event\.entityId\)\}/);
+  assert.match(googleChat, /Aufgabe öffnen/);
   assert.match(attachmentRoute, /requireFounder/);
   assert.match(attachmentRoute, /uploadGitHubAttachment/);
   assert.match(attachmentRoute, /\.fmd-attachments\/tasks/);
@@ -368,6 +380,8 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(commentHook, /api\/tasks\/\$\{task\.id\}\/comments/);
   assert.match(commentHook, /api\/tasks\/\$\{task\.id\}\/attachments/);
   assert.match(commentHook, /api\/tasks\/\$\{task\.id\}\/github-comments/);
+  assert.match(commentComposer, /mentionOptions/);
+  assert.match(commentComposer, /insertMention/);
   assert.match(commentHook, /Kommentar konnte nicht gespeichert werden/);
   assert.match(commentHook, /Anhang konnte nicht hochgeladen werden/);
   assert.match(commentHook, /GitHub-Kommentare konnten nicht aktualisiert werden/);

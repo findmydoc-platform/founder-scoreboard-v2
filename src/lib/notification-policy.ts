@@ -1,5 +1,6 @@
 export const googleChatDigestEventTypes = [
   "task.blocker_reported",
+  "task.mention",
   "task.proposed",
   "task.review_requested",
   "task.review_rework",
@@ -15,6 +16,7 @@ export const googleChatDigestEventTypes = [
 
 export const googleChatDirectDmEventTypes = [
   "task.blocker_reported",
+  "task.mention",
   "task.review_requested",
   "task.review_rework",
   "task.deadline_overdue",
@@ -26,6 +28,7 @@ export type GoogleChatDirectDmEventType = (typeof googleChatDirectDmEventTypes)[
 
 export function notificationEventLabel(eventType: string) {
   if (eventType === "task.blocker_reported") return "Blocker gemeldet";
+  if (eventType === "task.mention") return "Erwähnung";
   if (eventType === "task.proposed") return "Aufgabe vorgeschlagen";
   if (eventType === "task.review_requested") return "Review angefragt";
   if (eventType === "task.review_rework") return "Nacharbeit erforderlich";
