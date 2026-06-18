@@ -1,16 +1,23 @@
-﻿"use client";
+"use client";
 
-import { AlertTriangle, Lock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { CustomSelect } from "@/shared/atoms/custom-select";
+import { SprintControlsSummary } from "@/features/sprint/molecules/sprint-controls-summary";
 import { SprintMeetingAttendanceSection } from "@/features/sprint/molecules/sprint-meeting-attendance-section";
-import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
-import { TaskReviewSheet } from "@/features/reviews/organisms/task-review-sheet";
-import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
-import { hasGitHubIssue, reviewLabel, roleLabel } from "@/lib/platform";
+import { SprintFounderScoreTable } from "@/features/sprint/organisms/sprint-founder-score-table";
+import { SprintReviewSheetSection } from "@/features/sprint/organisms/sprint-review-sheet-section";
+import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-objections";
+import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
 import { buildSprintScoreViewModel, findCurrentSprint } from "@/features/sprint/model/sprint-score-view-model";
-import { normalizeStatus, statusTone, taskStatuses } from "@/lib/status";
-import type { CommitmentLevel, Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+
+type ReviewStatus = "accepted" | "partial" | "changes_requested";
+type ReviewChecklist = {
+  acceptanceCriteriaMet?: boolean;
+  dodMet?: boolean;
+  evidenceProvided?: boolean;
+  communicationClear?: boolean;
+  blockerHandled?: boolean;
+};
 
 export function SprintScoreTableOverview({
   data,
@@ -38,9 +45,9 @@ export function SprintScoreTableOverview({
   onOpen: (task: Task) => void;
   onReview: (
     task: Task,
-    reviewStatus: "accepted" | "partial" | "changes_requested",
+    reviewStatus: ReviewStatus,
     scorePoints: number,
-    checklist?: { acceptanceCriteriaMet?: boolean; dodMet?: boolean; evidenceProvided?: boolean; communicationClear?: boolean; blockerHandled?: boolean },
+    checklist?: ReviewChecklist,
     comment?: string,
   ) => void;
   onReopenReview: (task: Task) => void;
@@ -92,7 +99,7 @@ export function SprintScoreTableOverview({
       selectReviewTask(focusedReviewTaskId);
       onFocusedReviewTaskHandled?.();
     });
-  }, [data.sprints, data.tasks, focusedReviewTaskId, onFocusedReviewTaskHandled, selectedReviewTaskId, selectReviewTask, selectedSprintId]);
+  }, [data.sprints, data.tasks, focusedReviewTaskId, onFocusedReviewTaskHandled, selectReviewTask, selectedSprintId]);
 
   const {
     sprint,
@@ -115,12 +122,6 @@ export function SprintScoreTableOverview({
     ? data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId)?.name || task.reviewOwnerProfileId
     : "Ohne Review Owner";
   const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
-  const sprintStatusLabel: Record<Sprint["status"], string> = {
-    planning: "Planung",
-    active: "Aktiv",
-    review: "Review",
-    closed: "Abgeschlossen",
-  };
 
   if (!sprint) {
     return (
@@ -132,176 +133,31 @@ export function SprintScoreTableOverview({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
-            Sprint
-            <CustomSelect
-              value={sprint.id}
-              onChange={setSelectedSprintId}
-              className="h-9 text-sm"
-              options={data.sprints.map((item) => ({
-                value: item.id,
-                label: item.name,
-                current: currentSprint?.id === item.id,
-                locked: data.tasks.some((task) => task.sprintId === item.id),
-              }))}
-            />
-          </label>
-          <div className="grid gap-1 text-xs font-semibold text-slate-500">
-            Start
-            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.startDate)}</div>
-          </div>
-          <div className="grid gap-1 text-xs font-semibold text-slate-500">
-            Ende
-            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.endDate)}</div>
-          </div>
-          <div className="grid gap-1 text-xs font-semibold text-slate-500">
-            Review bis
-            <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">
-              {sprint.reviewDueAt ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt)) : "ohne Datum"}
-            </div>
-          </div>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
-            Status
-            <CustomSelect
-              value={sprint.status}
-              disabled={sprintControlsDisabled || sprint.scoreLocked}
-              onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
-              className="h-9 text-sm"
-              options={[
-                { value: "planning", label: "Planung" },
-                { value: "active", label: "Aktiv" },
-                { value: "review", label: "Review" },
-                { value: "closed", label: "Abgeschlossen" },
-              ]}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={sprintControlsDisabled || sprint.scoreLocked}
-            onClick={() => onLockSprint(sprint.id)}
-            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Sprint abschließen
-          </button>
-        </div>
-        <div className="grid gap-3 px-4 py-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-5">
-          <div><span className="font-semibold text-slate-950">{sprintTasks.length}</span> Aufgaben im Sprint</div>
-          <div><span className="font-semibold text-slate-950">{reviewTasks.length}</span> im Review</div>
-          <div><span className="font-semibold text-slate-950">{finalScores}/{sprintTasks.length}</span> Scores final</div>
-          <div><span className="font-semibold text-slate-950">{openScores}</span> Scores offen</div>
-          <div><span className="font-semibold text-slate-950">{unassignedTasks.length}</span> ohne Sprint</div>
-        </div>
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
-          {sprintIsCurrent && (
-            <span
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600"
-              aria-label="Aktueller Sprint"
-              title="Aktueller Sprint"
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]" />
-            </span>
-          )}
-          {sprintHasTasks && (
-            <span
-              className="inline-flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-600"
-              aria-label={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
-              title={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
-            >
-              <Lock size={13} />
-              {sprintTasks.length}
-            </span>
-          )}
-        </div>
-        {sprintLockMessage && (
-          <div className="border-t border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
-            {sprintLockMessage}
-          </div>
-        )}
-        {openObjections.length > 0 && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-            {openObjections.length} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.
-          </div>
-        )}
-      </section>
+      <SprintControlsSummary
+        data={data}
+        sprint={sprint}
+        currentSprint={currentSprint}
+        sprintTasks={sprintTasks}
+        reviewTasksCount={reviewTasks.length}
+        finalScores={finalScores}
+        openScores={openScores}
+        unassignedTasksCount={unassignedTasks.length}
+        sprintHasTasks={sprintHasTasks}
+        sprintIsCurrent={sprintIsCurrent}
+        sprintControlsDisabled={sprintControlsDisabled}
+        sprintLockMessage={sprintLockMessage}
+        openObjectionsCount={openObjections.length}
+        onSelectedSprintChange={setSelectedSprintId}
+        onUpdateSprint={onUpdateSprint}
+        onLockSprint={onLockSprint}
+      />
 
-      <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">FounderOps Score v2.1</h2>
-            <p className="text-xs text-slate-500">{sprintStatusLabel[sprint.status]} · {formatDate(sprint.startDate)} bis {formatDate(sprint.endDate)}</p>
-          </div>
-          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${sprint.scoreLocked ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-            {sprint.scoreLocked ? "Score gelockt" : "Score offen"}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full border-separate border-spacing-0 text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="border-b border-slate-200 px-4 py-3 font-semibold">Founder</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Aufgaben</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Wochenstunden</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Commitment</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Workflow</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Final</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Delivery</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Form / Review-Reife</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Weekly</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">20 Punkte</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Strike</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Offen</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Aufwand</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scoreRows.map((row) => (
-                <tr key={row.profile.id} className="hover:bg-slate-50">
-                  <td className="border-b border-slate-100 px-4 py-3">
-                    <div className="font-semibold text-slate-950">{row.profile.name}</div>
-                    <div className="text-xs text-slate-500">{roleLabel(row.profile)}</div>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <CustomSelect value={row.commitment.commitmentLevel} disabled={pending || sprint.scoreLocked} onChange={(value) => onUpdateCommitment({ ...row.commitment, commitmentLevel: value as CommitmentLevel })} className="h-8 w-28 text-xs" options={["Lite", "Standard", "Heavy", "Away"].map((level) => ({ value: level, label: level }))} />
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <input
-                      type="number"
-                      min={0}
-                      max={80}
-                      value={row.commitment.weeklyHours}
-                      disabled={pending || sprint.scoreLocked}
-                      onChange={(event) => onUpdateCommitment({ ...row.commitment, weeklyHours: Number(event.target.value) })}
-                      className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:bg-slate-50 disabled:opacity-60"
-                    />
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.committed}</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.active} aktiv · {row.blocked} blockiert</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.reviewReady}</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.finalScore}</td>
-                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.deliveryPoints}/12</td>
-                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.formPoints}/4</td>
-                  <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-900">{row.v21Score.weeklyPoints}/4</td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <div className="text-lg font-semibold text-slate-950">{row.v21Score.totalPoints}/20</div>
-                    <div className={`text-xs font-semibold ${row.v21Score.awayNeutral ? "text-blue-700" : row.v21Score.fulfilled ? "text-emerald-700" : "text-amber-700"}`}>
-                      {row.v21Score.awayNeutral ? "Away-neutral" : row.v21Score.fulfilled ? "erfüllt" : "nicht erfüllt"}
-                    </div>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                    <div className="font-semibold text-slate-900">{row.strikeState?.strikeLevel ?? 0}/3</div>
-                    <div className="text-xs text-slate-500">{row.strikeState?.fulfilledResetStreak ? `${row.strikeState.fulfilledResetStreak} Reset-Sprint` : "kein Reset offen"}</div>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.openScore} Score · {row.openScoreObjections} Einwand</td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{row.hours}h</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <SprintFounderScoreTable
+        sprint={sprint}
+        scoreRows={scoreRows}
+        pending={pending}
+        onUpdateCommitment={onUpdateCommitment}
+      />
 
       <SprintMeetingAttendanceSection
         data={data}
@@ -312,190 +168,44 @@ export function SprintScoreTableOverview({
         onUpdateMeetingAttendance={onUpdateMeetingAttendance}
       />
 
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
-            <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Lock geprüft sein. Es gibt maximal einen Zweitreview.</p>
-          </div>
-          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{openObjections.length} offen</span>
-        </div>
-        <div className="mt-3 grid gap-2">
-          {data.scoreObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
-            const profile = data.profiles.find((item) => item.id === objection.profileId);
-            return (
-              <div key={objection.id} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold text-slate-900">{profile?.name || objection.profileId} · {objection.status}</span>
-                  {canManageSprint && objection.status === "open" && (
-                    <div className="flex gap-2">
-                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "reviewed")} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Geprüft</button>
-                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "dismissed")} className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 disabled:opacity-50">Ablehnen</button>
-                      <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "accepted")} className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:opacity-50">Annehmen</button>
-                    </div>
-                  )}
-                </div>
-                <p className="text-slate-700">{objection.comment}</p>
-                {objection.secondReviewerProfileId && <p className="text-xs text-slate-500">Zweitreview: {objection.secondReviewerProfileId}</p>}
-              </div>
-            );
-          })}
-          {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch keine Score-Einwände.</div>}
-        </div>
-        {!sprint.scoreLocked && currentProfile && (
-          <form
-            className="mt-3 flex flex-col gap-2 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!scoreObjectionDraft.trim()) return;
-              onCreateScoreObjection(sprint, scoreObjectionDraft);
-              setScoreObjectionDraft("");
-            }}
-          >
-            <input
-              value={scoreObjectionDraft}
-              onChange={(event) => setScoreObjectionDraft(event.target.value)}
-              className="h-9 flex-1 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
-              placeholder="Sachlich begründeten Score-Einwand einreichen"
-            />
-            <button type="submit" disabled={pending || !scoreObjectionDraft.trim()} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Einwand speichern</button>
-          </form>
-        )}
-      </section>
+      <SprintScoreObjections
+        data={data}
+        sprint={sprint}
+        currentProfile={currentProfile}
+        canManageSprint={canManageSprint}
+        pending={pending}
+        scoreObjectionDraft={scoreObjectionDraft}
+        openObjectionsCount={openObjections.length}
+        onScoreObjectionDraftChange={setScoreObjectionDraft}
+        onCreateScoreObjection={onCreateScoreObjection}
+        onReviewScoreObjection={onReviewScoreObjection}
+      />
 
-      <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-base font-semibold text-slate-950">Sprint-Aufgaben</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1180px] w-full border-separate border-spacing-0 text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="border-b border-slate-200 px-4 py-3 font-semibold">Aufgabe</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Assignee</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Status</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review-Status</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">CEO-Score</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Sprint</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Zeitraum</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Nächster Schritt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sprintTasks.map((task) => (
-                <tr key={task.id} className="hover:bg-slate-50">
-                  <td className="max-w-[360px] border-b border-slate-100 px-4 py-3">
-                    <button type="button" onClick={() => onOpen(task)} className="flex max-w-full items-start gap-1.5 truncate text-left font-semibold text-slate-950 hover:text-blue-700">
-                      {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
-                      <span className="truncate">{task.title}</span>
-                    </button>
-                    <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
-                    {(!hasGitHubIssue(task) || task.carriedFromSprintId || task.sprintOutcome) && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {!hasGitHubIssue(task) && <GitHubMissingBadge />}
-                        {task.carriedFromSprintId && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Carry-over</span>}
-                        {task.sprintOutcome && <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{task.sprintOutcome}</span>}
-                      </div>
-                    )}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{taskOwnerLabel(task)}</td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className={`h-8 w-32 text-xs font-semibold ${statusTone(normalizeStatus(task.status))}`} options={taskStatuses.map((status) => ({ value: status, label: status }))} />
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                    <div>{reviewLabel(task.reviewStatus)}</div>
-                    <div className="mt-1 text-xs text-slate-500">{reviewOwnerName(task)}{isSelfReview(task) ? " · Self-Review" : ""}</div>
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                    {task.scorePoints} {task.scoreFinal ? "final" : "offen"}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <CustomSelect value={task.sprintId} disabled={pending || sprint.scoreLocked} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-44 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{dateRange(task)}</td>
-                  <td className="border-b border-slate-100 px-3 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {task.reviewStatus === "not_requested" || normalizeStatus(task.status) === "Nacharbeit" ? (
-                        <button type="button" disabled={pending || sprint.scoreLocked} onClick={() => onRequestReview(task)} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Review anfragen</button>
-                      ) : null}
-                      {task.reviewStatus !== "not_requested" || normalizeStatus(task.status) === "Review" ? (
-                        <button
-                          type="button"
-                          disabled={pending || sprint.scoreLocked || task.scoreFinal || !canReviewTask(task)}
-                          onClick={() => selectReviewTask(task.id)}
-                          className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Review-Blatt
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!sprintTasks.length && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Noch keine Aufgaben in diesem Sprint.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <SprintTaskTables
+        data={data}
+        sprint={sprint}
+        sprintTasks={sprintTasks}
+        otherTasks={otherTasks}
+        pending={pending}
+        canReviewTask={canReviewTask}
+        reviewOwnerName={reviewOwnerName}
+        isSelfReview={isSelfReview}
+        onOpen={onOpen}
+        onRequestReview={onRequestReview}
+        onChangeStatus={onChangeStatus}
+        onAssignSprint={onAssignSprint}
+        onSelectReviewTask={selectReviewTask}
+      />
 
-      {selectedReviewTask && (
-        <TaskReviewSheet
-          task={selectedReviewTask}
-          reviewOwnerName={`${reviewOwnerName(selectedReviewTask)}${isSelfReview(selectedReviewTask) ? " · Self-Review" : ""}`}
-          canReview={!sprint.scoreLocked && !selectedReviewTask.scoreFinal && canReviewTask(selectedReviewTask)}
-          canReopen={!sprint.scoreLocked && selectedReviewTask.scoreFinal && canReviewTask(selectedReviewTask)}
-          pending={pending}
-          onReview={onReview}
-          onReopen={onReopenReview}
-        />
-      )}
-
-      {otherTasks.length > 0 && (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <h2 className="text-base font-semibold text-slate-950">Backlog und andere Sprints</h2>
-            <p className="text-xs text-slate-500">Nicht im ausgewählten Sprint.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-[840px] w-full border-separate border-spacing-0 text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="border-b border-slate-200 px-4 py-3 font-semibold">Aufgabe</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-semibold">Assignee</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-semibold">Aktueller Sprint</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-semibold">Zuweisung</th>
-                </tr>
-              </thead>
-              <tbody>
-                {otherTasks.map((task) => {
-                  const currentSprint = data.sprints.find((item) => item.id === task.sprintId);
-                  return (
-                    <tr key={task.id} className="hover:bg-slate-50">
-                      <td className="max-w-[420px] border-b border-slate-100 px-4 py-3">
-                        <button type="button" onClick={() => onOpen(task)} className="block truncate text-left font-semibold text-slate-950 hover:text-blue-700">
-                          {task.title}
-                        </button>
-                        <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
-                      </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{taskOwnerLabel(task)}</td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{currentSprint?.name || "ohne Sprint"}</td>
-                      <td className="border-b border-slate-100 px-3 py-3">
-                        <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+      <SprintReviewSheetSection
+        selectedReviewTask={selectedReviewTask}
+        reviewOwnerName={(task) => `${reviewOwnerName(task)}${isSelfReview(task) ? " · Self-Review" : ""}`}
+        canReview={(task) => !sprint.scoreLocked && !task.scoreFinal && canReviewTask(task)}
+        canReopen={(task) => !sprint.scoreLocked && task.scoreFinal && canReviewTask(task)}
+        pending={pending}
+        onReview={onReview}
+        onReopen={onReopenReview}
+      />
     </div>
   );
 }
