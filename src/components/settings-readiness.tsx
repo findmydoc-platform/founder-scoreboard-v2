@@ -11,17 +11,13 @@ export function SystemStatusSection({
   authAvailable,
   authUserEmail,
   githubProviderTokenAvailable,
-  pending,
   googleChatReady,
-  onReconnectGitHub,
 }: {
   source: "seed" | "supabase";
   authAvailable: boolean;
   authUserEmail: string;
   githubProviderTokenAvailable: boolean;
-  pending: boolean;
   googleChatReady: boolean;
-  onReconnectGitHub: () => void;
 }) {
   return (
     <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -45,22 +41,6 @@ export function SystemStatusSection({
             {githubProviderTokenAvailable ? "verfügbar" : "neu anmelden nötig"}
           </span>
         </div>
-        {!githubProviderTokenAvailable && authUserEmail && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-            <div className="font-semibold">GitHub-Verbindung erneuern</div>
-            <p className="mt-1 text-xs leading-5">
-              Deine Supabase-Session ist aktiv, aber der GitHub-Token für Sync, Kommentare und Anhänge fehlt. Das ist kein App-Logout.
-            </p>
-            <button
-              type="button"
-              onClick={onReconnectGitHub}
-              disabled={pending}
-              className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              GitHub-Rechte erneuern
-            </button>
-          </div>
-        )}
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-slate-500">Google Chat</span>
           <span className={`min-w-0 whitespace-normal break-words font-semibold ${googleChatReady ? "text-emerald-700" : "text-amber-700"}`}>
@@ -75,14 +55,12 @@ export function SystemStatusSection({
 export function GitHubSyncQueueSection({
   tasks,
   pending,
-  authUserEmail,
   githubProviderTokenAvailable,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
 }: {
   tasks: Task[];
   pending: boolean;
-  authUserEmail: string;
   githubProviderTokenAvailable: boolean;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
@@ -111,11 +89,6 @@ export function GitHubSyncQueueSection({
           Verknüpfte Issues synchronisieren
         </button>
       </div>
-      {!githubProviderTokenAvailable && authUserEmail && (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          GitHub-Sync ist gesperrt, bis du die GitHub-Rechte erneuerst. Die App-Daten bleiben weiter verfügbar.
-        </div>
-      )}
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="min-w-0 rounded-md bg-slate-50 px-3 py-2 text-sm">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sync offen</div>
@@ -197,11 +170,6 @@ export function GitHubSyncQueueSection({
               </div>
             )}
           </div>
-          {!githubProviderTokenAvailable && authUserEmail && (
-            <p className="mt-3 rounded-md border border-amber-200 bg-white px-3 py-2 text-xs leading-5 text-amber-800">
-              GitHub-Issues können angelegt werden, sobald die GitHub-Rechte erneuert sind.
-            </p>
-          )}
         </div>
       </div>
     </section>

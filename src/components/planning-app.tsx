@@ -40,6 +40,7 @@ import { ExecutionLayerOverview } from "@/components/execution-layer-overview";
 import { FeedbackDialog as CurrentFeedbackDialog, type FeedbackDraft } from "@/components/feedback-dialog";
 import { FmdToolsOverview as CurrentFmdToolsOverview } from "@/components/fmd-tools-overview";
 import { GanttView as CurrentGanttView } from "@/components/gantt-view";
+import { GitHubConnectionStatus } from "@/components/github-connection-status";
 import { persistLocalPlanningTasks, useLocalPlanningState } from "@/hooks/use-local-planning-state";
 import { setProtectedPlanningDataCache, usePlanningAuth } from "@/hooks/use-planning-auth";
 import { usePlanningRequestContext } from "@/hooks/use-planning-request-context";
@@ -69,13 +70,17 @@ import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-v
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import type { AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AuthenticatedProfile, AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
   source: "seed" | "supabase";
   authRequired: boolean;
   initialTaskId?: string;
+  initialAuthUser?: User | null;
+  initialCurrentProfile?: AuthenticatedProfile | null;
+  initialProtectedDataLoaded?: boolean;
+  initialAuthError?: string;
   initialReviewTaskId?: string;
 };
 
@@ -206,6 +211,95 @@ const workspaceSubtitles: Record<Workspace, string> = {
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
   "ceo-intake": "CEO-only Task Intake für Codex-generierte Aufgaben.",
 };
+
+function PlanningBootShell({
+  workspace,
+  source,
+  localStateLoaded,
+  authAvailable,
+  authUserEmail,
+  title,
+  description,
+  error,
+  authUser,
+  authBusy = false,
+  githubProviderTokenAvailable = true,
+  onSignIn,
+  onSignOut,
+}: {
+  workspace: Workspace;
+  source: "seed" | "supabase";
+  localStateLoaded: boolean;
+  authAvailable: boolean;
+  authUserEmail: string;
+  title: string;
+  description: string;
+  error?: string;
+  authUser?: User | null;
+  authBusy?: boolean;
+  githubProviderTokenAvailable?: boolean;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
+      <AppSidebar
+        activeWorkspace={workspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail={authUserEmail}
+      />
+      <main className="lg:pl-16">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur lg:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
+              <h1 className="mt-1 text-xl font-semibold text-slate-950">{title}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{description}</p>
+            </div>
+            {authUser && onSignIn && onSignOut && (
+              <CurrentAuthControl
+                user={authUser}
+                error={error || ""}
+                busy={authBusy}
+                githubProviderTokenAvailable={githubProviderTokenAvailable}
+                onSignIn={onSignIn}
+                onSignOut={onSignOut}
+              />
+            )}
+          </div>
+        </header>
+        <section className="grid gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4 lg:px-6">
+          {["w-24", "w-20", "w-28", "w-16"].map((width, index) => (
+            <div key={index} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <div className={`h-3 ${width} animate-pulse rounded bg-slate-200`} />
+              <div className="mt-4 h-7 w-14 animate-pulse rounded bg-slate-100" />
+            </div>
+          ))}
+        </section>
+        <section className="px-4 pb-8 pt-2 lg:px-6">
+          <div className="grid min-h-[360px] gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-3">
+            {[0, 1, 2].map((column) => (
+              <div key={column} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="h-4 w-28 animate-pulse rounded bg-slate-200" />
+                <div className="mt-4 grid gap-3">
+                  {[0, 1, 2].map((item) => (
+                    <div key={item} className="rounded-md border border-slate-100 bg-white p-3">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200" />
+                      <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {error && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
+        </section>
+      </main>
+    </div>
+  );
+}
 
 const planningWorkspaces: Workspace[] = ["planning", "mine"];
 
@@ -554,7 +648,17 @@ function buildHygieneAlerts(data: PlanningData) {
   return alerts;
 }
 
-export function PlanningApp({ initialData, source, authRequired, initialTaskId = "", initialReviewTaskId = "" }: Props) {
+export function PlanningApp({
+  initialData,
+  source,
+  authRequired,
+  initialTaskId = "",
+  initialAuthUser = null,
+  initialCurrentProfile = null,
+  initialProtectedDataLoaded = false,
+  initialAuthError = "",
+  initialReviewTaskId = "",
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -617,6 +721,7 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     protectedDataLoaded,
     setProtectedDataLoaded,
     githubProviderTokenAvailable,
+    githubReauthFailed,
     authError,
     authNotice,
     authBusy,
@@ -627,6 +732,10 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     source,
     safeInitialData,
     taskCount: data.tasks.length,
+    initialAuthUser,
+    initialCurrentProfile,
+    initialProtectedDataLoaded,
+    initialAuthError,
     setData,
     normalizePlanningData,
     onSignedOut: clearSelectedTask,
@@ -3135,7 +3244,21 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
     }
   };
 
-  if (authRequired && (!authChecked || !authUser)) {
+  if (authRequired && !authChecked) {
+    return (
+      <PlanningBootShell
+        workspace={workspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail=""
+        title="Session wird geprüft"
+        description="FounderOps prüft die bestehende Team-Session, bevor geschützte Planungsdaten geladen werden."
+      />
+    );
+  }
+
+  if (authRequired && !authUser) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
         <section className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-7 shadow-xl">
@@ -3173,32 +3296,21 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
 
   if (authRequired && authUser && !protectedDataLoaded && !data.tasks.length) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f4f7fb] px-4 text-slate-900">
-        <section className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-7 shadow-xl">
-          <div className="grid gap-5">
-            <AppBrand />
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Session aktiv</div>
-              <h1 className="mt-1 text-xl font-semibold text-slate-950">{authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {authError ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet." : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."}
-              </p>
-            </div>
-          </div>
-          {authError && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{authError}</p>}
-          <div className="mt-5">
-            <CurrentAuthControl
-              user={authUser}
-              error={authError}
-              busy={authBusy}
-              githubProviderTokenAvailable={githubProviderTokenAvailable}
-              onSignIn={signIn}
-              onSignOut={signOut}
-              variant="gate"
-            />
-          </div>
-        </section>
-      </main>
+      <PlanningBootShell
+        workspace={workspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail={authUser.email || ""}
+        title={authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}
+        description={authError ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet." : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."}
+        error={authError || undefined}
+        authUser={authUser}
+        authBusy={authBusy}
+        githubProviderTokenAvailable={githubProviderTokenAvailable}
+        onSignIn={signIn}
+        onSignOut={signOut}
+      />
     );
   }
 
@@ -3316,6 +3428,13 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
                 onToggle={() => setShowNotifications((value) => !value)}
                 onOpen={openNotification}
                 onDismiss={dismissNotification}
+              />
+              <GitHubConnectionStatus
+                authenticated={Boolean(authUser)}
+                available={githubProviderTokenAvailable}
+                failed={githubReauthFailed}
+                busy={authBusy}
+                onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
               />
               {authAvailable && (
                 <CurrentAuthControl
@@ -3619,7 +3738,6 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
               onDispatchNotifications={dispatchNotifications}
               onRetryNotificationDelivery={retryNotificationDelivery}
               onSendGoogleChatTest={sendGoogleChatTest}
-              onReconnectGitHub={signIn}
               onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
               onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
               onSelectFeedback={setSelectedFeedbackId}
@@ -3853,7 +3971,6 @@ export function PlanningApp({ initialData, source, authRequired, initialTaskId =
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
-          onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onOpenReview={() => openReviewSheet(selectedTask)}
           onDelete={() => deleteTask(selectedTask)}
@@ -3898,7 +4015,6 @@ void SprintScoreTableOverview;
 void DecisionLogOverview;
 void MeetingFinderOverview;
 void LegacySettingsOverview;
-void AuthControl;
 void FeedbackDialog;
 void GanttView;
 void NewTaskDialog;
@@ -7259,7 +7375,6 @@ function LegacySettingsOverview({
   onUpdateSprintPlanning,
   onCreateSprintPlan,
   onDispatchNotifications,
-  onReconnectGitHub,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
   onSelectFeedback,
@@ -7279,7 +7394,6 @@ function LegacySettingsOverview({
   onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
   onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
-  onReconnectGitHub: () => void;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
   onSelectFeedback: (id: number) => void;
@@ -7324,22 +7438,6 @@ function LegacySettingsOverview({
               {githubProviderTokenAvailable ? "verfügbar" : "neu anmelden nötig"}
             </span>
           </div>
-          {!githubProviderTokenAvailable && authUserEmail && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-              <div className="font-semibold">GitHub-Verbindung erneuern</div>
-              <p className="mt-1 text-xs leading-5">
-                Deine Supabase-Session ist aktiv, aber der GitHub-Token für Sync, Kommentare und Anhänge fehlt. Das ist kein App-Logout.
-              </p>
-              <button
-                type="button"
-                onClick={onReconnectGitHub}
-                disabled={pending}
-                className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                GitHub-Rechte erneuern
-              </button>
-            </div>
-          )}
           <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
             <span className="text-slate-500">Google Chat</span>
             <span className={`font-semibold ${googleChatReady ? "text-emerald-700" : "text-amber-700"}`}>
@@ -7406,11 +7504,6 @@ function LegacySettingsOverview({
             Verknüpfte Issues synchronisieren
           </button>
         </div>
-        {!githubProviderTokenAvailable && authUserEmail && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            GitHub-Sync ist gesperrt, bis du die GitHub-Rechte erneuerst. Die App-Daten bleiben weiter verfügbar.
-          </div>
-        )}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sync offen</div>
@@ -7492,11 +7585,6 @@ function LegacySettingsOverview({
                 </div>
               )}
             </div>
-            {!githubProviderTokenAvailable && authUserEmail && (
-              <p className="mt-3 rounded-md border border-amber-200 bg-white px-3 py-2 text-xs leading-5 text-amber-800">
-                GitHub-Issues können angelegt werden, sobald die GitHub-Rechte erneuert sind.
-              </p>
-            )}
           </div>
         </div>
       </section>
@@ -7719,188 +7807,6 @@ function LegacySettingsOverview({
       </section>
     </div>
   );
-}
-
-function AuthControl({
-  user,
-  error,
-  busy,
-  githubProviderTokenAvailable = true,
-  onSignIn,
-  onSignOut,
-  variant = "header",
-}: {
-  user: User | null;
-  error: string;
-  busy: boolean;
-  githubProviderTokenAvailable?: boolean;
-  onSignIn: () => void;
-  onSignOut: () => void;
-  variant?: "header" | "gate";
-}) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const githubLogin = getUserMetadataString(user, "user_name") || getUserMetadataString(user, "preferred_username");
-  const avatarUrl = getUserMetadataString(user, "avatar_url");
-  const displayName = getUserMetadataString(user, "full_name") || getUserMetadataString(user, "name") || githubLogin || user?.email || "";
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-
-    window.addEventListener("pointerdown", closeOnOutside);
-    return () => window.removeEventListener("pointerdown", closeOnOutside);
-  }, [open]);
-
-  if (!user) {
-    return (
-      <div className={variant === "gate" ? "grid gap-3" : ""}>
-        {variant === "gate" && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-            Rollen und Zugriff werden nach dem Login über dein gemapptes GitHub-Profil geprüft.
-          </div>
-        )}
-        {error && variant === "gate" && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-        <button
-          type="button"
-          onClick={onSignIn}
-          disabled={busy}
-          className={variant === "gate"
-            ? "inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"}
-        >
-          <Users size={17} />
-          {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
-        </button>
-      </div>
-    );
-  }
-
-  if (variant === "gate") {
-    return (
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-200 bg-white object-cover" />
-          ) : (
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700">
-              {displayName.slice(0, 1).toUpperCase() || "?"}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-slate-950">{displayName}</div>
-            <div className="truncate text-xs text-slate-500">{githubLogin ? `@${githubLogin}` : user.email || "GitHub angemeldet"}</div>
-          </div>
-          <button
-            type="button"
-            onClick={onSignOut}
-            disabled={busy}
-            className="h-9 shrink-0 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Abmelden
-          </button>
-        </div>
-        {!githubProviderTokenAvailable && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-            <div className="font-semibold">GitHub-Rechte fehlen</div>
-            <p className="mt-1">Die App-Session ist aktiv. Für GitHub-Sync, Kommentare und Anhänge muss GitHub einmal neu autorisiert werden.</p>
-            <button
-              type="button"
-              onClick={onSignIn}
-              disabled={busy}
-              className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              GitHub-Rechte erneuern
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-        }}
-        aria-label="Account-Menü öffnen"
-        className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white p-0.5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-      >
-        {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatarUrl}
-            alt=""
-            className="h-8 w-8 rounded-full bg-slate-100 object-cover"
-          />
-        ) : (
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-            {displayName.slice(0, 1).toUpperCase() || "?"}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-11 z-30 w-80 rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-xl">
-          <div className="grid gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="h-11 w-11 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
-                />
-              ) : (
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600">
-                  {displayName.slice(0, 1).toUpperCase() || "?"}
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Angemeldet mit GitHub</div>
-                <div className="mt-1 truncate font-semibold text-slate-950">{displayName}</div>
-                {githubLogin && <div className="truncate text-xs text-slate-500">@{githubLogin}</div>}
-                {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
-              </div>
-            </div>
-            {!githubProviderTokenAvailable && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                <div className="font-semibold">GitHub-Rechte fehlen</div>
-                <p className="mt-1">Sync, Kommentare und Anhänge brauchen eine neue GitHub-Autorisierung.</p>
-                <button
-                  type="button"
-                  onClick={onSignIn}
-                  disabled={busy}
-                  className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  GitHub-Rechte erneuern
-                </button>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onSignOut}
-              disabled={busy}
-              className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              Abmelden
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function getUserMetadataString(user: User | null, key: string) {
-  const value = user?.user_metadata?.[key];
-  return typeof value === "string" ? value : "";
 }
 
 function FeedbackDialog({
@@ -8416,7 +8322,6 @@ function TaskDetailPanel({
   onImportGitHubComments,
   onReportBlocker,
   onCreateSubIssue,
-  onReconnectGitHub,
   onSyncGitHub,
   onAddRelation,
   onRemoveRelation,
@@ -8449,7 +8354,6 @@ function TaskDetailPanel({
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
-  onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -8927,20 +8831,6 @@ function TaskDetailPanel({
                 <p className="text-xs text-slate-500">
                   Diese Aufgabe wird nicht automatisch dupliziert. Nutze “GitHub-Issue anlegen”, wenn sie bewusst ins Management-Repo gespiegelt werden soll.
                 </p>
-              )}
-              {!githubProviderTokenAvailable && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                  <div className="font-semibold">GitHub-Rechte müssen erneuert werden.</div>
-                  <p className="mt-1">Du bist weiter in der App angemeldet, aber Sync, Kommentare und Anhänge brauchen einen frischen GitHub-Token.</p>
-                  <button
-                    type="button"
-                    onClick={onReconnectGitHub}
-                    disabled={pending}
-                    className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    GitHub-Rechte erneuern
-                  </button>
-                </div>
               )}
               {task.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
               {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}

@@ -20,11 +20,13 @@ npm run build
 
 1. App unter `http://localhost:3000` öffnen.
 2. Mit GitHub anmelden.
-3. Unten links muss der Teamzugriff die angemeldete Session zeigen.
-4. `/api/health` muss `status: "ready"` melden.
+3. Seite neu laden.
+4. Unten links muss der Teamzugriff die angemeldete Session zeigen.
+5. `/api/health` muss `status: "ready"` melden.
 
 Erwartung:
 - Datenquelle ist Supabase.
+- Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
 - 5 Profile sind vorhanden.
 - Volkan/MehmetVolkan ist CEO.
 - Navigation zeigt Planung, Sprint & Score, Decision Log, Meeting Finder, Team, Einstellungen.
@@ -108,11 +110,13 @@ Voraussetzung:
 Check:
 1. `npm run verify:github-sync` ausführen.
 2. Task öffnen.
-3. `Jetzt spiegeln` klicken.
-4. Link zum GitHub Issue prüfen.
+3. Falls der GitHub User-Token fehlt, die GitHub-Verbindung zentral im Header erneuern.
+4. `Jetzt spiegeln` klicken.
+5. Link zum GitHub Issue prüfen.
 
 Erwartung:
 - Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
+- GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
 - Issue wird im Management-Repo im Namen des eingeloggten GitHub-Users erstellt oder aktualisiert.
 - Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
 - Body enthält Epic / Meilenstein, Initiative, Sprint, Review, Score, Blocker und Kommentare.

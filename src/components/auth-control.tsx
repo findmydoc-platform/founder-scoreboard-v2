@@ -13,7 +13,6 @@ export function AuthControl({
   user,
   error,
   busy,
-  githubProviderTokenAvailable = true,
   onSignIn,
   onSignOut,
   variant = "header",
@@ -92,20 +91,6 @@ export function AuthControl({
             Abmelden
           </button>
         </div>
-        {!githubProviderTokenAvailable && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-            <div className="font-semibold">GitHub-Rechte fehlen</div>
-            <p className="mt-1">Die App-Session ist aktiv. Für GitHub-Sync, Kommentare und Anhänge muss GitHub einmal neu autorisiert werden.</p>
-            <button
-              type="button"
-              onClick={onSignIn}
-              disabled={busy}
-              className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              GitHub-Rechte erneuern
-            </button>
-          </div>
-        )}
       </div>
     );
   }
@@ -157,20 +142,6 @@ export function AuthControl({
                 {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
               </div>
             </div>
-            {!githubProviderTokenAvailable && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                <div className="font-semibold">GitHub-Rechte fehlen</div>
-                <p className="mt-1">Sync, Kommentare und Anhänge brauchen eine neue GitHub-Autorisierung.</p>
-                <button
-                  type="button"
-                  onClick={onSignIn}
-                  disabled={busy}
-                  className="mt-2 h-8 rounded-md border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  GitHub-Rechte erneuern
-                </button>
-              </div>
-            )}
             <button
               type="button"
               onClick={onSignOut}

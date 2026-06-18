@@ -59,7 +59,6 @@ export function TaskDetailPanel({
   onImportGitHubComments,
   onReportBlocker,
   onCreateSubIssue,
-  onReconnectGitHub,
   onSyncGitHub,
   onOpenReview,
   onDelete,
@@ -96,7 +95,6 @@ export function TaskDetailPanel({
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
-  onReconnectGitHub: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
   onDelete: () => void;
@@ -181,7 +179,6 @@ export function TaskDetailPanel({
             pending={pending}
             githubProviderTokenAvailable={githubProviderTokenAvailable}
             onUpdate={onUpdate}
-            onReconnectGitHub={onReconnectGitHub}
             onSyncGitHub={onSyncGitHub}
             onOpenReview={onOpenReview}
             onDelete={onDelete}
