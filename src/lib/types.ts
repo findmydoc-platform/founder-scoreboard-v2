@@ -99,6 +99,8 @@ export type Task = {
   sprintId: string;
   milestoneId?: string;
   reviewStatus: ReviewStatus;
+  reviewOwnerProfileId?: string;
+  reviewRequestedAt?: string;
   scorePoints: number;
   scoreFinal: boolean;
   githubRepo: string;

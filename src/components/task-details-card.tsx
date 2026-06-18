@@ -8,8 +8,8 @@ import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
 
-export type TaskDetailsMeta = Pick<Task, "status" | "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline">;
-export type TaskDetailsDraft = Pick<TaskDetailsMeta, "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline">;
+export type TaskDetailsMeta = Pick<Task, "status" | "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewStatus" | "reviewOwnerProfileId">;
+export type TaskDetailsDraft = Pick<TaskDetailsMeta, "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewOwnerProfileId">;
 
 function formatDate(value: string) {
   return formatDisplayDate(value, { includeYear: true });
@@ -39,6 +39,7 @@ type Props = {
   currentSprint?: Sprint;
   currentMilestone?: Milestone;
   canManageTaskMeta: boolean;
+  canManageReviewOwner: boolean;
   detailsEditing: boolean;
   pending: boolean;
   saveState: string;
@@ -65,6 +66,7 @@ export function TaskDetailsCard({
   currentSprint,
   currentMilestone,
   canManageTaskMeta,
+  canManageReviewOwner,
   detailsEditing,
   pending,
   saveState,
@@ -80,6 +82,9 @@ export function TaskDetailsCard({
   onCancelEditing,
   onSaveDetails,
 }: Props) {
+  const reviewOwnerProfile = profiles.find((profile) => profile.id === meta.reviewOwnerProfileId);
+  const selfReview = Boolean(meta.reviewOwnerProfileId && (task.ownerId === meta.reviewOwnerProfileId || task.owner === meta.reviewOwnerProfileId));
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between gap-3">
@@ -193,7 +198,24 @@ export function TaskDetailsCard({
         </div>
         <div className="border-t border-slate-100 pt-3">
           <div className="text-xs font-semibold text-slate-500">Review</div>
-          <div className="mt-1 text-sm font-semibold text-slate-800">{reviewLabel(task.reviewStatus)}</div>
+          <div className="mt-1 text-sm font-semibold text-slate-800">{reviewLabel(meta.reviewStatus)}</div>
+          {detailsEditing && canManageReviewOwner ? (
+            <label className="mt-2 grid gap-1 text-xs font-semibold text-slate-500">
+              Review Owner
+              <CustomSelect
+                value={detailsDraft.reviewOwnerProfileId || ""}
+                onChange={(value) => onDetailsDraftChange({ reviewOwnerProfileId: value })}
+                className="h-9 text-sm"
+                options={[{ value: "", label: "Ohne Review Owner" }, ...profiles.map((profile) => ({ value: profile.id, label: profile.name }))]}
+              />
+            </label>
+          ) : (
+            <div className="mt-1 text-xs text-slate-500">
+              {reviewOwnerProfile?.name || meta.reviewOwnerProfileId || "Ohne Review Owner"}
+              {selfReview ? " · Self-Review" : ""}
+            </div>
+          )}
+          {!canManageReviewOwner && <div className="mt-1 text-[11px] text-slate-400">Nur CEO kann den Review Owner ändern.</div>}
         </div>
         <div>
           <div className="text-xs font-semibold text-slate-500">Score</div>

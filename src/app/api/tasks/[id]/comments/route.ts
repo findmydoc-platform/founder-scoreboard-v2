@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { createGitHubIssueComment, githubUserForToken } from "@/lib/github";
+import { mentionedProfileIds } from "@/lib/mentions";
 import { getServerSupabase } from "@/lib/supabase";
 
 type CommentPayload = {
@@ -73,25 +74,49 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
   }
 
-  const recipients = new Set<string>();
-  if (task.owner && task.owner !== permission.profile?.id) recipients.add(task.owner);
+  const { data: profiles } = await supabase.from("profiles").select("id,name,github_login,platform_role");
+  const mentionedRecipients = new Set(mentionedProfileIds(
+    comment,
+    (profiles || []).map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      githubLogin: profile.github_login,
+    })),
+    permission.profile?.id || "",
+  ));
 
-  const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
+  const recipients = new Set<string>();
+  if (task.owner && task.owner !== permission.profile?.id && !mentionedRecipients.has(task.owner)) recipients.add(task.owner);
+
+  const leads = (profiles || []).filter((profile) => ["ceo", "deputy"].includes(profile.platform_role));
   leads?.forEach((lead) => {
-    if (lead.id !== permission.profile?.id) recipients.add(lead.id);
+    if (lead.id !== permission.profile?.id && !mentionedRecipients.has(lead.id)) recipients.add(lead.id);
   });
 
-  if (recipients.size) {
+  const notificationEvents = [
+    ...[...mentionedRecipients].map((recipientId) => ({
+      type: "task.mention",
+      actor_profile_id: permission.profile?.id || null,
+      recipient_profile_id: recipientId,
+      entity_type: "task",
+      entity_id: id,
+      title: `Du wurdest erwähnt: ${task.title}`,
+      body: comment,
+    })),
+    ...[...recipients].map((recipientId) => ({
+      type: "task.comment",
+      actor_profile_id: permission.profile?.id || null,
+      recipient_profile_id: recipientId,
+      entity_type: "task",
+      entity_id: id,
+      title: `Neuer Kommentar: ${task.title}`,
+      body: comment,
+    })),
+  ];
+
+  if (notificationEvents.length) {
     await supabase.from("notification_events").insert(
-      [...recipients].map((recipientId) => ({
-        type: "task.comment",
-        actor_profile_id: permission.profile?.id || null,
-        recipient_profile_id: recipientId,
-        entity_type: "task",
-        entity_id: id,
-        title: `Neuer Kommentar: ${task.title}`,
-        body: comment,
-      })),
+      notificationEvents,
     );
   }
 

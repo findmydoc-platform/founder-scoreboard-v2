@@ -82,7 +82,7 @@ Erzeugte Reminder:
 - fällige oder überfällige Sprint-Reviews
 - überfällige Deliverables
 
-Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag über `notification_events.dedupe_key` höchstens einmal erzeugt. `task.comment` bleibt weiterhin nur In-App.
+Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag über `notification_events.dedupe_key` höchstens einmal erzeugt. `task.comment` bleibt weiterhin nur In-App; gezielte Erwähnungen in Kommentaren laufen separat als `task.mention`.
 
 Sebastian-/Rresta-Übergabepaket:
 
@@ -133,11 +133,12 @@ Persönliche DMs sind erlaubt für:
 
 - `task.review_requested`
 - `task.review_rework`
+- `task.mention`
 - `task.blocker_reported`
 - `task.deadline_overdue`
 - `decision.confirmation_requested`
 
-`task.comment`, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
+Normale `task.comment`-Events, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Gezielte Kommentar-Erwähnungen erzeugen `task.mention` und dürfen persönlich per DM zugestellt werden. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
 
 ## Bot-Branding und geplanter Endpoint
 

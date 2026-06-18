@@ -90,10 +90,10 @@ export function MeetingSlotSearchSection({
 
   return (
     <>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-950">Meeting Finder</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus FindMyDoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Google-Workspace-Blockern.</p>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-4 grid grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Arbeitszeiten</div><div className="font-semibold">{workingHoursCount}</div></div>
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{blockersCount}</div></div>
           <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
@@ -111,14 +111,14 @@ export function MeetingSlotSearchSection({
               type="button"
               onClick={onSyncGoogleCalendar}
               disabled={pending || !canManageAvailability}
-              className="h-9 rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 w-full rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               Google-Kalender synchronisieren
             </button>
           </div>
         </div>
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Freie Slots finden</h2>

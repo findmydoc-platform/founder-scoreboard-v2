@@ -46,6 +46,8 @@ export function TaskDetailPanel({
   decisionTaskLinks,
   focusItems,
   canManageTaskMeta,
+  canManageReviewOwner,
+  canChangeTaskStatus = canManageTaskMeta,
   allTasks,
   relations,
   pending,
@@ -58,6 +60,7 @@ export function TaskDetailPanel({
   onReportBlocker,
   onCreateSubIssue,
   onSyncGitHub,
+  onOpenReview,
   onDelete,
   onAddRelation,
   onRemoveRelation,
@@ -79,6 +82,8 @@ export function TaskDetailPanel({
   decisionTaskLinks: DecisionTaskLink[];
   focusItems: TaskFocusItem[];
   canManageTaskMeta: boolean;
+  canManageReviewOwner: boolean;
+  canChangeTaskStatus?: boolean;
   allTasks: Task[];
   relations: TaskRelation[];
   pending: boolean;
@@ -91,6 +96,7 @@ export function TaskDetailPanel({
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onOpenReview: () => void;
   onDelete: () => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -168,10 +174,13 @@ export function TaskDetailPanel({
             sprints={sprints}
             milestones={milestones}
             canManageTaskMeta={canManageTaskMeta}
+            canManageReviewOwner={canManageReviewOwner}
+            canChangeTaskStatus={canChangeTaskStatus}
             pending={pending}
             githubProviderTokenAvailable={githubProviderTokenAvailable}
             onUpdate={onUpdate}
             onSyncGitHub={onSyncGitHub}
+            onOpenReview={onOpenReview}
             onDelete={onDelete}
           />
         </div>

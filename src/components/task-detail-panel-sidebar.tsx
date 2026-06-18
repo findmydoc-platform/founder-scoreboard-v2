@@ -16,10 +16,13 @@ type Props = {
   sprints: Sprint[];
   milestones: Milestone[];
   canManageTaskMeta: boolean;
+  canManageReviewOwner: boolean;
+  canChangeTaskStatus?: boolean;
   pending: boolean;
   githubProviderTokenAvailable: boolean;
   onUpdate: (patch: Partial<Task>) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
+  onOpenReview: () => void;
   onDelete: () => void;
 };
 
@@ -31,13 +34,18 @@ export function TaskDetailPanelSidebar({
   sprints,
   milestones,
   canManageTaskMeta,
+  canManageReviewOwner,
+  canChangeTaskStatus = canManageTaskMeta,
   pending,
   githubProviderTokenAvailable,
   onUpdate,
   onSyncGitHub,
+  onOpenReview,
   onDelete,
 }: Props) {
   const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
+  const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
+  const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
   const creatorProfile = teamProfiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
     || teamProfiles.find((profile) => profile.platformRole === "ceo")
     || ownerProfile;
@@ -45,6 +53,7 @@ export function TaskDetailPanelSidebar({
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
   const canSyncExistingGitHubIssue = hasGitHubIssue(task);
+  const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = canManageTaskMeta
     ? taskStatuses
     : normalizeStatus(task.status) === "Nacharbeit"
@@ -68,7 +77,7 @@ export function TaskDetailPanelSidebar({
         <div className="mt-3 grid gap-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-500">
             Status
-            <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={statusOptions.map((status) => ({ value: status, label: status }))} />
+            <CustomSelect value={normalizeStatus(task.status)} disabled={!canChangeTaskStatus} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
           </label>
           {canManageTaskMeta ? (
             <>
@@ -171,6 +180,36 @@ export function TaskDetailPanelSidebar({
           <div>
             <div className="text-xs font-semibold text-slate-500">Review</div>
             <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
+            {reviewOpen ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onOpenReview}
+                className="mt-2 h-8 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Zum Review-Blatt
+              </button>
+            ) : null}
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slate-500">Review Owner</div>
+            {canManageReviewOwner ? (
+              <CustomSelect
+                value={task.reviewOwnerProfileId || ""}
+                onChange={(value) => onUpdate({ reviewOwnerProfileId: value })}
+                className="mt-1 h-9 text-sm"
+                options={[{ value: "", label: "Ohne Review Owner" }, ...teamProfiles.map((profile) => ({ value: profile.id, label: profile.name }))]}
+              />
+            ) : (
+              <div className="mt-1">
+                {reviewOwnerProfile?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}
+                {selfReview ? <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Self-Review</span> : null}
+              </div>
+            )}
+            {!canManageReviewOwner ? <div className="mt-1 text-[11px] text-slate-400">Nur CEO kann den Review Owner ändern.</div> : null}
+            {task.reviewRequestedAt ? (
+              <div className="mt-1 text-xs text-slate-500">Angefragt am {new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(task.reviewRequestedAt))}</div>
+            ) : null}
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500">Erstellt von</div>

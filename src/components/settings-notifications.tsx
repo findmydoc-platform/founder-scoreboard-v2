@@ -78,7 +78,7 @@ export function SettingsNotificationsSection({
         {feedbackMessage && (
           <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">{feedbackMessage}</p>
         )}
-        <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
+        <div className="mt-4 grid grid-cols-1 min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
           <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -178,16 +178,16 @@ export function SettingsNotificationsSection({
           </div>
         </div>
         {!googleChatReady && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800 break-words">
             Google Chat sammelt Benachrichtigungen, sendet aber noch nichts. Operative Event Messages bleiben in der App. Release-Details oder Deployment-Zusammenfassungen gehen nur bewusst über die Pipeline raus. Chat API: {googleChatApiConfigured ? "gesetzt" : "fehlt"} · Webhook: {googleChatWebhookConfigured ? "gesetzt" : "fehlt"} · Versandschalter: {googleChatDeliveryEnabled ? "aktiv" : "inaktiv"}. Für persönliche DMs braucht die Umgebung `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, DM-Spaces in den Profilen und `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
           </div>
         )}
         {googleChatReady && (
-          <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800">
+          <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800 break-words">
             Google Chat ist versandbereit. Aktiver Modus: {googleChatModeLabel}. Persönliche DMs werden nur an Profile mit gültigem `spaces/...` gesendet; fehlende DM-Spaces werden als Zustellfehler protokolliert und nicht in den Gruppenchat umgeleitet.
           </div>
         )}
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5">
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chat-Digest</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDigestNotifications.length}</div>

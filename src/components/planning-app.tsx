@@ -15,6 +15,7 @@ import {
   Maximize2,
   Link2,
   ListTree,
+  Menu,
   MessageSquare,
   Plus,
   Search,
@@ -29,6 +30,7 @@ import type { User } from "@supabase/supabase-js";
 import { AppBrand } from "@/components/app-brand";
 import { AppSidebar, type AppWorkspace } from "@/components/app-sidebar";
 import { AuthControl as CurrentAuthControl } from "@/components/auth-control";
+import { CeoTaskIntake } from "@/components/ceo-task-intake";
 import { CommentBody } from "@/components/task-comment-body";
 import { CustomDatePicker } from "@/components/custom-date-picker";
 import { CustomSelect } from "@/components/custom-select";
@@ -48,6 +50,8 @@ import { NewTaskDialog as CurrentNewTaskDialog, type NewTaskDraft } from "@/comp
 import { MeetingFinderOverview as CurrentMeetingFinderOverview } from "@/components/meeting-finder-overview";
 import { NotificationInbox } from "@/components/notification-inbox";
 import { ProjectsOverview as CurrentProjectsOverview } from "@/components/projects-overview";
+import { ReviewDetailPage } from "@/components/review-detail-page";
+import { ReviewWorkspaceOverview } from "@/components/review-workspace-overview";
 import { SettingsOverview } from "@/components/settings-overview";
 import { SprintScoreTableOverview as CurrentSprintScoreTableOverview } from "@/components/sprint-score-overview";
 import type { SprintPlanningOptions } from "@/components/settings-sprint-planning";
@@ -61,6 +65,7 @@ import { decisionStatusLabel } from "@/lib/execution-layer-view-model";
 import { rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { googleChatDigestEventTypes, notificationChannelLabel, notificationEventLabel, shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import { founderScore, hasGitHubIssue, hasOpenWaitingRelation, reviewLabel, roleLabel, syncLabel, taskBelongsToProfile, taskRelationsFor } from "@/lib/platform";
+import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/lib/review-workspace-view-model";
 import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-view-model";
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
@@ -76,6 +81,7 @@ type Props = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
+  initialReviewTaskId?: string;
 };
 
 type Filters = {
@@ -180,6 +186,7 @@ const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   execution: "Execution",
   mine: "Meine Aufgaben",
+  reviews: "Reviews",
   sprint: "Sprint & Score",
   decisions: "Decision Log",
   meetings: "Meeting Finder",
@@ -187,12 +194,14 @@ const workspaceLabels: Record<Workspace, string> = {
   tools: "FMD-Tools",
   team: "Team",
   settings: "Einstellungen",
+  "ceo-intake": "CEO Intake",
 };
 
 const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
   mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
+  reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   sprint: "Review Queue, Punkte und Sprintabschluss.",
   decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
   meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
@@ -200,6 +209,7 @@ const workspaceSubtitles: Record<Workspace, string> = {
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
+  "ceo-intake": "CEO-only Task Intake für Codex-generierte Aufgaben.",
 };
 
 function PlanningBootShell({
@@ -551,6 +561,15 @@ function founderStatusGuardMessage(status: TaskStatus) {
   return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
 }
 
+function founderTaskOwnershipGuardMessage() {
+  return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
+}
+
+function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Package[]) {
+  const initiative = packages.find((item) => item.id === task.packageId);
+  return initiative?.accountableProfileId || initiative?.ownerId || "";
+}
+
 type HygieneAlert = {
   id: string;
   severity: "critical" | "warning" | "info";
@@ -638,6 +657,7 @@ export function PlanningApp({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
+  initialReviewTaskId = "",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -653,6 +673,10 @@ export function PlanningApp({
   const [view, setView] = useState<ViewMode>("board");
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
+  const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(searchParams.get("reviewTask") || "");
+  const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>("open");
+  const [reviewOwnerFilter, setReviewOwnerFilter] = useState<ReviewOwnerFilter>("all");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
@@ -672,6 +696,7 @@ export function PlanningApp({
   const [meetingCreateMessage, setMeetingCreateMessage] = useState("");
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sprintLockMessage, setSprintLockMessage] = useState("");
   const [sprintPlanningOptions, setSprintPlanningOptions] = useState<SprintPlanningOptions>({
     firstSprintNumber: 2,
@@ -717,6 +742,7 @@ export function PlanningApp({
   });
 
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
+  const selectedReviewDetailTask = data.tasks.find((task) => task.id === selectedReviewDetailTaskId) || null;
   const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
   const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
   const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
@@ -740,7 +766,10 @@ export function PlanningApp({
     currentProfileId: serverCurrentProfile?.id || "",
   });
   const mineOwnerName = currentProfile?.name || "deinem Profil";
+  const currentProfileId = currentProfile?.id || "";
+  const canUseCeoIntake = currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
+  const canChangeTaskStatus = (task: Task) => canManageTaskMeta || taskBelongsToProfile(task, currentProfile);
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
     if (!currentProfile) return pending;
@@ -749,13 +778,12 @@ export function PlanningApp({
   const hygieneAlerts = useMemo(() => buildHygieneAlerts(data), [data]);
   const todayFocusDate = currentIsoDate();
   const currentProfileFocusItems = useMemo(() => {
-    if (!currentProfile) return [];
-    const profileId = currentProfile.id;
+    if (!currentProfileId) return [];
     return data.taskFocusItems
-      .filter((item) => item.profileId === profileId && item.focusDate === todayFocusDate)
+      .filter((item) => item.profileId === currentProfileId && item.focusDate === todayFocusDate)
       .sort((left, right) => left.position - right.position)
       .slice(0, 3);
-  }, [currentProfile, data.taskFocusItems, todayFocusDate]);
+  }, [currentProfileId, data.taskFocusItems, todayFocusDate]);
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
     router.push(`/tasks/${encodeURIComponent(taskId)}`);
@@ -771,6 +799,19 @@ export function PlanningApp({
       }
     }
   }, [pathname, router]);
+
+  const openReviewSheet = useCallback((task: Task) => {
+    setSelectedTaskId(null);
+    setFocusedReviewTaskId(task.id);
+    setWorkspace("reviews");
+    router.push(`/reviews/${encodeURIComponent(task.id)}`);
+  }, [router, setWorkspace]);
+
+  useEffect(() => {
+    if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
+      setWorkspace("planning");
+    }
+  }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
 
   useEffect(() => {
     if (!selectedTaskId) return;
@@ -875,9 +916,31 @@ export function PlanningApp({
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
-    const normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
+    let normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
       ? { ...patch, ...taskOwnerPatch(patch.ownerId || patch.owner || "", data.profiles) }
       : patch;
+
+    if (normalizedPatch.status === "Review" || normalizedPatch.reviewStatus === "requested") {
+      if (task.scoreFinal) {
+        setSaveError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.");
+        return;
+      }
+      const nextTask = { ...task, ...normalizedPatch };
+      normalizedPatch = {
+        ...normalizedPatch,
+        status: "Review",
+        reviewStatus: "requested",
+        scoreFinal: false,
+        reviewOwnerProfileId: reviewOwnerForTask(nextTask, data.packages),
+        reviewRequestedAt: new Date().toISOString(),
+      };
+    }
+
+    if (normalizedPatch.status && !canChangeTaskStatus(task)) {
+      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardTaskId(task.id);
+      return;
+    }
 
     if (normalizedPatch.status && !canManageTaskMeta) {
       const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus);
@@ -888,7 +951,7 @@ export function PlanningApp({
       }
     }
 
-    setData((current) => {
+    applyPlanningDataUpdate((current) => {
       const nextData = {
         ...current,
         tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubSyncStatus: normalizedPatch.githubSyncStatus || "not_synced", githubSyncError: normalizedPatch.githubSyncStatus ? item.githubSyncError : "" } : item)),
@@ -925,6 +988,7 @@ export function PlanningApp({
             deadline: normalizedPatch.deadline,
             note: normalizedPatch.note,
             reviewStatus: normalizedPatch.reviewStatus,
+            reviewOwnerProfileId: normalizedPatch.reviewOwnerProfileId,
             scorePoints: normalizedPatch.scorePoints,
             scoreFinal: normalizedPatch.scoreFinal,
             githubSyncStatus: normalizedPatch.githubSyncStatus,
@@ -939,21 +1003,27 @@ export function PlanningApp({
           }),
         });
 
-        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[] } | null;
+        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[]; task?: Partial<Task> } | null;
         if (!response.ok) {
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         }
         if (body?.activities?.length) {
-          setData((current) => ({
+          applyPlanningDataUpdate((current) => ({
             ...current,
             taskActivity: [...body.activities!, ...current.taskActivity],
+          }));
+        }
+        if (body?.task) {
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         }
         if (normalizedPatch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {
-        setData((current) => ({
+        applyPlanningDataUpdate((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? task : item)),
         }));
@@ -1002,6 +1072,7 @@ export function PlanningApp({
       endDate: draft.endDate,
       sprintId: draft.taskType === "proposal" || draft.taskType === "sub_issue" ? "" : draft.sprintId,
       reviewStatus: "not_requested",
+      reviewOwnerProfileId: reviewOwnerForTask({ packageId: draft.packageId }, data.packages),
       scorePoints: 0,
       scoreFinal: false,
       githubRepo: "findmydoc-platform/management",
@@ -1353,6 +1424,12 @@ export function PlanningApp({
   };
 
   const startTaskDrag = (task: Task, event: DragEvent<HTMLElement>) => {
+    if (!canChangeTaskStatus(task)) {
+      event.preventDefault();
+      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardTaskId(task.id);
+      return;
+    }
     setDraggedTaskId(task.id);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", task.id);
@@ -1386,6 +1463,11 @@ export function PlanningApp({
     setDraggedTaskId(null);
     setDragOverStatus(null);
     if (!task || normalizeStatus(task.status) === status) return;
+    if (!canChangeTaskStatus(task)) {
+      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardTaskId(task.id);
+      return;
+    }
     updateTask(task, { status });
   };
 
@@ -1566,118 +1648,111 @@ export function PlanningApp({
     });
   };
 
-  const updateProfile = (profile: Profile, patch: Partial<Profile>) => {
+  const saveProfileSettings = async (profile: Profile, patch: Partial<Profile>, notificationEvents: Record<string, boolean>) => {
     setSaveError("");
-
-    setData((current) => ({
-      ...current,
-      profiles: current.profiles.map((item) => {
-        if (item.id === profile.id) return { ...item, ...patch };
-        if (patch.platformRole === "ceo" && item.platformRole === "ceo") {
-          return { ...item, platformRole: "founder", orgRole: item.orgRole === "CEO" ? "Founder" : item.orgRole };
-        }
-        return item;
-      }),
-    }));
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
-      try {
-        const response = await fetch(`/api/profiles/${profile.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            githubLogin: patch.githubLogin,
-            platformRole: patch.platformRole,
-            orgRole: patch.orgRole,
-            deputyFor: patch.deputyFor,
-            deputyActiveFrom: patch.deputyActiveFrom,
-            deputyActiveUntil: patch.deputyActiveUntil,
-            focus: patch.focus,
-            weeklyCapacity: patch.weeklyCapacity,
-            color: patch.color,
-            googleChatUserId: patch.googleChatUserId,
-            googleChatDmSpace: patch.googleChatDmSpace,
-            notificationsEnabled: patch.notificationsEnabled,
-            googleCalendarEmail: patch.googleCalendarEmail,
-            googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
-          }),
-        });
-
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error || "Profil konnte nicht gespeichert werden.");
-        }
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          profiles: current.profiles.map((item) => (item.id === profile.id ? profile : item)),
-        }));
-        setSaveError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
-      }
+    const previousData = data;
+    const changedNotificationEvents = Object.entries(notificationEvents).filter(([eventType, enabled]) => {
+      const currentPreference = data.notificationPreferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
+      return (currentPreference?.enabled !== false) !== enabled;
     });
-  };
-
-  const updateNotificationPreference = (profileId: string, eventType: string, enabled: boolean) => {
-    setSaveError("");
-
-    const previousPreferences = data.notificationPreferences;
-    const localPreference: NotificationPreference = {
-      id: previousPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType)?.id || Date.now(),
-      profileId,
-      channel: "google_chat",
-      eventType,
-      enabled,
-    };
 
     setData((current) => {
-      const exists = current.notificationPreferences.some((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
+      const nextPreferences = changedNotificationEvents.reduce((preferences, [eventType, enabled]) => {
+        const existing = preferences.find((item) => item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType);
+        if (existing) {
+          return preferences.map((item) =>
+            item.profileId === profile.id && item.channel === "google_chat" && item.eventType === eventType ? { ...item, enabled } : item
+          );
+        }
+        return [
+          {
+            id: Date.now() + preferences.length,
+            profileId: profile.id,
+            channel: "google_chat",
+            eventType,
+            enabled,
+          } satisfies NotificationPreference,
+          ...preferences,
+        ];
+      }, current.notificationPreferences);
+
       return {
         ...current,
-        notificationPreferences: exists
-          ? current.notificationPreferences.map((item) =>
-            item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType ? { ...item, enabled } : item
-          )
-          : [localPreference, ...current.notificationPreferences],
+        profiles: current.profiles.map((item) => {
+          if (item.id === profile.id) return { ...item, ...patch };
+          if (patch.platformRole === "ceo" && item.platformRole === "ceo") {
+            return { ...item, platformRole: "founder", orgRole: item.orgRole === "CEO" ? "Founder" : item.orgRole };
+          }
+          return item;
+        }),
+        notificationPreferences: nextPreferences,
       };
     });
 
     if (source !== "supabase") return;
 
-    startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
+    const session = await getBrowserSupabase()?.auth.getSession();
+    const token = session?.data.session?.access_token;
 
-      try {
-        const response = await fetch("/api/notification-preferences", {
+    try {
+      const profileResponse = await fetch(`/api/profiles/${profile.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          githubLogin: patch.githubLogin,
+          platformRole: patch.platformRole,
+          orgRole: patch.orgRole,
+          deputyFor: patch.deputyFor,
+          deputyActiveFrom: patch.deputyActiveFrom,
+          deputyActiveUntil: patch.deputyActiveUntil,
+          focus: patch.focus,
+          weeklyCapacity: patch.weeklyCapacity,
+          color: patch.color,
+          googleChatUserId: patch.googleChatUserId,
+          googleChatDmSpace: patch.googleChatDmSpace,
+          notificationsEnabled: patch.notificationsEnabled,
+          googleCalendarEmail: patch.googleCalendarEmail,
+          googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
+        }),
+      });
+      const profileBody = (await profileResponse.json().catch(() => null)) as { error?: string; profile?: Profile } | null;
+      if (!profileResponse.ok) throw new Error(profileBody?.error || "Profil konnte nicht gespeichert werden.");
+
+      const savedPreferences: NotificationPreference[] = [];
+      for (const [eventType, enabled] of changedNotificationEvents) {
+        const preferenceResponse = await fetch("/api/notification-preferences", {
           method: "PATCH",
           headers: {
             "content-type": "application/json",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ profileId, eventType, enabled }),
+          body: JSON.stringify({ profileId: profile.id, eventType, enabled }),
         });
-        const body = (await response.json().catch(() => null)) as { error?: string; preference?: NotificationPreference } | null;
-        if (!response.ok || !body?.preference) throw new Error(body?.error || "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
-
-        setData((current) => ({
-          ...current,
-          notificationPreferences: current.notificationPreferences.map((item) =>
-            item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType ? body.preference! : item
-          ),
-        }));
-      } catch (error) {
-        setData((current) => ({ ...current, notificationPreferences: previousPreferences }));
-        setSaveError(error instanceof Error ? error.message : "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
+        const preferenceBody = (await preferenceResponse.json().catch(() => null)) as { error?: string; preference?: NotificationPreference } | null;
+        if (!preferenceResponse.ok || !preferenceBody?.preference) throw new Error(preferenceBody?.error || "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
+        savedPreferences.push(preferenceBody.preference);
       }
-    });
+
+      setData((current) => ({
+        ...current,
+        profiles: profileBody?.profile
+          ? current.profiles.map((item) => (item.id === profile.id ? { ...item, ...profileBody.profile } : item))
+          : current.profiles,
+        notificationPreferences: savedPreferences.length
+          ? current.notificationPreferences.map((item) => {
+            const saved = savedPreferences.find((preference) => preference.profileId === item.profileId && preference.channel === item.channel && preference.eventType === item.eventType);
+            return saved || item;
+          })
+          : current.notificationPreferences,
+      }));
+    } catch (error) {
+      setData(previousData);
+      setSaveError(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
+      throw error;
+    }
   };
 
   const updateMeetingAttendance = (meeting: Meeting, attendance: MeetingAttendance) => {
@@ -2233,7 +2308,7 @@ export function PlanningApp({
     setData((current) => ({
       ...current,
       tasks: current.tasks.map((item) =>
-        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal } : item,
+        item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal, reviewRequestedAt: "" } : item,
       ),
     }));
 
@@ -2261,6 +2336,45 @@ export function PlanningApp({
           tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
         }));
         setSaveError(error instanceof Error ? error.message : "Review konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const reopenReviewTask = (task: Task) => {
+    setSaveError("");
+    const previousTask = task;
+    const reviewRequestedAt = new Date().toISOString();
+
+    setData((current) => ({
+      ...current,
+      tasks: current.tasks.map((item) =>
+        item.id === task.id ? { ...item, status: "Review", reviewStatus: "requested", scoreFinal: false, scorePoints: 0, reviewRequestedAt } : item,
+      ),
+    }));
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/review/reopen`, {
+          method: "POST",
+          headers: requestHeaders(token),
+        });
+        const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+        if (!response.ok || !body?.task) throw new Error(body?.error || "Review konnte nicht wieder geöffnet werden.");
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+        }));
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+        }));
+        setSaveError(error instanceof Error ? error.message : "Review konnte nicht wieder geöffnet werden.");
       }
     });
   };
@@ -2775,6 +2889,23 @@ export function PlanningApp({
     return () => window.clearTimeout(timeout);
   }, [refreshGoogleChatStatus, workspace]);
 
+  // Task detail route changes remount the planning app. Keep the authenticated
+  // in-memory cache aligned with optimistic task edits so the board does not
+  // briefly snap back to stale state after closing the detail panel.
+  const applyPlanningDataUpdate = useCallback((updater: (current: PlanningData) => PlanningData) => {
+    setData((current) => {
+      const nextData = updater(current);
+      if (source === "supabase" && authUser?.id) {
+        setProtectedPlanningDataCache({
+          authUserId: authUser.id,
+          data: nextData,
+          currentProfile: serverCurrentProfile,
+        });
+      }
+      return nextData;
+    });
+  }, [authUser, serverCurrentProfile, source]);
+
   const refreshPlanningData = useCallback(async (token?: string) => {
     if (source !== "supabase" || !authUser?.id) return;
     const refreshResponse = await fetch("/api/planning-data", {
@@ -3183,6 +3314,20 @@ export function PlanningApp({
     );
   }
 
+  if (selectedReviewDetailTaskId) {
+    return (
+      <ReviewDetailPage
+        data={data}
+        task={selectedReviewDetailTask}
+        currentProfile={currentProfile}
+        pending={isPending}
+        source={source}
+        onReview={reviewTask}
+        onReopen={reopenReviewTask}
+      />
+    );
+  }
+
   if (fullTaskView && selectedTask) {
     return (
       <TaskDetailPage
@@ -3219,6 +3364,9 @@ export function PlanningApp({
         localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser?.email || ""}
+        currentPlatformRole={currentProfile?.platformRole || ""}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
       />
 
       <main className="lg:pl-16">
@@ -3242,18 +3390,29 @@ export function PlanningApp({
             </div>
           )}
           <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 lg:items-center lg:px-6">
-            <div className="min-w-0 max-w-full">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
-              <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
-              <div className="mt-1 text-sm text-slate-500">
-                {workspace === "planning"
-                  ? data.project.range
-                  : workspace === "mine"
-                    ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
-                    : workspaceSubtitles[workspace]}
+            <div className="flex min-w-0 max-w-full items-start gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 lg:hidden"
+                aria-label="Navigation öffnen"
+                aria-expanded={mobileNavOpen}
+              >
+                <Menu size={19} />
+              </button>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
+                <h1 className="truncate text-xl font-semibold text-slate-950">{workspace === "planning" ? data.project.name : workspaceLabels[workspace]}</h1>
+                <div className="mt-1 text-sm text-slate-500">
+                  {workspace === "planning"
+                    ? data.project.range
+                    : workspace === "mine"
+                      ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
+                      : workspaceSubtitles[workspace]}
+                </div>
               </div>
             </div>
-            <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:px-0">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
               {devRoleSwitchAvailable && (
                 <DevRoleSwitch
                   profiles={data.profiles}
@@ -3318,7 +3477,7 @@ export function PlanningApp({
             </div>
           </div>
 
-          {filtersAvailable && <div className="flex items-center gap-2 overflow-x-auto px-4 pb-3 lg:px-6">
+          {filtersAvailable && <div className="flex flex-wrap items-center gap-2 px-4 pb-3 lg:px-6">
             {viewTabs.map((tab) => {
               const Icon = tab.icon;
               const active = view === tab.id;
@@ -3413,7 +3572,30 @@ export function PlanningApp({
           </section>
         )}
 
-        <section className="px-4 pb-8 pt-4 lg:px-6">
+        <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
+          {workspace === "ceo-intake" && canUseCeoIntake && (
+            <CeoTaskIntake
+              source={source}
+              profiles={data.profiles}
+              packages={data.packages}
+              sprints={data.sprints}
+              requestHeaders={requestHeaders}
+              onTasksCreated={(tasks) => {
+                setData((current) => ({
+                  ...current,
+                  tasks: sortTasks([...current.tasks, ...tasks]),
+                }));
+              }}
+            />
+          )}
+          {workspace === "ceo-intake" && !canUseCeoIntake && (
+            <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Assignee haben hier keinen Zugriff.
+              </p>
+            </section>
+          )}
           {workspace === "projects" && (
             <CurrentProjectsOverview
               data={data}
@@ -3453,6 +3635,16 @@ export function PlanningApp({
               onCreateTask={(draft) => setTaskDialogDefaults(draft)}
             />
           )}
+          {workspace === "reviews" && (
+            <ReviewWorkspaceOverview
+              data={data}
+              currentProfile={currentProfile}
+              statusFilter={reviewStatusFilter}
+              ownerFilter={reviewOwnerFilter}
+              onStatusFilterChange={setReviewStatusFilter}
+              onOwnerFilterChange={setReviewOwnerFilter}
+            />
+          )}
           {workspace === "tools" && <CurrentFmdToolsOverview tools={data.fmdTools} />}
           {workspace === "team" && (
             <CurrentTeamOverview
@@ -3461,8 +3653,7 @@ export function PlanningApp({
               pending={isPending}
               canManageTeam={source === "seed" || currentProfile?.platformRole === "ceo"}
               currentProfileId={currentProfile?.id || ""}
-              onUpdateProfile={updateProfile}
-              onUpdateNotificationPreference={updateNotificationPreference}
+              onSaveProfileSettings={saveProfileSettings}
             />
           )}
           {workspace === "sprint" && (
@@ -3471,6 +3662,7 @@ export function PlanningApp({
               pending={isPending}
               onOpen={(task) => openTaskPanel(task.id)}
               onReview={reviewTask}
+              onReopenReview={reopenReviewTask}
               onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
               onChangeStatus={(task, status) => updateTask(task, { status })}
               onLockSprint={lockSprint}
@@ -3483,6 +3675,8 @@ export function PlanningApp({
               currentProfile={currentProfile}
               canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
               sprintLockMessage={sprintLockMessage}
+              focusedReviewTaskId={focusedReviewTaskId}
+              onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
             />
           )}
           {workspace === "decisions" && (
@@ -3581,22 +3775,26 @@ export function PlanningApp({
                       </button>
                     </div>
                     <div className="grid min-w-0 gap-3 p-3">
-                      {tasks.length ? tasks.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          pack={packageById(data.packages, task.packageId)}
-                          ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
-                          relations={data.taskRelations}
-                          allTasks={data.tasks}
-                          statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
-                          onOpen={(nextTask) => openTaskPanel(nextTask.id)}
-                          onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
-                          onDragStart={startTaskDrag}
-                          onDragEnd={endTaskDrag}
-                          isDragging={draggedTaskId === task.id}
-                        />
-                      )) : <EmptyColumn />}
+                      {tasks.length ? tasks.map((task) => {
+                        const canUpdateStatus = canChangeTaskStatus(task);
+                        return (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            pack={packageById(data.packages, task.packageId)}
+                            ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
+                            relations={data.taskRelations}
+                            allTasks={data.tasks}
+                            statusOptions={canUpdateStatus ? statusOptionsForRole(task.status, canManageTaskMeta) : [normalizeStatus(task.status)]}
+                            statusDisabled={!canUpdateStatus}
+                            onOpen={(nextTask) => openTaskPanel(nextTask.id)}
+                            onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
+                            onDragStart={canUpdateStatus ? startTaskDrag : undefined}
+                            onDragEnd={endTaskDrag}
+                            isDragging={draggedTaskId === task.id}
+                          />
+                        );
+                      }) : <EmptyColumn />}
                     </div>
                   </section>
                 );
@@ -3647,19 +3845,23 @@ export function PlanningApp({
                     </div>
                     {expanded && (
                       <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-                        {tasks.map((task) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            pack={pack}
-                            ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
-                            relations={data.taskRelations}
-                            allTasks={data.tasks}
-                            statusOptions={statusOptionsForRole(task.status, canManageTaskMeta)}
-                            onOpen={(nextTask) => openTaskPanel(nextTask.id)}
-                            onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
-                          />
-                        ))}
+                        {tasks.map((task) => {
+                          const canUpdateStatus = canChangeTaskStatus(task);
+                          return (
+                            <TaskCard
+                              key={task.id}
+                              task={task}
+                              pack={pack}
+                              ownerColor={profileColor(data.profiles.find((profile) => profile.name === task.owner))}
+                              relations={data.taskRelations}
+                              allTasks={data.tasks}
+                              statusOptions={canUpdateStatus ? statusOptionsForRole(task.status, canManageTaskMeta) : [normalizeStatus(task.status)]}
+                              statusDisabled={!canUpdateStatus}
+                              onOpen={(nextTask) => openTaskPanel(nextTask.id)}
+                              onStatusChange={(nextTask, nextStatus) => updateTask(nextTask, { status: nextStatus })}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </section>
@@ -3682,10 +3884,11 @@ export function PlanningApp({
                   {visibleTasks.map((task) => {
                     const relationGroups = taskRelationsFor(task.id, data.taskRelations);
                     const hasOpenWait = hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations);
+                    const canUpdateStatus = canChangeTaskStatus(task);
                     return (
                     <tr key={task.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
                       <td className="px-3 py-3">
-                        <CustomSelect value={normalizeStatus(task.status)} onChange={(value) => updateTask(task, { status: value })} className="h-8 w-32 text-xs" options={statusOptionsForRole(task.status, canManageTaskMeta).map((status) => ({ value: status, label: status }))} />
+                        <CustomSelect value={normalizeStatus(task.status)} disabled={!canUpdateStatus} onChange={(value) => updateTask(task, { status: value })} className="h-8 w-32 text-xs" options={(canUpdateStatus ? statusOptionsForRole(task.status, canManageTaskMeta) : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
                       </td>
                       <td className="px-3 py-3">
                         {hasGitHubIssue(task) ? (
@@ -3754,6 +3957,8 @@ export function PlanningApp({
           decisionTaskLinks={data.decisionTaskLinks}
           focusItems={data.taskFocusItems}
           canManageTaskMeta={canManageTaskMeta}
+          canManageReviewOwner={currentProfile?.platformRole === "ceo"}
+          canChangeTaskStatus={canChangeTaskStatus(selectedTask)}
           allTasks={data.tasks}
           relations={data.taskRelations}
           pending={isPending}
@@ -3767,6 +3972,7 @@ export function PlanningApp({
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
+          onOpenReview={() => openReviewSheet(selectedTask)}
           onDelete={() => deleteTask(selectedTask)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
@@ -3800,6 +4006,19 @@ export function PlanningApp({
     </div>
   );
 }
+
+void LegacyExecutionLayerOverview;
+void ProjectsOverview;
+void FmdToolsOverview;
+void TeamOverview;
+void SprintScoreTableOverview;
+void DecisionLogOverview;
+void MeetingFinderOverview;
+void LegacySettingsOverview;
+void FeedbackDialog;
+void GanttView;
+void NewTaskDialog;
+void TaskDetailPanel;
 function LegacyExecutionLayerOverview({
   data,
   currentProfile,
@@ -4090,12 +4309,12 @@ function LegacyExecutionLayerOverview({
 
         <div className="mt-5 border-t border-slate-100 pt-4">
           <h3 className="text-sm font-semibold text-slate-950">Vorschläge für heute</h3>
-          <div className="mt-3 grid gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3">
             {suggestedTasks.map((task) => (
-              <article key={task.id} className="rounded-md border border-slate-200 p-3">
+              <article key={task.id} className="w-full min-w-0 rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <button type="button" onClick={() => onOpenTask(task)} className="truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                    <button type="button" onClick={() => onOpenTask(task)} className="block w-full truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
                       {task.title}
                     </button>
                     <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">

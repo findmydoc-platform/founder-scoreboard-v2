@@ -31,6 +31,8 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(ui, /searchParams\.get\("view"\) === "full"/);
   assert.match(ui, /openTaskPanel/);
   assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+  assert.match(ui, /openReviewSheet/);
+  assert.match(ui, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(ui, /router\.back\(\)/);
   assert.match(ui, /event\.key !== "Backspace"/);
   assert.match(ui, /TaskDetailPanel/);
@@ -81,6 +83,13 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelSidebarSection, /Steuerung/);
   assert.match(panelSidebarSection, /Planung/);
   assert.match(panelSidebarSection, /Review & Historie/);
+  assert.match(panelSidebarSection, /Review Owner/);
+  assert.match(panelSidebarSection, /canManageReviewOwner/);
+  assert.match(panelSidebarSection, /onUpdate\(\{ reviewOwnerProfileId: value \}\)/);
+  assert.match(panelSidebarSection, /Nur CEO kann den Review Owner ändern/);
+  assert.match(panelSidebarSection, /Zum Review-Blatt/);
+  assert.match(panelSidebarSection, /onOpenReview/);
+  assert.match(panelSidebarSection, /Self-Review/);
   assert.match(panelSidebarSection, /GitHub/);
   assert.match(panelSidebarSection, /Aufgabe löschen/);
   assert.match(page, /title="Kommentare"/);
@@ -205,6 +214,9 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(detailsCard, /Meilenstein/);
   assert.match(detailsCard, /Erstellt von/);
   assert.match(detailsCard, /Assignee/);
+  assert.match(detailsCard, /canManageReviewOwner/);
+  assert.match(detailsCard, /reviewOwnerProfileId/);
+  assert.match(detailsCard, /Nur CEO kann den Review Owner ändern/);
   assert.match(detailsCard, /availableStatusOptions/);
   assert.match(detailsCard, /CustomDatePicker/);
   assert.match(detailsCard, /Bearbeiten/);
@@ -259,6 +271,13 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(projectsOverview, /Aktives Projekt/);
   assert.match(projectsOverview, /Erfolgskriterien/);
   assert.match(projectsOverview, /onEditInitiative/);
+  assert.match(projectsOverview, /openMilestoneIds/);
+  assert.match(projectsOverview, /openInitiativeIds/);
+  assert.match(projectsOverview, /aria-expanded=\{isMilestoneOpen\}/);
+  assert.match(projectsOverview, /InitiativeTreeItem/);
+  assert.match(projectsOverview, /DeliverableTable/);
+  assert.match(projectsOverview, /taskOwnerLabel/);
+  assert.match(projectsOverview, /\/tasks\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(display, /initiativeMetaLabel/);
   assert.match(ui, /Initiative/);
   assert.match(ui, /InitiativeDialog/);

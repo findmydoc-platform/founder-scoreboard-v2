@@ -6,7 +6,7 @@ import { CustomSelect } from "@/components/custom-select";
 import type { NewTaskDraft } from "@/components/new-task-dialog";
 import { focusStatusLabel, formatDate } from "@/lib/display";
 import { buildExecutionLayerViewModel, decisionStatusLabel, profileColor, type HygieneAlert, type HygieneAlertAreaFilter, type HygieneAlertSeverityFilter } from "@/lib/execution-layer-view-model";
-import { hasOpenWaitingRelation } from "@/lib/platform";
+import { hasOpenWaitingRelation, reviewLabel } from "@/lib/platform";
 import { normalizeStatus, priorityTone, statusTone } from "@/lib/status";
 import type { DecisionTaskLink, PlanningData, Profile, Task, TaskFocusItem } from "@/lib/types";
 
@@ -52,6 +52,10 @@ export function ExecutionLayerOverview({
     focusHistoryDates,
     teamFocusCoverage,
     executionMetrics,
+    myReviewTasks,
+    teamReviewTasks,
+    reviewTasksWithoutOwner,
+    overdueReviewTasks,
     suggestedTasks,
     filteredAlerts,
     visibleAlerts,
@@ -66,21 +70,65 @@ export function ExecutionLayerOverview({
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-      <section className="xl:col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 min-w-0 gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <section className="xl:col-span-2 grid grid-cols-1 min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           [isOperationalLead ? "Kritische Alerts" : "Meine kritischen Alerts", executionMetrics.criticalAlerts, "text-red-700"],
           [isOperationalLead ? "Review Queue" : "Meine Review Queue", executionMetrics.reviewQueue, "text-blue-700"],
           [isOperationalLead ? "Blockiert/abhängig" : "Meine Blocker", executionMetrics.openBlockers, "text-amber-700"],
           [isOperationalLead ? "Team-Fokus gesetzt" : "Mein Fokus", isOperationalLead ? `${teamFocusCoverage}%` : `${focusItems.length}/3`, "text-emerald-700"],
         ].map(([label, value, tone]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div key={label} className="min-w-0 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="text-xs font-semibold text-slate-500">{label}</div>
             <div className={`mt-1 text-2xl font-semibold ${tone}`}>{value}</div>
           </div>
         ))}
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="xl:col-span-2 min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">{isOperationalLead ? "Team-Reviews" : "Meine Reviews"}</h2>
+            <p className="mt-1 text-sm text-slate-500">Offene Accountable-Reviews aus Status Review.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">{myReviewTasks.length} mir zugewiesen</span>
+            {isOperationalLead && <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">{teamReviewTasks.length} offen</span>}
+            {isOperationalLead && reviewTasksWithoutOwner.length > 0 && <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">{reviewTasksWithoutOwner.length} ohne Owner</span>}
+            {overdueReviewTasks.length > 0 && <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700">{overdueReviewTasks.length} überfällig</span>}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          {(isOperationalLead ? teamReviewTasks : myReviewTasks).slice(0, 8).map((task) => {
+            const reviewOwner = data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
+            const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+            const reviewOverdue = overdueReviewTasks.some((item) => item.id === task.id);
+            return (
+              <article key={task.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 text-left text-sm font-semibold leading-5 text-slate-950 hover:text-blue-700">
+                    {task.title}
+                  </button>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${reviewOverdue ? "border-red-200 bg-red-50 text-red-700" : "border-blue-200 bg-blue-50 text-blue-700"}`}>
+                    {reviewLabel(task.reviewStatus)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold text-slate-600">
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">{reviewOwner?.name || task.reviewOwnerProfileId || "Ohne Review Owner"}</span>
+                  {selfReview && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">Self-Review</span>}
+                  {task.reviewRequestedAt && <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">{formatDate(task.reviewRequestedAt)}</span>}
+                </div>
+              </article>
+            );
+          })}
+          {!(isOperationalLead ? teamReviewTasks : myReviewTasks).length && (
+            <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 md:col-span-2">
+              Keine offenen Reviews.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Heute-Fokus</h2>
@@ -107,28 +155,28 @@ export function ExecutionLayerOverview({
             </span>
           </div>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
           {[
             ["Geplant", focusStatusCounts.planned],
             ["Erledigt", focusStatusCounts.done],
             ["Blockiert", focusStatusCounts.blocked],
             ["Entscheidung", focusStatusCounts.needs_decision],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+            <div key={label} className="min-w-0 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
               <div className="text-[11px] font-semibold text-slate-500">{label}</div>
               <div className="mt-1 text-lg font-semibold text-slate-950">{value}</div>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 grid gap-3">
+        <div className="mt-4 grid grid-cols-1 gap-3">
           {focusItems.length ? focusItems.map((item) => {
             const task = taskById.get(item.taskId);
             if (!task) return null;
             return (
               <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <button type="button" onClick={() => onOpenTask(task)} className="text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 break-words text-left text-sm font-semibold leading-5 text-slate-950 hover:text-blue-700">
                     {task.title}
                   </button>
                   <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
@@ -281,12 +329,12 @@ export function ExecutionLayerOverview({
 
         <div className="mt-5 border-t border-slate-100 pt-4">
           <h3 className="text-sm font-semibold text-slate-950">Vorschläge für heute</h3>
-          <div className="mt-3 grid gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3">
             {suggestedTasks.map((task) => (
-              <article key={task.id} className="rounded-md border border-slate-200 p-3">
+              <article key={task.id} className="w-full min-w-0 rounded-md border border-slate-200 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <button type="button" onClick={() => onOpenTask(task)} className="truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                    <button type="button" onClick={() => onOpenTask(task)} className="block w-full truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
                       {task.title}
                     </button>
                     <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">
@@ -317,7 +365,7 @@ export function ExecutionLayerOverview({
       </section>
 
       <div className="grid gap-5">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-slate-950">Hygiene Alerts</h2>
             <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{filteredAlerts.length}/{hygieneAlerts.length} offen</span>
@@ -381,7 +429,7 @@ export function ExecutionLayerOverview({
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-slate-950">Decision-Folgearbeit</h2>
             <span className="text-xs font-semibold text-slate-500">{data.decisionTaskLinks.length} Links · {executionMetrics.decisionsWithoutTasks} offen</span>

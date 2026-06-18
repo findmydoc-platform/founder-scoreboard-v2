@@ -53,8 +53,15 @@ export function formatGoogleChatMessage(event: GoogleChatDeliveryEvent) {
   ].filter(Boolean).join("\n");
 }
 
+function eventUrl(event: Pick<GoogleChatDeliveryEvent, "entityType" | "entityId">, appUrl: string) {
+  const baseUrl = appUrl.replace(/\/$/, "");
+  if (event.entityType === "task" && event.entityId) return `${baseUrl}/tasks/${encodeURIComponent(event.entityId)}`;
+  return baseUrl;
+}
+
 function digestTypeLabel(type: string) {
   if (type === "task.blocker_reported") return "Blocker";
+  if (type === "task.mention") return "Erwähnung";
   if (type === "task.review_requested") return "Review";
   if (type === "task.proposed") return "Vorschlag";
   if (type === "sprint.task_carried_over") return "Carry-over";
@@ -106,8 +113,8 @@ export function formatGoogleChatDigestCard(events: GoogleChatDigestEvent[], appU
             widgets: [{
               buttonList: {
                 buttons: [{
-                  text: "FounderOps öffnen",
-                  onClick: { openLink: { url: appUrl } },
+                  text: events.length === 1 && events[0]?.entityType === "task" ? "Aufgabe öffnen" : "FounderOps öffnen",
+                  onClick: { openLink: { url: events.length === 1 && events[0] ? eventUrl(events[0], appUrl) : appUrl } },
                 }],
               },
             }],

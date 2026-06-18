@@ -53,6 +53,7 @@ export function TaskCard({
   relations,
   allTasks,
   statusOptions,
+  statusDisabled = false,
   onOpen,
   onStatusChange,
   onDragStart,
@@ -65,6 +66,7 @@ export function TaskCard({
   relations: TaskRelation[];
   allTasks: Task[];
   statusOptions: TaskStatus[];
+  statusDisabled?: boolean;
   onOpen: (task: Task) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -82,7 +84,7 @@ export function TaskCard({
       onDragStart={(event) => onDragStart?.(task, event)}
       onDragEnd={onDragEnd}
       className={`min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${
-        isDragging ? "scale-[0.98] cursor-grabbing border-dashed opacity-55 ring-2 ring-blue-200" : "cursor-grab active:cursor-grabbing"
+        isDragging ? "scale-[0.98] cursor-grabbing border-dashed opacity-55 ring-2 ring-blue-200" : onDragStart ? "cursor-grab active:cursor-grabbing" : "cursor-default"
       }`}
       style={{
         borderLeftColor: ownerColor,
@@ -136,6 +138,7 @@ export function TaskCard({
         <CustomSelect
           value={normalized}
           onChange={(value) => onStatusChange(task, value as TaskStatus)}
+          disabled={statusDisabled}
           options={statusOptions.map((status) => ({ value: status, label: status }))}
           className="h-8 w-32 text-xs"
           aria-label="Status ändern"

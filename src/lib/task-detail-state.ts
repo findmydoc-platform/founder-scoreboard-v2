@@ -14,6 +14,8 @@ export type EditableTaskState = Pick<
   | "startDate"
   | "endDate"
   | "deadline"
+  | "reviewStatus"
+  | "reviewOwnerProfileId"
   | "dependsOn"
   | "evidenceLink"
   | "problemStatement"
@@ -32,6 +34,7 @@ export type TaskDetailGitHubState = Pick<
 export type TaskDetailDetailsDraft = Pick<
   EditableTaskState,
   "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline"
+  | "reviewOwnerProfileId"
 >;
 
 export type TaskBriefDraft = Pick<
@@ -50,6 +53,8 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
     startDate: task.startDate,
     endDate: task.endDate,
     deadline: task.deadline,
+    reviewStatus: task.reviewStatus,
+    reviewOwnerProfileId: task.reviewOwnerProfileId || "",
     dependsOn: task.dependsOn,
     evidenceLink: task.evidenceLink || task.issueUrl,
     problemStatement: task.problemStatement || task.description,
@@ -82,6 +87,7 @@ export function buildTaskDetailsDraft(meta: EditableTaskState): TaskDetailDetail
     startDate: meta.startDate,
     endDate: meta.endDate,
     deadline: meta.deadline,
+    reviewOwnerProfileId: meta.reviewOwnerProfileId || "",
   };
 }
 

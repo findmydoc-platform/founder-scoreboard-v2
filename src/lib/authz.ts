@@ -132,3 +132,24 @@ export function requireCEO(request: NextRequest) {
 export function requireOperationalLead(request: NextRequest) {
   return requirePlatformRole(request, ["ceo", "deputy"]);
 }
+
+export async function requireTaskReviewer(
+  request: NextRequest,
+  task: { review_owner_profile_id?: string | null },
+  existingPermission?: AuthzResult,
+) {
+  const permission = existingPermission || await requireFounder(request);
+  if (!permission.ok) return permission;
+  if (!requiresSupabaseAuth()) return permission;
+
+  const profile = permission.profile;
+  if (!profile) return { ok: false as const, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
+  if (isOperationalLeadRole(profile.platformRole)) return permission;
+  if (task.review_owner_profile_id && task.review_owner_profile_id === profile.id) return permission;
+
+  return {
+    ok: false as const,
+    status: 403,
+    error: "Nur Review Owner, CEO oder Deputy können diese Review finalisieren.",
+  };
+}

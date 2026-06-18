@@ -59,7 +59,7 @@ export function SettingsOverview({
   const googleChatReady = Boolean(googleChatStatus?.ready);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+    <div className="grid grid-cols-1 min-w-0 gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
       <SystemStatusSection
         source={source}
         authAvailable={authAvailable}

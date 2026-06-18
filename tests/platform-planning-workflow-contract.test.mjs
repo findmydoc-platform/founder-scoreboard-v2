@@ -117,12 +117,49 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(authHook, /\/api\/planning-data/);
 });
 
-test("task review uses operational lead route and keeps rework non-final", async () => {
+test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const createTaskRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const authz = await readFile("src/lib/authz.ts", "utf8");
+  const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
+  const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
+  const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const appUi = await readFile("src/components/planning-app.tsx", "utf8");
   const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
 
-  assert.match(route, /requireOperationalLead/);
+  assert.match(migration, /review_owner_profile_id/);
+  assert.match(migration, /review_requested_at/);
+  assert.match(backfillMigration, /review_owner_profile_id is null/);
+  assert.match(backfillMigration, /accountable_profile_id/);
+  assert.match(backfillMigration, /review_status = 'requested' or task\.status = 'Review'/);
+  assert.match(plannedOwnerBackfillMigration, /review_owner_profile_id is null/);
+  assert.match(plannedOwnerBackfillMigration, /coalesce\(package\.accountable_profile_id, package\.owner_id\)/);
+  assert.match(authz, /requireTaskReviewer/);
+  assert.match(authz, /review_owner_profile_id/);
+  assert.match(createTaskRoute, /review_owner_profile_id: reviewOwnerProfileId/);
+  assert.match(createTaskRoute, /accountable_profile_id/);
+  assert.match(taskRoute, /accountable_profile_id/);
+  assert.match(taskRoute, /update\.review_owner_profile_id/);
+  assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
+  assert.match(taskRoute, /payload\.reviewOwnerProfileId !== undefined && permission\.profile\?\.platformRole !== "ceo"/);
+  assert.match(taskRoute, /task\.review_requested/);
+  assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
+  assert.match(taskRoute, /deine Accountable-Review/);
+  assert.match(appUi, /openReviewSheet/);
+  assert.match(sprintUi, /focusedReviewTaskId/);
+  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
+  assert.match(sprintUi, /accountable-review-sheet/);
+  assert.match(sprintUi, /scrollIntoView/);
+  assert.match(sprintUi, /TaskReviewSheet/);
+  assert.match(sprintUi, /onReopenReview/);
+  assert.match(route, /review_owner_profile_id/);
+  assert.doesNotMatch(route, /review_owner_profile_id: null/);
+  assert.doesNotMatch(route, /reviewOwnerProfileId: ""/);
+  assert.match(route, /requireTaskReviewer/);
+  assert.match(route, /requireFounder/);
   assert.match(route, /task_reviews/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
@@ -132,10 +169,56 @@ test("task review uses operational lead route and keeps rework non-final", async
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
   assert.match(sprintUi, /CEO-Score/);
-  assert.match(sprintUi, /Nächster Schritt/);
-  assert.match(sprintUi, /Evidence Required/);
-  assert.match(sprintUi, /Definition of Done Snapshot/);
+  assert.match(appUi, /Nächster Schritt/);
+  assert.match(reviewSheet, /Evidence Required/);
+  assert.match(reviewSheet, /Definition of Done Snapshot/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
+});
+
+test("review workspace has direct review detail routes filters and reopen guard", async () => {
+  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const app = await readFile("src/components/planning-app.tsx", "utf8");
+  const workspace = await readFile("src/components/review-workspace-overview.tsx", "utf8");
+  const detail = await readFile("src/components/review-detail-page.tsx", "utf8");
+  const sheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const model = await readFile("src/lib/review-workspace-view-model.ts", "utf8");
+  const reviewRoute = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
+  const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
+
+  assert.match(sidebar, /reviews/);
+  assert.match(sidebar, /Reviews/);
+  assert.match(app, /workspace === "reviews"/);
+  assert.match(app, /ReviewWorkspaceOverview/);
+  assert.match(app, /reviewStatusFilter/);
+  assert.match(app, /reviewOwnerFilter/);
+  assert.match(app, /useState<ReviewOwnerFilter>\("all"\)/);
+  assert.match(app, /initialReviewTaskId/);
+  assert.match(app, /ReviewDetailPage/);
+  assert.match(app, /reopenReviewTask/);
+  assert.match(app, /\/api\/tasks\/\$\{task\.id\}\/review\/reopen/);
+  assert.match(model, /label: "Meine"/);
+  assert.match(workspace, /Offen/);
+  assert.match(workspace, /Abgeschlossen/);
+  assert.match(workspace, /Nacharbeit/);
+  assert.match(workspace, /Geblockt/);
+  assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
+  assert.match(detail, /TaskReviewSheet/);
+  assert.match(detail, /Review nicht gefunden/);
+  assert.match(sheet, /Review wieder öffnen/);
+  assert.match(model, /isOpenReviewTask/);
+  assert.match(model, /isCompletedReviewTask/);
+  assert.match(model, /isReworkReviewTask/);
+  assert.match(model, /isBlockedReviewTask/);
+  assert.match(model, /hasOpenWaitingRelation/);
+  assert.match(model, /owner === "mine"/);
+  assert.match(reviewRoute, /initialReviewTaskId=\{id\}/);
+  assert.match(reviewRoute, /requiresSupabaseAuth/);
+  assert.match(reopenRoute, /requireTaskReviewer/);
+  assert.match(reopenRoute, /review_status: "requested"/);
+  assert.match(reopenRoute, /score_final: false/);
+  assert.match(reopenRoute, /status: "Review"/);
+  assert.match(reopenRoute, /task\.review_owner_profile_id/);
+  assert.match(reopenRoute, /task\.review\.reopen/);
 });
 
 test("founderops v2.1 computes 20 point sprint scores strikes and objections", async () => {
@@ -336,7 +419,6 @@ test("notification preferences are editable per profile and event type", async (
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
@@ -349,7 +431,9 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(dataMappers, /mapNotificationPreference/);
   assert.match(types, /export type NotificationPreference/);
   assert.match(teamUi, /Google-Chat-Events/);
-  assert.match(ui, /onUpdateNotificationPreference/);
+  assert.match(teamUi, /onSaveProfileSettings/);
+  assert.match(teamUi, /Ungespeicherte Änderungen/);
+  assert.match(teamUi, /Speichern/);
   assert.match(teamUi, /notificationEventLabel/);
   assert.match(policy, /GoogleChatDigestEventType/);
   assert.match(policy, /Review angefragt/);
@@ -388,13 +472,18 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.match(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
-  assert.match(sprintUi, /CEO Review-Blatt/);
+  assert.match(reviewSheet, /Accountable Review-Blatt/);
   assert.match(sprintUi, /Review anfragen/);
+  assert.match(sprintUi, /focusedReviewTaskId/);
+  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
+  assert.match(sprintUi, /accountable-review-sheet/);
+  assert.match(sprintUi, /scrollIntoView/);
 });
 
 test("founder self checklist is separate from CEO scoring", async () => {
@@ -402,6 +491,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);
@@ -409,10 +499,10 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.doesNotMatch(sprintUi, /Founder-Arbeitsstand/);
   assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
-  assert.match(sprintUi, /Review-Blatt/);
-  assert.match(sprintUi, /CEO Review-Blatt/);
-  assert.match(sprintUi, /Review-Rohpunkte/);
-  assert.match(sprintUi, /reviewChecklistScore/);
+  assert.match(reviewSheet, /Review-Blatt/);
+  assert.match(reviewSheet, /Accountable Review-Blatt/);
+  assert.match(reviewSheet, /Review-Rohpunkte/);
+  assert.match(reviewSheet, /reviewChecklistScore/);
   assert.match(sprintUi, /20 Punkte/);
   assert.match(sprintUi, /Form \/ Review-Reife/);
   assert.match(reviewRoute, /checklistPoints/);
