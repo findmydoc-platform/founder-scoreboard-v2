@@ -101,6 +101,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
   const relationshipHook = await readFile("src/hooks/use-task-relationships.ts", "utf8");
   const relationshipSection = await readFile("src/components/task-relationships-section.tsx", "utf8");
+  const relationshipViewModel = await readFile("src/lib/relationship-view-model.ts", "utf8");
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
@@ -115,11 +116,23 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(data, /task_relationship_edges/);
   assert.match(platform, /taskRelationsFor/);
   assert.match(platform, /hasOpenWaitingRelation/);
+  assert.match(platform, /blockingTask && blockingTask\.status !== "Erledigt"/);
   assert.match(display, /Diese Aufgabe kann erst sauber weitergehen/);
   assert.match(display, /Verknüpft mit/);
+  assert.match(relationshipViewModel, /relationshipBadgeFor/);
+  assert.match(relationshipViewModel, /Blockiert aktuell/);
+  assert.match(relationshipViewModel, /Blocker erledigt/);
+  assert.match(relationshipViewModel, /Blockiert andere/);
+  assert.match(relationshipViewModel, /Abhängigkeit erfüllt/);
+  assert.match(relationshipViewModel, /Verknüpft/);
+  assert.match(relationshipViewModel, /relationMatchesDraft/);
   const panelDependencies = await readFile("src/components/task-detail-panel-dependencies-section.tsx", "utf8");
   assert.match(panelDependencies, /Relationship hinzufügen/);
+  assert.match(panelDependencies, /Relationship existiert bereits/);
+  assert.match(panelDependencies, /Diese Relationship ist bereits gespeichert/);
+  assert.match(panelDependencies, /relationMatchesDraft/);
   assert.match(detail, /useTaskRelationships/);
+  assert.match(detail, /task=\{task\}/);
   assert.match(relationshipHook, /Relationship konnte nicht gespeichert werden/);
   assert.match(relationshipHook, /Relationship konnte nicht entfernt werden/);
   assert.match(relationshipHook, /api\/tasks\/\$\{task\.id\}\/relationships/);
@@ -133,6 +146,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(detail, /TaskRelationshipsSection/);
   assert.match(relationshipSection, /RelationshipPanelList/);
   assert.match(relationshipSection, /Relationship hinzufügen/);
+  assert.match(relationshipSection, /relationshipBadgeFor/);
+  assert.match(relationshipSection, /relationshipBadgeToneClass/);
+  assert.match(relationshipSection, /Relationship existiert bereits/);
   assert.match(relationshipSection, /relationshipHelpText/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);

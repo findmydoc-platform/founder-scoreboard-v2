@@ -359,6 +359,7 @@ export function TaskDetailPage({
                 />
                 <TaskContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
                 <TaskRelationshipsSection
+                  task={task}
                   waitsOn={waitsOn}
                   blocks={blocks}
                   related={related}
