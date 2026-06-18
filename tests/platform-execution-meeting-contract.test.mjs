@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { readPlanningSurface } from "./helpers/planning-surface.mjs";
+import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -37,7 +37,7 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
 test("execution layer adds focus board hygiene alerts and decision task links", async () => {
   const migration = await readFile("supabase/0020_execution_layer.sql", "utf8");
   const ui = await readPlanningSurface();
-  const executionUi = await readFile("src/features/execution/organisms/execution-layer-overview.tsx", "utf8");
+  const executionUi = await readFeatureSurface("src/features/execution");
   const executionViewModel = await readFile("src/features/execution/model/execution-layer-view-model.ts", "utf8");
   const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
@@ -184,7 +184,7 @@ test("weekly meeting attendance has scoring, absence reasons and updates", async
   const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const sprintMeetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
@@ -215,7 +215,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   const calendarRoute = await readFile("src/app/api/calendar-sync/route.ts", "utf8");
   const calendarLib = await readFile("src/lib/google-calendar.ts", "utf8");
   const ui = await readPlanningSurface();
-  const meetingUi = await readFile("src/features/meetings/organisms/meeting-finder-overview.tsx", "utf8");
+  const meetingUi = await readFeatureSurface("src/features/meetings");
   const meetingLogic = await readFile("src/features/meetings/model/meeting-finder.ts", "utf8");
   const meetingViewModel = await readFile("src/features/meetings/model/meeting-finder-view-model.ts", "utf8");
   const meetingAvailabilityHook = await readFile("src/features/meetings/hooks/use-meeting-availability-editor.ts", "utf8");

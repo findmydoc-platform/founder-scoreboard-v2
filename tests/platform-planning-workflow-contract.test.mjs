@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { readPlanningSurface } from "./helpers/planning-surface.mjs";
+import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -120,7 +120,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
   const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
   const appUi = await readPlanningSurface();
   const sprintViewModel = await readFile("src/features/sprint/model/sprint-score-view-model.ts", "utf8");
@@ -221,7 +221,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
-  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
@@ -301,7 +301,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
   const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
   const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
   const ui = await readPlanningSurface();
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
   const sprintPlanningUi = await readFile("src/features/settings/molecules/settings-sprint-planning.tsx", "utf8");
 
@@ -467,7 +467,7 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const status = await readFile("src/lib/status.ts", "utf8");
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
@@ -486,7 +486,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);

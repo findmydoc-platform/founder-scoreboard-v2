@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { readPlanningSurface } from "./helpers/planning-surface.mjs";
+import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -317,7 +317,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const ui = await readPlanningSurface();
-  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const panelBlockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
   const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");

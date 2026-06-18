@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MeetingAvailabilityDialog } from "@/features/meetings/organisms/meeting-availability-dialog";
-import { MeetingAvailabilitySummarySection } from "@/features/meetings/molecules/meeting-availability-summary-section";
-import { MeetingCalendarMonthView } from "@/features/meetings/organisms/meeting-calendar-month-view";
-import { MeetingCalendarToolbar } from "@/features/meetings/molecules/meeting-calendar-toolbar";
-import { MeetingCalendarWeekView } from "@/features/meetings/organisms/meeting-calendar-week-view";
-import { MeetingAvailabilityForms } from "@/features/meetings/molecules/meeting-availability-forms";
+import { MeetingAvailabilityManagement } from "@/features/meetings/organisms/meeting-availability-management";
+import { MeetingCalendarWorkspace } from "@/features/meetings/organisms/meeting-calendar-workspace";
 import { MeetingSlotSearchSection } from "@/features/meetings/organisms/meeting-slot-search-section";
-import { PlannedMeetingsSection } from "@/features/meetings/organisms/planned-meetings-section";
 import { useMeetingAvailabilityEditor } from "@/features/meetings/hooks/use-meeting-availability-editor";
 import type { AvailabilityEntry, Meeting, PlanningData, Profile } from "@/lib/types";
 
@@ -84,7 +79,7 @@ export function MeetingFinderOverview({
     targetStart: number;
     moved: boolean;
   } | null>(null);
-  const [meetingTitle, setMeetingTitle] = useState("FindMyDoc Teammeeting");
+  const [meetingTitle, setMeetingTitle] = useState("findmydoc Teammeeting");
   const [meetingAgenda, setMeetingAgenda] = useState("Sprint-Update, Blocker, Entscheidungen und nächste Schritte.");
   const suppressBlockClickRef = useRef(false);
   const {
@@ -242,7 +237,7 @@ export function MeetingFinderOverview({
     const sprint = sprintForSlot(slot);
     if (!sprint || !selectedProfileIds.length) return;
     onCreateMeeting({
-      title: meetingTitle.trim() || "FindMyDoc Teammeeting",
+      title: meetingTitle.trim() || "findmydoc Teammeeting",
       agenda: meetingAgenda.trim(),
       sprintId: sprint.id,
       meetingAt: meetingSlotIso(slot),
@@ -335,91 +330,75 @@ export function MeetingFinderOverview({
         onToggleParticipant={toggleParticipant}
         onReserveSlot={reserveSlot}
       />
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-        <MeetingCalendarToolbar
-          calendarView={calendarView}
-          calendarTitle={calendarTitle}
-          calendarSubtitle={calendarSubtitle}
-          currentProfile={currentProfile}
-          selectableProfiles={selectableProfiles}
-          selectedProfileIds={selectedProfileIds}
-          onToday={() => setCalendarWeekStart(startOfWeekKey(today))}
-          onMoveCalendar={moveCalendar}
-          onCalendarViewChange={setCalendarView}
-          onSelectCurrentProfile={() => currentProfile?.id && setSelectedProfileIds([currentProfile.id])}
-          onSelectAllProfiles={() => setSelectedProfileIds(selectableProfiles.map((profile) => profile.id))}
-          onToggleParticipant={toggleParticipant}
-        />
-        {calendarView === "week" ? (
-          <MeetingCalendarWeekView
-            dates={calendarDates}
-            hours={calendarHours}
-            calendarSelection={calendarSelection}
-            calendarDrag={calendarDrag}
-            calendarDragPreview={calendarDragPreview}
-            calendarCellFor={calendarCellFor}
-            calendarBlocksForDate={calendarBlocksForDate}
-            canEditAvailabilityEntry={canEditAvailabilityEntry}
-            onBeginCalendarSelection={beginCalendarSelection}
-            onExtendCalendarSelection={extendCalendarSelection}
-            onFinishCalendarSelection={finishCalendarSelection}
-            onMoveCalendarBlockDrag={moveCalendarBlockDrag}
-            onFinishCalendarBlockDrag={finishCalendarBlockDrag}
-            onBeginCalendarBlockDrag={beginCalendarBlockDrag}
-            onCalendarBlockClick={(entry) => {
-              if (suppressBlockClickRef.current) {
-                suppressBlockClickRef.current = false;
-                return;
-              }
-              openAvailabilityEditDialog(entry);
-            }}
-          />
-        ) : (
-          <MeetingCalendarMonthView
-            dates={calendarMonthDates}
-            activeMonth={calendarActiveMonth}
-            today={today}
-            daySummary={calendarDaySummary}
-          />
-        )}
-        {!workingHours.length && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-            Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre FindMyDoc-Zeiten ein oder nutze „Mo-Fr auswählen“. Erst dann kann das Raster echte freie Zeiten zeigen.
-          </div>
-        )}
-        {availabilityDialogMode && (
-          <MeetingAvailabilityDialog
-            mode={availabilityDialogMode}
-            hasEditingAvailability={Boolean(editingAvailability)}
-            normalizedBlockerProfileId={normalizedBlockerProfileId}
-            profileOptions={profileOptions}
-            canManageAvailability={canManageAvailability}
-            pending={pending}
-            blockerTitle={blockerTitle}
-            blockerKind={blockerKind}
-            blockerStartDate={blockerStartDate}
-            blockerEndDate={blockerEndDate}
-            blockerAllDay={blockerAllDay}
-            blockerStartTime={blockerStartTime}
-            blockerEndTime={blockerEndTime}
-            blockerNote={blockerNote}
-            saveDisabled={pending || !normalizedBlockerProfileId || !blockerTitle.trim() || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))}
-            onClose={closeAvailabilityDialog}
-            onDelete={deleteAvailabilityDialogEntry}
-            onSave={saveAvailabilityDialog}
-            onBlockerProfileChange={setBlockerProfileId}
-            onBlockerTitleChange={setBlockerTitle}
-            onBlockerKindChange={setBlockerKind}
-            onBlockerStartDateChange={setBlockerStartDate}
-            onBlockerEndDateChange={setBlockerEndDate}
-            onBlockerAllDayChange={setBlockerAllDay}
-            onBlockerStartTimeChange={setBlockerStartTime}
-            onBlockerEndTimeChange={setBlockerEndTime}
-            onBlockerNoteChange={setBlockerNote}
-          />
-        )}
-      </section>
-      <MeetingAvailabilityForms
+      <MeetingCalendarWorkspace
+        calendarView={calendarView}
+        calendarTitle={calendarTitle}
+        calendarSubtitle={calendarSubtitle}
+        currentProfile={currentProfile}
+        selectableProfiles={selectableProfiles}
+        selectedProfileIds={selectedProfileIds}
+        today={today}
+        calendarDates={calendarDates}
+        calendarHours={calendarHours}
+        calendarSelection={calendarSelection}
+        calendarDrag={calendarDrag}
+        calendarDragPreview={calendarDragPreview}
+        calendarMonthDates={calendarMonthDates}
+        calendarActiveMonth={calendarActiveMonth}
+        workingHoursCount={workingHours.length}
+        availabilityDialogMode={availabilityDialogMode}
+        editingAvailability={editingAvailability}
+        normalizedBlockerProfileId={normalizedBlockerProfileId}
+        profileOptions={profileOptions}
+        canManageAvailability={canManageAvailability}
+        pending={pending}
+        blockerTitle={blockerTitle}
+        blockerKind={blockerKind}
+        blockerStartDate={blockerStartDate}
+        blockerEndDate={blockerEndDate}
+        blockerAllDay={blockerAllDay}
+        blockerStartTime={blockerStartTime}
+        blockerEndTime={blockerEndTime}
+        blockerNote={blockerNote}
+        availabilityDialogSaveDisabled={pending || !normalizedBlockerProfileId || !blockerTitle.trim() || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))}
+        calendarCellFor={calendarCellFor}
+        calendarBlocksForDate={calendarBlocksForDate}
+        canEditAvailabilityEntry={canEditAvailabilityEntry}
+        calendarDaySummary={calendarDaySummary}
+        onToday={() => setCalendarWeekStart(startOfWeekKey(today))}
+        onMoveCalendar={moveCalendar}
+        onCalendarViewChange={setCalendarView}
+        onSelectCurrentProfile={() => currentProfile?.id && setSelectedProfileIds([currentProfile.id])}
+        onSelectAllProfiles={() => setSelectedProfileIds(selectableProfiles.map((profile) => profile.id))}
+        onToggleParticipant={toggleParticipant}
+        onBeginCalendarSelection={beginCalendarSelection}
+        onExtendCalendarSelection={extendCalendarSelection}
+        onFinishCalendarSelection={finishCalendarSelection}
+        onMoveCalendarBlockDrag={moveCalendarBlockDrag}
+        onFinishCalendarBlockDrag={finishCalendarBlockDrag}
+        onBeginCalendarBlockDrag={beginCalendarBlockDrag}
+        onCalendarBlockClick={(entry) => {
+          if (suppressBlockClickRef.current) {
+            suppressBlockClickRef.current = false;
+            return;
+          }
+          openAvailabilityEditDialog(entry);
+        }}
+        onCloseAvailabilityDialog={closeAvailabilityDialog}
+        onDeleteAvailabilityDialogEntry={deleteAvailabilityDialogEntry}
+        onSaveAvailabilityDialog={saveAvailabilityDialog}
+        onBlockerProfileChange={setBlockerProfileId}
+        onBlockerTitleChange={setBlockerTitle}
+        onBlockerKindChange={setBlockerKind}
+        onBlockerStartDateChange={setBlockerStartDate}
+        onBlockerEndDateChange={setBlockerEndDate}
+        onBlockerAllDayChange={setBlockerAllDay}
+        onBlockerStartTimeChange={setBlockerStartTime}
+        onBlockerEndTimeChange={setBlockerEndTime}
+        onBlockerNoteChange={setBlockerNote}
+      />
+      <MeetingAvailabilityManagement
+        data={data}
         normalizedWorkProfileId={normalizedWorkProfileId}
         normalizedBlockerProfileId={normalizedBlockerProfileId}
         profileOptions={profileOptions}
@@ -436,6 +415,14 @@ export function MeetingFinderOverview({
         blockerStartTime={blockerStartTime}
         blockerEndTime={blockerEndTime}
         blockerNote={blockerNote}
+        plannedMeetings={plannedMeetings}
+        profileNameById={profileNameById}
+        calendarDates={calendarDates}
+        workingHours={workingHours}
+        blockers={blockers}
+        googleCalendarBlocksCount={googleCalendarBlocks.length}
+        googleCalendarProfilesCount={googleCalendarProfiles.length}
+        currentProfileId={currentProfile?.id}
         onWorkProfileChange={setWorkProfileId}
         onBlockerProfileChange={setBlockerProfileId}
         onWorkWeekdaysChange={setWorkWeekdays}
@@ -452,27 +439,7 @@ export function MeetingFinderOverview({
         onBlockerNoteChange={setBlockerNote}
         onAddWorkingHours={addWorkingHours}
         onAddBlocker={addBlocker}
-      />
-      <PlannedMeetingsSection
-        plannedMeetings={plannedMeetings}
-        sprints={data.sprints}
-        meetingAttendance={data.meetingAttendance}
-        profileNameById={profileNameById}
-        canManageAvailability={canManageAvailability}
-        pending={pending}
         onUpdateMeeting={onUpdateMeeting}
-      />
-      <MeetingAvailabilitySummarySection
-        availability={data.availability}
-        calendarDates={calendarDates}
-        workingHours={workingHours}
-        blockers={blockers}
-        googleCalendarBlocksCount={googleCalendarBlocks.length}
-        googleCalendarProfilesCount={googleCalendarProfiles.length}
-        profileNameById={profileNameById}
-        canManageAvailability={canManageAvailability}
-        currentProfileId={currentProfile?.id}
-        pending={pending}
         onDeleteAvailability={onDeleteAvailability}
       />
     </div>

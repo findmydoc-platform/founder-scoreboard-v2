@@ -21,3 +21,9 @@ export async function readPlanningSurface() {
   const parts = await Promise.all(planningSurfaceFiles.map(async (file) => `// ${file}\n${await readFile(file, "utf8")}`));
   return parts.join("\n\n");
 }
+
+export async function readFeatureSurface(featureDir) {
+  const files = (await listSourceFiles(featureDir)).sort();
+  const parts = await Promise.all(files.map(async (file) => `// ${file}\n${await readFile(file, "utf8")}`));
+  return parts.join("\n\n");
+}
