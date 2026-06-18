@@ -1,6 +1,6 @@
 import { seedData } from "./generated/seed-data";
-import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
-import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
+import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData } from "./types";
 
@@ -34,6 +34,7 @@ export const emptyPlanningData: PlanningData = {
   notificationPreferences: [],
   feedbackItems: [],
   fmdTools: [],
+  events: [],
   meetings: [],
   meetingAttendance: [],
   audit: [],
@@ -44,7 +45,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
   const supabase = getServerSupabase();
   if (!supabase) return { data: seedData, source: "seed" };
 
-  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
+  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at").order("name"),
     supabase.from("packages").select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order").order("sort_order"),
@@ -74,6 +75,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
     supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
     supabase.from("feedback_items").select("id,type,status,severity,profile_id,title,description,page_url,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,sort_order").order("sort_order"),
+    supabase.from("founder_events").select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status,created_by,created_at,updated_at").order("starts_at", { ascending: true }).limit(200),
     supabase.from("meetings").select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at").order("meeting_at", { ascending: false }).limit(100),
     supabase.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at").order("updated_at", { ascending: false }).limit(300),
     supabase.from("audit_log").select("id,entity_type,entity_id,action,actor_profile_id,created_at,before_data,after_data").eq("entity_type", "decision").order("created_at", { ascending: false }).limit(100),
@@ -118,6 +120,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
       notificationPreferences: notificationPreferenceResult.error ? [] : (notificationPreferenceResult.data as DbNotificationPreference[]).map(mapNotificationPreference),
       feedbackItems: feedbackResult.error ? [] : (feedbackResult.data as DbFeedbackItem[]).map(mapFeedbackItem),
       fmdTools: fmdToolResult.error ? [] : (fmdToolResult.data as DbFmdTool[]).map(mapFmdTool),
+      events: eventResult.error ? [] : (eventResult.data as DbFounderEvent[]).map(mapFounderEvent),
       meetings: meetingResult.error ? [] : (meetingResult.data as DbMeeting[]).map(mapMeeting),
       meetingAttendance: meetingAttendanceResult.error ? [] : (meetingAttendanceResult.data as DbMeetingAttendance[]).map(mapMeetingAttendance),
       audit: auditResult.error ? [] : (auditResult.data as DbAuditEntry[]).map(mapAuditEntry),

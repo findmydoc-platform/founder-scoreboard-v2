@@ -1,4 +1,5 @@
 import { CeoTaskIntake } from "@/features/intake/organisms/ceo-task-intake";
+import { EventsOverview } from "@/features/events/organisms/events-overview";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { futureSprintDrafts, sortTasks } from "@/features/planning/model/planning-app-model";
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
@@ -25,6 +26,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     confirmDecision,
     createAvailability,
     createDecision,
+    createFounderEvent,
     createMeetingFromSlot,
     createScoreObjection,
     createSprintPlan,
@@ -34,6 +36,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     deleteAvailability,
     dispatchNotifications,
     editDecision,
+    eventMessage,
     feedbackMessage,
     focusedReviewTaskId,
     googleChatStatus,
@@ -71,6 +74,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateAvailability,
+    updateFounderEvent,
     updateMeeting,
     updateMeetingAttendance,
     updateSprint,
@@ -152,6 +156,17 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           ownerFilter={reviewOwnerFilter}
           onStatusFilterChange={setReviewStatusFilter}
           onOwnerFilterChange={setReviewOwnerFilter}
+        />
+      )}
+      {workspace === "events" && (
+        <EventsOverview
+          events={data.events}
+          profiles={data.profiles}
+          canManageEvents={canManageTaskMeta}
+          pending={isPending}
+          message={eventMessage}
+          onCreateEvent={createFounderEvent}
+          onUpdateEvent={updateFounderEvent}
         />
       )}
       {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}

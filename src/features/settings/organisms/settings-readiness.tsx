@@ -65,7 +65,7 @@ export function GitHubSyncQueueSection({
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
 }) {
-  const githubCreatableTasks = tasks.filter((task) => task.taskType === "deliverable" || task.taskType === "proposal");
+  const githubCreatableTasks = tasks.filter((task) => task.taskType === "deliverable");
   const linkedSyncQueue = githubCreatableTasks.filter((task) => hasGitHubIssue(task) && task.githubSyncStatus !== "synced");
   const failedSyncTasks = githubCreatableTasks.filter((task) => task.githubSyncStatus === "failed");
   const appOnlyTasks = githubCreatableTasks.filter((task) => !hasGitHubIssue(task));
@@ -129,7 +129,7 @@ export function GitHubSyncQueueSection({
             <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-amber-700">{appOnlyTasks.length}</span>
           </div>
           <p className="mt-1 text-xs leading-5 text-amber-800">
-            Diese Liste bleibt dauerhaft erhalten. Vorschläge und Deliverables bleiben App-only, bis sie bewusst ins Management-Repo gespiegelt werden.
+            Diese Liste bleibt dauerhaft erhalten. Deliverables bleiben App-only, bis sie bewusst ins Management-Repo gespiegelt werden.
           </p>
           <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
             {appOnlyPreviewTasks.map((task) => (

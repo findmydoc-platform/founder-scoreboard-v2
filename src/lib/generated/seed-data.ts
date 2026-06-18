@@ -2148,6 +2148,7 @@ export const seedData: PlanningData = {
       "sortOrder": 70
     }
   ],
+  "events": [],
   "meetings": [
     {
       "id": 1,

@@ -349,6 +349,24 @@ export type FmdTool = {
   sortOrder: number;
 };
 
+export type FounderEvent = {
+  id: number;
+  title: string;
+  category: "conference" | "legal" | "company" | "travel" | "deadline" | "other";
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  description: string;
+  audienceMode: "all" | "selected";
+  participantProfileIds: string[];
+  reminderDaysBefore: number;
+  reminderGeneratedAt: string;
+  status: "planned" | "done" | "cancelled";
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Meeting = {
   id: number;
   sprintId: string;
@@ -448,6 +466,7 @@ export type PlanningData = {
   notificationPreferences: NotificationPreference[];
   feedbackItems: FeedbackItem[];
   fmdTools: FmdTool[];
+  events: FounderEvent[];
   meetings: Meeting[];
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];

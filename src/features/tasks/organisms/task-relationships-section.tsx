@@ -3,6 +3,7 @@
 import { CircleHelp, X } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { relationshipHelpText, relationTypeLabel, taskOwnerLabel } from "@/lib/display";
+import { relationshipBadgeFor, relationshipBadgeToneClass, relationMatchesDraft } from "@/lib/relationship-view-model";
 import { normalizeStatus } from "@/lib/status";
 import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
@@ -33,12 +34,14 @@ function RelationshipInfo({ title }: { title: string }) {
 
 function RelationshipPanelList({
   title,
+  currentTask,
   rows,
   empty,
   canManage,
   onRemove,
 }: {
   title: string;
+  currentTask: Task;
   rows: Array<{ relation: TaskRelation; task?: Task }>;
   empty: string;
   canManage?: boolean;
@@ -54,25 +57,34 @@ function RelationshipPanelList({
         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-500">{rows.length}</span>
       </div>
       <div className="mt-2 grid gap-1.5">
-        {rows.map(({ relation, task }) => (
-          <div key={`${relation.id}-${task?.id || "unknown"}`} className="flex items-start justify-between gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
-            <div className="min-w-0">
-              <div className="break-words font-semibold text-slate-800">{task?.title || relation.relatedTaskId}</div>
-              <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskOwnerLabel(task)}` : "Aufgabe nicht gefunden"}</div>
-              {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
+        {rows.map(({ relation, task }) => {
+          const badge = relationshipBadgeFor(currentTask, relation, task);
+
+          return (
+            <div key={`${relation.id}-${task?.id || "unknown"}`} className="flex items-start justify-between gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="break-words font-semibold text-slate-800">{task?.title || relation.relatedTaskId}</span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${relationshipBadgeToneClass(badge.tone)}`}>
+                    {badge.label}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskOwnerLabel(task)}` : "Aufgabe nicht gefunden"}</div>
+                {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
+              </div>
+              {canManage && onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(relation)}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  aria-label={`${title}-Relationship entfernen`}
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
-            {canManage && onRemove && (
-              <button
-                type="button"
-                onClick={() => onRemove(relation)}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                aria-label={`${title}-Relationship entfernen`}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
         {!rows.length && <div className="text-xs text-slate-500">{empty}</div>}
       </div>
     </div>
@@ -80,6 +92,7 @@ function RelationshipPanelList({
 }
 
 type Props = {
+  task: Task;
   waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
   blocks: Array<{ relation: TaskRelation; task?: Task }>;
   related: Array<{ relation: TaskRelation; task?: Task }>;
@@ -96,6 +109,7 @@ type Props = {
 };
 
 export function TaskRelationshipsSection({
+  task,
   waitsOn,
   blocks,
   related,
@@ -110,13 +124,16 @@ export function TaskRelationshipsSection({
   onRelationDraftChange,
   onAddRelation,
 }: Props) {
+  const relationshipRows = [...waitsOn, ...blocks, ...related];
+  const duplicateRelation = Boolean(relationDraft.relatedTaskId) && relationshipRows.some(({ relation }) => relationMatchesDraft(task.id, relation, relationDraft));
+
   return (
     <div>
       <h3 className="text-sm font-semibold text-slate-950">Relationships</h3>
       <div className="mt-2 grid gap-2">
-        <RelationshipPanelList title="Wartet auf" rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
-        <RelationshipPanelList title="Blockiert" rows={blocks} empty="Blockiert keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
-        <RelationshipPanelList title="Verknüpft mit" rows={related} empty="Keine losen Verknüpfungen." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+        <RelationshipPanelList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+        <RelationshipPanelList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+        <RelationshipPanelList title="Verknüpft mit" currentTask={task} rows={related} empty="Keine losen Verknüpfungen." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
       </div>
       {dependsOn && (
         <textarea
@@ -150,12 +167,13 @@ export function TaskRelationshipsSection({
           />
           <button
             type="button"
-            disabled={pending || !relationDraft.relatedTaskId}
+            disabled={pending || !relationDraft.relatedTaskId || duplicateRelation}
             onClick={onAddRelation}
             className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Relationship hinzufügen
+            {duplicateRelation ? "Relationship existiert bereits" : "Relationship hinzufügen"}
           </button>
+          {duplicateRelation && <div className="text-xs font-semibold text-amber-700">Diese Relationship ist bereits gespeichert.</div>}
         </div>
       )}
     </div>

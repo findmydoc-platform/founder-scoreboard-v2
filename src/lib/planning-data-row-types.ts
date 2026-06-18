@@ -1,4 +1,4 @@
-import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -357,6 +357,24 @@ export type DbFmdTool = {
   owner: string | null;
   status: FmdTool["status"];
   sort_order: number;
+};
+
+export type DbFounderEvent = {
+  id: number;
+  title: string;
+  category: FounderEvent["category"];
+  starts_at: string;
+  ends_at: string | null;
+  location: string | null;
+  description: string | null;
+  audience_mode: FounderEvent["audienceMode"];
+  participant_profile_ids: string[] | null;
+  reminder_days_before: number;
+  reminder_generated_at: string | null;
+  status: FounderEvent["status"];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type DbMeeting = {

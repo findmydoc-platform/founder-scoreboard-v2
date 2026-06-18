@@ -46,6 +46,26 @@ type SprintRow = {
   review_due_at: string | null;
 };
 
+type FounderEventRow = {
+  id: number;
+  title: string;
+  category: string;
+  starts_at: string;
+  ends_at: string | null;
+  location: string | null;
+  description: string | null;
+  audience_mode: "all" | "selected";
+  participant_profile_ids: string[] | null;
+  reminder_days_before: number;
+  reminder_generated_at: string | null;
+  status: string;
+};
+
+type ProfileRow = {
+  id: string;
+  platform_role: string | null;
+};
+
 type ReminderCandidate = {
   type: string;
   actorProfileId: string | null;
@@ -103,6 +123,15 @@ function isDueTodayOrOverdue(value: string | null, today: string) {
   return value.slice(0, 10) <= today;
 }
 
+function isReminderWindowReached(event: FounderEventRow, now: Date) {
+  if (event.status !== "planned" || event.reminder_generated_at) return false;
+  const startsAt = new Date(event.starts_at);
+  if (Number.isNaN(startsAt.getTime())) return false;
+  const reminderAt = new Date(startsAt);
+  reminderAt.setDate(reminderAt.getDate() - event.reminder_days_before);
+  return reminderAt.getTime() <= now.getTime() && startsAt.getTime() >= now.getTime();
+}
+
 function isDoneTask(task: TaskRow) {
   const status = (task.status || "").toLowerCase();
   return status.includes("erledigt") || Boolean(task.score_final);
@@ -118,6 +147,17 @@ function taskBody(task: TaskRow, fallback: string) {
   return `${owner}${priority}${task.description || fallback}`.slice(0, 700);
 }
 
+function eventBody(event: FounderEventRow) {
+  const startsAt = new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Berlin",
+  }).format(new Date(event.starts_at));
+  const location = event.location ? ` Ort: ${event.location}.` : "";
+  const description = event.description ? ` ${event.description}` : "";
+  return `Start: ${startsAt}.${location}${description}`.slice(0, 700);
+}
+
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
   if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
@@ -129,6 +169,7 @@ export async function POST(request: NextRequest) {
   const limit = safeLimit(payload.limit);
   const dryRun = Boolean(payload.dryRun);
   const today = berlinDateKey();
+  const now = new Date();
 
   const [
     taskResult,
@@ -136,6 +177,8 @@ export async function POST(request: NextRequest) {
     decisionResult,
     confirmationResult,
     sprintResult,
+    eventResult,
+    profileResult,
   ] = await Promise.all([
     supabase
       .from("tasks")
@@ -164,9 +207,21 @@ export async function POST(request: NextRequest) {
       .in("status", ["active", "review"])
       .order("review_due_at", { ascending: true })
       .limit(20),
+    supabase
+      .from("founder_events")
+      .select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status")
+      .eq("status", "planned")
+      .is("reminder_generated_at", null)
+      .order("starts_at", { ascending: true })
+      .limit(100),
+    supabase
+      .from("profiles")
+      .select("id,platform_role")
+      .neq("platform_role", "viewer")
+      .limit(100),
   ]);
 
-  const firstError = [taskResult, blockerResult, decisionResult, confirmationResult, sprintResult].find((result) => result.error)?.error;
+  const firstError = [taskResult, blockerResult, decisionResult, confirmationResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
 
   const tasks = (taskResult.data || []) as TaskRow[];
@@ -293,6 +348,27 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const activeProfileIds = ((profileResult.data || []) as ProfileRow[]).map((profile) => profile.id);
+  for (const event of (eventResult.data || []) as FounderEventRow[]) {
+    if (!isReminderWindowReached(event, now)) continue;
+    const recipientProfileIds = event.audience_mode === "selected"
+      ? (event.participant_profile_ids || []).filter(Boolean)
+      : activeProfileIds;
+    if (!recipientProfileIds.length) continue;
+    for (const profileId of recipientProfileIds) {
+      candidates.push({
+        type: "event.upcoming",
+        actorProfileId: null,
+        recipientProfileId: profileId,
+        entityType: "founder_event",
+        entityId: String(event.id),
+        title: `Event steht bald an: ${event.title}`,
+        body: eventBody(event),
+        dedupeKey: dedupeKey("event.upcoming", "founder_event", String(event.id), today, profileId),
+      });
+    }
+  }
+
   const limitedCandidates = candidates.slice(0, limit);
   const candidateKeys = limitedCandidates.map((candidate) => candidate.dedupeKey);
   const existingResult = candidateKeys.length
@@ -305,6 +381,12 @@ export async function POST(request: NextRequest) {
 
   const existingKeys = new Set((existingResult.data || []).map((row: { dedupe_key: string | null }) => row.dedupe_key).filter(Boolean));
   const toCreate = limitedCandidates.filter((candidate) => !existingKeys.has(candidate.dedupeKey));
+  const generatedReminderEventIds = new Set(
+    toCreate
+      .filter((candidate) => candidate.type === "event.upcoming" && candidate.entityType === "founder_event")
+      .map((candidate) => Number(candidate.entityId))
+      .filter((id) => Number.isFinite(id)),
+  );
 
   if (!dryRun && toCreate.length) {
     const insertResult = await supabase.from("notification_events").insert(toCreate.map((candidate) => ({
@@ -318,6 +400,14 @@ export async function POST(request: NextRequest) {
       dedupe_key: candidate.dedupeKey,
     })));
     if (insertResult.error) return NextResponse.json({ error: insertResult.error.message }, { status: 500 });
+  }
+
+  if (!dryRun && generatedReminderEventIds.size) {
+    const updateResult = await supabase
+      .from("founder_events")
+      .update({ reminder_generated_at: now.toISOString(), updated_at: now.toISOString() })
+      .in("id", [...generatedReminderEventIds]);
+    if (updateResult.error) return NextResponse.json({ error: updateResult.error.message }, { status: 500 });
   }
 
   return NextResponse.json({
