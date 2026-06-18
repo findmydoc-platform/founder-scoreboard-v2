@@ -167,6 +167,27 @@ create table if not exists score_objections (
   created_at timestamptz not null default now()
 );
 
+create table if not exists founder_events (
+  id bigserial primary key,
+  title text not null,
+  category text not null default 'other' check (category in ('conference', 'legal', 'company', 'travel', 'deadline', 'other')),
+  starts_at timestamptz not null,
+  ends_at timestamptz,
+  location text not null default '',
+  description text not null default '',
+  audience_mode text not null default 'all' check (audience_mode in ('all', 'selected')),
+  participant_profile_ids text[] not null default '{}',
+  reminder_days_before integer not null default 7 check (reminder_days_before between 0 and 90),
+  reminder_generated_at timestamptz,
+  status text not null default 'planned' check (status in ('planned', 'done', 'cancelled')),
+  created_by text references profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint founder_events_participant_profile_ids_no_null check (array_position(participant_profile_ids, null) is null),
+  constraint founder_events_selected_has_participants check (audience_mode = 'all' or cardinality(participant_profile_ids) > 0),
+  constraint founder_events_end_after_start check (ends_at is null or ends_at >= starts_at)
+);
+
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
   create index if not exists packages_project_id_idx on packages(project_id);
@@ -193,10 +214,14 @@ create index if not exists strike_events_profile_sprint_idx on strike_events(pro
 create index if not exists strike_events_type_idx on strike_events(event_type);
 create index if not exists score_objections_sprint_status_idx on score_objections(sprint_id, status);
 create index if not exists score_objections_profile_idx on score_objections(profile_id);
+create index if not exists founder_events_starts_at_idx on founder_events(starts_at);
+create index if not exists founder_events_status_idx on founder_events(status);
+create index if not exists founder_events_reminder_generated_at_idx on founder_events(reminder_generated_at);
+create index if not exists founder_events_participant_profile_ids_idx on founder_events using gin(participant_profile_ids);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections to authenticated, service_role;
-grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections to authenticated, service_role;
+grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 create or replace function public.current_profile_role()
@@ -223,6 +248,7 @@ alter table founder_sprint_scores enable row level security;
 alter table founder_strike_state enable row level security;
 alter table strike_events enable row level security;
 alter table score_objections enable row level security;
+alter table founder_events enable row level security;
 
 drop policy if exists "profiles_select_team" on profiles;
 create policy "profiles_select_team" on profiles for select to authenticated using (auth.uid() is not null);
@@ -302,3 +328,11 @@ drop policy if exists "decision_task_links_write_team" on decision_task_links;
 create policy "decision_task_links_write_team" on decision_task_links for all to authenticated
 using (auth.uid() is not null)
 with check (auth.uid() is not null);
+
+drop policy if exists "founder_events_select_team" on founder_events;
+create policy "founder_events_select_team" on founder_events for select to authenticated using (auth.uid() is not null);
+
+drop policy if exists "founder_events_write_members" on founder_events;
+create policy "founder_events_write_members" on founder_events for all to authenticated
+using (public.current_profile_role() in ('admin', 'member'))
+with check (public.current_profile_role() in ('admin', 'member'));

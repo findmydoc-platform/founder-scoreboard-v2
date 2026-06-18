@@ -37,6 +37,7 @@ import { CustomSelect } from "@/components/custom-select";
 import { DecisionLogOverview as CurrentDecisionLogOverview } from "@/components/decision-log-overview";
 import { DevRoleSwitch } from "@/components/dev-role-switch";
 import { ExecutionLayerOverview } from "@/components/execution-layer-overview";
+import { EventsOverview, type FounderEventDraft } from "@/components/events-overview";
 import { FeedbackDialog as CurrentFeedbackDialog, type FeedbackDraft } from "@/components/feedback-dialog";
 import { FmdToolsOverview as CurrentFmdToolsOverview } from "@/components/fmd-tools-overview";
 import { GanttView as CurrentGanttView } from "@/components/gantt-view";
@@ -70,7 +71,7 @@ import { reviewChecklistItems, reviewChecklistScore } from "@/lib/sprint-score-v
 import { normalizeStatus, priorityTone, statusTone, taskStatuses } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
 import { TaskDetailPage } from "@/components/task-detail-page";
-import type { AuthenticatedProfile, AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AuthenticatedProfile, AvailabilityEntry, CommitmentLevel, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, PlatformRole, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
@@ -176,6 +177,7 @@ function normalizePlanningData(data: PlanningData): PlanningData {
     notificationPreferences: data.notificationPreferences || [],
     feedbackItems: data.feedbackItems || [],
     fmdTools: data.fmdTools || [],
+    events: data.events || [],
     meetings: data.meetings || [],
     meetingAttendance: data.meetingAttendance || [],
     audit: data.audit || [],
@@ -227,6 +229,7 @@ const workspaceLabels: Record<Workspace, string> = {
   execution: "Execution",
   mine: "Meine Aufgaben",
   reviews: "Reviews",
+  events: "Events",
   sprint: "Sprint & Score",
   decisions: "Decision Log",
   meetings: "Meeting Finder",
@@ -238,6 +241,7 @@ const workspaceLabels: Record<Workspace, string> = {
 };
 
 const workspaceSubtitles: Record<Workspace, string> = {
+  events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
   mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
@@ -734,6 +738,7 @@ export function PlanningApp({
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
   const [calendarSyncMessage, setCalendarSyncMessage] = useState("");
   const [meetingCreateMessage, setMeetingCreateMessage] = useState("");
+  const [eventMessage, setEventMessage] = useState("");
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -1979,6 +1984,133 @@ export function PlanningApp({
     });
   };
 
+  const createFounderEvent = (draft: FounderEventDraft) => {
+    setSaveError("");
+    setEventMessage("");
+
+    const now = new Date().toISOString();
+    const localEvent: FounderEvent = {
+      id: Date.now(),
+      title: draft.title.trim(),
+      category: draft.category,
+      startsAt: new Date(draft.startsAt).toISOString(),
+      endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : new Date(draft.startsAt).toISOString(),
+      location: draft.location.trim(),
+      description: draft.description.trim(),
+      audienceMode: draft.audienceMode,
+      participantProfileIds: draft.audienceMode === "selected" ? draft.participantProfileIds : [],
+      reminderDaysBefore: draft.reminderDaysBefore,
+      reminderGeneratedAt: "",
+      status: "planned",
+      createdBy: currentProfile?.id || "",
+      createdAt: now,
+      updatedAt: now,
+    };
+    const previousData = data;
+
+    setData((current) => ({ ...current, events: [localEvent, ...current.events] }));
+    setEventMessage(`Event vorgemerkt: ${localEvent.title}`);
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const payload = {
+          ...draft,
+          startsAt: new Date(draft.startsAt).toISOString(),
+          endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : "",
+        };
+        const response = await fetch("/api/events", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = (await response.json().catch(() => null)) as { error?: string; event?: FounderEvent } | null;
+        if (!response.ok || !body?.event) throw new Error(body?.error || "Event konnte nicht gespeichert werden.");
+
+        setData((current) => ({
+          ...current,
+          events: current.events.map((item) => (item.id === localEvent.id ? body.event! : item)),
+        }));
+        setEventMessage(`Event gespeichert: ${body.event.title}`);
+      } catch (error) {
+        setData(previousData);
+        setEventMessage("");
+        setSaveError(error instanceof Error ? error.message : "Event konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  const updateFounderEvent = (event: FounderEvent, draft: FounderEventDraft) => {
+    setSaveError("");
+    setEventMessage("");
+
+    const nextEvent: FounderEvent = {
+      ...event,
+      title: draft.title.trim(),
+      category: draft.category,
+      startsAt: new Date(draft.startsAt).toISOString(),
+      endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : new Date(draft.startsAt).toISOString(),
+      location: draft.location.trim(),
+      description: draft.description.trim(),
+      audienceMode: draft.audienceMode,
+      participantProfileIds: draft.audienceMode === "selected" ? draft.participantProfileIds : [],
+      reminderDaysBefore: draft.reminderDaysBefore,
+      status: draft.status,
+      updatedAt: new Date().toISOString(),
+    };
+    const previousData = data;
+
+    setData((current) => ({
+      ...current,
+      events: current.events.map((item) => (item.id === event.id ? nextEvent : item)),
+    }));
+    setEventMessage(nextEvent.status === "cancelled" ? `Event abgesagt: ${nextEvent.title}` : `Event aktualisiert: ${nextEvent.title}`);
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const session = await getBrowserSupabase()?.auth.getSession();
+      const token = session?.data.session?.access_token;
+
+      try {
+        const payload = {
+          ...draft,
+          startsAt: new Date(draft.startsAt).toISOString(),
+          endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : "",
+        };
+        const response = await fetch(`/api/events/${event.id}`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = (await response.json().catch(() => null)) as { error?: string; event?: FounderEvent } | null;
+        if (!response.ok || !body?.event) throw new Error(body?.error || "Event konnte nicht aktualisiert werden.");
+
+        setData((current) => ({
+          ...current,
+          events: current.events.map((item) => (item.id === event.id ? body.event! : item)),
+        }));
+        setEventMessage(body.event.status === "cancelled" ? `Event abgesagt: ${body.event.title}` : `Event aktualisiert: ${body.event.title}`);
+      } catch (error) {
+        setData(previousData);
+        setEventMessage("");
+        setSaveError(error instanceof Error ? error.message : "Event konnte nicht aktualisiert werden.");
+      }
+    });
+  };
+
   const createAvailability = (entry: Omit<AvailabilityEntry, "id">) => {
     setSaveError("");
 
@@ -3093,6 +3225,8 @@ export function PlanningApp({
       setWorkspace("decisions");
     } else if (event.entityType === "meeting") {
       setWorkspace("meetings");
+    } else if (event.entityType === "founder_event") {
+      setWorkspace("events");
     }
     setShowNotifications(false);
   };
@@ -3680,6 +3814,17 @@ export function PlanningApp({
               ownerFilter={reviewOwnerFilter}
               onStatusFilterChange={setReviewStatusFilter}
               onOwnerFilterChange={setReviewOwnerFilter}
+            />
+          )}
+          {workspace === "events" && (
+            <EventsOverview
+              events={data.events}
+              profiles={data.profiles}
+              canManageEvents={canManageTaskMeta}
+              pending={isPending}
+              message={eventMessage}
+              onCreateEvent={createFounderEvent}
+              onUpdateEvent={updateFounderEvent}
             />
           )}
           {workspace === "tools" && <CurrentFmdToolsOverview tools={data.fmdTools} />}

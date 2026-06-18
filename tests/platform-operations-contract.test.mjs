@@ -260,6 +260,67 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(readinessUi, /Supabase Auth Redirects/);
 });
 
+test("founder events are modeled as team-visible operational reminders", async () => {
+  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const app = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readFile("src/components/events-overview.tsx", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const mappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const migration = await readFile("supabase/0035_founder_events.sql", "utf8");
+  const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
+
+  assert.match(sidebar, /"events"/);
+  assert.match(sidebar, /label: "Events"/);
+  assert.match(app, /workspace === "events"/);
+  assert.match(app, /EventsOverview/);
+  assert.match(app, /canManageEvents=\{canManageTaskMeta\}/);
+  assert.match(ui, /Event-Zentrale/);
+  assert.match(ui, /Alle aktiven Profile/);
+  assert.match(ui, /Ausgewählte Profile/);
+  assert.match(types, /export type FounderEvent/);
+  assert.match(types, /events: FounderEvent\[\]/);
+  assert.match(data, /founder_events/);
+  assert.match(data, /mapFounderEvent/);
+  assert.match(mappers, /mapFounderEvent/);
+  assert.match(migration, /create table if not exists founder_events/);
+  assert.match(migration, /participant_profile_ids/);
+  assert.match(migration, /reminder_generated_at/);
+  assert.match(migration, /founder_events_select_team/);
+  assert.match(verify, /founder_events/);
+});
+
+test("founder event writes are operational-lead guarded and audited", async () => {
+  const createRoute = await readFile("src/app/api/events/route.ts", "utf8");
+  const updateRoute = await readFile("src/app/api/events/[id]/route.ts", "utf8");
+
+  assert.match(createRoute, /requireOperationalLead/);
+  assert.match(createRoute, /founder_event\.create/);
+  assert.match(createRoute, /audit_log/);
+  assert.match(createRoute, /audienceMode === "selected"/);
+  assert.match(updateRoute, /requireOperationalLead/);
+  assert.match(updateRoute, /founder_event\.update/);
+  assert.match(updateRoute, /before_data/);
+  assert.match(updateRoute, /reminder_generated_at: reminderRelevantChange \? null/);
+});
+
+test("event reminders use the existing notification pipeline", async () => {
+  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const digestRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
+  const deliveryRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
+
+  assert.match(policy, /"event\.upcoming"/);
+  assert.match(policy, /Event-Erinnerung/);
+  assert.match(digestRoute, /from\("founder_events"\)/);
+  assert.match(digestRoute, /isReminderWindowReached/);
+  assert.match(digestRoute, /type: "event\.upcoming"/);
+  assert.match(digestRoute, /recipientProfileId: profileId/);
+  assert.match(digestRoute, /dedupeKey\("event\.upcoming", "founder_event"/);
+  assert.match(digestRoute, /reminder_generated_at/);
+  assert.match(deliveryRoute, /shouldSendToGoogleChatDigest/);
+  assert.match(deliveryRoute, /shouldSendToGoogleChatDm/);
+});
+
 test("health and supabase verification detect operational migrations", async () => {
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");

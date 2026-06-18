@@ -70,6 +70,7 @@ const schemaChecks = [
   { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
   { name: "availability.calendar_sync", table: "availability", select: "id,title,blocker_kind,source,external_id,external_calendar_id,synced_at" },
   { name: "meetings.google_calendar_sync", table: "meetings", select: "id,duration_minutes,google_calendar_id,google_calendar_event_id,google_calendar_sync_status" },
+  { name: "founder_events", table: "founder_events", select: "id,title,category,starts_at,ends_at,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status" },
 ];
 
 async function checkSchema(check) {
@@ -119,6 +120,7 @@ const result = {
   notificationDeliveries: await count("notification_deliveries"),
   meetings: await count("meetings"),
   meetingAttendance: await count("meeting_attendance"),
+  events: await count("founder_events"),
   milestones: await count("milestones"),
   schema: await Promise.all(schemaChecks.map(checkSchema)),
 };

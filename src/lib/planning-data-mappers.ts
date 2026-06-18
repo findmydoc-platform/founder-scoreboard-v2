@@ -1,5 +1,5 @@
-import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderSprintScore, FounderStrikeState, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
-import type { DbProfile, DbPackage, DbMilestone, DbTask, DbSprint, DbDecision, DbSprintCommitment, DbAvailability, DbAuditEntry, DbDecisionComment, DbTaskComment, DbTaskExternalComment, DbTaskBlocker, DbTaskRelation, DbTaskActivity, DbTaskFocusItem, DbDecisionTaskLink, DbNotificationEvent, DbNotificationDelivery, DbNotificationPreference, DbFeedbackItem, DbFmdTool, DbMeeting, DbMeetingAttendance, DbFounderSprintScore, DbFounderStrikeState, DbStrikeEvent, DbScoreObjection } from "./planning-data-row-types";
+import type { AuditEntry, AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, FounderSprintScore, FounderStrikeState, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { DbProfile, DbPackage, DbMilestone, DbTask, DbSprint, DbDecision, DbSprintCommitment, DbAvailability, DbAuditEntry, DbDecisionComment, DbTaskComment, DbTaskExternalComment, DbTaskBlocker, DbTaskRelation, DbTaskActivity, DbTaskFocusItem, DbDecisionTaskLink, DbNotificationEvent, DbNotificationDelivery, DbNotificationPreference, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbMeeting, DbMeetingAttendance, DbFounderSprintScore, DbFounderStrikeState, DbStrikeEvent, DbScoreObjection } from "./planning-data-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
   volkan: "#22c55e",
@@ -430,6 +430,26 @@ export function mapFmdTool(row: DbFmdTool): FmdTool {
     owner: row.owner || "",
     status: row.status,
     sortOrder: row.sort_order,
+  };
+}
+
+export function mapFounderEvent(row: DbFounderEvent): FounderEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at || row.starts_at,
+    location: row.location || "",
+    description: row.description || "",
+    audienceMode: row.audience_mode,
+    participantProfileIds: row.participant_profile_ids || [],
+    reminderDaysBefore: row.reminder_days_before,
+    reminderGeneratedAt: row.reminder_generated_at || "",
+    status: row.status,
+    createdBy: row.created_by || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
