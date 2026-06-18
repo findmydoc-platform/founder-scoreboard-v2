@@ -78,7 +78,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateTask,
     upsertFocusItem,
     workspace,
-    signIn,
   } = controller;
 
   return (
@@ -248,7 +247,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onDispatchNotifications={dispatchNotifications}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
-          onReconnectGitHub={signIn}
           onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
           onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
           onSelectFeedback={setSelectedFeedbackId}

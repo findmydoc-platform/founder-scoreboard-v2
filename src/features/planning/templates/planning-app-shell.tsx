@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
+import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
 import { PlanningAuthGate } from "@/features/planning/molecules/planning-auth-gate";
 import { PlanningMetrics } from "@/features/planning/molecules/planning-metrics";
 import { quickFilters } from "@/features/planning/model/planning-app-model";
@@ -19,7 +20,9 @@ type PlanningAppShellProps = {
 export function PlanningAppShell({ authRequired, controller, source }: PlanningAppShellProps) {
   const {
     authAvailable,
+    authBusy,
     authChecked,
+    authError,
     authUser,
     commentImportNotice,
     currentProfile,
@@ -47,17 +50,48 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     setFilters,
     setMobileNavOpen,
     setWorkspace,
+    signIn,
+    signOut,
     showFilters,
     sidebarRef,
     workspace,
   } = controller;
 
-  if (authRequired && (!authChecked || !authUser)) {
+  if (authRequired && !authChecked) {
+    return (
+      <PlanningBootShell
+        workspace={workspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail=""
+        title="Session wird geprüft"
+        description="FounderOps prüft die bestehende Team-Session, bevor geschützte Planungsdaten geladen werden."
+      />
+    );
+  }
+
+  if (authRequired && !authUser) {
     return <PlanningAuthGate controller={controller} state="sign-in" />;
   }
 
   if (authRequired && authUser && !protectedDataLoaded && !data.tasks.length) {
-    return <PlanningAuthGate controller={controller} state="loading" />;
+    return (
+      <PlanningBootShell
+        workspace={workspace}
+        source={source}
+        localStateLoaded={localStateLoaded}
+        authAvailable={authAvailable}
+        authUserEmail={authUser.email || ""}
+        title={authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}
+        description={authError ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet." : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."}
+        error={authError || undefined}
+        authUser={authUser}
+        authBusy={authBusy}
+        onSignIn={signIn}
+        onSignOut={signOut}
+      />
+    );
   }
 
   if (selectedReviewDetailTaskId) {

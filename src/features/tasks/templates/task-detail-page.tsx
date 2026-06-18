@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "@/lib/types";
+import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
 import { TaskContextSection } from "@/features/tasks/molecules/task-context-section";
@@ -72,6 +73,7 @@ export function TaskDetailPage({
   const [githubState, setGithubState] = useState(() => buildTaskDetailGitHubState(task));
   const [currentRole, setCurrentRole] = useState<Profile["platformRole"] | "">(source === "seed" ? "ceo" : "");
   const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(hasRememberedGitHubProviderToken());
+  const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { relations, relationDraft, setRelationDraft, addRelation, removeRelation } = useTaskRelationships({
     task,
@@ -151,6 +153,7 @@ export function TaskDetailPage({
       if (!active) return;
       rememberGitHubProviderToken(data.session?.provider_token);
       setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
+      if (data.session?.provider_token) setGithubReconnectFailed(false);
       const login = String(data.session?.user.user_metadata?.user_name || data.session?.user.user_metadata?.preferred_username || "");
       const profile = profiles.find((item) => item.githubLogin === login);
       setCurrentRole(profile?.platformRole || "");
@@ -166,15 +169,19 @@ export function TaskDetailPage({
     if (!supabase) return;
 
     setError("");
+    setGithubReconnectFailed(false);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`,
         scopes: "repo read:user user:email",
       },
     });
 
-    if (error) setError("GitHub-Anmeldung konnte nicht gestartet werden.");
+    if (error) {
+      setGithubReconnectFailed(true);
+      setError("GitHub-Anmeldung konnte nicht gestartet werden.");
+    }
   };
 
   const updateTask = (patch: Partial<EditableTaskState>) => {
@@ -295,7 +302,21 @@ export function TaskDetailPage({
     <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
       <AppSidebar activeWorkspace="planning" source={source} />
 
-      <TaskDetailHeader title={task.title} status={meta.status} priority={meta.priority} hours={task.hours} />
+      <TaskDetailHeader
+        title={task.title}
+        status={meta.status}
+        priority={meta.priority}
+        hours={task.hours}
+        actions={(
+          <GitHubConnectionStatus
+            authenticated={source === "supabase"}
+            available={githubProviderTokenAvailable}
+            failed={githubReconnectFailed}
+            busy={isPending}
+            onReconnect={reconnectGitHub}
+          />
+        )}
+      />
 
       <div className="mx-auto max-w-7xl px-6 py-6">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -400,7 +421,6 @@ export function TaskDetailPage({
               githubProviderTokenAvailable={githubProviderTokenAvailable}
               onSyncGitHub={() => syncGitHub()}
               onCreateGitHubIssue={() => syncGitHub({ createIfMissing: true })}
-              onReconnectGitHub={reconnectGitHub}
             />
           </aside>
         </div>

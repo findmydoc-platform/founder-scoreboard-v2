@@ -36,7 +36,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
-    signIn,
     statusGuardNotice,
     statusGuardTask,
     syncTaskToGitHub,
@@ -92,7 +91,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
-          onReconnectGitHub={signIn}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onOpenReview={() => openReviewSheet(selectedTask)}
           onDelete={() => deleteTask(selectedTask)}

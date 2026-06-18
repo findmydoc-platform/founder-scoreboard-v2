@@ -1,6 +1,7 @@
 import { Filter, Menu, MessageSquare, Plus, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
+import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { viewTabs, workspaceLabels, workspaceSubtitles } from "@/features/planning/model/planning-app-model";
 import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
@@ -19,6 +20,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     dismissNotification,
     filtersAvailable,
     githubProviderTokenAvailable,
+    githubReauthFailed,
     headerPrimaryAction,
     mineOwnerName,
     mobileNavOpen,
@@ -101,12 +103,18 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onOpen={openNotification}
             onDismiss={dismissNotification}
           />
+          <GitHubConnectionStatus
+            authenticated={Boolean(authUser)}
+            available={githubProviderTokenAvailable}
+            failed={githubReauthFailed}
+            busy={authBusy}
+            onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
+          />
           {authAvailable && (
             <AuthControl
               user={authUser}
               error={authError}
               busy={authBusy}
-              githubProviderTokenAvailable={githubProviderTokenAvailable}
               onSignIn={signIn}
               onSignOut={signOut}
             />

@@ -1,5 +1,6 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type DragEvent } from "react";
 import { persistLocalPlanningTasks, useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
@@ -15,7 +16,7 @@ import { rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
-import type { AvailabilityEntry, DecisionTaskLink, FeedbackItem, Meeting, MeetingAttendance, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import type { AuthenticatedProfile, AvailabilityEntry, DecisionTaskLink, FeedbackItem, Meeting, MeetingAttendance, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 import {
   addDaysIso,
   buildHygieneAlerts,
@@ -43,6 +44,10 @@ type PlanningAppControllerOptions = {
   source: "seed" | "supabase";
   authRequired: boolean;
   initialTaskId?: string;
+  initialAuthUser?: User | null;
+  initialCurrentProfile?: AuthenticatedProfile | null;
+  initialProtectedDataLoaded?: boolean;
+  initialAuthError?: string;
   initialReviewTaskId?: string;
 };
 
@@ -69,7 +74,17 @@ type HeaderPrimaryAction = {
   onClick: () => void;
 };
 
-export function usePlanningAppController({ initialData, source, authRequired, initialTaskId = "", initialReviewTaskId = "" }: PlanningAppControllerOptions) {
+export function usePlanningAppController({
+  initialData,
+  source,
+  authRequired,
+  initialTaskId = "",
+  initialAuthUser = null,
+  initialCurrentProfile = null,
+  initialProtectedDataLoaded = false,
+  initialAuthError = "",
+  initialReviewTaskId = "",
+}: PlanningAppControllerOptions) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -132,6 +147,7 @@ export function usePlanningAppController({ initialData, source, authRequired, in
     protectedDataLoaded,
     setProtectedDataLoaded,
     githubProviderTokenAvailable,
+    githubReauthFailed,
     authError,
     authNotice,
     authBusy,
@@ -142,6 +158,10 @@ export function usePlanningAppController({ initialData, source, authRequired, in
     source,
     safeInitialData,
     taskCount: data.tasks.length,
+    initialAuthUser,
+    initialCurrentProfile,
+    initialProtectedDataLoaded,
+    initialAuthError,
     setData,
     normalizePlanningData,
     onSignedOut: clearSelectedTask,
@@ -2698,6 +2718,7 @@ export function usePlanningAppController({ initialData, source, authRequired, in
     focusedReviewTaskId,
     fullTaskView,
     githubProviderTokenAvailable,
+    githubReauthFailed,
     googleChatStatus,
     headerPrimaryAction,
     hygieneAlerts,

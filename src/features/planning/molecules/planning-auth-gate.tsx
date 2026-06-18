@@ -14,7 +14,6 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
     authError,
     authNotice,
     authUser,
-    githubProviderTokenAvailable,
     signIn,
     signOut,
   } = controller;
@@ -54,7 +53,6 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
               user={authUser}
               error={authError}
               busy={authBusy}
-              githubProviderTokenAvailable={githubProviderTokenAvailable}
               onSignIn={signIn}
               onSignOut={signOut}
               variant="gate"
