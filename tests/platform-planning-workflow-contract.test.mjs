@@ -443,7 +443,7 @@ test("notification preferences are editable per profile and event type", async (
 test("decision audit loads before and after data for collapsible diffs", async () => {
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
-  const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
+  const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(data, /before_data,after_data/);
   assert.match(dataMappers, /beforeData: row.before_data/);

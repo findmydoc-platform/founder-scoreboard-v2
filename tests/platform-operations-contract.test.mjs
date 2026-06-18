@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { readPlanningSurface } from "./helpers/planning-surface.mjs";
+import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -473,7 +473,7 @@ test("local seed state persists task overrides in browser storage", async () => 
 
 test("header actions are workspace aware", async () => {
   const ui = await readPlanningSurface();
-  const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
+  const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);

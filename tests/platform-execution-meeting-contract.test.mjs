@@ -39,7 +39,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const ui = await readPlanningSurface();
   const executionUi = await readFeatureSurface("src/features/execution");
   const executionViewModel = await readFile("src/features/execution/model/execution-layer-view-model.ts", "utf8");
-  const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
+  const decisionUi = await readFeatureSurface("src/features/decisions");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
