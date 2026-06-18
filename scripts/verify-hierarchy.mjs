@@ -9,11 +9,11 @@ const checks = [
   ["src/lib/types.ts", /milestoneId\?: string/],
   ["src/lib/github.ts", /Epic \/ Milestone/],
   ["src/lib/github.ts", /Initiative/],
-  ["src/components/planning-app.tsx", /Initiative/],
-  ["src/components/projects-overview.tsx", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
-  ["src/components/initiative-dialog.tsx", /Epic \/ Meilenstein/],
-  ["src/components/new-task-dialog.tsx", /Deliverables brauchen Epic, Initiative und Sprint/],
-  ["src/components/task-detail-panel-sidebar.tsx", /Epic \/ Meilenstein/],
+  ["src/features/planning/PlanningApp.tsx", /Initiative/],
+  ["src/features/projects/organisms/projects-overview.tsx", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
+  ["src/features/projects/organisms/initiative-dialog.tsx", /Epic \/ Meilenstein/],
+  ["src/features/tasks/organisms/new-task-dialog.tsx", /Deliverables brauchen Epic, Initiative und Sprint/],
+  ["src/features/tasks/organisms/task-detail-panel-sidebar.tsx", /Epic \/ Meilenstein/],
 ];
 
 const failures = [];

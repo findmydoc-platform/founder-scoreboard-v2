@@ -13,7 +13,7 @@ Do not add native browser choice controls for app UI:
 - no `input type="date"` or `input type="datetime-local"`
 - no Chrome-default date/calendar picker for Founder Scoreboard workflows
 
-Use existing shared components first: `src/components/custom-select.tsx` and `src/components/custom-date-picker.tsx`.
+Use existing shared components first: `src/shared/atoms/custom-select.tsx` and `src/shared/atoms/custom-date-picker.tsx`.
 
 ## Workflow
 
