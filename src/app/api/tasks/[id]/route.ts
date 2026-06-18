@@ -263,6 +263,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.sprint_id = nextSprintId;
   }
 
+  const effectiveOwner = typeof update.owner === "string" ? update.owner : currentTask.owner || "";
+  const effectiveStatus = typeof update.status === "string" ? update.status : currentTask.status || "";
+  const effectivePackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
+  const effectiveSprintId = typeof update.sprint_id === "string" ? update.sprint_id : currentTask.sprint_id || "";
+  const shouldPromoteProposal =
+    currentTask.task_type === "proposal" &&
+    Boolean(effectiveOwner) &&
+    effectiveStatus !== "Vorschlag";
+
+  if (shouldPromoteProposal) {
+    if (!effectivePackageId || !effectiveSprintId) {
+      return NextResponse.json({ error: "Für ein Deliverable fehlen noch Initiative oder Sprint." }, { status: 400 });
+    }
+    update.task_type = "deliverable";
+    update.score_relevant = true;
+  }
+
   if (payload.reviewStatus) {
     if (!reviewStatuses.has(payload.reviewStatus)) {
       return NextResponse.json({ error: "Ungültiger Review-Status." }, { status: 400 });
@@ -363,6 +380,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   let activities: Array<{ id: number; taskId: string; message: string; createdAt: string }> = [];
   if (Object.keys(update).length || payload.note !== undefined || payload.dependsOn !== undefined) {
     const messages = activityMessages(payload, currentTask);
+    if (update.task_type === "deliverable" && currentTask.task_type === "proposal") {
+      messages.push("Aufgabenvorschlag zu Deliverable konvertiert");
+    }
     if (messages.length) {
       const { data: activityRows } = await supabase.from("task_activity").insert(
         messages.map((message) => ({
@@ -408,6 +428,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
     reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
     ...(update.review_requested_at ? { reviewRequestedAt: String(update.review_requested_at) } : {}),
+    ...(update.task_type ? { taskType: String(update.task_type) } : {}),
+    ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
+  } : Object.keys(update).length ? {
+    id,
+    ...(update.task_type ? { taskType: String(update.task_type) } : {}),
+    ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
   } : undefined;
 
   return NextResponse.json({

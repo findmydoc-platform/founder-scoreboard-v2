@@ -148,6 +148,8 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
 test("task creation supports deliverables proposals and non scoring sub issues", async () => {
   const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const promotionMigration = await readFile("supabase/0034_promote_assigned_proposals.sql", "utf8");
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
   const newTaskUi = await readFile("src/components/new-task-dialog.tsx", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
@@ -161,9 +163,16 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(route, /taskType === "deliverable"/);
   assert.match(route, /taskType === "proposal" \? null/);
   assert.match(route, /Deliverables brauchen Initiative und Sprint/);
+  assert.match(updateRoute, /shouldPromoteProposal/);
+  assert.match(updateRoute, /currentTask\.task_type === "proposal"/);
+  assert.match(updateRoute, /effectiveStatus !== "Vorschlag"/);
+  assert.match(updateRoute, /update\.task_type = "deliverable"/);
+  assert.match(updateRoute, /update\.score_relevant = true/);
+  assert.match(promotionMigration, /task_type = 'proposal'/);
+  assert.match(promotionMigration, /status <> 'Vorschlag'/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
-  assert.match(await readFile("src/app/api/tasks/[id]/route.ts", "utf8"), /Nur Vorschläge können ohne Assignee bleiben/);
+  assert.match(updateRoute, /Nur Vorschläge können ohne Assignee bleiben/);
   assert.match(ui, /NewTaskDialog/);
   assert.match(display, /Nicht zugeordnet/);
   assert.match(newTaskUi, /Vorschläge können bewusst ohne Assignee bleiben/);

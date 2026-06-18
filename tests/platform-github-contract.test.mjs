@@ -207,8 +207,9 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(taskCard, /App-only/);
   assert.match(readinessUi, /App-only-Aufgaben bleiben dauerhaft sichtbar/);
   assert.match(readinessUi, /Diese Liste bleibt dauerhaft erhalten/);
-  assert.match(readinessUi, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
-  assert.match(readinessUi, /Vorschläge und Deliverables bleiben App-only/);
+  assert.match(readinessUi, /task\.taskType === "deliverable"/);
+  assert.doesNotMatch(readinessUi, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
+  assert.match(readinessUi, /Deliverables bleiben App-only/);
   assert.match(readinessUi, /GitHub anlegen/);
   assert.match(readinessUi, /Keine App-only Aufgaben ohne GitHub-Issue/);
   assert.match(taskCard, /Nur in der App: noch kein GitHub-Issue verknüpft/);
