@@ -484,6 +484,19 @@ test("header actions are workspace aware", async () => {
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 
+test("planning filters survive task detail route remounts", async () => {
+  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const taskRoute = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
+
+  assert.match(taskRoute, /<PlanningApp key=\{id\}/);
+  assert.match(ui, /planningFiltersSessionKey = "fmd-planning-filters-v1"/);
+  assert.match(ui, /function readPlanningFiltersFromSession\(\): Filters/);
+  assert.match(ui, /window\.sessionStorage\.getItem\(planningFiltersSessionKey\)/);
+  assert.match(ui, /useState<Filters>\(\(\) => readPlanningFiltersFromSession\(\)\)/);
+  assert.match(ui, /window\.sessionStorage\.setItem\(planningFiltersSessionKey, JSON\.stringify\(filters\)\)/);
+  assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+});
+
 test("mine workspace follows the effective current profile", async () => {
   const ui = await readFile("src/components/planning-app.tsx", "utf8");
 

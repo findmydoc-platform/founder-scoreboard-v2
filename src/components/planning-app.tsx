@@ -93,6 +93,17 @@ type Filters = {
   quick: string;
 };
 
+const planningFiltersSessionKey = "fmd-planning-filters-v1";
+
+const defaultPlanningFilters: Filters = {
+  query: "",
+  owner: "Alle",
+  status: "Alle",
+  priority: "Alle",
+  packageId: "Alle",
+  quick: "",
+};
+
 type Workspace = AppWorkspace;
 
 type GoogleChatStatus = {
@@ -108,6 +119,35 @@ type HeaderPrimaryAction = {
   label: string;
   onClick: () => void;
 };
+
+function isFilterString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function normalizePlanningFilters(value: unknown): Filters {
+  if (!value || typeof value !== "object") return defaultPlanningFilters;
+
+  const candidate = value as Partial<Record<keyof Filters, unknown>>;
+
+  return {
+    query: isFilterString(candidate.query) ? candidate.query : defaultPlanningFilters.query,
+    owner: isFilterString(candidate.owner) ? candidate.owner : defaultPlanningFilters.owner,
+    status: isFilterString(candidate.status) ? candidate.status : defaultPlanningFilters.status,
+    priority: isFilterString(candidate.priority) ? candidate.priority : defaultPlanningFilters.priority,
+    packageId: isFilterString(candidate.packageId) ? candidate.packageId : defaultPlanningFilters.packageId,
+    quick: isFilterString(candidate.quick) ? candidate.quick : defaultPlanningFilters.quick,
+  };
+}
+
+function readPlanningFiltersFromSession(): Filters {
+  if (typeof window === "undefined") return defaultPlanningFilters;
+
+  try {
+    return normalizePlanningFilters(JSON.parse(window.sessionStorage.getItem(planningFiltersSessionKey) || "null"));
+  } catch {
+    return defaultPlanningFilters;
+  }
+}
 
 function normalizePlanningData(data: PlanningData): PlanningData {
   return {
@@ -705,14 +745,7 @@ export function PlanningApp({
     horizonWeeks: 6,
     targetSprintNumber: 0,
   });
-  const [filters, setFilters] = useState<Filters>({
-    query: "",
-    owner: "Alle",
-    status: "Alle",
-    priority: "Alle",
-    packageId: "Alle",
-    quick: "",
-  });
+  const [filters, setFilters] = useState<Filters>(() => readPlanningFiltersFromSession());
   const clearSelectedTask = useCallback(() => setSelectedTaskId(null), []);
   const {
     authUser,
@@ -806,6 +839,10 @@ export function PlanningApp({
     setWorkspace("reviews");
     router.push(`/reviews/${encodeURIComponent(task.id)}`);
   }, [router, setWorkspace]);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(planningFiltersSessionKey, JSON.stringify(filters));
+  }, [filters]);
 
   useEffect(() => {
     if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
