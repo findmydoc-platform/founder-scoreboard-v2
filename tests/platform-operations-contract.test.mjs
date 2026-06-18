@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -9,11 +10,11 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const generatorRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
-  const readinessUi = await readFile("src/components/settings-readiness.tsx", "utf8");
-  const settingsNotificationsUi = await readFile("src/components/settings-notifications.tsx", "utf8");
-  const inboxUi = await readFile("src/components/notification-inbox.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
+  const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
+  const inboxUi = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
 
   assert.match(migration, /google_chat_user_id/);
   assert.match(migration, /google_chat_dm_space/);
@@ -176,9 +177,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const pkg = await readFile("package.json", "utf8");
   const layout = await readFile("src/app/layout.tsx", "utf8");
   const css = await readFile("src/app/globals.css", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
-  const readinessUi = await readFile("src/components/settings-readiness.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
   assert.match(verify, /node --test tests\/\*\.test\.mjs/);
@@ -294,9 +295,9 @@ test("health and supabase verification detect operational migrations", async () 
 test("founder feedback creates bug and feature notifications with details", async () => {
   const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
   const route = await readFile("src/app/api/feedback/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
-  const settingsNotificationsUi = await readFile("src/components/settings-notifications.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
@@ -317,8 +318,8 @@ test("founder feedback creates bug and feature notifications with details", asyn
 });
 
 test("workspace selection survives page refreshes", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const workspaceHook = await readFile("src/hooks/use-planning-workspace.ts", "utf8");
+  const ui = await readPlanningSurface();
+  const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
 
   assert.match(ui, /usePlanningWorkspace/);
   assert.match(workspaceHook, /workspaceStateKey/);
@@ -329,9 +330,9 @@ test("workspace selection survives page refreshes", async () => {
 
 test("ceo task intake is ceo-only and separated from team ai work access", async () => {
   const agents = await readFile("AGENTS.md", "utf8");
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const intakeUi = await readFile("src/components/ceo-task-intake.tsx", "utf8");
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const intakeUi = await readFile("src/features/intake/organisms/ceo-task-intake.tsx", "utf8");
   const previewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
@@ -458,8 +459,8 @@ test("founderops agent api is token guarded and limited to planning intake", asy
 });
 
 test("local seed state persists task overrides in browser storage", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const localStateHook = await readFile("src/hooks/use-local-planning-state.ts", "utf8");
+  const ui = await readPlanningSurface();
+  const localStateHook = await readFile("src/features/planning/hooks/use-local-planning-state.ts", "utf8");
 
   assert.match(ui, /useLocalPlanningState/);
   assert.match(ui, /persistLocalPlanningTasks\(nextData\.tasks\)/);
@@ -471,8 +472,8 @@ test("local seed state persists task overrides in browser storage", async () => 
 });
 
 test("header actions are workspace aware", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const decisionUi = await readFile("src/components/decision-log-overview.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
@@ -485,7 +486,7 @@ test("header actions are workspace aware", async () => {
 });
 
 test("mine workspace follows the effective current profile", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(ui, /serverCurrentProfile/);
   assert.match(ui, /currentProfileId: serverCurrentProfile\?\.id/);
@@ -498,10 +499,10 @@ test("mine workspace follows the effective current profile", async () => {
 });
 
 test("gantt uses sprint dates for scheduled tasks", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const ganttUi = await readFile("src/components/gantt-view.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const ganttUi = await readFile("src/features/tasks/organisms/gantt-view.tsx", "utf8");
 
-  assert.match(ui, /<CurrentGanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
+  assert.match(ui, /<GanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
   assert.match(ganttUi, /export function GanttView\(\{ tasks, packages, sprints, relations, onOpen \}/);
   assert.match(ganttUi, /parseIsoDate\(sprint\?\.startDate \|\| ""\) \|\| parseIsoDate\(task\.startDate\)/);
   assert.match(ganttUi, /parseIsoDate\(sprint\?\.endDate \|\| ""\) \|\| parseIsoDate\(task\.endDate\)/);

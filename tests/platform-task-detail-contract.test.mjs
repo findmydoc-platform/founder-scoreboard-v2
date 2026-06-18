@@ -1,24 +1,25 @@
 import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 test("task route opens the detail panel inside the planning shell", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
-  const page = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const panelBlockerSection = await readFile("src/components/task-detail-panel-blocker-section.tsx", "utf8");
-  const panelHeader = await readFile("src/components/task-detail-panel-header.tsx", "utf8");
-  const panelBriefSection = await readFile("src/components/task-detail-panel-brief-section.tsx", "utf8");
-  const panelContextSection = await readFile("src/components/task-detail-panel-context-section.tsx", "utf8");
-  const panelDependenciesSection = await readFile("src/components/task-detail-panel-dependencies-section.tsx", "utf8");
-  const panelSubIssuesSection = await readFile("src/components/task-detail-panel-sub-issues-section.tsx", "utf8");
-  const panelNotesSection = await readFile("src/components/task-detail-panel-notes-section.tsx", "utf8");
-  const panelSidebarSection = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
-  const subIssuesSection = await readFile("src/components/task-sub-issues-section.tsx", "utf8");
-  const commentHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
-  const brand = await readFile("src/components/app-brand.tsx", "utf8");
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const panelBlockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
+  const panelHeader = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
+  const panelBriefSection = await readFile("src/features/tasks/molecules/task-detail-panel-brief-section.tsx", "utf8");
+  const panelContextSection = await readFile("src/features/tasks/molecules/task-detail-panel-context-section.tsx", "utf8");
+  const panelDependenciesSection = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
+  const panelSubIssuesSection = await readFile("src/features/tasks/molecules/task-detail-panel-sub-issues-section.tsx", "utf8");
+  const panelNotesSection = await readFile("src/features/tasks/molecules/task-detail-panel-notes-section.tsx", "utf8");
+  const panelSidebarSection = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const subIssuesSection = await readFile("src/features/tasks/molecules/task-sub-issues-section.tsx", "utf8");
+  const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const brand = await readFile("src/shared/atoms/app-brand.tsx", "utf8");
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
 
   assert.match(route, /getPlanningData/);
   assert.match(route, /PlanningApp/);
@@ -123,21 +124,21 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const creatorMigration = await readFile("supabase/0017_task_created_by.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const page = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const briefSection = await readFile("src/components/task-brief-section.tsx", "utf8");
-  const contextSection = await readFile("src/components/task-context-section.tsx", "utf8");
-  const detailsCard = await readFile("src/components/task-details-card.tsx", "utf8");
-  const evidenceSection = await readFile("src/components/task-evidence-link-section.tsx", "utf8");
-  const header = await readFile("src/components/task-detail-header.tsx", "utf8");
-  const relationshipsSection = await readFile("src/components/task-relationships-section.tsx", "utf8");
-  const subIssuesSection = await readFile("src/components/task-sub-issues-section.tsx", "utf8");
-  const blockerCard = await readFile("src/components/task-blocker-card.tsx", "utf8");
-  const detailGitHubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
-  const taskDetailState = await readFile("src/lib/task-detail-state.ts", "utf8");
-  const comments = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const commentTimeline = await readFile("src/components/task-comment-timeline.tsx", "utf8");
-  const app = await readFile("src/components/planning-app.tsx", "utf8");
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
+  const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
+  const contextSection = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
+  const detailsCard = await readFile("src/features/tasks/organisms/task-details-card.tsx", "utf8");
+  const evidenceSection = await readFile("src/features/tasks/molecules/task-evidence-link-section.tsx", "utf8");
+  const header = await readFile("src/features/tasks/molecules/task-detail-header.tsx", "utf8");
+  const relationshipsSection = await readFile("src/features/tasks/organisms/task-relationships-section.tsx", "utf8");
+  const subIssuesSection = await readFile("src/features/tasks/molecules/task-sub-issues-section.tsx", "utf8");
+  const blockerCard = await readFile("src/features/tasks/molecules/task-blocker-card.tsx", "utf8");
+  const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const taskDetailState = await readFile("src/features/tasks/model/task-detail-state.ts", "utf8");
+  const comments = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
+  const app = await readPlanningSurface();
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
 
@@ -229,7 +230,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(commentTimeline, /github\.com\/\$\{login\}\.png/);
   assert.match(app, /TaskDetailPanel/);
   assert.match(panel, /TaskDetailPanelBriefSection/);
-  assert.match(await readFile("src/components/task-detail-panel-brief-section.tsx", "utf8"), /TaskChecklist/);
+  assert.match(await readFile("src/features/tasks/molecules/task-detail-panel-brief-section.tsx", "utf8"), /TaskChecklist/);
   assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a core workflow/);
 });
 
@@ -242,10 +243,10 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   const initiativeSkill = await readFile(".agents/skills/fmd-initiative-planning/SKILL.md", "utf8");
   const initiativeRoute = await readFile("src/app/api/initiatives/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const display = await readFile("src/lib/display.ts", "utf8");
-  const projectsOverview = await readFile("src/components/projects-overview.tsx", "utf8");
-  const initiativeDialog = await readFile("src/components/initiative-dialog.tsx", "utf8");
+  const projectsOverview = await readFile("src/features/projects/organisms/projects-overview.tsx", "utf8");
+  const initiativeDialog = await readFile("src/features/projects/organisms/initiative-dialog.tsx", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(migration, /packages add column if not exists milestone_id/);

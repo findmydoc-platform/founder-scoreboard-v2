@@ -1,4 +1,5 @@
 ﻿import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import { readdir, stat } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,8 +19,8 @@ async function listFiles(dir, extension) {
 test("app UI uses custom dropdown and calendar controls", async () => {
   const files = await listFiles("src", ".tsx");
   const approved = new Set([
-    "src/components/custom-select.tsx",
-    "src/components/custom-date-picker.tsx",
+    "src/shared/atoms/custom-select.tsx",
+    "src/shared/atoms/custom-date-picker.tsx",
   ]);
 
   for (const file of files) {
@@ -84,7 +85,7 @@ test("github sync route keeps the app as source of truth", async () => {
 
 test("github issue export includes structure review blockers and comments", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const platform = await readFile("src/lib/platform.ts", "utf8");
 
   assert.match(github, /taskIssueTitle/);
@@ -119,9 +120,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const section = await readFile("src/components/task-relationships-section.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const section = await readFile("src/features/tasks/organisms/task-relationships-section.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
@@ -190,10 +191,10 @@ test("github sync verification is read-only and checks the management repo", asy
 });
 
 test("app-only tasks are visibly marked without creating github issues", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
-  const githubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const githubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
   assert.match(taskCard, /App-only/);
@@ -234,9 +235,9 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const types = await readFile("src/lib/types.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const briefSection = await readFile("src/components/task-brief-section.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
   assert.match(migration, /problem_statement/);
@@ -284,12 +285,12 @@ test("story writing skill protects approved stories and enforces template guardr
 });
 
 test("github oauth prepares user-based sync without storing provider tokens", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const requestContext = await readFile("src/hooks/use-planning-request-context.ts", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const githubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
-  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
+  const ui = await readPlanningSurface();
+  const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const githubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
   const providerTokenMemory = await readFile("src/lib/github-provider-token.ts", "utf8");
   const supabase = await readFile("src/lib/supabase.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
@@ -345,9 +346,9 @@ test("strict auth gates planning data until a valid session is present", async (
   const page = await readFile("src/app/page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const authControl = await readFile("src/components/auth-control.tsx", "utf8");
-  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
+  const ui = await readPlanningSurface();
+  const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
+  const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
 
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /emptyPlanningData/);
@@ -372,10 +373,10 @@ test("strict auth gates planning data until a valid session is present", async (
 
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
-  const appUi = await readFile("src/components/planning-app.tsx", "utf8");
-  const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
+  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const appUi = await readPlanningSurface();
+  const sprintViewModel = await readFile("src/features/sprint/model/sprint-score-view-model.ts", "utf8");
 
   assert.match(route, /requireTaskReviewer/);
   assert.match(route, /requireFounder/);
@@ -406,8 +407,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
 test("sprint lock creates carryover for unfinished deliverables", async () => {
   const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /original_sprint_id/);
@@ -429,8 +430,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
 test("sprint configuration is operational-lead only and audited", async () => {
   const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
   const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
+  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -457,24 +458,24 @@ test("tasks can be assigned to an unlocked sprint", async () => {
 
 test("founders can only move or change status for their own tasks", async () => {
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const app = await readFile("src/components/planning-app.tsx", "utf8");
-  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
-  const detailPanel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const detailSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+  const app = await readPlanningSurface();
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
   assert.match(route, /taskOwnedByProfile/);
   assert.match(route, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
   assert.match(app, /canChangeTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
-  assert.match(app, /onDragStart=\{canUpdateStatus \? startTaskDrag : undefined\}/);
+  assert.match(app, /onDragStart=\{canUpdateStatus && onDragStart \? onDragStart : undefined\}/);
   assert.match(taskCard, /statusDisabled/);
   assert.match(detailPanel, /canChangeTaskStatus/);
   assert.match(detailSidebar, /disabled=\{!canChangeTaskStatus\}/);
 });
 
 test("header overlays close on outside click and escape", async () => {
-  const notifications = await readFile("src/components/notification-inbox.tsx", "utf8");
-  const feedback = await readFile("src/components/feedback-dialog.tsx", "utf8");
+  const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
+  const feedback = await readFile("src/features/settings/molecules/feedback-dialog.tsx", "utf8");
 
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
@@ -528,7 +529,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(route, /requireCEO/);
   assert.match(route, /platformRoles/);
@@ -561,8 +562,8 @@ test("notification preferences are editable per profile and event type", async (
   const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(route, /requireFounder/);
@@ -584,7 +585,7 @@ test("notification preferences are editable per profile and event type", async (
 
 test("decision audit loads before and after data for collapsible diffs", async () => {
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(data, /before_data,after_data/);
   assert.match(ui, /auditChanges/);
@@ -594,11 +595,12 @@ test("decision audit loads before and after data for collapsible diffs", async (
 });
 
 test("board tasks can be dragged between status columns", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
 
   assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
-  assert.match(ui, /onDrop=\{\(event\) => dropTaskOnStatus\(status, event\)\}/);
+  assert.match(ui, /onDrop=\{\(event\) => onDropTask\(status, event\)\}/);
+  assert.match(ui, /onDropTask=\{dropTaskOnStatus\}/);
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
   assert.match(ui, /founderStatusGuardMessage/);
@@ -612,8 +614,8 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const status = await readFile("src/lib/status.ts", "utf8");
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.match(status, /Vorschlag/);
@@ -627,8 +629,8 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const ui = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);
@@ -657,12 +659,12 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const timeline = await readFile("src/components/task-comment-timeline.tsx", "utf8");
-  const commentBody = await readFile("src/components/task-comment-body.tsx", "utf8");
-  const githubCommentImage = await readFile("src/components/github-comment-image.tsx", "utf8");
-  const composer = await readFile("src/components/task-comment-composer.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const timeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
+  const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
+  const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
+  const composer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists task_comments/);
@@ -752,12 +754,12 @@ test("comments blockers and notification outbox are modeled before Google Chat d
 
 test("task route opens the detail panel inside the planning shell", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
-  const page = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const detailsCard = await readFile("src/components/task-details-card.tsx", "utf8");
-  const commentsHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const brand = await readFile("src/components/app-brand.tsx", "utf8");
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const detailsCard = await readFile("src/features/tasks/organisms/task-details-card.tsx", "utf8");
+  const commentsHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const ui = await readPlanningSurface();
+  const brand = await readFile("src/shared/atoms/app-brand.tsx", "utf8");
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
 
   assert.match(route, /getPlanningData/);
   assert.match(route, /PlanningApp/);
@@ -818,12 +820,12 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
-  const page = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const detailsCard = await readFile("src/components/task-details-card.tsx", "utf8");
-  const contextSection = await readFile("src/components/task-context-section.tsx", "utf8");
-  const commentsHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
-  const comments = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const app = await readFile("src/components/planning-app.tsx", "utf8");
+  const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const detailsCard = await readFile("src/features/tasks/organisms/task-details-card.tsx", "utf8");
+  const contextSection = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
+  const commentsHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const comments = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const app = await readPlanningSurface();
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists milestones/);
@@ -868,12 +870,12 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(await readFile("AGENTS.md", "utf8"), /Milestone management is a core workflow/);
 });
 
-test("planning hierarchy treats sprint as time container and packages as group commitments", async () => {
+test("planning hierarchy treats sprint as time container and packages as initiatives", async () => {
   const migration = await readFile("supabase/0013_epic_group_commitment_hierarchy.sql", "utf8");
   const docs = await readFile("docs/planning-hierarchy.md", "utf8");
   const skill = await readFile("skills/fmd-planning-structure/SKILL.md", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(migration, /packages add column if not exists milestone_id/);
@@ -883,7 +885,7 @@ test("planning hierarchy treats sprint as time container and packages as group c
   assert.match(github, /Epic \/ Milestone/);
   assert.match(github, /Initiative/);
   assert.match(ui, /Epic \/ Meilenstein/);
-  assert.match(ui, /Group Commitment/);
+  assert.match(ui, /Initiative/);
   assert.match(ui, /expandedPackages/);
   assert.match(ui, /Alle einklappen/);
   assert.match(ui, /Alle ausklappen/);
@@ -913,7 +915,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const route = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(migration, /google_chat_user_id/);
   assert.match(migration, /google_chat_dm_space/);
@@ -1008,7 +1010,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   const pkg = await readFile("package.json", "utf8");
   const layout = await readFile("src/app/layout.tsx", "utf8");
   const css = await readFile("src/app/globals.css", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(verify, /ready-for-github-actions-deployment/);
   assert.match(verify, /deploy-preview\.yml/);
@@ -1166,7 +1168,7 @@ test("health and supabase verification detect operational migrations", async () 
 test("founder feedback creates bug and feature notifications with details", async () => {
   const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
   const route = await readFile("src/app/api/feedback/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const data = await readFile("src/lib/planning-data.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
@@ -1185,7 +1187,7 @@ test("founder feedback creates bug and feature notifications with details", asyn
 });
 
 test("workspace selection survives page refreshes", async () => {
-  const workspaceHook = await readFile("src/hooks/use-planning-workspace.ts", "utf8");
+  const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
 
   assert.match(workspaceHook, /workspaceStateKey/);
   assert.match(workspaceHook, /URLSearchParams\(window\.location\.search\)/);
@@ -1194,7 +1196,7 @@ test("workspace selection survives page refreshes", async () => {
 });
 
 test("header actions are workspace aware", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
@@ -1207,9 +1209,9 @@ test("header actions are workspace aware", async () => {
 });
 
 test("gantt uses sprint dates for scheduled tasks", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
-  assert.match(ui, /<CurrentGanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
+  assert.match(ui, /<GanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
   assert.match(ui, /function GanttView\(\{ tasks, packages, sprints, relations, onOpen \}/);
   assert.match(ui, /parseIsoDate\(sprint\?\.startDate \|\| ""\) \|\| parseIsoDate\(task\.startDate\)/);
   assert.match(ui, /parseIsoDate\(sprint\?\.endDate \|\| ""\) \|\| parseIsoDate\(task\.endDate\)/);
@@ -1217,7 +1219,7 @@ test("gantt uses sprint dates for scheduled tasks", async () => {
 
 test("fmd tools hub keeps internal tools repos notion and drive visible", async () => {
   const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const seed = await readFile("src/lib/generated/seed-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -1247,8 +1249,8 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
 
 test("execution layer adds focus board hygiene alerts and decision task links", async () => {
   const migration = await readFile("supabase/0020_execution_layer.sql", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
@@ -1256,8 +1258,8 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schema = await readFile("supabase/schema.sql", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const contextSection = await readFile("src/components/task-context-section.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const contextSection = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
   const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const agents = await readFile("AGENTS.md", "utf8");
   const plan = await readFile("docs/execution-layer-plan.md", "utf8");
@@ -1341,7 +1343,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
 test("task creation supports deliverables proposals and non scoring sub issues", async () => {
   const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /task_type/);
@@ -1365,11 +1367,11 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(types, /TaskType = "deliverable" \| "proposal" \| "sub_issue"/);
 });
 
-test("biweekly meeting attendance has scoring, absence reasons and updates", async () => {
+test("weekly meeting attendance has scoring, absence reasons and updates", async () => {
   const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists meetings/);
@@ -1383,11 +1385,11 @@ test("biweekly meeting attendance has scoring, absence reasons and updates", asy
   assert.match(route, /founder_self_report/);
   assert.match(route, /lead_review/);
   assert.match(data, /meetingAttendance/);
-  assert.match(ui, /Biweekly Meeting & Updates/);
+  assert.match(ui, /Weekly Updates/);
   assert.match(ui, /Triftiger Grund/);
   assert.match(ui, /eigene Rückmeldung/);
   assert.match(ui, /canScoreAttendance/);
-  assert.match(ui, /max\. 4 Punkte/);
+  assert.match(ui, /max\. 2 je Weekly, 4 je Sprint/);
   assert.match(types, /MeetingAttendanceStatus/);
 });
 
@@ -1396,7 +1398,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   const meetingRoute = await readFile("src/app/api/meetings/route.ts", "utf8");
   const calendarRoute = await readFile("src/app/api/calendar-sync/route.ts", "utf8");
   const calendarLib = await readFile("src/lib/google-calendar.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
   const migration = await readFile("supabase/0002_founder_platform.sql", "utf8");
   const calendarMigration = await readFile("supabase/0022_meeting_finder_calendar_sync.sql", "utf8");
   const profileCalendarMigration = await readFile("supabase/0023_google_calendar_profile_sync.sql", "utf8");
@@ -1475,8 +1477,8 @@ test("meeting finder manages working hours blockers and guarded availability", a
 
 test("app choice controls use custom components instead of browser-native pickers", async () => {
   const files = (await listFiles("src", ".tsx")).filter((file) => ![
-    "src/components/custom-select.tsx",
-    "src/components/custom-date-picker.tsx",
+    "src/shared/atoms/custom-select.tsx",
+    "src/shared/atoms/custom-date-picker.tsx",
   ].includes(file));
   const violations = [];
 

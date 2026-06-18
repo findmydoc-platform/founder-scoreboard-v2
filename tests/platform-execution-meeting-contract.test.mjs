@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 test("fmd tools hub keeps internal tools repos notion and drive visible", async () => {
   const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const toolsUi = await readFile("src/components/fmd-tools-overview.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const toolsUi = await readFile("src/features/tools/organisms/fmd-tools-overview.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const seed = await readFile("src/lib/generated/seed-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -35,11 +36,11 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
 
 test("execution layer adds focus board hygiene alerts and decision task links", async () => {
   const migration = await readFile("supabase/0020_execution_layer.sql", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const executionUi = await readFile("src/components/execution-layer-overview.tsx", "utf8");
-  const executionViewModel = await readFile("src/lib/execution-layer-view-model.ts", "utf8");
-  const decisionUi = await readFile("src/components/decision-log-overview.tsx", "utf8");
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const executionUi = await readFile("src/features/execution/organisms/execution-layer-overview.tsx", "utf8");
+  const executionViewModel = await readFile("src/features/execution/model/execution-layer-view-model.ts", "utf8");
+  const decisionUi = await readFile("src/features/decisions/organisms/decision-log-overview.tsx", "utf8");
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
@@ -47,8 +48,8 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schema = await readFile("supabase/schema.sql", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const taskContext = await readFile("src/components/task-context-section.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const taskContext = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
   const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const agents = await readFile("AGENTS.md", "utf8");
   const plan = await readFile("docs/execution-layer-plan.md", "utf8");
@@ -108,8 +109,8 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(focusRoute, /Founder können nur eigene Fokus-Einträge entfernen/);
   assert.match(ui, /Acceptance Criteria fehlen/);
   assert.match(ui, /Decision ohne Folgeaufgabe/);
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const panelContext = await readFile("src/components/task-detail-panel-context-section.tsx", "utf8");
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const panelContext = await readFile("src/features/tasks/molecules/task-detail-panel-context-section.tsx", "utf8");
   assert.match(panel, /TaskDetailPanelContextSection/);
   assert.match(panelContext, /Begründende Decisions/);
   assert.match(panelContext, /Fokus-Kontext/);
@@ -148,8 +149,8 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
 test("task creation supports deliverables proposals and non scoring sub issues", async () => {
   const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const newTaskUi = await readFile("src/components/new-task-dialog.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
@@ -183,8 +184,8 @@ test("weekly meeting attendance has scoring, absence reasons and updates", async
   const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const sprintMeetingUi = await readFile("src/components/sprint-meeting-attendance-section.tsx", "utf8");
+  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const sprintMeetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists meetings/);
@@ -213,19 +214,19 @@ test("meeting finder manages working hours blockers and guarded availability", a
   const meetingRoute = await readFile("src/app/api/meetings/route.ts", "utf8");
   const calendarRoute = await readFile("src/app/api/calendar-sync/route.ts", "utf8");
   const calendarLib = await readFile("src/lib/google-calendar.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const meetingUi = await readFile("src/components/meeting-finder-overview.tsx", "utf8");
-  const meetingLogic = await readFile("src/lib/meeting-finder.ts", "utf8");
-  const meetingViewModel = await readFile("src/lib/meeting-finder-view-model.ts", "utf8");
-  const meetingAvailabilityHook = await readFile("src/hooks/use-meeting-availability-editor.ts", "utf8");
-  const availabilityDialogUi = await readFile("src/components/meeting-availability-dialog.tsx", "utf8");
-  const availabilityFormsUi = await readFile("src/components/meeting-availability-forms.tsx", "utf8");
-  const availabilitySummaryUi = await readFile("src/components/meeting-availability-summary-section.tsx", "utf8");
-  const calendarMonthUi = await readFile("src/components/meeting-calendar-month-view.tsx", "utf8");
-  const calendarToolbarUi = await readFile("src/components/meeting-calendar-toolbar.tsx", "utf8");
-  const calendarWeekUi = await readFile("src/components/meeting-calendar-week-view.tsx", "utf8");
-  const slotSearchUi = await readFile("src/components/meeting-slot-search-section.tsx", "utf8");
-  const plannedMeetingsUi = await readFile("src/components/planned-meetings-section.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const meetingUi = await readFile("src/features/meetings/organisms/meeting-finder-overview.tsx", "utf8");
+  const meetingLogic = await readFile("src/features/meetings/model/meeting-finder.ts", "utf8");
+  const meetingViewModel = await readFile("src/features/meetings/model/meeting-finder-view-model.ts", "utf8");
+  const meetingAvailabilityHook = await readFile("src/features/meetings/hooks/use-meeting-availability-editor.ts", "utf8");
+  const availabilityDialogUi = await readFile("src/features/meetings/organisms/meeting-availability-dialog.tsx", "utf8");
+  const availabilityFormsUi = await readFile("src/features/meetings/molecules/meeting-availability-forms.tsx", "utf8");
+  const availabilitySummaryUi = await readFile("src/features/meetings/molecules/meeting-availability-summary-section.tsx", "utf8");
+  const calendarMonthUi = await readFile("src/features/meetings/organisms/meeting-calendar-month-view.tsx", "utf8");
+  const calendarToolbarUi = await readFile("src/features/meetings/molecules/meeting-calendar-toolbar.tsx", "utf8");
+  const calendarWeekUi = await readFile("src/features/meetings/organisms/meeting-calendar-week-view.tsx", "utf8");
+  const slotSearchUi = await readFile("src/features/meetings/organisms/meeting-slot-search-section.tsx", "utf8");
+  const plannedMeetingsUi = await readFile("src/features/meetings/organisms/planned-meetings-section.tsx", "utf8");
   const migration = await readFile("supabase/0002_founder_platform.sql", "utf8");
   const calendarMigration = await readFile("supabase/0022_meeting_finder_calendar_sync.sql", "utf8");
   const profileCalendarMigration = await readFile("supabase/0023_google_calendar_profile_sync.sql", "utf8");

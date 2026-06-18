@@ -18,8 +18,8 @@ async function listFiles(dir, extension) {
 test("app UI uses custom dropdown and calendar controls", async () => {
   const files = await listFiles("src", ".tsx");
   const approved = new Set([
-    "src/components/custom-select.tsx",
-    "src/components/custom-date-picker.tsx",
+    "src/shared/atoms/custom-select.tsx",
+    "src/shared/atoms/custom-date-picker.tsx",
   ]);
 
   for (const file of files) {
@@ -71,8 +71,8 @@ test("german utf8 guard verifies persisted task text", async () => {
 
 test("app choice controls use custom components instead of browser-native pickers", async () => {
   const files = (await listFiles("src", ".tsx")).filter((file) => ![
-    "src/components/custom-select.tsx",
-    "src/components/custom-date-picker.tsx",
+    "src/shared/atoms/custom-select.tsx",
+    "src/shared/atoms/custom-date-picker.tsx",
   ].includes(file));
   const violations = [];
 

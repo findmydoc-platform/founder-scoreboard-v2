@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -40,7 +41,7 @@ test("github sync route keeps the app as source of truth", async () => {
 test("operational leads can delete test tasks and close linked github issues", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
   assert.match(taskRoute, /export async function DELETE/);
   assert.match(taskRoute, /Nur CEO oder Deputy können Aufgaben löschen/);
@@ -55,10 +56,10 @@ test("operational leads can delete test tasks and close linked github issues", a
 
 test("github issue export includes structure review blockers and comments", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
-  const readinessUi = await readFile("src/components/settings-readiness.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
 
   assert.match(github, /taskIssueTitle/);
@@ -96,11 +97,11 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const relationshipUi = await readFile("src/components/relationship-list.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const relationshipHook = await readFile("src/hooks/use-task-relationships.ts", "utf8");
-  const relationshipSection = await readFile("src/components/task-relationships-section.tsx", "utf8");
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const relationshipUi = await readFile("src/features/tasks/molecules/relationship-list.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const relationshipHook = await readFile("src/features/tasks/hooks/use-task-relationships.ts", "utf8");
+  const relationshipSection = await readFile("src/features/tasks/organisms/task-relationships-section.tsx", "utf8");
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
@@ -117,7 +118,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(platform, /hasOpenWaitingRelation/);
   assert.match(display, /Diese Aufgabe kann erst sauber weitergehen/);
   assert.match(display, /Verknüpft mit/);
-  const panelDependencies = await readFile("src/components/task-detail-panel-dependencies-section.tsx", "utf8");
+  const panelDependencies = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
   assert.match(panelDependencies, /Relationship hinzufügen/);
   assert.match(detail, /useTaskRelationships/);
   assert.match(relationshipHook, /Relationship konnte nicht gespeichert werden/);
@@ -179,13 +180,13 @@ test("github sync verification is read-only and checks the management repo", asy
 });
 
 test("app-only tasks are visibly marked without creating github issues", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
-  const readinessUi = await readFile("src/components/settings-readiness.tsx", "utf8");
-  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const detailGitHubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
   assert.match(taskCard, /App-only/);
@@ -236,17 +237,17 @@ test("legacy github body sections are not kept inside evidence link fields", asy
 });
 
 test("github oauth prepares user-based sync without storing provider tokens", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const requestContext = await readFile("src/hooks/use-planning-request-context.ts", "utf8");
-  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
-  const readinessUi = await readFile("src/components/settings-readiness.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const detailGitHubSyncCard = await readFile("src/components/task-github-sync-card.tsx", "utf8");
-  const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const commentHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
-  const commentBody = await readFile("src/components/task-comment-body.tsx", "utf8");
-  const commentComposer = await readFile("src/components/task-comment-composer.tsx", "utf8");
-  const githubCommentImage = await readFile("src/components/github-comment-image.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
+  const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
+  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
+  const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
+  const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const providerTokenMemory = await readFile("src/lib/github-provider-token.ts", "utf8");
   const supabase = await readFile("src/lib/supabase.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
@@ -315,16 +316,16 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const panel = await readFile("src/components/task-detail-panel.tsx", "utf8");
-  const panelBlockerSection = await readFile("src/components/task-detail-panel-blocker-section.tsx", "utf8");
-  const thread = await readFile("src/components/task-comment-thread.tsx", "utf8");
-  const commentHook = await readFile("src/hooks/use-task-comments.ts", "utf8");
-  const commentBody = await readFile("src/components/task-comment-body.tsx", "utf8");
-  const commentComposer = await readFile("src/components/task-comment-composer.tsx", "utf8");
-  const commentTimeline = await readFile("src/components/task-comment-timeline.tsx", "utf8");
-  const githubCommentImage = await readFile("src/components/github-comment-image.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const sprintUi = await readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8");
+  const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const panelBlockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
+  const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
+  const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
+  const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
+  const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
+  const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const mentions = await readFile("src/lib/mentions.ts", "utf8");
   const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
   const googleChat = await readFile("src/lib/google-chat.ts", "utf8");
