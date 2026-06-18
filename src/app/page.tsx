@@ -1,4 +1,4 @@
-import { PlanningApp } from "@/components/planning-app";
+import { PlanningApp } from "@/features/planning/PlanningApp";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 

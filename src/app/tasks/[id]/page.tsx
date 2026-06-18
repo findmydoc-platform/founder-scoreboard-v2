@@ -1,5 +1,5 @@
-import { PlanningApp } from "@/components/planning-app";
-import { TaskDetailPage } from "@/components/task-detail-page";
+import { PlanningApp } from "@/features/planning/PlanningApp";
+import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
