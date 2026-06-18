@@ -64,7 +64,7 @@
 
 ## 2026-06-11 - Planning App Legacy Sprint Component Removal
 
-- Scope: Level 4 deletion of proven-unreachable local Sprint UI duplicates from `src/components/planning-app.tsx`, with no active route, API, auth, database, or mutation changes.
+- Scope: Level 4 deletion of proven-unreachable local Sprint UI duplicates from `src/features/planning/PlanningApp.tsx`, with no active route, API, auth, database, or mutation changes.
 - Proof: Repo search found `SprintScoreOverview` only at its local definition and `void SprintScoreOverview`; `SprintScoreOverviewLegacy` only at its local definition and `void SprintScoreOverviewLegacy`. The active sprint workspace imports and renders `SprintScoreTableOverview`.
 - Commands: pre-deletion `npm test`, `npm run lint`, `npm run build`; post-deletion `npx tsc --noEmit --pretty false`, `npm test`, `npm run lint`, `npm run build`, `npm run audit:stewardship`, `npm run verify:supabase`, `npm run verify:auth`, UTF-8/mojibake scan for `planning-app.tsx`, `git diff --check`.
 - Browser: Local dev smoke on `/?workspace=sprint` showed Sprint & Score / Founder Scoreboard / Biweekly Meeting / Sprint-Aufgaben; smoke on `/?workspace=planning` showed project title and Board/Struktur/Tabelle.

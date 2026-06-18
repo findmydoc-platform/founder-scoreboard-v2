@@ -27,7 +27,7 @@ if (existsSync(envPath)) {
 const envExample = await readFile(".env.example", "utf8");
 const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
 const nextStep = await readFile("docs/google-chat-next-step.md", "utf8");
-const settingsUi = await readFile("src/components/settings-notifications.tsx", "utf8");
+const settingsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
 const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
 const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
 const googleChat = await readFile("src/lib/google-chat.ts", "utf8");

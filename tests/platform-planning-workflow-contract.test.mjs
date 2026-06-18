@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
+import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 test("dev role switch is local-only and flows through API authorization", async () => {
   const authz = await readFile("src/lib/authz.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const requestContext = await readFile("src/hooks/use-planning-request-context.ts", "utf8");
-  const devSwitch = await readFile("src/components/dev-role-switch.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
+  const devSwitch = await readFile("src/features/planning/molecules/dev-role-switch.tsx", "utf8");
 
   assert.match(authz, /x-fmd-dev-profile-id/);
   assert.match(authz, /process\.env\.NODE_ENV === "production"/);
@@ -29,9 +30,9 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const types = await readFile("src/lib/types.ts", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
-  const newTaskUi = await readFile("src/components/new-task-dialog.tsx", "utf8");
-  const detail = await readFile("src/components/task-detail-page.tsx", "utf8");
-  const briefSection = await readFile("src/components/task-brief-section.tsx", "utf8");
+  const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
+  const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
   assert.match(migration, /problem_statement/);
@@ -86,9 +87,9 @@ test("strict auth gates planning data until a valid session is present", async (
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const serverAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const authHook = await readFile("src/hooks/use-planning-auth.ts", "utf8");
-  const authControl = await readFile("src/components/auth-control.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
+  const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
 
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /getServerPlanningAuth/);
@@ -125,10 +126,10 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
   const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
-  const appUi = await readFile("src/components/planning-app.tsx", "utf8");
-  const sprintViewModel = await readFile("src/lib/sprint-score-view-model.ts", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const appUi = await readPlanningSurface();
+  const sprintViewModel = await readFile("src/features/sprint/model/sprint-score-view-model.ts", "utf8");
 
   assert.match(migration, /review_owner_profile_id/);
   assert.match(migration, /review_requested_at/);
@@ -176,12 +177,12 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 });
 
 test("review workspace has direct review detail routes filters and reopen guard", async () => {
-  const sidebar = await readFile("src/components/app-sidebar.tsx", "utf8");
-  const app = await readFile("src/components/planning-app.tsx", "utf8");
-  const workspace = await readFile("src/components/review-workspace-overview.tsx", "utf8");
-  const detail = await readFile("src/components/review-detail-page.tsx", "utf8");
-  const sheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
-  const model = await readFile("src/lib/review-workspace-view-model.ts", "utf8");
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const app = await readPlanningSurface();
+  const workspace = await readFile("src/features/reviews/organisms/review-workspace-overview.tsx", "utf8");
+  const detail = await readFile("src/features/reviews/templates/review-detail-page.tsx", "utf8");
+  const sheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const model = await readFile("src/features/reviews/model/review-workspace-view-model.ts", "utf8");
   const reviewRoute = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
 
@@ -226,8 +227,8 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
-  const ui = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const meetingUi = await readFile("src/components/sprint-meeting-attendance-section.tsx", "utf8");
+  const ui = await readFeatureSurface("src/features/sprint");
+  const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
@@ -282,8 +283,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
 test("sprint lock creates carryover for unfinished deliverables", async () => {
   const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const panelSidebar = await readFile("src/components/task-detail-panel-sidebar.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /original_sprint_id/);
@@ -305,10 +306,10 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
 test("sprint configuration is operational-lead only and audited", async () => {
   const route = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
   const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/components/settings-overview.tsx", "utf8");
-  const sprintPlanningUi = await readFile("src/components/settings-sprint-planning.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const sprintUi = await readFeatureSurface("src/features/sprint");
+  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const sprintPlanningUi = await readFile("src/features/settings/molecules/settings-sprint-planning.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -383,8 +384,8 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
 
   assert.match(route, /requireCEO/);
   assert.match(route, /platformRoles/);
@@ -419,7 +420,7 @@ test("notification preferences are editable per profile and event type", async (
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const teamUi = await readFile("src/components/team-overview.tsx", "utf8");
+  const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(route, /requireFounder/);
@@ -442,7 +443,7 @@ test("notification preferences are editable per profile and event type", async (
 test("decision audit loads before and after data for collapsible diffs", async () => {
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
-  const decisionUi = await readFile("src/components/decision-log-overview.tsx", "utf8");
+  const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(data, /before_data,after_data/);
   assert.match(dataMappers, /beforeData: row.before_data/);
@@ -453,11 +454,12 @@ test("decision audit loads before and after data for collapsible diffs", async (
 });
 
 test("board tasks can be dragged between status columns", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
-  const taskCard = await readFile("src/components/task-card.tsx", "utf8");
+  const ui = await readPlanningSurface();
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
 
   assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
-  assert.match(ui, /onDrop=\{\(event\) => dropTaskOnStatus\(status, event\)\}/);
+  assert.match(ui, /onDrop=\{\(event\) => onDropTask\(status, event\)\}/);
+  assert.match(ui, /onDropTask=\{dropTaskOnStatus\}/);
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
   assert.match(ui, /founderStatusGuardMessage/);
@@ -471,8 +473,8 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const status = await readFile("src/lib/status.ts", "utf8");
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.match(status, /Vorschlag/);
@@ -490,8 +492,8 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const sprintUi = await readFile("src/components/sprint-score-overview.tsx", "utf8");
-  const reviewSheet = await readFile("src/components/task-review-sheet.tsx", "utf8");
+  const sprintUi = await readFeatureSurface("src/features/sprint");
+  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoute, /self_dod_checked/);

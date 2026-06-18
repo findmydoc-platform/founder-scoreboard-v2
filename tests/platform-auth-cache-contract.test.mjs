@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 test("task updates keep the protected planning cache aligned across detail-route remounts", async () => {
-  const ui = await readFile("src/components/planning-app.tsx", "utf8");
+  const ui = await readPlanningSurface();
 
   assert.match(ui, /const applyPlanningDataUpdate = useCallback/);
   assert.match(

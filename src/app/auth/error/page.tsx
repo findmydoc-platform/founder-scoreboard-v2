@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppBrand } from "@/components/app-brand";
+import { AppBrand } from "@/shared/atoms/app-brand";
 
 type Props = {
   searchParams: Promise<{ next?: string }>;

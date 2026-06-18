@@ -31,3 +31,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - When actively working on a Founder Scoreboard task from the app as an execution/research task, keep drafts, evidence matrices, private analyses, and working notes outside all Git repositories under `C:\tmp\fmd-private-work\` in a task-specific subfolder. Do not store sensitive founder reviews, personal performance notes, internal conflict analysis, or unfinished report drafts in this repo or GitHub unless explicitly requested. Publish final approved report content to Notion/Gmail/shared tools only after the user asks for that publication step. German-language private reports, Markdown drafts, Notion-ready text, and email drafts must use real UTF-8 German umlauts (`ä`, `ö`, `ü`, `Ä`, `Ö`, `Ü`, `ß`) instead of ASCII fallbacks such as `ae`, `oe`, `ue`, or `ss`, except in technical identifiers, URLs, slugs, or file names.
 - After meaningful frontend or API changes run `npm test`, `npm run lint`, and `npm run build`.
 - If a pattern is repeated three times across API guards, schema verification, GitHub sync, Decision Log, or Meeting Finder, propose extracting it into a project skill/check before adding more duplication.
+
+### Planning UI Structure
+
+- Planning UI follows feature-first Atomic Design: feature UI belongs under `src/features/<domain>/{atoms,molecules,organisms,templates,hooks,model}`.
+- `src/shared` is only for domain-neutral primitives. Components or helpers named around Task, Sprint, Meeting, Decision, Founder, Milestone, GitHub issue, review, or planning workflow semantics must stay inside the owning feature.
+- Do not create new `src/components` or `src/hooks` directories. Do not add imports from `@/components`, `@/hooks`, `src/components`, or `src/hooks`; move code into the owning feature or `src/shared` instead.
+- Templates and shell components orchestrate layout and pass typed props. Business logic, API calls, mutations, auth/role decisions, and derived data belong in hooks, model/view-model files, API routes, or service helpers.
+- The custom-control policy is part of the UI structure contract: do not add native `<select>`, `<option>`, `input type="date"`, or `input type="datetime-local"` to app UI.
