@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type CommitmentPayload = {
   sprintId?: string;
@@ -15,10 +16,10 @@ const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
 
 export async function PUT(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json()) as CommitmentPayload;
   const sprintId = payload.sprintId?.trim();
@@ -27,13 +28,13 @@ export async function PUT(request: NextRequest) {
   const weeklyHours = Math.max(0, Math.min(80, Math.round(Number(payload.weeklyHours ?? 0))));
   const note = cleanText(payload.note, 1000);
 
-  if (!sprintId) return NextResponse.json({ error: "Sprint ist erforderlich." }, { status: 400 });
-  if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
-  if (!levels.has(commitmentLevel)) return NextResponse.json({ error: "Ungültiges Commitment." }, { status: 400 });
+  if (!sprintId) return apiError("Sprint ist erforderlich.", 400);
+  if (!profileId) return apiError("Profil ist erforderlich.", 400);
+  if (!levels.has(commitmentLevel)) return apiError("Ungültiges Commitment.", 400);
 
   const canEditAny = permission.profile?.platformRole === "ceo" || permission.profile?.platformRole === "deputy";
   if (!canEditAny && profileId !== permission.profile?.id) {
-    return NextResponse.json({ error: "Founder können nur ihr eigenes Commitment ändern." }, { status: 403 });
+    return apiError("Founder können nur ihr eigenes Commitment ändern.", 403);
   }
 
   const { data, error } = await supabase
@@ -49,7 +50,7 @@ export async function PUT(request: NextRequest) {
     .select("id,sprint_id,profile_id,commitment_level,weekly_hours,note")
     .single();
 
-  if (error || !data) return NextResponse.json({ error: error?.message || "Commitment konnte nicht gespeichert werden." }, { status: 500 });
+  if (error || !data) return apiError(error?.message || "Commitment konnte nicht gespeichert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

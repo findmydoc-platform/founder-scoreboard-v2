@@ -3,6 +3,7 @@ import { requireFounder } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 const maxUploadBytes = 10 * 1024 * 1024;
 const allowedMimeTypes = new Set([
@@ -37,10 +38,10 @@ function isImageType(type: string) {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
@@ -49,20 +50,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const formData = await request.formData();
   const file = formData.get("file");
-  if (!(file instanceof File)) return NextResponse.json({ error: "Datei ist erforderlich." }, { status: 400 });
-  if (file.size <= 0) return NextResponse.json({ error: "Datei ist leer." }, { status: 400 });
-  if (file.size > maxUploadBytes) return NextResponse.json({ error: "Datei ist zu groß. Maximal erlaubt sind 10 MB." }, { status: 413 });
-  if (!allowedMimeTypes.has(file.type)) return NextResponse.json({ error: "Dateityp wird noch nicht unterstützt." }, { status: 415 });
+  if (!(file instanceof File)) return apiError("Datei ist erforderlich.", 400);
+  if (file.size <= 0) return apiError("Datei ist leer.", 400);
+  if (file.size > maxUploadBytes) return apiError("Datei ist zu groß. Maximal erlaubt sind 10 MB.", 413);
+  if (!allowedMimeTypes.has(file.type)) return apiError("Dateityp wird noch nicht unterstützt.", 415);
 
   let githubUserToken = "";
   try {
     githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Upload wiederholen.");
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden." }, { status: 403 });
+    return apiError(error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden.", 403);
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

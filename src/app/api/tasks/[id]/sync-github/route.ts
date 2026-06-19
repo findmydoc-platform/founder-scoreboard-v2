@@ -4,6 +4,7 @@ import { githubRepoSlug, upsertGitHubIssue, type GitHubTaskSyncContext } from "@
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Task } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type TaskRow = Record<string, unknown>;
 type SyncRequestBody = {
@@ -192,21 +193,21 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
   let githubUserToken = "";
   try {
     githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Sync erneut starten.");
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub User-Token konnte nicht geprüft werden.";
-    return NextResponse.json({ error: message }, { status: 401 });
+    return apiError(message, 401);
   }
 
   const { id } = await context.params;
   const { data, error } = await supabase.from("tasks").select("*").eq("id", id).single();
-  if (error || !data) return NextResponse.json({ error: error?.message || "Aufgabe nicht gefunden." }, { status: 404 });
+  if (error || !data) return apiError(error?.message || "Aufgabe nicht gefunden.", 404);
 
   const syncContext = await buildSyncContext(supabase, data as TaskRow);
   const profileNameById = new Map<string, string>();

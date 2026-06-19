@@ -3,6 +3,7 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type PreferencePayload = {
   profileId?: string;
@@ -18,21 +19,21 @@ function canEditProfilePreference(actorProfileId: string, actorRole: string, tar
 
 export async function PATCH(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as PreferencePayload;
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : "";
   const eventType = typeof payload.eventType === "string" ? payload.eventType.trim() : "";
 
-  if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
-  if (!allowedEventTypes.has(eventType)) return NextResponse.json({ error: "Unbekannter Benachrichtigungstyp." }, { status: 400 });
-  if (typeof payload.enabled !== "boolean") return NextResponse.json({ error: "Status ist erforderlich." }, { status: 400 });
+  if (!profileId) return apiError("Profil ist erforderlich.", 400);
+  if (!allowedEventTypes.has(eventType)) return apiError("Unbekannter Benachrichtigungstyp.", 400);
+  if (typeof payload.enabled !== "boolean") return apiError("Status ist erforderlich.", 400);
   if (!canEditProfilePreference(permission.profile.id, permission.profile.platformRole, profileId)) {
-    return NextResponse.json({ error: "Keine Berechtigung für diese Benachrichtigungseinstellung." }, { status: 403 });
+    return apiError("Keine Berechtigung für diese Benachrichtigungseinstellung.", 403);
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -41,7 +42,7 @@ export async function PATCH(request: NextRequest) {
     .eq("id", profileId)
     .single();
 
-  if (profileError || !profile) return NextResponse.json({ error: "Profil wurde nicht gefunden." }, { status: 404 });
+  if (profileError || !profile) return apiError("Profil wurde nicht gefunden.", 404);
 
   const { data: preference, error } = await supabase
     .from("notification_preferences")
@@ -55,7 +56,7 @@ export async function PATCH(request: NextRequest) {
     .select("id,profile_id,channel,event_type,enabled")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,

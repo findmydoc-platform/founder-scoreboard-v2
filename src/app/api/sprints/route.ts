@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type SprintRow = {
   id: string;
@@ -48,10 +49,10 @@ function mapSprint(row: SprintRow) {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json().catch(() => ({}))) as CreateSprintPlanPayload;
   const firstSprintNumber = Math.max(Number(payload.firstSprintNumber) || 1, 1);
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
   const targetSprintNumber = Math.max(Number(payload.targetSprintNumber) || 0, 0);
 
   if (!isIsoDate(anchorStartDate)) {
-    return NextResponse.json({ error: "Startdatum der Sprint-Planung ist ungültig." }, { status: 400 });
+    return apiError("Startdatum der Sprint-Planung ist ungültig.", 400);
   }
 
   const { data: existing, error: existingError } = await supabase
@@ -70,14 +71,14 @@ export async function POST(request: NextRequest) {
     .eq("project_id", projectId)
     .order("start_date", { ascending: true });
 
-  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+  if (existingError) return apiError(existingError.message, 500);
 
   const { data: assignedTasks, error: assignedTasksError } = await supabase
     .from("tasks")
     .select("sprint_id")
     .not("sprint_id", "is", null);
 
-  if (assignedTasksError) return NextResponse.json({ error: assignedTasksError.message }, { status: 500 });
+  if (assignedTasksError) return apiError(assignedTasksError.message, 500);
 
   const protectedSprintIds = new Set((assignedTasks || []).map((task) => task.sprint_id).filter(Boolean));
   const sprints = (existing || []) as SprintRow[];
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
     .upsert(upserts, { onConflict: "id" })
     .select("id,name,status,start_date,end_date,review_due_at,score_locked");
 
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+  if (insertError) return apiError(insertError.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

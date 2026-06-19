@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type BlockerPayload = {
   reason?: string;
@@ -11,10 +12,10 @@ type BlockerPayload = {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const payload = (await request.json()) as BlockerPayload;
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const needsHelpFrom = cleanText(payload.needsHelpFrom, 500);
 
   if (reason.length < 5) {
-    return NextResponse.json({ error: "Blocker-Grund ist erforderlich." }, { status: 400 });
+    return apiError("Blocker-Grund ist erforderlich.", 400);
   }
 
   const { data: task, error: taskError } = await supabase
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const { data: blocker, error: insertError } = await supabase
     .from("task_blockers")
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at")
     .single();
 
-  if (insertError || !blocker) return NextResponse.json({ error: insertError?.message || "Blocker konnte nicht gespeichert werden." }, { status: 500 });
+  if (insertError || !blocker) return apiError(insertError?.message || "Blocker konnte nicht gespeichert werden.", 500);
 
   await supabase.from("tasks").update({
     status: "Blockiert",

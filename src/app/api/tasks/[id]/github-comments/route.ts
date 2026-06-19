@@ -3,6 +3,7 @@ import { requireFounder } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 function isAppMirroredComment(body: string) {
   return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
@@ -18,17 +19,17 @@ function extractEvidenceFromIssueBody(body: string) {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   let githubUserToken = "";
   try {
     githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und Kommentare aktualisieren.");
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub User-Token konnte nicht geprüft werden.";
-    return NextResponse.json({ error: message }, { status: 401 });
+    return apiError(message, 401);
   }
 
   const { id } = await context.params;
@@ -38,11 +39,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const issueNumber = Number(task.github_issue_number || task.issue_number || 0);
   if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-    return NextResponse.json({ error: "Diese Aufgabe ist noch nicht mit einem GitHub-Issue verknüpft." }, { status: 409 });
+    return apiError("Diese Aufgabe ist noch nicht mit einem GitHub-Issue verknüpft.", 409);
   }
 
   let githubComments: Awaited<ReturnType<typeof listGitHubIssueComments>>;
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         github_sync_error: null,
       })
       .eq("id", id);
-    if (evidenceError) return NextResponse.json({ error: evidenceError.message }, { status: 500 });
+    if (evidenceError) return apiError(evidenceError.message, 500);
     await supabase.from("task_activity").insert({
       task_id: id,
       message: "Evidence aus GitHub-Issue importiert",
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .eq("source", "github")
       .in("external_id", externalRows.map((row) => row.external_id));
 
-    if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+    if (existingError) return apiError(existingError.message, 500);
 
     const existingIds = new Set((existingRows || []).map((row) => row.external_id));
     newExternalRows = externalRows.filter((row) => !existingIds.has(row.external_id));
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { error: upsertError } = await supabase
       .from("task_external_comments")
       .upsert(externalRows, { onConflict: "source,external_id" });
-    if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    if (upsertError) return apiError(upsertError.message, 500);
   }
 
   if (newExternalRows.length) {
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("task_id", id)
     .order("created_at", { ascending: true });
 
-  if (importedError) return NextResponse.json({ error: importedError.message }, { status: 500 });
+  if (importedError) return apiError(importedError.message, 500);
 
   return NextResponse.json({
     ok: true,

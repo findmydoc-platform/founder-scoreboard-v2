@@ -1,3 +1,4 @@
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { archiveGitHubIssue } from "@/lib/github";
@@ -122,12 +123,12 @@ function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForAc
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
   if (!supabase) {
-    return NextResponse.json({ error: "Supabase env is not configured. UI changes remain local only." }, { status: 501 });
+    return supabaseUnavailable("Supabase env is not configured. UI changes remain local only.");
   }
 
   const permission = await requireFounder(request);
   if (!permission.ok) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status });
+    return authzError(permission);
   }
 
   const { id } = await context.params;
@@ -139,7 +140,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", id)
     .single();
   if (!currentTask) {
-    return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+    return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const restrictedFields = [
@@ -153,32 +154,32 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   ].filter(Boolean);
 
   if (!isOperationalLead && restrictedFields.length) {
-    return NextResponse.json({ error: `Diese Felder sind geschützt: ${restrictedFields.join(", ")}.` }, { status: 403 });
+    return apiError(`Diese Felder sind geschützt: ${restrictedFields.join(", ")}.`, 403);
   }
 
   if (payload.reviewOwnerProfileId !== undefined && permission.profile?.platformRole !== "ceo") {
-    return NextResponse.json({ error: "Nur der CEO kann den Review Owner ändern." }, { status: 403 });
+    return apiError("Nur der CEO kann den Review Owner ändern.", 403);
   }
 
   if (payload.status) {
     if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
-      return NextResponse.json({ error: "Ungültiger Status." }, { status: 400 });
+      return apiError("Ungültiger Status.", 400);
     }
     if (!isOperationalLead && !taskOwnedByProfile(currentTask, permission.profile)) {
-      return NextResponse.json({ error: "Founder können nur den Status ihrer eigenen Aufgaben ändern." }, { status: 403 });
+      return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
     }
     if (!isOperationalLead && payload.status === "Erledigt") {
-      return NextResponse.json({ error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt." }, { status: 403 });
+      return apiError("Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", 403);
     }
     if (!isOperationalLead && currentTask?.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
-      return NextResponse.json({ error: "Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden." }, { status: 403 });
+      return apiError("Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden.", 403);
     }
     update.status = payload.status;
   }
 
   if (payload.priority) {
     if (!priorities.has(payload.priority)) {
-      return NextResponse.json({ error: "Ungültige Priorität." }, { status: 400 });
+      return apiError("Ungültige Priorität.", 400);
     }
     update.priority = payload.priority;
   }
@@ -191,7 +192,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .select("id")
         .eq("id", nextMilestoneId)
         .single();
-      if (milestoneError || !milestone) return NextResponse.json({ error: "Meilenstein wurde nicht gefunden." }, { status: 404 });
+      if (milestoneError || !milestone) return apiError("Meilenstein wurde nicht gefunden.", 404);
     }
     update.milestone_id = nextMilestoneId;
   }
@@ -204,7 +205,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .select("id,milestone_id,owner_id,accountable_profile_id")
         .eq("id", nextPackageId)
         .single();
-      if (initiativeError || !initiative) return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
+      if (initiativeError || !initiative) return apiError("Initiative wurde nicht gefunden.", 404);
       update.package_id = nextPackageId;
       if (payload.milestoneId === undefined) update.milestone_id = initiative.milestone_id || null;
       if (payload.reviewOwnerProfileId === undefined && !currentTask.review_owner_profile_id) {
@@ -218,7 +219,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.owner !== undefined) {
     const nextOwner = profileId(payload.owner);
     if (!nextOwner && currentTask?.task_type !== "proposal") {
-      return NextResponse.json({ error: "Nur Vorschläge können ohne Assignee bleiben." }, { status: 400 });
+      return apiError("Nur Vorschläge können ohne Assignee bleiben.", 400);
     }
     update.owner = nextOwner || null;
     update.assignee = nextOwner || null;
@@ -243,8 +244,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .select("id,score_locked")
         .eq("id", nextSprintId)
         .single();
-      if (sprintError || !sprint) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
-      if (sprint.score_locked) return NextResponse.json({ error: "Gelockte Sprints können nicht mehr zugewiesen werden." }, { status: 409 });
+      if (sprintError || !sprint) return apiError("Sprint wurde nicht gefunden.", 404);
+      if (sprint.score_locked) return apiError("Gelockte Sprints können nicht mehr zugewiesen werden.", 409);
     }
     update.sprint_id = nextSprintId;
   }
@@ -260,7 +261,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (shouldPromoteProposal) {
     if (!effectivePackageId || !effectiveSprintId) {
-      return NextResponse.json({ error: "Für ein Deliverable fehlen noch Initiative oder Sprint." }, { status: 400 });
+      return apiError("Für ein Deliverable fehlen noch Initiative oder Sprint.", 400);
     }
     update.task_type = "deliverable";
     update.score_relevant = true;
@@ -268,10 +269,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.reviewStatus) {
     if (!reviewStatuses.has(payload.reviewStatus)) {
-      return NextResponse.json({ error: "Ungültiger Review-Status." }, { status: 400 });
+      return apiError("Ungültiger Review-Status.", 400);
     }
     if (!isOperationalLead && payload.reviewStatus !== "requested") {
-      return NextResponse.json({ error: "Founder können Review nur anfragen. Final bewertet wird im CEO-Review." }, { status: 403 });
+      return apiError("Founder können Review nur anfragen. Final bewertet wird im CEO-Review.", 403);
     }
     update.review_status = payload.reviewStatus;
     update.score_final = ["accepted", "partial", "changes_requested"].includes(payload.reviewStatus);
@@ -294,7 +295,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .select("id")
         .eq("id", nextReviewOwner)
         .single();
-      if (reviewOwnerError || !reviewOwner) return NextResponse.json({ error: "Review Owner wurde nicht gefunden." }, { status: 404 });
+      if (reviewOwnerError || !reviewOwner) return apiError("Review Owner wurde nicht gefunden.", 404);
     }
     update.review_owner_profile_id = nextReviewOwner || null;
   }
@@ -302,7 +303,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const startsReviewRequest = payload.status === "Review" || payload.reviewStatus === "requested";
   if (startsReviewRequest) {
     if (currentTask.score_final) {
-      return NextResponse.json({ error: "Final bewertete Aufgaben können nicht erneut in Review gegeben werden." }, { status: 409 });
+      return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
     }
 
     const reviewPackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
@@ -313,7 +314,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .select("owner_id,accountable_profile_id")
         .eq("id", reviewPackageId)
         .maybeSingle();
-      if (initiativeError) return NextResponse.json({ error: initiativeError.message }, { status: 500 });
+      if (initiativeError) return apiError(initiativeError.message, 500);
       reviewOwnerProfileId = initiative?.accountable_profile_id || initiative?.owner_id || "";
     }
 
@@ -326,7 +327,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.githubSyncStatus) {
     if (!syncStatuses.has(payload.githubSyncStatus)) {
-      return NextResponse.json({ error: "Ungültiger GitHub-Sync-Status." }, { status: 400 });
+      return apiError("Ungültiger GitHub-Sync-Status.", 400);
     }
     update.github_sync_status = payload.githubSyncStatus;
   }
@@ -343,23 +344,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (Object.keys(update).length) {
     const { error } = await supabase.from("tasks").update(update).eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiError(error.message, 500);
   }
 
   if (payload.note !== undefined) {
     const { error } = await supabase
       .from("task_notes")
       .upsert({ task_id: id, note: payload.note, updated_at: new Date().toISOString() });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return apiError(error.message, 500);
   }
 
   if (payload.dependsOn !== undefined) {
     const note = payload.dependsOn.trim().slice(0, 2000);
     const { error: deleteError } = await supabase.from("task_dependencies").delete().eq("task_id", id);
-    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    if (deleteError) return apiError(deleteError.message, 500);
     if (note) {
       const { error: dependencyError } = await supabase.from("task_dependencies").insert({ task_id: id, note });
-      if (dependencyError) return NextResponse.json({ error: dependencyError.message }, { status: 500 });
+      if (dependencyError) return apiError(dependencyError.message, 500);
     }
   }
 
@@ -431,12 +432,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
-  if (!isOperationalLead) return NextResponse.json({ error: "Nur CEO oder Deputy können Aufgaben löschen." }, { status: 403 });
+  if (!isOperationalLead) return apiError("Nur CEO oder Deputy können Aufgaben löschen.", 403);
 
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
@@ -444,7 +445,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url")
     .eq("id", id)
     .single();
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const issueNumber = linkedIssueNumber(task);
   let githubClosed = false;
@@ -452,18 +453,18 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     try {
       const token = await optionalMatchingGitHubProviderToken(request, permission.profile);
       if (!token) {
-        return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte die GitHub-Verbindung im Header erneuern und dann erneut löschen." }, { status: 409 });
+        return apiError("Für verknüpfte GitHub-Issues bitte die GitHub-Verbindung im Header erneuern und dann erneut löschen.", 409);
       }
       await archiveGitHubIssue(issueNumber, token);
       githubClosed = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "GitHub Issue konnte nicht geschlossen werden.";
-      return NextResponse.json({ error: message }, { status: 502 });
+      return apiError(message, 502);
     }
   }
 
   const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
-  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  if (deleteError) return apiError(deleteError.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

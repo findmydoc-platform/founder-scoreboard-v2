@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { requireOperationalLead } from "@/lib/authz";
 import {
   googleChatDeliveryStatus,
@@ -166,17 +167,17 @@ async function insertDeliveryRows(
 
 export async function GET(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { count, error } = await supabase
     .from("notification_events")
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   const status = googleChatDeliveryStatus();
   return NextResponse.json({
@@ -189,10 +190,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await authorizeDeliveryTrigger(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json().catch(() => ({}))) as DeliveryRequestPayload;
   const limit = safeLimit(payload.limit);
@@ -232,7 +233,7 @@ export async function POST(request: NextRequest) {
 
   const { data: events, error: eventError } = await eventQuery;
 
-  if (eventError) return NextResponse.json({ error: eventError.message }, { status: 500 });
+  if (eventError) return apiError(eventError.message, 500);
   if (!events?.length) return NextResponse.json({ ok: true, sent: 0, failed: 0, skipped: 0, results: [] });
 
   const eventIds = (events as NotificationRow[]).map((event) => event.id);
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest) {
     .eq("channel", "google_chat")
     .in("event_id", eventIds);
 
-  if (deliveryReadError) return NextResponse.json({ error: deliveryReadError.message }, { status: 500 });
+  if (deliveryReadError) return apiError(deliveryReadError.message, 500);
 
   const alreadyDelivered = new Set(
     (existingDeliveries || [])
@@ -272,7 +273,7 @@ export async function POST(request: NextRequest) {
     : { data: [] };
 
   if ("error" in preferenceResult && preferenceResult.error) {
-    return NextResponse.json({ error: preferenceResult.error.message }, { status: 500 });
+    return apiError(preferenceResult.error.message, 500);
   }
 
   const profiles = new Map((profileResult.data || []).map((profile: ProfileRow) => [profile.id, profile]));

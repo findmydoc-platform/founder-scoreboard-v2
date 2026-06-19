@@ -4,6 +4,7 @@ import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import type { AvailabilityEntry } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type AvailabilityPayload = {
   id?: number;
@@ -74,11 +75,11 @@ function mapAvailability(row: {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : "";
@@ -88,15 +89,15 @@ export async function POST(request: NextRequest) {
   const startTime = cleanTime(payload.startTime);
   const endTime = cleanTime(payload.endTime);
 
-  if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
-  if (!type) return NextResponse.json({ error: "Typ ist erforderlich." }, { status: 400 });
-  if (!startTime || !endTime || startTime >= endTime) return NextResponse.json({ error: "Start- und Endzeit sind ungültig." }, { status: 400 });
+  if (!profileId) return apiError("Profil ist erforderlich.", 400);
+  if (!type) return apiError("Typ ist erforderlich.", 400);
+  if (!startTime || !endTime || startTime >= endTime) return apiError("Start- und Endzeit sind ungültig.", 400);
   if (!isOperationalLeadRole(permission.profile.platformRole) && profileId !== permission.profile.id) {
-    return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten pflegen." }, { status: 403 });
+    return apiError("Founder können nur eigene Verfügbarkeiten pflegen.", 403);
   }
 
   const { data: targetProfile, error: profileError } = await supabase.from("profiles").select("id").eq("id", profileId).single();
-  if (profileError || !targetProfile) return NextResponse.json({ error: "Profil wurde nicht gefunden." }, { status: 404 });
+  if (profileError || !targetProfile) return apiError("Profil wurde nicht gefunden.", 404);
 
   const row: Record<string, string | number | null> = {
     profile_id: profileId,
@@ -112,14 +113,14 @@ export async function POST(request: NextRequest) {
 
   if (type === "working_hours") {
     const weekday = Number(payload.weekday);
-    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return NextResponse.json({ error: "Wochentag ist ungültig." }, { status: 400 });
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return apiError("Wochentag ist ungültig.", 400);
     row.weekday = weekday;
     row.start_date = null;
     row.end_date = null;
   } else {
     const startDate = cleanDate(payload.startDate);
     const endDate = cleanDate(payload.endDate) || startDate;
-    if (!startDate || !endDate || startDate > endDate) return NextResponse.json({ error: "Datumsbereich ist ungültig." }, { status: 400 });
+    if (!startDate || !endDate || startDate > endDate) return apiError("Datumsbereich ist ungültig.", 400);
     row.weekday = null;
     row.start_date = startDate;
     row.end_date = endDate;
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
     .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,
@@ -147,15 +148,15 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const id = Number(payload.id);
-  if (!Number.isFinite(id)) return NextResponse.json({ error: "Eintrag ist erforderlich." }, { status: 400 });
+  if (!Number.isFinite(id)) return apiError("Eintrag ist erforderlich.", 400);
 
   const { data: current, error: readError } = await supabase
     .from("availability")
@@ -163,13 +164,13 @@ export async function DELETE(request: NextRequest) {
     .eq("id", id)
     .single();
 
-  if (readError || !current) return NextResponse.json({ error: "Eintrag wurde nicht gefunden." }, { status: 404 });
+  if (readError || !current) return apiError("Eintrag wurde nicht gefunden.", 404);
   if (!isOperationalLeadRole(permission.profile.platformRole) && current.profile_id !== permission.profile.id) {
-    return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten löschen." }, { status: 403 });
+    return apiError("Founder können nur eigene Verfügbarkeiten löschen.", 403);
   }
 
   const { error } = await supabase.from("availability").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,
@@ -185,15 +186,15 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const id = Number(payload.id);
-  if (!Number.isFinite(id)) return NextResponse.json({ error: "Eintrag ist erforderlich." }, { status: 400 });
+  if (!Number.isFinite(id)) return apiError("Eintrag ist erforderlich.", 400);
 
   const { data: current, error: readError } = await supabase
     .from("availability")
@@ -201,12 +202,12 @@ export async function PATCH(request: NextRequest) {
     .eq("id", id)
     .single();
 
-  if (readError || !current) return NextResponse.json({ error: "Eintrag wurde nicht gefunden." }, { status: 404 });
+  if (readError || !current) return apiError("Eintrag wurde nicht gefunden.", 404);
   if (current.source === "google_calendar") {
-    return NextResponse.json({ error: "Importierte Google-Kalenderblöcke können nicht in der App bearbeitet werden." }, { status: 403 });
+    return apiError("Importierte Google-Kalenderblöcke können nicht in der App bearbeitet werden.", 403);
   }
   if (!isOperationalLeadRole(permission.profile.platformRole) && current.profile_id !== permission.profile.id) {
-    return NextResponse.json({ error: "Founder können nur eigene Verfügbarkeiten bearbeiten." }, { status: 403 });
+    return apiError("Founder können nur eigene Verfügbarkeiten bearbeiten.", 403);
   }
 
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : current.profile_id;
@@ -216,15 +217,15 @@ export async function PATCH(request: NextRequest) {
   const startTime = cleanTime(payload.startTime) || current.start_time?.slice(0, 5) || "";
   const endTime = cleanTime(payload.endTime) || current.end_time?.slice(0, 5) || "";
 
-  if (!profileId) return NextResponse.json({ error: "Profil ist erforderlich." }, { status: 400 });
-  if (!type) return NextResponse.json({ error: "Typ ist erforderlich." }, { status: 400 });
-  if (!startTime || !endTime || startTime >= endTime) return NextResponse.json({ error: "Start- und Endzeit sind ungültig." }, { status: 400 });
+  if (!profileId) return apiError("Profil ist erforderlich.", 400);
+  if (!type) return apiError("Typ ist erforderlich.", 400);
+  if (!startTime || !endTime || startTime >= endTime) return apiError("Start- und Endzeit sind ungültig.", 400);
   if (!isOperationalLeadRole(permission.profile.platformRole) && profileId !== permission.profile.id) {
-    return NextResponse.json({ error: "Founder können Einträge nicht auf andere Profile übertragen." }, { status: 403 });
+    return apiError("Founder können Einträge nicht auf andere Profile übertragen.", 403);
   }
 
   const { data: targetProfile, error: profileError } = await supabase.from("profiles").select("id").eq("id", profileId).single();
-  if (profileError || !targetProfile) return NextResponse.json({ error: "Profil wurde nicht gefunden." }, { status: 404 });
+  if (profileError || !targetProfile) return apiError("Profil wurde nicht gefunden.", 404);
 
   const row: Record<string, string | number | null> = {
     profile_id: profileId,
@@ -238,14 +239,14 @@ export async function PATCH(request: NextRequest) {
 
   if (type === "working_hours") {
     const weekday = Number(payload.weekday ?? current.weekday);
-    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return NextResponse.json({ error: "Wochentag ist ungültig." }, { status: 400 });
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return apiError("Wochentag ist ungültig.", 400);
     row.weekday = weekday;
     row.start_date = null;
     row.end_date = null;
   } else {
     const startDate = cleanDate(payload.startDate) || current.start_date || "";
     const endDate = cleanDate(payload.endDate) || current.end_date || startDate;
-    if (!startDate || !endDate || startDate > endDate) return NextResponse.json({ error: "Datumsbereich ist ungültig." }, { status: 400 });
+    if (!startDate || !endDate || startDate > endDate) return apiError("Datumsbereich ist ungültig.", 400);
     row.weekday = null;
     row.start_date = startDate;
     row.end_date = endDate;
@@ -258,7 +259,7 @@ export async function PATCH(request: NextRequest) {
     .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,

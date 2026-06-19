@@ -4,6 +4,7 @@ import { requireFounder, requireOperationalLead } from "@/lib/authz";
 import { createGoogleCalendarEvent, isGoogleCalendarSyncConfigured } from "@/lib/google-calendar";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type CreateMeetingPayload = {
   id?: number;
@@ -87,11 +88,11 @@ function mapAttendance(row: {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
   const title = cleanText(payload.title, 160) || "findmydoc Teammeeting";
@@ -102,9 +103,9 @@ export async function POST(request: NextRequest) {
   const parsedMeetingAt = meetingAt ? new Date(meetingAt) : null;
   const durationMinutes = cleanDurationMinutes(payload.durationMinutes);
 
-  if (!sprintId) return NextResponse.json({ error: "Sprint ist erforderlich." }, { status: 400 });
-  if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return NextResponse.json({ error: "Meeting-Zeitpunkt ist ungültig." }, { status: 400 });
-  if (!profileIds.length) return NextResponse.json({ error: "Mindestens ein Teilnehmer ist erforderlich." }, { status: 400 });
+  if (!sprintId) return apiError("Sprint ist erforderlich.", 400);
+  if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return apiError("Meeting-Zeitpunkt ist ungültig.", 400);
+  if (!profileIds.length) return apiError("Mindestens ein Teilnehmer ist erforderlich.", 400);
 
   const [{ data: sprint }, { data: profiles }, { data: actorProfile }] = await Promise.all([
     supabase.from("sprints").select("id").eq("id", sprintId).single(),
@@ -114,9 +115,9 @@ export async function POST(request: NextRequest) {
       : Promise.resolve({ data: null }),
   ]);
 
-  if (!sprint) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
+  if (!sprint) return apiError("Sprint wurde nicht gefunden.", 404);
   const validProfileIds = new Set((profiles || []).map((profile) => profile.id));
-  if (validProfileIds.size !== profileIds.length) return NextResponse.json({ error: "Mindestens ein Teilnehmerprofil wurde nicht gefunden." }, { status: 404 });
+  if (validProfileIds.size !== profileIds.length) return apiError("Mindestens ein Teilnehmerprofil wurde nicht gefunden.", 404);
 
   const { data: meeting, error: meetingError } = await supabase
     .from("meetings")
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
     .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .single();
 
-  if (meetingError || !meeting) return NextResponse.json({ error: meetingError?.message || "Meeting konnte nicht angelegt werden." }, { status: 500 });
+  if (meetingError || !meeting) return apiError(meetingError?.message || "Meeting konnte nicht angelegt werden.", 500);
 
   const { data: attendance, error: attendanceError } = await supabase
     .from("meeting_attendance")
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
     })))
     .select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at");
 
-  if (attendanceError) return NextResponse.json({ error: attendanceError.message }, { status: 500 });
+  if (attendanceError) return apiError(attendanceError.message, 500);
 
   const attendeeEmails = (profiles || [])
     .map((profile) => profile.google_calendar_email)
@@ -229,22 +230,22 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
   const id = Number(payload.id);
-  if (!Number.isFinite(id)) return NextResponse.json({ error: "Meeting ist erforderlich." }, { status: 400 });
+  if (!Number.isFinite(id)) return apiError("Meeting ist erforderlich.", 400);
 
   const { data: current, error: currentError } = await supabase
     .from("meetings")
     .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .eq("id", id)
     .single();
-  if (currentError || !current) return NextResponse.json({ error: "Meeting wurde nicht gefunden." }, { status: 404 });
+  if (currentError || !current) return apiError("Meeting wurde nicht gefunden.", 404);
 
   const patch: Record<string, string> = { updated_at: new Date().toISOString() };
   const title = cleanText(payload.title, 160);
@@ -256,11 +257,11 @@ export async function PATCH(request: NextRequest) {
   if (title) patch.title = title;
   if (typeof payload.agenda === "string") patch.agenda = agenda;
   if (status) {
-    if (!["planned", "done", "cancelled"].includes(status)) return NextResponse.json({ error: "Meeting-Status ist ungültig." }, { status: 400 });
+    if (!["planned", "done", "cancelled"].includes(status)) return apiError("Meeting-Status ist ungültig.", 400);
     patch.status = status;
   }
   if (meetingAt) {
-    if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return NextResponse.json({ error: "Meeting-Zeitpunkt ist ungültig." }, { status: 400 });
+    if (!parsedMeetingAt || Number.isNaN(parsedMeetingAt.getTime())) return apiError("Meeting-Zeitpunkt ist ungültig.", 400);
     patch.meeting_at = parsedMeetingAt.toISOString();
   }
 
@@ -271,7 +272,7 @@ export async function PATCH(request: NextRequest) {
     .select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda,google_calendar_id,google_calendar_event_id,google_calendar_html_link,google_calendar_sync_status,google_calendar_sync_error,google_calendar_synced_at")
     .single();
 
-  if (error || !meeting) return NextResponse.json({ error: error?.message || "Meeting konnte nicht aktualisiert werden." }, { status: 500 });
+  if (error || !meeting) return apiError(error?.message || "Meeting konnte nicht aktualisiert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,

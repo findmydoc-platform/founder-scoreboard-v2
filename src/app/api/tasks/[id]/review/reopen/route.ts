@@ -2,13 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const founderPermission = await requireFounder(request);
-  if (!founderPermission.ok) return NextResponse.json({ error: founderPermission.error }, { status: founderPermission.status });
+  if (!founderPermission.ok) return authzError(founderPermission);
 
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
@@ -17,10 +18,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const permission = await requireTaskReviewer(request, task, founderPermission);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   if (task.sprint_id) {
     const { data: sprint, error: sprintError } = await supabase
@@ -28,8 +29,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .select("id,score_locked")
       .eq("id", task.sprint_id)
       .single();
-    if (sprintError) return NextResponse.json({ error: sprintError.message }, { status: 500 });
-    if (sprint?.score_locked) return NextResponse.json({ error: "Sprint-Score ist bereits gelockt." }, { status: 409 });
+    if (sprintError) return apiError(sprintError.message, 500);
+    if (sprint?.score_locked) return apiError("Sprint-Score ist bereits gelockt.", 409);
   }
 
   const reviewRequestedAt = new Date().toISOString();
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     })
     .eq("id", id);
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) return apiError(updateError.message, 500);
 
   await supabase.from("task_activity").insert({
     task_id: id,

@@ -105,6 +105,30 @@ test("app UI uses custom dropdown and calendar controls", async () => {
   assert.deepEqual(violations, []);
 });
 
+test("api routes centralize single-error responses", async () => {
+  const helper = await readFile("src/lib/api-response.ts", "utf8");
+  const routeFiles = await listFiles("src/app/api", ".ts");
+  const directSingleErrorResponses = [];
+  let helperRouteCount = 0;
+
+  assert.match(helper, /export function apiError/);
+  assert.match(helper, /export function authzError/);
+  assert.match(helper, /export function supabaseUnavailable/);
+
+  for (const file of routeFiles) {
+    const source = await readFile(file, "utf8");
+    if (source.includes("@/lib/api-response")) helperRouteCount += 1;
+
+    const matches = source.match(/NextResponse\.json\(\{ error: [^,\n{}]+ \}, \{ status: [^{}\n]+ \}\)/g) || [];
+    for (const match of matches) {
+      directSingleErrorResponses.push(`${file}: ${match}`);
+    }
+  }
+
+  assert.ok(helperRouteCount >= 35);
+  assert.deepEqual(directSingleErrorResponses, []);
+});
+
 test("custom controls keep keyboard and aria contracts", async () => {
   const select = await readFile("src/shared/atoms/custom-select.tsx", "utf8");
   const datePicker = await readFile("src/shared/atoms/custom-date-picker.tsx", "utf8");

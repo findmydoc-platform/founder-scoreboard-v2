@@ -3,6 +3,7 @@ import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { DecisionTaskLink } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type LinkPayload = {
   taskId?: string;
@@ -26,24 +27,24 @@ function mapDecisionTaskLink(row: Record<string, string | number>): DecisionTask
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const decisionId = Number(id);
-  if (!Number.isFinite(decisionId)) return NextResponse.json({ error: "Decision ist ungültig." }, { status: 400 });
+  if (!Number.isFinite(decisionId)) return apiError("Decision ist ungültig.", 400);
 
   const payload = (await request.json()) as LinkPayload;
   const taskId = typeof payload.taskId === "string" ? payload.taskId.trim() : "";
-  if (!taskId) return NextResponse.json({ error: "Aufgabe ist erforderlich." }, { status: 400 });
+  if (!taskId) return apiError("Aufgabe ist erforderlich.", 400);
 
   const { data: decision, error: decisionError } = await supabase.from("decision_log").select("id,title").eq("id", decisionId).single();
-  if (decisionError || !decision) return NextResponse.json({ error: "Decision nicht gefunden." }, { status: 404 });
+  if (decisionError || !decision) return apiError("Decision nicht gefunden.", 404);
 
   const { data: task, error: taskError } = await supabase.from("tasks").select("id,title").eq("id", taskId).single();
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe nicht gefunden.", 404);
 
   const linkType = payload.linkType && linkTypes.has(payload.linkType) ? payload.linkType : "follows_from";
   const { data, error } = await supabase
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,decision_id,task_id,link_type,note,created_by,created_at")
     .single();
 
-  if (error || !data) return NextResponse.json({ error: error?.message || "Verknüpfung konnte nicht gespeichert werden." }, { status: 500 });
+  if (error || !data) return apiError(error?.message || "Verknüpfung konnte nicht gespeichert werden.", 500);
 
   await supabase.from("task_activity").insert({
     task_id: taskId,
@@ -70,16 +71,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const decisionId = Number(id);
   const linkId = Number(request.nextUrl.searchParams.get("linkId"));
   if (!Number.isFinite(decisionId) || !Number.isFinite(linkId)) {
-    return NextResponse.json({ error: "Decision-Link ist ungültig." }, { status: 400 });
+    return apiError("Decision-Link ist ungültig.", 400);
   }
 
   const { data: link, error: readError } = await supabase
@@ -88,10 +89,10 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     .eq("id", linkId)
     .eq("decision_id", decisionId)
     .single();
-  if (readError || !link) return NextResponse.json({ error: "Decision-Link nicht gefunden." }, { status: 404 });
+  if (readError || !link) return apiError("Decision-Link nicht gefunden.", 404);
 
   const { error } = await supabase.from("decision_task_links").delete().eq("id", linkId).eq("decision_id", decisionId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("task_activity").insert({
     task_id: link.task_id,

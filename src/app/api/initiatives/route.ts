@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead, requirePlatformRole } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Package } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type InitiativePayload = {
   title?: string;
@@ -102,10 +103,10 @@ async function assertReferenceRows(
 
 export async function GET(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const auth = await requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth.ok) return authzError(auth);
 
   const { data, error } = await supabase
     .from("packages")
@@ -113,42 +114,42 @@ export async function GET(request: NextRequest) {
     .eq("project_id", projectId)
     .order("sort_order");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
   return NextResponse.json({ ok: true, initiatives: (data || []).map((row) => mapInitiative(row)) });
 }
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json()) as InitiativePayload;
   const title = cleanText(payload.title, 240);
-  if (title.length < 3) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
-  if (!payload.milestoneId) return NextResponse.json({ error: "Meilenstein ist erforderlich." }, { status: 400 });
-  if (!payload.ownerId) return NextResponse.json({ error: "Initiative-Owner ist erforderlich." }, { status: 400 });
-  if (payload.priority && !priorities.has(payload.priority)) return NextResponse.json({ error: "Ungültige Priorität." }, { status: 400 });
-  if (payload.status && !statuses.has(payload.status)) return NextResponse.json({ error: "Ungültiger Initiative-Status." }, { status: 400 });
+  if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
+  if (!payload.milestoneId) return apiError("Meilenstein ist erforderlich.", 400);
+  if (!payload.ownerId) return apiError("Initiative-Owner ist erforderlich.", 400);
+  if (payload.priority && !priorities.has(payload.priority)) return apiError("Ungültige Priorität.", 400);
+  if (payload.status && !statuses.has(payload.status)) return apiError("Ungültiger Initiative-Status.", 400);
 
   const referenceError = await assertReferenceRows(supabase, payload);
-  if (referenceError) return NextResponse.json({ error: referenceError }, { status: 404 });
+  if (referenceError) return apiError(referenceError, 404);
 
   const accountableProfileId = cleanText(payload.accountableProfileId || payload.ownerId, 120);
   const responsibleProfileIds = cleanProfileIds(payload.responsibleProfileIds);
   const resolvedResponsibleProfileIds = responsibleProfileIds.length ? responsibleProfileIds : [payload.ownerId];
   const consultedProfileIds = cleanProfileIds(payload.consultedProfileIds);
   const informedProfileIds = cleanProfileIds(payload.informedProfileIds);
-  if (!accountableProfileId) return NextResponse.json({ error: "Accountable ist erforderlich." }, { status: 400 });
-  if (!resolvedResponsibleProfileIds.length) return NextResponse.json({ error: "Responsible ist erforderlich." }, { status: 400 });
+  if (!accountableProfileId) return apiError("Accountable ist erforderlich.", 400);
+  if (!resolvedResponsibleProfileIds.length) return apiError("Responsible ist erforderlich.", 400);
   const raciReferenceError = await validateProfileIds(supabase, [
     accountableProfileId,
     ...resolvedResponsibleProfileIds,
     ...consultedProfileIds,
     ...informedProfileIds,
   ]);
-  if (raciReferenceError) return NextResponse.json({ error: raciReferenceError }, { status: 404 });
+  if (raciReferenceError) return apiError(raciReferenceError, 404);
 
   const { data: maxRow } = await supabase
     .from("packages")
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
   };
 
   const { data: created, error } = await supabase.from("packages").insert(insert).select("*").single();
-  if (error || !created) return NextResponse.json({ error: error?.message || "Initiative konnte nicht erstellt werden." }, { status: 500 });
+  if (error || !created) return apiError(error?.message || "Initiative konnte nicht erstellt werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

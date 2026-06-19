@@ -1,14 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil erforderlich." }, { status: 401 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
   const { id } = await context.params;
   const decisionId = Number(id);
@@ -19,17 +20,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", decisionId)
     .single();
 
-  if (decisionError || !decision) return NextResponse.json({ error: "Decision nicht gefunden." }, { status: 404 });
-  if (decision.status === "locked") return NextResponse.json({ error: "Decision ist bereits gelockt." }, { status: 409 });
+  if (decisionError || !decision) return apiError("Decision nicht gefunden.", 404);
+  if (decision.status === "locked") return apiError("Decision ist bereits gelockt.", 409);
   if (decision.status !== "open_for_confirmation") {
-    return NextResponse.json({ error: "Decision ist noch nicht zur Bestätigung geöffnet." }, { status: 409 });
+    return apiError("Decision ist noch nicht zur Bestätigung geöffnet.", 409);
   }
 
   const { error } = await supabase
     .from("decision_confirmations")
     .upsert({ decision_id: decisionId, profile_id: permission.profile.id });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   const { data: confirmations } = await supabase
     .from("decision_confirmations")

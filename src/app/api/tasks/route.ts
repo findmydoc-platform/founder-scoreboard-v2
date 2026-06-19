@@ -5,6 +5,7 @@ import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 import type { Task, TaskType } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type CreateTaskPayload = {
   title?: string;
@@ -49,17 +50,17 @@ function profileId(value?: string) {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json()) as CreateTaskPayload;
   const title = cleanText(payload.title, 240);
-  if (title.length < 3) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
+  if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
 
   const requestedType = payload.taskType || "deliverable";
-  if (!taskTypes.has(requestedType)) return NextResponse.json({ error: "Ungültiger Aufgabentyp." }, { status: 400 });
+  if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
 
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const packageId = payload.packageId || null;
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
   const endDate = payload.endDate || null;
 
   if (startDate && endDate && startDate > endDate) {
-    return NextResponse.json({ error: "Das Startdatum darf nicht nach dem Enddatum liegen." }, { status: 400 });
+    return apiError("Das Startdatum darf nicht nach dem Enddatum liegen.", 400);
   }
 
   if (packageId) {
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       .eq("id", packageId)
       .maybeSingle();
     if (initiativeError || !initiativeRow) {
-      return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
+      return apiError("Initiative wurde nicht gefunden.", 404);
     }
     initiative = initiativeRow;
     milestoneId = milestoneId || initiative.milestone_id || null;
@@ -96,11 +97,11 @@ export async function POST(request: NextRequest) {
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && (!packageId || !payload.sprintId)) {
-    return NextResponse.json({ error: "Deliverables brauchen Initiative und Sprint." }, { status: 400 });
+    return apiError("Deliverables brauchen Initiative und Sprint.", 400);
   }
 
   if (taskType === "sub_issue" && !parentTaskId) {
-    return NextResponse.json({ error: "Sub-Issue braucht ein Deliverable." }, { status: 400 });
+    return apiError("Sub-Issue braucht ein Deliverable.", 400);
   }
 
   if (taskType === "sub_issue") {
@@ -109,9 +110,9 @@ export async function POST(request: NextRequest) {
       .select("id,owner,title")
       .eq("id", parentTaskId)
       .single();
-    if (parentError || !parent) return NextResponse.json({ error: "Deliverable wurde nicht gefunden." }, { status: 404 });
+    if (parentError || !parent) return apiError("Deliverable wurde nicht gefunden.", 404);
     if (!isOperationalLead && parent.owner !== permission.profile?.id) {
-      return NextResponse.json({ error: "Founder können nur eigene Deliverables verfeinern." }, { status: 403 });
+      return apiError("Founder können nur eigene Deliverables verfeinern.", 403);
     }
   }
 
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
   };
 
   const { data: created, error: insertError } = await supabase.from("tasks").insert(insert).select("*").single();
-  if (insertError || !created) return NextResponse.json({ error: insertError?.message || "Aufgabe konnte nicht erstellt werden." }, { status: 500 });
+  if (insertError || !created) return apiError(insertError?.message || "Aufgabe konnte nicht erstellt werden.", 500);
 
   const profileIds = [...new Set([created.owner, created.assignee, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
   const { data: profileRows } = profileIds.length

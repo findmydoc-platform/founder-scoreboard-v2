@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
+import { apiError } from "@/lib/api-response";
 
 type GoogleChatEventPayload = {
   type?: string;
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null) as GoogleChatEventPayload | null;
 
   if (!payload || typeof payload !== "object") {
-    return NextResponse.json({ error: "Ungültiges Google-Chat-Event." }, { status: 400 });
+    return apiError("Ungültiges Google-Chat-Event.", 400);
   }
 
   const status = routeStatus();

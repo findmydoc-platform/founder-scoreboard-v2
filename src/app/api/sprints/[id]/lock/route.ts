@@ -3,6 +3,7 @@ import { requireOperationalLead } from "@/lib/authz";
 import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type TaskRow = {
   id: string;
@@ -69,10 +70,10 @@ function carryoverReason(outcome: string) {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
   const payload = (await request.json().catch(() => ({}))) as { finalizeNow?: boolean };
 
   const { id } = await context.params;
@@ -83,21 +84,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (sprintError || !sprint) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
-  if (sprint.score_locked) return NextResponse.json({ error: "Sprint ist bereits gelockt." }, { status: 409 });
+  if (sprintError || !sprint) return apiError("Sprint wurde nicht gefunden.", 404);
+  if (sprint.score_locked) return apiError("Sprint ist bereits gelockt.", 409);
 
   const { count: openObjections, error: objectionError } = await supabase
     .from("score_objections")
     .select("*", { count: "exact", head: true })
     .eq("sprint_id", id)
     .eq("status", "open");
-  if (objectionError) return NextResponse.json({ error: objectionError.message }, { status: 500 });
+  if (objectionError) return apiError(objectionError.message, 500);
   if ((openObjections || 0) > 0) {
-    return NextResponse.json({ error: "Offene Score-Einwände müssen vor dem Sprint-Lock geprüft werden." }, { status: 409 });
+    return apiError("Offene Score-Einwände müssen vor dem Sprint-Lock geprüft werden.", 409);
   }
 
   if (sprint.review_due_at && new Date(sprint.review_due_at).getTime() > Date.now() && !payload.finalizeNow) {
-    return NextResponse.json({ error: "Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen." }, { status: 409 });
+    return apiError("Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen.", 409);
   }
 
   const { data: nextSprint } = await supabase
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
-  if (tasksError) return NextResponse.json({ error: tasksError.message }, { status: 500 });
+  if (tasksError) return apiError(tasksError.message, 500);
 
   const sprintTasks = (tasks || []) as TaskRow[];
   const carryoverTasks = sprintTasks.filter((task) =>
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (carryoverInserts.length) {
     const { error: carryoverError } = await supabase.from("tasks").insert(carryoverInserts);
-    if (carryoverError) return NextResponse.json({ error: carryoverError.message }, { status: 500 });
+    if (carryoverError) return apiError(carryoverError.message, 500);
   }
 
   if (notifications.length) {
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("sprint_id", id)
     .eq("score_final", false);
 
-  if (freezeError) return NextResponse.json({ error: freezeError.message }, { status: 500 });
+  if (freezeError) return apiError(freezeError.message, 500);
 
   const [
     profileResult,
@@ -244,11 +245,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     supabase.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at"),
   ]);
 
-  if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
-  if (commitmentResult.error) return NextResponse.json({ error: commitmentResult.error.message }, { status: 500 });
-  if (meetingResult.error) return NextResponse.json({ error: meetingResult.error.message }, { status: 500 });
-  if (attendanceResult.error) return NextResponse.json({ error: attendanceResult.error.message }, { status: 500 });
-  if (strikeStateResult.error) return NextResponse.json({ error: strikeStateResult.error.message }, { status: 500 });
+  if (profileResult.error) return apiError(profileResult.error.message, 500);
+  if (commitmentResult.error) return apiError(commitmentResult.error.message, 500);
+  if (meetingResult.error) return apiError(meetingResult.error.message, 500);
+  if (attendanceResult.error) return apiError(attendanceResult.error.message, 500);
+  if (strikeStateResult.error) return apiError(strikeStateResult.error.message, 500);
 
   const profiles = (profileResult.data || []).map((profile) => ({
     id: profile.id,
@@ -360,17 +361,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (scoreRows.length) {
     const { error: scoreError } = await supabase.from("founder_sprint_scores").upsert(scoreRows, { onConflict: "sprint_id,profile_id" });
-    if (scoreError) return NextResponse.json({ error: scoreError.message }, { status: 500 });
+    if (scoreError) return apiError(scoreError.message, 500);
   }
 
   if (strikeStateRows.length) {
     const { error: strikeStateError } = await supabase.from("founder_strike_state").upsert(strikeStateRows, { onConflict: "profile_id" });
-    if (strikeStateError) return NextResponse.json({ error: strikeStateError.message }, { status: 500 });
+    if (strikeStateError) return apiError(strikeStateError.message, 500);
   }
 
   if (strikeEvents.length) {
     const { error: strikeError } = await supabase.from("strike_events").insert(strikeEvents);
-    if (strikeError) return NextResponse.json({ error: strikeError.message }, { status: 500 });
+    if (strikeError) return apiError(strikeError.message, 500);
   }
 
   const { error: updateError } = await supabase
@@ -378,7 +379,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .update({ score_locked: true, status: "closed", updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) return apiError(updateError.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
