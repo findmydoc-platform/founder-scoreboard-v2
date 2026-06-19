@@ -225,9 +225,11 @@ test("agent rules and stewardship skill document atomic UI drift guards", async 
 
   assert.match(rules, /Planning UI Structure/);
   assert.match(rules, /src\/features\/<domain>\/\{atoms,molecules,organisms,templates,hooks,model\}/);
+  assert.match(rules, /Create only the subdirectories a feature currently uses/);
   assert.match(rules, /Do not create new `src\/components` or `src\/hooks` directories/);
   assert.match(rules, /fmd-code-stewardship/);
   assert.match(skill, /Feature-first Atomic Design/);
+  assert.match(skill, /Do not keep empty placeholder directories or commit `.gitkeep` files/);
   assert.match(skill, /compatibility re-export shims/);
   assert.match(skill, /use-planning-app-controller\.ts/);
   assert.match(audit, /FORBIDDEN_STRUCTURE_DIRECTORIES/);

@@ -12,22 +12,53 @@ updates:
       - dependencies
       - security
     groups:
-      nextjs-stack:
+      nextjs-stack-minor-patch:
         patterns:
           - next
           - eslint-config-next
-      react-stack:
+        update-types:
+          - minor
+          - patch
+      nextjs-stack-major:
+        patterns:
+          - next
+          - eslint-config-next
+        update-types:
+          - major
+      react-stack-minor-patch:
         patterns:
           - react
           - react-dom
           - "@types/react"
           - "@types/react-dom"
-      tooling:
+        update-types:
+          - minor
+          - patch
+      react-stack-major:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - major
+      tooling-minor-patch:
         patterns:
           - eslint
           - typescript
           - tailwindcss
           - "@tailwindcss/*"
+        update-types:
+          - minor
+          - patch
+      tooling-major:
+        patterns:
+          - eslint
+          - typescript
+          - tailwindcss
+          - "@tailwindcss/*"
+        update-types:
+          - major
 
   - package-ecosystem: github-actions
     directory: /

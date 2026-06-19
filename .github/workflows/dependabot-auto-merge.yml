@@ -1,0 +1,146 @@
+name: Dependabot Auto Merge
+
+on:
+  workflow_run:
+    workflows:
+      - Dependency Validation
+      - Deploy Preview
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  auto-merge:
+    name: Auto Merge Dependabot PRs
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.repository.full_name == 'findmydoc-platform/founder-scoreboard-v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve pull request
+        id: pr
+        env:
+          PR_COUNT: ${{ toJson(github.event.workflow_run.pull_requests) }}
+        run: |
+          pr_number="$(jq -r '.[0].number // empty' <<<"$PR_COUNT")"
+          if [[ -z "$pr_number" ]]; then
+            echo "No pull request attached to workflow run."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve dependency validation run
+        id: validation-run
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid)"
+          head_sha="$(jq -r '.headRefOid' <<<"$pr_json")"
+          run_id="$(gh api "repos/$REPO/actions/workflows/dependency-validation.yml/runs?event=pull_request&head_sha=$head_sha&status=completed&per_page=10" | jq -r '.workflow_runs[] | select(.conclusion == "success") | .id' | head -n 1)"
+
+          if [[ -z "$run_id" ]]; then
+            echo "No successful Dependency Validation run found for PR #$PR_NUMBER."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Download Dependabot metadata
+        if: steps.validation-run.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ steps.validation-run.outputs.run_id }}
+        run: |
+          gh run download "$RUN_ID" \
+            --repo "$REPO" \
+            --name "dependabot-metadata-pr-${PR_NUMBER}" \
+            --dir "./dependabot-metadata"
+
+      - name: Validate PR and checks
+        id: validate
+        if: steps.validation-run.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          metadata_file="dependabot-metadata/pr-${PR_NUMBER}.json"
+          update_type="$(jq -r '.update_type // empty' "$metadata_file")"
+
+          if [[ "$update_type" != "version-update:semver-minor" && "$update_type" != "version-update:semver-patch" ]]; then
+            echo "Unsupported update type: $update_type"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author,baseRefName,headRefName,headRefOid,mergeStateStatus,mergeable,state,statusCheckRollup,url)"
+          author_login="$(jq -r '.author.login' <<<"$pr_json")"
+          base_ref="$(jq -r '.baseRefName' <<<"$pr_json")"
+          merge_state="$(jq -r '.mergeStateStatus' <<<"$pr_json")"
+          mergeable="$(jq -r '.mergeable' <<<"$pr_json")"
+          state="$(jq -r '.state' <<<"$pr_json")"
+          head_sha="$(jq -r '.headRefOid' <<<"$pr_json")"
+
+          if [[ "$author_login" != "app/dependabot" && "$author_login" != "dependabot[bot]" ]]; then
+            echo "PR author is not Dependabot: $author_login"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$base_ref" != "main" ]]; then
+            echo "PR base is not main: $base_ref"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$state" != "OPEN" ]]; then
+            echo "PR is not open: $state"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$mergeable" != "MERGEABLE" || "$merge_state" != "CLEAN" ]]; then
+            echo "PR is not mergeable yet: mergeable=$mergeable merge_state=$merge_state"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          checks_json="$(gh api "repos/$REPO/commits/$head_sha/check-runs")"
+          preview_ok="$(jq -r '[.check_runs[] | select(.name == "Deploy Preview" and .conclusion == "success")] | length > 0' <<<"$checks_json")"
+          validation_ok="$(jq -r '[.check_runs[] | select(.name == "Dependency Validation" and .conclusion == "success")] | length > 0' <<<"$checks_json")"
+
+          if [[ "$preview_ok" != "true" || "$validation_ok" != "true" ]]; then
+            echo "Required checks not green yet: preview=$preview_ok validation=$validation_ok"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$(jq -r '.url' <<<"$pr_json")" >> "$GITHUB_OUTPUT"
+
+      - name: Merge pull request
+        if: steps.validate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.validate.outputs.pr_url }}
+        run: gh pr merge --squash --delete-branch "$PR_URL"

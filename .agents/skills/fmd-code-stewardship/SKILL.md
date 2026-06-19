@@ -33,6 +33,7 @@ Improve maintainability through small, behavior-preserving changes. Prefer code 
 ## Feature-first Atomic Design
 
 - Keep feature UI under `src/features/<domain>/{atoms,molecules,organisms,templates,hooks,model}`. Use `src/shared` only for domain-neutral primitives that make sense without Founder Scoreboard planning vocabulary.
+- Create only the subdirectories a feature currently uses. Do not keep empty placeholder directories or commit `.gitkeep` files just to mirror the full Atomic shape.
 - Put tiny display-only controls in `atoms`, composed UI sections in `molecules`, workflow-sized sections in `organisms`, and page/workspace shells in `templates`.
 - Put local state orchestration, browser state, API calls, mutations, auth/role decisions, and side effects in `hooks`; put pure derived data, status mapping, sorting, filtering, and view-model builders in `model`.
 - Do not create compatibility re-export shims from old global paths. Move call sites to the new feature or shared path in the same patch.
