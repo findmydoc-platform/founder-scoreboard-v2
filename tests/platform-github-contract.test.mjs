@@ -373,6 +373,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const providerAuth = await readFile("src/lib/github-provider-auth.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskMutationContract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const ui = await readPlanningSurface();
   const sprintUi = await readFeatureSurface("src/features/sprint");
@@ -429,7 +430,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(githubCommentsRoute, /source,external_id/);
   assert.doesNotMatch(githubCommentsRoute, /events/);
   assert.match(blockersRoute, /task.blocker_reported/);
-  assert.match(taskRoute, /Status geändert/);
+  assert.match(taskMutationContract, /Status geändert/);
   assert.match(taskRoute, /activityMessages/);
   assert.match(syncRoute, /GitHub Sync ausgeführt/);
   assert.match(panel, /TaskDetailPanelBlockerSection/);

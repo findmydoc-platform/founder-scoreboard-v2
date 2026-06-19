@@ -1,41 +1,12 @@
+import { NextResponse, type NextRequest } from "next/server";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
-﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
+import { activityMessages, buildTaskUpdateResponsePatch, profileId, taskOwnedByProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { archiveGitHubIssue } from "@/lib/github";
 import { optionalMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
-
-type UpdatePayload = {
-  status?: string;
-  owner?: string;
-  reviewOwnerProfileId?: string;
-  priority?: string;
-  problemStatement?: string;
-  intendedOutcome?: string;
-  scopeConstraints?: string;
-  acceptanceCriteria?: string;
-  evidenceRequired?: string;
-  definitionOfDone?: string;
-  packageId?: string;
-  milestoneId?: string;
-  startDate?: string;
-  endDate?: string;
-  deadline?: string;
-  dependsOn?: string;
-  evidenceLink?: string;
-  note?: string;
-  reviewStatus?: string;
-  scorePoints?: number;
-  scoreFinal?: boolean;
-  githubSyncStatus?: string;
-  sprintId?: string;
-  selfDodChecked?: boolean;
-  selfEvidenceChecked?: boolean;
-  selfDocumentedChecked?: boolean;
-  selfBlockersChecked?: boolean;
-};
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
@@ -50,75 +21,6 @@ function linkedIssueNumber(row: { github_issue_number?: number | null; issue_num
   return match ? Number(match[1]) : null;
 }
 
-function profileId(value?: string) {
-  return value
-    ?.normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function taskOwnedByProfile(task: { owner?: string | null }, profile?: { id?: string; name?: string } | null) {
-  if (!profile || !task.owner) return false;
-  const owner = task.owner;
-  return owner === profile.id || owner === profile.name || owner === profileId(profile.name);
-}
-
-type CurrentTaskForActivity = {
-  task_type?: string | null;
-  status?: string | null;
-  review_status?: string | null;
-  review_owner_profile_id?: string | null;
-  review_requested_at?: string | null;
-  score_final?: boolean | null;
-  owner?: string | null;
-  priority?: string | null;
-  sprint_id?: string | null;
-  milestone_id?: string | null;
-  package_id?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
-  deadline?: string | null;
-  evidence_link?: string | null;
-};
-
-function formatChange(previous?: string | number | boolean | null, next?: string | number | boolean | null) {
-  const before = previous === undefined || previous === null || previous === "" ? "leer" : String(previous);
-  const after = next === undefined || next === null || next === "" ? "leer" : String(next);
-  return `${before} → ${after}`;
-}
-
-function activityMessages(payload: UpdatePayload, currentTask?: CurrentTaskForActivity | null) {
-  const messages: string[] = [];
-  if (payload.status && currentTask?.status && payload.status !== currentTask.status) {
-    messages.push(`Status geändert: ${currentTask.status} → ${payload.status}`);
-  }
-  if (payload.reviewStatus && currentTask?.review_status && payload.reviewStatus !== currentTask.review_status) {
-    messages.push(`Review geändert: ${currentTask.review_status} → ${payload.reviewStatus}`);
-  }
-  if (payload.reviewOwnerProfileId !== undefined && payload.reviewOwnerProfileId !== currentTask?.review_owner_profile_id) {
-    messages.push(`Review Owner geändert: ${formatChange(currentTask?.review_owner_profile_id, payload.reviewOwnerProfileId)}`);
-  }
-  if (payload.owner !== undefined && payload.owner !== currentTask?.owner) messages.push(`Owner geändert: ${formatChange(currentTask?.owner, payload.owner)}`);
-  if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
-  if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
-  if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
-  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Initiative geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
-  if (
-    (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
-    || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)
-    || (payload.deadline !== undefined && payload.deadline !== currentTask?.deadline)
-  ) {
-    messages.push(`Zeitraum geändert: ${formatChange(currentTask?.start_date, payload.startDate ?? currentTask?.start_date)} bis ${formatChange(currentTask?.end_date, payload.endDate ?? currentTask?.end_date)}`);
-  }
-  if (payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined) messages.push("Aufgabenbrief aktualisiert");
-  if (payload.evidenceLink !== undefined && payload.evidenceLink !== currentTask?.evidence_link) messages.push("Evidence-Link geändert");
-  if (payload.selfDodChecked !== undefined || payload.selfEvidenceChecked !== undefined || payload.selfDocumentedChecked !== undefined || payload.selfBlockersChecked !== undefined) messages.push("Founder-Checkliste aktualisiert");
-  if (payload.note !== undefined) messages.push("Notiz aktualisiert");
-  if (payload.dependsOn !== undefined) messages.push("Abhängigkeit aktualisiert");
-  return [...new Set(messages)];
-}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
@@ -132,7 +34,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const { id } = await context.params;
-  const payload = (await request.json()) as UpdatePayload;
+  const payload = (await request.json()) as TaskUpdatePayload;
   const update: Record<string, string | number | boolean | null> = {};
   const { data: currentTask } = await supabase
     .from("tasks")
@@ -408,20 +310,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  const taskPatch = startsReviewRequest || update.review_owner_profile_id !== undefined ? {
-    id,
-    ...(update.status ? { status: String(update.status) } : {}),
-    ...(update.review_status ? { reviewStatus: String(update.review_status) } : {}),
-    ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
-    reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
-    ...(update.review_requested_at ? { reviewRequestedAt: String(update.review_requested_at) } : {}),
-    ...(update.task_type ? { taskType: String(update.task_type) } : {}),
-    ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
-  } : Object.keys(update).length ? {
-    id,
-    ...(update.task_type ? { taskType: String(update.task_type) } : {}),
-    ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
-  } : undefined;
+  const taskPatch = buildTaskUpdateResponsePatch(id, update, startsReviewRequest);
 
   return NextResponse.json({
     ok: true,
