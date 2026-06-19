@@ -13,6 +13,7 @@ import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningBoardState } from "@/features/planning/hooks/use-planning-board-state";
 import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
+import { usePlanningTaskSelection } from "@/features/planning/hooks/use-planning-task-selection";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
@@ -31,9 +32,7 @@ import {
   currentIsoDate,
   findCurrentSprint,
   normalizePlanningData,
-  packageById,
   planningWorkspaces,
-  sortTasks,
 } from "@/features/planning/model/planning-app-model";
 
 type PlanningAppControllerOptions = {
@@ -187,15 +186,24 @@ export function usePlanningAppController({
     startTransition,
   };
 
-  const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
-  const selectedReviewDetailTask = data.tasks.find((task) => task.id === selectedReviewDetailTaskId) || null;
-  const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
-  const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
-  const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
-  const selectedTaskExternalComments = selectedTask ? data.taskExternalComments.filter((comment) => comment.taskId === selectedTask.id) : [];
-  const selectedTaskActivity = selectedTask ? data.taskActivity.filter((activity) => activity.taskId === selectedTask.id) : [];
-  const selectedTaskBlockers = selectedTask ? data.taskBlockers.filter((blocker) => blocker.taskId === selectedTask.id) : [];
-  const fullTaskView = searchParams.get("view") === "full";
+  const taskSelection = usePlanningTaskSelection({
+    data,
+    fullTaskView: searchParams.get("view") === "full",
+    pathname,
+    router,
+    selectedReviewDetailTaskId,
+    selectedTaskId,
+    setFocusedReviewTaskId,
+    setSelectedTaskId,
+    setWorkspace,
+  });
+  const {
+    closeTaskPanel,
+    fullTaskView,
+    openReviewSheet,
+    openTaskPanel,
+    selectedTask,
+  } = taskSelection;
 
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
@@ -212,51 +220,11 @@ export function usePlanningAppController({
       .slice(0, 3);
   }, [currentProfileId, data.taskFocusItems, todayFocusDate]);
 
-  const openTaskPanel = useCallback((taskId: string) => {
-    setSelectedTaskId(taskId);
-    router.push(`/tasks/${encodeURIComponent(taskId)}`);
-  }, [router, setSelectedTaskId]);
-
-  const closeTaskPanel = useCallback(() => {
-    setSelectedTaskId(null);
-    if (pathname?.startsWith("/tasks/")) {
-      if (window.history.length > 1) {
-        router.back();
-      } else {
-        router.push("/");
-      }
-    }
-  }, [pathname, router, setSelectedTaskId]);
-
-  const openReviewSheet = useCallback((task: Task) => {
-    setSelectedTaskId(null);
-    setFocusedReviewTaskId(task.id);
-    setWorkspace("reviews");
-    router.push(`/reviews/${encodeURIComponent(task.id)}`);
-  }, [router, setFocusedReviewTaskId, setSelectedTaskId, setWorkspace]);
-
   useEffect(() => {
     if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
       setWorkspace("planning");
     }
   }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
-
-  useEffect(() => {
-    if (!selectedTaskId) return;
-
-    const closeOnBackspace = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isEditable = target?.closest("input, textarea, select, [contenteditable='true']");
-      if (isEditable || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key !== "Backspace") return;
-
-      event.preventDefault();
-      closeTaskPanel();
-    };
-
-    window.addEventListener("keydown", closeOnBackspace);
-    return () => window.removeEventListener("keydown", closeOnBackspace);
-  }, [closeTaskPanel, selectedTaskId]);
 
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters, workspace });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
@@ -418,15 +386,15 @@ export function usePlanningAppController({
     reviewStatusFilter,
     saveError,
     selectedFeedbackId,
-    selectedPackage,
-    selectedReviewDetailTask,
+    selectedPackage: taskSelection.selectedPackage,
+    selectedReviewDetailTask: taskSelection.selectedReviewDetailTask,
     selectedReviewDetailTaskId,
     selectedTask,
-    selectedTaskActivity,
-    selectedTaskBlockers,
-    selectedTaskComments,
-    selectedTaskExternalComments,
-    selectedTaskSubIssues,
+    selectedTaskActivity: taskSelection.selectedTaskActivity,
+    selectedTaskBlockers: taskSelection.selectedTaskBlockers,
+    selectedTaskComments: taskSelection.selectedTaskComments,
+    selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
+    selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     setData,
     setDevProfileId,
     setFeedbackDialogOpen,
