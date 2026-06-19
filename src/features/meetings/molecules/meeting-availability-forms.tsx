@@ -2,6 +2,7 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { blockerKindOptions, timeOptions, timeToMinutes, weekdayOptions } from "@/features/meetings/model/meeting-finder";
 import type { AvailabilityEntry } from "@/lib/types";
+import { UiButton, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type Option = { value: string; label: string };
 
@@ -76,25 +77,25 @@ export function MeetingAvailabilityForms({
 
   return (
     <>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel>
         <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
-        <p className="mt-1 text-sm text-slate-500">Regelmäßige FindMyDoc-Zeit pro Person und mehrere Wochentage in einem Schritt.</p>
+        <p className="mt-1 text-sm text-slate-500">Regelmäßige findmydoc-Zeit pro Person und mehrere Wochentage in einem Schritt.</p>
         <div className="mt-4 grid gap-3">
           <CustomSelect value={normalizedWorkProfileId} onChange={onWorkProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileSelectOptions} />
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => onWorkWeekdaysChange(["1", "2", "3", "4", "5"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              <UiButton onClick={() => onWorkWeekdaysChange(["1", "2", "3", "4", "5"])} size="sm">
                 Mo-Fr auswählen
-              </button>
-              <button type="button" onClick={() => onWorkWeekdaysChange(["6", "0"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              </UiButton>
+              <UiButton onClick={() => onWorkWeekdaysChange(["6", "0"])} size="sm">
                 Wochenende
-              </button>
-              <button type="button" onClick={() => onWorkWeekdaysChange(["0"])} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              </UiButton>
+              <UiButton onClick={() => onWorkWeekdaysChange(["0"])} size="sm">
                 Nur Sonntag
-              </button>
-              <button type="button" onClick={() => onWorkWeekdaysChange(weekdayOptions.map((item) => item.value))} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              </UiButton>
+              <UiButton onClick={() => onWorkWeekdaysChange(weekdayOptions.map((item) => item.value))} size="sm">
                 Alle Tage
-              </button>
+              </UiButton>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {weekdayOptions.map((option) => (
@@ -117,21 +118,21 @@ export function MeetingAvailabilityForms({
             <CustomSelect value={workStart} onChange={onWorkStartChange} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Start" />
             <CustomSelect value={workEnd} onChange={onWorkEndChange} disabled={pending} className="h-9 text-sm" options={timeOptions} aria-label="Arbeitszeit Ende" />
           </div>
-          <button type="button" onClick={onAddWorkingHours} disabled={pending || !normalizedWorkProfileId || !workWeekdays.length || timeToMinutes(workStart) >= timeToMinutes(workEnd)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <UiButton onClick={onAddWorkingHours} disabled={pending || !normalizedWorkProfileId || !workWeekdays.length || timeToMinutes(workStart) >= timeToMinutes(workEnd)} variant="primary">
             Arbeitszeiten für {workWeekdays.length || 0} Tag{workWeekdays.length === 1 ? "" : "e"} speichern
-          </button>
+          </UiButton>
         </div>
-      </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      </UiPanel>
+      <UiPanel>
         <h2 className="text-base font-semibold text-slate-950">Blocker eintragen</h2>
         <p className="mt-1 text-sm text-slate-500">Arbeit, Urlaub, Krankheit oder sonstige Nicht-Verfügbarkeit.</p>
         <div className="mt-4 grid gap-3">
           <CustomSelect value={normalizedBlockerProfileId} onChange={onBlockerProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileSelectOptions} />
-          <input
+          <UiTextInput
             value={blockerTitle}
             onChange={(event) => onBlockerTitleChange(event.target.value)}
             disabled={pending}
-            className="h-9 rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+            className="px-3"
             placeholder="Titel"
           />
           <CustomSelect value={blockerKind} onChange={(value) => onBlockerKindChange(value as AvailabilityEntry["blockerKind"])} disabled={pending} className="h-9 text-sm" options={blockerKindOptions} aria-label="Art des Blockers" />
@@ -147,12 +148,12 @@ export function MeetingAvailabilityForms({
             <CustomSelect value={blockerStartTime} onChange={onBlockerStartTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Startzeit" />
             <CustomSelect value={blockerEndTime} onChange={onBlockerEndTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
           </div>
-          <textarea value={blockerNote} onChange={(event) => onBlockerNoteChange(event.target.value)} placeholder="Notiz / Kontext, optional" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          <button type="button" onClick={onAddBlocker} disabled={pending || !normalizedBlockerProfileId || !blockerTitle.trim() || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} className="h-9 rounded-md bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <UiTextArea value={blockerNote} onChange={(event) => onBlockerNoteChange(event.target.value)} placeholder="Notiz / Kontext, optional" className="min-h-20 px-3 text-slate-800" />
+          <UiButton onClick={onAddBlocker} disabled={pending || !normalizedBlockerProfileId || !blockerTitle.trim() || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} variant="amberPrimary">
             Blocker speichern
-          </button>
+          </UiButton>
         </div>
-      </section>
+      </UiPanel>
     </>
   );
 }

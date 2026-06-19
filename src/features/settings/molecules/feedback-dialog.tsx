@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export type FeedbackDraft = {
   type: "bug" | "feature";
@@ -80,22 +81,22 @@ export function FeedbackDialog({
               />
             </label>
           </div>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Titel
-            <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400" placeholder="Kurz beschreiben, was aufgefallen ist" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiTextInput value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} inputSize="lg" inputPadding="md" placeholder="Kurz beschreiben, was aufgefallen ist" />
+          </UiField>
+          <UiField>
             Beschreibung
-            <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-32 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Was ist passiert, was hast du erwartet, und wo genau im Tool?" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiTextArea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} minHeight="2xl" inputPadding="md" leading="relaxed" placeholder="Was ist passiert, was hast du erwartet, und wo genau im Tool?" />
+          </UiField>
+          <UiField>
             Kontextseite
-            <input value={draft.pageUrl} onChange={(event) => setDraft((current) => ({ ...current, pageUrl: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400" placeholder="URL oder Bereich im Tool" />
-          </label>
+            <UiTextInput value={draft.pageUrl} onChange={(event) => setDraft((current) => ({ ...current, pageUrl: event.target.value }))} inputSize="lg" inputPadding="md" placeholder="URL oder Bereich im Tool" />
+          </UiField>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">Abbrechen</button>
-          <button type="submit" disabled={pending || !canSubmit} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Senden</button>
+          <UiButton type="button" onClick={onClose}>Abbrechen</UiButton>
+          <UiButton type="submit" disabled={pending || !canSubmit} variant="primary">Senden</UiButton>
         </div>
       </form>
     </div>

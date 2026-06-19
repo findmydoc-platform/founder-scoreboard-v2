@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import type { Profile } from "@/lib/types";
+import { UiBadge, UiButton, UiField, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type DecisionCreateFormProps = {
   canCreate: boolean;
@@ -37,28 +38,28 @@ export function DecisionCreateForm({
   };
 
   return (
-    <section id="decision-create" className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel id="decision-create" className="scroll-mt-24">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Neue Decision</h2>
           <p className="mt-1 text-sm text-slate-500">Nur CEO kann Einträge erstellen. Nach Bestätigung aller ausgewählten Personen wird automatisch gelockt.</p>
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${canCreate ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+        <UiBadge tone={canCreate ? "blue" : "slate"} size="md" className={canCreate ? "" : "text-slate-500"}>
           {canCreate ? "CEO-Rechte aktiv" : "Read/Confirm"}
-        </span>
+        </UiBadge>
       </div>
       <form className="mt-4 grid gap-3" onSubmit={submit}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Titel
-            <input
+            <UiTextInput
               value={title}
               disabled={!canCreate || pending}
               onChange={(event) => onTitleChange(event.target.value)}
-              className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 disabled:bg-slate-50 disabled:opacity-70"
+              className="h-10 px-3 disabled:opacity-70"
               placeholder="z. B. Malta-Struktur für Sprint 1 freigeben"
             />
-          </label>
+          </UiField>
           <fieldset className="grid gap-2 text-xs font-semibold text-slate-500">
             Bestätigung erforderlich von
             <div className="flex flex-wrap gap-2">
@@ -83,36 +84,37 @@ export function DecisionCreateForm({
             </div>
           </fieldset>
         </div>
-        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+        <UiField>
           Kontext
-          <textarea
+          <UiTextArea
             value={context}
             disabled={!canCreate || pending}
             onChange={(event) => onContextChange(event.target.value)}
-            className="min-h-20 resize-y rounded-md border border-slate-200 px-3 py-2 text-sm font-normal leading-6 text-slate-900 disabled:bg-slate-50 disabled:opacity-70"
+            className="min-h-20 px-3 leading-6 disabled:opacity-70"
             placeholder="Warum steht diese Entscheidung jetzt an?"
           />
-        </label>
-        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+        </UiField>
+        <UiField>
           Entscheidung
-          <textarea
+          <UiTextArea
             value={decisionText}
             disabled={!canCreate || pending}
             onChange={(event) => onDecisionTextChange(event.target.value)}
-            className="min-h-24 resize-y rounded-md border border-slate-200 px-3 py-2 text-sm font-normal leading-6 text-slate-900 disabled:bg-slate-50 disabled:opacity-70"
+            className="min-h-24 px-3 leading-6 disabled:opacity-70"
             placeholder="Was wird konkret entschieden?"
           />
-        </label>
+        </UiField>
         <div className="flex justify-end">
-          <button
+          <UiButton
             type="submit"
             disabled={!canCreate || pending || !title.trim() || !decisionText.trim() || !requiredProfileIds.length}
-            className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            variant="primary"
+            className="px-4"
           >
             Decision öffnen
-          </button>
+          </UiButton>
         </div>
       </form>
-    </section>
+    </UiPanel>
   );
 }

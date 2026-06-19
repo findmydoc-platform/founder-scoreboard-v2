@@ -1,4 +1,5 @@
 import type { TaskBlocker } from "@/lib/types";
+import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function TaskBlockerCard({
   blockers,
@@ -10,7 +11,7 @@ export function TaskBlockerCard({
   profileName: (profileId: string) => string;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5">
+    <UiPanel padding="lg">
       <h2 className="text-sm font-semibold text-slate-950">Blocker</h2>
       <div className="mt-2 text-sm text-slate-600">{openBlockerCount} offen</div>
       <div className="mt-3 grid gap-2">
@@ -22,6 +23,6 @@ export function TaskBlockerCard({
         ))}
         {!blockers.length && <div className="text-sm text-slate-500">Keine Blocker gemeldet.</div>}
       </div>
-    </section>
+    </UiPanel>
   );
 }

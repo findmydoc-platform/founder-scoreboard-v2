@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { TaskChecklist } from "@/features/tasks/molecules/task-checklist";
 import { taskOwnerLabel } from "@/lib/display";
 import type { Profile, Task } from "@/lib/types";
+import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export type TaskBriefState = Pick<Task, "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone">;
 
@@ -61,7 +62,7 @@ export function TaskBriefSection({
   children,
 }: Props) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5">
+    <UiPanel padding="lg">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <ProfileAvatar profile={creatorProfile} />
@@ -81,24 +82,23 @@ export function TaskBriefSection({
               >
                 <X size={15} />
               </button>
-              <button
-                type="button"
+              <UiButton
                 onClick={onSave}
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+                variant="blue"
+                size="sm"
               >
                 <Save size={14} />
                 Speichern
-              </button>
+              </UiButton>
             </>
           ) : (
-            <button
-              type="button"
+            <UiButton
               onClick={onEdit}
-              className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              size="sm"
             >
               <Pencil size={14} />
               Bearbeiten
-            </button>
+            </UiButton>
           )}
         </div>
       </div>
@@ -126,6 +126,6 @@ export function TaskBriefSection({
         </div>
       ))}
       {children}
-    </section>
+    </UiPanel>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { TaskReviewSheet } from "@/features/reviews/organisms/task-review-sheet";
 import { canActOnReview, isReviewRelevantTask } from "@/features/reviews/model/review-workspace-view-model";
 import type { PlanningData, Profile, Task } from "@/lib/types";
+import { UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   data: PlanningData;
@@ -28,13 +28,13 @@ export function ReviewDetailPage({ data, task, currentProfile, pending, source, 
       <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
         <AppSidebar activeWorkspace="reviews" source={source} currentPlatformRole={currentProfile?.platformRole || ""} />
         <div className="mx-auto max-w-4xl px-6 py-10">
-          <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <UiPanel padding="xl">
             <h1 className="text-lg font-semibold text-slate-950">Review nicht gefunden</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">Diese Aufgabe existiert nicht oder ist aktuell keine Review.</p>
-            <Link href="/?workspace=reviews" className="mt-4 inline-flex h-9 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+            <UiLinkButton href="/?workspace=reviews" variant="blue" className="mt-4">
               Zur Review-Zentrale
-            </Link>
-          </section>
+            </UiLinkButton>
+          </UiPanel>
         </div>
       </main>
     );
@@ -54,9 +54,9 @@ export function ReviewDetailPage({ data, task, currentProfile, pending, source, 
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review</div>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">{task.title}</h1>
           </div>
-          <Link href="/?workspace=reviews" className="h-9 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <UiLinkButton href="/?workspace=reviews">
             Zur Review-Zentrale
-          </Link>
+          </UiLinkButton>
         </div>
         <TaskReviewSheet
           task={task}

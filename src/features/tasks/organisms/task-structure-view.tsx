@@ -3,6 +3,8 @@ import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { initiativeMetaLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
+import { DataSurface } from "@/shared/molecules/data-surface";
 
 type TaskStructureViewProps = {
   packages: Package[];
@@ -36,18 +38,18 @@ export function TaskStructureView({
   return (
     <div className="grid gap-4">
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => onSetAllPackageCollapse(true)} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+        <UiButton type="button" onClick={() => onSetAllPackageCollapse(true)} size="sm">
           Alle einklappen
-        </button>
-        <button type="button" onClick={() => onSetAllPackageCollapse(false)} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+        </UiButton>
+        <UiButton type="button" onClick={() => onSetAllPackageCollapse(false)} size="sm">
           Alle ausklappen
-        </button>
+        </UiButton>
       </div>
       {packages.map((pack) => {
         const tasks = visibleTasks.filter((task) => task.packageId === pack.id);
         const expanded = Boolean(expandedPackages[pack.id]);
         return (
-          <section key={pack.id} className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <DataSurface key={pack.id}>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <button type="button" onClick={() => onTogglePackage(pack.id)} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus:ring-2 focus:ring-blue-100" aria-expanded={expanded}>
                 <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500">
@@ -59,7 +61,7 @@ export function TaskStructureView({
                   <span className="mt-1 block text-sm text-slate-500">{pack.goal}</span>
                 </span>
               </button>
-              <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{tasks.length} Aufgaben</span>
+              <UiBadge tone="white" size="md">{tasks.length} Aufgaben</UiBadge>
             </div>
             {expanded && (
               <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
@@ -82,7 +84,7 @@ export function TaskStructureView({
                 })}
               </div>
             )}
-          </section>
+          </DataSurface>
         );
       })}
     </div>

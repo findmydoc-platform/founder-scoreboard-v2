@@ -3,6 +3,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { initiativeOptionLabel } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
 import type { Package, Profile } from "@/lib/types";
+import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export type PlanningFiltersValue = {
   query: string;
@@ -23,7 +24,7 @@ type PlanningFiltersProps = {
 
 export function PlanningFilters({ filters, profiles, packages, quickFilters, onChange }: PlanningFiltersProps) {
   return (
-    <section className="mx-4 mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:mx-6">
+    <UiPanel className="mx-4 mb-4 lg:mx-6">
       <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_repeat(4,180px)]">
         <label className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -41,18 +42,17 @@ export function PlanningFilters({ filters, profiles, packages, quickFilters, onC
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {quickFilters.map((filter) => (
-          <button
+          <UiButton
             key={filter.id}
-            type="button"
             onClick={() => onChange({ ...filters, quick: filters.quick === filter.id ? "" : filter.id })}
-            className={`h-8 rounded-md border px-3 text-xs font-semibold ${
-              filters.quick === filter.id ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"
-            }`}
+            variant={filters.quick === filter.id ? "blue" : "secondary"}
+            size="sm"
+            className={filters.quick === filter.id ? "border-blue-300" : "text-slate-600"}
           >
             {filter.label}
-          </button>
+          </UiButton>
         ))}
       </div>
-    </section>
+    </UiPanel>
   );
 }

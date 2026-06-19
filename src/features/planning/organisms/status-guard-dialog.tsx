@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import type { Task, TaskStatus } from "@/lib/types";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 
 type StatusGuardDialogProps = {
   task: Task;
@@ -20,15 +21,15 @@ export function StatusGuardDialog({ task, notice, onUpdate, onClose }: StatusGua
           <p className="mt-1 leading-5 text-slate-600">{notice}</p>
           <p className="mt-2 truncate text-xs font-semibold text-slate-500">{task.title}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => onUpdate(task, { status: "Review" as TaskStatus })} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">
+            <UiButton type="button" onClick={() => onUpdate(task, { status: "Review" as TaskStatus })} variant="primary">
               In Review verschieben
-            </button>
-            <button type="button" onClick={() => onUpdate(task, { status: "Blockiert" as TaskStatus })} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            </UiButton>
+            <UiButton type="button" onClick={() => onUpdate(task, { status: "Blockiert" as TaskStatus })}>
               Als blockiert markieren
-            </button>
-            <button type="button" onClick={onClose} className="h-9 rounded-md px-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">
+            </UiButton>
+            <UiButton type="button" onClick={onClose} variant="ghost">
               Abbrechen
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

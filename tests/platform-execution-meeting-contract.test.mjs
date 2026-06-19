@@ -8,7 +8,8 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
   const ui = await readPlanningSurface();
   const toolsUi = await readFile("src/features/tools/organisms/fmd-tools-overview.tsx", "utf8");
   const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const seed = await readFile("src/lib/generated/seed-data.ts", "utf8");
+  const seed = await readFile("src/lib/seed/full-data.ts", "utf8");
+  const importer = await readFile("scripts/import-dashboard.mjs", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists fmd_tools/);
@@ -31,6 +32,8 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
   assert.match(seed, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
   assert.match(seed, /https:\/\/pitchdeck\.findmydoc\.eu\//);
   assert.match(seed, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
+  assert.match(importer, /readExistingFullSeedData/);
+  assert.match(importer, /preserveExistingFixtureAddons/);
   assert.match(types, /export type FmdTool/);
 });
 

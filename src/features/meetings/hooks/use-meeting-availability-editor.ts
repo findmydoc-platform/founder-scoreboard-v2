@@ -54,14 +54,14 @@ export function useMeetingAvailabilityEditor({
       onCreateAvailability({
         profileId: normalizedWorkProfileId,
         type: "working_hours",
-        title: "Reguläre FindMyDoc-Arbeitszeit",
+        title: "Reguläre findmydoc-Arbeitszeit",
         blockerKind: "working_hours",
         weekday: Number(weekday),
         startDate: "",
         endDate: "",
         startTime: workStart,
         endTime: workEnd,
-        note: "Reguläre FindMyDoc-Arbeitszeit",
+        note: "Reguläre findmydoc-Arbeitszeit",
       });
     }
   };

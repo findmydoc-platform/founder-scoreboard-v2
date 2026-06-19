@@ -9,7 +9,8 @@ const root = resolve(__dirname, "..");
 const legacyRoot = resolve(root, "..", "docs", "findmydoc");
 const htmlPath = join(legacyRoot, "founder-task-dashboard.html");
 const statePath = join(legacyRoot, "dashboard-state.json");
-const outDir = join(root, "src", "lib", "generated");
+const seedDir = join(root, "src", "lib", "seed");
+const fullSeedPath = join(seedDir, "full-data.ts");
 const supabaseDir = join(root, "supabase");
 
 function extractConst(source, name) {
@@ -52,6 +53,28 @@ function extractConst(source, name) {
 function evaluateArray(source, name) {
   const text = extractConst(source, name);
   return vm.runInNewContext(`(${text})`, {}, { timeout: 1000 });
+}
+
+async function readExistingFullSeedData() {
+  if (!existsSync(fullSeedPath)) return null;
+  const source = (await readFile(fullSeedPath, "utf8")).replace(/^\uFEFF/, "");
+  const match = source.match(/export const fullSeedData: PlanningData = ([\s\S]*);\s*$/);
+  if (!match) return null;
+  return JSON.parse(match[1]);
+}
+
+function preserveExistingFixtureAddons(generated, existing) {
+  if (!existing) return generated;
+
+  const merged = { ...generated };
+  for (const [key, value] of Object.entries(generated)) {
+    if (!Array.isArray(value) || value.length > 0) continue;
+    const existingValue = existing[key];
+    if (Array.isArray(existingValue) && existingValue.length > 0) {
+      merged[key] = existingValue;
+    }
+  }
+  return merged;
 }
 
 function slugify(value) {
@@ -175,52 +198,70 @@ const planningTasks = tasks.map((task, index) => {
   };
 });
 
-await mkdir(outDir, { recursive: true });
+await mkdir(seedDir, { recursive: true });
 await mkdir(supabaseDir, { recursive: true });
 
-await writeFile(
-  join(outDir, "seed-data.ts"),
-  `import type { PlanningData } from "../types";\n\nexport const seedData: PlanningData = ${JSON.stringify(
+const generatedFullSeedData = {
+  project: {
+    id: "findmydoc-founder-execution",
+    name: "findmydoc Founder Execution",
+    range: "Sprint 1 / operative Planungsphase",
+  },
+  profiles,
+  packages,
+  milestones: [],
+  tasks: planningTasks,
+  sprints: [
     {
-      project: {
-        id: "findmydoc-founder-execution",
-        name: "findmydoc Founder Execution",
-        range: "Sprint 1 / operative Planungsphase",
-      },
-      profiles,
-      packages,
-      tasks: planningTasks,
-      sprints: [
-        {
-          id: "sprint-1",
-          name: "Sprint 1",
-          status: "active",
-          startDate: "2026-05-25",
-          endDate: "2026-06-07",
-          reviewDueAt: "2026-06-05T12:00:00.000Z",
-          scoreLocked: false,
-        },
-      ],
-      sprintCommitments: [],
-      decisions: [],
-      decisionComments: [],
-      taskComments: [],
-      taskBlockers: [],
-      notificationEvents: [],
-      meetings: [
-        {
-          id: 1,
-          sprintId: "sprint-1",
-          title: "Sprint 1 Biweekly",
-          meetingAt: "2026-06-07T18:00:00.000Z",
-          status: "planned",
-          agenda: "Sprint-Update, Blocker, Review-Stand, Entscheidungen und nächste Sprintplanung.",
-        },
-      ],
-      meetingAttendance: [],
-      audit: [],
-      availability: [],
+      id: "sprint-1",
+      name: "Sprint 1",
+      status: "active",
+      startDate: "2026-05-25",
+      endDate: "2026-06-07",
+      reviewDueAt: "2026-06-05T12:00:00.000Z",
+      scoreLocked: false,
     },
+  ],
+  sprintCommitments: [],
+  founderSprintScores: [],
+  founderStrikeStates: [],
+  strikeEvents: [],
+  scoreObjections: [],
+  decisions: [],
+  decisionComments: [],
+  taskComments: [],
+  taskExternalComments: [],
+  taskBlockers: [],
+  taskRelations: [],
+  taskActivity: [],
+  taskFocusItems: [],
+  decisionTaskLinks: [],
+  notificationEvents: [],
+  notificationDeliveries: [],
+  notificationPreferences: [],
+  feedbackItems: [],
+  fmdTools: [],
+  events: [],
+  meetings: [
+    {
+      id: 1,
+      sprintId: "sprint-1",
+      title: "Sprint 1 Biweekly",
+      meetingAt: "2026-06-07T18:00:00.000Z",
+      status: "planned",
+      agenda: "Sprint-Update, Blocker, Review-Stand, Entscheidungen und nächste Sprintplanung.",
+    },
+  ],
+  meetingAttendance: [],
+  audit: [],
+  availability: [],
+};
+const fullSeedData = preserveExistingFixtureAddons(generatedFullSeedData, await readExistingFullSeedData());
+
+await writeFile(
+  fullSeedPath,
+  `import type { PlanningData } from "../types";\n\nexport const fullSeedData: PlanningData = ${JSON.stringify(
+    fullSeedData,
     null,
     2,
   )};\n`,

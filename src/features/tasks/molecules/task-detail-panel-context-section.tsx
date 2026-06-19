@@ -2,6 +2,7 @@
 
 import { focusStatusLabel, formatDate } from "@/lib/display";
 import type { DecisionTaskLink, PlanningData, TaskFocusItem } from "@/lib/types";
+import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 type LinkedDecision = {
   link: DecisionTaskLink;
@@ -30,14 +31,14 @@ export function TaskDetailPanelContextSection({ linkedFocusItems, linkedDecision
             <article key={item.id} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold text-slate-800">{profileName(item.profileId)} · {formatDate(item.focusDate)}</span>
-                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
+                <UiBadge tone="blue" size="xs">{focusStatusLabel(item.status)}</UiBadge>
               </div>
               <div className="mt-1 text-xs leading-5 text-slate-500">{item.nextStep || "Kein nächster Schritt hinterlegt."}</div>
             </article>
           )) : (
-            <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+            <UiEmptyState>
               Diese Aufgabe ist aktuell in keinem Tagesfokus.
-            </div>
+            </UiEmptyState>
           )}
         </div>
       </section>
@@ -51,9 +52,9 @@ export function TaskDetailPanelContextSection({ linkedFocusItems, linkedDecision
               <div className="mt-1 text-xs text-slate-500">{decision ? decisionStatusLabel(decision.status) : "Decision"} · {link.note || "Keine Notiz hinterlegt."}</div>
             </article>
           )) : (
-            <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+            <UiEmptyState>
               Noch keine Decision verknüpft.
-            </div>
+            </UiEmptyState>
           )}
         </div>
       </section>

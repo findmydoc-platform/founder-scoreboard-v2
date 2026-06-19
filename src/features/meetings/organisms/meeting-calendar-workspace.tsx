@@ -4,6 +4,7 @@ import { MeetingCalendarToolbar } from "@/features/meetings/molecules/meeting-ca
 import { MeetingCalendarWeekView } from "@/features/meetings/organisms/meeting-calendar-week-view";
 import type { CalendarBlock, CalendarCell } from "@/features/meetings/model/meeting-finder";
 import type { AvailabilityEntry, Profile } from "@/lib/types";
+import { UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type SelectOption = { value: string; label: string };
 type CalendarSelection = { date: string; start: number; end: number };
@@ -152,7 +153,7 @@ export function MeetingCalendarWorkspace({
   onBlockerNoteChange: (note: string) => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <UiPanel className="min-w-0 xl:col-span-2">
       <MeetingCalendarToolbar
         calendarView={calendarView}
         calendarTitle={calendarTitle}
@@ -194,9 +195,9 @@ export function MeetingCalendarWorkspace({
         />
       )}
       {!workingHoursCount && (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+        <UiNotice tone="warning" className="mt-3 text-amber-900">
           Noch keine Arbeitszeiten hinterlegt. Trage unten pro Person reguläre findmydoc-Zeiten ein oder nutze „Mo-Fr auswählen“. Erst dann kann das Raster echte freie Zeiten zeigen.
-        </div>
+        </UiNotice>
       )}
       {availabilityDialogMode && (
         <MeetingAvailabilityDialog
@@ -229,6 +230,6 @@ export function MeetingCalendarWorkspace({
           onBlockerNoteChange={onBlockerNoteChange}
         />
       )}
-    </section>
+    </UiPanel>
   );
 }

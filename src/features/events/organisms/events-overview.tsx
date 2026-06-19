@@ -6,6 +6,7 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { eventDateRangeLabel, founderEventAudienceLabel, founderEventCategories, founderEventCategoryLabel, founderEventStatusLabel, founderEventStatuses, normalizeEventDateTimeInput } from "@/lib/founder-events";
 import type { FounderEvent, Profile } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export type FounderEventDraft = {
   id?: number;
@@ -130,21 +131,20 @@ export function EventsOverview({
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Event-Zentrale</h2>
             <p className="mt-1 text-sm text-slate-600">Wichtige Gründertermine, Messen, Reisen und rechtliche Termine an einem Ort.</p>
           </div>
           {canManageEvents && (
-            <button
-              type="button"
+            <UiButton
               onClick={openCreate}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"
+              variant="primary"
             >
               <Plus size={16} />
               Event eintragen
-            </button>
+            </UiButton>
           )}
         </div>
         <div className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
@@ -160,23 +160,22 @@ export function EventsOverview({
             { id: "cancelled", label: "Abgesagt" },
             { id: "all", label: "Alle" },
           ].map((option) => (
-            <button
+            <UiButton
               key={option.id}
-              type="button"
               onClick={() => setFilter(option.id as EventFilter)}
-              className={`h-8 rounded-md border px-3 text-xs font-semibold ${
-                filter === option.id ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
+              variant={filter === option.id ? "blue" : "secondary"}
+              size="sm"
+              className={filter === option.id ? "border-blue-300" : "text-slate-600"}
             >
               {option.label}
-            </button>
+            </UiButton>
           ))}
         </div>
-        {message && <p className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">{message}</p>}
-      </section>
+        {message && <UiNotice className="mt-3 font-medium leading-normal">{message}</UiNotice>}
+      </UiPanel>
 
       {formOpen && canManageEvents && (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <UiPanel>
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-slate-950">{editingEvent ? "Event bearbeiten" : "Event eintragen"}</h2>
@@ -189,10 +188,10 @@ export function EventsOverview({
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Titel
-              <input
+              <UiTextInput
                 value={draft.title}
                 onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400"
+                className="h-10 px-3"
                 placeholder="z. B. Gesundheitsmesse Düsseldorf"
               />
             </label>
@@ -210,29 +209,29 @@ export function EventsOverview({
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Ort
-              <input
+              <UiTextInput
                 value={draft.location}
                 onChange={(event) => setDraft({ ...draft, location: event.target.value })}
-                className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400"
+                className="h-10 px-3"
                 placeholder="z. B. Düsseldorf"
               />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Erinnerung
-              <input
+              <UiTextInput
                 value={String(draft.reminderDaysBefore)}
                 onChange={(event) => setDraft({ ...draft, reminderDaysBefore: Number(event.target.value) || 0 })}
-                className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400"
+                className="h-10 px-3"
                 inputMode="numeric"
                 placeholder="7"
               />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500 lg:col-span-2">
               Beschreibung
-              <textarea
+              <UiTextArea
                 value={draft.description}
                 onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                className="min-h-24 rounded-md border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-blue-400"
+                className="min-h-24 px-3"
                 placeholder="Kontext, Vorbereitung oder wichtige Hinweise"
               />
             </label>
@@ -281,27 +280,27 @@ export function EventsOverview({
             )}
           </div>
           <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={closeForm} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+            <UiButton onClick={closeForm} className="text-slate-600">
               Abbrechen
-            </button>
-            <button type="button" onClick={submit} disabled={pending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">
+            </UiButton>
+            <UiButton onClick={submit} disabled={pending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
               {editingEvent ? "Event speichern" : "Event erstellen"}
-            </button>
+            </UiButton>
           </div>
-        </section>
+        </UiPanel>
       )}
 
       <section className="grid gap-3">
         {visibleEvents.map((event) => (
-          <article key={event.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <UiPanel key={event.id} as="article">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{founderEventCategoryLabel(event.category)}</span>
-                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${event.status === "cancelled" ? "border-rose-100 bg-rose-50 text-rose-700" : event.status === "done" ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  <UiBadge tone="blue">{founderEventCategoryLabel(event.category)}</UiBadge>
+                  <UiBadge tone={event.status === "cancelled" ? "rose" : event.status === "done" ? "emerald" : "slate"}>
                     {founderEventStatusLabel(event.status)}
-                  </span>
-                  {event.reminderGeneratedAt && <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Reminder erzeugt</span>}
+                  </UiBadge>
+                  {event.reminderGeneratedAt && <UiBadge tone="emerald">Reminder erzeugt</UiBadge>}
                 </div>
                 <h3 className="mt-2 text-base font-semibold text-slate-950">{event.title}</h3>
                 <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-600">
@@ -313,18 +312,18 @@ export function EventsOverview({
                 {event.description && <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">{event.description}</p>}
               </div>
               {canManageEvents && (
-                <button type="button" onClick={() => openEdit(event)} className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                <UiButton onClick={() => openEdit(event)} size="sm" className="text-slate-600">
                   <Pencil size={14} />
                   Bearbeiten
-                </button>
+                </UiButton>
               )}
             </div>
-          </article>
+          </UiPanel>
         ))}
         {!visibleEvents.length && (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+          <UiEmptyState className="rounded-lg px-4 py-10">
             Keine Events für diesen Filter.
-          </div>
+          </UiEmptyState>
         )}
       </section>
     </div>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { dateRange } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/features/sprint/model/sprint-score-view-model";
 import type { Task } from "@/lib/types";
+import { UiButton, UiField, UiLinkButton, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type ReviewChecklist = {
   acceptanceCriteriaMet?: boolean;
@@ -46,9 +46,9 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
               {task.owner} · {task.priority} · {task.hours}h · {dateRange(task)} · {reviewLabel(task.reviewStatus)} · {reviewOwnerName}
             </p>
           </div>
-          <Link href={`/tasks/${encodeURIComponent(task.id)}`} className="h-8 rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+          <UiLinkButton href={`/tasks/${encodeURIComponent(task.id)}`} variant="blueOutline" size="sm">
             Aufgabe öffnen
-          </Link>
+          </UiLinkButton>
         </div>
         <p className="mt-2 text-xs leading-5 text-blue-800">
           Review-Rohpunkte entstehen hier im Review-Blatt. Der Sprint-Gesamtscore bleibt im 20-Punkte-Modell von Sprint & Score.
@@ -71,9 +71,9 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
         </div>
         <div className="grid content-start gap-3">
           {final ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm leading-6 text-emerald-800">
+            <UiNotice tone="success" className="border-emerald-200">
               Diese Review ist abgeschlossen: {task.scorePoints} Punkte · {reviewLabel(task.reviewStatus)}.
-            </div>
+            </UiNotice>
           ) : (
             <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
               Review-Rohpunkte: vier Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
@@ -93,30 +93,31 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
               />
             </label>
           ))}
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Automatische Review-Rohpunkte
-            <input
+            <UiTextInput
               type="number"
               min={0}
               max={10}
               value={final ? task.scorePoints : reviewScore}
               readOnly
-              className="h-9 rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800"
+              surface="muted"
+              className="font-semibold text-slate-800"
             />
-          </label>
+          </UiField>
           {!final ? (
             <>
               <p className="text-[11px] leading-5 text-slate-500">Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={pending || !canReview} onClick={() => onReview(task, "accepted", reviewScore, checklist, comment)} className="h-9 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Akzeptieren</button>
-                <button type="button" disabled={pending || !canReview} onClick={() => onReview(task, "partial", reviewScore, checklist, comment)} className="h-9 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-700 disabled:cursor-not-allowed disabled:opacity-50">Teilweise</button>
-                <button type="button" disabled={pending || !canReview} onClick={() => onReview(task, "changes_requested", 0, checklist, comment)} className="h-9 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700 disabled:cursor-not-allowed disabled:opacity-50">Nacharbeit</button>
+                <UiButton disabled={pending || !canReview} onClick={() => onReview(task, "accepted", reviewScore, checklist, comment)} variant="emerald">Akzeptieren</UiButton>
+                <UiButton disabled={pending || !canReview} onClick={() => onReview(task, "partial", reviewScore, checklist, comment)} variant="amber">Teilweise</UiButton>
+                <UiButton disabled={pending || !canReview} onClick={() => onReview(task, "changes_requested", 0, checklist, comment)} variant="orange">Nacharbeit</UiButton>
               </div>
             </>
           ) : (
-            <button type="button" disabled={pending || !canReopen} onClick={() => onReopen(task)} className="h-9 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            <UiButton disabled={pending || !canReopen} onClick={() => onReopen(task)} variant="blue">
               Review wieder öffnen
-            </button>
+            </UiButton>
           )}
           {!canReview && !final ? <p className="text-xs leading-5 text-slate-500">Nur Review Owner, CEO oder Deputy können diese Review finalisieren.</p> : null}
           {final && !canReopen ? <p className="text-xs leading-5 text-slate-500">Nur Review Owner, CEO oder Deputy können diese Review wieder öffnen.</p> : null}

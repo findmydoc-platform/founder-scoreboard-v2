@@ -5,8 +5,9 @@ import type { DragEvent } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
-import { normalizeStatus, priorityTone, statusTone } from "@/lib/status";
+import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
 import type { Package, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 
 function cardHexToRgba(hex: string, alpha: number) {
   const match = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -20,29 +21,24 @@ function cardHexToRgba(hex: string, alpha: number) {
 
 export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
   return (
-    <span
+    <UiBadge
+      tone="amber"
+      size="xs"
       title="Nur in der App: noch kein GitHub-Issue verknüpft."
-      className={`inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 font-semibold text-amber-700 ${
-        compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]"
-      }`}
+      className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}
     >
       <AlertTriangle size={compact ? 12 : 13} />
       {!compact && "App-only"}
-    </span>
+    </UiBadge>
   );
 }
 
-export function RelationBadge({ label, count, tone = "slate" }: { label: string; count: number; tone?: "amber" | "blue" | "slate" }) {
+export function RelationBadge({ label, count, tone = "slate" }: { label: string; count: number; tone?: Extract<UiTone, "amber" | "blue" | "slate"> }) {
   if (!count) return null;
-  const classes = {
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    slate: "border-slate-200 bg-slate-50 text-slate-600",
-  }[tone];
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>
+    <UiBadge tone={tone} size="xs" className="text-[11px]">
       {label} {count}
-    </span>
+    </UiBadge>
   );
 }
 
@@ -113,15 +109,15 @@ export function TaskCard({
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(normalized)}`}>
+        <UiBadge tone={statusBadgeTone(normalized)} size="xs" className="text-[11px]">
           {normalized}
-        </span>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${priorityTone(task.priority)}`}>
+        </UiBadge>
+        <UiBadge tone={priorityBadgeTone(task.priority)} size="xs" className="text-[11px]">
           {task.priority}
-        </span>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+        </UiBadge>
+        <UiBadge size="xs" className="text-[11px]">
           {task.hours}h
-        </span>
+        </UiBadge>
         {missingGitHub && <GitHubMissingBadge />}
         <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
         <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />

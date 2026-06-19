@@ -5,6 +5,7 @@ import { taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, syncLabel } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Task } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function SystemStatusSection({
   source,
@@ -20,7 +21,7 @@ export function SystemStatusSection({
   googleChatReady: boolean;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <h2 className="text-base font-semibold text-slate-950">Systemstatus</h2>
       <div className="mt-4 grid gap-3 text-sm">
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -48,7 +49,7 @@ export function SystemStatusSection({
           </span>
         </div>
       </div>
-    </section>
+    </UiPanel>
   );
 }
 
@@ -72,7 +73,7 @@ export function GitHubSyncQueueSection({
   const appOnlyPreviewTasks = appOnlyTasks.slice(0, 12);
 
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <UiPanel className="min-w-0 xl:col-span-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-950">GitHub Sync Queue</h2>
@@ -80,14 +81,13 @@ export function GitHubSyncQueueSection({
             App bleibt führend. Verknüpfte Issues werden aktualisiert; App-only-Aufgaben bleiben dauerhaft sichtbar und können später bewusst als GitHub-Issue angelegt werden.
           </p>
         </div>
-        <button
-          type="button"
+        <UiButton
           disabled={pending || !linkedSyncQueue.length || !githubProviderTokenAvailable}
           onClick={onSyncLinkedGitHubTasks}
-          className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="w-full sm:w-auto"
         >
           Verknüpfte Issues synchronisieren
-        </button>
+        </UiButton>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="min-w-0 rounded-md bg-slate-50 px-3 py-2 text-sm">
@@ -107,7 +107,7 @@ export function GitHubSyncQueueSection({
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-slate-950">Aktualisierbare GitHub-Issues</h3>
-            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600">{linkedSyncQueue.length}</span>
+            <UiBadge tone="white" bordered={false}>{linkedSyncQueue.length}</UiBadge>
           </div>
           <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
             {linkedSyncQueue.slice(0, 8).map((task) => (
@@ -120,13 +120,13 @@ export function GitHubSyncQueueSection({
                 {task.githubSyncError && <div className="mt-1 line-clamp-2 text-xs text-red-700">{task.githubSyncError}</div>}
               </div>
             ))}
-            {!linkedSyncQueue.length && <div className="rounded-md border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500">Keine verknüpften Issues warten auf Sync.</div>}
+            {!linkedSyncQueue.length && <UiEmptyState>Keine verknüpften Issues warten auf Sync.</UiEmptyState>}
           </div>
         </div>
         <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-amber-950">App-only Aufgaben</h3>
-            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-amber-700">{appOnlyTasks.length}</span>
+            <UiBadge tone="amberWhite" bordered={false}>{appOnlyTasks.length}</UiBadge>
           </div>
           <p className="mt-1 text-xs leading-5 text-amber-800">
             Diese Liste bleibt dauerhaft erhalten. Deliverables bleiben App-only, bis sie bewusst ins Management-Repo gespiegelt werden.
@@ -148,31 +148,32 @@ export function GitHubSyncQueueSection({
                       <span>{task.hours}h</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
+                  <UiButton
                     disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
                     onClick={() => onCreateGitHubIssue(task)}
-                    className="h-7 w-full shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    variant="amber"
+                    size="compact"
+                    className="w-full shrink-0 text-amber-800 sm:w-auto"
                   >
                     GitHub-Issue anlegen
-                  </button>
+                  </UiButton>
                 </div>
               </div>
             ))}
             {appOnlyTasks.length > appOnlyPreviewTasks.length && (
-              <div className="rounded-md border border-amber-200 bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">
+              <UiNotice tone="warning" size="xs" className="bg-white text-center font-semibold">
                 {appOnlyTasks.length - appOnlyPreviewTasks.length} weitere App-only Aufgaben warten auf GitHub-Anlage.
-              </div>
+              </UiNotice>
             )}
             {!appOnlyTasks.length && (
-              <div className="rounded-md border border-dashed border-amber-200 bg-white px-3 py-4 text-center text-sm text-amber-700">
+              <UiEmptyState tone="warning" className="bg-white">
                 Keine App-only Aufgaben ohne GitHub-Issue.
-              </div>
+              </UiEmptyState>
             )}
           </div>
         </div>
       </div>
-    </section>
+    </UiPanel>
   );
 }
 
@@ -225,15 +226,15 @@ const productionReadinessItems = [
 
 export function ProductionReadinessSection() {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <UiPanel className="min-w-0 xl:col-span-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Production Readiness</h2>
           <p className="mt-1 text-sm text-slate-500">Aktueller Übergang von lokaler App zu GitHub-Actions-Deployment. GitHub Actions ist der einzige manuelle Blocker.</p>
         </div>
-        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+        <UiBadge tone="amber">
           GitHub Actions offen
-        </span>
+        </UiBadge>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
         {productionReadinessItems.map((item) => {
@@ -242,25 +243,25 @@ export function ProductionReadinessSection() {
             <div key={item.title} className={`rounded-lg border p-3 text-sm ${blocked ? "border-amber-200 bg-amber-50" : "border-slate-100 bg-slate-50"}`}>
               <div className="flex items-start justify-between gap-3">
                 <h3 className={`font-semibold ${blocked ? "text-amber-950" : "text-slate-950"}`}>{item.title}</h3>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${blocked ? "border-amber-200 bg-white text-amber-700" : "border-emerald-200 bg-white text-emerald-700"}`}>
+                <UiBadge tone={blocked ? "amberWhite" : "emeraldWhite"} size="xs" className="shrink-0">
                   {item.status}
-                </span>
+                </UiBadge>
               </div>
               <p className={`mt-2 break-words leading-5 ${blocked ? "text-amber-800" : "text-slate-600"}`}>{item.description}</p>
             </div>
           );
         })}
       </div>
-      <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-800 break-words">
+      <UiNotice className="mt-4 break-words">
         Nächster echter Deployment-Schritt: GitHub Actions Workflow mit den Deploy-Secrets ausführen. Danach laufen Env-Pull, Build und Deploy vollständig über Actions.
-      </div>
-    </section>
+      </UiNotice>
+    </UiPanel>
   );
 }
 
 export function SetupChecklistSection() {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <h2 className="text-base font-semibold text-slate-950">Setup-Checkliste</h2>
       <div className="mt-4 grid gap-2">
         {setupChecks.map((check, index) => (
@@ -270,6 +271,6 @@ export function SetupChecklistSection() {
           </div>
         ))}
       </div>
-    </section>
+    </UiPanel>
   );
 }

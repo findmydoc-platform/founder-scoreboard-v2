@@ -7,6 +7,7 @@ import { DecisionFollowUpList } from "@/features/decisions/molecules/decision-fo
 import { DecisionObjectionForm } from "@/features/decisions/molecules/decision-objection-form";
 import { decisionStatusLabel, type DecisionAuditEntry, type DecisionComment, type DecisionEditDraft, type DecisionItem, type DecisionLinkedTask } from "@/features/decisions/model/decision-log-view-model";
 import type { DecisionTaskLink, Profile } from "@/lib/types";
+import { UiBadge, UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type DecisionCardProps = {
   auditEntries: DecisionAuditEntry[];
@@ -60,7 +61,7 @@ export function DecisionCard({
   onToggleOpen,
 }: DecisionCardProps) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel as="article">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <button type="button" onClick={onToggleOpen} className="flex min-w-0 flex-1 items-start gap-2 text-left" aria-expanded={isOpen}>
           <ChevronRight size={16} className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
@@ -72,14 +73,14 @@ export function DecisionCard({
           </span>
         </button>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{decisionStatusLabel(decision.status)}</span>
-          <button type="button" onClick={onCreateFollowUp} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700">
+          <UiBadge tone="blue">{decisionStatusLabel(decision.status)}</UiBadge>
+          <UiButton onClick={onCreateFollowUp} size="xs">
             Folgeaufgabe
-          </button>
+          </UiButton>
           {canCreate && decision.status !== "locked" && (
-            <button type="button" onClick={onToggleEdit} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700">
+            <UiButton onClick={onToggleEdit} size="xs">
               {isEditing ? "Schließen" : "Editieren"}
-            </button>
+            </UiButton>
           )}
         </div>
       </div>
@@ -97,6 +98,6 @@ export function DecisionCard({
           <DecisionAuditTrail auditEntries={auditEntries} auditOpen={auditOpen} profiles={profiles} onToggleAudit={onToggleAudit} />
         </>
       )}
-    </article>
+    </UiPanel>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { initiativeOptionLabel, initiativeRaciRows, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
 import type { PlanningData, TaskRelationType } from "@/lib/types";
@@ -108,14 +109,14 @@ export function NewTaskDialog({
               {draft.taskType === "proposal" ? "Aufgabenvorschlag" : draft.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable"}
             </h2>
           </div>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Dialog schließen">
+          <UiButton type="button" onClick={onClose} size="iconMd" className="text-slate-500" aria-label="Dialog schließen">
             ×
-          </button>
+          </UiButton>
         </div>
 
         <div className="grid gap-4 p-5">
           <div className="grid gap-3 sm:grid-cols-4">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiField>
               Typ
               <CustomSelect
                 value={draft.taskType}
@@ -128,8 +129,8 @@ export function NewTaskDialog({
                 className="h-9 text-sm"
                 options={[{ value: "deliverable", label: "Deliverable" }, { value: "proposal", label: "Vorschlag" }, { value: "sub_issue", label: "Sub-Issue" }]}
               />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Epic / Meilenstein
               <CustomSelect
                 value={draft.milestoneId}
@@ -141,15 +142,15 @@ export function NewTaskDialog({
                 className="h-9 text-sm"
                 options={[{ value: "", label: "Ohne Epic" }, ...data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))]}
               />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Initiative
               <CustomSelect value={draft.packageId} onChange={(value) => setDraft((current) => ({ ...current, packageId: value }))} className="h-9 text-sm" options={visibleInitiatives.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Sprint
               <CustomSelect value={draft.sprintId} disabled={draft.taskType !== "deliverable"} onChange={(value) => setDraft((current) => ({ ...current, sprintId: value }))} className="h-9 text-sm" options={data.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))} />
-            </label>
+            </UiField>
           </div>
 
           {selectedInitiative && (
@@ -167,11 +168,11 @@ export function NewTaskDialog({
           )}
 
           {draft.taskType === "sub_issue" && (
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiField>
               Deliverable
               <CustomSelect value={draft.parentTaskId} onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))} className="h-9 text-sm" options={[{ value: "", label: "Deliverable auswählen" }, ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: task.title }))]} />
               {parentTask && <span className="text-xs font-normal text-slate-500">Sub-Issues unter {parentTask.title} sind nicht score-relevant.</span>}
-            </label>
+            </UiField>
           )}
 
           {draft.decisionId > 0 && (
@@ -181,64 +182,64 @@ export function NewTaskDialog({
             </div>
           )}
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Titel
-            <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400" placeholder="Konkretes Ergebnis oder Vorschlag" />
-          </label>
+            <UiTextInput value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} inputSize="lg" inputPadding="md" placeholder="Konkretes Ergebnis oder Vorschlag" />
+          </UiField>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Beschreibung
-            <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-24 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Kontext, Ziel und relevante Hinweise" />
-          </label>
+            <UiTextArea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Kontext, Ziel und relevante Hinweise" />
+          </UiField>
 
           <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Template v2</div>
             <p className="mt-1 text-xs leading-5 text-slate-600">Beschreibe das Ziel und die prüfbaren Kriterien, ohne unnötig vorzugeben, wie die Aufgabe umgesetzt werden muss.</p>
           </div>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Problem Statement
-            <textarea value={draft.problemStatement} onChange={(event) => setDraft((current) => ({ ...current, problemStatement: event.target.value }))} className="min-h-20 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Welches Problem löst diese Aufgabe und warum ist sie wichtig?" />
-          </label>
+            <UiTextArea value={draft.problemStatement} onChange={(event) => setDraft((current) => ({ ...current, problemStatement: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welches Problem löst diese Aufgabe und warum ist sie wichtig?" />
+          </UiField>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Intended Outcome
-            <textarea value={draft.intendedOutcome} onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))} className="min-h-20 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Welcher fertige Zustand soll am Ende erreicht sein?" />
-          </label>
+            <UiTextArea value={draft.intendedOutcome} onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher fertige Zustand soll am Ende erreicht sein?" />
+          </UiField>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Scope & Constraints
-            <textarea value={draft.scopeConstraints} onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))} className="min-h-20 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Was gehört dazu, was ausdrücklich nicht, und welche Rahmenbedingungen gelten?" />
-          </label>
+            <UiTextArea value={draft.scopeConstraints} onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu, was ausdrücklich nicht, und welche Rahmenbedingungen gelten?" />
+          </UiField>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Acceptance Criteria
-            <textarea value={draft.acceptanceCriteria} onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))} className="min-h-28 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Ein Kriterium pro Zeile. Nur messbare Punkte, die der Owner beeinflussen kann." />
-          </label>
+            <UiTextArea value={draft.acceptanceCriteria} onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))} minHeight="xl" inputPadding="md" leading="relaxed" placeholder="Ein Kriterium pro Zeile. Nur messbare Punkte, die der Owner beeinflussen kann." />
+          </UiField>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Evidence Required
-            <textarea value={draft.evidenceRequired} onChange={(event) => setDraft((current) => ({ ...current, evidenceRequired: event.target.value }))} className="min-h-20 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Welcher Nachweis muss am Ende verlinkt oder kommentiert sein?" />
-          </label>
+            <UiTextArea value={draft.evidenceRequired} onChange={(event) => setDraft((current) => ({ ...current, evidenceRequired: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher Nachweis muss am Ende verlinkt oder kommentiert sein?" />
+          </UiField>
 
           <div className="grid gap-3 sm:grid-cols-4">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiField>
               Assignee
               <CustomSelect value={draft.owner} onChange={(value) => setDraft((current) => ({ ...current, owner: value }))} className="h-9 text-sm" options={taskOwnerOptions(draft.taskType, data.profiles)} />
               {draft.taskType === "proposal" && <span className="text-[11px] font-normal leading-4 text-slate-500">Vorschläge können bewusst ohne Assignee bleiben.</span>}
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Priorität
               <CustomSelect value={draft.priority} onChange={(value) => setDraft((current) => ({ ...current, priority: value }))} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Status
               <CustomSelect value={draft.status} disabled={draft.taskType === "proposal"} onChange={(value) => setDraft((current) => ({ ...current, status: value }))} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Aufwand
-              <input type="number" min={0} value={draft.hours} onChange={(event) => setDraft((current) => ({ ...current, hours: Number(event.target.value) }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm font-normal text-slate-800" />
-            </label>
+              <UiTextInput type="number" min={0} value={draft.hours} onChange={(event) => setDraft((current) => ({ ...current, hours: Number(event.target.value) }))} textTone="muted" />
+            </UiField>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -265,24 +266,24 @@ export function NewTaskDialog({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiField>
               Workstream
-              <input value={draft.workstream} onChange={(event) => setDraft((current) => ({ ...current, workstream: event.target.value }))} className="h-9 rounded-md border border-slate-200 px-2 text-sm font-normal text-slate-800" />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              <UiTextInput value={draft.workstream} onChange={(event) => setDraft((current) => ({ ...current, workstream: event.target.value }))} textTone="muted" />
+            </UiField>
+            <UiField>
               Start
               <CustomDatePicker value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} className="h-9 text-sm" />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Ende
               <CustomDatePicker value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} className="h-9 text-sm" />
-            </label>
+            </UiField>
           </div>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Zieltermin
             <CustomDatePicker value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} className="h-9 text-sm" />
-          </label>
+          </UiField>
 
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="text-sm font-semibold text-slate-950">Erste Relationship</div>
@@ -308,25 +309,27 @@ export function NewTaskDialog({
                 ]}
               />
             </div>
-            <input
+            <UiTextInput
               value={draft.relationNote}
               onChange={(event) => setDraft((current) => ({ ...current, relationNote: event.target.value }))}
-              className="mt-3 h-9 w-full rounded-md border border-slate-200 px-3 text-sm font-normal text-slate-800 outline-none focus:border-blue-400"
+              className="mt-3 w-full"
+              inputPadding="md"
+              textTone="muted"
               placeholder="Optionaler Hinweis zur Abhängigkeit"
             />
           </div>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Definition of Done
-            <textarea value={draft.definitionOfDone} onChange={(event) => setDraft((current) => ({ ...current, definitionOfDone: event.target.value }))} className="min-h-20 rounded-md border border-slate-200 p-3 text-sm font-normal leading-6 text-slate-900 outline-none focus:border-blue-400" placeholder="Allgemeiner Qualitätsstandard oder DoD-Snapshot für dieses Deliverable" />
-          </label>
+            <UiTextArea value={draft.definitionOfDone} onChange={(event) => setDraft((current) => ({ ...current, definitionOfDone: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Allgemeiner Qualitätsstandard oder DoD-Snapshot für dieses Deliverable" />
+          </UiField>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">Abbrechen</button>
-          <button type="submit" disabled={pending || !canCreate} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <UiButton type="button" onClick={onClose}>Abbrechen</UiButton>
+          <UiButton type="submit" disabled={pending || !canCreate} variant="primary">
             Erstellen
-          </button>
+          </UiButton>
         </div>
       </form>
     </div>

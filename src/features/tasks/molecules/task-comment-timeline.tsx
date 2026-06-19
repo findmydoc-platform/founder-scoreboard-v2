@@ -3,6 +3,7 @@
 import { AlertCircle, CheckCircle2, Clock3, GitBranch, GitPullRequestArrow, MessageSquare, Paperclip } from "lucide-react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import type { Profile } from "@/lib/types";
+import { UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export type TaskCommentTimelineItem =
   | {
@@ -192,9 +193,9 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
         })()
       ))}
       {!items.length && (
-        <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">
+        <UiEmptyState>
           Noch keine Kommentare, Nachfragen oder relevante Aktivitäten.
-        </div>
+        </UiEmptyState>
       )}
     </div>
   );

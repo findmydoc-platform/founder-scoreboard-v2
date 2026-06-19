@@ -3,6 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import { taskRelationsFor } from "@/lib/platform";
 import type { Package, Sprint, Task, TaskRelation } from "@/lib/types";
+import { DataOverflow, DataSurface } from "@/shared/molecules/data-surface";
 
 function parseIsoDate(value: string) {
   if (!value) return null;
@@ -27,7 +28,8 @@ export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tas
   });
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <DataSurface>
+      <DataOverflow>
       <div className="grid min-w-[1180px] grid-cols-[360px_1fr]">
         <div className="border-r border-slate-200">
           <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabe</div>
@@ -71,6 +73,7 @@ export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tas
           })}
         </div>
       </div>
-    </div>
+      </DataOverflow>
+    </DataSurface>
   );
 }

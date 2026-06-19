@@ -1,5 +1,6 @@
 import type { DecisionItem } from "@/features/decisions/model/decision-log-view-model";
 import type { Profile } from "@/lib/types";
+import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 
 type DecisionConfirmationStripProps = {
   currentProfileId: string;
@@ -17,20 +18,19 @@ export function DecisionConfirmationStrip({ currentProfileId, decision, pending,
           const profile = profiles.find((item) => item.id === profileId);
           const confirmed = decision.confirmedProfileIds.includes(profileId);
           return (
-            <span key={profileId} className={`rounded-full border px-2 py-1 font-semibold ${confirmed ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+            <UiBadge key={profileId} tone={confirmed ? "emerald" : "slate"} size="sm" className={!confirmed ? "text-slate-500" : undefined}>
               {profile?.name || profileId}: {confirmed ? "bestätigt" : "offen"}
-            </span>
+            </UiBadge>
           );
         })}
       </div>
-      <button
+      <UiButton
         type="button"
         disabled={pending || decision.status === "locked" || !currentProfileId || decision.confirmedProfileIds.includes(currentProfileId)}
         onClick={onConfirm}
-        className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {decision.confirmedProfileIds.includes(currentProfileId) ? "Bestätigt" : "Bestätigen"}
-      </button>
+      </UiButton>
     </div>
   );
 }

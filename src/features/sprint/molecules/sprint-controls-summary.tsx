@@ -1,5 +1,6 @@
 import { Lock } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { formatDate } from "@/lib/display";
 import type { PlanningData, Sprint, Task } from "@/lib/types";
 
@@ -39,7 +40,7 @@ export function SprintControlsSummary({
   onLockSprint: (sprintId: string) => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <UiPanel padding="none" className="min-w-0">
       <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
         <label className="grid gap-1 text-xs font-semibold text-slate-500">
           Sprint
@@ -84,14 +85,13 @@ export function SprintControlsSummary({
             ]}
           />
         </label>
-        <button
+        <UiButton
           type="button"
           disabled={sprintControlsDisabled || sprint.scoreLocked}
           onClick={() => onLockSprint(sprint.id)}
-          className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Sprint abschließen
-        </button>
+        </UiButton>
       </div>
       <div className="grid gap-3 px-4 py-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-5">
         <div><span className="font-semibold text-slate-950">{sprintTasks.length}</span> Aufgaben im Sprint</div>
@@ -111,26 +111,27 @@ export function SprintControlsSummary({
           </span>
         )}
         {sprintHasTasks && (
-          <span
-            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-600"
+          <UiBadge
+            size="xs"
+            className="h-7 gap-1.5"
             aria-label={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
             title={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
           >
             <Lock size={13} />
             {sprintTasks.length}
-          </span>
+          </UiBadge>
         )}
       </div>
       {sprintLockMessage && (
-        <div className="border-t border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+        <UiNotice tone="info" radius="none" className="!border-x-0 !border-b-0 border-t-blue-100 px-4 py-3 font-medium">
           {sprintLockMessage}
-        </div>
+        </UiNotice>
       )}
       {openObjectionsCount > 0 && (
-        <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+        <UiNotice tone="warning" radius="none" className="!border-x-0 !border-b-0 border-t-amber-100 px-4 py-3 font-medium">
           {openObjectionsCount} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.
-        </div>
+        </UiNotice>
       )}
-    </section>
+    </UiPanel>
   );
 }

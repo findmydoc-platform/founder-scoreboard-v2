@@ -1,9 +1,10 @@
 import type { Dispatch, SetStateAction } from "react";
 import { focusStatusLabel, formatDate } from "@/lib/display";
 import { hasOpenWaitingRelation } from "@/lib/platform";
-import { normalizeStatus, priorityTone, statusTone } from "@/lib/status";
+import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
 import { profileColor } from "@/features/execution/model/execution-layer-view-model";
 import type { Profile, Task, TaskFocusItem, TaskRelation } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type FocusDraftSetter = Dispatch<SetStateAction<Record<string, string>>>;
 
@@ -51,15 +52,14 @@ export function ExecutionFocusPanel({
   onRemoveFocus: (focusItem: TaskFocusItem) => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Heute-Fokus</h2>
           <p className="mt-1 text-sm text-slate-500">Maximal drei Aufgaben, nächster Schritt und Tagesstatus.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <UiButton
             disabled={pending || !focusItems.some((item) => item.status === "planned")}
             onClick={() => {
               focusItems
@@ -69,13 +69,14 @@ export function ExecutionFocusPanel({
                   if (task) onSetFocus(task, item.nextStep || "Auf morgen verschoben.", "deferred");
                 });
             }}
-            className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            size="sm"
+            className="text-slate-600"
           >
             Offene verschieben
-          </button>
-          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+          </UiButton>
+          <UiBadge tone="white" size="md">
             {currentProfile?.name || "Team"} · {focusItems.length}/3
-          </span>
+          </UiBadge>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
@@ -102,31 +103,31 @@ export function ExecutionFocusPanel({
                 <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 break-words text-left text-sm font-semibold leading-5 text-slate-950 hover:text-blue-700">
                   {task.title}
                 </button>
-                <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{focusStatusLabel(item.status)}</span>
+                <UiBadge tone="blue" size="xs" className="shrink-0">{focusStatusLabel(item.status)}</UiBadge>
               </div>
-              <input
+              <UiTextInput
                 value={focusDrafts[item.taskId] ?? item.nextStep}
                 onChange={(event) => setFocusDrafts((current) => ({ ...current, [item.taskId]: event.target.value }))}
                 onBlur={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, item.status)}
-                className="mt-3 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                className="mt-3 w-full px-3"
                 placeholder={task.intendedOutcome || task.description || "Nächsten Schritt ergänzen."}
               />
               <div className="mt-3 flex flex-wrap gap-2">
                 {(["done", "blocked", "deferred", "needs_decision"] as TaskFocusItem["status"][]).map((status) => (
-                  <button key={status} type="button" disabled={pending} onClick={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, status)} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                  <UiButton key={status} disabled={pending} onClick={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, status)} size="xs" className="text-slate-600">
                     {focusStatusLabel(status)}
-                  </button>
+                  </UiButton>
                 ))}
-                <button type="button" disabled={pending} onClick={() => onRemoveFocus(item)} className="h-8 rounded-md border border-red-200 bg-red-50 px-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
+                <UiButton disabled={pending} onClick={() => onRemoveFocus(item)} variant="red" size="xs">
                   Entfernen
-                </button>
+                </UiButton>
               </div>
             </article>
           );
         }) : (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          <UiEmptyState tone="muted" className="px-4 py-8">
             Noch kein Tagesfokus gesetzt.
-          </div>
+          </UiEmptyState>
         )}
       </div>
 
@@ -155,26 +156,26 @@ export function ExecutionFocusPanel({
                   <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 text-left text-sm font-semibold text-slate-900 hover:text-blue-700">
                     {task.title}
                   </button>
-                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">{focusStatusLabel(item.status)}</span>
+                  <UiBadge tone="white" size="xs">{focusStatusLabel(item.status)}</UiBadge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Heute erledigt.", "done")} className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Heute erledigt.", "done")} variant="emerald" size="xs">
                     Als erledigt markieren
-                  </button>
-                  <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Blocker für morgen klären.", "blocked")} className="h-8 rounded-md border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50">
+                  </UiButton>
+                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Blocker für morgen klären.", "blocked")} variant="amber" size="xs">
                     Blockiert
-                  </button>
-                  <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Auf morgen verschoben.", "deferred")} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                  </UiButton>
+                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Auf morgen verschoben.", "deferred")} size="xs" className="text-slate-600">
                     Verschieben
-                  </button>
-                  <button type="button" disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Braucht eine Entscheidung.", "needs_decision")} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+                  </UiButton>
+                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Braucht eine Entscheidung.", "needs_decision")} variant="blue" size="xs">
                     Entscheidung nötig
-                  </button>
+                  </UiButton>
                 </div>
               </article>
             );
           }) : (
-            <div className="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-500">Kein Tagesfokus für den Abschluss vorhanden.</div>
+            <UiEmptyState className="px-3 py-6">Kein Tagesfokus für den Abschluss vorhanden.</UiEmptyState>
           )}
         </div>
         {endOfDayOpenItems.length > 0 && (
@@ -200,7 +201,7 @@ export function ExecutionFocusPanel({
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: profileColor(profile) }} />
                       <span className="truncate text-sm font-semibold text-slate-950">{profile.name}</span>
                     </div>
-                    <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{profileFocus.length}/3</span>
+                    <UiBadge tone="white" size="xs" className="text-slate-500">{profileFocus.length}/3</UiBadge>
                   </div>
                   <div className="mt-2 grid gap-1">
                     {profileFocus.length ? profileFocus.map((item) => {
@@ -212,7 +213,7 @@ export function ExecutionFocusPanel({
                         </button>
                       ) : null;
                     }) : (
-                      <div className="rounded-md border border-dashed border-slate-200 px-2 py-2 text-xs text-slate-500">Kein Fokus gesetzt.</div>
+                      <UiEmptyState className="px-2 py-2 text-xs">Kein Fokus gesetzt.</UiEmptyState>
                     )}
                   </div>
                 </article>
@@ -238,13 +239,13 @@ export function ExecutionFocusPanel({
                     <span className="text-xs text-slate-500">{items.length} Fokus</span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{done} erledigt</span>
-                    <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{blocked} kritisch</span>
+                    <UiBadge tone="emerald" bordered={false}>{done} erledigt</UiBadge>
+                    <UiBadge tone="amber" bordered={false}>{blocked} kritisch</UiBadge>
                   </div>
                 </div>
               );
             }) : (
-              <div className="rounded-md border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-500">Noch kein Fokus-Verlauf.</div>
+              <UiEmptyState className="px-3 py-8 text-xs">Noch kein Fokus-Verlauf.</UiEmptyState>
             )}
           </div>
         </section>
@@ -261,30 +262,30 @@ export function ExecutionFocusPanel({
                     {task.title}
                   </button>
                   <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">
-                    <span className={`rounded-full border px-2 py-0.5 ${priorityTone(task.priority)}`}>{task.priority}</span>
-                    <span className={`rounded-full border px-2 py-0.5 ${statusTone(normalizeStatus(task.status))}`}>{normalizeStatus(task.status)}</span>
-                    {hasOpenWaitingRelation(task.id, allTasks, taskRelations) && <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">wartet</span>}
+                    <UiBadge tone={priorityBadgeTone(task.priority)} size="xs">{task.priority}</UiBadge>
+                    <UiBadge tone={statusBadgeTone(normalizeStatus(task.status))} size="xs">{normalizeStatus(task.status)}</UiBadge>
+                    {hasOpenWaitingRelation(task.id, allTasks, taskRelations) && <UiBadge tone="amber" size="xs">wartet</UiBadge>}
                   </div>
                 </div>
-                <button
-                  type="button"
+                <UiButton
                   disabled={pending || focusItems.length >= 3}
                   onClick={() => onSetFocus(task, focusDrafts[task.id] || task.intendedOutcome || task.acceptanceCriteria || "Nächsten Schritt klären.", "planned")}
-                  className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  variant="primary"
+                  size="sm"
                 >
                   In Fokus
-                </button>
+                </UiButton>
               </div>
-              <input
+              <UiTextInput
                 value={focusDrafts[task.id] || ""}
                 onChange={(event) => setFocusDrafts((current) => ({ ...current, [task.id]: event.target.value }))}
-                className="mt-3 h-9 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+                className="mt-3 w-full px-3"
                 placeholder="Nächster Schritt"
               />
             </article>
           ))}
         </div>
       </div>
-    </section>
+    </UiPanel>
   );
 }

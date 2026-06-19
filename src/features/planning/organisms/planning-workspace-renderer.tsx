@@ -12,6 +12,7 @@ import { SettingsOverview } from "@/features/settings/organisms/settings-overvie
 import { SprintScoreTableOverview } from "@/features/sprint/organisms/sprint-score-overview";
 import { FmdToolsOverview } from "@/features/tools/organisms/fmd-tools-overview";
 import { TeamOverview } from "@/features/team/organisms/team-overview";
+import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
@@ -102,12 +103,12 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         />
       )}
       {workspace === "ceo-intake" && !canUseCeoIntake && (
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <UiPanel padding="xl">
           <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Assignee haben hier keinen Zugriff.
           </p>
-        </section>
+        </UiPanel>
       )}
       {workspace === "projects" && (
         <ProjectsOverview

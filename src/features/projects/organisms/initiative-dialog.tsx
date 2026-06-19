@@ -5,6 +5,7 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import type { Package, PlanningData } from "@/lib/types";
+import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export type InitiativeDraft = {
   id?: string;
@@ -70,21 +71,21 @@ export function InitiativeDialog({
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Initiative-Brief</div>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">{draft.id ? "Initiative bearbeiten" : "Neue Initiative"}</h2>
           </div>
-          <button type="button" onClick={onClose} className="h-8 rounded-md border border-slate-200 px-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Schließen</button>
+          <UiButton onClick={onClose} size="xs" className="text-sm text-slate-600">Schließen</UiButton>
         </div>
 
         <div className="grid gap-4 px-5 py-4">
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Titel
-            <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="h-10 rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-blue-400" placeholder="z. B. Partnerpraxen-Erstkontaktmaterial" />
-          </label>
+            <UiTextInput value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} className="h-10 px-3" placeholder="z. B. Partnerpraxen-Erstkontaktmaterial" />
+          </UiField>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiField>
               Epic / Meilenstein
               <CustomSelect value={draft.milestoneId} onChange={(value) => setDraft((current) => ({ ...current, milestoneId: value }))} className="h-10 text-sm" options={data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Owner
               <CustomSelect
                 value={draft.ownerId}
@@ -97,12 +98,12 @@ export function InitiativeDialog({
                 className="h-10 text-sm"
                 options={data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))}
               />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Priorität
               <CustomSelect value={draft.priority} onChange={(value) => setDraft((current) => ({ ...current, priority: value }))} className="h-10 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Status
               <CustomSelect value={draft.status} onChange={(value) => setDraft((current) => ({ ...current, status: value as InitiativeDraft["status"] }))} className="h-10 text-sm" options={[
                 { value: "planned", label: "Geplant" },
@@ -110,11 +111,11 @@ export function InitiativeDialog({
                 { value: "done", label: "Erledigt" },
                 { value: "paused", label: "Pausiert" },
               ]} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            </UiField>
+            <UiField>
               Zieltermin
               <CustomDatePicker value={draft.targetDate} onChange={(value) => setDraft((current) => ({ ...current, targetDate: value }))} className="h-10 text-sm" />
-            </label>
+            </UiField>
           </div>
 
           <section className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
@@ -123,44 +124,44 @@ export function InitiativeDialog({
               <p className="mt-1 text-xs leading-5 text-slate-500">Mini-RACI gilt für die Initiative. Deliverables übernehmen diesen Kontext.</p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              <UiField>
                 Accountable
                 <CustomSelect value={draft.accountableProfileId} onChange={(value) => setDraft((current) => ({ ...current, accountableProfileId: value }))} className="h-10 text-sm" options={data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))} />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              </UiField>
+              <UiField>
                 Responsible
                 <ProfileMultiSelect value={draft.responsibleProfileIds} profiles={data.profiles} onChange={(value) => setDraft((current) => ({ ...current, responsibleProfileIds: value }))} placeholder="Responsible wählen" />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              </UiField>
+              <UiField>
                 Consulted
                 <ProfileMultiSelect value={draft.consultedProfileIds} profiles={data.profiles} onChange={(value) => setDraft((current) => ({ ...current, consultedProfileIds: value }))} placeholder="Consulted wählen" />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
+              </UiField>
+              <UiField>
                 Informed
                 <ProfileMultiSelect value={draft.informedProfileIds} profiles={data.profiles} onChange={(value) => setDraft((current) => ({ ...current, informedProfileIds: value }))} placeholder="Informed wählen" />
-              </label>
+              </UiField>
             </div>
           </section>
 
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          <UiField>
             Ziel / Outcome
-            <textarea value={draft.goal} onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value }))} rows={3} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiTextArea value={draft.goal} onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value }))} rows={3} className="px-3" />
+          </UiField>
+          <UiField>
             Erfolgskriterien
-            <textarea value={draft.successCriteria} onChange={(event) => setDraft((current) => ({ ...current, successCriteria: event.target.value }))} rows={3} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400" />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            <UiTextArea value={draft.successCriteria} onChange={(event) => setDraft((current) => ({ ...current, successCriteria: event.target.value }))} rows={3} className="px-3" />
+          </UiField>
+          <UiField>
             Constraints
-            <textarea value={draft.scopeConstraints} onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))} rows={3} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400" />
-          </label>
+            <UiTextArea value={draft.scopeConstraints} onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))} rows={3} className="px-3" />
+          </UiField>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">Abbrechen</button>
-          <button type="submit" disabled={pending || !canSave} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <UiButton onClick={onClose}>Abbrechen</UiButton>
+          <UiButton type="submit" disabled={pending || !canSave} variant="primary">
             Speichern
-          </button>
+          </UiButton>
         </div>
       </form>
     </div>
