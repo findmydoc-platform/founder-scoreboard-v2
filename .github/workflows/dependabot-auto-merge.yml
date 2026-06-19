@@ -44,7 +44,7 @@ jobs:
 
       - name: Resolve dependency validation run
         id: validation-run
-        if: steps.pr.outputs.skip != 'true'
+        if: steps.pr.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -64,7 +64,7 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Download Dependabot metadata
-        if: steps.validation-run.outputs.skip != 'true'
+        if: steps.validation-run.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -78,7 +78,7 @@ jobs:
 
       - name: Validate PR and checks
         id: validate
-        if: steps.validation-run.outputs.skip != 'true'
+        if: steps.validation-run.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
@@ -139,7 +139,7 @@ jobs:
           echo "pr_url=$(jq -r '.url' <<<"$pr_json")" >> "$GITHUB_OUTPUT"
 
       - name: Merge pull request
-        if: steps.validate.outputs.skip != 'true'
+        if: steps.validate.outputs.skip == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ steps.validate.outputs.pr_url }}
