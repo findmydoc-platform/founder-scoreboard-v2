@@ -69,6 +69,70 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
   assert.match(decisionHook, /toggleEdit/);
 });
 
+test("planning app controller delegates command domains and stays a thin composer", async () => {
+  const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
+  const taskMutations = await readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8");
+  const taskCollaboration = await readFile("src/features/tasks/hooks/use-task-collaboration-commands.ts", "utf8");
+  const boardState = await readFile("src/features/planning/hooks/use-planning-board-state.ts", "utf8");
+  const dataRefresh = await readFile("src/features/planning/hooks/use-planning-data-refresh.ts", "utf8");
+  const taskViewModel = await readFile("src/features/planning/hooks/use-planning-task-view-model.ts", "utf8");
+  const executionCommands = await readFile("src/features/execution/hooks/use-execution-commands.ts", "utf8");
+  const initiativeCommands = await readFile("src/features/projects/hooks/use-initiative-commands.ts", "utf8");
+  const sprintCommands = await readFile("src/features/sprint/hooks/use-sprint-commands.ts", "utf8");
+  const profileCommands = await readFile("src/features/team/hooks/use-profile-settings-commands.ts", "utf8");
+  const meetingCommands = await readFile("src/features/meetings/hooks/use-meeting-commands.ts", "utf8");
+  const eventCommands = await readFile("src/features/events/hooks/use-founder-event-commands.ts", "utf8");
+  const decisionCommands = await readFile("src/features/decisions/hooks/use-decision-commands.ts", "utf8");
+  const reviewCommands = await readFile("src/features/reviews/hooks/use-review-commands.ts", "utf8");
+  const notificationCommands = await readFile("src/features/planning/hooks/use-notification-commands.ts", "utf8");
+  const feedbackCommands = await readFile("src/features/settings/hooks/use-feedback-commands.ts", "utf8");
+
+  assert.ok(controller.split(/\r?\n/).length < 500);
+  assert.match(controller, /useTaskMutationCommands/);
+  assert.match(controller, /useTaskCollaborationCommands/);
+  assert.match(controller, /usePlanningDataRefresh/);
+  assert.match(controller, /usePlanningTaskViewModel/);
+  assert.match(controller, /useMeetingCommands/);
+  assert.match(controller, /useDecisionCommands/);
+  assert.match(controller, /useSprintCommands/);
+  assert.match(controller, /useNotificationCommands/);
+  assert.doesNotMatch(controller, /planningApi\.|taskApi\./);
+  assert.doesNotMatch(controller, /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/);
+  assert.doesNotMatch(controller, /createMeetingRequest|availabilityRequest|createDecisionRequest|lockSprintRequest/);
+  assert.doesNotMatch(controller, /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/);
+  assert.doesNotMatch(controller, /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/);
+
+  assert.match(taskMutations, /updateTaskRequest/);
+  assert.match(taskMutations, /createTaskRequest/);
+  assert.match(taskMutations, /syncTaskToGitHubRequest/);
+  assert.match(taskMutations, /deleteTaskRequest/);
+  assert.match(taskMutations, /persistLocalPlanningTasks/);
+  assert.match(taskMutations, /window\.confirm/);
+  assert.match(taskCollaboration, /createTaskCommentRequest/);
+  assert.match(taskCollaboration, /uploadTaskAttachmentRequest/);
+  assert.match(taskCollaboration, /importGitHubCommentsRequest/);
+  assert.match(taskCollaboration, /reportTaskBlockerRequest/);
+  assert.match(taskCollaboration, /addTaskRelationshipRequest/);
+  assert.match(taskCollaboration, /removeTaskRelationshipRequest/);
+  assert.match(boardState, /event\.dataTransfer\.setData/);
+  assert.match(boardState, /founderTaskOwnershipGuardMessage/);
+  assert.match(dataRefresh, /setProtectedPlanningDataCache/);
+  assert.match(taskViewModel, /hasOpenWaitingRelation/);
+  assert.match(executionCommands, /saveFocusItemRequest/);
+  assert.match(executionCommands, /linkDecisionTaskRequest/);
+  assert.match(initiativeCommands, /saveInitiativeRequest/);
+  assert.match(sprintCommands, /lockSprintRequest/);
+  assert.match(sprintCommands, /createScoreObjectionRequest/);
+  assert.match(profileCommands, /updateProfileRequest/);
+  assert.match(meetingCommands, /createMeetingRequest/);
+  assert.match(meetingCommands, /availabilityRequest/);
+  assert.match(eventCommands, /createFounderEventRequest/);
+  assert.match(decisionCommands, /createDecisionRequest/);
+  assert.match(reviewCommands, /reviewTaskRequest/);
+  assert.match(notificationCommands, /runNotificationDeliveryRequest/);
+  assert.match(feedbackCommands, /createFeedbackRequest/);
+});
+
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
   const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
