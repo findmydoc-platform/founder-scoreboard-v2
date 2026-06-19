@@ -351,7 +351,7 @@ export function meetingSlotIso(slot: MeetingSlot) {
   return new Date(`${slot.date}T${slot.startTime}:00`).toISOString();
 }
 
-export function googleCalendarUrl(slot: MeetingSlot, profiles: Profile[], title = "FindMyDoc Teammeeting", agenda = "") {
+export function googleCalendarUrl(slot: MeetingSlot, profiles: Profile[], title = "findmydoc Teammeeting", agenda = "") {
   const attendeeEmails = profiles.map((profile) => profile.googleCalendarEmail).filter(Boolean);
   const encodedTitle = encodeURIComponent(title);
   const details = encodeURIComponent(`${agenda ? `${agenda}\n\n` : ""}Teilnehmer: ${profiles.map((profile) => profile.name).join(", ")}`);

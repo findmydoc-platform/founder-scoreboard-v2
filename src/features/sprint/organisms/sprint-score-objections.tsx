@@ -1,4 +1,5 @@
 import type { PlanningData, Profile, Sprint } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export function SprintScoreObjections({
   data,
@@ -24,13 +25,13 @@ export function SprintScoreObjections({
   onReviewScoreObjection: (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Score-Einwände</h2>
           <p className="text-xs text-slate-500">Einwände müssen vor dem Sprint-Lock geprüft sein. Es gibt maximal einen Zweitreview.</p>
         </div>
-        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{openObjectionsCount} offen</span>
+        <UiBadge tone="white" size="md">{openObjectionsCount} offen</UiBadge>
       </div>
       <div className="mt-3 grid gap-2">
         {data.scoreObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
@@ -41,9 +42,9 @@ export function SprintScoreObjections({
                 <span className="font-semibold text-slate-900">{profile?.name || objection.profileId} · {objection.status}</span>
                 {canManageSprint && objection.status === "open" && (
                   <div className="flex gap-2">
-                    <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "reviewed")} className="h-8 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 disabled:opacity-50">Geprüft</button>
-                    <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "dismissed")} className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 disabled:opacity-50">Ablehnen</button>
-                    <button type="button" disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "accepted")} className="h-8 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 disabled:opacity-50">Annehmen</button>
+                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "reviewed")} variant="blue" size="sm">Geprüft</UiButton>
+                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "dismissed")} variant="amber" size="sm">Ablehnen</UiButton>
+                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "accepted")} variant="emerald" size="sm">Annehmen</UiButton>
                   </div>
                 )}
               </div>
@@ -52,7 +53,7 @@ export function SprintScoreObjections({
             </div>
           );
         })}
-        {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch keine Score-Einwände.</div>}
+        {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <UiEmptyState>Noch keine Score-Einwände.</UiEmptyState>}
       </div>
       {!sprint.scoreLocked && currentProfile && (
         <form
@@ -64,15 +65,15 @@ export function SprintScoreObjections({
             onScoreObjectionDraftChange("");
           }}
         >
-          <input
+          <UiTextInput
             value={scoreObjectionDraft}
             onChange={(event) => onScoreObjectionDraftChange(event.target.value)}
-            className="h-9 flex-1 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+            className="flex-1 px-3"
             placeholder="Sachlich begründeten Score-Einwand einreichen"
           />
-          <button type="submit" disabled={pending || !scoreObjectionDraft.trim()} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Einwand speichern</button>
+          <UiButton type="submit" disabled={pending || !scoreObjectionDraft.trim()}>Einwand speichern</UiButton>
         </form>
       )}
-    </section>
+    </UiPanel>
   );
 }

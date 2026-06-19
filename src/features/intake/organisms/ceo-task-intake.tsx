@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { TaskIntakePreviewTask } from "@/lib/task-intake";
 import type { Package, Profile, Sprint, Task } from "@/lib/types";
+import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type RequestHeaders = (token?: string, options?: { json?: boolean; github?: boolean }) => Record<string, string>;
 
@@ -125,7 +126,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
@@ -138,24 +139,22 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+            <UiButton
               disabled={pending || !canUseSupabase}
               onClick={preview}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              variant="blue"
             >
               <ClipboardList size={16} />
               Preview prüfen
-            </button>
-            <button
-              type="button"
+            </UiButton>
+            <UiButton
               disabled={pending || !state.valid || !canUseSupabase}
               onClick={commit}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              variant="primary"
             >
               <CheckCircle2 size={16} />
               Aufgaben erstellen
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -167,17 +166,17 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
         />
 
         {message && (
-          <div className={`mt-3 rounded-md border px-3 py-2 text-sm ${state.valid ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+          <UiNotice tone={state.valid ? "success" : "warning"} className="mt-3 leading-normal">
             {message}
-          </div>
+          </UiNotice>
         )}
 
         {previewTasks.length > 0 && (
           <div className="mt-4 grid gap-3">
             <div className="flex flex-wrap gap-2 text-xs font-semibold">
-              <span className="rounded-full border border-slate-200 px-2 py-1 text-slate-600">{previewTasks.length} Aufgaben</span>
-              <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-700">{state.errors} Fehler</span>
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{state.warnings} Hinweise</span>
+              <UiBadge tone="white">{previewTasks.length} Aufgaben</UiBadge>
+              <UiBadge tone="red">{state.errors} Fehler</UiBadge>
+              <UiBadge tone="amber">{state.warnings} Hinweise</UiBadge>
             </div>
             {previewTasks.map((task) => (
               <article key={task.clientId} className="rounded-lg border border-slate-200 p-3">
@@ -188,9 +187,9 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
                       {task.taskType} · {task.priority} · {task.ownerName || "ohne Assignee"} · Review: {task.reviewOwnerName || "ohne Review Owner"}
                     </p>
                   </div>
-                  <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${task.errors.length ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                  <UiBadge tone={task.errors.length ? "red" : "emerald"}>
                     {task.errors.length ? "Fehler" : "gültig"}
-                  </span>
+                  </UiBadge>
                 </div>
                 {[...task.errors, ...task.warnings].length > 0 && (
                   <ul className="mt-3 grid gap-1 text-xs leading-5 text-slate-600">
@@ -206,10 +205,10 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
             ))}
           </div>
         )}
-      </section>
+      </UiPanel>
 
       <aside className="grid h-fit gap-4">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <UiPanel>
           <h3 className="text-sm font-semibold text-slate-950">Verfügbare Referenzen</h3>
           <div className="mt-3 grid gap-3 text-xs leading-5 text-slate-600">
             <div>
@@ -225,16 +224,16 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
               <p>{packages.slice(0, 12).map((pack) => pack.id).join(", ")}</p>
             </div>
           </div>
-        </section>
+        </UiPanel>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <UiPanel>
           <h3 className="text-sm font-semibold text-slate-950">Team-KI Leitplanken</h3>
           <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
             <p>Team-KI bleibt getrennt vom CEO Intake und nutzt nur die bestehende Browser-Session, keine persönlichen langlebigen API-Tokens.</p>
             <p>Erlaubt sind operative Aktionen wie Kommentar, Evidence, Blocker, Checklisten und Status bis Review.</p>
             <p>Planung, RACI, Sprint, Review Owner, Punkte und Erledigt bleiben geschützt.</p>
           </div>
-        </section>
+        </UiPanel>
       </aside>
     </div>
   );

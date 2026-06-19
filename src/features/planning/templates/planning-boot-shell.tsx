@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { AppSidebar, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { workspaceLabels } from "@/features/planning/model/planning-app-model";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
+import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 type PlanningBootShellProps = {
   workspace: AppWorkspace;
@@ -69,7 +70,7 @@ export function PlanningBootShell({
           ))}
         </section>
         <section className="px-4 pb-8 pt-2 lg:px-6">
-          <div className="grid min-h-[360px] gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-3">
+          <UiPanel as="div" className="grid min-h-[360px] gap-4 lg:grid-cols-3">
             {[0, 1, 2].map((column) => (
               <div key={column} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                 <div className="h-4 w-28 animate-pulse rounded bg-slate-200" />
@@ -83,7 +84,7 @@ export function PlanningBootShell({
                 </div>
               </div>
             ))}
-          </div>
+          </UiPanel>
           {error && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
         </section>
       </main>

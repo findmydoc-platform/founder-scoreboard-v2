@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
   if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
 
   const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
-  const title = cleanText(payload.title, 160) || "FindMyDoc Teammeeting";
+  const title = cleanText(payload.title, 160) || "findmydoc Teammeeting";
   const agenda = cleanText(payload.agenda, 4000);
   const sprintId = cleanText(payload.sprintId, 80);
   const profileIds = cleanProfileIds(payload.profileIds);

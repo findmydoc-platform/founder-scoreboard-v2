@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiButton, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { blockerKindOptions, timeOptions } from "@/features/meetings/model/meeting-finder";
 import type { AvailabilityEntry } from "@/lib/types";
 
@@ -71,17 +72,17 @@ export function MeetingAvailabilityDialog({
             <h3 className="text-base font-semibold text-slate-950">{mode === "edit" ? "Blocker bearbeiten" : "Blocker anlegen"}</h3>
             <p className="mt-1 text-sm text-slate-500">Direkt aus der Kalenderansicht. Zeiten und Typ können nachträglich angepasst werden.</p>
           </div>
-          <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Dialog schließen">
+          <UiButton type="button" onClick={onClose} size="iconXs" className="text-slate-500" aria-label="Dialog schließen">
             <X className="h-4 w-4" />
-          </button>
+          </UiButton>
         </div>
         <div className="mt-4 grid gap-3">
           <CustomSelect value={normalizedBlockerProfileId} onChange={onBlockerProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} aria-label="Profil wählen" />
-          <input
+          <UiTextInput
             value={blockerTitle}
             onChange={(event) => onBlockerTitleChange(event.target.value)}
             disabled={pending}
-            className="h-9 rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+            inputPadding="md"
             placeholder="Titel, z. B. Kundentermin, Fokuszeit, Urlaub"
             aria-label="Blocker-Titel"
           />
@@ -98,28 +99,30 @@ export function MeetingAvailabilityDialog({
             <CustomSelect value={blockerStartTime} onChange={onBlockerStartTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Startzeit wählen" />
             <CustomSelect value={blockerEndTime} onChange={onBlockerEndTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Endzeit wählen" />
           </div>
-          <textarea
+          <UiTextArea
             value={blockerNote}
             onChange={(event) => onBlockerNoteChange(event.target.value)}
             placeholder="Notiz / Kontext, optional"
-            className="min-h-24 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            minHeight="lg"
+            inputPadding="mdBlock"
+            textTone="muted"
           />
         </div>
         <div className="mt-4 flex flex-wrap justify-between gap-2">
           <div>
             {mode === "edit" && hasEditingAvailability && (
-              <button type="button" onClick={onDelete} disabled={pending} className="h-9 rounded-md border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
+              <UiButton type="button" onClick={onDelete} disabled={pending} variant="red">
                 Löschen
-              </button>
+              </UiButton>
             )}
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <UiButton type="button" onClick={onClose}>
               Abbrechen
-            </button>
-            <button type="button" onClick={onSave} disabled={saveDisabled} className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            </UiButton>
+            <UiButton type="button" onClick={onSave} disabled={saveDisabled} variant="primary">
               {mode === "edit" ? "Änderungen speichern" : "Blocker speichern"}
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

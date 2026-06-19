@@ -4,6 +4,7 @@ import { Bell, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { formatDate } from "@/lib/display";
 import type { NotificationEvent, Profile } from "@/lib/types";
+import { UiBadge, UiEmptyState, type UiTone } from "@/shared/atoms/ui-primitives";
 
 function notificationTypeLabel(type: string) {
   if (type === "feedback.bug_reported") return "Bug";
@@ -20,14 +21,14 @@ function notificationTypeLabel(type: string) {
   return "Hinweis";
 }
 
-function notificationTone(type: string) {
-  if (type === "feedback.bug_reported") return "border-red-200 bg-red-50 text-red-700";
-  if (type === "feedback.feature_requested") return "border-violet-200 bg-violet-50 text-violet-700";
-  if (type === "task.blocker_reported") return "border-red-200 bg-red-50 text-red-700";
-  if (type === "task.review_rework") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (type === "task.review_requested") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (type === "task.review_completed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  return "border-slate-200 bg-slate-50 text-slate-600";
+function notificationBadgeTone(type: string): UiTone {
+  if (type === "feedback.bug_reported") return "red";
+  if (type === "feedback.feature_requested") return "violet";
+  if (type === "task.blocker_reported") return "red";
+  if (type === "task.review_rework") return "amber";
+  if (type === "task.review_requested") return "blue";
+  if (type === "task.review_completed") return "emerald";
+  return "slate";
 }
 
 export function NotificationInbox({
@@ -92,7 +93,7 @@ export function NotificationInbox({
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
               <p className="mt-0.5 text-xs text-slate-500">Persönliche Hinweise bleiben hier, Google Chat bekommt nur Digests.</p>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{unreadCount}</span>
+            <UiBadge tone="slate" bordered={false}>{unreadCount}</UiBadge>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
             {notifications.length ? notifications.slice(0, 12).map((event) => {
@@ -101,9 +102,9 @@ export function NotificationInbox({
                 <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
                     <button type="button" onClick={() => onOpen(event)} className="min-w-0 flex-1 text-left">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${notificationTone(event.type)}`}>
+                      <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
                         {notificationTypeLabel(event.type)}
-                      </span>
+                      </UiBadge>
                       <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
                       {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
                       <span className="mt-1 block text-xs text-slate-400">{actorName ? `${actorName} · ` : ""}{formatDate(event.createdAt)}</span>
@@ -120,9 +121,9 @@ export function NotificationInbox({
                 </article>
               );
             }) : (
-              <div className="rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+              <UiEmptyState className="px-4 py-8">
                 Keine offenen Hinweise.
-              </div>
+              </UiEmptyState>
             )}
           </div>
         </section>

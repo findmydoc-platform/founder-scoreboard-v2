@@ -37,6 +37,7 @@ async function listFilesByExtensions(dir, extensions) {
 
 test("planning UI keeps feature-first atomic structure", async () => {
   const features = (await readdir("src/features")).sort();
+  const allowedFeatureDirs = new Set(atomicFeatureDirs);
 
   assert.ok(features.length > 0);
   assert.equal(await pathExists("src/components"), false);
@@ -47,11 +48,13 @@ test("planning UI keeps feature-first atomic structure", async () => {
     const info = await stat(featurePath);
     if (!info.isDirectory()) continue;
 
-    for (const dir of atomicFeatureDirs) {
+    const featureEntries = await readdir(featurePath, { withFileTypes: true });
+    for (const entry of featureEntries) {
+      if (!entry.isDirectory()) continue;
       assert.equal(
-        await pathExists(`${featurePath}/${dir}`),
+        allowedFeatureDirs.has(entry.name),
         true,
-        `${featurePath} must keep ${dir}`,
+        `${featurePath}/${entry.name} is not an approved feature-first layer`,
       );
     }
   }
@@ -100,6 +103,84 @@ test("app UI uses custom dropdown and calendar controls", async () => {
   }
 
   assert.deepEqual(violations, []);
+});
+
+test("custom controls keep keyboard and aria contracts", async () => {
+  const select = await readFile("src/shared/atoms/custom-select.tsx", "utf8");
+  const datePicker = await readFile("src/shared/atoms/custom-date-picker.tsx", "utf8");
+
+  assert.match(select, /role="listbox"/);
+  assert.match(select, /role="option"/);
+  assert.match(select, /aria-activedescendant/);
+  assert.match(select, /ArrowDown/);
+  assert.match(select, /ArrowUp/);
+  assert.match(select, /Home/);
+  assert.match(select, /End/);
+  assert.match(select, /Enter/);
+  assert.match(select, /Escape/);
+  assert.match(select, /optionRefs/);
+
+  assert.match(datePicker, /role="dialog"/);
+  assert.match(datePicker, /role="grid"/);
+  assert.match(datePicker, /role="gridcell"/);
+  assert.match(datePicker, /aria-selected/);
+  assert.match(datePicker, /ArrowDown/);
+  assert.match(datePicker, /ArrowUp/);
+  assert.match(datePicker, /PageDown/);
+  assert.match(datePicker, /PageUp/);
+  assert.match(datePicker, /lastDayOfTargetMonth/);
+  assert.doesNotMatch(datePicker, /Math\.min\(date\.getDate\(\), 28\)/);
+  assert.match(datePicker, /Heute/);
+  assert.match(datePicker, /Löschen/);
+  assert.match(datePicker, /dayRefs/);
+});
+
+test("badge tone policy stays semantic and primitive based", async () => {
+  const status = await readFile("src/lib/status.ts", "utf8");
+  const primitives = await readFile("src/shared/atoms/ui-primitives.tsx", "utf8");
+  const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const taskDetailPanelHeader = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
+  const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
+  const sprintTables = await readFile("src/features/sprint/organisms/sprint-task-tables.tsx", "utf8");
+
+  assert.match(primitives, /export type UiTone/);
+  assert.match(primitives, /sky:/);
+  assert.match(status, /statusBadgeTone/);
+  assert.match(status, /priorityBadgeTone/);
+  assert.doesNotMatch(status, /border-|bg-|text-/);
+  assert.match(taskCard, /UiBadge/);
+  assert.match(taskCard, /statusBadgeTone/);
+  assert.match(taskDetailPanelHeader, /UiBadge/);
+  assert.match(taskDetailPanelHeader, /priorityBadgeTone/);
+  assert.match(notifications, /notificationBadgeTone/);
+  assert.match(notifications, /UiBadge/);
+  assert.match(sprintTables, /UiBadge/);
+  assert.doesNotMatch(`${taskCard}\n${taskDetailPanelHeader}\n${notifications}\n${sprintTables}`, /statusTone|priorityTone|notificationTone/);
+});
+
+test("shared data surfaces centralize table shells without domain columns", async () => {
+  const dataSurface = await readFile("src/shared/molecules/data-surface.tsx", "utf8");
+  const migratedFiles = [
+    "src/features/sprint/organisms/sprint-task-tables.tsx",
+    "src/features/sprint/organisms/sprint-founder-score-table.tsx",
+    "src/features/sprint/molecules/sprint-meeting-attendance-section.tsx",
+    "src/features/tasks/organisms/task-table-view.tsx",
+    "src/features/tasks/organisms/task-structure-view.tsx",
+    "src/features/tasks/organisms/gantt-view.tsx",
+  ];
+
+  assert.match(dataSurface, /export function DataSurface/);
+  assert.match(dataSurface, /export function DataOverflow/);
+  assert.match(dataSurface, /export function DataTable/);
+  assert.match(dataSurface, /export function DataHeaderCell/);
+  assert.match(dataSurface, /export function DataCell/);
+  assert.match(dataSurface, /export function DataEmptyRow/);
+  assert.doesNotMatch(dataSurface, /TaskStatus|SprintStatus|reviewStatus|packageId|ownerId/);
+
+  for (const file of migratedFiles) {
+    const source = await readFile(file, "utf8");
+    assert.match(source, /DataSurface/, `${file} should use shared data surface shell`);
+  }
 });
 
 test("visible German app copy keeps real UTF-8 umlauts", async () => {

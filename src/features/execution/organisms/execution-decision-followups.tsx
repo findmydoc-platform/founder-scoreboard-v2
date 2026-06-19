@@ -6,6 +6,7 @@ import { decisionStatusLabel } from "@/features/execution/model/execution-layer-
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { DecisionTaskLink, PlanningData, Task, TaskRelation } from "@/lib/types";
+import { UiBadge, UiButton, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type DraftSetter<T> = Dispatch<SetStateAction<Record<number, T>>>;
 
@@ -43,7 +44,7 @@ export function ExecutionDecisionFollowups({
   onRemoveDecisionTaskLink: (link: DecisionTaskLink) => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-950">Decision-Folgearbeit</h2>
         <span className="text-xs font-semibold text-slate-500">{data.decisionTaskLinks.length} Links · {executionMetrics.decisionsWithoutTasks} offen</span>
@@ -65,8 +66,7 @@ export function ExecutionDecisionFollowups({
                   <h3 className="text-sm font-semibold text-slate-950">{decision.title}</h3>
                   <p className="mt-1 text-xs text-slate-500">{links.length} verknüpfte Aufgaben · {decisionStatusLabel(decision.status)}</p>
                 </div>
-                <button
-                  type="button"
+                <UiButton
                   onClick={() => onCreateTask({
                     taskType: "deliverable",
                     title: `${decision.title} umsetzen`,
@@ -78,15 +78,16 @@ export function ExecutionDecisionFollowups({
                     decisionId: decision.id,
                     decisionLinkNote: "Folgeaufgabe aus Decision",
                   })}
-                  className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  size="sm"
+                  className="shrink-0 text-slate-600"
                 >
                   Folgeaufgabe
-                </button>
+                </UiButton>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-semibold">
-                <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">{followUpCounts.open} Folgearbeit offen</span>
-                <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{followUpCounts.done} erledigt</span>
-                <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{followUpCounts.blocked} blockiert</span>
+                <UiBadge tone="blue">{followUpCounts.open} Folgearbeit offen</UiBadge>
+                <UiBadge tone="emerald">{followUpCounts.done} erledigt</UiBadge>
+                <UiBadge tone="amber">{followUpCounts.blocked} blockiert</UiBadge>
               </div>
               {links.length > 0 && (
                 <div className="mt-3 grid gap-1">
@@ -96,9 +97,9 @@ export function ExecutionDecisionFollowups({
                     return (
                       <div key={link.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1">
                         <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-slate-700 hover:text-blue-700">{task.title}</button>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${status === "Erledigt" ? "bg-emerald-50 text-emerald-700" : isBlocked ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+                        <UiBadge tone={status === "Erledigt" ? "emerald" : isBlocked ? "amber" : "blue"} size="xs" bordered={false} className="shrink-0">
                           {status === "Erledigt" ? "erledigt" : isBlocked ? "blockiert" : "offen"}
-                        </span>
+                        </UiBadge>
                         <button type="button" disabled={pending} onClick={() => onRemoveDecisionTaskLink(link)} className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600" aria-label="Decision-Link entfernen">
                           <X size={12} />
                         </button>
@@ -114,25 +115,24 @@ export function ExecutionDecisionFollowups({
                   options={[{ value: "", label: "Aufgabe auswählen" }, ...openTasks.map((task) => ({ value: task.id, label: task.title }))]}
                   className="h-9 text-sm"
                 />
-                <input
+                <UiTextInput
                   value={decisionNoteDrafts[decision.id] || ""}
                   onChange={(event) => onDecisionNoteDraftsChange((current) => ({ ...current, [decision.id]: event.target.value }))}
-                  className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+                  className="px-3"
                   placeholder="Warum folgt diese Aufgabe aus der Decision?"
                 />
-                <button
-                  type="button"
+                <UiButton
                   disabled={pending || !selectedTaskId}
                   onClick={() => onLinkDecisionTask(decision.id, selectedTaskId, decisionNoteDrafts[decision.id] || "")}
-                  className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  variant="slate"
                 >
                   Verknüpfen
-                </button>
+                </UiButton>
               </div>
             </article>
           );
         })}
       </div>
-    </section>
+    </UiPanel>
   );
 }

@@ -3,6 +3,7 @@
 import { taskOwnerLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Task } from "@/lib/types";
+import { UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   subIssues: Task[];
@@ -17,9 +18,9 @@ export function TaskDetailPanelSubIssuesSection({ subIssues, onCreateSubIssue }:
           <h3 className="text-sm font-semibold text-slate-950">Sub-Issues</h3>
           <p className="mt-1 text-xs text-slate-500">Persönliche Arbeitsstruktur, nicht score-relevant.</p>
         </div>
-        <button type="button" onClick={onCreateSubIssue} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+        <UiButton onClick={onCreateSubIssue} size="xs">
           Sub-Issue
-        </button>
+        </UiButton>
       </div>
       <div className="mt-3 grid gap-2">
         {subIssues.map((item) => (
@@ -28,7 +29,7 @@ export function TaskDetailPanelSubIssuesSection({ subIssues, onCreateSubIssue }:
             <div className="mt-1 text-xs text-slate-500">{normalizeStatus(item.status)} · {taskOwnerLabel(item)}</div>
           </div>
         ))}
-        {!subIssues.length && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch keine Sub-Issues.</div>}
+        {!subIssues.length && <UiEmptyState>Noch keine Sub-Issues.</UiEmptyState>}
       </div>
     </section>
   );

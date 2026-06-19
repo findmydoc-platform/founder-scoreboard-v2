@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
 import { dateRange, taskOwnerLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { buildReviewWorkspaceViewModel, isBlockedReviewTask, reviewStatusFilterOptions, type ReviewOwnerFilter, type ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
@@ -34,7 +35,7 @@ export function ReviewWorkspaceOverview({
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Review-Zentrale</h2>
@@ -61,9 +62,9 @@ export function ReviewWorkspaceOverview({
           <ReviewMetric label="Nacharbeit" value={metrics.rework} />
           <ReviewMetric label="Geblockt" value={metrics.blocked} />
         </div>
-      </section>
+      </UiPanel>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <UiPanel padding="none" className="overflow-hidden">
         <div className="border-b border-slate-100 px-4 py-3">
           <h2 className="text-base font-semibold text-slate-950">Reviews</h2>
           <p className="text-xs text-slate-500">{visibleTasks.length} Treffer mit aktuellem Filter.</p>
@@ -98,9 +99,9 @@ export function ReviewWorkspaceOverview({
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{dateRange(task)}</td>
                   <td className="border-b border-slate-100 px-3 py-3">
-                    <Link href={`/reviews/${encodeURIComponent(task.id)}`} className="inline-flex h-8 items-center rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                    <UiLinkButton href={`/reviews/${encodeURIComponent(task.id)}`} variant="blue" size="sm">
                       Review öffnen
-                    </Link>
+                    </UiLinkButton>
                   </td>
                 </tr>
               ))}
@@ -114,7 +115,7 @@ export function ReviewWorkspaceOverview({
             </tbody>
           </table>
         </div>
-      </section>
+      </UiPanel>
     </div>
   );
 }

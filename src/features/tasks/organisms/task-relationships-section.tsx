@@ -2,6 +2,7 @@
 
 import { CircleHelp, X } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiButton, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { relationshipHelpText, relationTypeLabel, taskOwnerLabel } from "@/lib/display";
 import { relationshipBadgeFor, relationshipBadgeToneClass, relationMatchesDraft } from "@/lib/relationship-view-model";
 import { normalizeStatus } from "@/lib/status";
@@ -159,20 +160,20 @@ export function TaskRelationshipsSection({
             className="h-9 text-sm"
             options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
           />
-          <input
+          <UiTextInput
             value={relationDraft.note}
             onChange={(event) => onRelationDraftChange({ note: event.target.value })}
-            className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+            inputPadding="md"
             placeholder="Optionaler Hinweis"
           />
-          <button
+          <UiButton
             type="button"
             disabled={pending || !relationDraft.relatedTaskId || duplicateRelation}
             onClick={onAddRelation}
-            className="h-9 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            variant="primary"
           >
             {duplicateRelation ? "Relationship existiert bereits" : "Relationship hinzufügen"}
-          </button>
+          </UiButton>
           {duplicateRelation && <div className="text-xs font-semibold text-amber-700">Diese Relationship ist bereits gespeichert.</div>}
         </div>
       )}

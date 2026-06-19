@@ -1,6 +1,6 @@
-﻿import type { PlanningData } from "../types";
+import type { PlanningData } from "../types";
 
-export const seedData: PlanningData = {
+export const fullSeedData: PlanningData = {
   "project": {
     "id": "findmydoc-founder-execution",
     "name": "findmydoc Founder Execution",
@@ -71,9 +71,20 @@ export const seedData: PlanningData = {
       "priority": "P0",
       "ownerId": "volkan",
       "accountableProfileId": "volkan",
-      "responsibleProfileIds": ["volkan"],
-      "consultedProfileIds": ["anil", "ozen"],
-      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "responsibleProfileIds": [
+        "volkan"
+      ],
+      "consultedProfileIds": [
+        "anil",
+        "ozen"
+      ],
+      "informedProfileIds": [
+        "volkan",
+        "sebastian",
+        "anil",
+        "ozen",
+        "youssef"
+      ],
       "status": "active",
       "successCriteria": "MVP, Legal-Basis und Klinik-Onboarding können ohne versteckte Vorarbeit reviewed werden.",
       "scopeConstraints": "",
@@ -86,9 +97,20 @@ export const seedData: PlanningData = {
       "priority": "P0",
       "ownerId": "volkan",
       "accountableProfileId": "volkan",
-      "responsibleProfileIds": ["volkan"],
-      "consultedProfileIds": ["anil", "ozen"],
-      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "responsibleProfileIds": [
+        "volkan"
+      ],
+      "consultedProfileIds": [
+        "anil",
+        "ozen"
+      ],
+      "informedProfileIds": [
+        "volkan",
+        "sebastian",
+        "anil",
+        "ozen",
+        "youssef"
+      ],
       "status": "active",
       "successCriteria": "Warme Klinik- und Messekontakte haben Owner, nächsten Schritt und dokumentierten Follow-up-Status.",
       "scopeConstraints": "",
@@ -101,9 +123,19 @@ export const seedData: PlanningData = {
       "priority": "P1",
       "ownerId": "youssef",
       "accountableProfileId": "youssef",
-      "responsibleProfileIds": ["youssef"],
-      "consultedProfileIds": ["volkan"],
-      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "responsibleProfileIds": [
+        "youssef"
+      ],
+      "consultedProfileIds": [
+        "volkan"
+      ],
+      "informedProfileIds": [
+        "volkan",
+        "sebastian",
+        "anil",
+        "ozen",
+        "youssef"
+      ],
       "status": "planned",
       "successCriteria": "Pitchdeck, Funding-Narrative und Investor-Follow-ups sind als reviewfähiges Paket vorbereitet.",
       "scopeConstraints": "",
@@ -116,9 +148,17 @@ export const seedData: PlanningData = {
       "priority": "P1",
       "ownerId": "anil",
       "accountableProfileId": "anil",
-      "responsibleProfileIds": ["anil"],
+      "responsibleProfileIds": [
+        "anil"
+      ],
       "consultedProfileIds": [],
-      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "informedProfileIds": [
+        "volkan",
+        "sebastian",
+        "anil",
+        "ozen",
+        "youssef"
+      ],
       "status": "planned",
       "successCriteria": "Founder-Struktur, Governance und operative Transparenz sind für das Team nachvollziehbar dokumentiert.",
       "scopeConstraints": "",
@@ -131,9 +171,19 @@ export const seedData: PlanningData = {
       "priority": "P2",
       "ownerId": "youssef",
       "accountableProfileId": "youssef",
-      "responsibleProfileIds": ["youssef"],
-      "consultedProfileIds": ["volkan"],
-      "informedProfileIds": ["volkan", "sebastian", "anil", "ozen", "youssef"],
+      "responsibleProfileIds": [
+        "youssef"
+      ],
+      "consultedProfileIds": [
+        "volkan"
+      ],
+      "informedProfileIds": [
+        "volkan",
+        "sebastian",
+        "anil",
+        "ozen",
+        "youssef"
+      ],
       "status": "planned",
       "successCriteria": "Marketing- und Content-Arbeit ist priorisiert, briefbar und ohne medizinische Risikoaussagen nutzbar.",
       "scopeConstraints": "",
@@ -2163,6 +2213,3 @@ export const seedData: PlanningData = {
   "audit": [],
   "availability": []
 };
-
-
-

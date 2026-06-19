@@ -3,6 +3,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { formatDate } from "@/lib/display";
 import { durationOptions, formatLongDateLabel, googleCalendarUrl, timeOptions, type MeetingSlot } from "@/features/meetings/model/meeting-finder";
 import type { Profile } from "@/lib/types";
+import { UiBadge, UiButton, UiNotice, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type ParticipantOption = { value: string; label: string };
 
@@ -90,16 +91,16 @@ export function MeetingSlotSearchSection({
 
   return (
     <>
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel className="min-w-0">
         <h2 className="text-base font-semibold text-slate-950">Meeting Finder</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus FindMyDoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Google-Workspace-Blockern.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus findmydoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Google-Workspace-Blockern.</p>
         <div className="mt-4 grid grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Arbeitszeiten</div><div className="font-semibold">{workingHoursCount}</div></div>
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{blockersCount}</div></div>
           <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
           <div className="rounded-md bg-blue-50 p-3"><div className="text-xs text-blue-700">Teilnehmer</div><div className="font-semibold text-blue-900">{selectedProfiles.length}</div></div>
         </div>
-        <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-3 text-sm leading-6 text-blue-800">
+        <UiNotice className="mt-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="font-semibold text-blue-950">Google Workspace Sync</div>
@@ -107,24 +108,25 @@ export function MeetingSlotSearchSection({
               {lastGoogleSync && <div className="mt-1 text-xs text-blue-700">Letzter Sync: {formatDate(lastGoogleSync)}</div>}
               {calendarSyncMessage && <div className="mt-2 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-800">{calendarSyncMessage}</div>}
             </div>
-            <button
-              type="button"
+            <UiButton
               onClick={onSyncGoogleCalendar}
               disabled={pending || !canManageAvailability}
-              className="h-9 w-full rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              variant="blueOutline"
+              size="md"
+              className="w-full text-xs sm:w-auto"
             >
               Google-Kalender synchronisieren
-            </button>
+            </UiButton>
           </div>
-        </div>
-      </section>
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        </UiNotice>
+      </UiPanel>
+      <UiPanel className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">Freie Slots finden</h2>
             <p className="mt-1 text-sm text-slate-500">Volle Treffer werden zuerst gezeigt, Teilmatches bleiben sichtbar, damit du schnell entscheiden kannst.</p>
           </div>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">{visibleSlots.length}/{slots.length} Slots</span>
+          <UiBadge>{visibleSlots.length}/{slots.length} Slots</UiBadge>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_160px_140px_140px]">
           <CustomDatePicker value={fromDate} onChange={onFromDateChange} className="h-9 text-sm" aria-label="Startdatum wählen" />
@@ -136,7 +138,7 @@ export function MeetingSlotSearchSection({
         {duration === "custom" && (
           <div className="mt-3 grid gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-3 sm:grid-cols-[180px_1fr]">
             <label className="text-xs font-semibold text-slate-500" htmlFor="meeting-custom-duration">Eigene Dauer in Minuten</label>
-            <input
+            <UiTextInput
               id="meeting-custom-duration"
               type="number"
               min={15}
@@ -144,34 +146,34 @@ export function MeetingSlotSearchSection({
               step={15}
               value={customDuration}
               onChange={(event) => onCustomDurationChange(event.target.value)}
-              className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="px-3"
               placeholder="z. B. 120"
             />
           </div>
         )}
         {searchStartMinutes >= searchEndMinutes && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+          <UiNotice tone="warning" className="mt-3 font-semibold leading-normal">
             Das Zeitfenster ist ungültig. Die früheste Startzeit muss vor der spätesten Endzeit liegen.
-          </div>
+          </UiNotice>
         )}
         <div className="mt-4 grid gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
           <div className="text-sm font-semibold text-slate-950">Meeting vormerken</div>
-          <input
+          <UiTextInput
             value={meetingTitle}
             onChange={(event) => onMeetingTitleChange(event.target.value)}
-            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="px-3"
             placeholder="Meeting-Titel"
           />
-          <textarea
+          <UiTextArea
             value={meetingAgenda}
             onChange={(event) => onMeetingAgendaChange(event.target.value)}
-            className="min-h-20 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="min-h-20 px-3"
             placeholder="Agenda oder Kontext"
           />
           <p className="text-xs leading-5 text-slate-500">
             Ein Slot legt ein internes Meeting an, erzeugt offene Anwesenheitszeilen und versucht den Google-Kalender automatisch zu synchronisieren.
           </p>
-          {meetingCreateMessage && <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">{meetingCreateMessage}</div>}
+          {meetingCreateMessage && <UiNotice tone="success" className="px-2 py-1 text-xs font-semibold leading-normal">{meetingCreateMessage}</UiNotice>}
         </div>
         {nextRecommendedSlot && (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm">
@@ -181,14 +183,14 @@ export function MeetingSlotSearchSection({
                 <div className="mt-1 font-semibold text-emerald-950">{formatLongDateLabel(nextRecommendedSlot.date)} · {nextRecommendedSlot.startTime}-{nextRecommendedSlot.endTime}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
+                <UiButton
                   onClick={() => onReserveSlot(nextRecommendedSlot)}
                   disabled={pending || !canReserveMeetingSlot}
-                  className="inline-flex h-8 items-center rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  variant="emeraldPrimary"
+                  size="sm"
                 >
                   In App anlegen
-                </button>
+                </UiButton>
                 <a
                   href={googleCalendarUrl(nextRecommendedSlot, selectedProfiles, meetingTitle, meetingAgenda)}
                   target="_blank"
@@ -279,7 +281,7 @@ export function MeetingSlotSearchSection({
             </div>
           )}
         </div>
-      </section>
+      </UiPanel>
     </>
   );
 }

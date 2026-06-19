@@ -1,6 +1,6 @@
-import { seedData } from "./generated/seed-data";
 import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
 import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import { leanSeedData } from "./seed";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData } from "./types";
 
@@ -43,7 +43,7 @@ export const emptyPlanningData: PlanningData = {
 
 export async function getPlanningData(): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
-  if (!supabase) return { data: seedData, source: "seed" };
+  if (!supabase) return { data: leanSeedData, source: "seed" };
 
   const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", "findmydoc-founder-execution").single(),
@@ -83,7 +83,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
   ]);
 
   if (projectResult.error || profileResult.error || packageResult.error || taskResult.error) {
-    return { data: seedData, source: "seed" };
+    return { data: leanSeedData, source: "seed" };
   }
 
   const profiles = (profileResult.data as DbProfile[]).map(mapProfile);
@@ -100,7 +100,7 @@ export async function getPlanningData(): Promise<{ data: PlanningData; source: "
       packages: (packageResult.data as DbPackage[]).map(mapPackage),
       milestones: milestoneResult.error ? [] : (milestoneResult.data as DbMilestone[]).map(mapMilestone),
       tasks: (taskResult.data as DbTask[]).map((row) => mapTask(row, profiles)),
-      sprints: sprintResult.error ? seedData.sprints : (sprintResult.data as DbSprint[]).map(mapSprint),
+      sprints: sprintResult.error ? leanSeedData.sprints : (sprintResult.data as DbSprint[]).map(mapSprint),
       sprintCommitments: sprintCommitmentResult.error ? [] : (sprintCommitmentResult.data as DbSprintCommitment[]).map(mapSprintCommitment),
       founderSprintScores: founderSprintScoreResult.error ? [] : (founderSprintScoreResult.data as DbFounderSprintScore[]).map(mapFounderSprintScore),
       founderStrikeStates: founderStrikeStateResult.error ? [] : (founderStrikeStateResult.data as DbFounderStrikeState[]).map(mapFounderStrikeState),

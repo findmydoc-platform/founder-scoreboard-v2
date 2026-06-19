@@ -4,6 +4,7 @@ import { Paperclip } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Profile } from "@/lib/types";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   pending?: boolean;
@@ -96,26 +97,24 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
                   if (file) void uploadAttachment(file);
                 }}
               />
-              <button
+              <UiButton
                 type="button"
                 disabled={pending || uploadPending}
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Paperclip size={15} />
                 {uploadPending ? "Lädt hoch..." : "Anhang"}
-              </button>
+              </UiButton>
             </>
           )}
         </div>
-        <button
+        <UiButton
           type="button"
           disabled={pending || uploadPending || newComment.trim().length < 2}
           onClick={submitComment}
-          className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Kommentieren
-        </button>
+        </UiButton>
       </div>
     </>
   );

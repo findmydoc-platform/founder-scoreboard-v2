@@ -7,6 +7,7 @@ import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiati
 import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
+import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export type TaskDetailsMeta = Pick<Task, "status" | "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewStatus" | "reviewOwnerProfileId">;
 export type TaskDetailsDraft = Pick<TaskDetailsMeta, "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewOwnerProfileId">;
@@ -86,7 +87,7 @@ export function TaskDetailsCard({
   const selfReview = Boolean(meta.reviewOwnerProfileId && (task.ownerId === meta.reviewOwnerProfileId || task.owner === meta.reviewOwnerProfileId));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5">
+    <UiPanel padding="lg">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-950">Details</h2>
@@ -104,24 +105,23 @@ export function TaskDetailsCard({
                 >
                   <X size={14} />
                 </button>
-                <button
-                  type="button"
+                <UiButton
                   onClick={onSaveDetails}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700"
+                  variant="blue"
+                  size="sm"
                 >
                   <Save size={14} />
                   Speichern
-                </button>
+                </UiButton>
               </>
             ) : (
-              <button
-                type="button"
+              <UiButton
                 onClick={onStartEditing}
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                size="sm"
               >
                 <Pencil size={14} />
                 Bearbeiten
-              </button>
+              </UiButton>
             )}
           </div>
         )}
@@ -247,6 +247,6 @@ export function TaskDetailsCard({
           </div>
         )}
       </div>
-    </section>
+    </UiPanel>
   );
 }

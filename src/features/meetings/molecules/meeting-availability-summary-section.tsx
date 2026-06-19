@@ -8,6 +8,7 @@ import {
   weekdayOptions,
 } from "@/features/meetings/model/meeting-finder";
 import type { AvailabilityEntry } from "@/lib/types";
+import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function MeetingAvailabilitySummarySection({
   availability,
@@ -37,7 +38,7 @@ export function MeetingAvailabilitySummarySection({
   const summaryEntries = [...workingHours, ...blockers];
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <UiPanel className="xl:col-span-2">
       <h2 className="text-base font-semibold text-slate-950">Kalenderwoche & Blocker</h2>
       <p className="mt-1 text-sm text-slate-500">Die nächsten Tage zeigen Arbeitszeiten, Abwesenheiten und später importierte Google-Kalenderblöcke zusammen.</p>
       <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
@@ -56,7 +57,7 @@ export function MeetingAvailabilitySummarySection({
                     <div>{availabilityCalendarLabel(entry)} · {entry.startTime}-{entry.endTime}</div>
                   </div>
                 ))}
-                {!dayEntries.length && <div className="rounded-md border border-dashed border-slate-200 bg-white px-2 py-3 text-center text-xs text-slate-400">Keine Einträge</div>}
+                {!dayEntries.length && <UiEmptyState className="px-2 py-3 text-xs text-slate-400">Keine Einträge</UiEmptyState>}
               </div>
             </div>
           );
@@ -78,21 +79,21 @@ export function MeetingAvailabilitySummarySection({
               </div>
             </div>
             {(canManageAvailability || entry.profileId === currentProfileId) && (
-              <button type="button" onClick={() => onDeleteAvailability(entry)} disabled={pending} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+              <UiButton onClick={() => onDeleteAvailability(entry)} disabled={pending} size="xs" className="text-slate-600">
                 Löschen
-              </button>
+              </UiButton>
             )}
           </div>
         ))}
         {!summaryEntries.length && (
-          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 lg:col-span-2">
+          <UiEmptyState tone="muted" className="rounded-lg border-slate-300 px-4 py-8 lg:col-span-2">
             Noch keine Arbeitszeiten oder Blocker hinterlegt.
-          </div>
+          </UiEmptyState>
         )}
       </div>
-      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+      <UiNotice tone="neutral" className="mt-4 leading-normal">
         Kalenderstatus: {googleCalendarBlocksCount} importierte Google-Blöcke, {googleCalendarProfilesCount} Profil(e) für Sync aktiviert. Manuelle Arbeitszeiten bleiben führend; Google-Termine blockieren nur freie Slots.
-      </div>
-    </section>
+      </UiNotice>
+    </UiPanel>
   );
 }

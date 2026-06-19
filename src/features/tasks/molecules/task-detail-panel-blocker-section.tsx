@@ -1,6 +1,7 @@
 "use client";
 
 import type { TaskBlocker } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type BlockerDraft = {
   reason: string;
@@ -32,7 +33,7 @@ export function TaskDetailPanelBlockerSection({
           <h3 className="text-sm font-semibold text-slate-950">Blocker</h3>
           <p className="mt-1 text-xs text-slate-500">Blocker früh melden, damit der Sprint planbar bleibt.</p>
         </div>
-        <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{blockers.filter((blocker) => blocker.status === "open").length} offen</span>
+        <UiBadge tone="white">{blockers.filter((blocker) => blocker.status === "open").length} offen</UiBadge>
       </div>
       <div className="mt-3 grid gap-2">
         {blockers.map((blocker) => (
@@ -46,36 +47,35 @@ export function TaskDetailPanelBlockerSection({
             {blocker.needsHelpFrom && <p className="mt-1 text-xs text-orange-800">Braucht Hilfe von: {blocker.needsHelpFrom}</p>}
           </article>
         ))}
-        {!blockers.length && <div className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500">Noch kein Blocker gemeldet.</div>}
+        {!blockers.length && <UiEmptyState>Noch kein Blocker gemeldet.</UiEmptyState>}
       </div>
       <div className="mt-3 grid gap-2">
-        <textarea
+        <UiTextArea
           value={blockerDraft.reason}
           onChange={(event) => onBlockerDraftChange({ reason: event.target.value })}
-          className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-blue-400"
+          className="min-h-20 w-full p-3 leading-6"
           placeholder="Was blockiert dich konkret?"
         />
-        <input
+        <UiTextInput
           value={blockerDraft.impact}
           onChange={(event) => onBlockerDraftChange({ impact: event.target.value })}
-          className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+          className="px-3"
           placeholder="Auswirkung auf Sprint oder Review"
         />
-        <input
+        <UiTextInput
           value={blockerDraft.needsHelpFrom}
           onChange={(event) => onBlockerDraftChange({ needsHelpFrom: event.target.value })}
-          className="h-9 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-400"
+          className="px-3"
           placeholder="Braucht Hilfe von"
         />
         <div className="flex justify-end">
-          <button
-            type="button"
+          <UiButton
             disabled={pending || blockerDraft.reason.trim().length < 5}
             onClick={() => onReportBlocker(blockerDraft)}
-            className="h-9 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+            variant="orange"
           >
             Blocker melden
-          </button>
+          </UiButton>
         </div>
       </div>
     </section>

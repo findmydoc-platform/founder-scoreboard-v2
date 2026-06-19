@@ -6,6 +6,7 @@ import { useState } from "react";
 import { dateRange, formatDate, initiativeMetaLabel, initiativeRaciRows, taskOwnerLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function ProjectsOverview({
   data,
@@ -29,11 +30,11 @@ export function ProjectsOverview({
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <UiPanel>
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktives Projekt</div>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{data.project.name}</h2>
         <p className="mt-1 text-sm text-slate-500">Struktur: Epic / Meilenstein → Initiative → Deliverable → Sub-Issue. Sprints sind der Zeitcontainer für Deliverables.</p>
-      </section>
+      </UiPanel>
       <section className="grid gap-3">
         {milestones.map((milestone) => {
           const milestoneKey = milestone.id || "without-epic";
@@ -44,7 +45,7 @@ export function ProjectsOverview({
           const effort = milestoneTasks.reduce((sum, task) => sum + task.hours, 0);
 
           return (
-            <article key={milestoneKey} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <UiPanel key={milestoneKey} as="article" padding="none" className="overflow-hidden">
               <button
                 type="button"
                 onClick={() => setOpenMilestoneIds((current) => toggleSetValue(current, milestoneKey))}
@@ -84,13 +85,13 @@ export function ProjectsOverview({
                     />
                   ))}
                   {!groups.length && (
-                    <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                    <UiEmptyState className="rounded-lg px-4 py-6">
                       Noch keine Initiativen in diesem Epic.
-                    </div>
+                    </UiEmptyState>
                   )}
                 </div>
               )}
-            </article>
+            </UiPanel>
           );
         })}
       </section>
@@ -136,12 +137,12 @@ function InitiativeTreeItem({
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">{tasks.length} Deliverables</span>
-          <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">{blocked} blockiert</span>
+          <UiBadge tone="white">{tasks.length} Deliverables</UiBadge>
+          <UiBadge tone="orange">{blocked} blockiert</UiBadge>
           {canEdit && (
-            <button type="button" onClick={onEdit} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            <UiButton onClick={onEdit} size="xs">
               Bearbeiten
-            </button>
+            </UiButton>
           )}
         </div>
       </div>

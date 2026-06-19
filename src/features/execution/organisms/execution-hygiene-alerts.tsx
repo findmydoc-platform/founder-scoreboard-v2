@@ -2,6 +2,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import type { HygieneAlert, HygieneAlertAreaFilter, HygieneAlertSeverityFilter } from "@/features/execution/model/execution-layer-view-model";
 import type { Task, TaskFocusItem, TaskRelation } from "@/lib/types";
+import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function ExecutionHygieneAlerts({
   alertSeverityFilter,
@@ -35,10 +36,10 @@ export function ExecutionHygieneAlerts({
   onSetFocus: (task: Task, nextStep: string, status?: TaskFocusItem["status"]) => void;
 }) {
   return (
-    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <UiPanel className="min-w-0">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-950">Hygiene Alerts</h2>
-        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">{filteredAlerts.length}/{hygieneAlerts.length} offen</span>
+        <UiBadge tone="white" size="md">{filteredAlerts.length}/{hygieneAlerts.length} offen</UiBadge>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <CustomSelect
@@ -72,11 +73,11 @@ export function ExecutionHygieneAlerts({
       <div className="mt-4 grid gap-2">
         {visibleAlerts.length ? visibleAlerts.map((alert) => {
           const task = alert.taskId ? taskById.get(alert.taskId) : null;
-          const tone = alert.severity === "critical" ? "border-red-200 bg-red-50 text-red-700" : alert.severity === "warning" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-blue-200 bg-blue-50 text-blue-700";
+          const tone = alert.severity === "critical" ? "red" : alert.severity === "warning" ? "amber" : "blue";
           return (
             <article key={alert.id} className="rounded-md border border-slate-200 p-3">
               <div className="flex items-start gap-2">
-                <span className={`mt-0.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{alert.severity === "critical" ? "kritisch" : alert.severity === "warning" ? "Warnung" : "Info"}</span>
+                <UiBadge tone={tone} size="xs" className="mt-0.5">{alert.severity === "critical" ? "kritisch" : alert.severity === "warning" ? "Warnung" : "Info"}</UiBadge>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-slate-950">{alert.title}</h3>
                   <p className="mt-1 text-xs leading-5 text-slate-600">{alert.description}</p>
@@ -86,7 +87,7 @@ export function ExecutionHygieneAlerts({
                   {task && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button type="button" onClick={() => onOpenTask(task)} className="text-xs font-semibold text-blue-600 hover:text-blue-700">{task.title}</button>
-                      <button type="button" disabled={pending || focusItems.length >= 3} onClick={() => onSetFocus(task, alert.recommendedAction, alert.focusStatus || "planned")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Aktion in Fokus</button>
+                      <UiButton disabled={pending || focusItems.length >= 3} onClick={() => onSetFocus(task, alert.recommendedAction, alert.focusStatus || "planned")} size="compact">Aktion in Fokus</UiButton>
                     </div>
                   )}
                   {task && hasOpenWaitingRelation(task.id, allTasks, taskRelations) && (
@@ -97,9 +98,9 @@ export function ExecutionHygieneAlerts({
             </article>
           );
         }) : (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">Keine Hygiene Alerts offen.</div>
+          <UiEmptyState tone="muted" className="px-4 py-8">Keine Hygiene Alerts offen.</UiEmptyState>
         )}
       </div>
-    </section>
+    </UiPanel>
   );
 }
