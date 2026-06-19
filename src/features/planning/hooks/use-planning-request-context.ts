@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { getRememberedGitHubProviderToken } from "@/lib/github-provider-token";
+import { useEffect, useMemo, useState } from "react";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile } from "@/lib/types";
 
 const devProfileStateKey = "fmd-planning-dev-profile-v1";
@@ -8,11 +8,6 @@ function isLocalDevHost() {
   if (typeof window === "undefined") return false;
   return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
-
-type RequestHeaderOptions = {
-  json?: boolean;
-  github?: boolean;
-};
 
 type UsePlanningRequestContextOptions = {
   source: "seed" | "supabase";
@@ -49,15 +44,10 @@ export function usePlanningRequestContext({ source, profiles, currentGithubLogin
     else window.localStorage.removeItem(devProfileStateKey);
   }, [devProfileId, devRoleSwitchAvailable]);
 
-  const requestHeaders = useCallback((token?: string, options: RequestHeaderOptions = { json: true }) => {
-    const githubProviderToken = options.github ? getRememberedGitHubProviderToken() : "";
-    return {
-      ...(options.json !== false ? { "content-type": "application/json" } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(devRoleSwitchAvailable && devProfileId ? { "x-fmd-dev-profile-id": devProfileId } : {}),
-      ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-    };
-  }, [devProfileId, devRoleSwitchAvailable]);
+  const apiClient = useMemo(() => createBrowserApiClient({
+    devProfileId,
+    devProfileOverrideEnabled: devRoleSwitchAvailable,
+  }), [devProfileId, devRoleSwitchAvailable]);
 
   return {
     actualProfile,
@@ -65,6 +55,6 @@ export function usePlanningRequestContext({ source, profiles, currentGithubLogin
     devProfileId,
     setDevProfileId,
     devRoleSwitchAvailable,
-    requestHeaders,
+    apiClient,
   };
 }

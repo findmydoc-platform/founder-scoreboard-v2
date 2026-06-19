@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
-import { githubUserForToken, uploadGitHubAttachment } from "@/lib/github";
+import { uploadGitHubAttachment } from "@/lib/github";
+import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { getServerSupabase } from "@/lib/supabase";
 
 const maxUploadBytes = 10 * 1024 * 1024;
@@ -14,10 +15,6 @@ const allowedMimeTypes = new Set([
   "text/plain",
   "text/markdown",
 ]);
-
-function providerToken(request: NextRequest) {
-  return request.headers.get("x-github-provider-token")?.trim() || "";
-}
 
 function safeFileName(value: string) {
   const fallback = "anhang";
@@ -36,19 +33,6 @@ function safeFileName(value: string) {
 
 function isImageType(type: string) {
   return type.toLowerCase().startsWith("image/");
-}
-
-async function requireMatchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
-  const token = providerToken(request);
-  if (!token) throw new Error("GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Upload wiederholen.");
-
-  const githubUser = await githubUserForToken(token);
-  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
-  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
-  }
-
-  return token;
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -76,7 +60,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubToken(request, permission.profile);
+    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Upload wiederholen.");
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden." }, { status: 403 });
   }

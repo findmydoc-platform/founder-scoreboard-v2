@@ -52,7 +52,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     removeDecisionTaskLink,
     removeFocusItem,
     reopenReviewTask,
-    requestHeaders,
+    apiClient,
     retryNotificationDelivery,
     reviewOwnerFilter,
     reviewScoreObjection,
@@ -93,7 +93,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           profiles={data.profiles}
           packages={data.packages}
           sprints={data.sprints}
-          requestHeaders={requestHeaders}
+          apiClient={apiClient}
           onTasksCreated={(tasks) => {
             setData((current) => ({
               ...current,

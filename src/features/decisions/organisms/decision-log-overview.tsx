@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useDecisionLogWorkflow } from "@/features/decisions/hooks/use-decision-log-workflow";
 import { DecisionCreateForm } from "@/features/decisions/molecules/decision-create-form";
 import { DecisionLogSummary } from "@/features/decisions/molecules/decision-log-summary";
 import { DecisionCard } from "@/features/decisions/organisms/decision-card";
-import { decisionAuditEntries, decisionLinkedTasks, type DecisionEditDraft, type DecisionPayload } from "@/features/decisions/model/decision-log-view-model";
+import { decisionAuditEntries, decisionLinkedTasks, type DecisionPayload } from "@/features/decisions/model/decision-log-view-model";
 import type { DecisionTaskLink, PlanningData } from "@/lib/types";
 
 export function DecisionLogOverview({
@@ -28,39 +28,30 @@ export function DecisionLogOverview({
   onRemoveDecisionTaskLink: (link: DecisionTaskLink) => void;
   onCreateFollowUp: (decision: PlanningData["decisions"][number]) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [context, setContext] = useState("");
-  const [decisionText, setDecisionText] = useState("");
-  const [requiredProfileIds, setRequiredProfileIds] = useState<string[]>(() => data.profiles.map((profile) => profile.id));
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<DecisionEditDraft>({ title: "", context: "", decision: "", requiredProfileIds: [] });
-  const [objectionDrafts, setObjectionDrafts] = useState<Record<number, string>>({});
-  const [openDecisions, setOpenDecisions] = useState<Record<number, boolean>>({});
-  const [openAudits, setOpenAudits] = useState<Record<number, boolean>>({});
-  const currentProfile = data.profiles.find((profile) => profile.id === currentProfileId);
-  const canCreate = currentProfile?.platformRole === "ceo";
-
-  const resetForm = () => {
-    setTitle("");
-    setContext("");
-    setDecisionText("");
-    setRequiredProfileIds(data.profiles.map((profile) => profile.id));
-  };
-
-  const startEdit = (item: PlanningData["decisions"][number]) => {
-    setEditingId(item.id);
-    setEditDraft({
-      title: item.title,
-      context: item.context,
-      decision: item.decision,
-      requiredProfileIds: item.requiredProfileIds,
-    });
-  };
-
-  const submitCreate = () => {
-    onCreate({ title, context, decision: decisionText, requiredProfileIds });
-    resetForm();
-  };
+  const {
+    canCreate,
+    context,
+    decisionText,
+    editDraft,
+    editingId,
+    objectionDrafts,
+    openAudits,
+    openDecisions,
+    requiredProfileIds,
+    setContext,
+    setDecisionText,
+    setEditDraft,
+    setObjectionDraft,
+    setRequiredProfileIds,
+    setTitle,
+    submitCreate,
+    submitEdit,
+    submitObjection,
+    title,
+    toggleAudit,
+    toggleEdit,
+    toggleOpen,
+  } = useDecisionLogWorkflow({ data, currentProfileId, onCreate, onEdit, onObject });
 
   return (
     <div className="grid gap-4">
@@ -107,23 +98,13 @@ export function DecisionLogOverview({
             onConfirm={() => onConfirm(decision.id)}
             onCreateFollowUp={() => onCreateFollowUp(decision)}
             onEditDraftChange={setEditDraft}
-            onEditSubmit={() => {
-              onEdit(decision.id, editDraft);
-              setEditingId(null);
-            }}
-            onObjectSubmit={() => {
-              onObject(decision.id, objectionText);
-              setObjectionDrafts((current) => ({ ...current, [decision.id]: "" }));
-            }}
-            onObjectionChange={(nextObjectionText) => setObjectionDrafts((current) => ({ ...current, [decision.id]: nextObjectionText }))}
+            onEditSubmit={() => submitEdit(decision.id)}
+            onObjectSubmit={() => submitObjection(decision.id)}
+            onObjectionChange={(nextObjectionText) => setObjectionDraft(decision.id, nextObjectionText)}
             onRemoveDecisionTaskLink={onRemoveDecisionTaskLink}
-            onToggleAudit={() => setOpenAudits((current) => ({ ...current, [decision.id]: !auditOpen }))}
-            onToggleEdit={() => {
-              setOpenDecisions((current) => ({ ...current, [decision.id]: true }));
-              if (isEditing) setEditingId(null);
-              else startEdit(decision);
-            }}
-            onToggleOpen={() => setOpenDecisions((current) => ({ ...current, [decision.id]: !isOpen }))}
+            onToggleAudit={() => toggleAudit(decision.id)}
+            onToggleEdit={() => toggleEdit(decision)}
+            onToggleOpen={() => toggleOpen(decision.id)}
           />
         );
       }) : (

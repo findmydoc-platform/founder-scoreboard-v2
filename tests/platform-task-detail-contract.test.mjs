@@ -18,6 +18,8 @@ test("task route opens the detail panel inside the planning shell", async () => 
   const panelSidebarSection = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const subIssuesSection = await readFile("src/features/tasks/molecules/task-sub-issues-section.tsx", "utf8");
   const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
+  const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const brand = await readFile("src/shared/atoms/app-brand.tsx", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
 
@@ -97,8 +99,10 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(page, /<div className="mx-auto max-w-7xl px-6 py-6">/);
   assert.match(page, /<div className="mt-5 min-w-0">\s*<TaskCommentThread/);
   assert.doesNotMatch(page, /lg:col-span-2/);
-  assert.match(page, /useTaskComments/);
-  assert.match(commentHook, /api\/tasks\/\$\{task\.id\}\/comments/);
+  assert.match(page, /useTaskDetailWorkflow/);
+  assert.match(taskDetailWorkflow, /useTaskComments/);
+  assert.match(commentHook, /createTaskCommentRequest/);
+  assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/comments/);
   assert.match(page, /AppSidebar/);
   assert.doesNotMatch(page, /detailNavItems/);
   assert.match(ui, /AppSidebar/);
@@ -135,6 +139,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const blockerCard = await readFile("src/features/tasks/molecules/task-blocker-card.tsx", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
   const taskDetailState = await readFile("src/features/tasks/model/task-detail-state.ts", "utf8");
+  const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const comments = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
   const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
   const app = await readPlanningSurface();
@@ -156,11 +161,12 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(dataMappers, /createdBy/);
   assert.match(types, /export type Milestone/);
   assert.match(types, /createdBy\?: string/);
-  assert.match(page, /buildEditableTaskState/);
-  assert.match(page, /buildTaskDetailGitHubState/);
-  assert.match(page, /buildTaskDetailViewModel/);
-  assert.match(page, /buildTaskDetailsDraft/);
-  assert.match(page, /buildTaskBriefDraft/);
+  assert.match(page, /useTaskDetailWorkflow/);
+  assert.match(taskDetailWorkflow, /buildEditableTaskState/);
+  assert.match(taskDetailWorkflow, /buildTaskDetailGitHubState/);
+  assert.match(taskDetailWorkflow, /buildTaskDetailViewModel/);
+  assert.match(taskDetailWorkflow, /buildTaskDetailsDraft/);
+  assert.match(taskDetailWorkflow, /buildTaskBriefDraft/);
   assert.match(taskDetailState, /normalizeStatus/);
   assert.match(taskDetailState, /evidenceLink: task\.evidenceLink \|\| task\.issueUrl/);
   assert.match(taskDetailState, /buildTaskDetailGitHubState/);
@@ -175,7 +181,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(taskDetailState, /canManageTaskMeta/);
   assert.match(taskDetailState, /canSyncExistingGitHubIssue/);
   assert.match(page, /detailsEditing/);
-  assert.match(page, /detailsEditSnapshot/);
+  assert.match(taskDetailWorkflow, /detailsEditSnapshot/);
   assert.match(page, /briefEditing/);
   assert.match(page, /TaskBriefSection/);
   assert.match(page, /TaskContextSection/);

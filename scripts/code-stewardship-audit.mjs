@@ -25,9 +25,7 @@ const TASK_MARKERS = [
   ["FIX", "ME"].join(""),
   ["HA", "CK"].join(""),
 ];
-const LARGE_FILE_EXCEPTIONS = new Set([
-  "src/features/planning/hooks/use-planning-app-controller.ts",
-]);
+const LARGE_FILE_EXCEPTIONS = new Set([]);
 const APPROVED_NATIVE_CONTROL_FILES = new Set([
   "src/shared/atoms/custom-select.tsx",
   "src/shared/atoms/custom-date-picker.tsx",

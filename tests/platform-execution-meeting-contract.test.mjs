@@ -48,6 +48,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
   const decisionTaskRoute = await readFile("src/app/api/decisions/[id]/tasks/route.ts", "utf8");
+  const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schema = await readFile("supabase/schema.sql", "utf8");
@@ -103,7 +104,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(executionUi, /Decision-Link entfernen/);
   assert.match(executionUi, /decisionId/);
   assert.match(executionUi, /decisionLinkNote/);
-  assert.match(ui, /api\/decisions\/\$\{draft\.decisionId\}\/tasks/);
+  assert.match(planningApiClient, /api\/decisions\/\$\{decisionId\}\/tasks/);
   assert.match(ui, /buildHygieneAlerts/);
   assert.match(executionUi, /recommendedAction/);
   assert.match(executionUi, /Nächste Aktion/);
