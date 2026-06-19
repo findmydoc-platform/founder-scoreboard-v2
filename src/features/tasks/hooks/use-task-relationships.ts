@@ -2,18 +2,21 @@
 
 import { useState, type TransitionStartFunction } from "react";
 import type { TaskRelationshipDraft } from "@/features/tasks/organisms/task-relationships-section";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { addTaskRelationshipRequest, removeTaskRelationshipRequest } from "@/features/tasks/model/task-api-client";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Task, TaskRelation } from "@/lib/types";
 
 export function useTaskRelationships({
   task,
   initialRelations,
+  apiClient,
   source,
   startTransition,
   setError,
 }: {
   task: Task;
   initialRelations: TaskRelation[];
+  apiClient: BrowserApiClient;
   source: "seed" | "supabase";
   startTransition: TransitionStartFunction;
   setError: (message: string) => void;
@@ -45,19 +48,8 @@ export function useTaskRelationships({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(relationDraft),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; relation?: TaskRelation } | null;
+        const { response, body } = await addTaskRelationshipRequest(apiClient, task.id, relationDraft);
         if (!response.ok || !body?.relation) throw new Error(body?.error || "Relationship konnte nicht gespeichert werden.");
         setRelations((current) => current.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)));
       } catch (caught) {
@@ -74,19 +66,8 @@ export function useTaskRelationships({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
-          method: "DELETE",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ relationId: relation.id }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await removeTaskRelationshipRequest(apiClient, task.id, relation.id);
         if (!response.ok) throw new Error(body?.error || "Relationship konnte nicht entfernt werden.");
       } catch (caught) {
         setRelations((current) => [relation, ...current]);

@@ -1,30 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { createGitHubIssueComment, githubUserForToken } from "@/lib/github";
+import { createGitHubIssueComment } from "@/lib/github";
+import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { getServerSupabase } from "@/lib/supabase";
 
 type CommentPayload = {
   comment?: string;
 };
-
-function providerToken(request: NextRequest) {
-  return request.headers.get("x-github-provider-token")?.trim() || "";
-}
-
-async function requireMatchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
-  const token = providerToken(request);
-  if (!token) throw new Error("GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und kommentieren.");
-
-  const githubUser = await githubUserForToken(token);
-  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
-  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
-  }
-
-  return token;
-}
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
@@ -67,7 +51,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let githubSyncError = "";
   if (hasLinkedGitHubIssue) {
     try {
-      const githubUserToken = await requireMatchingGitHubToken(request, permission.profile);
+      const githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und kommentieren.");
       await createGitHubIssueComment(githubIssueNumber, comment, githubUserToken, `fmd-comment-id:${created.id}`);
     } catch (syncError) {
       githubSyncError = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";

@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
-import { archiveGitHubIssue, githubUserForToken } from "@/lib/github";
+import { archiveGitHubIssue } from "@/lib/github";
+import { optionalMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
@@ -39,10 +40,6 @@ const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
 const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
 
-function providerToken(request: NextRequest) {
-  return request.headers.get("x-github-provider-token")?.trim() || "";
-}
-
 function linkedIssueNumber(row: { github_issue_number?: number | null; issue_number?: string | null; github_issue_url?: string | null; issue_url?: string | null }) {
   if (row.github_issue_number) return Number(row.github_issue_number);
   const legacyNumber = Number(row.issue_number);
@@ -50,17 +47,6 @@ function linkedIssueNumber(row: { github_issue_number?: number | null; issue_num
   const url = row.github_issue_url || row.issue_url || "";
   const match = url.match(/\/issues\/(\d+)(?:$|[?#])/);
   return match ? Number(match[1]) : null;
-}
-
-async function matchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
-  const token = providerToken(request);
-  if (!token) return "";
-  const githubUser = await githubUserForToken(token);
-  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
-  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
-  }
-  return token;
 }
 
 function profileId(value?: string) {
@@ -464,7 +450,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   let githubClosed = false;
   if (issueNumber) {
     try {
-      const token = await matchingGitHubToken(request, permission.profile);
+      const token = await optionalMatchingGitHubProviderToken(request, permission.profile);
       if (!token) {
         return NextResponse.json({ error: "Für verknüpfte GitHub-Issues bitte die GitHub-Verbindung im Header erneuern und dann erneut löschen." }, { status: 409 });
       }

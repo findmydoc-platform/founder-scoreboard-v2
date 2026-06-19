@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type TransitionStartFunction } from "react";
-import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
+import { createTaskCommentRequest, importGitHubCommentsRequest, uploadTaskAttachmentRequest } from "@/features/tasks/model/task-api-client";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
-import { getBrowserSupabase } from "@/lib/supabase";
 import type { EditableTaskState } from "@/features/tasks/model/task-detail-state";
-import type { PlanningData, Profile, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
+import type { Profile, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
 export function useTaskComments({
   task,
@@ -14,6 +14,7 @@ export function useTaskComments({
   initialActivities,
   commentImportNotice,
   profiles,
+  apiClient,
   source,
   startTransition,
   setError,
@@ -25,6 +26,7 @@ export function useTaskComments({
   initialActivities: TaskActivity[];
   commentImportNotice: string;
   profiles: Profile[];
+  apiClient: BrowserApiClient;
   source: "seed" | "supabase";
   startTransition: TransitionStartFunction;
   setError: (message: string) => void;
@@ -60,23 +62,9 @@ export function useTaskComments({
 
     setGithubCommentImportPending(true);
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/comments`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
-          body: JSON.stringify({ comment }),
-        });
+        const { response, body } = await createTaskCommentRequest(apiClient, task.id, comment);
 
-        const body = (await response.json().catch(() => null)) as { error?: string; githubSyncError?: string; comment?: PlanningData["taskComments"][number] } | null;
         if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
         setTaskComments((current) => [body.comment!, ...current]);
         if (body.githubSyncError) {
@@ -95,23 +83,7 @@ export function useTaskComments({
       throw new Error("Anhänge können nur mit Supabase- und GitHub-Login hochgeladen werden.");
     }
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-    rememberGitHubProviderToken(session?.data.session?.provider_token);
-    const githubProviderToken = getRememberedGitHubProviderToken();
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await fetch(`/api/tasks/${task.id}/attachments`, {
-      method: "POST",
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-      },
-      body: formData,
-    });
-
-    const body = (await response.json().catch(() => null)) as { error?: string; markdown?: string } | null;
+    const { response, body } = await uploadTaskAttachmentRequest(apiClient, task.id, file);
     if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
     appendTaskActivities([
       {
@@ -136,22 +108,9 @@ export function useTaskComments({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
-        });
+        const { response, body } = await importGitHubCommentsRequest(apiClient, task.id);
 
-        const body = (await response.json().catch(() => null)) as { error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] } | null;
         if (!response.ok || !body?.comments) throw new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden.");
         setTaskExternalComments(body.comments);
         if (body.evidenceLink) {
@@ -169,7 +128,7 @@ export function useTaskComments({
         setGithubCommentImportPending(false);
       }
     });
-  }, [setError, setMeta, source, startTransition, task.id]);
+  }, [apiClient, setError, setMeta, source, startTransition, task.id]);
 
   useEffect(() => {
     if (source !== "supabase") return;
