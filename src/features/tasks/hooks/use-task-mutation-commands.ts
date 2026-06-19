@@ -11,8 +11,8 @@ import {
   founderTaskOwnershipGuardMessage,
   profileForOwnerValue,
   reviewOwnerForTask,
-  taskOwnerPatch,
 } from "@/features/planning/model/planning-app-model";
+import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { DecisionTaskLink, Task, TaskStatus } from "@/lib/types";
 
@@ -127,25 +127,12 @@ export function useTaskMutationCommands({
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
-    let normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
-      ? { ...patch, ...taskOwnerPatch(patch.ownerId || patch.owner || "", data.profiles) }
-      : patch;
-
-    if (normalizedPatch.status === "Review" || normalizedPatch.reviewStatus === "requested") {
-      if (task.scoreFinal) {
-        setSaveError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.");
-        return;
-      }
-      const nextTask = { ...task, ...normalizedPatch };
-      normalizedPatch = {
-        ...normalizedPatch,
-        status: "Review",
-        reviewStatus: "requested",
-        scoreFinal: false,
-        reviewOwnerProfileId: reviewOwnerForTask(nextTask, data.packages),
-        reviewRequestedAt: new Date().toISOString(),
-      };
+    const normalized = buildClientTaskUpdatePatch(task, patch, data.profiles, data.packages);
+    if (!normalized.ok) {
+      setSaveError(normalized.error);
+      return;
     }
+    const normalizedPatch = normalized.patch;
 
     if (normalizedPatch.status && !canChangeTaskStatus(task)) {
       setStatusGuardNotice(founderTaskOwnershipGuardMessage());
@@ -183,29 +170,7 @@ export function useTaskMutationCommands({
 
     startTransition(async () => {
       try {
-        const { response, body } = await taskApi.updateTaskRequest(apiClient, task.id, {
-          status: normalizedPatch.status,
-          owner: normalizedPatch.ownerId || normalizedPatch.owner,
-          priority: normalizedPatch.priority,
-          packageId: normalizedPatch.packageId,
-          startDate: normalizedPatch.startDate,
-          endDate: normalizedPatch.endDate,
-          deadline: normalizedPatch.deadline,
-          note: normalizedPatch.note,
-          reviewStatus: normalizedPatch.reviewStatus,
-          reviewOwnerProfileId: normalizedPatch.reviewOwnerProfileId,
-          scorePoints: normalizedPatch.scorePoints,
-          scoreFinal: normalizedPatch.scoreFinal,
-          githubSyncStatus: normalizedPatch.githubSyncStatus,
-          sprintId: normalizedPatch.sprintId,
-          milestoneId: normalizedPatch.milestoneId,
-          dependsOn: normalizedPatch.dependsOn,
-          evidenceLink: normalizedPatch.evidenceLink,
-          selfDodChecked: normalizedPatch.selfDodChecked,
-          selfEvidenceChecked: normalizedPatch.selfEvidenceChecked,
-          selfDocumentedChecked: normalizedPatch.selfDocumentedChecked,
-          selfBlockersChecked: normalizedPatch.selfBlockersChecked,
-        });
+        const { response, body } = await taskApi.updateTaskRequest(apiClient, task.id, taskUpdateRequestPayload(normalizedPatch));
         if (!response.ok) {
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         }

@@ -133,6 +133,30 @@ test("planning app controller delegates command domains and stays a thin compose
   assert.match(feedbackCommands, /createFeedbackRequest/);
 });
 
+test("task mutation contract centralizes update normalization and route patches", async () => {
+  const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
+  const taskMutations = await readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8");
+  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+
+  assert.match(contract, /export function buildClientTaskUpdatePatch/);
+  assert.match(contract, /export function taskUpdateRequestPayload/);
+  assert.match(contract, /export function buildTaskUpdateResponsePatch/);
+  assert.match(contract, /export function activityMessages/);
+  assert.match(contract, /export function taskOwnedByProfile/);
+  assert.match(contract, /Final bewertete Aufgaben können nicht erneut in Review gegeben werden/);
+
+  assert.match(taskMutations, /buildClientTaskUpdatePatch/);
+  assert.match(taskMutations, /taskUpdateRequestPayload/);
+  assert.doesNotMatch(taskMutations, /taskOwnerPatch/);
+
+  assert.match(updateRoute, /buildTaskUpdateResponsePatch/);
+  assert.match(updateRoute, /activityMessages/);
+  assert.match(updateRoute, /taskOwnedByProfile/);
+  assert.doesNotMatch(updateRoute, /function activityMessages/);
+  assert.doesNotMatch(updateRoute, /function taskOwnedByProfile/);
+  assert.doesNotMatch(updateRoute, /function profileId/);
+});
+
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
   const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
