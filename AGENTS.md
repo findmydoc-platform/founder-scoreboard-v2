@@ -35,6 +35,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### Planning UI Structure
 
 - Planning UI follows feature-first Atomic Design: feature UI belongs under `src/features/<domain>/{atoms,molecules,organisms,templates,hooks,model}`.
+- Create only the subdirectories a feature currently uses. Do not keep empty placeholder directories, `.gitkeep` files, or shape-only scaffolding just to satisfy structure expectations.
 - `src/shared` is only for domain-neutral primitives. Components or helpers named around Task, Sprint, Meeting, Decision, Founder, Milestone, GitHub issue, review, or planning workflow semantics must stay inside the owning feature.
 - Do not create new `src/components` or `src/hooks` directories. Do not add imports from `@/components`, `@/hooks`, `src/components`, or `src/hooks`; move code into the owning feature or `src/shared` instead.
 - Templates and shell components orchestrate layout and pass typed props. Business logic, API calls, mutations, auth/role decisions, and derived data belong in hooks, model/view-model files, API routes, or service helpers.
