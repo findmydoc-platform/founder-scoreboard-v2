@@ -157,12 +157,31 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.doesNotMatch(updateRoute, /function profileId/);
 });
 
+test("planning data loader separates query loading from public orchestration", async () => {
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+
+  assert.match(data, /loadPlanningDataRows/);
+  assert.match(data, /hasCorePlanningDataError/);
+  assert.match(data, /mapPlanningDataRows/);
+  assert.doesNotMatch(data, /Promise\.all/);
+  assert.doesNotMatch(data, /task_dependencies\(note\), task_notes\(note\)/);
+
+  assert.match(loader, /Promise\.all/);
+  assert.match(loader, /founderProjectId/);
+  assert.match(loader, /task_dependencies\(note\), task_notes\(note\)/);
+  assert.match(loader, /export function hasCorePlanningDataError/);
+  assert.match(loader, /export function mapPlanningDataRows/);
+  assert.match(loader, /scoreObjections/);
+  assert.match(loader, /notificationPreferenceResult/);
+});
+
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
   const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
@@ -364,7 +383,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
   const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(scoring, /deliveryPoints/);
@@ -518,7 +537,7 @@ test("decision objections are founder comments with audit trail", async () => {
 test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const ui = await readPlanningSurface();
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const teamModel = await readFile("src/features/team/model/team-profile-view-model.ts", "utf8");
@@ -554,7 +573,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
 
 test("notification preferences are editable per profile and event type", async () => {
   const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
@@ -581,7 +600,7 @@ test("notification preferences are editable per profile and event type", async (
 });
 
 test("decision audit loads before and after data for collapsible diffs", async () => {
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const decisionUi = await readFeatureSurface("src/features/decisions");
 

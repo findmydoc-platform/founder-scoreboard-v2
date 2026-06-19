@@ -266,7 +266,7 @@ test("founder events are modeled as team-visible operational reminders", async (
   const app = await readPlanningSurface();
   const ui = await readFeatureSurface("src/features/events");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const mappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
   const migration = await readFile("supabase/0035_founder_events.sql", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
@@ -359,7 +359,7 @@ test("founder feedback creates bug and feature notifications with details", asyn
   const ui = await readPlanningSurface();
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
   const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
   assert.match(migration, /type text not null check \(type in \('bug', 'feature'\)\)/);

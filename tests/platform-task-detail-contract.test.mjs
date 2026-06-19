@@ -127,7 +127,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const migration = await readFile("supabase/0011_milestones_task_detail.sql", "utf8");
   const creatorMigration = await readFile("supabase/0017_task_created_by.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
   const contextSection = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
