@@ -102,6 +102,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const relationshipUi = await readFile("src/features/tasks/molecules/relationship-list.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const relationshipHook = await readFile("src/features/tasks/hooks/use-task-relationships.ts", "utf8");
   const relationshipSection = await readFile("src/features/tasks/organisms/task-relationships-section.tsx", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
@@ -135,7 +136,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(panelDependencies, /Relationship existiert bereits/);
   assert.match(panelDependencies, /Diese Relationship ist bereits gespeichert/);
   assert.match(panelDependencies, /relationMatchesDraft/);
-  assert.match(detail, /useTaskRelationships/);
+  assert.match(detail, /useTaskDetailWorkflow/);
+  assert.match(taskDetailWorkflow, /useTaskRelationships/);
   assert.match(detail, /task=\{task\}/);
   assert.match(relationshipHook, /Relationship konnte nicht gespeichert werden/);
   assert.match(relationshipHook, /Relationship konnte nicht entfernt werden/);
@@ -263,6 +265,7 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
   const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
   const githubStatus = await readFile("src/features/planning/molecules/github-connection-status.tsx", "utf8");
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -310,7 +313,8 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.doesNotMatch(planningHeader, /markGitHubReauthAttempt/);
   assert.doesNotMatch(planningHeader, /hasGitHubReauthAttempt/);
   assert.match(authHook, /clearRememberedGitHubProviderToken/);
-  assert.match(detail, /createBrowserApiClient/);
+  assert.match(detail, /useTaskDetailWorkflow/);
+  assert.match(taskDetailWorkflow, /createBrowserApiClient/);
   assert.match(ui, /GitHubConnectionStatus/);
   assert.match(detail, /GitHubConnectionStatus/);
   assert.match(githubStatus, /GitHub-Verbindung erneuern/);
@@ -321,7 +325,7 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.doesNotMatch(detailGitHubSyncCard, /frische Autorisierung/);
   assert.match(commentBody, /GitHubCommentImage/);
   assert.match(thread, /TaskCommentComposer/);
-  assert.match(detail, /useTaskComments/);
+  assert.match(taskDetailWorkflow, /useTaskComments/);
   assert.match(commentHook, /createTaskCommentRequest/);
   assert.doesNotMatch(commentHook, /x-github-provider-token|getRememberedGitHubProviderToken|getBrowserSupabase|auth\.getSession/);
   assert.match(commentComposer, /onUploadAttachment/);
