@@ -1,0 +1,88 @@
+name: Dependency Validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  NODE_VERSION: 24.14.0
+  NEXT_TELEMETRY_DISABLED: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validation:
+    name: Dependency Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build app
+        run: npm run build
+
+  dependabot-metadata:
+    name: Dependabot Metadata
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write metadata artifact
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          mkdir -p dependabot-metadata
+          cat > "dependabot-metadata/pr-${PR_NUMBER}.json" <<EOF
+          {
+            "pr_number": ${PR_NUMBER},
+            "pr_url": "${PR_URL}",
+            "base_ref": "${BASE_REF}",
+            "head_ref": "${HEAD_REF}",
+            "head_sha": "${HEAD_SHA}",
+            "dependency_names": "${DEPENDENCY_NAMES}",
+            "dependency_type": "${DEPENDENCY_TYPE}",
+            "update_type": "${UPDATE_TYPE}"
+          }
+          EOF
+
+      - name: Upload metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependabot-metadata-pr-${{ github.event.pull_request.number }}
+          path: dependabot-metadata/pr-${{ github.event.pull_request.number }}.json
+          if-no-files-found: error
+          retention-days: 7
