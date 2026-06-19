@@ -74,6 +74,7 @@ test("planning app controller delegates command domains and stays a thin compose
   const taskMutations = await readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8");
   const taskCollaboration = await readFile("src/features/tasks/hooks/use-task-collaboration-commands.ts", "utf8");
   const boardState = await readFile("src/features/planning/hooks/use-planning-board-state.ts", "utf8");
+  const taskSelection = await readFile("src/features/planning/hooks/use-planning-task-selection.ts", "utf8");
   const dataRefresh = await readFile("src/features/planning/hooks/use-planning-data-refresh.ts", "utf8");
   const taskViewModel = await readFile("src/features/planning/hooks/use-planning-task-view-model.ts", "utf8");
   const executionCommands = await readFile("src/features/execution/hooks/use-execution-commands.ts", "utf8");
@@ -91,6 +92,7 @@ test("planning app controller delegates command domains and stays a thin compose
   assert.match(controller, /useTaskMutationCommands/);
   assert.match(controller, /useTaskCollaborationCommands/);
   assert.match(controller, /usePlanningDataRefresh/);
+  assert.match(controller, /usePlanningTaskSelection/);
   assert.match(controller, /usePlanningTaskViewModel/);
   assert.match(controller, /useMeetingCommands/);
   assert.match(controller, /useDecisionCommands/);
@@ -101,6 +103,7 @@ test("planning app controller delegates command domains and stays a thin compose
   assert.doesNotMatch(controller, /createMeetingRequest|availabilityRequest|createDecisionRequest|lockSprintRequest/);
   assert.doesNotMatch(controller, /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/);
   assert.doesNotMatch(controller, /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/);
+  assert.doesNotMatch(controller, /window\.history\.length|addEventListener\("keydown"/);
 
   assert.match(taskMutations, /updateTaskRequest/);
   assert.match(taskMutations, /createTaskRequest/);
@@ -116,6 +119,11 @@ test("planning app controller delegates command domains and stays a thin compose
   assert.match(taskCollaboration, /removeTaskRelationshipRequest/);
   assert.match(boardState, /event\.dataTransfer\.setData/);
   assert.match(boardState, /founderTaskOwnershipGuardMessage/);
+  assert.match(taskSelection, /selectedTaskSubIssues/);
+  assert.match(taskSelection, /openTaskPanel/);
+  assert.match(taskSelection, /openReviewSheet/);
+  assert.match(taskSelection, /window\.history\.length/);
+  assert.match(taskSelection, /addEventListener\("keydown"/);
   assert.match(dataRefresh, /setProtectedPlanningDataCache/);
   assert.match(taskViewModel, /hasOpenWaitingRelation/);
   assert.match(executionCommands, /saveFocusItemRequest/);
