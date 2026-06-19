@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
-import { githubUserForToken } from "@/lib/github";
-
-function providerToken(request: NextRequest) {
-  return request.headers.get("x-github-provider-token")?.trim() || "";
-}
+import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 
 function isAllowedGitHubAssetUrl(value: string) {
   try {
@@ -34,15 +30,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Nur GitHub-Bildanhänge dürfen geladen werden." }, { status: 400 });
   }
 
-  const token = providerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden." }, { status: 401 });
-  }
-
-  const githubUser = await githubUserForToken(token);
-  const expectedLogin = permission.profile?.githubLogin?.toLowerCase();
-  if (expectedLogin && githubUser.login.toLowerCase() !== expectedLogin) {
-    return NextResponse.json({ error: "GitHub User-Token passt nicht zum angemeldeten Teamprofil." }, { status: 403 });
+  let token = "";
+  try {
+    token = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden.";
+    const status = message.includes("nicht verfügbar") ? 401 : 403;
+    return NextResponse.json({ error: message }, { status });
   }
 
   const response = await fetch(url, {

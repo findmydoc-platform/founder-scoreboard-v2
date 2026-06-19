@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { loadGitHubAssetBlob } from "@/features/tasks/model/task-api-client";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
 
 function isGitHubAssetUrl(value: string) {
   try {
@@ -36,25 +36,9 @@ export function GitHubCommentImage({ href, alt }: { href: string; alt: string })
     setProxyAttempted(true);
 
     try {
-      const supabase = getBrowserSupabase();
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
-      const accessToken = session?.access_token || "";
-      rememberGitHubProviderToken(session?.provider_token);
-      const providerToken = getRememberedGitHubProviderToken();
-
-      if (!accessToken || !providerToken) {
-        setFailed(true);
-        return;
-      }
-
-      const response = await fetch(`/api/github-assets?url=${encodeURIComponent(href)}`, {
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          "x-github-provider-token": providerToken,
-        },
-      });
+      const { response, blob } = await loadGitHubAssetBlob(createBrowserApiClient(), href);
       if (!response.ok) throw new Error(`GitHub asset failed: ${response.status}`);
-      const blob = await response.blob();
+      if (!blob) throw new Error("GitHub asset failed: empty response");
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = URL.createObjectURL(blob);
       setSrc(objectUrlRef.current);

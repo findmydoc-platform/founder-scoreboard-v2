@@ -1,61 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { useTeamProfileDrafts } from "@/features/team/hooks/use-team-profile-drafts";
+import { activeDeputyProfiles, platformRoleOptions, profileColor, profileColorOptions } from "@/features/team/model/team-profile-view-model";
 import { formatDate } from "@/lib/display";
 import { googleChatDigestEventTypes, notificationEventLabel } from "@/lib/notification-policy";
 import { roleLabel, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, PlatformRole, Profile, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiField, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
-
-const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
-const profileColorOptions = [
-  { value: "#22c55e", label: "Mint" },
-  { value: "#3b82f6", label: "Blau" },
-  { value: "#f59e0b", label: "Gelb" },
-  { value: "#8b5cf6", label: "Lila" },
-  { value: "#ec4899", label: "Pink" },
-  { value: "#14b8a6", label: "Türkis" },
-  { value: "#ef4444", label: "Rot" },
-  { value: "#64748b", label: "Schiefer" },
-];
-
-const profileDraftFields: Array<keyof Profile> = [
-  "platformRole",
-  "orgRole",
-  "githubLogin",
-  "googleChatUserId",
-  "googleChatDmSpace",
-  "notificationsEnabled",
-  "googleCalendarSyncEnabled",
-  "googleCalendarEmail",
-  "focus",
-  "color",
-  "weeklyCapacity",
-  "deputyFor",
-  "deputyActiveFrom",
-  "deputyActiveUntil",
-];
-
-type ProfileCardDraft = {
-  profile: Partial<Profile>;
-  notificationEvents: Record<string, boolean>;
-};
-
-function profileColor(profile?: Pick<Profile, "color"> | null) {
-  return profile?.color || "#64748b";
-}
-
-function eventEnabled(data: PlanningData, profileId: string, eventType: string) {
-  const preference = data.notificationPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
-  return preference?.enabled !== false;
-}
-
-function sameProfileValue(left: unknown, right: unknown) {
-  return (left ?? "") === (right ?? "");
-}
 
 export function TeamOverview({
   data,
@@ -72,82 +26,19 @@ export function TeamOverview({
   currentProfileId: string;
   onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, notificationEvents: Record<string, boolean>) => Promise<void>;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, ProfileCardDraft>>({});
-  const [savingProfileId, setSavingProfileId] = useState("");
-  const [profileSaveMessage, setProfileSaveMessage] = useState("");
+  const {
+    draftEventEnabled,
+    draftFor,
+    isProfileDirty,
+    profileSaveMessage,
+    resetProfileDraft,
+    saveProfileDraft,
+    savingProfileId,
+    setNotificationDraft,
+    setProfileDraft,
+  } = useTeamProfileDrafts({ data, onSaveProfileSettings });
   const today = new Date().toISOString().slice(0, 10);
-  const activeDeputies = data.profiles.filter((profile) => {
-    if (profile.platformRole !== "deputy") return false;
-    if (profile.deputyActiveFrom && profile.deputyActiveFrom > today) return false;
-    if (profile.deputyActiveUntil && profile.deputyActiveUntil < today) return false;
-    return Boolean(profile.deputyFor);
-  });
-  const draftFor = (profile: Profile) => ({
-    ...profile,
-    ...(drafts[profile.id]?.profile || {}),
-  });
-
-  const draftEventEnabled = (profileId: string, eventType: string) => {
-    const draftValue = drafts[profileId]?.notificationEvents[eventType];
-    return draftValue ?? eventEnabled(data, profileId, eventType);
-  };
-
-  const setProfileDraft = (profileId: string, patch: Partial<Profile>) => {
-    setProfileSaveMessage("");
-    setDrafts((current) => ({
-      ...current,
-      [profileId]: {
-        profile: { ...(current[profileId]?.profile || {}), ...patch },
-        notificationEvents: current[profileId]?.notificationEvents || {},
-      },
-    }));
-  };
-
-  const setNotificationDraft = (profileId: string, eventType: string, enabled: boolean) => {
-    setProfileSaveMessage("");
-    setDrafts((current) => ({
-      ...current,
-      [profileId]: {
-        profile: current[profileId]?.profile || {},
-        notificationEvents: { ...(current[profileId]?.notificationEvents || {}), [eventType]: enabled },
-      },
-    }));
-  };
-
-  const resetProfileDraft = (profileId: string) => {
-    setProfileSaveMessage("");
-    setDrafts((current) => {
-      const next = { ...current };
-      delete next[profileId];
-      return next;
-    });
-  };
-
-  const isProfileDirty = (profile: Profile) => {
-    const draft = drafts[profile.id];
-    if (!draft) return false;
-    const profileDirty = profileDraftFields.some((field) => field in draft.profile && !sameProfileValue(draft.profile[field], profile[field]));
-    const eventsDirty = googleChatDigestEventTypes.some((eventType) =>
-      eventType in draft.notificationEvents && draft.notificationEvents[eventType] !== eventEnabled(data, profile.id, eventType)
-    );
-    return profileDirty || eventsDirty;
-  };
-
-  const saveProfileDraft = async (profile: Profile) => {
-    const draft = drafts[profile.id];
-    if (!draft || !isProfileDirty(profile)) return;
-    setSavingProfileId(profile.id);
-    setProfileSaveMessage("");
-    try {
-      await onSaveProfileSettings(profile, draft.profile, draft.notificationEvents);
-      resetProfileDraft(profile.id);
-      setProfileSaveMessage(`${profile.name} gespeichert.`);
-    } catch (error) {
-      setProfileSaveMessage(error instanceof Error ? error.message : "Profil konnte nicht gespeichert werden.");
-    } finally {
-      setSavingProfileId("");
-    }
-  };
+  const activeDeputies = activeDeputyProfiles(data.profiles, today);
 
   return (
     <div className="grid gap-4">

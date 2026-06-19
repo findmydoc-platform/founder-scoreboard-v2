@@ -552,9 +552,9 @@ test("planning filters survive task detail route remounts", async () => {
 
   assert.match(taskRoute, /<PlanningApp key=\{id\}/);
   assert.match(ui, /planningFiltersSessionKey = "fmd-planning-filters-v1"/);
-  assert.match(ui, /function readPlanningFiltersFromSession\(\): Filters/);
+  assert.match(ui, /function readPlanningFiltersFromSession\(\): PlanningFilters/);
   assert.match(ui, /window\.sessionStorage\.getItem\(planningFiltersSessionKey\)/);
-  assert.match(ui, /useState<Filters>\(\(\) => readPlanningFiltersFromSession\(\)\)/);
+  assert.match(ui, /useState<PlanningFilters>\(\(\) => readPlanningFiltersFromSession\(\)\)/);
   assert.match(ui, /window\.sessionStorage\.setItem\(planningFiltersSessionKey, JSON\.stringify\(filters\)\)/);
   assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
 });
