@@ -7,6 +7,7 @@ test("dev role switch is local-only and flows through API authorization", async 
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const ui = await readPlanningSurface();
   const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
+  const browserApiClient = await readFile("src/lib/browser-api-client.ts", "utf8");
   const devSwitch = await readFile("src/features/planning/molecules/dev-role-switch.tsx", "utf8");
 
   assert.match(authz, /x-fmd-dev-profile-id/);
@@ -17,7 +18,8 @@ test("dev role switch is local-only and flows through API authorization", async 
   assert.match(ui, /usePlanningRequestContext/);
   assert.match(devSwitch, /Dev-Ansicht/);
   assert.match(devSwitch, /roleLabel\(effectiveProfile\)/);
-  assert.match(requestContext, /x-fmd-dev-profile-id/);
+  assert.match(requestContext, /createBrowserApiClient/);
+  assert.match(browserApiClient, /x-fmd-dev-profile-id/);
   assert.match(requestContext, /devProfileStateKey/);
   assert.match(requestContext, /process\.env\.NODE_ENV !== "production"/);
   assert.match(requestContext, /isLocalDevHost\(\)/);
@@ -185,6 +187,7 @@ test("review workspace has direct review detail routes filters and reopen guard"
   const model = await readFile("src/features/reviews/model/review-workspace-view-model.ts", "utf8");
   const reviewRoute = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
+  const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
 
   assert.match(sidebar, /reviews/);
   assert.match(sidebar, /Reviews/);
@@ -196,7 +199,7 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(app, /initialReviewTaskId/);
   assert.match(app, /ReviewDetailPage/);
   assert.match(app, /reopenReviewTask/);
-  assert.match(app, /\/api\/tasks\/\$\{task\.id\}\/review\/reopen/);
+  assert.match(taskApiClient, /\/api\/tasks\/\$\{taskId\}\/review\/reopen/);
   assert.match(model, /label: "Meine"/);
   assert.match(workspace, /Offen/);
   assert.match(workspace, /Abgeschlossen/);

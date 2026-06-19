@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "@/lib/types";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
@@ -15,8 +15,8 @@ import { TaskEvidenceLinkSection } from "@/features/tasks/molecules/task-evidenc
 import { TaskGitHubSyncCard } from "@/features/tasks/molecules/task-github-sync-card";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { TaskSubIssuesSection } from "@/features/tasks/molecules/task-sub-issues-section";
-import { getRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { buildDetailsMilestonePatch, buildDetailsPackagePatch, buildEditableTaskState, buildTaskBriefDraft, buildTaskDetailGitHubState, buildTaskDetailsDraft, buildTaskDetailViewModel } from "@/features/tasks/model/task-detail-state";
+import { syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
 import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
 import type { EditableTaskState } from "@/features/tasks/model/task-detail-state";
@@ -72,12 +72,14 @@ export function TaskDetailPage({
   const [detailsEditSnapshot, setDetailsEditSnapshot] = useState<TaskDetailsDraft | null>(null);
   const [githubState, setGithubState] = useState(() => buildTaskDetailGitHubState(task));
   const [currentRole, setCurrentRole] = useState<Profile["platformRole"] | "">(source === "seed" ? "ceo" : "");
-  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(hasRememberedGitHubProviderToken());
+  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
+  const [apiClient] = useState(() => createBrowserApiClient());
   const [isPending, startTransition] = useTransition();
   const { relations, relationDraft, setRelationDraft, addRelation, removeRelation } = useTaskRelationships({
     task,
     initialRelations: taskRelations,
+    apiClient,
     source,
     startTransition,
     setError,
@@ -99,6 +101,7 @@ export function TaskDetailPage({
     initialActivities: activities,
     commentImportNotice,
     profiles,
+    apiClient,
     source,
     startTransition,
     setError,
@@ -145,16 +148,12 @@ export function TaskDetailPage({
       return;
     }
 
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    apiClient.getAuthSnapshot().then((snapshot) => {
       if (!active) return;
-      rememberGitHubProviderToken(data.session?.provider_token);
-      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
-      if (data.session?.provider_token) setGithubReconnectFailed(false);
-      const login = String(data.session?.user.user_metadata?.user_name || data.session?.user.user_metadata?.preferred_username || "");
+      setGithubProviderTokenAvailable(snapshot.githubProviderTokenAvailable);
+      if (snapshot.githubProviderTokenAvailable) setGithubReconnectFailed(false);
+      const login = snapshot.githubLogin;
       const profile = profiles.find((item) => item.githubLogin === login);
       setCurrentRole(profile?.platformRole || "");
     });
@@ -162,21 +161,12 @@ export function TaskDetailPage({
     return () => {
       active = false;
     };
-  }, [profiles, source]);
+  }, [apiClient, profiles, source]);
 
   const reconnectGitHub = async () => {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return;
-
     setError("");
     setGithubReconnectFailed(false);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`,
-        scopes: "repo read:user user:email",
-      },
-    });
+    const { error } = await apiClient.startGitHubOAuth();
 
     if (error) {
       setGithubReconnectFailed(true);
@@ -196,19 +186,8 @@ export function TaskDetailPage({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(patch),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[]; task?: Partial<Task> } | null;
+        const { response, body } = await updateTaskRequest(apiClient, task.id, patch);
         if (!response.ok) throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         if (body?.activities?.length) appendTaskActivities(body.activities);
         if (body?.task) {
@@ -263,23 +242,8 @@ export function TaskDetailPage({
     setGithubState((current) => ({ ...current, githubSyncStatus: "pending", githubSyncError: "" }));
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-      const githubProviderToken = getRememberedGitHubProviderToken();
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(githubProviderToken ? { "x-github-provider-token": githubProviderToken } : {}),
-          },
-          body: JSON.stringify({ createIfMissing: Boolean(options.createIfMissing) }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+        const { response, body } = await syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
 
         setGithubState((current) => ({

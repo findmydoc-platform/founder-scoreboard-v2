@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
-import { githubRepoSlug, githubUserForToken, upsertGitHubIssue, type GitHubTaskSyncContext } from "@/lib/github";
+import { githubRepoSlug, upsertGitHubIssue, type GitHubTaskSyncContext } from "@/lib/github";
+import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Task } from "@/lib/types";
 
@@ -8,23 +9,6 @@ type TaskRow = Record<string, unknown>;
 type SyncRequestBody = {
   createIfMissing?: boolean;
 };
-
-function providerToken(request: NextRequest) {
-  return request.headers.get("x-github-provider-token")?.trim() || "";
-}
-
-async function requireMatchingGitHubToken(request: NextRequest, profile: { githubLogin?: string } | null) {
-  const token = providerToken(request);
-  if (!token) throw new Error("GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Sync erneut starten.");
-
-  const githubUser = await githubUserForToken(token);
-  const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
-  if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
-  }
-
-  return token;
-}
 
 function hasLinkedGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
   return Boolean(
@@ -214,7 +198,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubToken(request, permission.profile);
+    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Sync erneut starten.");
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub User-Token konnte nicht geprüft werden.";
     return NextResponse.json({ error: message }, { status: 401 });

@@ -7,17 +7,18 @@ import { persistLocalPlanningTasks, useLocalPlanningState } from "@/features/pla
 import { setProtectedPlanningDataCache, usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
+import * as planningApi from "@/features/planning/model/planning-api-client";
+import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { FounderEventDraft } from "@/features/events/organisms/events-overview";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { FeedbackDraft } from "@/features/settings/molecules/feedback-dialog";
 import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
-import { rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import { getBrowserSupabase, hasSupabaseEnv } from "@/lib/supabase";
-import type { AuthenticatedProfile, AvailabilityEntry, DecisionTaskLink, FeedbackItem, FounderEvent, Meeting, MeetingAttendance, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, PlanningDataResponse, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskActivity, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
+import { hasSupabaseEnv } from "@/lib/supabase";
+import type { AuthenticatedProfile, AvailabilityEntry, DecisionTaskLink, FeedbackItem, FounderEvent, Meeting, MeetingAttendance, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningData, Profile, ScoreObjection, Sprint, SprintCommitment, Task, TaskFocusItem, TaskRelation, TaskRelationType, TaskStatus, ViewMode } from "@/lib/types";
 import {
   addDaysIso,
   buildHygieneAlerts,
@@ -219,7 +220,7 @@ export function usePlanningAppController({
     devProfileId,
     setDevProfileId,
     devRoleSwitchAvailable,
-    requestHeaders,
+    apiClient,
   } = usePlanningRequestContext({
     source,
     profiles: data.profiles,
@@ -436,39 +437,30 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}`, {
-          method: "PATCH",
-          headers: requestHeaders(token),
-          body: JSON.stringify({
-            status: normalizedPatch.status,
-            owner: normalizedPatch.ownerId || normalizedPatch.owner,
-            priority: normalizedPatch.priority,
-            packageId: normalizedPatch.packageId,
-            startDate: normalizedPatch.startDate,
-            endDate: normalizedPatch.endDate,
-            deadline: normalizedPatch.deadline,
-            note: normalizedPatch.note,
-            reviewStatus: normalizedPatch.reviewStatus,
-            reviewOwnerProfileId: normalizedPatch.reviewOwnerProfileId,
-            scorePoints: normalizedPatch.scorePoints,
-            scoreFinal: normalizedPatch.scoreFinal,
-            githubSyncStatus: normalizedPatch.githubSyncStatus,
-            sprintId: normalizedPatch.sprintId,
-            milestoneId: normalizedPatch.milestoneId,
-            dependsOn: normalizedPatch.dependsOn,
-            evidenceLink: normalizedPatch.evidenceLink,
-            selfDodChecked: normalizedPatch.selfDodChecked,
-            selfEvidenceChecked: normalizedPatch.selfEvidenceChecked,
-            selfDocumentedChecked: normalizedPatch.selfDocumentedChecked,
-            selfBlockersChecked: normalizedPatch.selfBlockersChecked,
-          }),
+        const { response, body } = await taskApi.updateTaskRequest(apiClient, task.id, {
+          status: normalizedPatch.status,
+          owner: normalizedPatch.ownerId || normalizedPatch.owner,
+          priority: normalizedPatch.priority,
+          packageId: normalizedPatch.packageId,
+          startDate: normalizedPatch.startDate,
+          endDate: normalizedPatch.endDate,
+          deadline: normalizedPatch.deadline,
+          note: normalizedPatch.note,
+          reviewStatus: normalizedPatch.reviewStatus,
+          reviewOwnerProfileId: normalizedPatch.reviewOwnerProfileId,
+          scorePoints: normalizedPatch.scorePoints,
+          scoreFinal: normalizedPatch.scoreFinal,
+          githubSyncStatus: normalizedPatch.githubSyncStatus,
+          sprintId: normalizedPatch.sprintId,
+          milestoneId: normalizedPatch.milestoneId,
+          dependsOn: normalizedPatch.dependsOn,
+          evidenceLink: normalizedPatch.evidenceLink,
+          selfDodChecked: normalizedPatch.selfDodChecked,
+          selfEvidenceChecked: normalizedPatch.selfEvidenceChecked,
+          selfDocumentedChecked: normalizedPatch.selfDocumentedChecked,
+          selfBlockersChecked: normalizedPatch.selfBlockersChecked,
         });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; activities?: TaskActivity[]; task?: Partial<Task> } | null;
         if (!response.ok) {
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         }
@@ -577,18 +569,10 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       let createdTaskCommitted = false;
 
       try {
-        const response = await fetch("/api/tasks", {
-          method: "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify({ ...draft, owner: ownerId || draft.owner }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; task?: Task } | null;
+        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...draft, owner: ownerId || draft.owner });
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
         setData((current) => ({
@@ -601,15 +585,7 @@ export function usePlanningAppController({
         createdTaskCommitted = true;
 
         if (draft.decisionId) {
-          const decisionResponse = await fetch(`/api/decisions/${draft.decisionId}/tasks`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ taskId: body.task.id, linkType: "follows_from", note: draft.decisionLinkNote }),
-          });
-          const decisionBody = (await decisionResponse.json().catch(() => null)) as { error?: string; link?: DecisionTaskLink } | null;
+          const { response: decisionResponse, body: decisionBody } = await planningApi.linkDecisionTaskRequest(apiClient, draft.decisionId, { taskId: body.task.id, linkType: "follows_from", note: draft.decisionLinkNote });
           if (!decisionResponse.ok || !decisionBody?.link) throw new Error(decisionBody?.error || "Decision-Folgeaufgabe konnte nicht verknüpft werden.");
           setData((current) => ({
             ...current,
@@ -620,19 +596,11 @@ export function usePlanningAppController({
         }
 
         if (draft.relatedTaskId && draft.relatedTaskId !== body.task.id) {
-          const relationResponse = await fetch(`/api/tasks/${body.task.id}/relationships`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              ...(token ? { authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              relationType: draft.relationType,
-              relatedTaskId: draft.relatedTaskId,
-              note: draft.relationNote,
-            }),
+          const { response: relationResponse, body: relationBody } = await taskApi.addTaskRelationshipRequest(apiClient, body.task.id, {
+            relationType: draft.relationType,
+            relatedTaskId: draft.relatedTaskId,
+            note: draft.relationNote,
           });
-          const relationBody = (await relationResponse.json().catch(() => null)) as { error?: string; relation?: TaskRelation } | null;
           if (!relationResponse.ok || !relationBody?.relation) throw new Error(relationBody?.error || "Relationship konnte nicht gespeichert werden.");
           setData((current) => ({
             ...current,
@@ -646,17 +614,11 @@ export function usePlanningAppController({
         }
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
-          rememberGitHubProviderToken(session?.data.session?.provider_token);
-          const syncResponse = await fetch(`/api/tasks/${body.task.id}/sync-github`, {
-            method: "POST",
-            headers: requestHeaders(token, { github: true }),
-            body: JSON.stringify({ createIfMissing: true }),
-          });
-          const syncBody = (await syncResponse.json().catch(() => null)) as { error?: string; task?: Task } | null;
+          const { response: syncResponse, body: syncBody } = await taskApi.syncTaskToGitHubRequest(apiClient, body.task.id, { createIfMissing: true });
           if (!syncResponse.ok || !syncBody?.task) throw new Error(syncBody?.error || "GitHub-Issue konnte nicht angelegt werden.");
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((task) => (task.id === body.task!.id ? syncBody.task! : task)),
+            tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),
           }));
         }
       } catch (error) {
@@ -705,16 +667,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(isEdit ? `/api/initiatives/${draft.id}` : "/api/initiatives", {
-          method: isEdit ? "PATCH" : "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify(draft),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; initiative?: Package } | null;
+        const { response, body } = await planningApi.saveInitiativeRequest(apiClient, draft);
         if (!response.ok || !body?.initiative) throw new Error(body?.error || "Initiative konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -766,15 +720,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch("/api/focus", {
-          method: "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify({ taskId: task.id, profileId, focusDate: todayFocusDate, position, nextStep, status }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; focusItem?: TaskFocusItem } | null;
+        const { response, body } = await planningApi.saveFocusItemRequest(apiClient, { taskId: task.id, profileId, focusDate: todayFocusDate, position, nextStep, status });
         if (!response.ok || !body?.focusItem) throw new Error(body?.error || "Fokus konnte nicht gespeichert werden.");
         setData((current) => ({
           ...current,
@@ -800,14 +747,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch(`/api/focus?id=${encodeURIComponent(String(focusItem.id))}`, {
-          method: "DELETE",
-          headers: requestHeaders(token, { json: false }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await planningApi.deleteFocusItemRequest(apiClient, focusItem.id);
         if (!response.ok) throw new Error(body?.error || "Fokus konnte nicht entfernt werden.");
       } catch (error) {
         setData((current) => ({ ...current, taskFocusItems: [focusItem, ...current.taskFocusItems] }));
@@ -836,18 +777,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch(`/api/decisions/${decisionId}/tasks`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ taskId, linkType: "follows_from", note }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; link?: DecisionTaskLink } | null;
+        const { response, body } = await planningApi.linkDecisionTaskRequest(apiClient, decisionId, { taskId, linkType: "follows_from", note });
         if (!response.ok || !body?.link) throw new Error(body?.error || "Decision-Link konnte nicht gespeichert werden.");
         setData((current) => ({
           ...current,
@@ -870,16 +801,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch(`/api/decisions/${link.decisionId}/tasks?linkId=${encodeURIComponent(String(link.id))}`, {
-          method: "DELETE",
-          headers: {
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await planningApi.deleteDecisionTaskLinkRequest(apiClient, link.decisionId, link.id);
         if (!response.ok) throw new Error(body?.error || "Decision-Link konnte nicht entfernt werden.");
       } catch (error) {
         setData((current) => ({ ...current, decisionTaskLinks: [link, ...current.decisionTaskLinks] }));
@@ -960,35 +883,24 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/sprints/${sprint.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            name: patch.name,
-            status: patch.status,
-            startDate: patch.startDate,
-            endDate: patch.endDate,
-            reviewDueAt: patch.reviewDueAt,
-          }),
+        const { response, body } = await planningApi.updateSprintRequest(apiClient, sprint.id, {
+          name: patch.name,
+          status: patch.status,
+          startDate: patch.startDate,
+          endDate: patch.endDate,
+          reviewDueAt: patch.reviewDueAt,
         });
 
         if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as { error?: string } | null;
           throw new Error(body?.error || "Sprint konnte nicht gespeichert werden.");
         }
 
-        const body = (await response.json()) as { sprint?: Sprint };
-        if (body.sprint) {
+        if (body?.sprint) {
+          const savedSprint = body.sprint;
           setData((current) => ({
             ...current,
-            sprints: current.sprints.map((item) => (item.id === sprint.id ? body.sprint! : item)),
+            sprints: current.sprints.map((item) => (item.id === sprint.id ? savedSprint : item)),
           }));
         }
       } catch (error) {
@@ -1023,20 +935,8 @@ export function usePlanningAppController({
       return drafts.length;
     }
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-
     try {
-      const response = await fetch("/api/sprints", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(options),
-      });
-
-      const body = (await response.json().catch(() => null)) as { error?: string; sprints?: Sprint[] } | null;
+      const { response, body } = await planningApi.createSprintPlanRequest(apiClient, options);
       if (!response.ok) throw new Error(body?.error || "Sprints konnten nicht angelegt werden.");
 
       if (body?.sprints) {
@@ -1085,20 +985,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/sprint-commitments", {
-          method: "PUT",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(commitment),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; commitment?: SprintCommitment } | null;
+        const { response, body } = await planningApi.updateSprintCommitmentRequest(apiClient, commitment);
         if (!response.ok || !body?.commitment) throw new Error(body?.error || "Commitment konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1156,47 +1044,28 @@ export function usePlanningAppController({
 
     if (source !== "supabase") return;
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-
     try {
-      const profileResponse = await fetch(`/api/profiles/${profile.id}`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          githubLogin: patch.githubLogin,
-          platformRole: patch.platformRole,
-          orgRole: patch.orgRole,
-          deputyFor: patch.deputyFor,
-          deputyActiveFrom: patch.deputyActiveFrom,
-          deputyActiveUntil: patch.deputyActiveUntil,
-          focus: patch.focus,
-          weeklyCapacity: patch.weeklyCapacity,
-          color: patch.color,
-          googleChatUserId: patch.googleChatUserId,
-          googleChatDmSpace: patch.googleChatDmSpace,
-          notificationsEnabled: patch.notificationsEnabled,
-          googleCalendarEmail: patch.googleCalendarEmail,
-          googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
-        }),
+      const { response: profileResponse, body: profileBody } = await planningApi.updateProfileRequest(apiClient, profile.id, {
+        githubLogin: patch.githubLogin,
+        platformRole: patch.platformRole,
+        orgRole: patch.orgRole,
+        deputyFor: patch.deputyFor,
+        deputyActiveFrom: patch.deputyActiveFrom,
+        deputyActiveUntil: patch.deputyActiveUntil,
+        focus: patch.focus,
+        weeklyCapacity: patch.weeklyCapacity,
+        color: patch.color,
+        googleChatUserId: patch.googleChatUserId,
+        googleChatDmSpace: patch.googleChatDmSpace,
+        notificationsEnabled: patch.notificationsEnabled,
+        googleCalendarEmail: patch.googleCalendarEmail,
+        googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
       });
-      const profileBody = (await profileResponse.json().catch(() => null)) as { error?: string; profile?: Profile } | null;
       if (!profileResponse.ok) throw new Error(profileBody?.error || "Profil konnte nicht gespeichert werden.");
 
       const savedPreferences: NotificationPreference[] = [];
       for (const [eventType, enabled] of changedNotificationEvents) {
-        const preferenceResponse = await fetch("/api/notification-preferences", {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ profileId: profile.id, eventType, enabled }),
-        });
-        const preferenceBody = (await preferenceResponse.json().catch(() => null)) as { error?: string; preference?: NotificationPreference } | null;
+        const { response: preferenceResponse, body: preferenceBody } = await planningApi.updateNotificationPreferenceRequest(apiClient, { profileId: profile.id, eventType, enabled });
         if (!preferenceResponse.ok || !preferenceBody?.preference) throw new Error(preferenceBody?.error || "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
         savedPreferences.push(preferenceBody.preference);
       }
@@ -1237,27 +1106,15 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/meetings/${meeting.id}/attendance`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            profileId: attendance.profileId,
-            status: attendance.status,
-            absenceReason: attendance.absenceReason,
-            reasonAccepted: attendance.reasonAccepted,
-            writtenUpdate: attendance.writtenUpdate,
-            points: attendance.points,
-          }),
+        const { response, body } = await planningApi.updateMeetingAttendanceRequest(apiClient, meeting.id, {
+          profileId: attendance.profileId,
+          status: attendance.status,
+          absenceReason: attendance.absenceReason,
+          reasonAccepted: attendance.reasonAccepted,
+          writtenUpdate: attendance.writtenUpdate,
+          points: attendance.points,
         });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; attendance?: MeetingAttendance } | null;
         if (!response.ok || !body?.attendance) throw new Error(body?.error || "Meeting-Rückmeldung konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1320,20 +1177,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/meetings", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; meeting?: Meeting; attendance?: MeetingAttendance[]; calendarSync?: { status: "synced" | "skipped" | "failed"; htmlLink?: string; error?: string } } | null;
+        const { response, body } = await planningApi.createMeetingRequest(apiClient, payload);
         if (!response.ok || !body?.meeting) throw new Error(body?.error || "Meeting konnte nicht vorgemerkt werden.");
 
         setData((current) => ({
@@ -1372,26 +1217,14 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/meetings", {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            id: meeting.id,
-            title: patch.title,
-            agenda: patch.agenda,
-            meetingAt: patch.meetingAt,
-            status: patch.status,
-          }),
+        const { response, body } = await planningApi.updateMeetingRequest(apiClient, {
+          id: meeting.id,
+          title: patch.title,
+          agenda: patch.agenda,
+          meetingAt: patch.meetingAt,
+          status: patch.status,
         });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; meeting?: Meeting } | null;
         if (!response.ok || !body?.meeting) throw new Error(body?.error || "Meeting konnte nicht aktualisiert werden.");
 
         setData((current) => ({
@@ -1437,25 +1270,13 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
         const payload = {
           ...draft,
           startsAt: new Date(draft.startsAt).toISOString(),
           endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : "",
         };
-        const response = await fetch("/api/events", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; event?: FounderEvent } | null;
+        const { response, body } = await planningApi.createFounderEventRequest(apiClient, payload);
         if (!response.ok || !body?.event) throw new Error(body?.error || "Event konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1500,25 +1321,13 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
         const payload = {
           ...draft,
           startsAt: new Date(draft.startsAt).toISOString(),
           endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : "",
         };
-        const response = await fetch(`/api/events/${event.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; event?: FounderEvent } | null;
+        const { response, body } = await planningApi.updateFounderEventRequest(apiClient, event.id, payload);
         if (!response.ok || !body?.event) throw new Error(body?.error || "Event konnte nicht aktualisiert werden.");
 
         setData((current) => ({
@@ -1548,19 +1357,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/availability", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(entry),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; availability?: AvailabilityEntry } | null;
+        const { response, body } = await planningApi.availabilityRequest<{ error?: string; availability?: AvailabilityEntry }>(apiClient, "POST", entry);
         if (!response.ok || !body?.availability) throw new Error(body?.error || "Verfügbarkeit konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1586,19 +1384,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/availability", {
-          method: "DELETE",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ id: entry.id }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await planningApi.availabilityRequest<{ error?: string }>(apiClient, "DELETE", { id: entry.id });
         if (!response.ok) throw new Error(body?.error || "Verfügbarkeit konnte nicht gelöscht werden.");
       } catch (error) {
         setData(previousData);
@@ -1620,19 +1407,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/availability", {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ id: entry.id, ...patch }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; availability?: AvailabilityEntry } | null;
+        const { response, body } = await planningApi.availabilityRequest<{ error?: string; availability?: AvailabilityEntry }>(apiClient, "PATCH", { id: entry.id, ...patch });
         if (!response.ok || !body?.availability) throw new Error(body?.error || "Verfügbarkeit konnte nicht aktualisiert werden.");
 
         setData((current) => ({
@@ -1656,28 +1432,8 @@ export function usePlanningAppController({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/calendar-sync", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-        });
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-          ready?: boolean;
-          skipped?: boolean;
-          reason?: string;
-          imported?: number;
-          removed?: number;
-          syncedAt?: string;
-          availability?: AvailabilityEntry[];
-          results?: Array<{ profileId: string; email: string; imported: number; removed?: number; error?: string }>;
-        } | null;
+        const { response, body } = await planningApi.syncGoogleCalendarRequest(apiClient);
 
         if (!response.ok) throw new Error(body?.error || "Google Calendar Sync konnte nicht ausgeführt werden.");
 
@@ -1687,7 +1443,7 @@ export function usePlanningAppController({
 
         const failedProfiles = body?.results?.filter((result) => result.error).length || 0;
         if (body?.skipped) {
-          setCalendarSyncMessage(body.reason || "Google Calendar Sync wurde übersprungen.");
+          setCalendarSyncMessage(body?.reason || "Google Calendar Sync wurde übersprungen.");
         } else {
           setCalendarSyncMessage(`Google Calendar Sync abgeschlossen: ${body?.imported || 0} Kalenderblöcke importiert, ${body?.removed || 0} alte Blöcke entfernt${failedProfiles ? `, ${failedProfiles} Profil(e) mit Fehler` : ""}.`);
         }
@@ -1703,20 +1459,8 @@ export function usePlanningAppController({
     setSaveError("");
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/decisions", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; decision?: PlanningData["decisions"][number] } | null;
+        const { response, body } = await planningApi.createDecisionRequest(apiClient, payload);
         if (!response.ok || !body?.decision) {
           throw new Error(body?.error || "Decision konnte nicht erstellt werden.");
         }
@@ -1751,18 +1495,8 @@ export function usePlanningAppController({
     setSaveError("");
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/decisions/${decisionId}/confirm`, {
-          method: "POST",
-          headers: {
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; locked?: boolean; confirmedProfileIds?: string[] } | null;
+        const { response, body } = await planningApi.confirmDecisionRequest(apiClient, decisionId);
         if (!response.ok) throw new Error(body?.error || "Bestätigung konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1799,20 +1533,8 @@ export function usePlanningAppController({
     setSaveError("");
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/decisions/${decisionId}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; decision?: PlanningData["decisions"][number] } | null;
+        const { response, body } = await planningApi.updateDecisionRequest(apiClient, decisionId, payload);
         if (!response.ok || !body?.decision) throw new Error(body?.error || "Decision konnte nicht aktualisiert werden.");
 
         setData((current) => ({
@@ -1847,20 +1569,8 @@ export function usePlanningAppController({
     setSaveError("");
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/decisions/${decisionId}/objections`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ comment }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; comment?: PlanningData["decisionComments"][number] } | null;
+        const { response, body } = await planningApi.objectDecisionRequest(apiClient, decisionId, comment);
         if (!response.ok || !body?.comment) throw new Error(body?.error || "Einwand konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -1907,17 +1617,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/review`, {
-          method: "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify({ decision: reviewStatus, points: scorePoints, checklist, comment }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await taskApi.reviewTaskRequest(apiClient, task.id, { decision: reviewStatus, points: scorePoints, checklist, comment });
         if (!response.ok) throw new Error(body?.error || "Review konnte nicht gespeichert werden.");
         if (hasGitHubIssue(task) && githubProviderTokenAvailable) {
           syncTaskToGitHub({ ...task, status: nextStatus, reviewStatus, scorePoints, scoreFinal }, { silent: true });
@@ -1947,15 +1648,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/review/reopen`, {
-          method: "POST",
-          headers: requestHeaders(token),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+        const { response, body } = await taskApi.reopenTaskReviewRequest(apiClient, task.id);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Review konnte nicht wieder geöffnet werden.");
         setData((current) => ({
           ...current,
@@ -1998,18 +1692,8 @@ export function usePlanningAppController({
 
     setCommentImportPendingTaskIds((current) => new Set(current).add(task.id));
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/comments`, {
-          method: "POST",
-          headers: requestHeaders(token, { github: true }),
-          body: JSON.stringify({ comment }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; githubSyncError?: string; comment?: PlanningData["taskComments"][number] } | null;
+        const { response, body } = await taskApi.createTaskCommentRequest(apiClient, task.id, comment);
         if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -2037,19 +1721,7 @@ export function usePlanningAppController({
       throw new Error("Anhänge können nur mit Supabase- und GitHub-Login hochgeladen werden.");
     }
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-    rememberGitHubProviderToken(session?.data.session?.provider_token);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await fetch(`/api/tasks/${task.id}/attachments`, {
-      method: "POST",
-      headers: requestHeaders(token, { json: false, github: true }),
-      body: formData,
-    });
-
-    const body = (await response.json().catch(() => null)) as { error?: string; markdown?: string } | null;
+    const { response, body } = await taskApi.uploadTaskAttachmentRequest(apiClient, task.id, file);
     if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
     setData((current) => ({
       ...current,
@@ -2079,17 +1751,8 @@ export function usePlanningAppController({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/github-comments`, {
-          method: "POST",
-          headers: requestHeaders(token, { github: true }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] } | null;
+        const { response, body } = await taskApi.importGitHubCommentsRequest(apiClient, task.id);
         if (!response.ok || !body?.comments) throw new Error(body?.error || "GitHub-Kommentare konnten nicht aktualisiert werden.");
 
         setData((current) => ({
@@ -2120,7 +1783,7 @@ export function usePlanningAppController({
         });
       }
     });
-  }, [requestHeaders, source, startTransition]);
+  }, [apiClient, source, startTransition]);
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -2163,17 +1826,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/blockers`, {
-          method: "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; blocker?: PlanningData["taskBlockers"][number] } | null;
+        const { response, body } = await taskApi.reportTaskBlockerRequest(apiClient, task.id, payload);
         if (!response.ok || !body?.blocker) throw new Error(body?.error || "Blocker konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -2217,19 +1871,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; relation?: TaskRelation } | null;
+        const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
         if (!response.ok || !body?.relation) throw new Error(body?.error || "Relationship konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -2260,19 +1903,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/relationships`, {
-          method: "DELETE",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ relationId: relation.id }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await taskApi.removeTaskRelationshipRequest(apiClient, task.id, relation.id);
         if (!response.ok) throw new Error(body?.error || "Relationship konnte nicht entfernt werden.");
       } catch (error) {
         setData((current) => ({
@@ -2303,18 +1935,8 @@ export function usePlanningAppController({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
-          method: "POST",
-          headers: requestHeaders(token, { github: true }),
-          body: JSON.stringify({ createIfMissing: Boolean(options.createIfMissing) }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+        const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
 
         setData((current) => ({
@@ -2355,19 +1977,9 @@ export function usePlanningAppController({
     }));
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-
       for (const task of queueTasks) {
         try {
-          const response = await fetch(`/api/tasks/${task.id}/sync-github`, {
-            method: "POST",
-            headers: requestHeaders(token, { github: true }),
-            body: JSON.stringify({ createIfMissing: false }),
-          });
-
-          const body = (await response.json().catch(() => null)) as { error?: string; task?: Partial<Task> } | null;
+          const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: false });
           if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
 
           setData((current) => ({
@@ -2417,16 +2029,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-      rememberGitHubProviderToken(session?.data.session?.provider_token);
-
       try {
-        const response = await fetch(`/api/tasks/${task.id}`, {
-          method: "DELETE",
-          headers: requestHeaders(token, { json: false, github: true }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await taskApi.deleteTaskRequest(apiClient, task.id);
         if (!response.ok) throw new Error(body?.error || "Aufgabe konnte nicht gelöscht werden.");
       } catch (error) {
         setData((current) => ({
@@ -2444,20 +2048,8 @@ export function usePlanningAppController({
   const refreshGoogleChatStatus = useCallback(async () => {
     if (source !== "supabase") return;
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-
     try {
-      const response = await fetch("/api/notifications/deliver", {
-        headers: {
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      const body = (await response.json().catch(() => null)) as {
-        googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: GoogleChatStatus["mode"] };
-        googleChatConfigured?: boolean;
-        pending?: number;
-      } | null;
+      const { response, body } = await planningApi.notificationDeliveryStatusRequest(apiClient);
       if (!response.ok || !body) return;
 
       setGoogleChatStatus({
@@ -2471,7 +2063,7 @@ export function usePlanningAppController({
     } catch {
       // Settings can still show local queue counts when the status endpoint is unavailable.
     }
-  }, [source]);
+  }, [apiClient, source]);
 
   useEffect(() => {
     if (workspace !== "settings") return;
@@ -2498,20 +2090,15 @@ export function usePlanningAppController({
     });
   }, [authUser, serverCurrentProfile, source]);
 
-  const refreshPlanningData = useCallback(async (token?: string) => {
+  const refreshPlanningData = useCallback(async () => {
     if (source !== "supabase" || !authUser?.id) return;
-    const refreshResponse = await fetch("/api/planning-data", {
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    const refreshPayload = await refreshResponse.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
+    const { response: refreshResponse, body: refreshPayload } = await planningApi.requestPlanningData(apiClient);
     if (!refreshResponse.ok || !refreshPayload?.data) return;
     const nextData = normalizePlanningData(refreshPayload.data);
     setProtectedPlanningDataCache({ authUserId: authUser.id, data: nextData, currentProfile: refreshPayload.currentProfile || serverCurrentProfile });
     setData(nextData);
     setProtectedDataLoaded(true);
-  }, [authUser, serverCurrentProfile, setProtectedDataLoaded, source]);
+  }, [apiClient, authUser, serverCurrentProfile, setProtectedDataLoaded, source]);
 
   const runNotificationDelivery = useCallback((payload: Record<string, unknown>, fallbackError: string) => {
     setSaveError("");
@@ -2523,31 +2110,19 @@ export function usePlanningAppController({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/notifications/deliver", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; sent?: number; failed?: number; skipped?: number } | null;
+        const { response, body } = await planningApi.runNotificationDeliveryRequest(apiClient, payload);
         if (!response.ok && !body?.error) throw new Error(fallbackError);
         if (!response.ok) throw new Error(body?.error || "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
 
         setNotificationDispatchMessage(`${body?.sent || 0} gesendet, ${body?.failed || 0} fehlgeschlagen, ${body?.skipped || 0} übersprungen.`);
         await refreshGoogleChatStatus();
-        await refreshPlanningData(token);
+        await refreshPlanningData();
       } catch (error) {
         setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
       }
       });
-  }, [refreshGoogleChatStatus, refreshPlanningData, source]);
+  }, [apiClient, refreshGoogleChatStatus, refreshPlanningData, source]);
 
   const dispatchNotifications = () => {
     runNotificationDelivery({ limit: 20 }, "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
@@ -2598,20 +2173,8 @@ export function usePlanningAppController({
     }
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch("/api/feedback", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(draft),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; feedback?: FeedbackItem } | null;
+        const { response, body } = await planningApi.createFeedbackRequest(apiClient, draft);
         if (!response.ok || !body?.feedback) throw new Error(body?.error || "Feedback konnte nicht gespeichert werden.");
 
         setData((current) => ({
@@ -2661,19 +2224,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/notifications/${eventId}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ status: "dismissed" }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        const { response, body } = await planningApi.dismissNotificationRequest(apiClient, eventId);
         if (!response.ok) throw new Error(body?.error || "Notification konnte nicht geschlossen werden.");
       } catch (error) {
         setData((current) => ({
@@ -2715,15 +2267,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch(`/api/sprints/${sprint.id}/score-objections`, {
-          method: "POST",
-          headers: requestHeaders(token),
-          body: JSON.stringify({ comment }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; objection?: Parameters<typeof mapScoreObjectionResponse>[0] } | null;
+        const { response, body } = await planningApi.createScoreObjectionRequest(apiClient, sprint.id, comment);
         if (!response.ok || !body?.objection) throw new Error(body?.error || "Score-Einwand konnte nicht gespeichert werden.");
         const saved = mapScoreObjectionResponse(body.objection);
         setData((current) => ({
@@ -2748,15 +2293,8 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
       try {
-        const response = await fetch(`/api/sprints/${sprint.id}/score-objections`, {
-          method: "PATCH",
-          headers: requestHeaders(token),
-          body: JSON.stringify({ objectionId, status, resolutionComment: status === "accepted" ? "Einwand angenommen." : "Einwand geprüft." }),
-        });
-        const body = (await response.json().catch(() => null)) as { error?: string; objection?: Parameters<typeof mapScoreObjectionResponse>[0] } | null;
+        const { response, body } = await planningApi.reviewScoreObjectionRequest(apiClient, sprint.id, objectionId, status);
         if (!response.ok || !body?.objection) throw new Error(body?.error || "Score-Einwand konnte nicht geprüft werden.");
         const saved = mapScoreObjectionResponse(body.objection);
         setData((current) => ({
@@ -2784,30 +2322,13 @@ export function usePlanningAppController({
     if (source !== "supabase") return;
 
     startTransition(async () => {
-      const session = await getBrowserSupabase()?.auth.getSession();
-      const token = session?.data.session?.access_token;
-
       try {
-        const response = await fetch(`/api/sprints/${sprintId}/lock`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ finalizeNow: true }),
-        });
-
-        const body = (await response.json().catch(() => null)) as { error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } } | null;
+        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId);
         if (!response.ok) throw new Error(body?.error || "Sprint konnte nicht gelockt werden.");
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
         }
-        const refreshResponse = await fetch("/api/planning-data", {
-          headers: {
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
-        });
-        const refreshPayload = await refreshResponse.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
+        const { response: refreshResponse, body: refreshPayload } = await planningApi.requestPlanningData(apiClient);
         if (refreshResponse.ok && refreshPayload?.data && authUser?.id) {
           const nextData = normalizePlanningData(refreshPayload.data);
           setProtectedPlanningDataCache({ authUserId: authUser.id, data: nextData, currentProfile: refreshPayload.currentProfile || serverCurrentProfile });
@@ -2912,7 +2433,7 @@ export function usePlanningAppController({
     removeTaskRelation,
     reopenReviewTask,
     reportTaskBlocker,
-    requestHeaders,
+    apiClient,
     retryNotificationDelivery,
     reviewOwnerFilter,
     reviewScoreObjection,

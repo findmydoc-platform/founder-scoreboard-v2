@@ -2,32 +2,18 @@
 
 import { AlertTriangle, CheckCircle2, ClipboardList, WandSparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import { getBrowserSupabase } from "@/lib/supabase";
+import { commitTaskIntake, previewTaskIntake, type TaskIntakeCommitResponse, type TaskIntakeResponse } from "@/features/intake/model/task-intake-api-client";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { TaskIntakePreviewTask } from "@/lib/task-intake";
 import type { Package, Profile, Sprint, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
-
-type RequestHeaders = (token?: string, options?: { json?: boolean; github?: boolean }) => Record<string, string>;
-
-type TaskIntakeResponse = {
-  ok?: boolean;
-  valid?: boolean;
-  error?: string;
-  tasks?: TaskIntakePreviewTask[];
-};
-
-type TaskIntakeCommitResponse = {
-  ok?: boolean;
-  error?: string;
-  tasks?: Task[];
-};
 
 type Props = {
   source: "seed" | "supabase";
   profiles: Profile[];
   packages: Package[];
   sprints: Sprint[];
-  requestHeaders: RequestHeaders;
+  apiClient: BrowserApiClient;
   onTasksCreated: (tasks: Task[]) => void;
 };
 
@@ -59,7 +45,7 @@ function previewState(tasks: TaskIntakePreviewTask[]) {
   return { errors, warnings, valid: tasks.length > 0 && errors === 0 };
 }
 
-export function CeoTaskIntake({ source, profiles, packages, sprints, requestHeaders, onTasksCreated }: Props) {
+export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, onTasksCreated }: Props) {
   const [rawInput, setRawInput] = useState(JSON.stringify(sampleTasks, null, 2));
   const [previewTasks, setPreviewTasks] = useState<TaskIntakePreviewTask[]>([]);
   const [message, setMessage] = useState("");
@@ -73,20 +59,16 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
     return parsed;
   };
 
-  const sendIntakeRequest = async (path: "/api/ceo/task-intake/preview" | "/api/ceo/task-intake/commit") => {
+  const sendIntakeRequest = async (type: "preview" | "commit") => {
     if (!canUseSupabase) {
       setMessage("CEO Intake schreibt nur gegen Supabase. Im Seed-Fallback ist kein Commit möglich.");
       return null;
     }
 
-    const session = await getBrowserSupabase()?.auth.getSession();
-    const token = session?.data.session?.access_token;
-    const response = await fetch(path, {
-      method: "POST",
-      headers: requestHeaders(token),
-      body: JSON.stringify(parsedPayload()),
-    });
-    const body = (await response.json().catch(() => null)) as TaskIntakeResponse | TaskIntakeCommitResponse | null;
+    const result = type === "preview"
+      ? await previewTaskIntake(apiClient, parsedPayload())
+      : await commitTaskIntake(apiClient, parsedPayload());
+    const { response, body } = result;
     if (!response.ok) throw new Error(body?.error || "Task Intake konnte nicht verarbeitet werden.");
     return body;
   };
@@ -95,7 +77,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
     setPending(true);
     setMessage("");
     try {
-      const body = await sendIntakeRequest("/api/ceo/task-intake/preview") as TaskIntakeResponse | null;
+      const body = await sendIntakeRequest("preview") as TaskIntakeResponse | null;
       if (!body?.tasks) return;
       setPreviewTasks(body.tasks);
       const nextState = previewState(body.tasks);
@@ -112,7 +94,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, requestHead
     setPending(true);
     setMessage("");
     try {
-      const body = await sendIntakeRequest("/api/ceo/task-intake/commit") as TaskIntakeCommitResponse | null;
+      const body = await sendIntakeRequest("commit") as TaskIntakeCommitResponse | null;
       if (!body?.tasks) return;
       onTasksCreated(body.tasks);
       setPreviewTasks([]);

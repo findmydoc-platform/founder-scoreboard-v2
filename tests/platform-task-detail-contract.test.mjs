@@ -18,6 +18,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   const panelSidebarSection = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const subIssuesSection = await readFile("src/features/tasks/molecules/task-sub-issues-section.tsx", "utf8");
   const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const brand = await readFile("src/shared/atoms/app-brand.tsx", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
 
@@ -98,7 +99,8 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(page, /<div className="mt-5 min-w-0">\s*<TaskCommentThread/);
   assert.doesNotMatch(page, /lg:col-span-2/);
   assert.match(page, /useTaskComments/);
-  assert.match(commentHook, /api\/tasks\/\$\{task\.id\}\/comments/);
+  assert.match(commentHook, /createTaskCommentRequest/);
+  assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/comments/);
   assert.match(page, /AppSidebar/);
   assert.doesNotMatch(page, /detailNavItems/);
   assert.match(ui, /AppSidebar/);
