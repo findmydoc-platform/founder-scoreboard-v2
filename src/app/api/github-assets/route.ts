@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { apiError, authzError } from "@/lib/api-response";
 
 function isAllowedGitHubAssetUrl(value: string) {
   try {
@@ -23,11 +24,11 @@ function isAllowedGitHubAssetUrl(value: string) {
 
 export async function GET(request: NextRequest) {
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const url = request.nextUrl.searchParams.get("url")?.trim() || "";
   if (!isAllowedGitHubAssetUrl(url)) {
-    return NextResponse.json({ error: "Nur GitHub-Bildanhänge dürfen geladen werden." }, { status: 400 });
+    return apiError("Nur GitHub-Bildanhänge dürfen geladen werden.", 400);
   }
 
   let token = "";
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden.";
     const status = message.includes("nicht verfügbar") ? 401 : 403;
-    return NextResponse.json({ error: message }, { status });
+    return apiError(message, status);
   }
 
   const response = await fetch(url, {
@@ -51,12 +52,12 @@ export async function GET(request: NextRequest) {
   });
 
   if (!response.ok) {
-    return NextResponse.json({ error: `GitHub-Anhang konnte nicht geladen werden: ${response.status}` }, { status: response.status });
+    return apiError(`GitHub-Anhang konnte nicht geladen werden: ${response.status}`, response.status);
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.toLowerCase().startsWith("image/")) {
-    return NextResponse.json({ error: "Der GitHub-Anhang ist kein unterstütztes Bild." }, { status: 415 });
+    return apiError("Der GitHub-Anhang ist kein unterstütztes Bild.", 415);
   }
 
   const body = await response.arrayBuffer();

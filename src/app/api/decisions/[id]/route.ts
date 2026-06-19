@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type UpdateDecisionPayload = {
   title?: string;
@@ -12,10 +13,10 @@ type UpdateDecisionPayload = {
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireCEO(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const decisionId = Number(id);
@@ -26,9 +27,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const decisionText = cleanText(payload.decision, 4000);
   const requiredProfileIds = Array.isArray(payload.requiredProfileIds) ? [...new Set(payload.requiredProfileIds)].filter(Boolean) : [];
 
-  if (!title) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
-  if (!decisionText) return NextResponse.json({ error: "Entscheidungstext ist erforderlich." }, { status: 400 });
-  if (!requiredProfileIds.length) return NextResponse.json({ error: "Mindestens eine bestätigende Person ist erforderlich." }, { status: 400 });
+  if (!title) return apiError("Titel ist erforderlich.", 400);
+  if (!decisionText) return apiError("Entscheidungstext ist erforderlich.", 400);
+  if (!requiredProfileIds.length) return apiError("Mindestens eine bestätigende Person ist erforderlich.", 400);
 
   const { data: before, error: readError } = await supabase
     .from("decision_log")
@@ -36,8 +37,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", decisionId)
     .single();
 
-  if (readError || !before) return NextResponse.json({ error: "Decision nicht gefunden." }, { status: 404 });
-  if (before.status === "locked") return NextResponse.json({ error: "Gelockte Decisions sind unveränderlich." }, { status: 409 });
+  if (readError || !before) return apiError("Decision nicht gefunden.", 404);
+  if (before.status === "locked") return apiError("Gelockte Decisions sind unveränderlich.", 409);
 
   const { data: updated, error: updateError } = await supabase
     .from("decision_log")
@@ -54,7 +55,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,title,context,decision,status,required_profile_ids,created_by,locked_at")
     .single();
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) return apiError(updateError.message, 500);
 
   await supabase.from("decision_confirmations").delete().eq("decision_id", decisionId);
 

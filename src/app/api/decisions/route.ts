@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type CreateDecisionPayload = {
   title?: string;
@@ -12,10 +13,10 @@ type CreateDecisionPayload = {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireCEO(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json()) as CreateDecisionPayload;
   const title = cleanText(payload.title, 160);
@@ -23,9 +24,9 @@ export async function POST(request: NextRequest) {
   const decision = cleanText(payload.decision, 4000);
   const requiredProfileIds = Array.isArray(payload.requiredProfileIds) ? [...new Set(payload.requiredProfileIds)].filter(Boolean) : [];
 
-  if (!title) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
-  if (!decision) return NextResponse.json({ error: "Entscheidungstext ist erforderlich." }, { status: 400 });
-  if (!requiredProfileIds.length) return NextResponse.json({ error: "Mindestens eine bestätigende Person ist erforderlich." }, { status: 400 });
+  if (!title) return apiError("Titel ist erforderlich.", 400);
+  if (!decision) return apiError("Entscheidungstext ist erforderlich.", 400);
+  if (!requiredProfileIds.length) return apiError("Mindestens eine bestätigende Person ist erforderlich.", 400);
 
   const { data, error } = await supabase
     .from("decision_log")
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     .select("*, decision_confirmations(profile_id)")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     entity_type: "decision",

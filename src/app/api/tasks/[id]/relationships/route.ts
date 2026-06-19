@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { TaskRelationType } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type RelationPayload = {
   relationType?: TaskRelationType;
@@ -21,10 +22,10 @@ function relationActionLabel(type: TaskRelationType) {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const payload = (await request.json()) as RelationPayload;
@@ -33,18 +34,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const note = cleanText(payload.note, 500);
 
   if (!relationType || !relationTypes.has(relationType)) {
-    return NextResponse.json({ error: "Ungültige Relationship-Art." }, { status: 400 });
+    return apiError("Ungültige Relationship-Art.", 400);
   }
   if (!relatedTaskId || relatedTaskId === id) {
-    return NextResponse.json({ error: "Bitte eine andere Aufgabe auswählen." }, { status: 400 });
+    return apiError("Bitte eine andere Aufgabe auswählen.", 400);
   }
 
   const { data: tasks, error: taskError } = await supabase
     .from("tasks")
     .select("id,title")
     .in("id", [id, relatedTaskId]);
-  if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
-  if ((tasks || []).length !== 2) return NextResponse.json({ error: "Eine der Aufgaben wurde nicht gefunden." }, { status: 404 });
+  if (taskError) return apiError(taskError.message, 500);
+  if ((tasks || []).length !== 2) return apiError("Eine der Aufgaben wurde nicht gefunden.", 404);
 
   const { data: relation, error } = await supabase
     .from("task_relationship_edges")
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (error || !relation) {
     const duplicate = error?.code === "23505";
-    return NextResponse.json({ error: duplicate ? "Diese Relationship existiert bereits." : error?.message || "Relationship konnte nicht gespeichert werden." }, { status: duplicate ? 409 : 500 });
+    return apiError(duplicate ? "Diese Relationship existiert bereits." : error?.message || "Relationship konnte nicht gespeichert werden.", duplicate ? 409 : 500);
   }
 
   await supabase.from("task_activity").insert({
@@ -98,16 +99,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const payload = (await request.json()) as RelationPayload;
   const relationId = Number(payload.relationId);
   if (!Number.isInteger(relationId) || relationId <= 0) {
-    return NextResponse.json({ error: "Relationship-ID ist erforderlich." }, { status: 400 });
+    return apiError("Relationship-ID ist erforderlich.", 400);
   }
 
   const { data: relation, error: readError } = await supabase
@@ -115,13 +116,13 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     .select("id,task_id,related_task_id,relation_type,note")
     .eq("id", relationId)
     .single();
-  if (readError || !relation) return NextResponse.json({ error: "Relationship wurde nicht gefunden." }, { status: 404 });
+  if (readError || !relation) return apiError("Relationship wurde nicht gefunden.", 404);
   if (relation.task_id !== id && relation.related_task_id !== id) {
-    return NextResponse.json({ error: "Relationship gehört nicht zu dieser Aufgabe." }, { status: 403 });
+    return apiError("Relationship gehört nicht zu dieser Aufgabe.", 403);
   }
 
   const { error } = await supabase.from("task_relationship_edges").delete().eq("id", relationId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("task_activity").insert({
     task_id: id,

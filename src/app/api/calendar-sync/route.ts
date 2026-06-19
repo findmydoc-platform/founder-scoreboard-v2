@@ -3,6 +3,7 @@ import { requireOperationalLead } from "@/lib/authz";
 import { getGoogleCalendarEvents, isGoogleCalendarSyncConfigured, type GoogleCalendarEvent } from "@/lib/google-calendar";
 import { getServerSupabase } from "@/lib/supabase";
 import type { AvailabilityEntry } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 
@@ -130,11 +131,11 @@ function mapAvailability(row: AvailabilityRow): AvailabilityEntry {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   if (!isGoogleCalendarSyncConfigured()) {
     return NextResponse.json({
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
     .not("google_calendar_email", "is", null)
     .order("name");
 
-  if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 500 });
+  if (profilesError) return apiError(profilesError.message, 500);
 
   const enabledProfiles = (profiles || []) as CalendarProfileRow[];
   if (!enabledProfiles.length) {
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
     .select("id,profile_id,type,title,blocker_kind,weekday,start_date,end_date,start_time,end_time,note,source,external_id,external_calendar_id,synced_at")
     .order("start_date");
 
-  if (availabilityError) return NextResponse.json({ error: availabilityError.message }, { status: 500 });
+  if (availabilityError) return apiError(availabilityError.message, 500);
 
   return NextResponse.json({
     ready: true,

@@ -5,6 +5,7 @@ import { createGitHubIssueComment } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type CommentPayload = {
   comment?: string;
@@ -12,17 +13,17 @@ type CommentPayload = {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const payload = (await request.json()) as CommentPayload;
   const comment = cleanText(payload.comment, 4000);
 
   if (comment.length < 2) {
-    return NextResponse.json({ error: "Kommentar ist erforderlich." }, { status: 400 });
+    return apiError("Kommentar ist erforderlich.", 400);
   }
 
   const { data: task, error: taskError } = await supabase
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", id)
     .single();
 
-  if (taskError || !task) return NextResponse.json({ error: "Aufgabe wurde nicht gefunden." }, { status: 404 });
+  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
   const githubIssueNumber = Number(task.github_issue_number || task.issue_number || 0);
   const hasLinkedGitHubIssue = Number.isInteger(githubIssueNumber) && githubIssueNumber > 0;
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,task_id,profile_id,comment,created_at")
     .single();
 
-  if (insertError || !created) return NextResponse.json({ error: insertError?.message || "Kommentar konnte nicht gespeichert werden." }, { status: 500 });
+  if (insertError || !created) return apiError(insertError?.message || "Kommentar konnte nicht gespeichert werden.", 500);
 
   let githubSyncError = "";
   if (hasLinkedGitHubIssue) {

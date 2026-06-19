@@ -3,6 +3,7 @@ import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Package } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type InitiativePayload = {
   title?: string;
@@ -91,10 +92,10 @@ async function assertReferenceRows(
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const { data: current, error: currentError } = await supabase
@@ -103,17 +104,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", id)
     .single();
 
-  if (currentError || !current) return NextResponse.json({ error: "Initiative wurde nicht gefunden." }, { status: 404 });
+  if (currentError || !current) return apiError("Initiative wurde nicht gefunden.", 404);
 
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const isInitiativeOwner = current.owner_id === permission.profile?.id;
   if (!isOperationalLead && !isInitiativeOwner) {
-    return NextResponse.json({ error: "Nur CEO, Deputy oder der Initiative-Owner können diese Initiative bearbeiten." }, { status: 403 });
+    return apiError("Nur CEO, Deputy oder der Initiative-Owner können diese Initiative bearbeiten.", 403);
   }
 
   const payload = (await request.json()) as InitiativePayload;
-  if (payload.priority && !priorities.has(payload.priority)) return NextResponse.json({ error: "Ungültige Priorität." }, { status: 400 });
-  if (payload.status && !statuses.has(payload.status)) return NextResponse.json({ error: "Ungültiger Initiative-Status." }, { status: 400 });
+  if (payload.priority && !priorities.has(payload.priority)) return apiError("Ungültige Priorität.", 400);
+  if (payload.status && !statuses.has(payload.status)) return apiError("Ungültiger Initiative-Status.", 400);
 
   const restrictedForOwner = [
     payload.ownerId !== undefined && payload.ownerId !== (current.owner_id || "") ? "Owner" : "",
@@ -121,11 +122,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     payload.accountableProfileId !== undefined && payload.accountableProfileId !== (current.accountable_profile_id || current.owner_id || "") ? "Accountable" : "",
   ].filter(Boolean);
   if (!isOperationalLead && restrictedForOwner.length) {
-    return NextResponse.json({ error: `Diese Initiative-Felder sind geschützt: ${restrictedForOwner.join(", ")}.` }, { status: 403 });
+    return apiError(`Diese Initiative-Felder sind geschützt: ${restrictedForOwner.join(", ")}.`, 403);
   }
 
   const referenceError = await assertReferenceRows(supabase, payload);
-  if (referenceError) return NextResponse.json({ error: referenceError }, { status: 404 });
+  if (referenceError) return apiError(referenceError, 404);
 
   const raciProfileIds = [
     payload.accountableProfileId !== undefined ? payload.accountableProfileId : "",
@@ -134,24 +135,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ...(payload.informedProfileIds !== undefined ? cleanProfileIds(payload.informedProfileIds) : []),
   ];
   const raciReferenceError = await validateProfileIds(supabase, raciProfileIds);
-  if (raciReferenceError) return NextResponse.json({ error: raciReferenceError }, { status: 404 });
+  if (raciReferenceError) return apiError(raciReferenceError, 404);
 
   const update: Record<string, string | string[] | null> = {};
   if (payload.title !== undefined) {
     const title = payload.title.trim().slice(0, 240);
-    if (title.length < 3) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
+    if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
     update.title = title;
   }
   if (payload.milestoneId !== undefined) update.milestone_id = payload.milestoneId || null;
   if (payload.ownerId !== undefined) update.owner_id = payload.ownerId || null;
   if (payload.accountableProfileId !== undefined) {
     const accountableProfileId = payload.accountableProfileId.trim();
-    if (!accountableProfileId) return NextResponse.json({ error: "Accountable ist erforderlich." }, { status: 400 });
+    if (!accountableProfileId) return apiError("Accountable ist erforderlich.", 400);
     update.accountable_profile_id = accountableProfileId;
   }
   if (payload.responsibleProfileIds !== undefined) {
     const responsibleProfileIds = cleanProfileIds(payload.responsibleProfileIds);
-    if (!responsibleProfileIds.length) return NextResponse.json({ error: "Responsible ist erforderlich." }, { status: 400 });
+    if (!responsibleProfileIds.length) return apiError("Responsible ist erforderlich.", 400);
     update.responsible_profile_ids = responsibleProfileIds;
   }
   if (payload.consultedProfileIds !== undefined) update.consulted_profile_ids = cleanProfileIds(payload.consultedProfileIds);
@@ -172,7 +173,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("*")
     .single();
 
-  if (error || !updated) return NextResponse.json({ error: error?.message || "Initiative konnte nicht gespeichert werden." }, { status: 500 });
+  if (error || !updated) return apiError(error?.message || "Initiative konnte nicht gespeichert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

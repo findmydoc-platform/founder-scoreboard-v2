@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type UpdateSprintPayload = {
   name?: string;
@@ -15,10 +16,10 @@ const sprintStatuses = new Set(["planning", "active", "review", "closed"]);
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const { id } = await context.params;
   const payload = (await request.json()) as UpdateSprintPayload;
@@ -29,29 +30,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", id)
     .single();
 
-  if (currentError || !current) return NextResponse.json({ error: "Sprint wurde nicht gefunden." }, { status: 404 });
-  if (current.score_locked) return NextResponse.json({ error: "Gelockte Sprints können nicht mehr geändert werden." }, { status: 409 });
+  if (currentError || !current) return apiError("Sprint wurde nicht gefunden.", 404);
+  if (current.score_locked) return apiError("Gelockte Sprints können nicht mehr geändert werden.", 409);
 
   const update: Record<string, string | null> = {};
 
   if (payload.name !== undefined) {
     const name = payload.name.trim();
-    if (!name) return NextResponse.json({ error: "Sprint-Name ist erforderlich." }, { status: 400 });
+    if (!name) return apiError("Sprint-Name ist erforderlich.", 400);
     update.name = name;
   }
 
   if (payload.status !== undefined) {
-    if (!sprintStatuses.has(payload.status)) return NextResponse.json({ error: "Ungültiger Sprint-Status." }, { status: 400 });
+    if (!sprintStatuses.has(payload.status)) return apiError("Ungültiger Sprint-Status.", 400);
     update.status = payload.status;
   }
 
   if (payload.startDate !== undefined) {
-    if (payload.startDate && !isIsoDate(payload.startDate)) return NextResponse.json({ error: "Ungültiges Startdatum." }, { status: 400 });
+    if (payload.startDate && !isIsoDate(payload.startDate)) return apiError("Ungültiges Startdatum.", 400);
     update.start_date = payload.startDate || null;
   }
 
   if (payload.endDate !== undefined) {
-    if (payload.endDate && !isIsoDate(payload.endDate)) return NextResponse.json({ error: "Ungültiges Enddatum." }, { status: 400 });
+    if (payload.endDate && !isIsoDate(payload.endDate)) return apiError("Ungültiges Enddatum.", 400);
     update.end_date = payload.endDate || null;
   }
 
@@ -62,7 +63,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const startDate = update.start_date ?? current.start_date;
   const endDate = update.end_date ?? current.end_date;
   if (startDate && endDate && startDate > endDate) {
-    return NextResponse.json({ error: "Sprint-Start darf nicht nach dem Sprint-Ende liegen." }, { status: 400 });
+    return apiError("Sprint-Start darf nicht nach dem Sprint-Ende liegen.", 400);
   }
 
   const timelineChanged = (update.name !== undefined && update.name !== current.name)
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       .select("id", { count: "exact", head: true })
       .eq("sprint_id", id);
 
-    if (taskCountError) return NextResponse.json({ error: taskCountError.message }, { status: 500 });
+    if (taskCountError) return apiError(taskCountError.message, 500);
     if ((count || 0) > 0) {
       return NextResponse.json({
         error: `Dieser Sprint ist geschützt, weil ${count} Aufgabe${count === 1 ? "" : "n"} damit verknüpft ${count === 1 ? "ist" : "sind"}. Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden.`,
@@ -108,7 +109,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,name,status,start_date,end_date,review_due_at,score_locked")
     .single();
 
-  if (updateError || !updated) return NextResponse.json({ error: updateError?.message || "Sprint konnte nicht gespeichert werden." }, { status: 500 });
+  if (updateError || !updated) return apiError(updateError?.message || "Sprint konnte nicht gespeichert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

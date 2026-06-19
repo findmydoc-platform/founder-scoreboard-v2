@@ -3,6 +3,7 @@ import { cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { PlatformRole } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type UpdatePayload = {
   githubLogin?: string;
@@ -31,12 +32,12 @@ function cleanColor(value: unknown) {
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
   if (!supabase) {
-    return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+    return supabaseUnavailable();
   }
 
   const permission = await requireCEO(request);
   if (!permission.ok) {
-    return NextResponse.json({ error: permission.error }, { status: permission.status });
+    return authzError(permission);
   }
 
   const { id } = await context.params;
@@ -49,7 +50,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.platformRole !== undefined) {
     if (!platformRoles.has(payload.platformRole)) {
-      return NextResponse.json({ error: "Ungültige Plattformrolle." }, { status: 400 });
+      return apiError("Ungültige Plattformrolle.", 400);
     }
     update.platform_role = payload.platformRole;
   }
@@ -59,14 +60,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.color !== undefined) {
     const color = cleanColor(payload.color);
-    if (!color) return NextResponse.json({ error: "Ungültige Profilfarbe." }, { status: 400 });
+    if (!color) return apiError("Ungültige Profilfarbe.", 400);
     update.profile_color = color;
   }
 
   if (payload.weeklyCapacity !== undefined) {
     const capacity = Number(payload.weeklyCapacity);
     if (!Number.isFinite(capacity) || capacity < 0 || capacity > 80) {
-      return NextResponse.json({ error: "Kapazität muss zwischen 0 und 80 Stunden liegen." }, { status: 400 });
+      return apiError("Kapazität muss zwischen 0 und 80 Stunden liegen.", 400);
     }
     update.weekly_capacity = Math.round(capacity);
   }
@@ -75,13 +76,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.deputyActiveFrom !== undefined) {
     const value = cleanOptionalDate(payload.deputyActiveFrom);
-    if (value === undefined) return NextResponse.json({ error: "Ungültiges Startdatum." }, { status: 400 });
+    if (value === undefined) return apiError("Ungültiges Startdatum.", 400);
     update.deputy_active_from = value;
   }
 
   if (payload.deputyActiveUntil !== undefined) {
     const value = cleanOptionalDate(payload.deputyActiveUntil);
-    if (value === undefined) return NextResponse.json({ error: "Ungültiges Enddatum." }, { status: 400 });
+    if (value === undefined) return apiError("Ungültiges Enddatum.", 400);
     update.deputy_active_until = value;
   }
 
@@ -116,15 +117,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,platform_role")
     .order("id");
 
-  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+  if (readError) return apiError(readError.message, 500);
 
   const current = currentProfiles.find((profile) => profile.id === id);
-  if (!current) return NextResponse.json({ error: "Profil wurde nicht gefunden." }, { status: 404 });
+  if (!current) return apiError("Profil wurde nicht gefunden.", 404);
 
   if (update.platform_role && update.platform_role !== "ceo") {
     const otherCeoExists = currentProfiles.some((profile) => profile.id !== id && profile.platform_role === "ceo");
     if (current.platform_role === "ceo" && !otherCeoExists) {
-      return NextResponse.json({ error: "Mindestens ein CEO muss gesetzt bleiben." }, { status: 400 });
+      return apiError("Mindestens ein CEO muss gesetzt bleiben.", 400);
     }
   }
 
@@ -135,7 +136,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       .neq("id", id)
       .eq("platform_role", "ceo");
 
-    if (demoteError) return NextResponse.json({ error: demoteError.message }, { status: 500 });
+    if (demoteError) return apiError(demoteError.message, 500);
   }
 
   const { data: updated, error: updateError } = await supabase
@@ -145,7 +146,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at")
     .single();
 
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) return apiError(updateError.message, 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id,

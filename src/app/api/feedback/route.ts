@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { FeedbackItem } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type FeedbackPayload = {
   type?: string;
@@ -17,10 +18,10 @@ const severities = new Set(["P0", "P1", "P2", "P3"]);
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json().catch(() => null)) as FeedbackPayload | null;
   const type = feedbackTypes.has(payload?.type || "") ? payload!.type! : "bug";
@@ -29,8 +30,8 @@ export async function POST(request: NextRequest) {
   const description = cleanText(payload?.description, 3000);
   const pageUrl = cleanText(payload?.pageUrl, 500);
 
-  if (title.length < 3) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
-  if (description.length < 10) return NextResponse.json({ error: "Beschreibung muss mindestens 10 Zeichen haben." }, { status: 400 });
+  if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
+  if (description.length < 10) return apiError("Beschreibung muss mindestens 10 Zeichen haben.", 400);
 
   const { data: created, error: insertError } = await supabase
     .from("feedback_items")
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     .select("id,type,status,severity,profile_id,title,description,page_url,created_at")
     .single();
 
-  if (insertError || !created) return NextResponse.json({ error: insertError?.message || "Feedback konnte nicht gespeichert werden." }, { status: 500 });
+  if (insertError || !created) return apiError(insertError?.message || "Feedback konnte nicht gespeichert werden.", 500);
 
   const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
   const notifications = (leads || [])

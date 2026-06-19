@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type TaskRow = {
   id: string;
@@ -160,10 +161,10 @@ function eventBody(event: FounderEventRow) {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await authorizeDigestGeneration(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
+  if (!permission.ok) return authzError(permission);
 
   const payload = (await request.json().catch(() => ({}))) as { limit?: number; dryRun?: boolean };
   const limit = safeLimit(payload.limit);
@@ -222,7 +223,7 @@ export async function POST(request: NextRequest) {
   ]);
 
   const firstError = [taskResult, blockerResult, decisionResult, confirmationResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
-  if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
+  if (firstError) return apiError(firstError.message, 500);
 
   const tasks = (taskResult.data || []) as TaskRow[];
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
@@ -376,7 +377,7 @@ export async function POST(request: NextRequest) {
     : { data: [] };
 
   if ("error" in existingResult && existingResult.error) {
-    return NextResponse.json({ error: existingResult.error.message }, { status: 500 });
+    return apiError(existingResult.error.message, 500);
   }
 
   const existingKeys = new Set((existingResult.data || []).map((row: { dedupe_key: string | null }) => row.dedupe_key).filter(Boolean));
@@ -399,7 +400,7 @@ export async function POST(request: NextRequest) {
       body: candidate.body,
       dedupe_key: candidate.dedupeKey,
     })));
-    if (insertResult.error) return NextResponse.json({ error: insertResult.error.message }, { status: 500 });
+    if (insertResult.error) return apiError(insertResult.error.message, 500);
   }
 
   if (!dryRun && generatedReminderEventIds.size) {
@@ -407,7 +408,7 @@ export async function POST(request: NextRequest) {
       .from("founder_events")
       .update({ reminder_generated_at: now.toISOString(), updated_at: now.toISOString() })
       .in("id", [...generatedReminderEventIds]);
-    if (updateResult.error) return NextResponse.json({ error: updateResult.error.message }, { status: 500 });
+    if (updateResult.error) return apiError(updateResult.error.message, 500);
   }
 
   return NextResponse.json({

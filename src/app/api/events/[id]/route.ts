@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { FounderEvent } from "@/lib/types";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type EventPayload = {
   title?: string;
@@ -76,15 +77,15 @@ function mapFounderEvent(row: {
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireOperationalLead(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil konnte nicht bestimmt werden." }, { status: 403 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const { id: rawId } = await context.params;
   const id = Number(rawId);
-  if (!Number.isFinite(id)) return NextResponse.json({ error: "Event ist erforderlich." }, { status: 400 });
+  if (!Number.isFinite(id)) return apiError("Event ist erforderlich.", 400);
 
   const { data: current, error: currentError } = await supabase
     .from("founder_events")
@@ -92,7 +93,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", id)
     .single();
 
-  if (currentError || !current) return NextResponse.json({ error: "Event wurde nicht gefunden." }, { status: 404 });
+  if (currentError || !current) return apiError("Event wurde nicht gefunden.", 404);
 
   const payload = (await request.json().catch(() => ({}))) as EventPayload;
   const title = typeof payload.title === "string" ? cleanText(payload.title, 180) : current.title;
@@ -108,15 +109,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const reminderDaysBefore = cleanReminderDays(payload.reminderDaysBefore, current.reminder_days_before);
   const status = typeof payload.status === "string" && eventStatuses.has(payload.status) ? payload.status : current.status;
 
-  if (!title) return NextResponse.json({ error: "Titel ist erforderlich." }, { status: 400 });
-  if (!startsAt) return NextResponse.json({ error: "Startzeitpunkt ist erforderlich." }, { status: 400 });
-  if (endsAt && endsAt < startsAt) return NextResponse.json({ error: "Ende darf nicht vor dem Start liegen." }, { status: 400 });
-  if (audienceMode === "selected" && !participantProfileIds.length) return NextResponse.json({ error: "Mindestens ein Profil ist für diese Zielgruppe erforderlich." }, { status: 400 });
+  if (!title) return apiError("Titel ist erforderlich.", 400);
+  if (!startsAt) return apiError("Startzeitpunkt ist erforderlich.", 400);
+  if (endsAt && endsAt < startsAt) return apiError("Ende darf nicht vor dem Start liegen.", 400);
+  if (audienceMode === "selected" && !participantProfileIds.length) return apiError("Mindestens ein Profil ist für diese Zielgruppe erforderlich.", 400);
 
   if (participantProfileIds.length) {
     const profileResult = await supabase.from("profiles").select("id").in("id", participantProfileIds);
-    if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
-    if ((profileResult.data || []).length !== participantProfileIds.length) return NextResponse.json({ error: "Mindestens ein Zielprofil wurde nicht gefunden." }, { status: 404 });
+    if (profileResult.error) return apiError(profileResult.error.message, 500);
+    if ((profileResult.data || []).length !== participantProfileIds.length) return apiError("Mindestens ein Zielprofil wurde nicht gefunden.", 404);
   }
 
   const reminderRelevantChange =
@@ -148,7 +149,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status,created_by,created_at,updated_at")
     .single();
 
-  if (error || !event) return NextResponse.json({ error: error?.message || "Event konnte nicht aktualisiert werden." }, { status: 500 });
+  if (error || !event) return apiError(error?.message || "Event konnte nicht aktualisiert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile.id,

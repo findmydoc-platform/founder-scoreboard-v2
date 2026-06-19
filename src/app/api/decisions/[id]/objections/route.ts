@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 
 type ObjectionPayload = {
   comment?: string;
@@ -9,18 +10,18 @@ type ObjectionPayload = {
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
-  if (!supabase) return NextResponse.json({ error: "Supabase env is not configured." }, { status: 501 });
+  if (!supabase) return supabaseUnavailable();
 
   const permission = await requireFounder(request);
-  if (!permission.ok) return NextResponse.json({ error: permission.error }, { status: permission.status });
-  if (!permission.profile) return NextResponse.json({ error: "Profil erforderlich." }, { status: 401 });
+  if (!permission.ok) return authzError(permission);
+  if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
   const { id } = await context.params;
   const decisionId = Number(id);
   const payload = (await request.json()) as ObjectionPayload;
   const comment = cleanText(payload.comment, 2000);
 
-  if (!comment) return NextResponse.json({ error: "Ein Kommentar ist erforderlich." }, { status: 400 });
+  if (!comment) return apiError("Ein Kommentar ist erforderlich.", 400);
 
   const { data: decision, error: decisionError } = await supabase
     .from("decision_log")
@@ -28,8 +29,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .eq("id", decisionId)
     .single();
 
-  if (decisionError || !decision) return NextResponse.json({ error: "Decision nicht gefunden." }, { status: 404 });
-  if (decision.status === "locked") return NextResponse.json({ error: "Gelockte Decisions können nicht mehr beanstandet werden." }, { status: 409 });
+  if (decisionError || !decision) return apiError("Decision nicht gefunden.", 404);
+  if (decision.status === "locked") return apiError("Gelockte Decisions können nicht mehr beanstandet werden.", 409);
 
   const { data: objection, error } = await supabase
     .from("decision_comments")
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,decision_id,profile_id,type,comment,created_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return apiError(error.message, 500);
 
   await supabase.from("audit_log").insert({
     entity_type: "decision",
