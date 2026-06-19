@@ -95,7 +95,7 @@ test("github issue export includes structure review blockers and comments", asyn
 test("task relationships use github-like blocked by and blocking semantics", async () => {
   const migration = await readFile("supabase/0016_task_relationship_edges.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
@@ -365,7 +365,7 @@ test("github oauth prepares user-based sync without storing provider tokens", as
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readFile("supabase/0005_comments_blockers_notifications.sql", "utf8");
   const externalMigration = await readFile("supabase/0018_task_external_comments.sql", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
   const githubAssetsRoute = await readFile("src/app/api/github-assets/route.ts", "utf8");

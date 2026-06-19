@@ -7,7 +7,7 @@ test("fmd tools hub keeps internal tools repos notion and drive visible", async 
   const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
   const ui = await readPlanningSurface();
   const toolsUi = await readFile("src/features/tools/organisms/fmd-tools-overview.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const seed = await readFile("src/lib/seed/full-data.ts", "utf8");
   const importer = await readFile("scripts/import-dashboard.mjs", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -44,7 +44,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const executionViewModel = await readFile("src/features/execution/model/execution-layer-view-model.ts", "utf8");
   const decisionUi = await readFeatureSurface("src/features/decisions");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
   const decisionTaskRoute = await readFile("src/app/api/decisions/[id]/tasks/route.ts", "utf8");
@@ -196,7 +196,7 @@ test("task creation supports deliverables proposals and non scoring sub issues",
 test("weekly meeting attendance has scoring, absence reasons and updates", async () => {
   const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const sprintMeetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
