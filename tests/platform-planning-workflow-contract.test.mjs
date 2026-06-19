@@ -30,6 +30,7 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
   const taskWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const meetingUi = await readFile("src/features/meetings/organisms/meeting-finder-overview.tsx", "utf8");
   const meetingControls = await readFile("src/features/meetings/hooks/use-meeting-finder-controls.ts", "utf8");
+  const meetingCalendarDrag = await readFile("src/features/meetings/hooks/use-meeting-calendar-drag.ts", "utf8");
   const meetingAvailabilityHook = await readFile("src/features/meetings/hooks/use-meeting-availability-editor.ts", "utf8");
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const teamDraftHook = await readFile("src/features/team/hooks/use-team-profile-drafts.ts", "utf8");
@@ -50,9 +51,15 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
   assert.match(meetingUi, /useMeetingAvailabilityEditor/);
   assert.doesNotMatch(meetingUi, /buildMeetingFinderViewModel|useState|useRef|useCallback|useEffect/);
   assert.match(meetingControls, /buildMeetingFinderViewModel/);
+  assert.match(meetingControls, /useMeetingCalendarDrag/);
   assert.match(meetingControls, /calendarDrag/);
   assert.match(meetingControls, /reserveSlot/);
   assert.match(meetingControls, /openAvailabilityBlock/);
+  assert.doesNotMatch(meetingControls, /suppressBlockClickRef|setCalendarDrag|availabilityCalendarLabel/);
+  assert.match(meetingCalendarDrag, /suppressBlockClickRef/);
+  assert.match(meetingCalendarDrag, /beginCalendarBlockDrag/);
+  assert.match(meetingCalendarDrag, /finishCalendarBlockDrag/);
+  assert.match(meetingCalendarDrag, /availabilityCalendarLabel/);
   assert.match(meetingAvailabilityHook, /saveAvailabilityDialog/);
 
   assert.match(teamUi, /useTeamProfileDrafts/);
