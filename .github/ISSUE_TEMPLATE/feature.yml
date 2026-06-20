@@ -1,0 +1,57 @@
+---
+name: Feature
+description: Product feature request for implementation planning
+title: "Feature: "
+labels: []
+type: Feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this exact structure for every new issue and every issue rewrite.
+        Keep the issue lightweight and template-shaped. Put implementation detail in a linked doc, not in the issue body.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem are we solving and for whom?
+      placeholder: Clear problem, motivation, and target users/stakeholders.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Intended Outcome
+      description: What should be true after this feature is delivered?
+      placeholder: Clear, measurable, outcome-focused description.
+    validations:
+      required: true
+
+  - type: textarea
+    id: quality-criteria
+    attributes:
+      label: Quality Criteria
+      description: Which quality aspects must this feature meet?
+      placeholder: Performance, reliability, accessibility, maintainability, security, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Which concrete conditions must be met for completion?
+      placeholder: Use bullet points with testable criteria.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of Scope
+      description: What is explicitly not part of this feature?
+      placeholder: List boundaries and exclusions to avoid scope creep.
+    validations:
+      required: false
