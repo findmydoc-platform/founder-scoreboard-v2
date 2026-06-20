@@ -3,9 +3,17 @@
 import { AlertTriangle, CalendarDays, Link2, Trash2 } from "lucide-react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange, formatDate, initiativeOptionLabel, initiativeRaciRows, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
+import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
+import { dateRange, formatDate, initiativeRaciRows, taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel, syncLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
+import {
+  assigneeOptions,
+  initiativeOptions,
+  milestoneOptions,
+  priorityOptions,
+  sprintOptions,
+} from "@/features/tasks/model/task-form-options";
 import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
 
 type Props = {
@@ -75,20 +83,22 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-950">Steuerung</h3>
         <div className="mt-3 grid gap-3">
-          <label className="grid gap-1 text-xs font-semibold text-slate-500">
-            Status
-            <CustomSelect value={normalizeStatus(task.status)} disabled={!canChangeTaskStatus} onChange={(value) => onUpdate({ status: value })} className="h-9 text-sm" options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
-          </label>
+          <UiSelectField
+            label="Status"
+            value={normalizeStatus(task.status)}
+            disabled={!canChangeTaskStatus}
+            onChange={(value) => onUpdate({ status: value })}
+            options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))}
+          />
           {canManageTaskMeta ? (
             <>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Assignee
-                <CustomSelect value={task.owner} onChange={(value) => onUpdate({ owner: value })} className="h-9 text-sm" options={taskOwnerOptions(task.taskType, teamProfiles)} />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Priorität
-                <CustomSelect value={task.priority} onChange={(value) => onUpdate({ priority: value })} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
-              </label>
+              <UiSelectField
+                label="Assignee"
+                value={task.owner}
+                onChange={(value) => onUpdate({ owner: value })}
+                options={assigneeOptions(task.taskType, teamProfiles)}
+              />
+              <UiSelectField label="Priorität" value={task.priority} onChange={(value) => onUpdate({ priority: value })} options={priorityOptions} />
             </>
           ) : (
             <>
@@ -123,18 +133,14 @@ export function TaskDetailPanelSidebar({
         <div className="mt-3 grid gap-3">
           {canManageTaskMeta ? (
             <>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Initiative
-                <CustomSelect value={task.packageId} onChange={updatePackage} className="h-9 text-sm" options={packages.map((item) => ({ value: item.id, label: initiativeOptionLabel(item) }))} />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Sprint
-                <CustomSelect value={task.sprintId} onChange={(value) => onUpdate({ sprintId: value })} className="h-9 text-sm" options={sprints.map((item) => ({ value: item.id, label: item.name }))} />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Epic / Meilenstein
-                <CustomSelect value={task.milestoneId || ""} onChange={updateMilestone} className="h-9 text-sm" options={[{ value: "", label: "Kein Epic" }, ...milestones.map((item) => ({ value: item.id, label: item.title }))]} />
-              </label>
+              <UiSelectField label="Initiative" value={task.packageId} onChange={updatePackage} options={initiativeOptions(packages)} />
+              <UiSelectField label="Sprint" value={task.sprintId} onChange={(value) => onUpdate({ sprintId: value })} options={sprintOptions(sprints)} />
+              <UiSelectField
+                label="Epic / Meilenstein"
+                value={task.milestoneId || ""}
+                onChange={updateMilestone}
+                options={milestoneOptions(milestones, "Kein Epic")}
+              />
               <div>
                 <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
                 <div className="mt-1 grid grid-cols-2 gap-2">
@@ -142,10 +148,7 @@ export function TaskDetailPanelSidebar({
                   <CustomDatePicker value={task.endDate || ""} onChange={(value) => onUpdate({ endDate: value })} className="h-9 text-sm" />
                 </div>
               </div>
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Zieltermin
-                <CustomDatePicker value={task.deadline || ""} onChange={(value) => onUpdate({ deadline: value })} className="h-9 text-sm" />
-              </label>
+              <UiDateField label="Zieltermin" value={task.deadline || ""} onChange={(value) => onUpdate({ deadline: value })} />
             </>
           ) : (
             <>
