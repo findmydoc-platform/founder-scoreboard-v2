@@ -67,13 +67,17 @@ export function mapMilestone(row: DbMilestone): Milestone {
   };
 }
 
+function profileNameById(profiles: Profile[], profileId?: string | null) {
+  return profiles.find((profile) => profile.id === profileId)?.name || profileId || "";
+}
+
 export function mapTask(row: DbTask, profiles: Profile[]): Task {
   const ownerId = row.owner || "";
   const assigneeId = row.assignee || "";
   const createdById = row.created_by || "";
-  const owner = profiles.find((profile) => profile.id === row.owner)?.name || row.owner || "";
-  const assignee = profiles.find((profile) => profile.id === row.assignee)?.name || row.assignee || owner;
-  const createdBy = profiles.find((profile) => profile.id === row.created_by)?.name || row.created_by || "";
+  const owner = profileNameById(profiles, row.owner);
+  const assignee = profileNameById(profiles, row.assignee) || owner;
+  const createdBy = profileNameById(profiles, row.created_by);
 
   return {
     id: row.id,

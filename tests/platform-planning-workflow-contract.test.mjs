@@ -175,6 +175,7 @@ test("task mutation contract centralizes update normalization and route patches"
 test("planning data loader separates query loading from public orchestration", async () => {
   const data = await readFile("src/lib/planning-data.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
 
   assert.match(data, /loadPlanningDataRows/);
   assert.match(data, /hasCorePlanningDataError/);
@@ -184,11 +185,57 @@ test("planning data loader separates query loading from public orchestration", a
 
   assert.match(loader, /Promise\.all/);
   assert.match(loader, /founderProjectId/);
-  assert.match(loader, /task_dependencies\(note\), task_notes\(note\)/);
+  assert.match(loader, /taskRowSelect/);
+  assert.doesNotMatch(loader, /select\("\*, task_dependencies\(note\), task_notes\(note\)"\)/);
+  assert.match(rowTypes, /export const taskRowColumns/);
+  assert.match(rowTypes, /task_dependencies\(note\), task_notes\(note\)/);
   assert.match(loader, /export function hasCorePlanningDataError/);
   assert.match(loader, /export function mapPlanningDataRows/);
   assert.match(loader, /scoreObjections/);
   assert.match(loader, /notificationPreferenceResult/);
+});
+
+test("task row descriptor covers planning UI mapping fields", async () => {
+  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
+  const mappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+
+  assert.match(loader, /select\(taskRowSelect\)/);
+  assert.match(mappers, /profileNameById/);
+
+  for (const [field, property] of [
+    ["owner", "ownerId"],
+    ["assignee", "assigneeId"],
+    ["created_by", "createdById"],
+    ["review_status", "reviewStatus"],
+    ["review_owner_profile_id", "reviewOwnerProfileId"],
+    ["review_requested_at", "reviewRequestedAt"],
+    ["github_repo", "githubRepo"],
+    ["github_issue_number", "githubIssueNumber"],
+    ["github_issue_url", "githubIssueUrl"],
+    ["github_sync_status", "githubSyncStatus"],
+    ["github_last_synced_at", "githubLastSyncedAt"],
+    ["github_sync_error", "githubSyncError"],
+    ["problem_statement", "problemStatement"],
+    ["intended_outcome", "intendedOutcome"],
+    ["scope_constraints", "scopeConstraints"],
+    ["acceptance_criteria", "acceptanceCriteria"],
+    ["evidence_required", "evidenceRequired"],
+    ["dod_template_version", "dodTemplateVersion"],
+    ["original_sprint_id", "originalSprintId"],
+    ["carried_from_task_id", "carriedFromTaskId"],
+    ["carried_from_sprint_id", "carriedFromSprintId"],
+    ["carryover_reason", "carryoverReason"],
+    ["carryover_count", "carryoverCount"],
+    ["sprint_outcome", "sprintOutcome"],
+    ["self_dod_checked", "selfDodChecked"],
+    ["self_evidence_checked", "selfEvidenceChecked"],
+    ["self_documented_checked", "selfDocumentedChecked"],
+    ["self_blockers_checked", "selfBlockersChecked"],
+  ]) {
+    assert.match(rowTypes, new RegExp(`"${field}"`));
+    assert.match(mappers, new RegExp(`\\b${property}\\b`));
+  }
 });
 
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
@@ -196,7 +243,6 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
@@ -210,7 +256,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(createRoute, /problemStatement/);
   assert.match(updateRoute, /acceptanceCriteria/);
   assert.match(types, /problemStatement/);
-  assert.match(data, /task_dependencies\(note\), task_notes\(note\)/);
+  assert.match(dataRowTypes, /task_dependencies\(note\), task_notes\(note\)/);
   assert.match(dataRowTypes, /problem_statement/);
   assert.match(newTaskUi, /Template v2/);
   assert.match(detail, /TaskBriefSection/);
