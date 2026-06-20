@@ -105,6 +105,66 @@ export type DbTask = {
   task_notes?: { note: string } | null;
 };
 
+type DbTaskScalarColumn = Exclude<keyof DbTask, "task_dependencies" | "task_notes">;
+
+export const taskRowColumns = [
+  "id",
+  "sort_order",
+  "title",
+  "description",
+  "status",
+  "priority",
+  "owner",
+  "assignee",
+  "created_by",
+  "workstream",
+  "package_id",
+  "deadline",
+  "problem_statement",
+  "intended_outcome",
+  "scope_constraints",
+  "acceptance_criteria",
+  "evidence_required",
+  "dod_template_version",
+  "definition_of_done",
+  "evidence_link",
+  "issue_number",
+  "issue_url",
+  "watched",
+  "estimate_hours",
+  "start_date",
+  "end_date",
+  "sprint_id",
+  "milestone_id",
+  "review_status",
+  "review_owner_profile_id",
+  "review_requested_at",
+  "score_points",
+  "score_final",
+  "github_repo",
+  "github_issue_number",
+  "github_issue_url",
+  "github_sync_status",
+  "github_last_synced_at",
+  "github_sync_error",
+  "task_type",
+  "parent_task_id",
+  "score_relevant",
+  "original_sprint_id",
+  "carried_from_task_id",
+  "carried_from_sprint_id",
+  "carryover_reason",
+  "carryover_count",
+  "sprint_outcome",
+  "self_dod_checked",
+  "self_evidence_checked",
+  "self_documented_checked",
+  "self_blockers_checked",
+] as const satisfies readonly DbTaskScalarColumn[];
+
+export const taskRelationSelect = "task_dependencies(note), task_notes(note)";
+export const taskRowSelect: string = `${taskRowColumns.join(",")}, ${taskRelationSelect}`;
+
 export type DbSprint = {
   id: string;
   name: string;
