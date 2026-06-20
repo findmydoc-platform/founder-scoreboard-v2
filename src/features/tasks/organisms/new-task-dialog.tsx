@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
-import { initiativeOptionLabel, initiativeRaciRows, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
-import { taskStatuses } from "@/lib/status";
+import { initiativeRaciRows, taskOwnerOptions } from "@/lib/display";
+import {
+  initiativeOptions,
+  milestoneOptions,
+  priorityOptions,
+  relatedTaskOptions,
+  sprintOptions,
+  taskRelationTypeOptions,
+  taskStatusOptions,
+  taskTypeOptions,
+} from "@/features/tasks/model/task-form-options";
 import type { PlanningData, TaskRelationType } from "@/lib/types";
 
 export type NewTaskDraft = {
@@ -116,41 +125,42 @@ export function NewTaskDialog({
 
         <div className="grid gap-4 p-5">
           <div className="grid gap-3 sm:grid-cols-4">
-            <UiField>
-              Typ
-              <CustomSelect
-                value={draft.taskType}
-                onChange={(value) => setDraft((current) => ({
+            <UiSelectField
+              label="Typ"
+              value={draft.taskType}
+              onChange={(value) =>
+                setDraft((current) => ({
                   ...current,
                   taskType: value as NewTaskDraft["taskType"],
                   owner: value === "proposal" ? "" : current.owner || fallbackOwner,
                   createGitHubIssue: value === "deliverable" ? current.createGitHubIssue : false,
-                }))}
-                className="h-9 text-sm"
-                options={[{ value: "deliverable", label: "Deliverable" }, { value: "proposal", label: "Vorschlag" }, { value: "sub_issue", label: "Sub-Issue" }]}
-              />
-            </UiField>
-            <UiField>
-              Epic / Meilenstein
-              <CustomSelect
-                value={draft.milestoneId}
-                onChange={(value) => {
-                  const milestoneId = value;
-                  const firstInitiative = data.packages.find((pack) => !milestoneId || !pack.milestoneId || pack.milestoneId === milestoneId);
-                  setDraft((current) => ({ ...current, milestoneId, packageId: firstInitiative?.id || current.packageId }));
-                }}
-                className="h-9 text-sm"
-                options={[{ value: "", label: "Ohne Epic" }, ...data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))]}
-              />
-            </UiField>
-            <UiField>
-              Initiative
-              <CustomSelect value={draft.packageId} onChange={(value) => setDraft((current) => ({ ...current, packageId: value }))} className="h-9 text-sm" options={visibleInitiatives.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))} />
-            </UiField>
-            <UiField>
-              Sprint
-              <CustomSelect value={draft.sprintId} disabled={draft.taskType !== "deliverable"} onChange={(value) => setDraft((current) => ({ ...current, sprintId: value }))} className="h-9 text-sm" options={data.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))} />
-            </UiField>
+                }))
+              }
+              options={taskTypeOptions}
+            />
+            <UiSelectField
+              label="Epic / Meilenstein"
+              value={draft.milestoneId}
+              onChange={(value) => {
+                const milestoneId = value;
+                const firstInitiative = data.packages.find((pack) => !milestoneId || !pack.milestoneId || pack.milestoneId === milestoneId);
+                setDraft((current) => ({ ...current, milestoneId, packageId: firstInitiative?.id || current.packageId }));
+              }}
+              options={milestoneOptions(data.milestones, "Ohne Epic")}
+            />
+            <UiSelectField
+              label="Initiative"
+              value={draft.packageId}
+              onChange={(value) => setDraft((current) => ({ ...current, packageId: value }))}
+              options={initiativeOptions(visibleInitiatives)}
+            />
+            <UiSelectField
+              label="Sprint"
+              value={draft.sprintId}
+              disabled={draft.taskType !== "deliverable"}
+              onChange={(value) => setDraft((current) => ({ ...current, sprintId: value }))}
+              options={sprintOptions(data.sprints)}
+            />
           </div>
 
           {selectedInitiative && (
@@ -168,11 +178,14 @@ export function NewTaskDialog({
           )}
 
           {draft.taskType === "sub_issue" && (
-            <UiField>
-              Deliverable
-              <CustomSelect value={draft.parentTaskId} onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))} className="h-9 text-sm" options={[{ value: "", label: "Deliverable auswählen" }, ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: task.title }))]} />
+            <UiSelectField
+              label="Deliverable"
+              value={draft.parentTaskId}
+              onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))}
+              options={[{ value: "", label: "Deliverable auswählen" }, ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: task.title }))]}
+            >
               {parentTask && <span className="text-xs font-normal text-slate-500">Sub-Issues unter {parentTask.title} sind nicht score-relevant.</span>}
-            </UiField>
+            </UiSelectField>
           )}
 
           {draft.decisionId > 0 && (
@@ -223,19 +236,27 @@ export function NewTaskDialog({
           </UiField>
 
           <div className="grid gap-3 sm:grid-cols-4">
-            <UiField>
-              Assignee
-              <CustomSelect value={draft.owner} onChange={(value) => setDraft((current) => ({ ...current, owner: value }))} className="h-9 text-sm" options={taskOwnerOptions(draft.taskType, data.profiles)} />
+            <UiSelectField
+              label="Assignee"
+              value={draft.owner}
+              onChange={(value) => setDraft((current) => ({ ...current, owner: value }))}
+              options={taskOwnerOptions(draft.taskType, data.profiles)}
+            >
               {draft.taskType === "proposal" && <span className="text-[11px] font-normal leading-4 text-slate-500">Vorschläge können bewusst ohne Assignee bleiben.</span>}
-            </UiField>
-            <UiField>
-              Priorität
-              <CustomSelect value={draft.priority} onChange={(value) => setDraft((current) => ({ ...current, priority: value }))} className="h-9 text-sm" options={["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))} />
-            </UiField>
-            <UiField>
-              Status
-              <CustomSelect value={draft.status} disabled={draft.taskType === "proposal"} onChange={(value) => setDraft((current) => ({ ...current, status: value }))} className="h-9 text-sm" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
-            </UiField>
+            </UiSelectField>
+            <UiSelectField
+              label="Priorität"
+              value={draft.priority}
+              onChange={(value) => setDraft((current) => ({ ...current, priority: value }))}
+              options={priorityOptions}
+            />
+            <UiSelectField
+              label="Status"
+              value={draft.status}
+              disabled={draft.taskType === "proposal"}
+              onChange={(value) => setDraft((current) => ({ ...current, status: value }))}
+              options={taskStatusOptions}
+            />
             <UiField>
               Aufwand
               <UiTextInput type="number" min={0} value={draft.hours} onChange={(event) => setDraft((current) => ({ ...current, hours: Number(event.target.value) }))} textTone="muted" />
@@ -270,20 +291,11 @@ export function NewTaskDialog({
               Workstream
               <UiTextInput value={draft.workstream} onChange={(event) => setDraft((current) => ({ ...current, workstream: event.target.value }))} textTone="muted" />
             </UiField>
-            <UiField>
-              Start
-              <CustomDatePicker value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} className="h-9 text-sm" />
-            </UiField>
-            <UiField>
-              Ende
-              <CustomDatePicker value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} className="h-9 text-sm" />
-            </UiField>
+            <UiDateField label="Start" value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
+            <UiDateField label="Ende" value={draft.endDate} onChange={(value) => setDraft((current) => ({ ...current, endDate: value }))} />
           </div>
 
-          <UiField>
-            Zieltermin
-            <CustomDatePicker value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} className="h-9 text-sm" />
-          </UiField>
+          <UiDateField label="Zieltermin" value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} />
 
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="text-sm font-semibold text-slate-950">Erste Relationship</div>
@@ -293,20 +305,13 @@ export function NewTaskDialog({
                 value={draft.relationType}
                 onChange={(value) => setDraft((current) => ({ ...current, relationType: value as TaskRelationType }))}
                 className="h-9 text-sm"
-                options={[
-                  { value: "blocked_by", label: "Wartet auf" },
-                  { value: "blocks", label: "Blockiert" },
-                  { value: "relates_to", label: "Verknüpft mit" },
-                ]}
+                options={taskRelationTypeOptions}
               />
               <CustomSelect
                 value={draft.relatedTaskId}
                 onChange={(value) => setDraft((current) => ({ ...current, relatedTaskId: value }))}
                 className="h-9 text-sm sm:col-span-2"
-                options={[
-                  { value: "", label: "Keine Relationship" },
-                  ...data.tasks.filter((task) => task.taskType !== "sub_issue").map((task) => ({ value: task.id, label: `${task.title} · ${taskOwnerLabel(task)}` })),
-                ]}
+                options={relatedTaskOptions(data.tasks)}
               />
             </div>
             <UiTextInput
