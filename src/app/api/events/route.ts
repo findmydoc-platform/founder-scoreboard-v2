@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { FounderEvent } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type EventPayload = {
   title?: string;
@@ -75,14 +74,12 @@ function mapFounderEvent(row: {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<EventPayload>(request, requireOperationalLead, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as EventPayload;
   const title = cleanText(payload.title, 180);
   const category = typeof payload.category === "string" && eventCategories.has(payload.category) ? payload.category : "other";
   const startsAt = cleanDateTime(payload.startsAt);

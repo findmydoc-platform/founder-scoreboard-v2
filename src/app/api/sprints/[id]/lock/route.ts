@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
 import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
-import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type TaskRow = {
   id: string;
@@ -69,12 +68,10 @@ function carryoverReason(outcome: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<{ finalizeNow?: boolean }>(request, requireOperationalLead, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
-  const payload = (await request.json().catch(() => ({}))) as { finalizeNow?: boolean };
+  const { payload, permission, supabase } = apiContext;
 
   const { id } = await context.params;
 

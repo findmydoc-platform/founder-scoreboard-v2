@@ -3,7 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead, requirePlatformRole } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Package } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
 
 type InitiativePayload = {
   title?: string;
@@ -102,12 +102,13 @@ async function assertReferenceRows(
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireApiContext(
+    request,
+    (innerRequest) => requirePlatformRole(innerRequest, ["ceo", "founder", "deputy", "viewer"]),
+  );
+  if (!context.ok) return context.response;
 
-  const auth = await requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
-  if (!auth.ok) return authzError(auth);
-
+  const { supabase } = context;
   const { data, error } = await supabase
     .from("packages")
     .select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order")
@@ -119,13 +120,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<InitiativePayload>(request, requireOperationalLead, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json()) as InitiativePayload;
+  const { payload, permission, supabase } = context;
   const title = cleanText(payload.title, 240);
   if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
   if (!payload.milestoneId) return apiError("Meilenstein ist erforderlich.", 400);

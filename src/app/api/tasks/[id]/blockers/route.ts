@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type BlockerPayload = {
   reason?: string;
@@ -11,14 +10,11 @@ type BlockerPayload = {
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<BlockerPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
+  const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
-  const payload = (await request.json()) as BlockerPayload;
   const reason = cleanText(payload.reason, 2000);
   const impact = cleanText(payload.impact, 2000);
   const needsHelpFrom = cleanText(payload.needsHelpFrom, 500);

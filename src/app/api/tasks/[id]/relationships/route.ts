@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { TaskRelationType } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type RelationPayload = {
   relationType?: TaskRelationType;
@@ -21,14 +20,11 @@ function relationActionLabel(type: TaskRelationType) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireOperationalLead, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
-
+  const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
-  const payload = (await request.json()) as RelationPayload;
   const relationType = payload.relationType;
   const relatedTaskId = typeof payload.relatedTaskId === "string" ? payload.relatedTaskId.trim() : "";
   const note = cleanText(payload.note, 500);
@@ -98,14 +94,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireOperationalLead, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
-
+  const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
-  const payload = (await request.json()) as RelationPayload;
   const relationId = Number(payload.relationId);
   if (!Number.isInteger(relationId) || relationId <= 0) {
     return apiError("Relationship-ID ist erforderlich.", 400);

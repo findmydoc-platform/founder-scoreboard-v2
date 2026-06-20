@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type PreferencePayload = {
   profileId?: string;
@@ -18,14 +17,12 @@ function canEditProfilePreference(actorProfileId: string, actorRole: string, tar
 }
 
 export async function PATCH(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<PreferencePayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as PreferencePayload;
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : "";
   const eventType = typeof payload.eventType === "string" ? payload.eventType.trim() : "";
 

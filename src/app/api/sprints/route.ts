@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type SprintRow = {
   id: string;
@@ -48,13 +47,10 @@ function mapSprint(row: SprintRow) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<CreateSprintPlanPayload>(request, requireOperationalLead, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json().catch(() => ({}))) as CreateSprintPlanPayload;
+  const { payload, permission, supabase } = context;
   const firstSprintNumber = Math.max(Number(payload.firstSprintNumber) || 1, 1);
   const anchorStartDate = payload.anchorStartDate?.trim() || new Date().toISOString().slice(0, 10);
   const rhythmWeeks = Math.min(Math.max(Number(payload.rhythmWeeks) || 2, 1), 12);

@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 function isAppMirroredComment(body: string) {
   return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
@@ -18,11 +17,10 @@ function extractEvidenceFromIssueBody(body: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
 
   let githubUserToken = "";
   try {

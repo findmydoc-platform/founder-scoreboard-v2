@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CommitmentPayload = {
   sprintId?: string;
@@ -15,13 +14,10 @@ type CommitmentPayload = {
 const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
 
 export async function PUT(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<CommitmentPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json()) as CommitmentPayload;
+  const { payload, permission, supabase } = context;
   const sprintId = payload.sprintId?.trim();
   const profileId = payload.profileId?.trim() || permission.profile?.id || "";
   const commitmentLevel = payload.commitmentLevel || "Standard";

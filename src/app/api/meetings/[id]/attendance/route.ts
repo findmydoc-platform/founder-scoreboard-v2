@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { MeetingAttendanceStatus } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 type AttendancePayload = {
   profileId?: string;
@@ -25,11 +24,10 @@ function defaultPoints(status: MeetingAttendanceStatus, reasonAccepted: boolean,
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const meetingId = Number(id);

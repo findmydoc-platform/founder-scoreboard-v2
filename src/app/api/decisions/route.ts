@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CreateDecisionPayload = {
   title?: string;
@@ -12,13 +11,10 @@ type CreateDecisionPayload = {
 };
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<CreateDecisionPayload>(request, requireCEO, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireCEO(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json()) as CreateDecisionPayload;
+  const { payload, permission, supabase } = apiContext;
   const title = cleanText(payload.title, 160);
   const context = cleanText(payload.context, 4000);
   const decision = cleanText(payload.decision, 4000);

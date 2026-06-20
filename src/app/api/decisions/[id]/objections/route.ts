@@ -1,24 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type ObjectionPayload = {
   comment?: string;
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
   if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
   const { id } = await context.params;
   const decisionId = Number(id);
-  const payload = (await request.json()) as ObjectionPayload;
   const comment = cleanText(payload.comment, 2000);
 
   if (!comment) return apiError("Ein Kommentar ist erforderlich.", 400);

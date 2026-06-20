@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { DecisionTaskLink } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
 
 type LinkPayload = {
   taskId?: string;
@@ -26,17 +25,15 @@ function mapDecisionTaskLink(row: Record<string, string | number>): DecisionTask
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<LinkPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const decisionId = Number(id);
   if (!Number.isFinite(decisionId)) return apiError("Decision ist ungültig.", 400);
 
-  const payload = (await request.json()) as LinkPayload;
   const taskId = typeof payload.taskId === "string" ? payload.taskId.trim() : "";
   if (!taskId) return apiError("Aufgabe ist erforderlich.", 400);
 
@@ -70,11 +67,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { supabase } = apiContext;
 
   const { id } = await context.params;
   const decisionId = Number(id);

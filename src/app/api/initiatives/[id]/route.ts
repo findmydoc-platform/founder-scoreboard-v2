@@ -3,7 +3,7 @@ import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Package } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 type InitiativePayload = {
   title?: string;
@@ -91,11 +91,10 @@ async function assertReferenceRows(
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const { data: current, error: currentError } = await supabase

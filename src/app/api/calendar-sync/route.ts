@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
 import { getGoogleCalendarEvents, isGoogleCalendarSyncConfigured, type GoogleCalendarEvent } from "@/lib/google-calendar";
-import { getServerSupabase } from "@/lib/supabase";
 import type { AvailabilityEntry } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 
@@ -130,11 +129,10 @@ function mapAvailability(row: AvailabilityRow): AvailabilityEntry {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireApiContext(request, requireOperationalLead);
+  if (!context.ok) return context.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   if (!isGoogleCalendarSyncConfigured()) {
