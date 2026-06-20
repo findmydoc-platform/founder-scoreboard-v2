@@ -2,9 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanDate, cleanTime } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { getServerSupabase } from "@/lib/supabase";
 import type { AvailabilityEntry } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type AvailabilityPayload = {
   id?: number;
@@ -74,14 +73,12 @@ function mapAvailability(row: {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<AvailabilityPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const profileId = typeof payload.profileId === "string" ? payload.profileId.trim() : "";
   const type = typeof payload.type === "string" && availabilityTypes.has(payload.type) ? payload.type : "";
   const title = typeof payload.title === "string" ? payload.title.trim().slice(0, 160) : "";
@@ -147,14 +144,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<AvailabilityPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const id = Number(payload.id);
   if (!Number.isFinite(id)) return apiError("Eintrag ist erforderlich.", 400);
 
@@ -185,14 +180,12 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<AvailabilityPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as AvailabilityPayload;
   const id = Number(payload.id);
   if (!Number.isFinite(id)) return apiError("Eintrag ist erforderlich.", 400);
 

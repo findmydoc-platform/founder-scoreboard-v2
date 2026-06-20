@@ -110,14 +110,21 @@ test("api routes centralize single-error responses", async () => {
   const routeFiles = await listFiles("src/app/api", ".ts");
   const directSingleErrorResponses = [];
   let helperRouteCount = 0;
+  let jsonContextUseCount = 0;
+  let setupContextUseCount = 0;
 
   assert.match(helper, /export function apiError/);
   assert.match(helper, /export function authzError/);
   assert.match(helper, /export function supabaseUnavailable/);
+  assert.match(helper, /export async function requireApiContext/);
+  assert.match(helper, /export async function readJsonPayload/);
+  assert.match(helper, /export async function requireJsonApiContext/);
 
   for (const file of routeFiles) {
     const source = await readFile(file, "utf8");
     if (source.includes("@/lib/api-response")) helperRouteCount += 1;
+    jsonContextUseCount += (source.match(/requireJsonApiContext(?:<|\()/g) || []).length;
+    setupContextUseCount += (source.match(/requireApiContext\(/g) || []).length;
 
     const matches = source.match(/NextResponse\.json\(\{ error: [^,\n{}]+ \}, \{ status: [^{}\n]+ \}\)/g) || [];
     for (const match of matches) {
@@ -126,7 +133,26 @@ test("api routes centralize single-error responses", async () => {
   }
 
   assert.ok(helperRouteCount >= 35);
+  assert.ok(jsonContextUseCount >= 20);
+  assert.ok(setupContextUseCount >= 8);
   assert.deepEqual(directSingleErrorResponses, []);
+});
+
+test("representative api routes share setup without weakening route guards", async () => {
+  const migratedRoutes = [
+    "src/app/api/notification-preferences/route.ts",
+    "src/app/api/focus/route.ts",
+    "src/app/api/sprint-commitments/route.ts",
+  ];
+
+  for (const file of migratedRoutes) {
+    const source = await readFile(file, "utf8");
+
+    assert.match(source, /requireJsonApiContext<[^>]+>\(request, requireFounder, \{\}\)/, `${file} should pass its existing founder guard to the shared setup helper`);
+    assert.doesNotMatch(source, /getServerSupabase\(\)/, `${file} should not repeat Supabase setup`);
+    assert.doesNotMatch(source, /authzError\(permission\)/, `${file} should not repeat authorization error mapping`);
+    assert.doesNotMatch(source, /supabaseUnavailable\(\)/, `${file} should not repeat Supabase availability errors`);
+  }
 });
 
 test("custom controls keep keyboard and aria contracts", async () => {

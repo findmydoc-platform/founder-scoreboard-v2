@@ -1,11 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 import { requireFounder } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, taskOwnedByProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { archiveGitHubIssue } from "@/lib/github";
 import { optionalMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
@@ -23,15 +22,12 @@ function linkedIssueNumber(row: { github_issue_number?: number | null; issue_num
 
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) {
-    return supabaseUnavailable("Supabase env is not configured. UI changes remain local only.");
-  }
+  const apiContext = await requireApiContext(request, requireFounder, {
+    supabaseUnavailableMessage: "Supabase env is not configured. UI changes remain local only.",
+  });
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) {
-    return authzError(permission);
-  }
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const payload = (await request.json()) as TaskUpdatePayload;
@@ -320,11 +316,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   if (!isOperationalLead) return apiError("Nur CEO oder Deputy können Aufgaben löschen.", 403);
 

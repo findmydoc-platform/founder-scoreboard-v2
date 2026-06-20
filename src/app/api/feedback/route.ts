@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { FeedbackItem } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type FeedbackPayload = {
   type?: string;
@@ -17,13 +16,10 @@ const feedbackTypes = new Set(["bug", "feature"]);
 const severities = new Set(["P0", "P1", "P2", "P3"]);
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<FeedbackPayload | null>(request, requireFounder, null);
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json().catch(() => null)) as FeedbackPayload | null;
+  const { payload, permission, supabase } = context;
   const type = feedbackTypes.has(payload?.type || "") ? payload!.type! : "bug";
   const severity = severities.has(payload?.severity || "") ? payload!.severity! : "P2";
   const title = cleanText(payload?.title, 180);

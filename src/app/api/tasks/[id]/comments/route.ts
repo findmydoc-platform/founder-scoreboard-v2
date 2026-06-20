@@ -4,22 +4,18 @@ import { requireFounder } from "@/lib/authz";
 import { createGitHubIssueComment } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { mentionedProfileIds } from "@/lib/mentions";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CommentPayload = {
   comment?: string;
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<CommentPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
+  const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
-  const payload = (await request.json()) as CommentPayload;
   const comment = cleanText(payload.comment, 4000);
 
   if (comment.length < 2) {

@@ -2,10 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { getServerSupabase } from "@/lib/supabase";
 import { taskStatuses } from "@/lib/status";
 import type { Task, TaskType } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CreateTaskPayload = {
   title?: string;
@@ -49,13 +48,10 @@ function profileId(value?: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<CreateTaskPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json()) as CreateTaskPayload;
+  const { payload, permission, supabase } = context;
   const title = cleanText(payload.title, 240);
   if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
 

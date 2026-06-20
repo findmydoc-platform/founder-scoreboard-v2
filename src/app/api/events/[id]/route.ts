@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { FounderEvent } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type EventPayload = {
   title?: string;
@@ -76,11 +75,10 @@ function mapFounderEvent(row: {
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLead, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const { id: rawId } = await context.params;
@@ -95,7 +93,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (currentError || !current) return apiError("Event wurde nicht gefunden.", 404);
 
-  const payload = (await request.json().catch(() => ({}))) as EventPayload;
   const title = typeof payload.title === "string" ? cleanText(payload.title, 180) : current.title;
   const category = typeof payload.category === "string" && eventCategories.has(payload.category) ? payload.category : current.category;
   const startsAt = typeof payload.startsAt === "string" ? cleanDateTime(payload.startsAt) : current.starts_at;

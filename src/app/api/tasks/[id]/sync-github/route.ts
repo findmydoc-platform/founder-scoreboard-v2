@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireOperationalLead } from "@/lib/authz";
 import { githubRepoSlug, upsertGitHubIssue, type GitHubTaskSyncContext } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
-import { getServerSupabase } from "@/lib/supabase";
 import type { Task } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type TaskRow = Record<string, unknown>;
 type SyncRequestBody = {
@@ -76,9 +76,7 @@ function formatDateRange(start?: unknown, end?: unknown) {
   return `${startValue || "offen"} bis ${endValue || "offen"}`;
 }
 
-async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, row: TaskRow): Promise<GitHubTaskSyncContext> {
-  if (!supabase) return {};
-
+async function buildSyncContext(supabase: SupabaseClient, row: TaskRow): Promise<GitHubTaskSyncContext> {
   const profileIds = new Set<string>();
   const addProfileId = (value: unknown) => {
     if (typeof value === "string" && value) profileIds.add(value);
@@ -192,11 +190,10 @@ async function buildSyncContext(supabase: ReturnType<typeof getServerSupabase>, 
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireOperationalLead, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
   let githubUserToken = "";
   try {
     githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Sync erneut starten.");
@@ -217,7 +214,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     for (const profile of profiles.data || []) profileNameById.set(profile.id, profile.name);
   }
   const task = mapTask(data as TaskRow, profileNameById);
-  const payload = (await request.json().catch(() => ({}))) as SyncRequestBody;
   const hasExistingGitHubIssue = hasLinkedGitHubIssue(task);
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {

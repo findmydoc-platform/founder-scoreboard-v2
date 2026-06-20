@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import type { PlatformRole } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 type UpdatePayload = {
   githubLogin?: string;
@@ -30,15 +29,10 @@ function cleanColor(value: unknown) {
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) {
-    return supabaseUnavailable();
-  }
+  const apiContext = await requireApiContext(request, requireCEO);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireCEO(request);
-  if (!permission.ok) {
-    return authzError(permission);
-  }
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const payload = (await request.json()) as UpdatePayload;

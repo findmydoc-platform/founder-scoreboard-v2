@@ -2,9 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { getServerSupabase } from "@/lib/supabase";
 import type { TaskFocusItem } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
 
 type FocusPayload = {
   taskId?: string;
@@ -36,13 +35,10 @@ function mapFocusItem(row: Record<string, string | number>): TaskFocusItem {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<FocusPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = (await request.json()) as FocusPayload;
+  const { payload, permission, supabase } = context;
   const taskId = typeof payload.taskId === "string" ? payload.taskId.trim() : "";
   if (!taskId) return apiError("Aufgabe ist erforderlich.", 400);
 
@@ -96,11 +92,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireApiContext(request, requireFounder);
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = context;
 
   const id = Number(request.nextUrl.searchParams.get("id"));
   if (!Number.isFinite(id)) return apiError("Fokus-Eintrag ist ungültig.", 400);

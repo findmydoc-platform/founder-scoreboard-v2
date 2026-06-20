@@ -2,9 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder, requireOperationalLead } from "@/lib/authz";
 import { createGoogleCalendarEvent, isGoogleCalendarSyncConfigured } from "@/lib/google-calendar";
-import { getServerSupabase } from "@/lib/supabase";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CreateMeetingPayload = {
   id?: number;
@@ -87,14 +86,12 @@ function mapAttendance(row: {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<CreateMeetingPayload>(request, requireFounder, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
   const title = cleanText(payload.title, 160) || "findmydoc Teammeeting";
   const agenda = cleanText(payload.agenda, 4000);
   const sprintId = cleanText(payload.sprintId, 80);
@@ -229,14 +226,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext<CreateMeetingPayload>(request, requireOperationalLead, {});
+  if (!context.ok) return context.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = context;
   if (!permission.profile) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
-  const payload = (await request.json().catch(() => ({}))) as CreateMeetingPayload;
   const id = Number(payload.id);
   if (!Number.isFinite(id)) return apiError("Meeting ist erforderlich.", 400);
 

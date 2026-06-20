@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 const maxUploadBytes = 10 * 1024 * 1024;
 const allowedMimeTypes = new Set([
@@ -37,11 +36,10 @@ function isImageType(type: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireFounder);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase

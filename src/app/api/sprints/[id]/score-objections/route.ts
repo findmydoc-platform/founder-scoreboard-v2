@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type ObjectionPayload = {
   comment?: string;
@@ -17,15 +16,13 @@ type ReviewPayload = {
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
   if (!permission.profile) return apiError("Profil erforderlich.", 401);
 
   const { id } = await context.params;
-  const payload = (await request.json()) as ObjectionPayload;
   const comment = cleanText(payload.comment, 2000);
   if (!comment) return apiError("Einwand ist erforderlich.", 400);
 
@@ -74,17 +71,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireJsonApiContext<ReviewPayload>(request, requireFounder, {});
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireFounder(request);
-  if (!permission.ok) return authzError(permission);
+  const { payload, permission, supabase } = apiContext;
   if (!permission.profile || !["ceo", "deputy"].includes(permission.profile.platformRole)) {
     return apiError("Nur CEO oder Deputy können Score-Einwände prüfen.", 403);
   }
 
   const { id } = await context.params;
-  const payload = (await request.json()) as ReviewPayload;
   const objectionId = Number(payload.objectionId);
   const status = payload.status || "reviewed";
   if (!Number.isFinite(objectionId)) return apiError("Einwand ist erforderlich.", 400);

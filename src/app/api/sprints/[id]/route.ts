@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireApiContext } from "@/lib/api-response";
 
 type UpdateSprintPayload = {
   name?: string;
@@ -15,11 +14,10 @@ type UpdateSprintPayload = {
 const sprintStatuses = new Set(["planning", "active", "review", "closed"]);
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const apiContext = await requireApiContext(request, requireOperationalLead);
+  if (!apiContext.ok) return apiContext.response;
 
-  const permission = await requireOperationalLead(request);
-  if (!permission.ok) return authzError(permission);
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
   const payload = (await request.json()) as UpdateSprintPayload;

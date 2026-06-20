@@ -1,19 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireCEO } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
 import { buildTaskIntakePreview, parseTaskIntakePayload } from "@/lib/task-intake";
 import { commitTaskIntake } from "@/lib/task-intake-commit";
 import { loadTaskIntakeContext } from "@/lib/task-intake-context";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+  const context = await requireJsonApiContext(request, requireCEO, null);
+  if (!context.ok) return context.response;
 
-  const permission = await requireCEO(request);
-  if (!permission.ok) return authzError(permission);
-
-  const payload = await request.json().catch(() => null);
+  const { payload, permission, supabase } = context;
   const rawTasks = parseTaskIntakePayload(payload);
   if (!rawTasks.length) return apiError("Mindestens eine Aufgabe ist erforderlich.", 400);
   if (rawTasks.length > 30) return apiError("Maximal 30 Aufgaben pro Intake.", 400);
