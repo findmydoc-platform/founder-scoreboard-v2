@@ -9,7 +9,6 @@
     "start": "next start",
     "lint": "eslint",
     "audit:stewardship": "node scripts/code-stewardship-audit.mjs",
-    "import:legacy": "node scripts/import-dashboard.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",

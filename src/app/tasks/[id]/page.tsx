@@ -2,6 +2,7 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
 type Props = {
@@ -25,6 +26,7 @@ export default async function TaskPage({ params, searchParams }: Props) {
         initialData={data}
         source={source}
         authRequired
+        demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
         initialTaskId={id}
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
@@ -61,5 +63,5 @@ export default async function TaskPage({ params, searchParams }: Props) {
     );
   }
 
-  return <PlanningApp key={id} initialData={data} source={source} authRequired={false} initialTaskId={id} />;
+  return <PlanningApp key={id} initialData={data} source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialTaskId={id} />;
 }

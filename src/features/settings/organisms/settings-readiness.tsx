@@ -26,7 +26,7 @@ export function SystemStatusSection({
       <div className="mt-4 grid gap-3 text-sm">
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-slate-500">Datenquelle</span>
-          <span className="min-w-0 whitespace-normal break-words font-semibold text-slate-900">{source === "supabase" ? "Supabase" : "Seed-Fallback"}</span>
+          <span className="min-w-0 whitespace-normal break-words font-semibold text-slate-900">{source === "supabase" ? "Supabase" : "Lokaler Fallback"}</span>
         </div>
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-slate-500">Supabase ENV</span>
@@ -179,7 +179,7 @@ export function GitHubSyncQueueSection({
 
 const setupChecks = [
   "Supabase-Projekt angelegt",
-  "supabase/seed.sql ausgeführt",
+  "Demo Import im lokalen Fallback ausgeführt",
   ".env.local gesetzt",
   "npm run verify:supabase grün",
   "Team-User in Supabase Auth angelegt",

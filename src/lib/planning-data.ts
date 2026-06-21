@@ -1,5 +1,4 @@
 import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows } from "./planning-data-loader";
-import { leanSeedData } from "./seed";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData } from "./types";
 
@@ -42,11 +41,11 @@ export const emptyPlanningData: PlanningData = {
 
 export async function getPlanningData(): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
-  if (!supabase) return { data: leanSeedData, source: "seed" };
+  if (!supabase) return { data: emptyPlanningData, source: "seed" };
 
   const rows = await loadPlanningDataRows(supabase);
   if (hasCorePlanningDataError(rows)) {
-    return { data: leanSeedData, source: "seed" };
+    return { data: emptyPlanningData, source: "seed" };
   }
 
   return {

@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
 import { taskRowSelect } from "./planning-data-row-types";
 import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
-import { leanSeedData } from "./seed";
 import type { PlanningData } from "./types";
 
 const founderProjectId = "findmydoc-founder-execution";
@@ -88,7 +87,7 @@ export function hasCorePlanningDataError(rows: PlanningDataRows) {
 export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
   const project = rows.projectResult.data;
   if (!project) {
-    return leanSeedData;
+    throw new Error("Planning project was not loaded.");
   }
 
   const profiles = (rows.profileResult.data as DbProfile[]).map(mapProfile);
@@ -103,7 +102,7 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
     packages: (rows.packageResult.data as DbPackage[]).map(mapPackage),
     milestones: rows.milestoneResult.error ? [] : (rows.milestoneResult.data as DbMilestone[]).map(mapMilestone),
     tasks: (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles)),
-    sprints: rows.sprintResult.error ? leanSeedData.sprints : (rows.sprintResult.data as DbSprint[]).map(mapSprint),
+    sprints: rows.sprintResult.error ? [] : (rows.sprintResult.data as DbSprint[]).map(mapSprint),
     sprintCommitments: rows.sprintCommitmentResult.error ? [] : (rows.sprintCommitmentResult.data as DbSprintCommitment[]).map(mapSprintCommitment),
     founderSprintScores: rows.founderSprintScoreResult.error ? [] : (rows.founderSprintScoreResult.data as DbFounderSprintScore[]).map(mapFounderSprintScore),
     founderStrikeStates: rows.founderStrikeStateResult.error ? [] : (rows.founderStrikeStateResult.data as DbFounderStrikeState[]).map(mapFounderStrikeState),

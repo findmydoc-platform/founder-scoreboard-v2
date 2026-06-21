@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PlanningData, Task } from "@/lib/types";
 
+const localDataKey = "fmd-planning-local-data-v1";
 const localStateKey = "fmd-planning-local-state-v1";
 
 function localTaskState(task: Task) {
@@ -33,6 +34,11 @@ export function persistLocalPlanningTasks(tasks: Task[]) {
   window.localStorage.setItem(localStateKey, JSON.stringify(changedTasks));
 }
 
+export function persistLocalPlanningData(data: PlanningData) {
+  window.localStorage.setItem(localDataKey, JSON.stringify(data));
+  persistLocalPlanningTasks(data.tasks);
+}
+
 type UseLocalPlanningStateOptions = {
   source: "seed" | "supabase";
   setData: (updater: (current: PlanningData) => PlanningData) => void;
@@ -46,16 +52,19 @@ export function useLocalPlanningState({ source, setData }: UseLocalPlanningState
 
     queueMicrotask(() => {
       try {
+        const storedData = window.localStorage.getItem(localDataKey);
         const stored = window.localStorage.getItem(localStateKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as Partial<Record<string, Partial<Task>>>;
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((task) => ({ ...task, ...(parsed[task.id] || {}) })),
-          }));
-        }
+        const parsedData = storedData ? JSON.parse(storedData) as PlanningData : null;
+        const parsedTasks = stored ? JSON.parse(stored) as Partial<Record<string, Partial<Task>>> : {};
+        setData((current) => {
+          const base = parsedData || current;
+          return {
+            ...base,
+            tasks: base.tasks.map((task) => ({ ...task, ...(parsedTasks[task.id] || {}) })),
+          };
+        });
       } catch {
-        // Keep seed data if local recovery fails.
+        // Keep the empty fallback if local recovery fails.
       } finally {
         setLocalStateLoaded(true);
       }

@@ -5,6 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 
 const envPath = resolve(process.cwd(), ".env.local");
 const appUrl = process.env.APP_URL || "http://localhost:3000";
+const seedSource = JSON.parse(await readFile(resolve(process.cwd(), "src/lib/seed/source.json"), "utf8"));
+const expected = {
+  profiles: seedSource.profiles.length,
+  tasksMin: seedSource.tasks.length,
+};
 
 function parseEnvLine(line) {
   const trimmed = line.trim();
@@ -104,10 +109,10 @@ const failures = [
   healthResult.body?.status !== "ready" ? `health body status ${healthResult.body?.status}` : "",
   pageResult.statusCode !== 200 ? `page status ${pageResult.statusCode}` : "",
   !authGateEnabled && failedMarkers.length ? `missing page markers: ${failedMarkers.join(", ")}` : "",
-  result.data.profiles !== 5 ? `expected 5 profiles, got ${result.data.profiles}` : "",
+  result.data.profiles !== expected.profiles ? `expected ${expected.profiles} profiles, got ${result.data.profiles}` : "",
   result.data.ceos !== 1 ? `expected 1 CEO, got ${result.data.ceos}` : "",
   result.data.githubMappedProfiles !== 5 ? `expected 5 github-mapped profiles, got ${result.data.githubMappedProfiles}` : "",
-  result.data.tasks < 53 ? `expected at least 53 tasks, got ${result.data.tasks}` : "",
+  result.data.tasks < expected.tasksMin ? `expected at least ${expected.tasksMin} tasks, got ${result.data.tasks}` : "",
   result.data.sprints < 1 ? "expected at least 1 sprint" : "",
   result.data.milestones < 1 ? "expected at least 1 milestone" : "",
   result.data.meetings < 1 ? "expected at least 1 meeting" : "",

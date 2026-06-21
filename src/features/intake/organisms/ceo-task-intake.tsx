@@ -61,7 +61,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
 
   const sendIntakeRequest = async (type: "preview" | "commit") => {
     if (!canUseSupabase) {
-      setMessage("CEO Intake schreibt nur gegen Supabase. Im Seed-Fallback ist kein Commit möglich.");
+      setMessage("CEO Intake schreibt nur gegen Supabase. Im lokalen Fallback ist kein Commit möglich.");
       return null;
     }
 

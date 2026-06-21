@@ -7,6 +7,7 @@ import { useDecisionCommands } from "@/features/decisions/hooks/use-decision-com
 import { useExecutionCommands } from "@/features/execution/hooks/use-execution-commands";
 import { useFounderEventCommands } from "@/features/events/hooks/use-founder-event-commands";
 import { useMeetingCommands } from "@/features/meetings/hooks/use-meeting-commands";
+import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-import";
 import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
 import { useNotificationCommands } from "@/features/planning/hooks/use-notification-commands";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
@@ -39,6 +40,7 @@ type PlanningAppControllerOptions = {
   initialData: PlanningData;
   source: "seed" | "supabase";
   authRequired: boolean;
+  demoSeedImportAvailable?: boolean;
   initialTaskId?: string;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -56,6 +58,7 @@ export function usePlanningAppController({
   initialData,
   source,
   authRequired,
+  demoSeedImportAvailable = false,
   initialTaskId = "",
   initialAuthUser = null,
   initialCurrentProfile = null,
@@ -336,6 +339,12 @@ export function usePlanningAppController({
     setWorkspace,
     workspace,
   });
+  const { demoSeedImportPending, importDemoSeed } = useDemoSeedImport({
+    apiClient,
+    setData,
+    setSaveError,
+    source,
+  });
 
   const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;
   const releaseSidebarFocus = () => {
@@ -360,6 +369,8 @@ export function usePlanningAppController({
     currentProfile,
     currentProfileFocusItems,
     data,
+    demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable,
+    demoSeedImportPending,
     devProfileId,
     devRoleSwitchAvailable,
     feedbackDialogOpen,
@@ -372,6 +383,7 @@ export function usePlanningAppController({
     headerPrimaryAction,
     hygieneAlerts,
     initiativeDialogDefaults,
+    importDemoSeed,
     isPending,
     localStateLoaded,
     metrics,

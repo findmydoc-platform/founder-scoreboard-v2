@@ -1,4 +1,4 @@
-import { Filter, Menu, MessageSquare, Plus, X } from "lucide-react";
+import { Filter, Import, Menu, MessageSquare, Plus, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
@@ -15,6 +15,8 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     authNotice,
     authUser,
     data,
+    demoSeedImportAvailable,
+    demoSeedImportPending,
     devProfileId,
     devRoleSwitchAvailable,
     dismissNotification,
@@ -22,6 +24,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     githubProviderTokenAvailable,
     githubReauthFailed,
     headerPrimaryAction,
+    importDemoSeed,
     mineOwnerName,
     mobileNavOpen,
     openNotification,
@@ -94,6 +97,17 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               value={devProfileId}
               onChange={setDevProfileId}
             />
+          )}
+          {demoSeedImportAvailable && (
+            <button
+              type="button"
+              onClick={importDemoSeed}
+              disabled={demoSeedImportPending}
+              className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Import size={16} />
+              {demoSeedImportPending ? "Import..." : "Demo Import"}
+            </button>
           )}
           <NotificationInbox
             notifications={unreadNotifications}

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
 import { getPlanningData } from "@/lib/planning-data";
+import { seedData } from "@/lib/seed";
 import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
 const expected = {
-  profiles: 5,
-  packages: 5,
-  tasksMin: 54,
+  profiles: seedData.profiles.length,
+  packages: seedData.packages.length,
+  tasksMin: seedData.tasks.length,
 };
 
 const schemaChecks = [
