@@ -1,8 +1,8 @@
-import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { blockerKindOptions, timeOptions, timeToMinutes, weekdayOptions } from "@/features/meetings/model/meeting-finder";
+import { timeOptions, timeToMinutes, weekdayOptions } from "@/features/meetings/model/meeting-finder";
+import { MeetingBlockerFormFields } from "@/features/meetings/molecules/meeting-blocker-form-fields";
 import type { AvailabilityEntry } from "@/lib/types";
-import { UiButton, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type Option = { value: string; label: string };
 
@@ -127,28 +127,37 @@ export function MeetingAvailabilityForms({
         <h2 className="text-base font-semibold text-slate-950">Blocker eintragen</h2>
         <p className="mt-1 text-sm text-slate-500">Arbeit, Urlaub, Krankheit oder sonstige Nicht-Verfügbarkeit.</p>
         <div className="mt-4 grid gap-3">
-          <CustomSelect value={normalizedBlockerProfileId} onChange={onBlockerProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileSelectOptions} />
-          <UiTextInput
-            value={blockerTitle}
-            onChange={(event) => onBlockerTitleChange(event.target.value)}
-            disabled={pending}
-            className="px-3"
-            placeholder="Titel"
+          <MeetingBlockerFormFields
+            normalizedBlockerProfileId={normalizedBlockerProfileId}
+            profileOptions={profileSelectOptions}
+            canManageAvailability={canManageAvailability}
+            pending={pending}
+            blockerTitle={blockerTitle}
+            blockerKind={blockerKind}
+            blockerStartDate={blockerStartDate}
+            blockerEndDate={blockerEndDate}
+            blockerAllDay={blockerAllDay}
+            blockerStartTime={blockerStartTime}
+            blockerEndTime={blockerEndTime}
+            blockerNote={blockerNote}
+            titlePlaceholder="Titel"
+            kindAriaLabel="Art des Blockers"
+            startDateAriaLabel="Blocker Startdatum"
+            endDateAriaLabel="Blocker Enddatum"
+            startTimeAriaLabel="Blocker Startzeit"
+            endTimeAriaLabel="Blocker Endzeit"
+            titleInputProps={{ className: "px-3" }}
+            noteTextAreaProps={{ className: "min-h-20 px-3 text-slate-800" }}
+            onBlockerProfileChange={onBlockerProfileChange}
+            onBlockerTitleChange={onBlockerTitleChange}
+            onBlockerKindChange={onBlockerKindChange}
+            onBlockerStartDateChange={onBlockerStartDateChange}
+            onBlockerEndDateChange={onBlockerEndDateChange}
+            onBlockerAllDayChange={onBlockerAllDayChange}
+            onBlockerStartTimeChange={onBlockerStartTimeChange}
+            onBlockerEndTimeChange={onBlockerEndTimeChange}
+            onBlockerNoteChange={onBlockerNoteChange}
           />
-          <CustomSelect value={blockerKind} onChange={(value) => onBlockerKindChange(value as AvailabilityEntry["blockerKind"])} disabled={pending} className="h-9 text-sm" options={blockerKindOptions} aria-label="Art des Blockers" />
-          <div className="grid grid-cols-2 gap-2">
-            <CustomDatePicker value={blockerStartDate} onChange={onBlockerStartDateChange} disabled={pending} className="h-9 text-sm" aria-label="Blocker Startdatum" />
-            <CustomDatePicker value={blockerEndDate} onChange={onBlockerEndDateChange} disabled={pending} className="h-9 text-sm" aria-label="Blocker Enddatum" />
-          </div>
-          <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-            <input type="checkbox" checked={blockerAllDay} onChange={(event) => onBlockerAllDayChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-            Ganztägig blockieren
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <CustomSelect value={blockerStartTime} onChange={onBlockerStartTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Startzeit" />
-            <CustomSelect value={blockerEndTime} onChange={onBlockerEndTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Blocker Endzeit" />
-          </div>
-          <UiTextArea value={blockerNote} onChange={(event) => onBlockerNoteChange(event.target.value)} placeholder="Notiz / Kontext, optional" className="min-h-20 px-3 text-slate-800" />
           <UiButton onClick={onAddBlocker} disabled={pending || !normalizedBlockerProfileId || !blockerTitle.trim() || (!blockerAllDay && timeToMinutes(blockerStartTime) >= timeToMinutes(blockerEndTime))} variant="amberPrimary">
             Blocker speichern
           </UiButton>

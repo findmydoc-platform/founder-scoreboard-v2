@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type TransitionStartFunction } from "react";
-import type { TaskRelationshipDraft } from "@/features/tasks/organisms/task-relationships-section";
+import type { TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import { addTaskRelationshipRequest, removeTaskRelationshipRequest } from "@/features/tasks/model/task-api-client";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Task, TaskRelation } from "@/lib/types";

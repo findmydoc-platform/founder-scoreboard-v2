@@ -3,6 +3,12 @@ import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskBlocker, TaskFocusItem, TaskRelation } from "@/lib/types";
 
+export type TaskRelationshipRows = {
+  waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
+  blocks: Array<{ relation: TaskRelation; task?: Task }>;
+  related: Array<{ relation: TaskRelation; task?: Task }>;
+};
+
 export type EditableTaskState = Pick<
   Task,
   | "status"
@@ -102,6 +108,38 @@ export function buildTaskDetailGitHubState(task: Task): TaskDetailGitHubState {
   };
 }
 
+export function buildTaskRelationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]): TaskRelationshipRows {
+  const taskById = new Map(tasks.map((item) => [item.id, item]));
+  const relationGroups = taskRelationsFor(task.id, relations);
+  const relatedTask = (relation: TaskRelation) => taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId);
+
+  return {
+    waitsOn: relationGroups.waitsOn.map((relation) => ({ relation, task: taskById.get(relation.relatedTaskId) })),
+    blocks: relationGroups.blocks.map((relation) => ({ relation, task: relatedTask(relation) })),
+    related: relationGroups.related.map((relation) => ({ relation, task: relatedTask(relation) })),
+  };
+}
+
+export function linkedDecisionsForTask(taskId: string, decisions: PlanningData["decisions"], decisionTaskLinks: DecisionTaskLink[]) {
+  return decisionTaskLinks
+    .filter((link) => link.taskId === taskId)
+    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
+    .filter((item) => item.decision);
+}
+
+export function linkedFocusItemsForTask(taskId: string, focusItems: TaskFocusItem[]) {
+  return focusItems
+    .filter((item) => item.taskId === taskId)
+    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
+    .slice(0, 5);
+}
+
+export function relationTargetOptionsForTask(task: Task, allTasks: Task[]) {
+  return allTasks
+    .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
+    .map((item) => ({ value: item.id, label: `${item.title} · ${taskOwnerLabel(item)}` }));
+}
+
 export function buildTaskDetailViewModel({
   task,
   meta,
@@ -146,22 +184,10 @@ export function buildTaskDetailViewModel({
   const currentPackage = packages.find((item) => item.id === meta.packageId) || pack;
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const openBlockers = blockers.filter((blocker) => blocker.status === "open");
-  const relationGroups = taskRelationsFor(task.id, relations);
-  const taskById = new Map(allTasks.map((item) => [item.id, item]));
-  const waitsOn = relationGroups.waitsOn.map((relation) => ({ relation, task: taskById.get(relation.relatedTaskId) }));
-  const blocks = relationGroups.blocks.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) }));
-  const related = relationGroups.related.map((relation) => ({ relation, task: taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId) }));
-  const linkedDecisions = decisionTaskLinks
-    .filter((link) => link.taskId === task.id)
-    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
-    .filter((item) => item.decision);
-  const linkedFocusItems = focusItems
-    .filter((item) => item.taskId === task.id)
-    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
-    .slice(0, 5);
-  const relationTargetOptions = allTasks
-    .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
-    .map((item) => ({ value: item.id, label: `${item.title} · ${taskOwnerLabel(item)}` }));
+  const { waitsOn, blocks, related } = buildTaskRelationshipRows(task, allTasks, relations);
+  const linkedDecisions = linkedDecisionsForTask(task.id, decisions, decisionTaskLinks);
+  const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
+  const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const canManageTaskMeta = currentRole === "ceo" || currentRole === "deputy";
   const canSyncExistingGitHubIssue = hasGitHubIssue({
     githubIssueNumber: githubState.githubIssueNumber,

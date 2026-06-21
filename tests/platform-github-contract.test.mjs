@@ -132,9 +132,11 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipViewModel, /Verknüpft/);
   assert.match(relationshipViewModel, /relationMatchesDraft/);
   const panelDependencies = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
-  assert.match(panelDependencies, /Relationship hinzufügen/);
-  assert.match(panelDependencies, /Relationship existiert bereits/);
-  assert.match(panelDependencies, /Diese Relationship ist bereits gespeichert/);
+  const relationshipForm = await readFile("src/features/tasks/molecules/task-relationship-form.tsx", "utf8");
+  const panelRelationshipContract = `${panelDependencies}\n${relationshipForm}`;
+  assert.match(panelRelationshipContract, /Relationship hinzufügen/);
+  assert.match(panelRelationshipContract, /Relationship existiert bereits/);
+  assert.match(panelRelationshipContract, /Diese Relationship ist bereits gespeichert/);
   assert.match(panelDependencies, /relationMatchesDraft/);
   assert.match(detail, /useTaskDetailWorkflow/);
   assert.match(taskDetailWorkflow, /useTaskRelationships/);
@@ -153,8 +155,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipUi, /relationshipBadgeToneClass/);
   assert.match(detail, /TaskRelationshipsSection/);
   assert.match(relationshipSection, /RelationshipList/);
-  assert.match(relationshipSection, /Relationship hinzufügen/);
-  assert.match(relationshipSection, /Relationship existiert bereits/);
+  assert.match(`${relationshipSection}\n${relationshipForm}`, /Relationship hinzufügen/);
+  assert.match(`${relationshipSection}\n${relationshipForm}`, /Relationship existiert bereits/);
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);
