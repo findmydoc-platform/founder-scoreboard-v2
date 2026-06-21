@@ -1,5 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
+import {
+  cleanText as clean,
+  compactText as compact,
+  ensurePeriod,
+  firstSentence,
+  hasSuspiciousEncoding as hasSuspiciousText,
+  includesAny,
+  taskTemplateBackupPath,
+} from "./lib/task-template-text.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const TEMPLATE_VERSION = "founder-deliverable-v2.2";
@@ -158,33 +167,6 @@ const taskOverrides = {
   },
 };
 
-function clean(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function ensurePeriod(value) {
-  const text = clean(value);
-  if (!text) return "";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
-function firstSentence(value) {
-  const text = clean(value).replace(/\s+/g, " ");
-  if (!text) return "";
-  const match = text.match(/^(.+?[.!?])\s/);
-  return match ? match[1] : text;
-}
-
-function compact(value, max = 850) {
-  const text = clean(value).replace(/\s+/g, " ");
-  return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
-}
-
-function includesAny(text, terms) {
-  const lower = `${text}`.toLowerCase();
-  return terms.some((term) => lower.includes(term));
-}
-
 function inferInitiative(task) {
   if (explicitInitiative.has(task.id)) return explicitInitiative.get(task.id);
   const haystack = `${task.title} ${task.workstream} ${task.description}`;
@@ -294,11 +276,6 @@ function buildTaskPatch(task, initiativeTitle) {
   return patch;
 }
 
-function hasSuspiciousText(value) {
-  const text = clean(value);
-  return /[A-Za-zÄÖÜäöüß]\?[A-Za-zÄÖÜäöüß]/.test(text) || text.includes("Ã") || text.includes("Â");
-}
-
 const { data: tasks, error: tasksError } = await supabase
   .from("tasks")
   .select("id,title,description,status,priority,owner,assignee,workstream,package_id,milestone_id,task_type,score_relevant,github_issue_number,github_sync_status,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,dod_template_version")
@@ -370,12 +347,8 @@ if (!APPLY) {
   process.exit(0);
 }
 
-await mkdir(resolve(process.cwd(), "docs"), { recursive: true });
-const backupPath = resolve(
-  process.cwd(),
-  "docs",
-  `task-template-v2-2-migration-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
-);
+await mkdir("docs", { recursive: true });
+const backupPath = taskTemplateBackupPath("task-template-v2-2-migration-backup");
 await writeFile(backupPath, JSON.stringify({ tasks, initiativeUpdates }, null, 2), "utf8");
 
 for (const initiative of initiativeUpdates) {
