@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAgentScope } from "@/lib/agent-auth";
 import { getServerSupabase } from "@/lib/supabase";
-import { buildTaskIntakePreview, parseTaskIntakePayload } from "@/lib/task-intake";
-import { loadTaskIntakeContext } from "@/lib/task-intake-context";
+import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const permission = requireAgentScope(request, "write:intake");
@@ -16,21 +15,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Supabase is required for Agent Task Intake." }, { status: 501 });
   }
 
-  const payload = await request.json().catch(() => null);
-  const rawTasks = parseTaskIntakePayload(payload);
-  if (!rawTasks.length) {
-    return NextResponse.json({ ok: false, error: "Keine Aufgaben im Payload gefunden." }, { status: 400 });
-  }
-  if (rawTasks.length > 30) {
-    return NextResponse.json({ ok: false, error: "Maximal 30 Aufgaben pro Intake." }, { status: 400 });
-  }
+  const intake = await buildTaskIntakePreviewForRoute({
+    supabase,
+    payload: await request.json().catch(() => null),
+    emptyMessage: "Keine Aufgaben im Payload gefunden.",
+    trimParentTaskIds: false,
+  });
+  if (!intake.ok) return NextResponse.json({ ok: false, error: intake.error }, { status: intake.status });
 
-  const parentTaskIds = rawTasks
-    .map((task) => typeof task.parentTaskId === "string" ? task.parentTaskId : "")
-    .filter(Boolean);
-  const context = await loadTaskIntakeContext(supabase, parentTaskIds);
-  const preview = buildTaskIntakePreview(rawTasks, context);
-
+  const { preview } = intake;
   return NextResponse.json({
     ok: true,
     valid: preview.every((task) => task.errors.length === 0),
