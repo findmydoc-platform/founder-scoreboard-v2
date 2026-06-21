@@ -1,8 +1,6 @@
 import { X } from "lucide-react";
-import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
-import { CustomSelect } from "@/shared/atoms/custom-select";
-import { UiButton, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
-import { blockerKindOptions, timeOptions } from "@/features/meetings/model/meeting-finder";
+import { MeetingBlockerFormFields } from "@/features/meetings/molecules/meeting-blocker-form-fields";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 import type { AvailabilityEntry } from "@/lib/types";
 
 type SelectOption = { value: string; label: string };
@@ -77,35 +75,38 @@ export function MeetingAvailabilityDialog({
           </UiButton>
         </div>
         <div className="mt-4 grid gap-3">
-          <CustomSelect value={normalizedBlockerProfileId} onChange={onBlockerProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]} aria-label="Profil wählen" />
-          <UiTextInput
-            value={blockerTitle}
-            onChange={(event) => onBlockerTitleChange(event.target.value)}
-            disabled={pending}
-            inputPadding="md"
-            placeholder="Titel, z. B. Kundentermin, Fokuszeit, Urlaub"
-            aria-label="Blocker-Titel"
-          />
-          <CustomSelect value={blockerKind} onChange={(value) => onBlockerKindChange(value as AvailabilityEntry["blockerKind"])} disabled={pending} className="h-9 text-sm" options={blockerKindOptions} aria-label="Art des Blockers wählen" />
-          <div className="grid grid-cols-2 gap-2">
-            <CustomDatePicker value={blockerStartDate} onChange={onBlockerStartDateChange} disabled={pending} className="h-9 text-sm" aria-label="Startdatum wählen" />
-            <CustomDatePicker value={blockerEndDate} onChange={onBlockerEndDateChange} disabled={pending} className="h-9 text-sm" aria-label="Enddatum wählen" />
-          </div>
-          <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-            <input type="checkbox" checked={blockerAllDay} onChange={(event) => onBlockerAllDayChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-            Ganztägig blockieren
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <CustomSelect value={blockerStartTime} onChange={onBlockerStartTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Startzeit wählen" />
-            <CustomSelect value={blockerEndTime} onChange={onBlockerEndTimeChange} disabled={pending || blockerAllDay} className="h-9 text-sm" options={timeOptions} aria-label="Endzeit wählen" />
-          </div>
-          <UiTextArea
-            value={blockerNote}
-            onChange={(event) => onBlockerNoteChange(event.target.value)}
-            placeholder="Notiz / Kontext, optional"
-            minHeight="lg"
-            inputPadding="mdBlock"
-            textTone="muted"
+          <MeetingBlockerFormFields
+            normalizedBlockerProfileId={normalizedBlockerProfileId}
+            profileOptions={profileOptions}
+            canManageAvailability={canManageAvailability}
+            pending={pending}
+            blockerTitle={blockerTitle}
+            blockerKind={blockerKind}
+            blockerStartDate={blockerStartDate}
+            blockerEndDate={blockerEndDate}
+            blockerAllDay={blockerAllDay}
+            blockerStartTime={blockerStartTime}
+            blockerEndTime={blockerEndTime}
+            blockerNote={blockerNote}
+            profileAriaLabel="Profil wählen"
+            titlePlaceholder="Titel, z. B. Kundentermin, Fokuszeit, Urlaub"
+            titleAriaLabel="Blocker-Titel"
+            kindAriaLabel="Art des Blockers wählen"
+            startDateAriaLabel="Startdatum wählen"
+            endDateAriaLabel="Enddatum wählen"
+            startTimeAriaLabel="Startzeit wählen"
+            endTimeAriaLabel="Endzeit wählen"
+            titleInputProps={{ inputPadding: "md" }}
+            noteTextAreaProps={{ minHeight: "lg", inputPadding: "mdBlock", textTone: "muted" }}
+            onBlockerProfileChange={onBlockerProfileChange}
+            onBlockerTitleChange={onBlockerTitleChange}
+            onBlockerKindChange={onBlockerKindChange}
+            onBlockerStartDateChange={onBlockerStartDateChange}
+            onBlockerEndDateChange={onBlockerEndDateChange}
+            onBlockerAllDayChange={onBlockerAllDayChange}
+            onBlockerStartTimeChange={onBlockerStartTimeChange}
+            onBlockerEndTimeChange={onBlockerEndTimeChange}
+            onBlockerNoteChange={onBlockerNoteChange}
           />
         </div>
         <div className="mt-4 flex flex-wrap justify-between gap-2">

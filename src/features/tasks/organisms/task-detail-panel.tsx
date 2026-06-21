@@ -10,24 +10,8 @@ import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-det
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
-import { taskOwnerLabel } from "@/lib/display";
-import { taskRelationsFor } from "@/lib/platform";
+import { buildTaskRelationshipRows, linkedDecisionsForTask, linkedFocusItemsForTask, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType } from "@/lib/types";
-
-function relationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]) {
-  const taskById = new Map(tasks.map((item) => [item.id, item]));
-  const grouped = taskRelationsFor(task.id, relations);
-  const toRow = (relation: TaskRelation, direction: "related" | "inverse") => {
-    const otherId = direction === "inverse" ? relation.taskId : relation.relatedTaskId;
-    return { relation, task: taskById.get(otherId) };
-  };
-
-  return {
-    waitsOn: grouped.waitsOn.map((relation) => toRow(relation, "related")),
-    blocks: grouped.blocks.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
-    related: grouped.related.map((relation) => relation.taskId === task.id ? toRow(relation, "related") : toRow(relation, "inverse")),
-  };
-}
 export function TaskDetailPanel({
   task,
   pack,
@@ -108,18 +92,10 @@ export function TaskDetailPanel({
     note: "",
   });
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const linkedDecisions = decisionTaskLinks
-    .filter((link) => link.taskId === task.id)
-    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
-    .filter((item) => item.decision);
-  const linkedFocusItems = focusItems
-    .filter((item) => item.taskId === task.id)
-    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
-    .slice(0, 5);
-  const relationshipGroups = relationshipRows(task, allTasks, relations);
-  const relationTargetOptions = allTasks
-    .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
-    .map((item) => ({ value: item.id, label: `${item.title} · ${taskOwnerLabel(item)}` }));
+  const linkedDecisions = linkedDecisionsForTask(task.id, decisions, decisionTaskLinks);
+  const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
+  const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
+  const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
 
   return (
     <>

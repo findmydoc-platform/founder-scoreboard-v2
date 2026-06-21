@@ -1,34 +1,21 @@
 "use client";
 
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
-import { CustomSelect } from "@/shared/atoms/custom-select";
 import { RelationshipList } from "@/features/tasks/molecules/relationship-list";
-import { UiButton, UiTextInput } from "@/shared/atoms/ui-primitives";
-import { relationTypeLabel } from "@/lib/display";
+import { TaskRelationshipForm, type TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import { relationMatchesDraft } from "@/lib/relationship-view-model";
-import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
-
-type RelationshipRows = {
-  waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
-  blocks: Array<{ relation: TaskRelation; task?: Task }>;
-  related: Array<{ relation: TaskRelation; task?: Task }>;
-};
-
-type RelationDraft = {
-  relationType: TaskRelationType;
-  relatedTaskId: string;
-  note: string;
-};
+import type { TaskRelationshipRows } from "@/features/tasks/model/task-detail-state";
+import type { Task, TaskRelation } from "@/lib/types";
 
 type Props = {
   task: Task;
-  relationshipGroups: RelationshipRows;
-  relationDraft: RelationDraft;
+  relationshipGroups: TaskRelationshipRows;
+  relationDraft: TaskRelationshipDraft;
   relationTargetOptions: Array<{ value: string; label: string }>;
   canManageTaskMeta: boolean;
   pending: boolean;
-  onRelationDraftChange: (patch: Partial<RelationDraft>) => void;
-  onAddRelation: (draft: RelationDraft) => void;
+  onRelationDraftChange: (patch: Partial<TaskRelationshipDraft>) => void;
+  onAddRelation: (draft: TaskRelationshipDraft) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
 };
 
@@ -66,36 +53,15 @@ export function TaskDetailPanelDependenciesSection({
           <p>Noch kein Evidence-Link hinterlegt.</p>
         )}
         {canManageTaskMeta && (
-          <div className="mt-2 grid gap-2 rounded-md border border-slate-200 bg-white p-3">
-            <div className="text-xs font-semibold text-slate-500">Relationship hinzufügen</div>
-            <CustomSelect
-              value={relationDraft.relationType}
-              onChange={(value) => onRelationDraftChange({ relationType: value as TaskRelationType })}
-              className="h-9 text-sm"
-              options={(["blocked_by", "blocks", "relates_to"] as TaskRelationType[]).map((type) => ({ value: type, label: relationTypeLabel(type) }))}
-            />
-            <CustomSelect
-              value={relationDraft.relatedTaskId}
-              onChange={(value) => onRelationDraftChange({ relatedTaskId: value })}
-              className="h-9 text-sm"
-              options={[{ value: "", label: "Aufgabe auswählen" }, ...relationTargetOptions]}
-            />
-            <UiTextInput
-              value={relationDraft.note}
-              onChange={(event) => onRelationDraftChange({ note: event.target.value })}
-              inputPadding="md"
-              placeholder="Optionaler Hinweis"
-            />
-            <UiButton
-              type="button"
-              disabled={pending || !relationDraft.relatedTaskId || duplicateRelation}
-              onClick={() => onAddRelation(relationDraft)}
-              variant="primary"
-            >
-              {duplicateRelation ? "Relationship existiert bereits" : "Relationship hinzufügen"}
-            </UiButton>
-            {duplicateRelation && <div className="text-xs font-semibold text-amber-700">Diese Relationship ist bereits gespeichert.</div>}
-          </div>
+          <TaskRelationshipForm
+            relationDraft={relationDraft}
+            relationTargetOptions={relationTargetOptions}
+            duplicateRelation={duplicateRelation}
+            pending={pending}
+            className="mt-2 grid gap-2 rounded-md border border-slate-200 bg-white p-3"
+            onRelationDraftChange={onRelationDraftChange}
+            onAddRelation={() => onAddRelation(relationDraft)}
+          />
         )}
       </div>
     </section>

@@ -65,7 +65,8 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelDependenciesSection, /Abhängigkeiten & Evidence/);
   assert.match(panelDependenciesSection, /RelationshipList/);
   assert.match(panelDependenciesSection, /CommentBody/);
-  assert.match(panelDependenciesSection, /Relationship hinzufügen/);
+  const relationshipForm = await readFile("src/features/tasks/molecules/task-relationship-form.tsx", "utf8");
+  assert.match(`${panelDependenciesSection}\n${relationshipForm}`, /Relationship hinzufügen/);
   assert.match(taskDetailPanel, /TaskDetailPanelSubIssuesSection/);
   assert.match(panelSubIssuesSection, /Sub-Issues/);
   assert.match(panelSubIssuesSection, /Noch keine Sub-Issues/);
