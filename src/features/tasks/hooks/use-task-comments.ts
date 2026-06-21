@@ -103,7 +103,7 @@ export function useTaskComments({
     }
 
     if (source !== "supabase") {
-      if (!options.silent) setError("GitHub-Kommentarimport ist nur mit Supabase-Datenquelle verfügbar.");
+      if (!options.silent) setError("GitHub-Kommentarimport ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 

@@ -93,6 +93,7 @@ export function buildReviewWorkspaceViewModel({
     visibleTasks,
     ownerOptions,
     metrics: {
+      total: reviewTasks.length,
       open: reviewTasks.filter(isOpenReviewTask).length,
       completed: reviewTasks.filter(isCompletedReviewTask).length,
       rework: reviewTasks.filter(isReworkReviewTask).length,

@@ -84,7 +84,7 @@ export function isUsefulActivity(message: string) {
     "Status geändert",
     "Review geändert",
     "Kommentar hinzugefügt",
-    "GitHub Sync",
+    "GitHub-Spiegelung",
     "GitHub-Kommentare importiert",
     "Blocker",
     "Relationship",

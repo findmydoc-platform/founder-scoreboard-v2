@@ -55,5 +55,5 @@ export function shouldSendToGoogleChatDm(eventType: string) {
 }
 
 export function notificationChannelLabel(eventType: string) {
-  return shouldSendToGoogleChatDigest(eventType) ? "Google-Chat-Digest" : "Nur In-App";
+  return shouldSendToGoogleChatDigest(eventType) ? "Sammelmeldung" : "Nur in der App";
 }

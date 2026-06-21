@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
+import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, taskOwnerLabel } from "@/lib/display";
@@ -24,11 +24,10 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
     <UiBadge
       tone="amber"
       size="xs"
-      title="Nur in der App: noch kein GitHub-Issue verknüpft."
+      title="Nur in der App: noch kein Issue verknüpft."
       className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}
     >
-      <AlertTriangle size={compact ? 12 : 13} />
-      {!compact && "App-only"}
+      Nur in der App
     </UiBadge>
   );
 }
@@ -50,6 +49,8 @@ export function TaskCard({
   allTasks,
   statusOptions,
   statusDisabled = false,
+  showStatus = true,
+  showStatusControl = true,
   onOpen,
   onStatusChange,
   onDragStart,
@@ -63,6 +64,8 @@ export function TaskCard({
   allTasks: Task[];
   statusOptions: TaskStatus[];
   statusDisabled?: boolean;
+  showStatus?: boolean;
+  showStatusControl?: boolean;
   onOpen: (task: Task) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -95,7 +98,6 @@ export function TaskCard({
           className="min-w-0 max-w-full text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
         >
           <span className="inline-flex min-w-0 max-w-full items-start gap-1.5">
-            {missingGitHub && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
             <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.title}</span>
           </span>
         </button>
@@ -109,9 +111,11 @@ export function TaskCard({
         </button>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        <UiBadge tone={statusBadgeTone(normalized)} size="xs" className="text-[11px]">
-          {normalized}
-        </UiBadge>
+        {showStatus && (
+          <UiBadge tone={statusBadgeTone(normalized)} size="xs" className="text-[11px]">
+            {normalized}
+          </UiBadge>
+        )}
         <UiBadge tone={priorityBadgeTone(task.priority)} size="xs" className="text-[11px]">
           {task.priority}
         </UiBadge>
@@ -131,18 +135,22 @@ export function TaskCard({
         <span className="shrink-0">{dateRange(task)}</span>
       </div>
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 border-t border-slate-100 pt-2">
-        <CustomSelect
-          value={normalized}
-          onChange={(value) => onStatusChange(task, value as TaskStatus)}
-          disabled={statusDisabled}
-          options={statusOptions.map((status) => ({ value: status, label: status }))}
-          className="h-8 w-32 text-xs"
-          aria-label="Status ändern"
-        />
+        {showStatusControl ? (
+          <CustomSelect
+            value={normalized}
+            onChange={(value) => onStatusChange(task, value as TaskStatus)}
+            disabled={statusDisabled}
+            options={statusOptions.map((status) => ({ value: status, label: status }))}
+            className="h-8 w-32 text-xs"
+            aria-label="Status ändern"
+          />
+        ) : (
+          <span className="h-8 min-w-0 flex-1" aria-hidden="true" />
+        )}
         <div className="flex items-center gap-2 text-slate-400">
           <MessageSquare size={14} />
           <FileText size={14} />
-          <Link2 size={14} className={hasGitHubIssue(task) ? "text-blue-500" : "text-amber-500"} />
+          {hasGitHubIssue(task) && <Link2 size={14} className="text-blue-500" />}
         </div>
       </div>
     </article>

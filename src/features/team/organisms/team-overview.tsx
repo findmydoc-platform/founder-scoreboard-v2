@@ -47,7 +47,7 @@ export function TeamOverview({
           <div>
             <h2 className="text-base font-semibold text-slate-950">Rollen & Vertretung</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              CEO verwaltet Rollen, GitHub-Zuordnung, Deputy-Zeiträume, Google-Chat-Ziele und Kalender-Sync. Deputy bekommt operative Rechte, aber kein Decision-Log-Edit.
+              CEO verwaltet Rollen, Kapazitäten und Vertretungen. Integrationen bleiben bei Bedarf pro Profil erreichbar.
             </p>
           </div>
           <UiBadge tone={canManageTeam ? "emerald" : "slate"} size="md">
@@ -180,106 +180,114 @@ export function TeamOverview({
                   />
                 </UiField>
               </div>
-              <UiField>
-                GitHub Login
-                <UiTextInput
-                  value={draftProfile.githubLogin}
-                  disabled={saving || pending || !canEditProfile}
-                  onChange={(event) => setProfileDraft(profile.id, { githubLogin: event.target.value })}
-                  textTone="muted"
-                />
-              </UiField>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <UiField>
-                  Google Chat User-ID
-                  <UiTextInput
-                    value={draftProfile.googleChatUserId || ""}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(event) => setProfileDraft(profile.id, { googleChatUserId: event.target.value })}
-                    textTone="muted"
-                    placeholder="users/..."
-                  />
-                </UiField>
-                <UiField>
-                  Google Chat DM-Space
-                  <UiTextInput
-                    value={draftProfile.googleChatDmSpace || ""}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(event) => setProfileDraft(profile.id, { googleChatDmSpace: event.target.value })}
-                    textTone="muted"
-                    placeholder="spaces/..."
-                  />
-                </UiField>
-              </div>
-              <label className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                <span>
-                  Google-Chat-Benachrichtigungen
-                  <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert verhindert Digest-Zustellung für dieses Profil.</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={draftProfile.notificationsEnabled !== false}
-                  disabled={saving || pending || !canEditProfile}
-                  onChange={(event) => setProfileDraft(profile.id, { notificationsEnabled: event.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
-                />
-              </label>
-              <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold text-blue-900">Google Calendar Sync</div>
-                    <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Aktiviert importiert Kalendertermine als schreibgeschützte Meeting-Finder-Blocker.</p>
+              <details className="rounded-md border border-slate-200 bg-white p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                  Integrationen bearbeiten
+                  <span className="ml-2 font-normal text-slate-500">GitHub, Chat, Kalender</span>
+                </summary>
+                <div className="mt-3 grid gap-3">
+                  <UiField>
+                    GitHub Login
+                    <UiTextInput
+                      value={draftProfile.githubLogin}
+                      disabled={saving || pending || !canEditProfile}
+                      onChange={(event) => setProfileDraft(profile.id, { githubLogin: event.target.value })}
+                      textTone="muted"
+                    />
+                  </UiField>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <UiField>
+                      Google Chat User-ID
+                      <UiTextInput
+                        value={draftProfile.googleChatUserId || ""}
+                        disabled={saving || pending || !canEditProfile}
+                        onChange={(event) => setProfileDraft(profile.id, { googleChatUserId: event.target.value })}
+                        textTone="muted"
+                        placeholder="users/..."
+                      />
+                    </UiField>
+                    <UiField>
+                      Google Chat DM-Space
+                      <UiTextInput
+                        value={draftProfile.googleChatDmSpace || ""}
+                        disabled={saving || pending || !canEditProfile}
+                        onChange={(event) => setProfileDraft(profile.id, { googleChatDmSpace: event.target.value })}
+                        textTone="muted"
+                        placeholder="spaces/..."
+                      />
+                    </UiField>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(draftProfile.googleCalendarSyncEnabled)}
-                    disabled={saving || pending || !canEditProfile || !draftProfile.googleCalendarEmail}
-                    onChange={(event) => setProfileDraft(profile.id, { googleCalendarSyncEnabled: event.target.checked })}
-                    className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600 disabled:opacity-60"
-                    aria-label="Google Calendar Sync aktivieren"
-                  />
-                </div>
-                <UiField className="mt-3 text-blue-900">
-                  Kalender-E-Mail
-                  <UiTextInput
-                    value={draftProfile.googleCalendarEmail || ""}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(event) => setProfileDraft(profile.id, { googleCalendarEmail: event.target.value })}
-                    borderTone="info"
-                    textTone="muted"
-                    placeholder="name@findmydoc.eu"
-                  />
-                </UiField>
-                <p className="mt-2 text-[11px] leading-4 text-blue-700">
-                  Letzter Sync: {draftProfile.googleCalendarLastSyncedAt ? formatDate(draftProfile.googleCalendarLastSyncedAt) : "noch nicht synchronisiert"}
-                </p>
-              </div>
-              <div className="rounded-md border border-slate-200 bg-white p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold text-slate-700">Google-Chat-Events</div>
-                    <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Feinsteuerung pro Ereignistyp. Ausgeschaltete Events bleiben in der App sichtbar.</p>
+                  <label className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    <span>
+                      Google-Chat-Benachrichtigungen
+                      <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert verhindert Digest-Zustellung für dieses Profil.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={draftProfile.notificationsEnabled !== false}
+                      disabled={saving || pending || !canEditProfile}
+                      onChange={(event) => setProfileDraft(profile.id, { notificationsEnabled: event.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
+                    />
+                  </label>
+                  <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-blue-900">Kalenderverbindung</div>
+                        <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Kalendertermine werden als Meeting-Finder-Blocker berücksichtigt.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(draftProfile.googleCalendarSyncEnabled)}
+                        disabled={saving || pending || !canEditProfile || !draftProfile.googleCalendarEmail}
+                        onChange={(event) => setProfileDraft(profile.id, { googleCalendarSyncEnabled: event.target.checked })}
+                        className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600 disabled:opacity-60"
+                        aria-label="Kalenderverbindung aktivieren"
+                      />
+                    </div>
+                    <UiField className="mt-3 text-blue-900">
+                      Kalender-E-Mail
+                      <UiTextInput
+                        value={draftProfile.googleCalendarEmail || ""}
+                        disabled={saving || pending || !canEditProfile}
+                        onChange={(event) => setProfileDraft(profile.id, { googleCalendarEmail: event.target.value })}
+                        borderTone="info"
+                        textTone="muted"
+                        placeholder="name@findmydoc.eu"
+                      />
+                    </UiField>
+                    <p className="mt-2 text-[11px] leading-4 text-blue-700">
+                      Letzte Aktualisierung: {draftProfile.googleCalendarLastSyncedAt ? formatDate(draftProfile.googleCalendarLastSyncedAt) : "noch nicht synchronisiert"}
+                    </p>
                   </div>
-                  <UiBadge size="xs">{enabledPreferenceCount}/{googleChatDigestEventTypes.length}</UiBadge>
+                  <div className="rounded-md border border-slate-200 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">Chat-Hinweise</div>
+                        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Profil entscheidet, welche Hinweise es außerhalb der App bekommen soll.</p>
+                      </div>
+                      <UiBadge size="xs">{enabledPreferenceCount}/{googleChatDigestEventTypes.length}</UiBadge>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {googleChatDigestEventTypes.map((eventType) => {
+                        const enabled = draftEventEnabled(profile.id, eventType);
+                        return (
+                          <label key={eventType} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600">
+                            <span className="min-w-0 truncate">{notificationEventLabel(eventType)}</span>
+                            <input
+                              type="checkbox"
+                              checked={enabled}
+                              disabled={saving || pending || draftProfile.notificationsEnabled === false || !canEditNotificationEvents}
+                              onChange={(event) => setNotificationDraft(profile.id, eventType, event.target.checked)}
+                              className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 disabled:opacity-60"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {googleChatDigestEventTypes.map((eventType) => {
-                    const enabled = draftEventEnabled(profile.id, eventType);
-                    return (
-                      <label key={eventType} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600">
-                        <span className="min-w-0 truncate">{notificationEventLabel(eventType)}</span>
-                        <input
-                          type="checkbox"
-                          checked={enabled}
-                          disabled={saving || pending || draftProfile.notificationsEnabled === false || !canEditNotificationEvents}
-                          onChange={(event) => setNotificationDraft(profile.id, eventType, event.target.checked)}
-                          className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 disabled:opacity-60"
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
+              </details>
               <UiField>
                 Fokus
                 <UiTextArea
@@ -345,7 +353,7 @@ export function TeamOverview({
                 </div>
               </div>
               <p className="text-xs leading-5 text-slate-500">
-                Rollen, Stammdaten und der zentrale Benachrichtigungsschalter sind CEO-geschützt. Einzelne Google-Chat-Events kann das Profil selbst steuern.
+                Rollen und Stammdaten sind CEO-geschützt. Integrationsdetails bleiben in der aufgeklappten Bearbeitung.
               </p>
             </div>
           </UiPanel>

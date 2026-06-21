@@ -5,7 +5,7 @@ import { dateRange } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/features/sprint/model/sprint-score-view-model";
 import type { Task } from "@/lib/types";
-import { UiButton, UiField, UiLinkButton, UiNotice, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiButton, UiLinkButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type ReviewChecklist = {
   acceptanceCriteriaMet?: boolean;
@@ -42,17 +42,19 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-950">{task.title}</h2>
-            <p className="mt-1 text-xs text-slate-600">
-              {task.owner} · {task.priority} · {task.hours}h · {dateRange(task)} · {reviewLabel(task.reviewStatus)} · {reviewOwnerName}
-            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <UiBadge tone="white" size="xs">{task.owner}</UiBadge>
+              <UiBadge tone="white" size="xs">{task.priority}</UiBadge>
+              <UiBadge tone="white" size="xs">{task.hours}h</UiBadge>
+              <UiBadge tone="white" size="xs">{dateRange(task)}</UiBadge>
+              <UiBadge tone="blue" size="xs">{reviewLabel(task.reviewStatus)}</UiBadge>
+              <UiBadge tone="white" size="xs">{reviewOwnerName}</UiBadge>
+            </div>
           </div>
           <UiLinkButton href={`/tasks/${encodeURIComponent(task.id)}`} variant="blueOutline" size="sm">
             Aufgabe öffnen
           </UiLinkButton>
         </div>
-        <p className="mt-2 text-xs leading-5 text-blue-800">
-          Review-Rohpunkte entstehen hier im Review-Blatt. Der Sprint-Gesamtscore bleibt im 20-Punkte-Modell von Sprint & Score.
-        </p>
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-3">
@@ -70,21 +72,21 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
           />
         </div>
         <div className="grid content-start gap-3">
+          <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Score</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{final ? task.scorePoints : reviewScore}/10</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {final ? reviewLabel(task.reviewStatus) : "Aus erfüllten Kriterien berechnet."}
+            </p>
+          </div>
           {final ? (
             <UiNotice tone="success" className="border-emerald-200">
               Diese Review ist abgeschlossen: {task.scorePoints} Punkte · {reviewLabel(task.reviewStatus)}.
             </UiNotice>
-          ) : (
-            <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-              Review-Rohpunkte: vier Kriterien ergeben je 2,5 Punkte, gerundet auf 0 bis 10.
-            </div>
-          )}
-          {reviewChecklistItems.map(([key, label, pointsLabel]) => (
+          ) : null}
+          {reviewChecklistItems.map(([key, label]) => (
             <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm text-slate-700">
-              <span>
-                <span className="block">{label}</span>
-                <span className="text-xs text-slate-500">{pointsLabel}</span>
-              </span>
+              <span>{label}</span>
               <input
                 type="checkbox"
                 checked={Boolean(checklist[key as keyof ReviewChecklist])}
@@ -93,21 +95,9 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
               />
             </label>
           ))}
-          <UiField>
-            Automatische Review-Rohpunkte
-            <UiTextInput
-              type="number"
-              min={0}
-              max={10}
-              value={final ? task.scorePoints : reviewScore}
-              readOnly
-              surface="muted"
-              className="font-semibold text-slate-800"
-            />
-          </UiField>
           {!final ? (
             <>
-              <p className="text-[11px] leading-5 text-slate-500">Nacharbeit vergibt 0 finale Punkte und verschiebt die Aufgabe zurück in den Status Nacharbeit.</p>
+              <p className="text-[11px] leading-5 text-slate-500">Nacharbeit öffnet die Aufgabe erneut und setzt 0 Punkte.</p>
               <div className="flex flex-wrap gap-2">
                 <UiButton disabled={pending || !canReview} onClick={() => onReview(task, "accepted", reviewScore, checklist, comment)} variant="emerald">Akzeptieren</UiButton>
                 <UiButton disabled={pending || !canReview} onClick={() => onReview(task, "partial", reviewScore, checklist, comment)} variant="amber">Teilweise</UiButton>

@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
     };
 
     if (alreadyDelivered.has(row.id)) {
-      results.push({ eventId: row.id, status: "skipped", error: "Bereits im Google-Chat-Digest gesendet." });
+      results.push({ eventId: row.id, status: "skipped", error: "Bereits in der Sammelmeldung gesendet." });
       continue;
     }
 

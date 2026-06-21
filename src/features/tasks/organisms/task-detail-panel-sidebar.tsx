@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarDays, Link2, Trash2 } from "lucide-react";
+import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
@@ -232,8 +232,8 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">GitHub</h3>
-            <p className="mt-1 text-xs text-slate-500">Backup ins Management-Repo.</p>
+            <h3 className="text-sm font-semibold text-slate-950">Externe Ablage</h3>
+            <p className="mt-1 text-xs text-slate-500">Optional in GitHub spiegeln.</p>
           </div>
           {canSyncExistingGitHubIssue ? (
             <button
@@ -251,32 +251,35 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Anlegen..." : "GitHub-Issue anlegen"}
+              {task.githubSyncStatus === "pending" ? "Anlegen..." : "Issue anlegen"}
             </button>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
           )}
         </div>
         <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
-          <p className="break-words">{task.githubRepo || "findmydoc-platform/management"} · {syncLabel(task.githubSyncStatus)}</p>
+          <p className="break-words font-medium text-slate-800">{hasGitHubIssue(task) ? "Verknüpft" : "Nur in der App"} · {syncLabel(task.githubSyncStatus)}</p>
           {task.githubIssueUrl ? (
             <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-blue-700 hover:underline">
               <Link2 size={15} className="shrink-0" />
-              <span className="truncate">{task.githubIssueUrl}</span>
+              <span className="truncate">Verknüpftes Issue öffnen</span>
             </a>
           ) : (
-            <p className="inline-flex items-center gap-1.5 text-amber-700">
-              <AlertTriangle size={15} />
-              Noch kein GitHub-Issue verknüpft.
-            </p>
+            <p className="text-slate-500">Noch nicht extern abgelegt.</p>
           )}
           {!hasGitHubIssue(task) && (
             <p className="text-xs text-slate-500">
-              Diese Aufgabe wird nicht automatisch dupliziert. Nutze “GitHub-Issue anlegen”, wenn sie bewusst ins Management-Repo gespiegelt werden soll.
+              Nutze „Issue anlegen“ nur, wenn diese Aufgabe bewusst extern gespiegelt werden soll.
             </p>
           )}
-          {task.githubLastSyncedAt && <p className="text-xs text-slate-500">Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
-          {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}
+          <details className="mt-1 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-slate-500">Ablagedetails anzeigen</summary>
+            <div className="mt-2 grid gap-1 text-xs text-slate-500">
+              <p className="break-words">Repository: {task.githubRepo || "findmydoc-platform/management"}</p>
+              {task.githubLastSyncedAt && <p>Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
+              {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}
+            </div>
+          </details>
         </div>
       </section>
 

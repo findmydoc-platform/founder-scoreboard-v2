@@ -51,6 +51,9 @@ export function ExecutionFocusPanel({
   onSetFocus: (task: Task, nextStep: string, status?: TaskFocusItem["status"]) => void;
   onRemoveFocus: (focusItem: TaskFocusItem) => void;
 }) {
+  const focusTaskIds = new Set(focusItems.map((item) => item.taskId));
+  const visibleSuggestedTasks = suggestedTasks.filter((task) => !focusTaskIds.has(task.id));
+
   return (
     <UiPanel className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -115,7 +118,7 @@ export function ExecutionFocusPanel({
               <div className="mt-3 flex flex-wrap gap-2">
                 {(["done", "blocked", "deferred", "needs_decision"] as TaskFocusItem["status"][]).map((status) => (
                   <UiButton key={status} disabled={pending} onClick={() => onSetFocus(task, focusDrafts[item.taskId] ?? item.nextStep, status)} size="xs" className="text-slate-600">
-                    {focusStatusLabel(status)}
+                    {status === "done" ? "Als erledigt markieren" : focusStatusLabel(status)}
                   </UiButton>
                 ))}
                 <UiButton disabled={pending} onClick={() => onRemoveFocus(item)} variant="red" size="xs">
@@ -145,44 +148,15 @@ export function ExecutionFocusPanel({
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${endOfDayCompletion}%` }} />
         </div>
-        <div className="mt-4 grid gap-2">
-          {focusItems.length ? focusItems.map((item) => {
-            const task = taskById.get(item.taskId);
-            if (!task) return null;
-            const currentNextStep = focusDrafts[item.taskId] ?? item.nextStep;
-            return (
-              <article key={`checkin-${item.id}`} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <button type="button" onClick={() => onOpenTask(task)} className="min-w-0 text-left text-sm font-semibold text-slate-900 hover:text-blue-700">
-                    {task.title}
-                  </button>
-                  <UiBadge tone="white" size="xs">{focusStatusLabel(item.status)}</UiBadge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Heute erledigt.", "done")} variant="emerald" size="xs">
-                    Als erledigt markieren
-                  </UiButton>
-                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Blocker für morgen klären.", "blocked")} variant="amber" size="xs">
-                    Blockiert
-                  </UiButton>
-                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Auf morgen verschoben.", "deferred")} size="xs" className="text-slate-600">
-                    Verschieben
-                  </UiButton>
-                  <UiButton disabled={pending} onClick={() => onSetFocus(task, currentNextStep || "Braucht eine Entscheidung.", "needs_decision")} variant="blue" size="xs">
-                    Entscheidung nötig
-                  </UiButton>
-                </div>
-              </article>
-            );
-          }) : (
-            <UiEmptyState className="px-3 py-6">Kein Tagesfokus für den Abschluss vorhanden.</UiEmptyState>
+        <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+          {focusItems.length ? (
+            endOfDayOpenItems.length > 0
+              ? `${endOfDayOpenItems.length} Fokusaufgabe(n) brauchen noch einen Abschlussstatus.`
+              : "Alle Fokusaufgaben haben einen Abschlussstatus."
+          ) : (
+            "Kein Tagesfokus für den Abschluss vorhanden."
           )}
         </div>
-        {endOfDayOpenItems.length > 0 && (
-          <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-            {endOfDayOpenItems.length} Fokusaufgaben sind noch geplant und brauchen einen Abschlussstatus.
-          </div>
-        )}
       </div>
 
       <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 lg:grid-cols-[minmax(0,1fr)_260px]">
@@ -204,15 +178,14 @@ export function ExecutionFocusPanel({
                     <UiBadge tone="white" size="xs" className="text-slate-500">{profileFocus.length}/3</UiBadge>
                   </div>
                   <div className="mt-2 grid gap-1">
-                    {profileFocus.length ? profileFocus.map((item) => {
-                      const task = taskById.get(item.taskId);
-                      return task ? (
-                        <button key={item.id} type="button" onClick={() => onOpenTask(task)} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-left text-xs hover:bg-blue-50">
-                          <span className="min-w-0 truncate font-semibold text-slate-700">{task.title}</span>
-                          <span className="shrink-0 text-slate-500">{focusStatusLabel(item.status)}</span>
-                        </button>
-                      ) : null;
-                    }) : (
+                    {profileFocus.length ? (
+                      <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold">
+                        <UiBadge tone="blue" bordered={false}>{profileFocus.filter((item) => item.status === "planned").length} offen</UiBadge>
+                        <UiBadge tone="emerald" bordered={false}>{profileFocus.filter((item) => item.status === "done").length} erledigt</UiBadge>
+                        <UiBadge tone="amber" bordered={false}>{profileFocus.filter((item) => item.status === "blocked" || item.status === "needs_decision").length} kritisch</UiBadge>
+                        <UiBadge tone="white" bordered={false}>{profileFocus.filter((item) => item.status === "deferred").length} verschoben</UiBadge>
+                      </div>
+                    ) : (
                       <UiEmptyState className="px-2 py-2 text-xs">Kein Fokus gesetzt.</UiEmptyState>
                     )}
                   </div>
@@ -254,7 +227,7 @@ export function ExecutionFocusPanel({
       <div className="mt-5 border-t border-slate-100 pt-4">
         <h3 className="text-sm font-semibold text-slate-950">Vorschläge für heute</h3>
         <div className="mt-3 grid grid-cols-1 gap-3">
-          {suggestedTasks.map((task) => (
+          {visibleSuggestedTasks.map((task) => (
             <article key={task.id} className="w-full min-w-0 rounded-md border border-slate-200 p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -284,6 +257,11 @@ export function ExecutionFocusPanel({
               />
             </article>
           ))}
+          {!visibleSuggestedTasks.length && (
+            <UiEmptyState tone="muted" className="px-4 py-6">
+              Alle aktuellen Vorschläge sind bereits im Tagesfokus.
+            </UiEmptyState>
+          )}
         </div>
       </div>
     </UiPanel>

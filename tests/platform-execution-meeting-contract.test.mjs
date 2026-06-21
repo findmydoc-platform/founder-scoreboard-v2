@@ -184,7 +184,7 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(newTaskUi, /taskOwnerOptions\(draft\.taskType, data\.profiles\)/);
   assert.match(newTaskUi, /Sub-Issues/);
   assert.match(newTaskUi, /nicht score-relevant/);
-  assert.match(newTaskUi, /Direkt als GitHub-Issue anlegen/);
+  assert.match(newTaskUi, /Direkt extern anlegen/);
   assert.match(newTaskUi, /createGitHubIssue/);
   assert.match(newTaskUi, /relationType/);
   assert.match(newTaskUi, /relatedTaskId/);
@@ -332,8 +332,8 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(meetingAvailabilityHook, /availabilityTypeForBlockerKind/);
   assert.match(meetingAvailabilityHook, /blockerKindForAvailability/);
   assert.match(availabilityFieldUi, /Ganztägig blockieren/);
-  assert.match(slotSearchUi, /Google Workspace Sync/);
-  assert.match(slotSearchUi, /Google-Kalender synchronisieren/);
+  assert.match(slotSearchUi, /Kalenderverbindung/);
+  assert.match(slotSearchUi, /Kalender aktualisieren/);
   assert.match(slotSearchUi, /Google-Termin öffnen/);
   assert.match(slotSearchUi, /In App anlegen/);
   assert.match(slotSearchUi, /Meeting vormerken/);

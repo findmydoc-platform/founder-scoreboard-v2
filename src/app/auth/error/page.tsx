@@ -23,7 +23,7 @@ export default async function AuthErrorPage({ searchParams }: Props) {
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Anmeldung fehlgeschlagen</div>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">GitHub-Anmeldung konnte nicht abgeschlossen werden</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Bitte starte die Anmeldung erneut. Die App lädt erst Planungsdaten, wenn die Supabase-Session sicher geprüft wurde.
+              Bitte starte die Anmeldung erneut. Die App lädt Planungsdaten erst, wenn deine Sitzung sicher geprüft wurde.
             </p>
           </div>
         </div>

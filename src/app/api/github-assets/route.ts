@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
 
   let token = "";
   try {
-    token = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+    token = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
   } catch (error) {
-    const message = error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden.";
+    const message = error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     const status = message.includes("nicht verfügbar") ? 401 : 403;
     return apiError(message, status);
   }

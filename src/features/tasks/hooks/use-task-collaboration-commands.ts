@@ -105,7 +105,7 @@ export function useTaskCollaborationCommands({
     }
 
     if (source !== "supabase") {
-      if (!options.silent) setSaveError("GitHub-Kommentarimport ist nur mit Supabase-Datenquelle verfügbar.");
+      if (!options.silent) setSaveError("GitHub-Kommentarimport ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 

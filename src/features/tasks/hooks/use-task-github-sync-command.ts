@@ -28,7 +28,7 @@ export function useTaskGitHubSyncCommand({
     }));
 
     if (source !== "supabase") {
-      setSaveError("GitHub Sync ist nur mit Supabase-Datenquelle verfügbar.");
+      setSaveError("GitHub-Spiegelung ist in diesem Arbeitsmodus nicht verfügbar.");
       setData((current) => ({
         ...current,
         tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
@@ -39,14 +39,14 @@ export function useTaskGitHubSyncCommand({
     startTransition(async () => {
       try {
         const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
-        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
+        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Spiegelung konnte nicht ausgeführt werden.");
 
         setData((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
         }));
       } catch (error) {
-        const message = error instanceof Error ? error.message : "GitHub Sync konnte nicht ausgeführt werden.";
+        const message = error instanceof Error ? error.message : "GitHub-Spiegelung konnte nicht ausgeführt werden.";
         setData((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
@@ -60,7 +60,7 @@ export function useTaskGitHubSyncCommand({
     setSaveError("");
 
     if (source !== "supabase") {
-      setSaveError("GitHub Sync ist nur mit Supabase-Datenquelle verfügbar.");
+      setSaveError("GitHub-Spiegelung ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 
@@ -82,14 +82,14 @@ export function useTaskGitHubSyncCommand({
       for (const task of queueTasks) {
         try {
           const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: false });
-          if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
+          if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Spiegelung konnte nicht ausgeführt werden.");
 
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         } catch (error) {
-          const message = error instanceof Error ? error.message : "GitHub Sync konnte nicht ausgeführt werden.";
+          const message = error instanceof Error ? error.message : "GitHub-Spiegelung konnte nicht ausgeführt werden.";
           const previousTask = previousTasks.get(task.id) || task;
           setData((current) => ({
             ...current,

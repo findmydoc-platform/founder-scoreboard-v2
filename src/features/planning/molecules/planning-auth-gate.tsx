@@ -39,9 +39,9 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {isLoadingState
                 ? authError
-                  ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet."
-                  : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."
-                : "Bitte melde dich mit GitHub an. Ohne gültige Supabase-Session werden keine Planungsdaten geladen."}
+                  ? "Die Anmeldung ist aktiv, aber die Planungsdaten konnten nicht geladen werden."
+                  : "Deine Sitzung ist geprüft. Die Planungsdaten werden jetzt geladen."
+                : "Bitte melde dich mit GitHub an. Ohne gültige Anmeldung werden keine Planungsdaten geladen."}
             </p>
           </div>
         </div>
@@ -58,7 +58,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
               variant="gate"
             />
           ) : (
-            <div className="h-9 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">Session wird geprüft...</div>
+            <div className="h-9 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">Anmeldung wird geprüft...</div>
           )}
         </div>
       </section>

@@ -86,28 +86,30 @@ export function MeetingSlotSearchSection({
   const nextRecommendedSlot = slots[0];
   const participantOptions: ParticipantOption[] = selectableProfiles.map((profile) => ({
     value: profile.id,
-    label: selectedProfileIds.includes(profile.id) ? `${profile.name} ?` : profile.name,
+    label: selectedProfileIds.includes(profile.id) ? `${profile.name} aktiv` : profile.name,
   }));
+  const calendarReady = googleCalendarProfiles.length > 0;
 
   return (
     <>
       <UiPanel className="min-w-0">
         <h2 className="text-base font-semibold text-slate-950">Meeting Finder</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus findmydoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Google-Workspace-Blockern.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Findet gemeinsame Slots aus findmydoc-Arbeitszeiten, Arbeit, Urlaub, Krankheit, bestehenden Meetings und Kalenderblockern.</p>
         <div className="mt-4 grid grid-cols-1 gap-2 text-sm min-[360px]:grid-cols-2">
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Arbeitszeiten</div><div className="font-semibold">{workingHoursCount}</div></div>
           <div className="rounded-md bg-slate-50 p-3"><div className="text-xs text-slate-500">Blocker</div><div className="font-semibold">{blockersCount}</div></div>
           <div className="rounded-md bg-emerald-50 p-3"><div className="text-xs text-emerald-700">Volle Treffer</div><div className="font-semibold text-emerald-900">{fullSlots.length}</div></div>
           <div className="rounded-md bg-blue-50 p-3"><div className="text-xs text-blue-700">Teilnehmer</div><div className="font-semibold text-blue-900">{selectedProfiles.length}</div></div>
         </div>
-        <UiNotice className="mt-4 py-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="font-semibold text-blue-950">Google Workspace Sync</div>
-              <div>{googleCalendarProfiles.length} Profil(e) sind für Kalenderimport vorbereitet. Importierte Termine erscheinen als Google-Blocker.</div>
-              {lastGoogleSync && <div className="mt-1 text-xs text-blue-700">Letzter Sync: {formatDate(lastGoogleSync)}</div>}
-              {calendarSyncMessage && <div className="mt-2 rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-800">{calendarSyncMessage}</div>}
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold text-slate-950">Kalenderverbindung</div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                {calendarReady ? `${googleCalendarProfiles.length} Profil(e) können Kalenderdaten einbeziehen.` : "Noch kein Kalender für die Suche verbunden."}
+              </p>
             </div>
+            <UiBadge tone={calendarReady ? "emerald" : "slate"}>{calendarReady ? "bereit" : "nicht verbunden"}</UiBadge>
             <UiButton
               onClick={onSyncGoogleCalendar}
               disabled={pending || !canManageAvailability}
@@ -115,10 +117,19 @@ export function MeetingSlotSearchSection({
               size="md"
               className="w-full text-xs sm:w-auto"
             >
-              Google-Kalender synchronisieren
+              Kalender aktualisieren
             </UiButton>
           </div>
-        </UiNotice>
+          {(lastGoogleSync || calendarSyncMessage) && (
+            <details className="mt-3 border-t border-slate-200 pt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-600">Kalenderdetails anzeigen</summary>
+              <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-600">
+                {lastGoogleSync && <div>Letzte Aktualisierung: {formatDate(lastGoogleSync)}</div>}
+                {calendarSyncMessage && <div className="rounded-md border border-slate-200 bg-white px-2 py-1 font-semibold text-slate-700">{calendarSyncMessage}</div>}
+              </div>
+            </details>
+          )}
+        </div>
       </UiPanel>
       <UiPanel className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -171,7 +182,7 @@ export function MeetingSlotSearchSection({
             placeholder="Agenda oder Kontext"
           />
           <p className="text-xs leading-5 text-slate-500">
-            Ein Slot legt ein internes Meeting an, erzeugt offene Anwesenheitszeilen und versucht den Google-Kalender automatisch zu synchronisieren.
+            Ein Slot legt ein internes Meeting an, erzeugt offene Anwesenheitszeilen und aktualisiert den Kalender, wenn eine Verbindung besteht.
           </p>
           {meetingCreateMessage && <UiNotice tone="success" className="px-2 py-1 text-xs font-semibold leading-normal">{meetingCreateMessage}</UiNotice>}
         </div>

@@ -89,18 +89,18 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /SettingsNotificationsSection/);
-  assert.match(settingsNotificationsUi, /Notification-Ausgang/);
+  assert.match(settingsNotificationsUi, /Benachrichtigungsausgang/);
   assert.match(settingsNotificationsUi, /googleChatDigestNotifications/);
   assert.match(settingsNotificationsUi, /googleChatReady/);
-  assert.match(readinessUi, /nur gesammelt/);
-  assert.match(settingsNotificationsUi, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
+  assert.match(readinessUi, /In der App gesammelt/);
+  assert.doesNotMatch(settingsNotificationsUi, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
   assert.match(settingsNotificationsUi, /notificationChannelLabel/);
-  assert.match(settingsNotificationsUi, /Keine Benachrichtigung wartet auf den Google-Chat-Digest/);
-  assert.match(settingsNotificationsUi, /Digest senden/);
-  assert.match(settingsNotificationsUi, /Delivery-Monitoring/);
+  assert.match(settingsNotificationsUi, /Keine Benachrichtigung wartet auf die Sammelmeldung/);
+  assert.match(settingsNotificationsUi, /Sammelmeldung senden/);
+  assert.match(settingsNotificationsUi, /Zustelldetails anzeigen/);
   assert.match(settingsNotificationsUi, /Erneut senden/);
-  assert.match(settingsNotificationsUi, /Test-Digest senden/);
-  assert.match(settingsNotificationsUi, /Test-DM/);
+  assert.match(settingsNotificationsUi, /Test-Sammelmeldung/);
+  assert.match(settingsNotificationsUi, /Direktnachricht/);
   assert.match(settingsNotificationsUi, /direct_dm/);
 });
 
@@ -254,11 +254,11 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /ProductionReadinessSection/);
-  assert.match(readinessUi, /Production Readiness/);
-  assert.match(readinessUi, /GitHub Actions offen/);
+  assert.match(readinessUi, /Betriebsdetails/);
+  assert.match(readinessUi, /manuell offen/);
   assert.doesNotMatch(readinessUi, /vercel login/);
-  assert.match(readinessUi, /GitHub OAuth/);
-  assert.match(readinessUi, /Supabase Auth Redirects/);
+  assert.match(readinessUi, /GitHub-Zugriff/);
+  assert.match(readinessUi, /Anmelde-Weiterleitungen/);
 });
 
 test("founder events are modeled as team-visible operational reminders", async () => {
@@ -377,7 +377,7 @@ test("founder feedback creates bug and feature notifications with details", asyn
   assert.match(settingsOverviewUi, /SettingsNotificationsSection/);
   assert.match(settingsNotificationsUi, /Benachrichtigungscenter/);
   assert.match(settingsNotificationsUi, /Feedback-Eingang/);
-  assert.match(settingsNotificationsUi, /Notification-Ausgang/);
+  assert.match(settingsNotificationsUi, /Benachrichtigungsausgang/);
   assert.match(settingsNotificationsUi, /xl:col-span-2/);
   assert.match(ui, /FeedbackDialog/);
   assert.match(ui, /\/api\/feedback/);
@@ -421,9 +421,9 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(commitRoute, /requireCEO/);
   assert.doesNotMatch(previewRoute, /requireOperationalLead/);
   assert.doesNotMatch(commitRoute, /requireOperationalLead/);
-  assert.match(intakeUi, /Team-KI bleibt getrennt vom CEO Intake/);
-  assert.match(intakeUi, /keine persönlichen langlebigen API-Tokens/);
-  assert.match(intakeUi, /Planung, RACI, Sprint, Review Owner, Punkte und Erledigt bleiben geschützt/);
+  assert.match(intakeUi, /Aufgaben importieren/);
+  assert.match(intakeUi, /Geschützte Felder/);
+  assert.match(intakeUi, /Planung, RACI, Sprint, Review Owner, Punkte und Erledigt werden nicht automatisch überschrieben/);
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
