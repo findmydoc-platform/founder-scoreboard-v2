@@ -1,4 +1,5 @@
 import { reviewOwnerForTask, taskOwnerPatch } from "@/features/planning/model/planning-app-model";
+import { slugify } from "@/lib/slug";
 import type { Package, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
@@ -56,12 +57,7 @@ type NormalizedClientTaskPatch =
   | { ok: false; error: string };
 
 export function profileId(value?: string) {
-  return value
-    ?.normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return slugify(value || "");
 }
 
 export function taskOwnedByProfile(task: { owner?: string | null }, profile?: { id?: string; name?: string } | null) {

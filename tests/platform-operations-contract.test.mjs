@@ -440,6 +440,7 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   const ceoCommitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
   const commitHelper = await readFile("src/lib/task-intake-commit.ts", "utf8");
   const routeHelper = await readFile("src/lib/task-intake-route.ts", "utf8");
+  const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const intakeContext = await readFile("src/lib/task-intake-context.ts", "utf8");
 
   assert.match(envExample, /FOUNDEROPS_AGENT_TOKEN_SHA256=/);
@@ -506,7 +507,7 @@ test("founderops agent api is token guarded and limited to planning intake", asy
     assert.doesNotMatch(route, /SUPABASE_SERVICE_ROLE_KEY/);
   }
 
-  assert.match(previewRoute, /valid: preview\.every/);
+  assert.match(`${previewRoute}\n${routeHelper}`, /valid: preview\.every/);
   assert.match(commitRoute, /agent\.task_intake\.create/);
   assert.match(commitRoute, /Agent API/);
   assert.match(commitRoute, /Agent Task Intake enthält ungültige Aufgaben/);
@@ -515,7 +516,8 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   assert.match(commitHelper, /audit_log/);
   assert.match(commitHelper, /auditAction/);
   assert.match(commitHelper, /agent\.task_intake\.create/);
-  assert.match(commitHelper, /review_owner_profile_id: task\.reviewOwnerProfileId/);
+  assert.match(commitHelper, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
+  assert.match(taskInsertRow, /review_owner_profile_id: input\.reviewOwnerProfileId \|\| null/);
   assert.match(intakeContext, /accountable_profile_id/);
   assert.match(intakeContext, /responsible_profile_ids/);
   assert.match(`${ceoPreviewRoute}\n${routeHelper}`, /loadTaskIntakeContext/);

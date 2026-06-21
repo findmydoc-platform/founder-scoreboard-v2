@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
+import { auditRequestMetadata, cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import type { PlatformRole } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
@@ -148,8 +148,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     entity_type: "profile",
     entity_id: id,
     after_data: update,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

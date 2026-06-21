@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { getGoogleCalendarEvents, isGoogleCalendarSyncConfigured, type GoogleCalendarEvent } from "@/lib/google-calendar";
 import { mapAvailability } from "@/lib/planning-data-mappers";
@@ -225,8 +226,7 @@ export async function POST(request: NextRequest) {
     entity_type: "availability",
     entity_id: "google_calendar",
     after_data: { from, to, results },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   const { data: availabilityRows, error: availabilityError } = await supabase

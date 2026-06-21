@@ -1,59 +1,13 @@
 import type { NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
+import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
+import { slugify } from "@/lib/slug";
+import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { TaskIntakeContext } from "@/lib/task-intake";
 import type { TaskIntakePreviewTask } from "@/lib/task-intake";
 import type { Task } from "@/lib/types";
 
 type SupabaseReader = ReturnType<typeof import("@/lib/supabase").getServerSupabase>;
-
-type CreatedTaskRow = {
-  id: string;
-  sort_order: number;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string;
-  owner: string | null;
-  assignee: string | null;
-  created_by: string | null;
-  workstream: string | null;
-  package_id: string | null;
-  deadline: string | null;
-  problem_statement: string | null;
-  intended_outcome: string | null;
-  scope_constraints: string | null;
-  acceptance_criteria: string | null;
-  evidence_required: string | null;
-  dod_template_version: string | null;
-  definition_of_done: string | null;
-  evidence_link: string | null;
-  issue_number: string | null;
-  issue_url: string | null;
-  watched: boolean | null;
-  estimate_hours: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  sprint_id: string | null;
-  milestone_id: string | null;
-  review_status: Task["reviewStatus"] | null;
-  review_owner_profile_id: string | null;
-  review_requested_at: string | null;
-  score_points: number | null;
-  score_final: boolean | null;
-  github_repo: string | null;
-  github_issue_number: number | null;
-  github_issue_url: string | null;
-  github_sync_status: Task["githubSyncStatus"] | null;
-  github_last_synced_at: string | null;
-  github_sync_error: string | null;
-  task_type: Task["taskType"] | null;
-  parent_task_id: string | null;
-  score_relevant: boolean | null;
-  self_dod_checked: boolean | null;
-  self_evidence_checked: boolean | null;
-  self_documented_checked: boolean | null;
-  self_blockers_checked: boolean | null;
-};
 
 type CommitTaskIntakeOptions = {
   supabase: NonNullable<SupabaseReader>;
@@ -65,109 +19,36 @@ type CommitTaskIntakeOptions = {
   activitySource: "CEO Intake" | "Agent API";
 };
 
-function slugify(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 70);
-}
-
 function insertForTask(task: TaskIntakePreviewTask, id: string, sortOrder: number, createdBy: string | null) {
-  return {
+  return buildTaskInsertRow({
     id,
-    project_id: "findmydoc-founder-execution",
-    package_id: task.packageId || null,
-    milestone_id: task.milestoneId || null,
+    packageId: task.packageId,
+    milestoneId: task.milestoneId,
     title: task.title,
     description: task.description,
-    problem_statement: task.problemStatement,
-    intended_outcome: task.intendedOutcome,
-    scope_constraints: task.scopeConstraints,
-    acceptance_criteria: task.acceptanceCriteria,
-    evidence_required: task.evidenceRequired,
-    dod_template_version: "founder-deliverable-v2",
+    problemStatement: task.problemStatement,
+    intendedOutcome: task.intendedOutcome,
+    scopeConstraints: task.scopeConstraints,
+    acceptanceCriteria: task.acceptanceCriteria,
+    evidenceRequired: task.evidenceRequired,
     status: task.status,
     priority: task.priority,
-    owner: task.ownerId || null,
-    assignee: task.ownerId || null,
-    created_by: createdBy,
+    owner: task.ownerId,
+    assignee: task.ownerId,
+    createdBy,
     workstream: task.workstream,
-    sort_order: sortOrder,
-    start_date: task.startDate || null,
-    end_date: task.endDate || null,
+    sortOrder,
+    startDate: task.startDate,
+    endDate: task.endDate,
     deadline: task.deadline || null,
-    estimate_hours: task.hours,
-    definition_of_done: task.definitionOfDone,
-    sprint_id: task.taskType === "deliverable" ? task.sprintId || null : null,
-    review_status: "not_requested",
-    review_owner_profile_id: task.reviewOwnerProfileId || null,
-    score_points: 0,
-    score_final: false,
-    github_repo: "findmydoc-platform/management",
-    github_sync_status: "not_synced",
-    task_type: task.taskType,
-    parent_task_id: task.parentTaskId || null,
-    score_relevant: task.scoreRelevant,
-  };
-}
-
-function mapCreatedTask(row: CreatedTaskRow, profileNameById: Map<string, string>): Task {
-  return {
-    id: row.id,
-    order: row.sort_order,
-    title: row.title,
-    description: row.description || "",
-    status: row.status,
-    priority: row.priority,
-    ownerId: row.owner || "",
-    owner: profileNameById.get(row.owner || "") || row.owner || "",
-    assigneeId: row.assignee || "",
-    assignee: profileNameById.get(row.assignee || "") || row.assignee || "",
-    createdById: row.created_by || "",
-    createdBy: profileNameById.get(row.created_by || "") || row.created_by || "",
-    workstream: row.workstream || "",
-    packageId: row.package_id || "",
-    deadline: row.deadline || "",
-    problemStatement: row.problem_statement || "",
-    intendedOutcome: row.intended_outcome || "",
-    scopeConstraints: row.scope_constraints || "",
-    acceptanceCriteria: row.acceptance_criteria || "",
-    evidenceRequired: row.evidence_required || "",
-    dodTemplateVersion: row.dod_template_version || "founder-deliverable-v2",
-    definitionOfDone: row.definition_of_done || "",
-    dependsOn: "",
-    evidenceLink: row.evidence_link || "",
-    issueNumber: row.issue_number || "",
-    issueUrl: row.issue_url || "",
-    note: "",
-    watched: Boolean(row.watched),
-    hours: row.estimate_hours || 0,
-    startDate: row.start_date || "",
-    endDate: row.end_date || "",
-    sprintId: row.sprint_id || "",
-    milestoneId: row.milestone_id || "",
-    reviewStatus: row.review_status || "not_requested",
-    reviewOwnerProfileId: row.review_owner_profile_id || "",
-    reviewRequestedAt: row.review_requested_at || "",
-    scorePoints: row.score_points || 0,
-    scoreFinal: Boolean(row.score_final),
-    githubRepo: row.github_repo || "findmydoc-platform/management",
-    githubIssueNumber: row.github_issue_number,
-    githubIssueUrl: row.github_issue_url || "",
-    githubSyncStatus: row.github_sync_status || "not_synced",
-    githubLastSyncedAt: row.github_last_synced_at || "",
-    githubSyncError: row.github_sync_error || "",
-    taskType: row.task_type || "deliverable",
-    parentTaskId: row.parent_task_id || "",
-    scoreRelevant: row.score_relevant !== false,
-    selfDodChecked: Boolean(row.self_dod_checked),
-    selfEvidenceChecked: Boolean(row.self_evidence_checked),
-    selfDocumentedChecked: Boolean(row.self_documented_checked),
-    selfBlockersChecked: Boolean(row.self_blockers_checked),
-  };
+    hours: task.hours,
+    definitionOfDone: task.definitionOfDone,
+    sprintId: task.taskType === "deliverable" ? task.sprintId : null,
+    reviewOwnerProfileId: task.reviewOwnerProfileId,
+    taskType: task.taskType,
+    parentTaskId: task.parentTaskId,
+    scoreRelevant: task.scoreRelevant,
+  });
 }
 
 export async function commitTaskIntake({
@@ -191,14 +72,14 @@ export async function commitTaskIntake({
   const idPrefix = actorProfileId || "agent";
   const now = Date.now().toString(36);
   const inserts = preview.map((task, index) => {
-    const id = `${idPrefix}-${slugify(task.title) || "neue-aufgabe"}-${now}-${index + 1}`;
+    const id = `${idPrefix}-${slugify(task.title, { maxLength: 70 }) || "neue-aufgabe"}-${now}-${index + 1}`;
     return insertForTask(task, id, baseSortOrder + index + 1, createdBy);
   });
 
   const { data: createdRows, error: insertError } = await supabase.from("tasks").insert(inserts).select("*");
   if (insertError || !createdRows) throw new Error(insertError?.message || "Aufgaben konnten nicht erstellt werden.");
 
-  const rows = createdRows as CreatedTaskRow[];
+  const rows = createdRows as (TaskRowForMapping & { id: string; task_type?: Task["taskType"] | null })[];
   await supabase.from("task_activity").insert(rows.map((task) => ({
     task_id: task.id,
     message: task.task_type === "sub_issue" ? `Sub-Issue über ${activitySource} erstellt` : `Deliverable über ${activitySource} erstellt`,
@@ -214,5 +95,5 @@ export async function commitTaskIntake({
   })));
 
   const profileNameById = new Map(context.profiles.map((profile) => [profile.id, profile.name]));
-  return rows.map((task) => mapCreatedTask(task, profileNameById));
+  return rows.map((task) => mapTaskRow(task, profileNameById));
 }

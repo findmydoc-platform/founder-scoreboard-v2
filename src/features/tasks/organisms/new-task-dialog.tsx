@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
-import { initiativeRaciRows, taskOwnerOptions } from "@/lib/display";
+import { taskOwnerOptions } from "@/lib/display";
 import {
   initiativeOptions,
   milestoneOptions,
@@ -166,14 +167,7 @@ export function NewTaskDialog({
           {selectedInitiative && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Initiative-RACI</div>
-              <div className="mt-2 grid gap-1 text-xs text-slate-600 sm:grid-cols-2">
-                {initiativeRaciRows(selectedInitiative, data.profiles).map((row) => (
-                  <div key={row.label} className="flex min-w-0 gap-2">
-                    <span className="w-4 shrink-0 font-semibold text-blue-700">{row.label}</span>
-                    <span className="min-w-0 truncate" title={`${row.title}: ${row.value}`}>{row.value}</span>
-                  </div>
-                ))}
-              </div>
+              <InitiativeRaciList initiative={selectedInitiative} profiles={data.profiles} className="mt-2 grid gap-1 text-xs text-slate-600 sm:grid-cols-2" />
             </div>
           )}
 

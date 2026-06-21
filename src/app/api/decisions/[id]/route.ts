@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cleanText } from "@/lib/api-input";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -64,8 +64,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     actor_profile_id: permission.profile?.id || null,
     before_data: before,
     after_data: updated,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent") || null,
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

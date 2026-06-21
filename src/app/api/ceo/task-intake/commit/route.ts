@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireCEO } from "@/lib/authz";
 import { commitTaskIntake } from "@/lib/task-intake-commit";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
+import { buildValidTaskIntakeForRoute, invalidTaskIntakeResponse } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext(request, requireCEO, null);
@@ -10,19 +10,20 @@ export async function POST(request: NextRequest) {
 
   const { payload, permission, supabase } = context;
   try {
-    const intake = await buildTaskIntakePreviewForRoute({
+    const intake = await buildValidTaskIntakeForRoute({
       supabase,
       payload,
       emptyMessage: "Mindestens eine Aufgabe ist erforderlich.",
       trimParentTaskIds: true,
+      invalidMessage: "Task Intake enthält ungültige Aufgaben.",
     });
-    if (!intake.ok) return apiError(intake.error, intake.status);
+    if (!intake.ok) {
+      return "preview" in intake && intake.preview
+        ? invalidTaskIntakeResponse(intake.error, intake.preview, false)
+        : apiError(intake.error, intake.status);
+    }
 
     const { context, preview } = intake;
-    const invalid = preview.filter((task) => task.errors.length > 0);
-    if (invalid.length) {
-      return NextResponse.json({ error: "Task Intake enthält ungültige Aufgaben.", tasks: preview }, { status: 400 });
-    }
 
     const tasks = await commitTaskIntake({
       supabase,

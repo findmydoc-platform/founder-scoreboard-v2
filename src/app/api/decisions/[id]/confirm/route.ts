@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -51,8 +52,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     entity_id: String(decisionId),
     action: shouldLock ? "confirm_and_lock" : "confirm",
     actor_profile_id: permission.profile.id,
-    request_ip: request.headers.get("x-forwarded-for") || null,
-    user_agent: request.headers.get("user-agent") || null,
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

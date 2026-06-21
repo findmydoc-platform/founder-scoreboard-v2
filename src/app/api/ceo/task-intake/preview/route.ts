@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { requireCEO } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
+import { buildTaskIntakePreviewForRoute, taskIntakePreviewResponse } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext(request, requireCEO, null);
@@ -16,11 +16,7 @@ export async function POST(request: NextRequest) {
       trimParentTaskIds: true,
     });
     if (!intake.ok) return apiError(intake.error, intake.status);
-    return NextResponse.json({
-      ok: true,
-      tasks: intake.preview,
-      valid: intake.preview.every((task) => task.errors.length === 0),
-    });
+    return taskIntakePreviewResponse(intake.preview);
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Task Intake konnte nicht geprüft werden.", 500);
   }

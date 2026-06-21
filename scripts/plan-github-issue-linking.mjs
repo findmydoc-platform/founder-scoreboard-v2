@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { loadLocalEnv } from "./lib/env.mjs";
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
+import { normalizeWords } from "./lib/text-normalization.mjs";
 
 const apply = process.argv.includes("--apply");
 const execFileAsync = promisify(execFile);
@@ -18,16 +19,10 @@ const supabase = await createSupabaseScriptClient({
 });
 
 function normalizeTitle(value) {
-  return String(value || "")
+  return normalizeWords(String(value || "")
     .replace(/^\[(deliverable|sub-issue|proposal|vorschlag)\]\s*:?\s*/i, "")
     .replace(/^\[(deliverable|subtask|sub-task)\]\s*:?\s*/i, "")
-    .replace(/\s+#\d+$/, "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+    .replace(/\s+#\d+$/, ""));
 }
 
 async function fetchIssues() {

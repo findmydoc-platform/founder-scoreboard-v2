@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAgentScope } from "@/lib/agent-auth";
 import { getServerSupabase } from "@/lib/supabase";
-import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
+import { buildTaskIntakePreviewForRoute, taskIntakePreviewResponse } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const permission = requireAgentScope(request, "write:intake");
@@ -23,10 +23,5 @@ export async function POST(request: NextRequest) {
   });
   if (!intake.ok) return NextResponse.json({ ok: false, error: intake.error }, { status: intake.status });
 
-  const { preview } = intake;
-  return NextResponse.json({
-    ok: true,
-    valid: preview.every((task) => task.errors.length === 0),
-    tasks: preview,
-  });
+  return taskIntakePreviewResponse(intake.preview);
 }

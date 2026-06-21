@@ -1,4 +1,5 @@
 import { cleanText } from "@/lib/api-input";
+import { normalizeLookup, slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
 import type { TaskStatus, TaskType } from "@/lib/types";
 
@@ -92,16 +93,7 @@ function valueAsText(value: unknown, maxLength: number) {
 }
 
 function profileId(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function normalizeLookup(value: string) {
-  return value.trim().toLowerCase();
+  return slugify(value);
 }
 
 function profileById(profiles: TaskIntakeProfile[], value: string) {

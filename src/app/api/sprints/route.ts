@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isIsoDate } from "@/lib/api-input";
+import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
@@ -123,8 +123,7 @@ export async function POST(request: NextRequest) {
     entity_type: "sprint",
     entity_id: "bulk",
     after_data: { firstSprintNumber, anchorStartDate, rhythmWeeks, horizonWeeks, targetSprintNumber, upserted: upserts.length, protectedSprintIds: Array.from(protectedSprintIds) },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ ok: true, sprints: ((created || []) as SprintRow[]).map(mapSprint) });
