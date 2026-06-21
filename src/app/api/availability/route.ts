@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanDate, cleanTime } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
+import { mapAvailability } from "@/lib/planning-data-mappers";
 import type { AvailabilityEntry } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -35,42 +36,6 @@ const blockerKinds = new Set([
   "calendar_event",
   "other",
 ]);
-
-function mapAvailability(row: {
-  id: number;
-  profile_id: string;
-  type: AvailabilityEntry["type"];
-  title: string | null;
-  blocker_kind: AvailabilityEntry["blockerKind"] | null;
-  weekday: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  note: string | null;
-  source?: AvailabilityEntry["source"] | null;
-  external_id?: string | null;
-  external_calendar_id?: string | null;
-  synced_at?: string | null;
-}): AvailabilityEntry {
-  return {
-    id: row.id,
-    profileId: row.profile_id,
-    type: row.type,
-    title: row.title || "",
-    blockerKind: row.blocker_kind || (row.type === "working_hours" ? "working_hours" : row.type === "vacation" ? "vacation" : row.type === "sick" ? "sick" : "on_business"),
-    weekday: row.weekday,
-    startDate: row.start_date || "",
-    endDate: row.end_date || "",
-    startTime: row.start_time?.slice(0, 5) || "",
-    endTime: row.end_time?.slice(0, 5) || "",
-    note: row.note || "",
-    source: row.source || "manual",
-    externalId: row.external_id || "",
-    externalCalendarId: row.external_calendar_id || "",
-    syncedAt: row.synced_at || "",
-  };
-}
 
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext<AvailabilityPayload>(request, requireFounder, {});

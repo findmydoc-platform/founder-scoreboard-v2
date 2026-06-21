@@ -6,7 +6,7 @@ import type { SprintPlanningOptions } from "@/features/settings/molecules/settin
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
 import type { PlanningData, ViewMode } from "@/lib/types";
-import { addDaysIso } from "@/features/planning/model/planning-app-model";
+import { addDaysIso } from "@/lib/planning-schedule";
 
 export type PlanningFilters = {
   query: string;

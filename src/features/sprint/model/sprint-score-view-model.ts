@@ -1,22 +1,8 @@
 import { founderScore, taskBelongsToProfile } from "@/lib/platform";
 import { computeFounderSprintScore } from "@/lib/founderops-scoring";
+import { findCurrentSprint } from "@/lib/planning-schedule";
 import { normalizeStatus } from "@/lib/status";
-import type { CommitmentLevel, PlanningData, Profile, Sprint } from "@/lib/types";
-
-export function currentIsoDate() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function findCurrentSprint(sprints: Sprint[], today = currentIsoDate()) {
-  return sprints.find((sprint) => sprint.startDate <= today && sprint.endDate >= today)
-    || sprints.find((sprint) => sprint.status === "active")
-    || sprints.find((sprint) => sprint.status === "planning" || sprint.status === "review")
-    || sprints[0];
-}
+import type { CommitmentLevel, PlanningData, Profile } from "@/lib/types";
 
 export function reviewChecklistScore(checklist: { acceptanceCriteriaMet?: boolean; dodMet?: boolean; evidenceProvided?: boolean; communicationClear?: boolean; blockerHandled?: boolean }) {
   const checked = [

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireOperationalLead } from "@/lib/authz";
 import { getGoogleCalendarEvents, isGoogleCalendarSyncConfigured, type GoogleCalendarEvent } from "@/lib/google-calendar";
+import { mapAvailability } from "@/lib/planning-data-mappers";
 import type { AvailabilityEntry } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -105,26 +106,6 @@ function mapEventToAvailability(profile: CalendarProfileRow, event: GoogleCalend
     external_id: eventId,
     external_calendar_id: profile.google_calendar_email,
     synced_at: syncedAt,
-  };
-}
-
-function mapAvailability(row: AvailabilityRow): AvailabilityEntry {
-  return {
-    id: row.id,
-    profileId: row.profile_id,
-    type: row.type,
-    title: row.title || "",
-    blockerKind: row.blocker_kind || (row.source === "google_calendar" ? "calendar_event" : row.type === "vacation" ? "vacation" : row.type === "sick" ? "sick" : "on_business"),
-    weekday: row.weekday,
-    startDate: row.start_date || "",
-    endDate: row.end_date || "",
-    startTime: row.start_time?.slice(0, 5) || "",
-    endTime: row.end_time?.slice(0, 5) || "",
-    note: row.note || "",
-    source: row.source || "manual",
-    externalId: row.external_id || "",
-    externalCalendarId: row.external_calendar_id || "",
-    syncedAt: row.synced_at || "",
   };
 }
 

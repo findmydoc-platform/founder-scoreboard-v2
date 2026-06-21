@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 
 type SprintRow = {
   id: string;
@@ -22,17 +23,6 @@ type CreateSprintPlanPayload = {
 };
 
 const projectId = "findmydoc-founder-execution";
-
-function sprintNumber(value: string) {
-  const match = value.match(/sprint\D*(\d+)/i) || value.match(/(\d+)$/);
-  return match ? Number(match[1]) : 0;
-}
-
-function addDaysIso(value: string, days: number) {
-  const date = value ? new Date(`${value}T00:00:00`) : new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 function mapSprint(row: SprintRow) {
   return {

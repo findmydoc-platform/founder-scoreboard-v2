@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder, requireOperationalLead } from "@/lib/authz";
 import { createGoogleCalendarEvent, isGoogleCalendarSyncConfigured } from "@/lib/google-calendar";
+import { mapMeeting } from "@/lib/planning-data-mappers";
 import type { Meeting, MeetingAttendance } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -25,38 +26,6 @@ function cleanDurationMinutes(value: unknown) {
   const minutes = Number(value);
   if (!Number.isInteger(minutes) || minutes < 15 || minutes > 480) return 60;
   return minutes;
-}
-
-function mapMeeting(row: {
-  id: number;
-  sprint_id: string;
-  title: string;
-  meeting_at: string;
-  duration_minutes: number | null;
-  status: Meeting["status"];
-  agenda: string | null;
-  google_calendar_id: string | null;
-  google_calendar_event_id: string | null;
-  google_calendar_html_link: string | null;
-  google_calendar_sync_status: Meeting["googleCalendarSyncStatus"] | null;
-  google_calendar_sync_error: string | null;
-  google_calendar_synced_at: string | null;
-}): Meeting {
-  return {
-    id: row.id,
-    sprintId: row.sprint_id,
-    title: row.title,
-    meetingAt: row.meeting_at,
-    durationMinutes: row.duration_minutes || 60,
-    status: row.status,
-    agenda: row.agenda || "",
-    googleCalendarId: row.google_calendar_id || "",
-    googleCalendarEventId: row.google_calendar_event_id || "",
-    googleCalendarHtmlLink: row.google_calendar_html_link || "",
-    googleCalendarSyncStatus: row.google_calendar_sync_status || "not_synced",
-    googleCalendarSyncError: row.google_calendar_sync_error || "",
-    googleCalendarSyncedAt: row.google_calendar_synced_at || "",
-  };
 }
 
 function mapAttendance(row: {

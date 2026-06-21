@@ -7,7 +7,8 @@ import { SprintFounderScoreTable } from "@/features/sprint/organisms/sprint-foun
 import { SprintReviewSheetSection } from "@/features/sprint/organisms/sprint-review-sheet-section";
 import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-objections";
 import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
-import { buildSprintScoreViewModel, findCurrentSprint } from "@/features/sprint/model/sprint-score-view-model";
+import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
+import { findCurrentSprint } from "@/lib/planning-schedule";
 import type { Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
 type ReviewStatus = "accepted" | "partial" | "changes_requested";
