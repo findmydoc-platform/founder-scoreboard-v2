@@ -16,7 +16,7 @@ export async function requireMatchingGitHubProviderToken(request: NextRequest, p
   const githubUser = await githubUserForToken(token);
   const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
   if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
+    throw new Error("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil.");
   }
 
   return token;
@@ -29,7 +29,7 @@ export async function optionalMatchingGitHubProviderToken(request: NextRequest, 
   const githubUser = await githubUserForToken(token);
   const expectedLogin = profile?.githubLogin?.toLowerCase() || "";
   if (!expectedLogin || githubUser.login.toLowerCase() !== expectedLogin) {
-    throw new Error("GitHub User-Token passt nicht zum angemeldeten Teamprofil.");
+    throw new Error("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil.");
   }
 
   return token;

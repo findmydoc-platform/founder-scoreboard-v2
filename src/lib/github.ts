@@ -202,12 +202,12 @@ export async function githubUserForToken(token: string) {
     method: "GET",
     headers: githubHeaders(token),
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub User-Token konnte nicht geprüft werden"));
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub-Verbindung konnte nicht geprüft werden"));
   return response.json() as Promise<{ login: string }>;
 }
 
 export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncContext = {}, token = "") {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const headers = githubHeaders(token);
   const payload = {
@@ -239,7 +239,7 @@ export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncConte
 }
 
 export async function archiveGitHubIssue(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     method: "PATCH",
@@ -255,7 +255,7 @@ export async function archiveGitHubIssue(issueNumber: number, token: string) {
 }
 
 export async function createGitHubIssueComment(issueNumber: number, comment: string, token: string, marker?: string) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
     method: "POST",
@@ -269,7 +269,7 @@ export async function createGitHubIssueComment(issueNumber: number, comment: str
 }
 
 export async function listGitHubIssueComments(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`, {
     method: "GET",
@@ -290,7 +290,7 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
 }
 
 export async function getGitHubIssue(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     method: "GET",
@@ -307,7 +307,7 @@ export async function uploadGitHubAttachment(
   token: string,
   message = "Add Founder Scoreboard attachment",
 ) {
-  if (!token) throw new Error("GitHub User-Token ist nicht verfügbar. Bitte erneut mit GitHub anmelden.");
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
     method: "PUT",

@@ -25,14 +25,14 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.match(route, /requireMatchingGitHubProviderToken/);
   assert.match(providerAuth, /x-github-provider-token/);
   assert.match(providerAuth, /githubUserForToken/);
-  assert.match(providerAuth, /GitHub User-Token passt nicht zum angemeldeten Teamprofil/);
+  assert.match(providerAuth, /GitHub-Verbindung passt nicht zum angemeldeten Teamprofil/);
   assert.match(route, /buildSyncContext/);
   assert.match(route, /task_comments/);
   assert.match(route, /task_blockers/);
   assert.match(route, /task_activity/);
   assert.match(route, /parent_task_id/);
   assert.match(route, /createIfMissing/);
-  assert.match(route, /Diese Aufgabe ist App-only/);
+  assert.match(route, /Diese Aufgabe liegt nur in der App/);
   assert.match(route, /Nur Deliverables werden als eigenständige GitHub-Issues gespiegelt/);
   assert.match(route, /github_sync_status: "pending"/);
   assert.match(route, /github_sync_status: "synced"/);
@@ -87,8 +87,8 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(panelSidebar, /Jetzt spiegeln/);
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /GitHubSyncQueueSection/);
-  assert.match(readinessUi, /GitHub Sync Queue/);
-  assert.match(readinessUi, /Verknüpfte Issues synchronisieren/);
+  assert.match(readinessUi, /Externe Ablage/);
+  assert.match(readinessUi, /Verknüpfte Issues aktualisieren/);
   assert.match(ui, /createIfMissing: false/);
 });
 
@@ -214,25 +214,25 @@ test("app-only tasks are visibly marked without creating github issues", async (
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
-  assert.match(taskCard, /App-only/);
-  assert.match(readinessUi, /App-only-Aufgaben bleiben dauerhaft sichtbar/);
+  assert.match(taskCard, /Nur in der App/);
+  assert.match(readinessUi, /Aufgaben ohne Issue bleiben in der App/);
   assert.match(readinessUi, /Diese Liste bleibt dauerhaft erhalten/);
   assert.match(readinessUi, /task\.taskType === "deliverable"/);
   assert.doesNotMatch(readinessUi, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
-  assert.match(readinessUi, /Deliverables bleiben App-only/);
-  assert.match(readinessUi, /GitHub anlegen/);
-  assert.match(readinessUi, /Keine App-only Aufgaben ohne GitHub-Issue/);
-  assert.match(taskCard, /Nur in der App: noch kein GitHub-Issue verknüpft/);
+  assert.match(readinessUi, /Deliverables bleiben in der App/);
+  assert.match(readinessUi, /Extern anlegen/);
+  assert.match(readinessUi, /Keine Aufgaben ohne externe Ablage/);
+  assert.match(taskCard, /Nur in der App: noch kein Issue verknüpft/);
   assert.match(panel, /TaskDetailPanelSidebar/);
-  assert.match(panelSidebar, /GitHub-Issue anlegen/);
+  assert.match(panelSidebar, /Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
   assert.match(ui, /onCreateGitHubIssue/);
-  assert.match(detailGitHubSyncCard, /Nur in der App: noch kein GitHub-Issue verknüpft/);
-  assert.match(detailGitHubSyncCard, /GitHub-Issue anlegen/);
+  assert.match(detailGitHubSyncCard, /Noch nicht extern abgelegt/);
+  assert.match(detailGitHubSyncCard, /Issue anlegen/);
   assert.match(detail, /createIfMissing: true/);
   assert.match(detail, /githubState/);
-  assert.match(panelSidebar, /nicht automatisch dupliziert/);
-  assert.match(detailGitHubSyncCard, /nicht automatisch dupliziert/);
+  assert.match(panelSidebar, /bewusst extern gespiegelt/);
+  assert.match(detailGitHubSyncCard, /bewusst extern gespiegelt/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -341,13 +341,13 @@ test("github oauth prepares user-based sync without storing provider tokens", as
   assert.doesNotMatch(providerTokenMemory, /localStorage|sessionStorage|indexedDB/i);
   assert.doesNotMatch(readinessUi, /onReconnectGitHub/);
   assert.doesNotMatch(detailGitHubSyncCard, /onReconnectGitHub/);
-  assert.match(readinessUi, /GitHub User-Token/);
+  assert.match(readinessUi, /GitHub-Verbindung/);
   assert.match(syncRoute, /requireMatchingGitHubProviderToken/);
   assert.match(providerAuth, /githubUser\.login\.toLowerCase\(\) !== expectedLogin/);
   assert.match(commentsRoute, /createGitHubIssueComment/);
   assert.match(commentsRoute, /githubSyncError/);
   assert.match(attachmentRoute, /requireMatchingGitHubProviderToken/);
-  assert.match(providerAuth, /GitHub User-Token passt nicht zum angemeldeten Teamprofil/);
+  assert.match(providerAuth, /GitHub-Verbindung passt nicht zum angemeldeten Teamprofil/);
   assert.match(providerAuth, /x-github-provider-token/);
   assert.doesNotMatch(commentsRoute, /task_comments"\)\.delete/);
   assert.match(github, /createGitHubIssueComment/);
@@ -436,7 +436,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(blockersRoute, /task.blocker_reported/);
   assert.match(taskMutationContract, /Status geändert/);
   assert.match(taskRoute, /activityMessages/);
-  assert.match(syncRoute, /GitHub Sync ausgeführt/);
+  assert.match(syncRoute, /GitHub-Spiegelung ausgeführt/);
   assert.match(panel, /TaskDetailPanelBlockerSection/);
   assert.match(panelBlockerSection, /Blocker melden/);
   assert.match(panel, /TaskCommentThread/);

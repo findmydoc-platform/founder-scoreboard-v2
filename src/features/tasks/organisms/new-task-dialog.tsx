@@ -279,7 +279,7 @@ export function NewTaskDialog({
                   onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300"
                 />
-                Direkt als GitHub-Issue anlegen
+                Direkt extern anlegen
               </label>
             </div>
             {deliverableNeedsStructure && <div className="mt-2 text-xs font-semibold text-amber-700">Für ein Deliverable fehlen noch Sprint oder Initiative.</div>}

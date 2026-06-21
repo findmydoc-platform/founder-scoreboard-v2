@@ -82,8 +82,8 @@ export const workspaceSubtitles: Record<Workspace, string> = {
   projects: "Epic-, Meilenstein- und Initiative-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
-  settings: "Datenquelle, Auth-Status und Setup-Prüfungen.",
-  "ceo-intake": "CEO-only Task Intake für Codex-generierte Aufgaben.",
+  settings: "Teamzugriff, Benachrichtigungen und Betriebsdetails.",
+  "ceo-intake": "CEO-only Import für freigegebene Aufgabenpakete.",
 };
 
 export const planningWorkspaces: Workspace[] = ["planning", "mine"];

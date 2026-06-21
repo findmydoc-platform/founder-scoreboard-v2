@@ -467,10 +467,10 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(app, /reopenReviewTask/);
   assert.match(taskApiClient, /\/api\/tasks\/\$\{taskId\}\/review\/reopen/);
   assert.match(model, /label: "Meine"/);
-  assert.match(workspace, /Offen/);
-  assert.match(workspace, /Abgeschlossen/);
-  assert.match(workspace, /Nacharbeit/);
-  assert.match(workspace, /Geblockt/);
+  assert.match(model, /label: "Offen"/);
+  assert.match(model, /label: "Abgeschlossen"/);
+  assert.match(model, /label: "Nacharbeit"/);
+  assert.match(model, /label: "Geblockt"/);
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(detail, /TaskReviewSheet/);
   assert.match(detail, /Review nicht gefunden/);
@@ -683,7 +683,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(teamUi, /Nur Ansicht/);
   assert.match(teamUi, /canManageTeam/);
   assert.match(teamUi, /Aktuell ist keine aktive Deputy-Vertretung gesetzt/);
-  assert.match(teamUi, /Rollen, Stammdaten und der zentrale Benachrichtigungsschalter sind CEO-geschützt/);
+  assert.match(teamUi, /Rollen und Stammdaten sind CEO-geschützt/);
 });
 
 test("notification preferences are editable per profile and event type", async () => {
@@ -703,7 +703,7 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(data, /notificationPreferenceResult/);
   assert.match(dataMappers, /mapNotificationPreference/);
   assert.match(types, /export type NotificationPreference/);
-  assert.match(teamUi, /Google-Chat-Events/);
+  assert.match(teamUi, /Chat-Hinweise/);
   assert.match(teamUi, /onSaveProfileSettings/);
   assert.match(teamUi, /Ungespeicherte Änderungen/);
   assert.match(teamUi, /Speichern/);
@@ -779,7 +779,7 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
   assert.match(reviewSheet, /Review-Blatt/);
   assert.match(reviewSheet, /Accountable Review-Blatt/);
-  assert.match(reviewSheet, /Review-Rohpunkte/);
+  assert.match(reviewSheet, /Aus erfüllten Kriterien berechnet/);
   assert.match(reviewSheet, /reviewChecklistScore/);
   assert.match(sprintUi, /20 Punkte/);
   assert.match(sprintUi, /Form \/ Review-Reife/);

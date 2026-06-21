@@ -164,10 +164,10 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.doesNotMatch(skill, /vercel logs/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
-  assert.match(ui, /Production Readiness/);
+  assert.match(ui, /Betriebsdetails/);
   assert.match(ui, /manuell offen/);
-  assert.match(ui, /GitHub Actions/);
+  assert.match(ui, /Deployment-Automation/);
   assert.doesNotMatch(ui, /vercel login/);
-  assert.match(ui, /GitHub OAuth/);
-  assert.match(ui, /Supabase Auth Redirects/);
+  assert.match(ui, /GitHub-Zugriff/);
+  assert.match(ui, /Anmelde-Weiterleitungen/);
 });

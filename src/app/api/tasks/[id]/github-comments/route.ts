@@ -24,9 +24,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und Kommentare aktualisieren.");
+    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und aktualisiere die Kommentare.");
   } catch (tokenError) {
-    const message = tokenError instanceof Error ? tokenError.message : "GitHub User-Token konnte nicht geprüft werden.";
+    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     return apiError(message, 401);
   }
 

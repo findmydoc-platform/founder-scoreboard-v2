@@ -196,9 +196,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { payload, permission, supabase } = apiContext;
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Sync erneut starten.");
+    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und starte die Spiegelung erneut.");
   } catch (tokenError) {
-    const message = tokenError instanceof Error ? tokenError.message : "GitHub User-Token konnte nicht geprüft werden.";
+    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     return apiError(message, 401);
   }
 
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (!hasExistingGitHubIssue && !payload.createIfMissing) {
     return NextResponse.json({
-      error: "Diese Aufgabe ist App-only. Ein neues GitHub-Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
+      error: "Diese Aufgabe liegt nur in der App. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
       task: {
         githubSyncStatus: task.githubSyncStatus,
         githubSyncError: "",
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }).eq("id", id);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: `GitHub Sync ausgeführt: ${githubRepo}#${issue.number}`,
+      message: `GitHub-Spiegelung ausgeführt: ${githubRepo}#${issue.number}`,
     });
 
     return NextResponse.json({
@@ -269,11 +269,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       },
     });
   } catch (syncError) {
-    const message = syncError instanceof Error ? syncError.message : "GitHub Sync fehlgeschlagen.";
+    const message = syncError instanceof Error ? syncError.message : "GitHub-Spiegelung fehlgeschlagen.";
     await supabase.from("tasks").update({ github_sync_status: "failed", github_sync_error: message }).eq("id", id);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: `GitHub Sync fehlgeschlagen: ${message}`,
+      message: `GitHub-Spiegelung fehlgeschlagen: ${message}`,
     });
     return NextResponse.json({
       error: message,

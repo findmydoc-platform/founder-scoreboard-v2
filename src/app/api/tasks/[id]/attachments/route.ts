@@ -59,9 +59,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und den Upload wiederholen.");
+    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und wiederhole den Upload.");
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "GitHub User-Token konnte nicht geprüft werden.", 403);
+    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", 403);
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

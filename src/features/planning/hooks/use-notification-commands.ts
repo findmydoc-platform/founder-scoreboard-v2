@@ -74,7 +74,7 @@ export function useNotificationCommands({
     setNotificationDispatchMessage("");
 
     if (source !== "supabase") {
-      setNotificationDispatchMessage("Notification Dispatch braucht Supabase als Datenquelle.");
+      setNotificationDispatchMessage("Benachrichtigungsausgang ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 

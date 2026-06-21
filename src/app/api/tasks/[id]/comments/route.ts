@@ -48,7 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let githubSyncError = "";
   if (hasLinkedGitHubIssue) {
     try {
-      const githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub User-Token fehlt. Bitte erneut mit GitHub anmelden und kommentieren.");
+      const githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und kommentiere dann.");
       await createGitHubIssueComment(githubIssueNumber, comment, githubUserToken, `fmd-comment-id:${created.id}`);
     } catch (syncError) {
       githubSyncError = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";

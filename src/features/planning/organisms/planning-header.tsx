@@ -106,7 +106,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Import size={16} />
-              {demoSeedImportPending ? "Import..." : "Demo Import"}
+              {demoSeedImportPending ? "Lädt..." : "Beispieldaten laden"}
             </button>
           )}
           <NotificationInbox

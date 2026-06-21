@@ -45,8 +45,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelHeader, /aria-label="Detailpanel schließen"/);
   assert.match(panelHeader, /Große Ansicht/);
   assert.match(panelHeader, /view=full/);
-  assert.match(panelHeader, /statusBadgeTone/);
-  assert.match(panelHeader, /priorityBadgeTone/);
+  assert.doesNotMatch(panelHeader, /statusBadgeTone|priorityBadgeTone/);
   const taskDetailPanel = panel.slice(panel.indexOf("export function TaskDetailPanel"));
   assert.match(taskDetailPanel, /TaskDetailPanelBriefSection/);
   assert.match(panelBriefSection, /Aufgabenbrief/);
@@ -233,7 +232,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(detailsCard, /onStatusChange/);
   assert.match(blockerCard, /Keine Blocker gemeldet/);
   assert.match(blockerCard, /openBlockerCount/);
-  assert.match(detailGitHubSyncCard, /GitHub Sync/);
+  assert.match(detailGitHubSyncCard, /Externe Ablage/);
   assert.match(detailGitHubSyncCard, /Jetzt spiegeln/);
   assert.match(comments, /TaskCommentTimeline/);
   assert.match(commentTimeline, /github\.com\/\$\{login\}\.png/);

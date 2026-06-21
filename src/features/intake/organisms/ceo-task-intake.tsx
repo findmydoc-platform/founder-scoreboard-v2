@@ -61,7 +61,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
 
   const sendIntakeRequest = async (type: "preview" | "commit") => {
     if (!canUseSupabase) {
-      setMessage("CEO Intake schreibt nur gegen Supabase. Im lokalen Fallback ist kein Commit möglich.");
+      setMessage("Aufgaben können in dieser Umgebung nicht erstellt werden.");
       return null;
     }
 
@@ -69,7 +69,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
       ? await previewTaskIntake(apiClient, parsedPayload())
       : await commitTaskIntake(apiClient, parsedPayload());
     const { response, body } = result;
-    if (!response.ok) throw new Error(body?.error || "Task Intake konnte nicht verarbeitet werden.");
+    if (!response.ok) throw new Error(body?.error || "Aufgabenimport konnte nicht verarbeitet werden.");
     return body;
   };
 
@@ -81,7 +81,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
       if (!body?.tasks) return;
       setPreviewTasks(body.tasks);
       const nextState = previewState(body.tasks);
-      setMessage(nextState.valid ? "Preview ist gültig. Aufgaben können erstellt werden." : "Preview enthält Fehler und kann nicht committed werden.");
+      setMessage(nextState.valid ? "Vorschau ist gültig. Aufgaben können erstellt werden." : "Vorschau enthält Fehler und kann nicht erstellt werden.");
     } catch (error) {
       setPreviewTasks([]);
       setMessage(error instanceof SyntaxError ? "JSON konnte nicht gelesen werden." : error instanceof Error ? error.message : "Preview fehlgeschlagen.");
@@ -115,9 +115,9 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
               <WandSparkles size={15} />
               CEO-only
             </div>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Task Intake</h2>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Aufgaben importieren</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-              Füge von Codex erzeugte Aufgaben als JSON ein, prüfe die Preview und erstelle sie danach in Supabase.
+              Füge ein Aufgabenpaket ein, prüfe die Vorschau und erstelle danach die freigegebenen Aufgaben.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -127,7 +127,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
               variant="blue"
             >
               <ClipboardList size={16} />
-              Preview prüfen
+              Vorschau prüfen
             </UiButton>
             <UiButton
               disabled={pending || !state.valid || !canUseSupabase}
@@ -140,12 +140,15 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
           </div>
         </div>
 
-        <textarea
-          value={rawInput}
-          onChange={(event) => setRawInput(event.target.value)}
-          className="mt-4 min-h-[420px] w-full resize-y rounded-md border border-slate-200 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-50 outline-none focus:border-blue-400"
-          spellCheck={false}
-        />
+        <label className="mt-4 grid gap-2 text-xs font-semibold text-slate-500">
+          Aufgabenpaket
+          <textarea
+            value={rawInput}
+            onChange={(event) => setRawInput(event.target.value)}
+            className="min-h-[420px] w-full resize-y rounded-md border border-slate-200 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-50 outline-none focus:border-blue-400"
+            spellCheck={false}
+          />
+        </label>
 
         {message && (
           <UiNotice tone={state.valid ? "success" : "warning"} className="mt-3 leading-normal">
@@ -191,29 +194,29 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
 
       <aside className="grid h-fit gap-4">
         <UiPanel>
-          <h3 className="text-sm font-semibold text-slate-950">Verfügbare Referenzen</h3>
+          <h3 className="text-sm font-semibold text-slate-950">Zuordnungshilfe</h3>
           <div className="mt-3 grid gap-3 text-xs leading-5 text-slate-600">
             <div>
               <div className="font-semibold text-slate-800">Team</div>
-              <p>{profiles.map((profile) => profile.id).join(", ")}</p>
+              <p>{profiles.map((profile) => profile.name).join(", ")}</p>
             </div>
             <div>
               <div className="font-semibold text-slate-800">Aktive Sprints</div>
-              <p>{activeSprints.map((sprint) => sprint.id).join(", ") || "Keine offenen Sprints"}</p>
+              <p>{activeSprints.map((sprint) => sprint.name).join(", ") || "Keine offenen Sprints"}</p>
             </div>
             <div>
               <div className="font-semibold text-slate-800">Initiativen</div>
-              <p>{packages.slice(0, 12).map((pack) => pack.id).join(", ")}</p>
+              <p>{packages.slice(0, 12).map((pack) => pack.title).join(", ")}</p>
             </div>
           </div>
         </UiPanel>
 
         <UiPanel>
-          <h3 className="text-sm font-semibold text-slate-950">Team-KI Leitplanken</h3>
+          <h3 className="text-sm font-semibold text-slate-950">Geschützte Felder</h3>
           <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
-            <p>Team-KI bleibt getrennt vom CEO Intake und nutzt nur die bestehende Browser-Session, keine persönlichen langlebigen API-Tokens.</p>
-            <p>Erlaubt sind operative Aktionen wie Kommentar, Evidence, Blocker, Checklisten und Status bis Review.</p>
-            <p>Planung, RACI, Sprint, Review Owner, Punkte und Erledigt bleiben geschützt.</p>
+            <p>Neue Aufgaben entstehen erst nach gültiger Vorschau und aktiver Bestätigung.</p>
+            <p>Planung, RACI, Sprint, Review Owner, Punkte und Erledigt werden nicht automatisch überschrieben.</p>
+            <p>Bestehende Aufgaben bleiben unverändert, bis du neue Aufgaben explizit erstellst.</p>
           </div>
         </UiPanel>
       </aside>

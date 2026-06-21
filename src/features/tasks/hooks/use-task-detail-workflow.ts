@@ -253,7 +253,7 @@ export function useTaskDetailWorkflow({
     setError("");
 
     if (source !== "supabase") {
-      setError("GitHub Sync ist nur mit Supabase-Datenquelle verfügbar.");
+      setError("GitHub-Spiegelung ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 
@@ -262,7 +262,7 @@ export function useTaskDetailWorkflow({
     startTransition(async () => {
       try {
         const { response, body } = await syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
-        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub Sync konnte nicht ausgeführt werden.");
+        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Spiegelung konnte nicht ausgeführt werden.");
 
         setGithubState((current) => ({
           githubRepo: body.task?.githubRepo || current.githubRepo,
@@ -273,7 +273,7 @@ export function useTaskDetailWorkflow({
           githubSyncError: body.task?.githubSyncError || "",
         }));
       } catch (caught) {
-        const message = caught instanceof Error ? caught.message : "GitHub Sync konnte nicht ausgeführt werden.";
+        const message = caught instanceof Error ? caught.message : "GitHub-Spiegelung konnte nicht ausgeführt werden.";
         setGithubState((current) => ({ ...current, githubSyncStatus: "failed", githubSyncError: message }));
         setError(message);
       }

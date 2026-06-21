@@ -51,34 +51,23 @@ type AppSidebarProps = {
   onMouseLeave?: () => void;
 };
 
-function DataSourceCard({
-  source,
-  localStateLoaded,
+function AccessCard({
   authAvailable,
   authUserEmail,
   className = "",
 }: {
-  source?: "seed" | "supabase";
-  localStateLoaded: boolean;
   authAvailable: boolean;
   authUserEmail: string;
   className?: string;
 }) {
-  if (!source) return null;
+  if (!authAvailable) return null;
 
   return (
     <div className={className}>
-      <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-        Datenquelle: <span className="font-semibold">{source === "supabase" ? "Supabase" : "Lokaler Fallback"}</span>
-        <br />
-        {source === "supabase" ? "Änderungen werden in Postgres gespeichert." : localStateLoaded ? "Demo-Daten werden nur per Import geladen." : "Lokaler Status wird geladen."}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+        <div className="font-semibold text-slate-800">Teamzugriff</div>
+        <div className="mt-1 truncate">{authUserEmail || "Nicht angemeldet"}</div>
       </div>
-      {authAvailable && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
-          <div className="font-semibold text-slate-800">Teamzugriff</div>
-          <div className="mt-1 truncate">{authUserEmail || "Nicht angemeldet"}</div>
-        </div>
-      )}
     </div>
   );
 }
@@ -86,8 +75,6 @@ function DataSourceCard({
 export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppSidebar({
   activeWorkspace = "planning",
   onSelect,
-  source,
-  localStateLoaded = true,
   authAvailable = false,
   authUserEmail = "",
   currentPlatformRole = "",
@@ -154,9 +141,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
         <nav className="space-y-1 px-3 py-4" aria-label="Hauptnavigation">
           {visibleNavItems.map((item) => renderNavItem(item, "desktop"))}
         </nav>
-        <DataSourceCard
-          source={source}
-          localStateLoaded={localStateLoaded}
+        <AccessCard
           authAvailable={authAvailable}
           authUserEmail={authUserEmail}
           className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -176,9 +161,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
             <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Mobile Hauptnavigation">
               {visibleNavItems.map((item) => renderNavItem(item, "mobile"))}
             </nav>
-            <DataSourceCard
-              source={source}
-              localStateLoaded={localStateLoaded}
+            <AccessCard
               authAvailable={authAvailable}
               authUserEmail={authUserEmail}
               className="border-t border-slate-100 p-4"

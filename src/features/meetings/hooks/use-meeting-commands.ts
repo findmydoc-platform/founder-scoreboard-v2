@@ -254,7 +254,7 @@ export function useMeetingCommands({
     setCalendarSyncMessage("Google Calendar Sync wird geprüft...");
 
     if (source !== "supabase") {
-      setCalendarSyncMessage("Google Calendar Sync ist nur mit Supabase-Datenquelle aktiv.");
+      setCalendarSyncMessage("Kalenderabgleich ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 

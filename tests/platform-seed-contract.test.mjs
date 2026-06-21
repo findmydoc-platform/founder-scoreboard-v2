@@ -45,7 +45,7 @@ test("source.json is the single maintained seed data source", async () => {
   }
 });
 
-test("runtime fallback stays empty until the Demo Import button writes seed data", async () => {
+test("runtime fallback stays empty until the sample data button writes seed data", async () => {
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const route = await readFile("src/app/api/demo-seed/import/route.ts", "utf8");
@@ -155,7 +155,7 @@ test("demo import route is local only and non destructive", async () => {
   assert.doesNotMatch(helper, /\.from\("tasks"\)\.delete\(/);
 });
 
-test("header exposes gated Demo Import before notifications", async () => {
+test("header exposes gated sample data import before notifications", async () => {
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const app = await readFile("src/features/planning/PlanningApp.tsx", "utf8");
   const page = await readFile("src/app/page.tsx", "utf8");
@@ -166,9 +166,9 @@ test("header exposes gated Demo Import before notifications", async () => {
   assert.match(header, /import \{ Filter, Import, Menu/);
   assert.match(header, /demoSeedImportAvailable/);
   assert.match(header, /importDemoSeed/);
-  assert.match(header, /Demo Import/);
+  assert.match(header, /Beispieldaten laden/);
   assert.match(header, /<Import size=\{16\}/);
-  assert.ok(header.indexOf("Demo Import") < header.indexOf("<NotificationInbox"), "Demo Import should render before NotificationInbox");
+  assert.ok(header.indexOf("Beispieldaten laden") < header.indexOf("<NotificationInbox"), "sample data import should render before NotificationInbox");
 
   assert.match(page, /isDemoSeedImportButtonAvailable/);
   assert.doesNotMatch(page, new RegExp("isDemoSeed" + "ImportAvailable"));

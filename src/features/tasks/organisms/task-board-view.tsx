@@ -92,6 +92,8 @@ export function TaskBoardView({
                     allTasks={allTasks}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
                     statusDisabled={!canUpdateStatus}
+                    showStatus={false}
+                    showStatusControl={false}
                     onOpen={onOpenTask}
                     onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
