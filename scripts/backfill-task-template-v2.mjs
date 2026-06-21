@@ -1,45 +1,12 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createSupabaseScriptClient } from "./lib/supabase.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const SHOW_INDEX = process.argv.indexOf("--show");
 const SHOW_ID = SHOW_INDEX >= 0 ? process.argv[SHOW_INDEX + 1] : "";
 
-function parseEnvLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) return null;
-  const separator = trimmed.indexOf("=");
-  if (separator < 0) return null;
-  const key = trimmed.slice(0, separator).trim();
-  const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, "");
-  return [key, value];
-}
-
-async function loadEnv() {
-  const envPath = resolve(process.cwd(), ".env.local");
-  if (!existsSync(envPath)) return;
-  const envFile = await readFile(envPath, "utf8");
-  for (const pair of envFile.split(/\r?\n/).map(parseEnvLine)) {
-    if (!pair) continue;
-    const [key, value] = pair;
-    process.env[key] ||= value;
-  }
-}
-
-await loadEnv();
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!url || !key) {
-  console.error("Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.");
-  process.exit(1);
-}
-
-const supabase = createClient(url, key, {
-  auth: { persistSession: false },
+const supabase = await createSupabaseScriptClient({
+  keyEnv: ["SUPABASE_SERVICE_ROLE_KEY"],
 });
 
 const PLACEHOLDERS = new Set([
