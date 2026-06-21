@@ -1,78 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
-import type { FounderEvent } from "@/lib/types";
+import { cleanEventDateTime, cleanEventProfileIds, cleanEventReminderDays, eventCategories, eventStatuses, founderEventSelect, type EventPayload } from "@/features/events/model/event-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-
-type EventPayload = {
-  title?: string;
-  category?: FounderEvent["category"];
-  startsAt?: string;
-  endsAt?: string;
-  location?: string;
-  description?: string;
-  audienceMode?: FounderEvent["audienceMode"];
-  participantProfileIds?: string[];
-  reminderDaysBefore?: number;
-  status?: FounderEvent["status"];
-};
-
-const eventCategories = new Set(["conference", "legal", "company", "travel", "deadline", "other"]);
-const eventStatuses = new Set(["planned", "done", "cancelled"]);
-
-function cleanDateTime(value: unknown) {
-  if (typeof value !== "string" || !value) return "";
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{3})?Z?)?$/.test(value)) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
-
-function cleanProfileIds(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)));
-}
-
-function cleanReminderDays(value: unknown, fallback: number) {
-  const days = Number(value);
-  if (!Number.isInteger(days) || days < 0 || days > 90) return fallback;
-  return days;
-}
-
-function mapFounderEvent(row: {
-  id: number;
-  title: string;
-  category: FounderEvent["category"];
-  starts_at: string;
-  ends_at: string | null;
-  location: string | null;
-  description: string | null;
-  audience_mode: FounderEvent["audienceMode"];
-  participant_profile_ids: string[] | null;
-  reminder_days_before: number;
-  reminder_generated_at: string | null;
-  status: FounderEvent["status"];
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}): FounderEvent {
-  return {
-    id: row.id,
-    title: row.title,
-    category: row.category,
-    startsAt: row.starts_at,
-    endsAt: row.ends_at || row.starts_at,
-    location: row.location || "",
-    description: row.description || "",
-    audienceMode: row.audience_mode,
-    participantProfileIds: row.participant_profile_ids || [],
-    reminderDaysBefore: row.reminder_days_before,
-    reminderGeneratedAt: row.reminder_generated_at || "",
-    status: row.status,
-    createdBy: row.created_by || "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
+import { mapFounderEvent } from "@/lib/planning-data-mappers";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLead, {});
@@ -87,7 +18,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { data: current, error: currentError } = await supabase
     .from("founder_events")
-    .select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status,created_by,created_at,updated_at")
+    .select(founderEventSelect)
     .eq("id", id)
     .single();
 
@@ -95,15 +26,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const title = typeof payload.title === "string" ? cleanText(payload.title, 180) : current.title;
   const category = typeof payload.category === "string" && eventCategories.has(payload.category) ? payload.category : current.category;
-  const startsAt = typeof payload.startsAt === "string" ? cleanDateTime(payload.startsAt) : current.starts_at;
-  const endsAt = typeof payload.endsAt === "string" ? cleanDateTime(payload.endsAt) || null : current.ends_at;
+  const startsAt = typeof payload.startsAt === "string" ? cleanEventDateTime(payload.startsAt) : current.starts_at;
+  const endsAt = typeof payload.endsAt === "string" ? cleanEventDateTime(payload.endsAt) || null : current.ends_at;
   const location = typeof payload.location === "string" ? cleanText(payload.location, 240) : current.location || "";
   const description = typeof payload.description === "string" ? cleanText(payload.description, 3000) : current.description || "";
   const audienceMode = payload.audienceMode === "selected" ? "selected" : payload.audienceMode === "all" ? "all" : current.audience_mode;
   const participantProfileIds = audienceMode === "selected"
-    ? (Array.isArray(payload.participantProfileIds) ? cleanProfileIds(payload.participantProfileIds) : current.participant_profile_ids || [])
+    ? (Array.isArray(payload.participantProfileIds) ? cleanEventProfileIds(payload.participantProfileIds) : current.participant_profile_ids || [])
     : [];
-  const reminderDaysBefore = cleanReminderDays(payload.reminderDaysBefore, current.reminder_days_before);
+  const reminderDaysBefore = cleanEventReminderDays(payload.reminderDaysBefore, current.reminder_days_before);
   const status = typeof payload.status === "string" && eventStatuses.has(payload.status) ? payload.status : current.status;
 
   if (!title) return apiError("Titel ist erforderlich.", 400);
@@ -143,7 +74,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .from("founder_events")
     .update(patch)
     .eq("id", id)
-    .select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status,created_by,created_at,updated_at")
+    .select(founderEventSelect)
     .single();
 
   if (error || !event) return apiError(error?.message || "Event konnte nicht aktualisiert werden.", 500);
