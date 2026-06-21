@@ -1,24 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireCEO } from "@/lib/authz";
-import { buildTaskIntakePreview, parseTaskIntakePayload } from "@/lib/task-intake";
 import { commitTaskIntake } from "@/lib/task-intake-commit";
-import { loadTaskIntakeContext } from "@/lib/task-intake-context";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext(request, requireCEO, null);
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
-  const rawTasks = parseTaskIntakePayload(payload);
-  if (!rawTasks.length) return apiError("Mindestens eine Aufgabe ist erforderlich.", 400);
-  if (rawTasks.length > 30) return apiError("Maximal 30 Aufgaben pro Intake.", 400);
-
-  const parentTaskIds = [...new Set(rawTasks.map((task) => typeof task.parentTaskId === "string" ? task.parentTaskId.trim() : "").filter(Boolean))];
-
   try {
-    const context = await loadTaskIntakeContext(supabase, parentTaskIds);
-    const preview = buildTaskIntakePreview(rawTasks, context);
+    const intake = await buildTaskIntakePreviewForRoute({
+      supabase,
+      payload,
+      emptyMessage: "Mindestens eine Aufgabe ist erforderlich.",
+      trimParentTaskIds: true,
+    });
+    if (!intake.ok) return apiError(intake.error, intake.status);
+
+    const { context, preview } = intake;
     const invalid = preview.filter((task) => task.errors.length > 0);
     if (invalid.length) {
       return NextResponse.json({ error: "Task Intake enthält ungültige Aufgaben.", tasks: preview }, { status: 400 });
