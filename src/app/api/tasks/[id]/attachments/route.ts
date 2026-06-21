@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
 const maxUploadBytes = 10 * 1024 * 1024;
@@ -21,14 +22,8 @@ function safeFileName(value: string) {
   const trimmed = value.trim() || fallback;
   const parts = trimmed.split(".");
   const extension = parts.length > 1 ? parts.pop() || "" : "";
-  const base = (parts.join(".") || trimmed)
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || fallback;
-  return extension ? `${base}.${extension.toLowerCase().replace(/[^a-z0-9]/g, "")}` : base;
+  const base = slugify(parts.join(".") || trimmed, { maxLength: 80 }) || fallback;
+  return extension ? `${base}.${compactAlphanumeric(extension)}` : base;
 }
 
 function isImageType(type: string) {

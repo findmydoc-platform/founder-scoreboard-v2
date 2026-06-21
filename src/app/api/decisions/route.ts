@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cleanText } from "@/lib/api-input";
+import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -45,8 +45,7 @@ export async function POST(request: NextRequest) {
     action: "create",
     actor_profile_id: permission.profile?.id || null,
     after_data: data,
-    request_ip: request.headers.get("x-forwarded-for") || null,
-    user_agent: request.headers.get("user-agent") || null,
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

@@ -2,21 +2,33 @@ import type { Profile, Task } from "./types";
 import type { DbTask } from "./planning-data-row-types";
 import { profileNameById } from "./planning-profile-mappers";
 
-export function mapTask(row: DbTask, profiles: Profile[]): Task {
+export type TaskRowForMapping = Partial<DbTask>;
+type TaskProfileLookup = Profile[] | Map<string, string>;
+
+type MapTaskRowOptions = {
+  defaultSprintId?: string;
+};
+
+function profileName(lookup: TaskProfileLookup, profileId?: string | null) {
+  if (Array.isArray(lookup)) return profileNameById(lookup, profileId);
+  return lookup.get(profileId || "") || profileId || "";
+}
+
+export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, options: MapTaskRowOptions = {}): Task {
   const ownerId = row.owner || "";
   const assigneeId = row.assignee || "";
   const createdById = row.created_by || "";
-  const owner = profileNameById(profiles, row.owner);
-  const assignee = profileNameById(profiles, row.assignee) || owner;
-  const createdBy = profileNameById(profiles, row.created_by);
+  const owner = profileName(profiles, row.owner);
+  const assignee = profileName(profiles, row.assignee) || owner;
+  const createdBy = profileName(profiles, row.created_by);
 
   return {
-    id: row.id,
-    order: row.sort_order,
-    title: row.title,
+    id: row.id || "",
+    order: row.sort_order || 0,
+    title: row.title || "",
     description: row.description || "",
-    status: row.status,
-    priority: row.priority,
+    status: row.status || "Offen",
+    priority: row.priority || "P2",
     ownerId,
     owner,
     assigneeId,
@@ -42,7 +54,7 @@ export function mapTask(row: DbTask, profiles: Profile[]): Task {
     hours: row.estimate_hours || 0,
     startDate: row.start_date || "",
     endDate: row.end_date || "",
-    sprintId: row.sprint_id || "sprint-1",
+    sprintId: row.sprint_id || options.defaultSprintId || "",
     milestoneId: row.milestone_id || "",
     reviewStatus: row.review_status || "not_requested",
     reviewOwnerProfileId: row.review_owner_profile_id || "",
@@ -50,7 +62,7 @@ export function mapTask(row: DbTask, profiles: Profile[]): Task {
     scorePoints: row.score_points || 0,
     scoreFinal: Boolean(row.score_final),
     githubRepo: row.github_repo || "findmydoc-platform/management",
-    githubIssueNumber: row.github_issue_number,
+    githubIssueNumber: row.github_issue_number ?? null,
     githubIssueUrl: row.github_issue_url || row.issue_url || "",
     githubSyncStatus: row.github_sync_status || "not_synced",
     githubLastSyncedAt: row.github_last_synced_at || "",
@@ -69,4 +81,8 @@ export function mapTask(row: DbTask, profiles: Profile[]): Task {
     selfDocumentedChecked: Boolean(row.self_documented_checked),
     selfBlockersChecked: Boolean(row.self_blockers_checked),
   };
+}
+
+export function mapTask(row: DbTask, profiles: Profile[]): Task {
+  return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1" });
 }

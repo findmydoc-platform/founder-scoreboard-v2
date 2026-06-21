@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
+import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
+import { slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
+import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Task, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -32,16 +35,6 @@ type CreateTaskPayload = {
 
 const taskTypes = new Set(["deliverable", "proposal", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-
-function slugify(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 70);
-}
 
 function profileId(value?: string) {
   return slugify(value || "");
@@ -119,46 +112,39 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const idBase = `${permission.profile?.id || "task"}-${slugify(title) || "neue-aufgabe"}`;
+  const idBase = `${permission.profile?.id || "task"}-${slugify(title, { maxLength: 70 }) || "neue-aufgabe"}`;
   const id = `${idBase}-${Date.now().toString(36)}`;
   const sortOrder = Number(maxRow?.sort_order || 0) + 1;
 
-  const insert = {
+  const insert = buildTaskInsertRow({
     id,
-    project_id: "findmydoc-founder-execution",
-    package_id: packageId,
-    milestone_id: milestoneId,
+    packageId,
+    milestoneId,
     title,
     description: cleanText(payload.description, 4000),
-    problem_statement: cleanText(payload.problemStatement, 4000),
-    intended_outcome: cleanText(payload.intendedOutcome, 4000),
-    scope_constraints: cleanText(payload.scopeConstraints, 4000),
-    acceptance_criteria: cleanText(payload.acceptanceCriteria, 6000),
-    evidence_required: cleanText(payload.evidenceRequired, 4000),
-    dod_template_version: "founder-deliverable-v2",
+    problemStatement: cleanText(payload.problemStatement, 4000),
+    intendedOutcome: cleanText(payload.intendedOutcome, 4000),
+    scopeConstraints: cleanText(payload.scopeConstraints, 4000),
+    acceptanceCriteria: cleanText(payload.acceptanceCriteria, 6000),
+    evidenceRequired: cleanText(payload.evidenceRequired, 4000),
     status,
     priority,
     owner,
     assignee: owner,
-    created_by: permission.profile?.id || null,
+    createdBy: permission.profile?.id || null,
     workstream: cleanText(payload.workstream, 120),
-    sort_order: sortOrder,
-    start_date: startDate,
-    end_date: endDate,
+    sortOrder,
+    startDate,
+    endDate,
     deadline: payload.deadline || null,
-    estimate_hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
-    definition_of_done: cleanText(payload.definitionOfDone, 4000),
-    sprint_id: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,
-    review_status: "not_requested",
-    review_owner_profile_id: reviewOwnerProfileId,
-    score_points: 0,
-    score_final: false,
-    github_repo: "findmydoc-platform/management",
-    github_sync_status: "not_synced",
-    task_type: taskType,
-    parent_task_id: parentTaskId || null,
-    score_relevant: scoreRelevant,
-  };
+    hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
+    definitionOfDone: cleanText(payload.definitionOfDone, 4000),
+    sprintId: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,
+    reviewOwnerProfileId,
+    taskType,
+    parentTaskId,
+    scoreRelevant,
+  });
 
   const { data: created, error: insertError } = await supabase.from("tasks").insert(insert).select("*").single();
   if (insertError || !created) return apiError(insertError?.message || "Aufgabe konnte nicht erstellt werden.", 500);
@@ -199,59 +185,7 @@ export async function POST(request: NextRequest) {
     ...auditRequestMetadata(request),
   });
 
-  const task: Task = {
-    id: created.id,
-    order: created.sort_order,
-    title: created.title,
-    description: created.description || "",
-    status: created.status,
-    priority: created.priority,
-    ownerId: created.owner || "",
-    owner: profileNameById.get(created.owner || "") || created.owner || "",
-    assigneeId: created.assignee || "",
-    assignee: profileNameById.get(created.assignee || "") || created.assignee || "",
-    createdById: created.created_by || "",
-    createdBy: profileNameById.get(created.created_by || "") || created.created_by || "",
-    workstream: created.workstream || "",
-    packageId: created.package_id || "",
-    deadline: created.deadline || "",
-    problemStatement: created.problem_statement || "",
-    intendedOutcome: created.intended_outcome || "",
-    scopeConstraints: created.scope_constraints || "",
-    acceptanceCriteria: created.acceptance_criteria || "",
-    evidenceRequired: created.evidence_required || "",
-    dodTemplateVersion: created.dod_template_version || "founder-deliverable-v2",
-    definitionOfDone: created.definition_of_done || "",
-    dependsOn: "",
-    evidenceLink: created.evidence_link || "",
-    issueNumber: created.issue_number || "",
-    issueUrl: created.issue_url || "",
-    note: "",
-    watched: Boolean(created.watched),
-    hours: created.estimate_hours || 0,
-    startDate: created.start_date || "",
-    endDate: created.end_date || "",
-    sprintId: created.sprint_id || "",
-    milestoneId: created.milestone_id || "",
-    reviewStatus: created.review_status || "not_requested",
-    reviewOwnerProfileId: created.review_owner_profile_id || "",
-    reviewRequestedAt: created.review_requested_at || "",
-    scorePoints: created.score_points || 0,
-    scoreFinal: Boolean(created.score_final),
-    githubRepo: created.github_repo || "findmydoc-platform/management",
-    githubIssueNumber: created.github_issue_number,
-    githubIssueUrl: created.github_issue_url || "",
-    githubSyncStatus: created.github_sync_status || "not_synced",
-    githubLastSyncedAt: created.github_last_synced_at || "",
-    githubSyncError: created.github_sync_error || "",
-    taskType: created.task_type || taskType,
-    parentTaskId: created.parent_task_id || "",
-    scoreRelevant: created.score_relevant !== false,
-    selfDodChecked: Boolean(created.self_dod_checked),
-    selfEvidenceChecked: Boolean(created.self_evidence_checked),
-    selfDocumentedChecked: Boolean(created.self_documented_checked),
-    selfBlockersChecked: Boolean(created.self_blockers_checked),
-  };
+  const task: Task = mapTaskRow(created as TaskRowForMapping, profileNameById);
 
   return NextResponse.json({ ok: true, task });
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { CalendarDays, Pencil, Save, X } from "lucide-react";
+import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiativeOptionLabel, initiativeRaciRows, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
+import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiativeOptionLabel, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
@@ -236,14 +237,7 @@ export function TaskDetailsCard({
         {currentPackage && (
           <div className="border-t border-slate-100 pt-3">
             <div className="text-xs font-semibold text-slate-500">Initiative-RACI</div>
-            <div className="mt-2 grid gap-1 text-xs text-slate-600">
-              {initiativeRaciRows(currentPackage, profiles).map((row) => (
-                <div key={row.label} className="flex min-w-0 gap-2">
-                  <span className="w-4 shrink-0 font-semibold text-blue-700">{row.label}</span>
-                  <span className="min-w-0 truncate" title={`${row.title}: ${row.value}`}>{row.value}</span>
-                </div>
-              ))}
-            </div>
+            <InitiativeRaciList initiative={currentPackage} profiles={profiles} className="mt-2 grid gap-1 text-xs text-slate-600" />
           </div>
         )}
       </div>

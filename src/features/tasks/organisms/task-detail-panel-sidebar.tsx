@@ -1,10 +1,11 @@
 "use client";
 
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
+import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
-import { dateRange, formatDate, initiativeRaciRows, taskOwnerLabel } from "@/lib/display";
+import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel, syncLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import {
@@ -116,14 +117,7 @@ export function TaskDetailPanelSidebar({
         {currentPackage && (
           <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
             <div className="mb-1 font-semibold text-slate-700">Initiative-RACI</div>
-            <div className="grid gap-1">
-              {initiativeRaciRows(currentPackage, teamProfiles).map((row) => (
-                <div key={row.label} className="flex min-w-0 gap-2">
-                  <span className="w-4 shrink-0 font-semibold text-blue-700">{row.label}</span>
-                  <span className="min-w-0 truncate" title={`${row.title}: ${row.value}`}>{row.value}</span>
-                </div>
-              ))}
-            </div>
+            <InitiativeRaciList initiative={currentPackage} profiles={teamProfiles} className="grid gap-1" />
           </div>
         )}
       </section>

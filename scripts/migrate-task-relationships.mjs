@@ -1,4 +1,5 @@
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
+import { normalizeWordsWithoutQuotes } from "./lib/text-normalization.mjs";
 
 const supabase = await createSupabaseScriptClient({
   missingMessage: "Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
@@ -6,14 +7,7 @@ const supabase = await createSupabaseScriptClient({
 });
 
 function normalize(value) {
-  return (value || "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[`'"]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeWordsWithoutQuotes(value);
 }
 
 function tokens(value) {

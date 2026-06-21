@@ -1,4 +1,5 @@
 import { cleanText } from "@/lib/api-input";
+import { slugify } from "@/lib/slug";
 import { getServerSupabase } from "@/lib/supabase";
 import type { Package } from "@/lib/types";
 
@@ -26,13 +27,7 @@ export const founderProjectId = "findmydoc-founder-execution";
 export const initiativeSelect = "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order";
 
 export function slugifyInitiativeId(value: string) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+  return slugify(value, { maxLength: 60 });
 }
 
 export function mapInitiative(row: Record<string, unknown>): Package {

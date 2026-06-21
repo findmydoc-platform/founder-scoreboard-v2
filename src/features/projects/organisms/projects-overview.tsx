@@ -3,7 +3,8 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { dateRange, formatDate, initiativeMetaLabel, initiativeRaciRows, taskOwnerLabel } from "@/lib/display";
+import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { dateRange, formatDate, initiativeMetaLabel, taskOwnerLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
@@ -150,14 +151,7 @@ function InitiativeTreeItem({
         <div className="grid gap-3 border-t border-slate-100 p-3">
           <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(420px,2fr)]">
             <div className="grid gap-2">
-              <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-                {initiativeRaciRows(initiative, data.profiles).map((row) => (
-                  <div key={row.label} className="flex min-w-0 gap-2">
-                    <span className="w-4 shrink-0 font-semibold text-blue-700">{row.label}</span>
-                    <span className="min-w-0 truncate" title={`${row.title}: ${row.value}`}>{row.value}</span>
-                  </div>
-                ))}
-              </div>
+              <InitiativeRaciList initiative={initiative} profiles={data.profiles} className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600" />
               {initiative.successCriteria && (
                 <p className="text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-700">Erfolgskriterien:</span> {initiative.successCriteria}</p>
               )}

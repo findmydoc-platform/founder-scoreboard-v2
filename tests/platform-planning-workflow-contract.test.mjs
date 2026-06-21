@@ -390,6 +390,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const createTaskRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
+  const createTaskContract = `${createTaskRoute}\n${taskInsertRow}`;
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
@@ -408,7 +410,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(plannedOwnerBackfillMigration, /coalesce\(package\.accountable_profile_id, package\.owner_id\)/);
   assert.match(authz, /requireTaskReviewer/);
   assert.match(authz, /review_owner_profile_id/);
-  assert.match(createTaskRoute, /review_owner_profile_id: reviewOwnerProfileId/);
+  assert.match(createTaskRoute, /reviewOwnerProfileId/);
+  assert.match(createTaskContract, /review_owner_profile_id: input\.reviewOwnerProfileId \|\| null/);
   assert.match(createTaskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /update\.review_owner_profile_id/);
@@ -552,6 +555,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
 test("sprint lock creates carryover for unfinished deliverables", async () => {
   const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+  const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
+  const routeContract = `${route}\n${taskInsertRow}`;
   const ui = await readPlanningSurface();
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -563,7 +568,7 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(route, /review_status === "partial"/);
   assert.match(route, /preserveScore/);
   assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
-  assert.match(route, /github_issue_number: null/);
+  assert.match(routeContract, /github_issue_number: input\.githubIssueNumber \|\| null/);
   assert.match(route, /missed_uncommunicated/);
   assert.match(route, /accepted_carryover/);
   assert.match(route, /sprint\.task_carried_over/);

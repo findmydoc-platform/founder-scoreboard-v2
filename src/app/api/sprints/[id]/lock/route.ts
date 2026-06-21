@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
+import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -38,7 +40,7 @@ type TaskRow = {
   problem_statement: string | null;
   intended_outcome: string | null;
   scope_constraints: string | null;
-  acceptance_criteria: unknown;
+  acceptance_criteria: string | null;
   evidence_required: string | null;
   dod_template_version: string | null;
   sprint_outcome: string | null;
@@ -153,49 +155,40 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     if (nextSprint?.id) {
-      carryoverInserts.push({
+      carryoverInserts.push(buildTaskInsertRow({
         id: `${task.id}-carryover-${nowSuffix}`,
-        project_id: task.project_id,
-        package_id: task.package_id,
-        milestone_id: task.milestone_id,
+        projectId: task.project_id,
+        packageId: task.package_id,
+        milestoneId: task.milestone_id,
         title: task.title,
         description: task.description,
-        problem_statement: task.problem_statement,
-        intended_outcome: task.intended_outcome,
-        scope_constraints: task.scope_constraints,
-        acceptance_criteria: task.acceptance_criteria,
-        evidence_required: task.evidence_required,
-        dod_template_version: task.dod_template_version,
+        problemStatement: task.problem_statement,
+        intendedOutcome: task.intended_outcome,
+        scopeConstraints: task.scope_constraints,
+        acceptanceCriteria: task.acceptance_criteria,
+        evidenceRequired: task.evidence_required,
+        dodTemplateVersion: task.dod_template_version,
         status: outcome === "communicated_blocker" ? "Blockiert" : "Offen",
         priority: task.priority,
         owner: task.owner,
         assignee: task.assignee,
         workstream: task.workstream,
-        sort_order: task.sort_order + 10000,
-        start_date: nextSprint.start_date || null,
-        end_date: nextSprint.end_date || null,
+        sortOrder: task.sort_order + 10000,
+        startDate: nextSprint.start_date || null,
+        endDate: nextSprint.end_date || null,
         deadline: nextSprint.end_date || null,
-        estimate_hours: task.estimate_hours,
-        definition_of_done: task.definition_of_done,
-        evidence_link: task.evidence_link,
-        issue_number: null,
-        issue_url: null,
-        github_issue_number: null,
-        github_issue_url: null,
-        sprint_id: nextSprint.id,
-        review_status: "not_requested",
-        score_points: 0,
-        score_final: false,
-        github_repo: "findmydoc-platform/management",
-        github_sync_status: "not_synced",
-        task_type: "deliverable",
-        score_relevant: true,
-        original_sprint_id: task.original_sprint_id || id,
-        carried_from_task_id: task.id,
-        carried_from_sprint_id: id,
-        carryover_reason: reason,
-        carryover_count: Number(task.carryover_count || 0) + 1,
-      });
+        hours: task.estimate_hours,
+        definitionOfDone: task.definition_of_done,
+        evidenceLink: task.evidence_link,
+        sprintId: nextSprint.id,
+        taskType: "deliverable",
+        scoreRelevant: true,
+        originalSprintId: task.original_sprint_id || id,
+        carriedFromTaskId: task.id,
+        carriedFromSprintId: id,
+        carryoverReason: reason,
+        carryoverCount: Number(task.carryover_count || 0) + 1,
+      }));
 
       if (task.owner) {
         notifications.push({
@@ -392,8 +385,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       founderScores: scoreRows.length,
       strikeEvents: strikeEvents.length,
     },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

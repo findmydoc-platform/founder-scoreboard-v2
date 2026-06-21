@@ -1,6 +1,8 @@
+import { NextResponse } from "next/server";
 import { buildTaskIntakePreview, parseTaskIntakePayload, type TaskIntakeInput } from "@/lib/task-intake";
 import { loadTaskIntakeContext } from "@/lib/task-intake-context";
 import { getServerSupabase } from "@/lib/supabase";
+import type { TaskIntakePreviewTask } from "@/lib/task-intake";
 
 type SupabaseClient = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -33,4 +35,34 @@ export async function buildTaskIntakePreviewForRoute({
   const context = await loadTaskIntakeContext(supabase, parentTaskIdsFromIntake(rawTasks, trimParentTaskIds));
   const preview = buildTaskIntakePreview(rawTasks, context);
   return { ok: true as const, context, preview };
+}
+
+export function taskIntakePreviewResponse(preview: TaskIntakePreviewTask[]) {
+  return NextResponse.json({
+    ok: true,
+    valid: preview.every((task) => task.errors.length === 0),
+    tasks: preview,
+  });
+}
+
+export function invalidTaskIntakeResponse(error: string, tasks: TaskIntakePreviewTask[], includeOk = true) {
+  return NextResponse.json(
+    includeOk ? { ok: false, error, tasks } : { error, tasks },
+    { status: 400 },
+  );
+}
+
+export async function buildValidTaskIntakeForRoute(options: TaskIntakePreviewRouteOptions & { invalidMessage: string }) {
+  const intake = await buildTaskIntakePreviewForRoute(options);
+  if (!intake.ok) return intake;
+  const invalid = intake.preview.filter((task) => task.errors.length > 0);
+  if (invalid.length) {
+    return {
+      ok: false as const,
+      error: options.invalidMessage,
+      status: 400,
+      preview: intake.preview,
+    };
+  }
+  return intake;
 }

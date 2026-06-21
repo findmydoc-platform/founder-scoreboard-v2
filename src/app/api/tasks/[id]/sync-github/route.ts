@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireOperationalLead } from "@/lib/authz";
 import { githubRepoSlug, upsertGitHubIssue, type GitHubTaskSyncContext } from "@/lib/github";
 import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -18,55 +19,6 @@ function hasLinkedGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssu
     task.issueNumber ||
     task.issueUrl.includes("github.com"),
   );
-}
-
-function mapTask(row: TaskRow, profileNameById: Map<string, string>): Task {
-  const owner = String(row.owner || "");
-  const assignee = String(row.assignee || "");
-
-  return {
-    id: String(row.id),
-    order: Number(row.sort_order || 0),
-    title: String(row.title || ""),
-    description: String(row.description || ""),
-    status: String(row.status || "Offen"),
-    priority: String(row.priority || "P2"),
-    owner: profileNameById.get(owner) || owner,
-    assignee: profileNameById.get(assignee) || assignee,
-    workstream: String(row.workstream || ""),
-    packageId: String(row.package_id || ""),
-    deadline: String(row.deadline || ""),
-    problemStatement: String(row.problem_statement || ""),
-    intendedOutcome: String(row.intended_outcome || ""),
-    scopeConstraints: String(row.scope_constraints || ""),
-    acceptanceCriteria: String(row.acceptance_criteria || ""),
-    evidenceRequired: String(row.evidence_required || ""),
-    dodTemplateVersion: String(row.dod_template_version || "founder-deliverable-v2"),
-    definitionOfDone: String(row.definition_of_done || ""),
-    dependsOn: "",
-    evidenceLink: String(row.evidence_link || ""),
-    issueNumber: String(row.issue_number || ""),
-    issueUrl: String(row.issue_url || ""),
-    note: "",
-    watched: Boolean(row.watched),
-    hours: Number(row.estimate_hours || 0),
-    startDate: String(row.start_date || ""),
-    endDate: String(row.end_date || ""),
-    sprintId: String(row.sprint_id || ""),
-    milestoneId: String(row.milestone_id || ""),
-    reviewStatus: (row.review_status as Task["reviewStatus"]) || "not_requested",
-    scorePoints: Number(row.score_points || 0),
-    scoreFinal: Boolean(row.score_final),
-    githubRepo: String(row.github_repo || "findmydoc-platform/management"),
-    githubIssueNumber: row.github_issue_number ? Number(row.github_issue_number) : null,
-    githubIssueUrl: String(row.github_issue_url || ""),
-    githubSyncStatus: (row.github_sync_status as Task["githubSyncStatus"]) || "not_synced",
-    githubLastSyncedAt: String(row.github_last_synced_at || ""),
-    githubSyncError: String(row.github_sync_error || ""),
-    taskType: (row.task_type as Task["taskType"]) || "deliverable",
-    parentTaskId: String(row.parent_task_id || ""),
-    scoreRelevant: row.score_relevant !== false,
-  };
 }
 
 function formatDateRange(start?: unknown, end?: unknown) {
@@ -213,7 +165,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const profiles = await supabase.from("profiles").select("id,name").in("id", involvedProfileIds);
     for (const profile of profiles.data || []) profileNameById.set(profile.id, profile.name);
   }
-  const task = mapTask(data as TaskRow, profileNameById);
+  const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
   const hasExistingGitHubIssue = hasLinkedGitHubIssue(task);
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {

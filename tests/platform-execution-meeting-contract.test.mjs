@@ -269,7 +269,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(schemaChecks, /profiles\.google_calendar/);
   assert.match(route, /requireFounder/);
   assert.match(route, /Founder können nur eigene Verfügbarkeiten pflegen/);
-  assert.match(route, /source: "manual"/);
+  assert.match(route, /source\s*[=:]\s*"manual"/);
   assert.match(route, /external_calendar_id/);
   assert.match(route, /blockerKind/);
   assert.match(route, /availability\.create/);

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
@@ -290,8 +291,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     entity_id: id,
     before_data: task,
     after_data: { deleted: true, githubClosed },
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ ok: true, deletedTaskId: id, githubClosed });

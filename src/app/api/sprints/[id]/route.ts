@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isIsoDate } from "@/lib/api-input";
+import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -116,8 +116,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     entity_id: id,
     before_data: current,
     after_data: updated,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentScope } from "@/lib/agent-auth";
 import { getServerSupabase } from "@/lib/supabase";
 import { commitTaskIntake } from "@/lib/task-intake-commit";
-import { buildTaskIntakePreviewForRoute } from "@/lib/task-intake-route";
+import { buildValidTaskIntakeForRoute, invalidTaskIntakeResponse } from "@/lib/task-intake-route";
 
 async function loadCeoActorProfileId(supabase: NonNullable<ReturnType<typeof getServerSupabase>>) {
   const { data } = await supabase
@@ -26,22 +26,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Supabase is required for Agent Task Intake." }, { status: 501 });
   }
 
-  const intake = await buildTaskIntakePreviewForRoute({
+  const intake = await buildValidTaskIntakeForRoute({
     supabase,
     payload: await request.json().catch(() => null),
     emptyMessage: "Keine Aufgaben im Payload gefunden.",
     trimParentTaskIds: false,
+    invalidMessage: "Agent Task Intake enthält ungültige Aufgaben.",
   });
-  if (!intake.ok) return NextResponse.json({ ok: false, error: intake.error }, { status: intake.status });
+  if (!intake.ok) {
+    return "preview" in intake && intake.preview
+      ? invalidTaskIntakeResponse(intake.error, intake.preview)
+      : NextResponse.json({ ok: false, error: intake.error }, { status: intake.status });
+  }
 
   const { context, preview } = intake;
-  const invalid = preview.filter((task) => task.errors.length > 0);
-  if (invalid.length) {
-    return NextResponse.json(
-      { ok: false, error: "Agent Task Intake enthält ungültige Aufgaben.", tasks: preview },
-      { status: 400 },
-    );
-  }
 
   const tasks = await commitTaskIntake({
     supabase,
