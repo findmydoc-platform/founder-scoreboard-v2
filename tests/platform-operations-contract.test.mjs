@@ -294,15 +294,18 @@ test("founder events are modeled as team-visible operational reminders", async (
 test("founder event writes are operational-lead guarded and audited", async () => {
   const createRoute = await readFile("src/app/api/events/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/events/[id]/route.ts", "utf8");
+  const eventApi = await readFile("src/features/events/model/event-api.ts", "utf8");
 
   assert.match(createRoute, /requireOperationalLead/);
   assert.match(createRoute, /founder_event\.create/);
   assert.match(createRoute, /audit_log/);
-  assert.match(createRoute, /audienceMode === "selected"/);
+  assert.match(createRoute, /buildFounderEventCreateRow/);
+  assert.match(eventApi, /audienceMode === "selected"/);
   assert.match(updateRoute, /requireOperationalLead/);
   assert.match(updateRoute, /founder_event\.update/);
   assert.match(updateRoute, /before_data/);
-  assert.match(updateRoute, /reminder_generated_at: reminderRelevantChange \? null/);
+  assert.match(updateRoute, /buildFounderEventUpdatePatch/);
+  assert.match(eventApi, /reminder_generated_at: reminderRelevantChange \? null/);
 });
 
 test("event reminders use the existing notification pipeline", async () => {

@@ -1,94 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { getServerSupabase } from "@/lib/supabase";
-import type { Package } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
-
-type InitiativePayload = {
-  title?: string;
-  milestoneId?: string;
-  ownerId?: string;
-  accountableProfileId?: string;
-  responsibleProfileIds?: string[];
-  consultedProfileIds?: string[];
-  informedProfileIds?: string[];
-  priority?: string;
-  status?: Package["status"];
-  targetDate?: string;
-  goal?: string;
-  successCriteria?: string;
-  scopeConstraints?: string;
-};
-
-const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-const statuses = new Set(["planned", "active", "done", "paused"]);
-
-function mapInitiative(row: Record<string, unknown>): Package {
-  const ownerId = String(row.owner_id || "");
-  const accountableProfileId = String(row.accountable_profile_id || ownerId);
-  const responsibleProfileIds = Array.isArray(row.responsible_profile_ids) ? row.responsible_profile_ids.map(String) : ownerId ? [ownerId] : [];
-  return {
-    id: String(row.id || ""),
-    milestoneId: String(row.milestone_id || ""),
-    ownerId,
-    accountableProfileId,
-    responsibleProfileIds,
-    consultedProfileIds: Array.isArray(row.consulted_profile_ids) ? row.consulted_profile_ids.map(String) : [],
-    informedProfileIds: Array.isArray(row.informed_profile_ids) ? row.informed_profile_ids.map(String) : [],
-    title: String(row.title || ""),
-    goal: String(row.goal || ""),
-    priority: String(row.priority || "P2"),
-    status: (row.status as Package["status"]) || "planned",
-    targetDate: String(row.target_date || ""),
-    successCriteria: String(row.success_criteria || ""),
-    scopeConstraints: String(row.scope_constraints || ""),
-    sortOrder: Number(row.sort_order || 0),
-  };
-}
-
-function cleanProfileIds(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
-}
-
-async function validateProfileIds(
-  supabase: NonNullable<ReturnType<typeof getServerSupabase>>,
-  profileIds: string[],
-) {
-  const uniqueIds = [...new Set(profileIds.filter(Boolean))];
-  if (!uniqueIds.length) return "";
-  const { data, error } = await supabase.from("profiles").select("id").in("id", uniqueIds);
-  if (error) return error.message;
-  const existing = new Set((data || []).map((profile) => profile.id));
-  const missing = uniqueIds.filter((profileId) => !existing.has(profileId));
-  return missing.length ? `Unbekannte Profil-ID: ${missing.join(", ")}.` : "";
-}
-
-async function assertReferenceRows(
-  supabase: NonNullable<ReturnType<typeof getServerSupabase>>,
-  payload: InitiativePayload,
-) {
-  if (payload.milestoneId) {
-    const { data: milestone, error } = await supabase
-      .from("milestones")
-      .select("id")
-      .eq("id", payload.milestoneId)
-      .single();
-    if (error || !milestone) return "Meilenstein wurde nicht gefunden.";
-  }
-
-  if (payload.ownerId) {
-    const { data: owner, error } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", payload.ownerId)
-      .single();
-    if (error || !owner) return "Initiative-Owner wurde nicht gefunden.";
-  }
-
-  return "";
-}
+import {
+  assertInitiativeReferenceRows,
+  cleanProfileIds,
+  initiativePriorities,
+  initiativeSelect,
+  initiativeStatuses,
+  mapInitiative,
+  validateProfileIds,
+  type InitiativePayload,
+} from "@/features/projects/model/initiative-api";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder);
@@ -99,7 +23,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { id } = await context.params;
   const { data: current, error: currentError } = await supabase
     .from("packages")
-    .select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order")
+    .select(initiativeSelect)
     .eq("id", id)
     .single();
 
@@ -112,8 +36,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const payload = (await request.json()) as InitiativePayload;
-  if (payload.priority && !priorities.has(payload.priority)) return apiError("Ungültige Priorität.", 400);
-  if (payload.status && !statuses.has(payload.status)) return apiError("Ungültiger Initiative-Status.", 400);
+  if (payload.priority && !initiativePriorities.has(payload.priority)) return apiError("Ungültige Priorität.", 400);
+  if (payload.status && !initiativeStatuses.has(payload.status)) return apiError("Ungültiger Initiative-Status.", 400);
 
   const restrictedForOwner = [
     payload.ownerId !== undefined && payload.ownerId !== (current.owner_id || "") ? "Owner" : "",
@@ -124,7 +48,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError(`Diese Initiative-Felder sind geschützt: ${restrictedForOwner.join(", ")}.`, 403);
   }
 
-  const referenceError = await assertReferenceRows(supabase, payload);
+  const referenceError = await assertInitiativeReferenceRows(supabase, payload);
   if (referenceError) return apiError(referenceError, 404);
 
   const raciProfileIds = [
@@ -181,8 +105,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     entity_id: id,
     before_data: current,
     after_data: update,
-    request_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
-    user_agent: request.headers.get("user-agent"),
+    ...auditRequestMetadata(request),
   });
 
   return NextResponse.json({ ok: true, initiative: mapInitiative(updated) });
