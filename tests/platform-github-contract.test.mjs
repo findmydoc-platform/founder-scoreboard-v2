@@ -149,13 +149,13 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(panelDependencies, /RelationshipList/);
   assert.match(panelDependencies, /Wartet auf/);
   assert.match(relationshipUi, /relationshipHelpText/);
+  assert.match(relationshipUi, /relationshipBadgeFor/);
+  assert.match(relationshipUi, /relationshipBadgeToneClass/);
   assert.match(detail, /TaskRelationshipsSection/);
-  assert.match(relationshipSection, /RelationshipPanelList/);
+  assert.match(relationshipSection, /RelationshipList/);
   assert.match(relationshipSection, /Relationship hinzufügen/);
-  assert.match(relationshipSection, /relationshipBadgeFor/);
-  assert.match(relationshipSection, /relationshipBadgeToneClass/);
   assert.match(relationshipSection, /Relationship existiert bereits/);
-  assert.match(relationshipSection, /relationshipHelpText/);
+  assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);
 });
