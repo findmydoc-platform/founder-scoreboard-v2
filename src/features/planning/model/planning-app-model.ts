@@ -5,6 +5,7 @@ import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-d
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
+export { profileColor } from "@/lib/profile-style";
 import type { Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskComment, TaskFocusItem, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
@@ -95,10 +96,6 @@ export const quickFilters = [
   { id: "high", label: "Hohe Priorität" },
   { id: "evidence", label: "Ohne Evidence" },
 ];
-
-export function profileColor(profile?: Pick<Profile, "color"> | null) {
-  return profile?.color || "#64748b";
-}
 
 export function profileForOwnerValue(profiles: Profile[], value?: string) {
   return profiles.find((profile) => profile.id === value || profile.name === value) || null;

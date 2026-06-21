@@ -1,23 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-async function loadDisplayHelpers() {
-  const source = await readFile("src/lib/display.ts", "utf8");
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  });
-  const cjsModule = { exports: {} };
-  Function("exports", "module", outputText)(cjsModule.exports, cjsModule);
-  return cjsModule.exports;
-}
+import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 test("display helpers preserve shared labels and date formatting", async () => {
-  const display = await loadDisplayHelpers();
+  const display = await loadTranspiledModule("src/lib/display.ts");
 
   assert.equal(display.unassignedAssigneeLabel, "Nicht zugeordnet");
   assert.equal(display.taskOwnerLabel({ owner: "" }), "Nicht zugeordnet");

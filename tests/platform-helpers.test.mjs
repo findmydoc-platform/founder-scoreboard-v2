@@ -1,23 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-async function loadPlatformHelpers() {
-  const source = await readFile("src/lib/platform.ts", "utf8");
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  });
-  const cjsModule = { exports: {} };
-  Function("exports", "module", outputText)(cjsModule.exports, cjsModule);
-  return cjsModule.exports;
-}
+import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 test("platform role helpers keep operational lead boundary explicit", async () => {
-  const { isOperationalLeadRole } = await loadPlatformHelpers();
+  const { isOperationalLeadRole } = await loadTranspiledModule("src/lib/platform.ts");
 
   assert.equal(isOperationalLeadRole("ceo"), true);
   assert.equal(isOperationalLeadRole("deputy"), true);
@@ -29,7 +15,7 @@ test("platform role helpers keep operational lead boundary explicit", async () =
 });
 
 test("task ownership uses profile id before display name fallback", async () => {
-  const { taskBelongsToProfile } = await loadPlatformHelpers();
+  const { taskBelongsToProfile } = await loadTranspiledModule("src/lib/platform.ts");
   const sebastian = { id: "sebastian", name: "Sebastian" };
   const volkan = { id: "volkan", name: "Volkan" };
 

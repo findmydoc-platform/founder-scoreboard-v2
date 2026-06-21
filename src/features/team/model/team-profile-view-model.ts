@@ -1,4 +1,5 @@
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
+export { profileColor } from "@/lib/profile-style";
 import type { PlanningData, PlatformRole, Profile } from "@/lib/types";
 
 export const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
@@ -35,10 +36,6 @@ export type ProfileCardDraft = {
   profile: Partial<Profile>;
   notificationEvents: Record<string, boolean>;
 };
-
-export function profileColor(profile?: Pick<Profile, "color"> | null) {
-  return profile?.color || "#64748b";
-}
 
 export function eventEnabled(data: PlanningData, profileId: string, eventType: string) {
   const preference = data.notificationPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
