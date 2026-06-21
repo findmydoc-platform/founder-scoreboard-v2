@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { googleChatDeliveryStatus } from "@/lib/google-chat";
+import planningSchemaCheckConfig from "@/lib/planning-schema-checks.json";
 import { getPlanningData } from "@/lib/planning-data";
 import { seedData } from "@/lib/seed";
 import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
@@ -10,30 +11,22 @@ const expected = {
   tasksMin: seedData.tasks.length,
 };
 
-const schemaChecks = [
-  { name: "profiles.google_chat", table: "profiles", select: "id,google_chat_user_id,google_chat_dm_space,notifications_enabled" },
-  { name: "notification_preferences", table: "notification_preferences", select: "id,profile_id,channel,event_type,enabled" },
-  { name: "notification_events.dedupe_key", table: "notification_events", select: "id,dedupe_key" },
-  { name: "notification_deliveries.payload", table: "notification_deliveries", select: "id,target,payload" },
-  { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },
-  { name: "sprint_commitments", table: "sprint_commitments", select: "id,sprint_id,profile_id,commitment_level,weekly_hours,note" },
-  { name: "founder_sprint_scores", table: "founder_sprint_scores", select: "id,sprint_id,profile_id,delivery_points,form_points,weekly_points,total_points,fulfilled,away_neutral" },
-  { name: "founder_strike_state", table: "founder_strike_state", select: "id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id" },
-  { name: "strike_events", table: "strike_events", select: "id,profile_id,sprint_id,event_type,previous_strike_level,next_strike_level,reason" },
-  { name: "score_objections", table: "score_objections", select: "id,sprint_id,profile_id,status,comment,second_reviewer_profile_id" },
-  { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
-  { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
-  { name: "tasks.created_by", table: "tasks", select: "id,created_by" },
-  { name: "packages.initiative", table: "packages", select: "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints" },
-  { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
-  { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
-  { name: "feedback_items", table: "feedback_items", select: "id,type,status,severity,profile_id,title,description,page_url" },
-  { name: "fmd_tools", table: "fmd_tools", select: "id,name,category,kind,url,owner,status,sort_order" },
-  { name: "task_relationship_edges", table: "task_relationship_edges", select: "id,task_id,related_task_id,relation_type,note" },
-  { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
-  { name: "task_focus_items", table: "task_focus_items", select: "id,profile_id,task_id,focus_date,position,next_step,status" },
-  { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
-];
+type SchemaCheckConfig = {
+  name: string;
+  table: string;
+  select?: string;
+  healthSelect?: string;
+  verifySelect?: string;
+  health: boolean;
+};
+
+const schemaChecks = (planningSchemaCheckConfig as SchemaCheckConfig[])
+  .filter((check) => check.health)
+  .map((check) => ({
+    name: check.name,
+    table: check.table,
+    select: check.healthSelect || check.select || check.verifySelect || "id",
+  }));
 
 async function checkSchema() {
   const supabase = getServerSupabase();

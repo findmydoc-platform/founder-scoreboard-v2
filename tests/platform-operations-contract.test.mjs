@@ -328,24 +328,27 @@ test("event reminders use the existing notification pipeline", async () => {
 test("health and supabase verification detect operational migrations", async () => {
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
+  const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const operational = await readFile("scripts/verify-operational.mjs", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
-  assert.match(health, /profiles\.google_chat/);
-  assert.match(health, /notification_preferences/);
-  assert.match(health, /tasks\.carryover/);
-  assert.match(health, /sprint_commitments/);
-  assert.match(health, /packages\.initiative/);
-  assert.match(health, /tasks\.template_v2/);
-  assert.match(health, /task_relationship_edges/);
-  assert.match(health, /task_external_comments/);
+  assert.match(health, /planning-schema-checks\.json/);
+  assert.match(schemaChecks, /profiles\.google_chat/);
+  assert.match(schemaChecks, /notification_preferences/);
+  assert.match(schemaChecks, /tasks\.carryover/);
+  assert.match(schemaChecks, /sprint_commitments/);
+  assert.match(schemaChecks, /packages\.initiative/);
+  assert.match(schemaChecks, /tasks\.template_v2/);
+  assert.match(schemaChecks, /task_relationship_edges/);
+  assert.match(schemaChecks, /task_external_comments/);
   assert.match(health, /githubSyncMode/);
   assert.match(health, /googleChatDeliveryStatus/);
   assert.match(health, /tasksMin/);
   assert.match(health, /counts\.tasks >= expected\.tasksMin/);
   assert.match(health, /schemaReady/);
   assert.match(verify, /0008_google_chat_delivery\.sql/);
-  assert.match(verify, /notification_events\.dedupe_key/);
+  assert.match(verify, /planning-schema-checks\.json/);
+  assert.match(schemaChecks, /notification_events\.dedupe_key/);
   assert.match(verify, /0009_sprint_carryover\.sql/);
   assert.match(verify, /notificationDeliveries/);
   assert.match(operational, /Founder Planning/);

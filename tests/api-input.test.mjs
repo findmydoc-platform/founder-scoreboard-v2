@@ -1,23 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-async function loadApiInputHelpers() {
-  const source = await readFile("src/lib/api-input.ts", "utf8");
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  });
-  const cjsModule = { exports: {} };
-  Function("exports", "module", outputText)(cjsModule.exports, cjsModule);
-  return cjsModule.exports;
-}
+import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 test("api input helpers preserve required and optional text semantics", async () => {
-  const { auditRequestMetadata, cleanDate, cleanOptionalDate, cleanOptionalText, cleanText, cleanTime, isIsoDate } = await loadApiInputHelpers();
+  const { auditRequestMetadata, cleanDate, cleanOptionalDate, cleanOptionalText, cleanText, cleanTime, isIsoDate } = await loadTranspiledModule("src/lib/api-input.ts");
 
   assert.equal(cleanText("  FounderOps  ", 20), "FounderOps");
   assert.equal(cleanText("  FounderOps  ", 7), "Founder");

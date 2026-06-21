@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
 
 const supabase = await createSupabaseScriptClient();
@@ -8,35 +9,14 @@ async function count(table) {
   return rowCount ?? 0;
 }
 
-const schemaChecks = [
-  { name: "profiles.google_chat", table: "profiles", select: "id,google_chat_user_id,google_chat_dm_space,notifications_enabled" },
-  { name: "profiles.google_calendar", table: "profiles", select: "id,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at" },
-  { name: "notification_preferences", table: "notification_preferences", select: "id,profile_id,channel,event_type,enabled" },
-  { name: "notification_events.dedupe_key", table: "notification_events", select: "id,dedupe_key" },
-  { name: "notification_deliveries.payload", table: "notification_deliveries", select: "id,target,payload" },
-  { name: "tasks.carryover", table: "tasks", select: "id,original_sprint_id,carried_from_task_id,carried_from_sprint_id,carryover_reason,carryover_count,sprint_outcome" },
-  { name: "tasks.accountable_review", table: "tasks", select: "id,review_owner_profile_id,review_requested_at" },
-  { name: "sprint_commitments", table: "sprint_commitments", select: "id,sprint_id,profile_id,commitment_level,weekly_hours,note" },
-  { name: "founder_sprint_scores", table: "founder_sprint_scores", select: "id,sprint_id,profile_id,delivery_points,form_points,weekly_points,total_points,fulfilled,away_neutral,finalized_at,finalized_by,reason_summary" },
-  { name: "founder_strike_state", table: "founder_strike_state", select: "id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at" },
-  { name: "strike_events", table: "strike_events", select: "id,profile_id,sprint_id,event_type,previous_strike_level,next_strike_level,reason,created_by" },
-  { name: "score_objections", table: "score_objections", select: "id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,second_reviewer_profile_id" },
-  { name: "tasks.self_checklist", table: "tasks", select: "id,self_dod_checked,self_evidence_checked,self_documented_checked,self_blockers_checked" },
-  { name: "tasks.milestone", table: "tasks", select: "id,milestone_id" },
-  { name: "tasks.created_by", table: "tasks", select: "id,created_by" },
-  { name: "packages.initiative", table: "packages", select: "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints" },
-  { name: "tasks.template_v2", table: "tasks", select: "id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version" },
-  { name: "milestones", table: "milestones", select: "id,title,target_date,status" },
-  { name: "feedback_items", table: "feedback_items", select: "id,type,status,severity,profile_id,title,description,page_url" },
-  { name: "fmd_tools", table: "fmd_tools", select: "id,name,category,kind,url,owner,status,sort_order" },
-  { name: "task_relationship_edges", table: "task_relationship_edges", select: "id,task_id,related_task_id,relation_type,note" },
-  { name: "task_external_comments", table: "task_external_comments", select: "id,task_id,source,external_id,author_login,body,html_url" },
-  { name: "task_focus_items", table: "task_focus_items", select: "id,profile_id,task_id,focus_date,position,next_step,status" },
-  { name: "decision_task_links", table: "decision_task_links", select: "id,decision_id,task_id,link_type,note,created_by" },
-  { name: "availability.calendar_sync", table: "availability", select: "id,title,blocker_kind,source,external_id,external_calendar_id,synced_at" },
-  { name: "meetings.google_calendar_sync", table: "meetings", select: "id,duration_minutes,google_calendar_id,google_calendar_event_id,google_calendar_sync_status" },
-  { name: "founder_events", table: "founder_events", select: "id,title,category,starts_at,ends_at,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status" },
-];
+const schemaCheckConfig = JSON.parse(
+  await readFile(new URL("../src/lib/planning-schema-checks.json", import.meta.url), "utf8"),
+);
+const schemaChecks = schemaCheckConfig.map((check) => ({
+  name: check.name,
+  table: check.table,
+  select: check.verifySelect || check.select || check.healthSelect || "id",
+}));
 
 async function checkSchema(check) {
   const { error } = await supabase.from(check.table).select(check.select).limit(1);

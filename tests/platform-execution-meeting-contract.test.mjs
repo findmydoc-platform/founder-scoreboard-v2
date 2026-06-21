@@ -48,6 +48,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
+  const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const schema = await readFile("supabase/schema.sql", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskContext = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
@@ -135,10 +136,10 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(decisionTaskRoute, /export async function DELETE/);
   assert.match(decisionTaskRoute, /Decision-Verknüpfung entfernt/);
   assert.match(decisionTaskRoute, /Mit Decision verknüpft/);
-  assert.match(verify, /task_focus_items/);
-  assert.match(verify, /decision_task_links/);
-  assert.match(health, /task_focus_items/);
-  assert.match(health, /decision_task_links/);
+  assert.match(verify, /planning-schema-checks\.json/);
+  assert.match(health, /planning-schema-checks\.json/);
+  assert.match(schemaChecks, /task_focus_items/);
+  assert.match(schemaChecks, /decision_task_links/);
   assert.match(schema, /create table if not exists task_focus_items/);
   assert.match(schema, /create table if not exists decision_task_links/);
   assert.match(agents, /docs\/execution-layer-plan\.md/);
@@ -247,6 +248,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   const meetingCalendarMigration = await readFile("supabase/0025_meeting_calendar_sync.sql", "utf8");
   const customDurationMigration = await readFile("supabase/0026_meeting_custom_duration.sql", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
+  const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
 
   assert.match(migration, /create table if not exists availability/);
   assert.match(calendarMigration, /source in \('manual', 'google_calendar'\)/);
@@ -260,10 +262,11 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(meetingCalendarMigration, /google_calendar_event_id/);
   assert.match(meetingCalendarMigration, /meetings_write_team/);
   assert.match(customDurationMigration, /between 15 and 480/);
-  assert.match(verify, /availability\.calendar_sync/);
-  assert.match(verify, /blocker_kind/);
-  assert.match(verify, /meetings\.google_calendar_sync/);
-  assert.match(verify, /profiles\.google_calendar/);
+  assert.match(verify, /planning-schema-checks\.json/);
+  assert.match(schemaChecks, /availability\.calendar_sync/);
+  assert.match(schemaChecks, /blocker_kind/);
+  assert.match(schemaChecks, /meetings\.google_calendar_sync/);
+  assert.match(schemaChecks, /profiles\.google_calendar/);
   assert.match(route, /requireFounder/);
   assert.match(route, /Founder können nur eigene Verfügbarkeiten pflegen/);
   assert.match(route, /source: "manual"/);

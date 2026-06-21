@@ -1,7 +1,8 @@
-import type { AvailabilityEntry, Profile } from "@/lib/types";
+import type { AvailabilityEntry } from "@/lib/types";
 
 import { blockerKindOptions } from "@/features/meetings/model/meeting-options";
 import { timeToMinutes, weekdayForDate } from "@/features/meetings/model/meeting-time";
+export { profileColor } from "@/lib/profile-style";
 
 export function hexToRgba(hex: string, alpha: number) {
   const match = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -11,10 +12,6 @@ export function hexToRgba(hex: string, alpha: number) {
   const green = Number.parseInt(value.slice(2, 4), 16);
   const blue = Number.parseInt(value.slice(4, 6), 16);
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
-export function profileColor(profile?: Pick<Profile, "color"> | null) {
-  return profile?.color || "#64748b";
 }
 
 export function availabilitySummaryTone(kind: "open" | "blocked" | "closed" | "meeting") {

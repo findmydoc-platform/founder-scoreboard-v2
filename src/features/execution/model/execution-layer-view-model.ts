@@ -1,6 +1,7 @@
 import { hasOpenWaitingRelation, isOperationalLeadRole, taskBelongsToProfile } from "@/lib/platform";
 import { addDaysIso, currentIsoDate } from "@/lib/planning-schedule";
 import { normalizeStatus } from "@/lib/status";
+export { profileColor } from "@/lib/profile-style";
 import type { PlanningData, Profile, Task, TaskFocusItem } from "@/lib/types";
 
 export type HygieneAlert = {
@@ -20,10 +21,6 @@ export type HygieneAlertAreaFilter = "all" | HygieneAlert["area"];
 
 function isOpenReviewTask(task: Task) {
   return !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-}
-
-export function profileColor(profile?: Pick<Profile, "color"> | null) {
-  return profile?.color || "#64748b";
 }
 
 export function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked") {
