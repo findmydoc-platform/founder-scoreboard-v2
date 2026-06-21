@@ -1,4 +1,5 @@
 import { hasOpenWaitingRelation, isOperationalLeadRole, taskBelongsToProfile } from "@/lib/platform";
+import { addDaysIso, currentIsoDate } from "@/lib/planning-schedule";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile, Task, TaskFocusItem } from "@/lib/types";
 
@@ -19,20 +20,6 @@ export type HygieneAlertAreaFilter = "all" | HygieneAlert["area"];
 
 function isOpenReviewTask(task: Task) {
   return !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-}
-
-export function currentIsoDate() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function addDaysIso(value: string, days: number) {
-  const date = value ? new Date(`${value}T00:00:00`) : new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 export function profileColor(profile?: Pick<Profile, "color"> | null) {

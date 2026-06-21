@@ -1,9 +1,11 @@
 import { Columns3, GanttChart, ListTree, Table2 } from "lucide-react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
+import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
+import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { Package, PlanningData, Profile, ScoreObjection, Sprint, Task, TaskActivity, TaskComment, TaskFocusItem, TaskStatus, ViewMode } from "@/lib/types";
+import type { Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskComment, TaskFocusItem, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
 
@@ -42,37 +44,7 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
   };
 }
 
-export function mapScoreObjectionResponse(row: {
-  id: number;
-  sprint_id: string;
-  profile_id: string;
-  founder_sprint_score_id: number | null;
-  status: ScoreObjection["status"];
-  comment: string;
-  resolution_comment?: string | null;
-  reviewed_by?: string | null;
-  reviewed_at?: string | null;
-  second_reviewer_profile_id?: string | null;
-  second_review_decision?: string | null;
-  second_reviewed_at?: string | null;
-  created_at: string;
-}): ScoreObjection {
-  return {
-    id: row.id,
-    sprintId: row.sprint_id,
-    profileId: row.profile_id,
-    founderSprintScoreId: row.founder_sprint_score_id,
-    status: row.status,
-    comment: row.comment,
-    resolutionComment: row.resolution_comment || "",
-    reviewedBy: row.reviewed_by || "",
-    reviewedAt: row.reviewed_at || "",
-    secondReviewerProfileId: row.second_reviewer_profile_id || "",
-    secondReviewDecision: row.second_review_decision || "",
-    secondReviewedAt: row.second_reviewed_at || "",
-    createdAt: row.created_at,
-  };
-}
+export { mapScoreObjectionResponse };
 
 export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns3 }> = [
   { id: "board", label: "Board", icon: Columns3 },
@@ -170,32 +142,6 @@ export function transparentDragImage() {
 
 export function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
-}
-
-export function sprintNumber(value: string) {
-  const match = value.match(/sprint\D*(\d+)/i) || value.match(/(\d+)$/);
-  return match ? Number(match[1]) : 0;
-}
-
-export function addDaysIso(value: string, days: number) {
-  const date = value ? new Date(`${value}T00:00:00`) : new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-export function currentIsoDate() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function findCurrentSprint(sprints: Sprint[], today = currentIsoDate()) {
-  return sprints.find((sprint) => sprint.startDate <= today && sprint.endDate >= today)
-    || sprints.find((sprint) => sprint.status === "active")
-    || sprints.find((sprint) => sprint.status === "planning" || sprint.status === "review")
-    || sprints[0];
 }
 
 export function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions, protectedSprintIds = new Set<string>()) {

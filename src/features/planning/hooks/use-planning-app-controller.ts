@@ -26,12 +26,11 @@ import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-se
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
 import { taskBelongsToProfile } from "@/lib/platform";
+import { currentIsoDate, findCurrentSprint } from "@/lib/planning-schedule";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
 import {
   buildHygieneAlerts,
-  currentIsoDate,
-  findCurrentSprint,
   normalizePlanningData,
   planningWorkspaces,
 } from "@/features/planning/model/planning-app-model";
