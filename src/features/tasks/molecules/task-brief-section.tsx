@@ -3,41 +3,22 @@
 import { Pencil, Save, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { TaskChecklist } from "@/features/tasks/molecules/task-checklist";
-import { taskOwnerLabel } from "@/lib/display";
-import type { Profile, Task } from "@/lib/types";
+import type { Task } from "@/lib/types";
 import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export type TaskBriefState = Pick<Task, "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone">;
 
 const briefFields = [
-  ["Problem Statement", "problemStatement", "Welches Problem löst diese Aufgabe?"],
-  ["Intended Outcome", "intendedOutcome", "Welcher fertige Zustand soll erreicht sein?"],
-  ["Scope & Constraints", "scopeConstraints", "Was gehört dazu, was nicht?"],
-  ["Acceptance Criteria", "acceptanceCriteria", "Ein messbares Kriterium pro Zeile."],
-  ["Evidence Required", "evidenceRequired", "Welcher Nachweis wird erwartet?"],
-  ["Definition of Done", "definitionOfDone", "Allgemeiner Qualitätsstandard oder DoD-Snapshot."],
+  ["Problem", "problemStatement", "Welches Problem löst diese Aufgabe?"],
+  ["Zielbild", "intendedOutcome", "Welcher fertige Zustand soll erreicht sein?"],
+  ["Umfang & Grenzen", "scopeConstraints", "Was gehört dazu, was nicht?"],
+  ["Abnahmekriterien", "acceptanceCriteria", "Ein messbares Kriterium pro Zeile."],
+  ["Nachweis", "evidenceRequired", "Welcher Nachweis wird erwartet?"],
+  ["Qualitätsstandard", "definitionOfDone", "Welche Qualität muss vor Abschluss erreicht sein?"],
 ] as const;
 
-function ProfileAvatar({ profile }: { profile?: Profile }) {
-  const login = profile?.githubLogin || "";
-  return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-      {login ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={`https://github.com/${login}.png?size=72`} alt="" className="h-full w-full object-cover" />
-      ) : (
-        profile?.name?.slice(0, 1).toUpperCase() || "?"
-      )}
-    </span>
-  );
-}
-
 type Props = {
-  task: Task;
   brief: TaskBriefState;
-  creatorProfile?: Profile;
-  ownerProfile?: Profile;
-  owner: string;
   editing: boolean;
   onEdit: () => void;
   onCancel: () => void;
@@ -48,11 +29,7 @@ type Props = {
 };
 
 export function TaskBriefSection({
-  task,
   brief,
-  creatorProfile,
-  ownerProfile,
-  owner,
   editing,
   onEdit,
   onCancel,
@@ -64,12 +41,9 @@ export function TaskBriefSection({
   return (
     <UiPanel padding="lg">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <ProfileAvatar profile={creatorProfile} />
-          <div>
-            <h2 className="text-sm font-semibold text-slate-950">Aufgabenbrief</h2>
-            <p className="text-xs text-slate-500">Erstellt von {creatorProfile?.name || task.createdBy || "Unbekannt"} · Assignee {ownerProfile?.name || taskOwnerLabel({ owner })} · {task.dodTemplateVersion || "founder-deliverable-v2"}</p>
-          </div>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-950">Aufgabenbrief</h2>
+          <p className="text-xs text-slate-500">Problem, Ziel, Scope und Nachweise für die Umsetzung.</p>
         </div>
         <div className="flex items-center gap-2">
           {editing ? (

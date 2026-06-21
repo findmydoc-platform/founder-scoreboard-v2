@@ -25,7 +25,7 @@ import { isOperationalLeadRole } from "@/lib/platform";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder, {
-    supabaseUnavailableMessage: "Supabase env is not configured. UI changes remain local only.",
+    supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
   });
   if (!apiContext.ok) return apiContext.response;
 
@@ -271,7 +271,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     try {
       const token = await optionalMatchingGitHubProviderToken(request, permission.profile);
       if (!token) {
-        return apiError("Für verknüpfte GitHub-Issues bitte die GitHub-Verbindung im Header erneuern und dann erneut löschen.", 409);
+        return apiError("Für extern abgelegte Aufgaben bitte die Verbindung im Header erneuern und dann erneut löschen.", 409);
       }
       await archiveGitHubIssue(issueNumber, token);
       githubClosed = true;

@@ -32,7 +32,7 @@ export function TaskRelationshipForm({
 }: TaskRelationshipFormProps) {
   return (
     <div className={className}>
-      <div className="text-xs font-semibold text-slate-500">Relationship hinzufügen</div>
+      <div className="text-xs font-semibold text-slate-500">Abhängigkeit hinzufügen</div>
       <CustomSelect
         value={relationDraft.relationType}
         onChange={(value) => onRelationDraftChange({ relationType: value as TaskRelationType })}
@@ -57,9 +57,9 @@ export function TaskRelationshipForm({
         onClick={onAddRelation}
         variant="primary"
       >
-        {duplicateRelation ? "Relationship existiert bereits" : "Relationship hinzufügen"}
+        {duplicateRelation ? "Abhängigkeit existiert bereits" : "Abhängigkeit hinzufügen"}
       </UiButton>
-      {duplicateRelation && <div className="text-xs font-semibold text-amber-700">Diese Relationship ist bereits gespeichert.</div>}
+      {duplicateRelation && <div className="text-xs font-semibold text-amber-700">Diese Abhängigkeit ist bereits gespeichert.</div>}
     </div>
   );
 }

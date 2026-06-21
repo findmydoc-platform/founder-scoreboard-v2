@@ -28,8 +28,6 @@ export function MeetingAvailabilityManagement({
   calendarDates,
   workingHours,
   blockers,
-  googleCalendarBlocksCount,
-  googleCalendarProfilesCount,
   currentProfileId,
   onWorkProfileChange,
   onBlockerProfileChange,
@@ -72,8 +70,6 @@ export function MeetingAvailabilityManagement({
   calendarDates: string[];
   workingHours: AvailabilityEntry[];
   blockers: AvailabilityEntry[];
-  googleCalendarBlocksCount: number;
-  googleCalendarProfilesCount: number;
   currentProfileId?: string;
   onWorkProfileChange: (value: string) => void;
   onBlockerProfileChange: (value: string) => void;
@@ -144,8 +140,6 @@ export function MeetingAvailabilityManagement({
         calendarDates={calendarDates}
         workingHours={workingHours}
         blockers={blockers}
-        googleCalendarBlocksCount={googleCalendarBlocksCount}
-        googleCalendarProfilesCount={googleCalendarProfilesCount}
         profileNameById={profileNameById}
         canManageAvailability={canManageAvailability}
         currentProfileId={currentProfileId}

@@ -63,7 +63,7 @@ export function MeetingCalendarWeekView({
     <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
       <div className="min-w-[980px] select-none">
         <div className="grid grid-cols-[72px_repeat(7,minmax(132px,1fr))] border-b border-slate-200 bg-white">
-          <div className="px-3 py-3 text-xs font-semibold text-slate-500">GMT+02</div>
+          <div className="px-3 py-3 text-xs font-semibold text-slate-500">Berlin</div>
           {dates.map((date) => (
             <div key={date} className="border-l border-slate-200 px-3 py-2">
               <div className="text-[11px] font-semibold uppercase text-slate-500">{new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(new Date(`${date}T00:00:00`))}</div>

@@ -50,11 +50,11 @@ export function useTaskRelationships({
     startTransition(async () => {
       try {
         const { response, body } = await addTaskRelationshipRequest(apiClient, task.id, relationDraft);
-        if (!response.ok || !body?.relation) throw new Error(body?.error || "Relationship konnte nicht gespeichert werden.");
+        if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
         setRelations((current) => current.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)));
       } catch (caught) {
         setRelations((current) => current.filter((relation) => relation.id !== localRelation.id));
-        setError(caught instanceof Error ? caught.message : "Relationship konnte nicht gespeichert werden.");
+        setError(caught instanceof Error ? caught.message : "Abhängigkeit konnte nicht gespeichert werden.");
       }
     });
   };
@@ -68,10 +68,10 @@ export function useTaskRelationships({
     startTransition(async () => {
       try {
         const { response, body } = await removeTaskRelationshipRequest(apiClient, task.id, relation.id);
-        if (!response.ok) throw new Error(body?.error || "Relationship konnte nicht entfernt werden.");
+        if (!response.ok) throw new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden.");
       } catch (caught) {
         setRelations((current) => [relation, ...current]);
-        setError(caught instanceof Error ? caught.message : "Relationship konnte nicht entfernt werden.");
+        setError(caught instanceof Error ? caught.message : "Abhängigkeit konnte nicht entfernt werden.");
       }
     });
   };

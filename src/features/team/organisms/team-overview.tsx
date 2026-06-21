@@ -103,7 +103,7 @@ export function TeamOverview({
                   <h2 className="text-base font-semibold text-slate-950">{draftProfile.name}</h2>
                 </div>
                 <p className="mt-1 text-sm leading-5 text-slate-500">{draftProfile.focus || "Kein Fokus hinterlegt."}</p>
-                <p className="mt-1 text-xs text-slate-500">@{draftProfile.githubLogin || "nicht gemappt"}</p>
+                <p className="mt-1 text-xs text-slate-500">{draftProfile.githubLogin ? `@${draftProfile.githubLogin}` : "Nicht verbunden"}</p>
               </div>
               <UiBadge tone="white">{roleLabel(draftProfile)}</UiBadge>
             </div>
@@ -182,45 +182,46 @@ export function TeamOverview({
               </div>
               <details className="rounded-md border border-slate-200 bg-white p-3">
                 <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                  Integrationen bearbeiten
-                  <span className="ml-2 font-normal text-slate-500">GitHub, Chat, Kalender</span>
+                  Externe Verbindungen bearbeiten
+                  <span className="ml-2 font-normal text-slate-500">Profil, Hinweise, Kalender</span>
                 </summary>
                 <div className="mt-3 grid gap-3">
                   <UiField>
-                    GitHub Login
+                    Externes Profil
                     <UiTextInput
                       value={draftProfile.githubLogin}
                       disabled={saving || pending || !canEditProfile}
                       onChange={(event) => setProfileDraft(profile.id, { githubLogin: event.target.value })}
                       textTone="muted"
+                      placeholder="Profilname"
                     />
                   </UiField>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <UiField>
-                      Google Chat User-ID
+                      Chat-Konto
                       <UiTextInput
                         value={draftProfile.googleChatUserId || ""}
                         disabled={saving || pending || !canEditProfile}
                         onChange={(event) => setProfileDraft(profile.id, { googleChatUserId: event.target.value })}
                         textTone="muted"
-                        placeholder="users/..."
+                        placeholder="optional"
                       />
                     </UiField>
                     <UiField>
-                      Google Chat DM-Space
+                      Persönliche Chat-Zustellung
                       <UiTextInput
                         value={draftProfile.googleChatDmSpace || ""}
                         disabled={saving || pending || !canEditProfile}
                         onChange={(event) => setProfileDraft(profile.id, { googleChatDmSpace: event.target.value })}
                         textTone="muted"
-                        placeholder="spaces/..."
+                        placeholder="optional"
                       />
                     </UiField>
                   </div>
                   <label className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
                     <span>
                       Google-Chat-Benachrichtigungen
-                      <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert verhindert Digest-Zustellung für dieses Profil.</span>
+                      <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert Hinweise außerhalb der App für dieses Profil.</span>
                     </span>
                     <input
                       type="checkbox"
@@ -234,7 +235,7 @@ export function TeamOverview({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-xs font-semibold text-blue-900">Kalenderverbindung</div>
-                        <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Kalendertermine werden als Meeting-Finder-Blocker berücksichtigt.</p>
+                        <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Kalendertermine werden bei freien Slots berücksichtigt.</p>
                       </div>
                       <input
                         type="checkbox"
@@ -257,7 +258,7 @@ export function TeamOverview({
                       />
                     </UiField>
                     <p className="mt-2 text-[11px] leading-4 text-blue-700">
-                      Letzte Aktualisierung: {draftProfile.googleCalendarLastSyncedAt ? formatDate(draftProfile.googleCalendarLastSyncedAt) : "noch nicht synchronisiert"}
+                      Zuletzt aktualisiert: {draftProfile.googleCalendarLastSyncedAt ? formatDate(draftProfile.googleCalendarLastSyncedAt) : "noch nicht aktualisiert"}
                     </p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-white p-3">

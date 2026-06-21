@@ -35,7 +35,7 @@ export function TaskTableView({
         <DataTable minWidth={1320}>
         <DataTableHead>
           <tr>
-            {["Status", "GitHub", "Assignee", "Priorität", "Workstream", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Definition of Done"].map((head) => (
+            {["Status", "Ablage", "Assignee", "Priorität", "Bereich", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Qualitätsstandard"].map((head) => (
               <DataHeaderCell key={head}>{head}</DataHeaderCell>
             ))}
           </tr>

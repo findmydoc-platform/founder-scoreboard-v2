@@ -8,15 +8,13 @@ import {
   weekdayOptions,
 } from "@/features/meetings/model/meeting-finder";
 import type { AvailabilityEntry } from "@/lib/types";
-import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export function MeetingAvailabilitySummarySection({
   availability,
   calendarDates,
   workingHours,
   blockers,
-  googleCalendarBlocksCount,
-  googleCalendarProfilesCount,
   profileNameById,
   canManageAvailability,
   currentProfileId,
@@ -27,8 +25,6 @@ export function MeetingAvailabilitySummarySection({
   calendarDates: string[];
   workingHours: AvailabilityEntry[];
   blockers: AvailabilityEntry[];
-  googleCalendarBlocksCount: number;
-  googleCalendarProfilesCount: number;
   profileNameById: Map<string, string>;
   canManageAvailability: boolean;
   currentProfileId?: string;
@@ -40,7 +36,7 @@ export function MeetingAvailabilitySummarySection({
   return (
     <UiPanel className="xl:col-span-2">
       <h2 className="text-base font-semibold text-slate-950">Kalenderwoche & Blocker</h2>
-      <p className="mt-1 text-sm text-slate-500">Die nächsten Tage zeigen Arbeitszeiten, Abwesenheiten und später importierte Google-Kalenderblöcke zusammen.</p>
+      <p className="mt-1 text-sm text-slate-500">Die nächsten Tage zeigen Arbeitszeiten, Abwesenheiten und belegte Zeiten zusammen.</p>
       <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
         {calendarDates.map((date) => {
           const dayEntries = availability.filter((entry) => {
@@ -69,7 +65,6 @@ export function MeetingAvailabilitySummarySection({
             <div className="min-w-0">
               <div className="font-semibold text-slate-900">
                 {profileNameById.get(entry.profileId) || entry.profileId} · {availabilityCalendarLabel(entry)}
-                {entry.source === "google_calendar" ? " · Google Kalender" : ""}
               </div>
               <div className="mt-0.5 truncate text-xs text-slate-500">
                 {entry.type === "working_hours"
@@ -91,9 +86,6 @@ export function MeetingAvailabilitySummarySection({
           </UiEmptyState>
         )}
       </div>
-      <UiNotice tone="neutral" className="mt-4 leading-normal">
-        Kalenderstatus: {googleCalendarBlocksCount} importierte Google-Blöcke, {googleCalendarProfilesCount} Profil(e) für Sync aktiviert. Manuelle Arbeitszeiten bleiben führend; Google-Termine blockieren nur freie Slots.
-      </UiNotice>
     </UiPanel>
   );
 }

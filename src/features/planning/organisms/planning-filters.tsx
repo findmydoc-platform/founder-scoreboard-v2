@@ -32,7 +32,7 @@ export function PlanningFilters({ filters, profiles, packages, quickFilters, onC
             value={filters.query}
             onChange={(event) => onChange({ ...filters, query: event.target.value })}
             className="h-10 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
-            placeholder="Nach Aufgabe, DoD, Workstream oder GitHub-Issue suchen"
+            placeholder="Nach Aufgabe, Ziel, Bereich oder externer Ablage suchen"
           />
         </label>
         <CustomSelect value={filters.owner} onChange={(value) => onChange({ ...filters, owner: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...profiles.map((profile) => ({ value: profile.name, label: profile.name }))]} />

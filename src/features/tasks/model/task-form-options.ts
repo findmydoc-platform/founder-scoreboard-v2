@@ -43,7 +43,7 @@ export function assigneeOptions(taskType: TaskType, profiles: Profile[]): Custom
 
 export function relatedTaskOptions(tasks: Task[]): CustomSelectOption[] {
   return [
-    { value: "", label: "Keine Relationship" },
+    { value: "", label: "Keine Abhängigkeit" },
     ...tasks
       .filter((task) => task.taskType !== "sub_issue")
       .map((task) => ({ value: task.id, label: `${task.title} · ${taskOwnerLabel(task)}` })),

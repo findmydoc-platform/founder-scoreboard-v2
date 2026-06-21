@@ -3,21 +3,13 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
-import type { Task } from "@/lib/types";
-import { UiBadge } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   title: string;
-  status: Task["status"];
-  priority: Task["priority"];
-  hours: Task["hours"];
   actions?: ReactNode;
 };
 
-export function TaskDetailHeader({ title, status, priority, hours, actions }: Props) {
-  const normalizedStatus = normalizeStatus(status);
-
+export function TaskDetailHeader({ title, actions }: Props) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
@@ -31,9 +23,6 @@ export function TaskDetailHeader({ title, status, priority, hours, actions }: Pr
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {actions}
-          <UiBadge tone={statusBadgeTone(normalizedStatus)} size="md">{normalizedStatus}</UiBadge>
-          <UiBadge tone={priorityBadgeTone(priority)} size="md">{priority}</UiBadge>
-          <UiBadge tone="white" size="md">{hours}h</UiBadge>
         </div>
       </div>
     </header>

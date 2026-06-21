@@ -200,32 +200,32 @@ export function NewTaskDialog({
           </UiField>
 
           <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Template v2</div>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Beschreibe das Ziel und die prüfbaren Kriterien, ohne unnötig vorzugeben, wie die Aufgabe umgesetzt werden muss.</p>
+            <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Aufgabenbrief</div>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Beschreibe Ziel und prüfbare Kriterien, ohne unnötig vorzugeben, wie die Aufgabe umgesetzt werden muss.</p>
           </div>
 
           <UiField>
-            Problem Statement
+            Problem
             <UiTextArea value={draft.problemStatement} onChange={(event) => setDraft((current) => ({ ...current, problemStatement: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welches Problem löst diese Aufgabe und warum ist sie wichtig?" />
           </UiField>
 
           <UiField>
-            Intended Outcome
+            Zielbild
             <UiTextArea value={draft.intendedOutcome} onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher fertige Zustand soll am Ende erreicht sein?" />
           </UiField>
 
           <UiField>
-            Scope & Constraints
+            Umfang & Grenzen
             <UiTextArea value={draft.scopeConstraints} onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu, was ausdrücklich nicht, und welche Rahmenbedingungen gelten?" />
           </UiField>
 
           <UiField>
-            Acceptance Criteria
+            Abnahmekriterien
             <UiTextArea value={draft.acceptanceCriteria} onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))} minHeight="xl" inputPadding="md" leading="relaxed" placeholder="Ein Kriterium pro Zeile. Nur messbare Punkte, die der Owner beeinflussen kann." />
           </UiField>
 
           <UiField>
-            Evidence Required
+            Nachweis
             <UiTextArea value={draft.evidenceRequired} onChange={(event) => setDraft((current) => ({ ...current, evidenceRequired: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher Nachweis muss am Ende verlinkt oder kommentiert sein?" />
           </UiField>
 
@@ -260,9 +260,9 @@ export function NewTaskDialog({
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-slate-950">Strukturprüfung</div>
+                <div className="text-sm font-semibold text-slate-950">Pflichtangaben</div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Deliverables brauchen Epic, Initiative und Sprint. Sub-Issues bleiben unter einem Deliverable und sind nicht score-relevant.
+                  Deliverables brauchen Epic, Initiative und Sprint. Sub-Issues bleiben unter einem Deliverable und werden nicht bewertet.
                 </p>
               </div>
               <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
@@ -273,7 +273,7 @@ export function NewTaskDialog({
                   onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300"
                 />
-                Direkt extern anlegen
+                Zusätzlich extern anlegen
               </label>
             </div>
             {deliverableNeedsStructure && <div className="mt-2 text-xs font-semibold text-amber-700">Für ein Deliverable fehlen noch Sprint oder Initiative.</div>}
@@ -282,7 +282,7 @@ export function NewTaskDialog({
 
           <div className="grid gap-3 sm:grid-cols-3">
             <UiField>
-              Workstream
+              Bereich
               <UiTextInput value={draft.workstream} onChange={(event) => setDraft((current) => ({ ...current, workstream: event.target.value }))} textTone="muted" />
             </UiField>
             <UiDateField label="Start" value={draft.startDate} onChange={(value) => setDraft((current) => ({ ...current, startDate: value }))} />
@@ -292,7 +292,7 @@ export function NewTaskDialog({
           <UiDateField label="Zieltermin" value={draft.deadline} onChange={(value) => setDraft((current) => ({ ...current, deadline: value }))} />
 
           <div className="rounded-lg border border-slate-200 p-3">
-            <div className="text-sm font-semibold text-slate-950">Erste Relationship</div>
+            <div className="text-sm font-semibold text-slate-950">Erste Abhängigkeit</div>
             <p className="mt-1 text-xs leading-5 text-slate-500">Optional, wenn diese Aufgabe direkt von einer anderen Aufgabe abhängt oder sie blockiert.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <CustomSelect
@@ -319,8 +319,8 @@ export function NewTaskDialog({
           </div>
 
           <UiField>
-            Definition of Done
-            <UiTextArea value={draft.definitionOfDone} onChange={(event) => setDraft((current) => ({ ...current, definitionOfDone: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Allgemeiner Qualitätsstandard oder DoD-Snapshot für dieses Deliverable" />
+            Qualitätsstandard
+            <UiTextArea value={draft.definitionOfDone} onChange={(event) => setDraft((current) => ({ ...current, definitionOfDone: event.target.value }))} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welche Qualität muss vor Abschluss erreicht sein?" />
           </UiField>
         </div>
 

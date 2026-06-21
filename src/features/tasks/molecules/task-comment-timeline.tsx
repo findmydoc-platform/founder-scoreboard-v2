@@ -110,8 +110,8 @@ function describeActivity(message: string) {
   if (normalized.startsWith("Status geändert")) return { title: "Status geändert", detail, tone: "blue" as const, icon: Clock3 };
   if (normalized.startsWith("Review geändert") || normalized.startsWith("Review finalisiert")) return { title, detail, tone: "emerald" as const, icon: CheckCircle2 };
   if (normalized.startsWith("Nacharbeit")) return { title, detail, tone: "amber" as const, icon: AlertCircle };
-  if (normalized.startsWith("GitHub")) return { title, detail, tone: "violet" as const, icon: GitBranch };
-  if (normalized.startsWith("Relationship")) return { title, detail, tone: "slate" as const, icon: GitPullRequestArrow };
+  if (normalized.startsWith("GitHub")) return { title: "Externe Ablage", detail, tone: "violet" as const, icon: GitBranch };
+  if (normalized.startsWith("Relationship")) return { title: "Abhängigkeit", detail, tone: "slate" as const, icon: GitPullRequestArrow };
   if (normalized.startsWith("Blocker")) return { title, detail, tone: "red" as const, icon: AlertCircle };
   if (normalized.startsWith("Kommentar")) return { title, detail, tone: "slate" as const, icon: MessageSquare };
   if (normalized.startsWith("Anhang")) return { title, detail, tone: "slate" as const, icon: Paperclip };

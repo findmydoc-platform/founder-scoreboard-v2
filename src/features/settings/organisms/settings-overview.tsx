@@ -1,7 +1,7 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import { GitHubSyncQueueSection, ProductionReadinessSection, SetupChecklistSection, SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
+import { GitHubSyncQueueSection, SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
 import { SprintPlanningSection, type SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import type { NotificationDelivery, PlanningData, Task } from "@/lib/types";
 
@@ -67,8 +67,6 @@ export function SettingsOverview({
         githubProviderTokenAvailable={githubProviderTokenAvailable}
         googleChatReady={googleChatReady}
       />
-      <ProductionReadinessSection />
-      <SetupChecklistSection />
       <GitHubSyncQueueSection
         tasks={data.tasks}
         pending={pending}

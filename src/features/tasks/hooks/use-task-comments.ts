@@ -80,7 +80,7 @@ export function useTaskComments({
     setError("");
 
     if (source !== "supabase") {
-      throw new Error("Anhänge können nur mit Supabase- und GitHub-Login hochgeladen werden.");
+      throw new Error("Anhänge können nur mit aktiver Verbindung hochgeladen werden.");
     }
 
     const { response, body } = await uploadTaskAttachmentRequest(apiClient, task.id, file);

@@ -103,10 +103,10 @@ export function MeetingSlotSearchSection({
         </div>
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="font-semibold text-slate-950">Kalenderverbindung</div>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                {calendarReady ? `${googleCalendarProfiles.length} Profil(e) können Kalenderdaten einbeziehen.` : "Noch kein Kalender für die Suche verbunden."}
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-950">Kalenderverbindung</div>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+                {calendarReady ? `${googleCalendarProfiles.length} Teammitglied${googleCalendarProfiles.length === 1 ? "" : "er"} berücksichtigen belegte Zeiten.` : "Noch kein Kalender für die Suche verbunden."}
               </p>
             </div>
             <UiBadge tone={calendarReady ? "emerald" : "slate"}>{calendarReady ? "bereit" : "nicht verbunden"}</UiBadge>
@@ -182,7 +182,7 @@ export function MeetingSlotSearchSection({
             placeholder="Agenda oder Kontext"
           />
           <p className="text-xs leading-5 text-slate-500">
-            Ein Slot legt ein internes Meeting an, erzeugt offene Anwesenheitszeilen und aktualisiert den Kalender, wenn eine Verbindung besteht.
+            Ein Slot legt ein internes Meeting an und aktualisiert den Kalender, wenn eine Verbindung besteht.
           </p>
           {meetingCreateMessage && <UiNotice tone="success" className="px-2 py-1 text-xs font-semibold leading-normal">{meetingCreateMessage}</UiNotice>}
         </div>

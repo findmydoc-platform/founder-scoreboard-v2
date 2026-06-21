@@ -82,7 +82,7 @@ export const workspaceSubtitles: Record<Workspace, string> = {
   projects: "Epic-, Meilenstein- und Initiative-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
-  settings: "Teamzugriff, Benachrichtigungen und Betriebsdetails.",
+  settings: "Teamzugriff und Benachrichtigungen.",
   "ceo-intake": "CEO-only Import für freigegebene Aufgabenpakete.",
 };
 
@@ -293,10 +293,10 @@ export function buildHygieneAlerts(data: PlanningData) {
       alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Assignee", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Assignee festlegen und nächsten Schritt notieren.", taskId: task.id });
     }
     if (!task.acceptanceCriteria?.trim()) {
-      alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Acceptance Criteria fehlen", description: "Ohne Akzeptanzkriterien ist Review und Score schwammig.", recommendedAction: "Akzeptanzkriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
+      alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Abnahmekriterien fehlen", description: "Ohne Abnahmekriterien ist Review und Score schwammig.", recommendedAction: "Abnahmekriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
     }
     if (!task.definitionOfDone?.trim()) {
-      alerts.push({ id: `dod-${task.id}`, severity: "warning", area: "quality", title: "Definition of Done fehlt", description: "Die Aufgabe hat kein klares Fertig-Kriterium.", recommendedAction: "Definition of Done ergänzen und Review-Erwartung klären.", taskId: task.id });
+      alerts.push({ id: `dod-${task.id}`, severity: "warning", area: "quality", title: "Qualitätsstandard fehlt", description: "Die Aufgabe hat kein klares Fertig-Kriterium.", recommendedAction: "Qualitätsstandard ergänzen und Review-Erwartung klären.", taskId: task.id });
     }
     if (status === "Blockiert" && !openBlockers.length) {
       alerts.push({ id: `blocker-comment-${task.id}`, severity: "critical", area: "blocker", title: "Blockiert ohne Blocker-Meldung", description: "Der Status ist blockiert, aber es fehlt eine konkrete Blocker-Meldung.", recommendedAction: "Blocker mit Ursache, Auswirkung und benötigter Hilfe erfassen.", focusStatus: "blocked", taskId: task.id });
@@ -305,7 +305,7 @@ export function buildHygieneAlerts(data: PlanningData) {
       alerts.push({ id: `review-aging-${task.id}`, severity: "warning", area: "review", title: "Review wartet zu lange", description: "Diese Aufgabe liegt mindestens zwei Tage in Review.", recommendedAction: "Review aktiv anstoßen oder Nacharbeit klar markieren.", taskId: task.id });
     }
     if (task.sprintId && status !== "Erledigt" && !task.evidenceLink && !task.githubIssueUrl && !task.issueUrl) {
-      alerts.push({ id: `evidence-${task.id}`, severity: "info", area: "evidence", title: "Evidence fehlt", description: "Sprint-Arbeit sollte einen Evidence- oder GitHub-Link haben.", recommendedAction: "Evidence-Link oder GitHub-Issue ergänzen.", taskId: task.id });
+      alerts.push({ id: `evidence-${task.id}`, severity: "info", area: "evidence", title: "Nachweis fehlt", description: "Sprint-Arbeit sollte einen Nachweis-Link haben.", recommendedAction: "Nachweis-Link oder externe Ablage ergänzen.", taskId: task.id });
     }
     if (relationGroups.waitsOn.length && hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
       alerts.push({ id: `waits-on-${task.id}`, severity: "warning", area: "dependency", title: "Wartet auf offene Aufgabe", description: "Eine Abhängigkeit ist noch offen und kann den Abschluss verschieben.", recommendedAction: "Abhängigkeit prüfen und Blocker oder Folgeaktion klären.", focusStatus: "blocked", taskId: task.id });

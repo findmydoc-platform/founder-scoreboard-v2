@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const note = cleanText(payload.note, 500);
 
   if (!relationType || !relationTypes.has(relationType)) {
-    return apiError("Ungültige Relationship-Art.", 400);
+    return apiError("Ungültige Abhängigkeitsart.", 400);
   }
   if (!relatedTaskId || relatedTaskId === id) {
     return apiError("Bitte eine andere Aufgabe auswählen.", 400);
@@ -57,12 +57,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (error || !relation) {
     const duplicate = error?.code === "23505";
-    return apiError(duplicate ? "Diese Relationship existiert bereits." : error?.message || "Relationship konnte nicht gespeichert werden.", duplicate ? 409 : 500);
+    return apiError(duplicate ? "Diese Abhängigkeit existiert bereits." : error?.message || "Abhängigkeit konnte nicht gespeichert werden.", duplicate ? 409 : 500);
   }
 
   await supabase.from("task_activity").insert({
     task_id: id,
-    message: `Relationship hinzugefügt: ${relationActionLabel(relationType)}`,
+    message: `Abhängigkeit hinzugefügt: ${relationActionLabel(relationType)}`,
   });
 
   await supabase.from("tasks").update({
@@ -101,7 +101,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const { id } = await context.params;
   const relationId = Number(payload.relationId);
   if (!Number.isInteger(relationId) || relationId <= 0) {
-    return apiError("Relationship-ID ist erforderlich.", 400);
+    return apiError("Abhängigkeit ist erforderlich.", 400);
   }
 
   const { data: relation, error: readError } = await supabase
@@ -109,9 +109,9 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     .select("id,task_id,related_task_id,relation_type,note")
     .eq("id", relationId)
     .single();
-  if (readError || !relation) return apiError("Relationship wurde nicht gefunden.", 404);
+  if (readError || !relation) return apiError("Abhängigkeit wurde nicht gefunden.", 404);
   if (relation.task_id !== id && relation.related_task_id !== id) {
-    return apiError("Relationship gehört nicht zu dieser Aufgabe.", 403);
+    return apiError("Abhängigkeit gehört nicht zu dieser Aufgabe.", 403);
   }
 
   const { error } = await supabase.from("task_relationship_edges").delete().eq("id", relationId);
@@ -119,7 +119,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   await supabase.from("task_activity").insert({
     task_id: id,
-    message: `Relationship entfernt: ${relationActionLabel(relation.relation_type)}`,
+    message: `Abhängigkeit entfernt: ${relationActionLabel(relation.relation_type)}`,
   });
 
   await supabase.from("tasks").update({

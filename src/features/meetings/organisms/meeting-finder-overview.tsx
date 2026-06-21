@@ -156,7 +156,6 @@ export function MeetingFinderOverview({
   const {
     workingHours,
     blockers,
-    googleCalendarBlocks,
     googleCalendarProfiles,
     lastGoogleSync,
     profileNameById,
@@ -297,8 +296,6 @@ export function MeetingFinderOverview({
         calendarDates={calendarDates}
         workingHours={workingHours}
         blockers={blockers}
-        googleCalendarBlocksCount={googleCalendarBlocks.length}
-        googleCalendarProfilesCount={googleCalendarProfiles.length}
         currentProfileId={currentProfile?.id}
         onWorkProfileChange={setWorkProfileId}
         onBlockerProfileChange={setBlockerProfileId}

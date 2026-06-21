@@ -77,7 +77,7 @@ export function useTaskCollaborationCommands({
     setSaveError("");
 
     if (source !== "supabase") {
-      throw new Error("Anhänge können nur mit Supabase- und GitHub-Login hochgeladen werden.");
+      throw new Error("Anhänge können nur mit aktiver Verbindung hochgeladen werden.");
     }
 
     const { response, body } = await taskApi.uploadTaskAttachmentRequest(apiClient, task.id, file);
@@ -232,7 +232,7 @@ export function useTaskCollaborationCommands({
     startTransition(async () => {
       try {
         const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
-        if (!response.ok || !body?.relation) throw new Error(body?.error || "Relationship konnte nicht gespeichert werden.");
+        if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
 
         setData((current) => ({
           ...current,
@@ -243,7 +243,7 @@ export function useTaskCollaborationCommands({
           ...current,
           taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
         }));
-        setSaveError(error instanceof Error ? error.message : "Relationship konnte nicht gespeichert werden.");
+        setSaveError(error instanceof Error ? error.message : "Abhängigkeit konnte nicht gespeichert werden.");
       }
     });
   };
@@ -264,13 +264,13 @@ export function useTaskCollaborationCommands({
     startTransition(async () => {
       try {
         const { response, body } = await taskApi.removeTaskRelationshipRequest(apiClient, task.id, relation.id);
-        if (!response.ok) throw new Error(body?.error || "Relationship konnte nicht entfernt werden.");
+        if (!response.ok) throw new Error(body?.error || "Abhängigkeit konnte nicht entfernt werden.");
       } catch (error) {
         setData((current) => ({
           ...current,
           taskRelations: [relation, ...current.taskRelations],
         }));
-        setSaveError(error instanceof Error ? error.message : "Relationship konnte nicht entfernt werden.");
+        setSaveError(error instanceof Error ? error.message : "Abhängigkeit konnte nicht entfernt werden.");
       }
     });
   };

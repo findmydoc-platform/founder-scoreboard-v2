@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const issueNumber = Number(task.github_issue_number || task.issue_number || 0);
   if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-    return apiError("Diese Aufgabe ist noch nicht mit einem GitHub-Issue verknüpft.", 409);
+    return apiError("Diese Aufgabe ist noch nicht extern abgelegt.", 409);
   }
 
   let githubComments: Awaited<ReturnType<typeof listGitHubIssueComments>>;
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (evidenceError) return apiError(evidenceError.message, 500);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: "Evidence aus GitHub-Issue importiert",
+      message: "Nachweis aus externer Ablage importiert",
     });
   } else {
     importedEvidenceLink = "";

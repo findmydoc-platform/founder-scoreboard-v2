@@ -29,7 +29,7 @@ export function useTaskDeleteCommand({
     }
     const confirmed = window.confirm(
       hasGitHubIssue(task)
-        ? "Aufgabe aus der App löschen und das verknüpfte GitHub-Issue schließen?"
+        ? "Aufgabe aus der App löschen und die externe Ablage schließen?"
         : "Aufgabe aus der App löschen?",
     );
     if (!confirmed) return;

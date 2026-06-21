@@ -190,7 +190,7 @@ function DeliverableTable({ tasks }: { tasks: Task[] }) {
         >
           <span className="min-w-0">
             <span className="block truncate font-semibold text-slate-950">{task.title}</span>
-            <span className="mt-0.5 block text-xs text-slate-500">{task.priority} · {task.workstream || "ohne Workstream"}</span>
+            <span className="mt-0.5 block text-xs text-slate-500">{task.priority} · {task.workstream || "ohne Bereich"}</span>
           </span>
           <span className="truncate text-slate-700">{taskOwnerLabel(task)}</span>
           <span className="text-slate-700">{normalizeStatus(task.status)}</span>

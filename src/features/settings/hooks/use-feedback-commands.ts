@@ -51,7 +51,7 @@ export function useFeedbackCommands({
     setSelectedFeedbackId(localFeedback.id);
 
     if (source !== "supabase") {
-      setFeedbackMessage("Feedback wurde lokal erfasst. Mit Supabase wird es als Notification an CEO/Deputy gesendet.");
+      setFeedbackMessage("Feedback wurde lokal erfasst.");
       setFeedbackDialogOpen(false);
       return;
     }

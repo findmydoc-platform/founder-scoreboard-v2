@@ -222,10 +222,6 @@ export function TaskDetailsCard({
           <div className="text-xs font-semibold text-slate-500">Score</div>
           <div className="mt-1 text-sm font-semibold text-slate-800">{task.scoreFinal ? `${task.scorePoints} final` : `${task.scorePoints} offen`}</div>
         </div>
-        <div className="border-t border-slate-100 pt-3">
-          <div className="text-xs font-semibold text-slate-500">Assignee</div>
-          <div className="mt-1 text-sm font-semibold text-slate-800">{ownerProfile?.githubLogin || ownerProfile?.name || taskOwnerLabel({ owner: meta.owner })}</div>
-        </div>
         <div>
           <div className="text-xs font-semibold text-slate-500">Epic-Ziel</div>
           <div className="mt-1 text-sm text-slate-700">{currentMilestone?.targetDate ? formatDate(currentMilestone.targetDate) : "Kein Zieltermin"}</div>
