@@ -1,44 +1,11 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createSupabaseScriptClient } from "./lib/supabase.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const TEMPLATE_VERSION = "founder-deliverable-v2.2";
 
-function parseEnvLine(line) {
-  const trimmed = line.trim().replace(/^\uFEFF/, "");
-  if (!trimmed || trimmed.startsWith("#")) return null;
-  const separator = trimmed.indexOf("=");
-  if (separator < 0) return null;
-  const key = trimmed.slice(0, separator).trim();
-  const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, "");
-  return [key, value];
-}
-
-async function loadEnv() {
-  const envPath = resolve(process.cwd(), ".env.local");
-  if (!existsSync(envPath)) return;
-  const envFile = await readFile(envPath, "utf8");
-  for (const pair of envFile.split(/\r?\n/).map(parseEnvLine)) {
-    if (!pair) continue;
-    const [key, value] = pair;
-    process.env[key] ||= value;
-  }
-}
-
-await loadEnv();
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-  console.error("Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.");
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false },
+const supabase = await createSupabaseScriptClient({
+  keyEnv: ["SUPABASE_SERVICE_ROLE_KEY"],
 });
 
 const initiativeUpdates = [
