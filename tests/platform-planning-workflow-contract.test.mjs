@@ -103,6 +103,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /useTaskMutationCommands/,
         /useTaskCollaborationCommands/,
         /usePlanningDataRefresh/,
+        /usePlanningHeaderPrimaryAction/,
         /usePlanningTaskSelection/,
         /usePlanningTaskViewModel/,
         /useMeetingCommands/,
@@ -123,7 +124,28 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task mutation commands",
       path: "src/features/tasks/hooks/use-task-mutation-commands.ts",
-      matches: [/updateTaskRequest/, /createTaskRequest/, /syncTaskToGitHubRequest/, /deleteTaskRequest/, /persistLocalPlanningTasks/, /window\.confirm/],
+      matches: [/useTaskGitHubSyncCommand/, /useTaskUpdateCommand/, /useTaskCreateCommand/, /useTaskDeleteCommand/],
+      excludes: [/updateTaskRequest|createTaskRequest|syncTaskToGitHubRequest|deleteTaskRequest|persistLocalPlanningTasks|window\.confirm/],
+    },
+    {
+      label: "task github sync command",
+      path: "src/features/tasks/hooks/use-task-github-sync-command.ts",
+      matches: [/syncTaskToGitHubRequest/, /syncLinkedGitHubTasks/, /syncTaskToGitHub/],
+    },
+    {
+      label: "task update command",
+      path: "src/features/tasks/hooks/use-task-update-command.ts",
+      matches: [/updateTaskRequest/, /persistLocalPlanningTasks/, /buildClientTaskUpdatePatch/],
+    },
+    {
+      label: "task create command",
+      path: "src/features/tasks/hooks/use-task-create-command.ts",
+      matches: [/createTaskRequest/, /linkDecisionTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
+    },
+    {
+      label: "task delete command",
+      path: "src/features/tasks/hooks/use-task-delete-command.ts",
+      matches: [/deleteTaskRequest/, /window\.confirm/],
     },
     {
       label: "task collaboration commands",
@@ -176,7 +198,7 @@ test("planning app controller delegates command domains and stays a thin compose
 
 test("task mutation contract centralizes update normalization and route patches", async () => {
   const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
-  const taskMutations = await readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8");
+  const taskUpdateCommand = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
 
   assert.match(contract, /export function buildClientTaskUpdatePatch/);
@@ -186,9 +208,9 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(contract, /export function taskOwnedByProfile/);
   assert.match(contract, /Final bewertete Aufgaben können nicht erneut in Review gegeben werden/);
 
-  assert.match(taskMutations, /buildClientTaskUpdatePatch/);
-  assert.match(taskMutations, /taskUpdateRequestPayload/);
-  assert.doesNotMatch(taskMutations, /taskOwnerPatch/);
+  assert.match(taskUpdateCommand, /buildClientTaskUpdatePatch/);
+  assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
+  assert.doesNotMatch(taskUpdateCommand, /taskOwnerPatch/);
 
   assert.match(updateRoute, /buildTaskUpdateResponsePatch/);
   assert.match(updateRoute, /activityMessages/);
