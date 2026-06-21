@@ -200,6 +200,8 @@ test("task mutation contract centralizes update normalization and route patches"
   const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const taskUpdateCommand = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
 
   assert.match(contract, /export function buildClientTaskUpdatePatch/);
   assert.match(contract, /export function taskUpdateRequestPayload/);
@@ -214,7 +216,7 @@ test("task mutation contract centralizes update normalization and route patches"
 
   assert.match(updateRoute, /buildTaskUpdateResponsePatch/);
   assert.match(updateRoute, /activityMessages/);
-  assert.match(updateRoute, /taskOwnedByProfile/);
+  assert.match(updateRoutePolicy, /taskOwnedByProfile/);
   assert.doesNotMatch(updateRoute, /function activityMessages/);
   assert.doesNotMatch(updateRoute, /function taskOwnedByProfile/);
   assert.doesNotMatch(updateRoute, /function profileId/);
@@ -290,6 +292,8 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
   const types = await readFile("src/lib/types.ts", "utf8");
   const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
@@ -302,7 +306,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(migration, /acceptance_criteria/);
   assert.match(migration, /evidence_required/);
   assert.match(createRoute, /problemStatement/);
-  assert.match(updateRoute, /acceptanceCriteria/);
+  assert.match(updateRoutePolicy, /acceptanceCriteria/);
   assert.match(types, /problemStatement/);
   assert.match(dataRowTypes, /task_dependencies\(note\), task_notes\(note\)/);
   assert.match(dataRowTypes, /problem_statement/);
@@ -760,11 +764,13 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(migration, /self_dod_checked/);
-  assert.match(taskRoute, /self_dod_checked/);
+  assert.match(taskRoutePolicy, /self_dod_checked/);
   assert.match(reviewRoute, /reviewDecisionPoints/);
   assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.doesNotMatch(sprintUi, /Founder-Arbeitsstand/);

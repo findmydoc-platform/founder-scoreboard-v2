@@ -1,25 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { requireFounder } from "@/lib/authz";
-import { activityMessages, buildTaskUpdateResponsePatch, profileId, taskOwnedByProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
+import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
+import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
+import {
+  applyReviewStatusUpdate,
+  applyTaskBriefUpdateFields,
+  applyTaskPriorityUpdate,
+  applyTaskScoreUpdateFields,
+  applyTaskSelfChecklistUpdateFields,
+  applyTaskStatusUpdate,
+  applyTaskSyncStatusUpdate,
+  markTaskGitHubSyncDirty,
+  proposalPromotionState,
+  restrictedTaskUpdateFields,
+  startsTaskReviewRequest,
+  validateTaskStatusUpdate,
+  type TaskRouteDbUpdate,
+} from "@/features/tasks/model/task-route-update-helpers";
 import { archiveGitHubIssue } from "@/lib/github";
 import { optionalMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { taskStatuses } from "@/lib/status";
-
-const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
-const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
-
-function linkedIssueNumber(row: { github_issue_number?: number | null; issue_number?: string | null; github_issue_url?: string | null; issue_url?: string | null }) {
-  if (row.github_issue_number) return Number(row.github_issue_number);
-  const legacyNumber = Number(row.issue_number);
-  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
-  const url = row.github_issue_url || row.issue_url || "";
-  const match = url.match(/\/issues\/(\d+)(?:$|[?#])/);
-  return match ? Number(match[1]) : null;
-}
-
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder, {
@@ -31,7 +32,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const payload = (await request.json()) as TaskUpdatePayload;
-  const update: Record<string, string | number | boolean | null> = {};
+  const update: TaskRouteDbUpdate = {};
   const { data: currentTask } = await supabase
     .from("tasks")
     .select("id,title,task_type,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
@@ -41,15 +42,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
-  const restrictedFields = [
-    payload.owner !== undefined ? "Owner" : "",
-    payload.priority !== undefined ? "Priorität" : "",
-    payload.packageId !== undefined ? "Initiative" : "",
-    payload.sprintId !== undefined ? "Sprint" : "",
-    payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
-    payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
-    payload.scorePoints !== undefined || payload.scoreFinal !== undefined ? "Score" : "",
-  ].filter(Boolean);
+  const restrictedFields = restrictedTaskUpdateFields(payload);
 
   if (!isOperationalLead && restrictedFields.length) {
     return apiError(`Diese Felder sind geschützt: ${restrictedFields.join(", ")}.`, 403);
@@ -59,28 +52,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
   }
 
-  if (payload.status) {
-    if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
-      return apiError("Ungültiger Status.", 400);
-    }
-    if (!isOperationalLead && !taskOwnedByProfile(currentTask, permission.profile)) {
-      return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
-    }
-    if (!isOperationalLead && payload.status === "Erledigt") {
-      return apiError("Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", 403);
-    }
-    if (!isOperationalLead && currentTask?.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
-      return apiError("Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden.", 403);
-    }
-    update.status = payload.status;
-  }
+  const statusGuard = validateTaskStatusUpdate({ currentTask, isOperationalLead, payload, profile: permission.profile });
+  if (!statusGuard.ok) return apiError(statusGuard.error, statusGuard.status);
+  applyTaskStatusUpdate(update, payload);
 
-  if (payload.priority) {
-    if (!priorities.has(payload.priority)) {
-      return apiError("Ungültige Priorität.", 400);
-    }
-    update.priority = payload.priority;
-  }
+  const priorityGuard = applyTaskPriorityUpdate(update, payload);
+  if (!priorityGuard.ok) return apiError(priorityGuard.error, priorityGuard.status);
 
   if (payload.milestoneId !== undefined) {
     const nextMilestoneId = payload.milestoneId || null;
@@ -123,16 +100,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.assignee = nextOwner || null;
   }
 
-  if (payload.startDate !== undefined) update.start_date = payload.startDate || null;
-  if (payload.endDate !== undefined) update.end_date = payload.endDate || null;
-  if (payload.deadline !== undefined) update.deadline = payload.deadline || null;
-  if (payload.problemStatement !== undefined) update.problem_statement = payload.problemStatement.trim().slice(0, 4000) || null;
-  if (payload.intendedOutcome !== undefined) update.intended_outcome = payload.intendedOutcome.trim().slice(0, 4000) || null;
-  if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim().slice(0, 4000) || null;
-  if (payload.acceptanceCriteria !== undefined) update.acceptance_criteria = payload.acceptanceCriteria.trim().slice(0, 6000) || null;
-  if (payload.evidenceRequired !== undefined) update.evidence_required = payload.evidenceRequired.trim().slice(0, 4000) || null;
-  if (payload.definitionOfDone !== undefined) update.definition_of_done = payload.definitionOfDone.trim().slice(0, 4000) || null;
-  if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
+  applyTaskBriefUpdateFields(update, payload);
 
   if (payload.sprintId !== undefined) {
     const nextSprintId = payload.sprintId || null;
@@ -148,14 +116,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.sprint_id = nextSprintId;
   }
 
-  const effectiveOwner = typeof update.owner === "string" ? update.owner : currentTask.owner || "";
-  const effectiveStatus = typeof update.status === "string" ? update.status : currentTask.status || "";
-  const effectivePackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
-  const effectiveSprintId = typeof update.sprint_id === "string" ? update.sprint_id : currentTask.sprint_id || "";
-  const shouldPromoteProposal =
-    currentTask.task_type === "proposal" &&
-    Boolean(effectiveOwner) &&
-    effectiveStatus !== "Vorschlag";
+  const { effectivePackageId, effectiveSprintId, shouldPromoteProposal } = proposalPromotionState(currentTask, update);
 
   if (shouldPromoteProposal) {
     if (!effectivePackageId || !effectiveSprintId) {
@@ -165,25 +126,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.score_relevant = true;
   }
 
-  if (payload.reviewStatus) {
-    if (!reviewStatuses.has(payload.reviewStatus)) {
-      return apiError("Ungültiger Review-Status.", 400);
-    }
-    if (!isOperationalLead && payload.reviewStatus !== "requested") {
-      return apiError("Founder können Review nur anfragen. Final bewertet wird im CEO-Review.", 403);
-    }
-    update.review_status = payload.reviewStatus;
-    update.score_final = ["accepted", "partial", "changes_requested"].includes(payload.reviewStatus);
-    if (!isOperationalLead) update.score_final = false;
-  }
-
-  if (payload.scorePoints !== undefined) {
-    update.score_points = Math.max(0, payload.scorePoints);
-  }
-
-  if (payload.scoreFinal !== undefined) {
-    update.score_final = Boolean(payload.scoreFinal);
-  }
+  const reviewStatusGuard = applyReviewStatusUpdate(update, payload, isOperationalLead);
+  if (!reviewStatusGuard.ok) return apiError(reviewStatusGuard.error, reviewStatusGuard.status);
+  applyTaskScoreUpdateFields(update, payload);
 
   if (payload.reviewOwnerProfileId !== undefined) {
     const nextReviewOwner = profileId(payload.reviewOwnerProfileId);
@@ -198,7 +143,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_owner_profile_id = nextReviewOwner || null;
   }
 
-  const startsReviewRequest = payload.status === "Review" || payload.reviewStatus === "requested";
+  const startsReviewRequest = startsTaskReviewRequest(payload);
   if (startsReviewRequest) {
     if (currentTask.score_final) {
       return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
@@ -223,22 +168,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_requested_at = new Date().toISOString();
   }
 
-  if (payload.githubSyncStatus) {
-    if (!syncStatuses.has(payload.githubSyncStatus)) {
-      return apiError("Ungültiger GitHub-Sync-Status.", 400);
-    }
-    update.github_sync_status = payload.githubSyncStatus;
-  }
-
-  if (payload.selfDodChecked !== undefined) update.self_dod_checked = Boolean(payload.selfDodChecked);
-  if (payload.selfEvidenceChecked !== undefined) update.self_evidence_checked = Boolean(payload.selfEvidenceChecked);
-  if (payload.selfDocumentedChecked !== undefined) update.self_documented_checked = Boolean(payload.selfDocumentedChecked);
-  if (payload.selfBlockersChecked !== undefined) update.self_blockers_checked = Boolean(payload.selfBlockersChecked);
-
-  if (Object.keys(update).length && payload.githubSyncStatus === undefined) {
-    update.github_sync_status = "not_synced";
-    update.github_sync_error = null;
-  }
+  const syncStatusGuard = applyTaskSyncStatusUpdate(update, payload);
+  if (!syncStatusGuard.ok) return apiError(syncStatusGuard.error, syncStatusGuard.status);
+  applyTaskSelfChecklistUpdateFields(update, payload);
+  markTaskGitHubSyncDirty(update, payload);
 
   if (Object.keys(update).length) {
     const { error } = await supabase.from("tasks").update(update).eq("id", id);
