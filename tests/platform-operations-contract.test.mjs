@@ -267,7 +267,7 @@ test("founder events are modeled as team-visible operational reminders", async (
   const ui = await readFeatureSurface("src/features/events");
   const types = await readFile("src/lib/types.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const mappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const mappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
   const migration = await readFile("supabase/0035_founder_events.sql", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 

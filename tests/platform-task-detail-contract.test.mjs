@@ -147,7 +147,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const app = await readPlanningSurface();
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-task-mappers.ts", "utf8");
 
   assert.match(migration, /create table if not exists milestones/);
   assert.match(migration, /milestone_id/);
