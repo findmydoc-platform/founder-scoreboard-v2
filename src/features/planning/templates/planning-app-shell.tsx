@@ -65,8 +65,8 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail=""
-        title="Session wird geprüft"
-        description="FounderOps prüft die bestehende Team-Session, bevor geschützte Planungsdaten geladen werden."
+        title="Zugriff wird geprüft"
+        description="FounderOps prüft den Teamzugriff, bevor Planungsdaten geladen werden."
       />
     );
   }
@@ -84,7 +84,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         authAvailable={authAvailable}
         authUserEmail={authUser.email || ""}
         title={authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}
-        description={authError ? "Die Session ist aktiv, aber die geschützte Daten-API hat nicht erfolgreich geantwortet." : "Die Session ist gültig. Die Daten werden jetzt über die geschützte API geladen."}
+        description={authError ? "Der Teamzugriff ist aktiv, aber die Planungsdaten konnten nicht geladen werden." : "Der Teamzugriff ist gültig. Die Daten werden jetzt geladen."}
         error={authError || undefined}
         authUser={authUser}
         authBusy={authBusy}

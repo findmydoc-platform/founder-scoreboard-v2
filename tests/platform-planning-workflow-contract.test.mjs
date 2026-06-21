@@ -312,12 +312,12 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(types, /problemStatement/);
   assert.match(dataRowTypes, /task_dependencies\(note\), task_notes\(note\)/);
   assert.match(dataRowTypes, /problem_statement/);
-  assert.match(newTaskUi, /Template v2/);
+  assert.match(newTaskUi, /Aufgabenbrief/);
   assert.match(detail, /TaskBriefSection/);
   assert.match(briefSection, /Aufgabenbrief/);
-  assert.match(briefSection, /Acceptance Criteria/);
-  assert.match(briefSection, /Evidence Required/);
-  assert.match(briefSection, /Definition of Done/);
+  assert.match(briefSection, /Abnahmekriterien/);
+  assert.match(briefSection, /Nachweis/);
+  assert.match(briefSection, /Qualitätsstandard/);
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 
@@ -439,11 +439,11 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(route, /Nacharbeit/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
-  assert.match(sprintViewModel, /Acceptance Criteria erfüllt/);
+  assert.match(sprintViewModel, /Abnahmekriterien erfüllt/);
   assert.match(sprintUi, /CEO-Score/);
   assert.match(appUi, /Nächster Schritt/);
-  assert.match(reviewSheet, /Evidence Required/);
-  assert.match(reviewSheet, /Definition of Done Snapshot/);
+  assert.match(reviewSheet, /Nachweis \/ Abhängigkeiten/);
+  assert.match(reviewSheet, /Qualitätsstandard/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
 });
 
@@ -680,8 +680,8 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(teamUi, /useTeamProfileDrafts/);
   assert.match(teamModel, /profileColorOptions/);
   assert.match(teamUi, /Post-it-Farbe/);
-  assert.match(teamUi, /Google Chat User-ID/);
-  assert.match(teamUi, /Google Chat DM-Space/);
+  assert.match(teamUi, /Chat-Konto/);
+  assert.match(teamUi, /Persönliche Chat-Zustellung/);
   assert.match(teamUi, /Google-Chat-Benachrichtigungen/);
   assert.match(teamUi, /Kalender-E-Mail/);
   assert.match(teamUi, /CEO-Bearbeitung aktiv/);

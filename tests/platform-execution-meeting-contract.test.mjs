@@ -109,7 +109,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(executionUi, /Aktion in Fokus/);
   assert.match(focusRoute, /Founder können nur eigene Aufgaben in den Fokus nehmen/);
   assert.match(focusRoute, /Founder können nur eigene Fokus-Einträge entfernen/);
-  assert.match(ui, /Acceptance Criteria fehlen/);
+  assert.match(ui, /Abnahmekriterien fehlen/);
   assert.match(ui, /Decision ohne Folgeaufgabe/);
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const panelContext = await readFile("src/features/tasks/molecules/task-detail-panel-context-section.tsx", "utf8");
@@ -183,8 +183,8 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(newTaskUi, /Vorschläge können bewusst ohne Assignee bleiben/);
   assert.match(newTaskUi, /taskOwnerOptions\(draft\.taskType, data\.profiles\)/);
   assert.match(newTaskUi, /Sub-Issues/);
-  assert.match(newTaskUi, /nicht score-relevant/);
-  assert.match(newTaskUi, /Direkt extern anlegen/);
+  assert.match(newTaskUi, /werden nicht bewertet/);
+  assert.match(newTaskUi, /Zusätzlich extern anlegen/);
   assert.match(newTaskUi, /createGitHubIssue/);
   assert.match(newTaskUi, /relationType/);
   assert.match(newTaskUi, /relatedTaskId/);
@@ -354,7 +354,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(calendarMonthUi, /Nicht verfügbar/);
   assert.match(calendarMonthUi, /blockiert/);
   assert.match(calendarMonthUi, /Meeting/);
-  assert.match(calendarWeekUi, /GMT\+02/);
+  assert.match(calendarWeekUi, /Berlin/);
   assert.match(calendarWeekUi, /Blocker anlegen/);
   assert.match(calendarWeekUi, /Arbeitszeit ohne Blocker/);
   assert.match(calendarWeekUi, /calendarBlockPosition/);
@@ -382,7 +382,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(meetingViewModel, /googleCalendarEmail/);
   assert.match(availabilitySummaryUi, /Kalenderwoche & Blocker/);
   assert.match(availabilitySummaryUi, /Keine Einträge/);
-  assert.match(availabilitySummaryUi, /Kalenderstatus/);
+  assert.doesNotMatch(availabilitySummaryUi, /Kalenderstatus/);
   assert.match(availabilitySummaryUi, /onDeleteAvailability/);
   assert.match(slotSearchUi, /Keine passenden Slots/);
   assert.match(slotSearchUi, /CustomDatePicker/);

@@ -206,7 +206,7 @@ export function usePlanningAuth({
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
       if (!token) {
-        setAuthError("Session ist aktiv, aber kein Zugriffstoken verfügbar. Bitte erneut anmelden.");
+        setAuthError("Der Teamzugriff ist aktiv, aber die Anmeldung muss erneuert werden. Bitte erneut anmelden.");
         setProtectedDataLoaded(false);
         return;
       }

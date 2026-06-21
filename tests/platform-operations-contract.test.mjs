@@ -248,12 +248,10 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /SettingsOverview/);
-  assert.match(settingsOverviewUi, /ProductionReadinessSection/);
-  assert.match(readinessUi, /Betriebsdetails/);
-  assert.match(readinessUi, /manuell offen/);
+  assert.doesNotMatch(settingsOverviewUi, /ProductionReadinessSection|SetupChecklistSection/);
+  assert.doesNotMatch(readinessUi, /Betriebsdetails|manuell offen/);
   assert.doesNotMatch(readinessUi, /vercel login/);
-  assert.match(readinessUi, /GitHub-Zugriff/);
-  assert.match(readinessUi, /Anmelde-Weiterleitungen/);
+  assert.doesNotMatch(readinessUi, /GitHub-Zugriff|Anmelde-Weiterleitungen|Deployment-Automation/);
 });
 
 test("founder events are modeled as team-visible operational reminders", async () => {

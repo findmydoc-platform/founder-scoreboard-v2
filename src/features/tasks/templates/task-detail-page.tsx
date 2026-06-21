@@ -143,9 +143,6 @@ export function TaskDetailPage({
 
       <TaskDetailHeader
         title={task.title}
-        status={meta.status}
-        priority={meta.priority}
-        hours={task.hours}
         actions={(
           <GitHubConnectionStatus
             authenticated={source === "supabase"}
@@ -161,11 +158,7 @@ export function TaskDetailPage({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid min-w-0 gap-5">
             <TaskBriefSection
-              task={task}
               brief={meta}
-              creatorProfile={creatorProfile}
-              ownerProfile={ownerProfile}
-              owner={meta.owner}
               editing={briefEditing}
               onEdit={() => setBriefEditing(true)}
               onCancel={resetBriefDraft}

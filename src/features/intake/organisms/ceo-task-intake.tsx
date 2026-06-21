@@ -45,6 +45,23 @@ function previewState(tasks: TaskIntakePreviewTask[]) {
   return { errors, warnings, valid: tasks.length > 0 && errors === 0 };
 }
 
+function taskTypeLabel(taskType: TaskIntakePreviewTask["taskType"]) {
+  if (taskType === "proposal") return "Vorschlag";
+  if (taskType === "sub_issue") return "Sub-Issue";
+  return "Deliverable";
+}
+
+function intakeMessageLabel(message: string) {
+  if (message.startsWith("Ungültiger Aufgabentyp:")) return "Aufgabentyp konnte nicht zugeordnet werden.";
+  if (message.startsWith("Initiative wurde nicht gefunden:")) return "Initiative wurde nicht gefunden. Bitte eine vorhandene Initiative aus der Zuordnungshilfe verwenden.";
+  if (message.startsWith("Epic / Meilenstein wurde nicht gefunden:")) return "Epic oder Meilenstein wurde nicht gefunden. Bitte eine vorhandene Zuordnung verwenden.";
+  if (message.startsWith("Sprint wurde nicht gefunden:")) return "Sprint wurde nicht gefunden. Bitte einen offenen Sprint aus der Zuordnungshilfe verwenden.";
+  if (message.startsWith("Parent-Task wurde nicht gefunden:")) return "Übergeordnetes Deliverable wurde nicht gefunden. Bitte eine vorhandene Aufgabe verwenden.";
+  if (message.startsWith("Assignee wurde nicht gefunden:")) return "Assignee wurde nicht gefunden. Bitte ein Teammitglied aus der Zuordnungshilfe verwenden.";
+  if (message.startsWith("Status auf Offen gesetzt")) return "Status wurde auf Offen gesetzt, weil der importierte Wert nicht bekannt ist.";
+  return message;
+}
+
 export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, onTasksCreated }: Props) {
   const [rawInput, setRawInput] = useState(JSON.stringify(sampleTasks, null, 2));
   const [previewTasks, setPreviewTasks] = useState<TaskIntakePreviewTask[]>([]);
@@ -53,6 +70,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
   const state = useMemo(() => previewState(previewTasks), [previewTasks]);
   const canUseSupabase = source === "supabase";
   const activeSprints = sprints.filter((sprint) => sprint.status !== "closed").slice(0, 5);
+  const sprintNameById = useMemo(() => new Map(sprints.map((sprint) => [sprint.id, sprint.name])), [sprints]);
 
   const parsedPayload = () => {
     const parsed = JSON.parse(rawInput) as unknown;
@@ -113,11 +131,11 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
               <WandSparkles size={15} />
-              CEO-only
+              Nur CEO
             </div>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">Aufgaben importieren</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-              Füge ein Aufgabenpaket ein, prüfe die Vorschau und erstelle danach die freigegebenen Aufgaben.
+              Füge ein Aufgabenpaket ein, prüfe die fachliche Vorschau und erstelle danach die freigegebenen Aufgaben.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -141,7 +159,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
         </div>
 
         <label className="mt-4 grid gap-2 text-xs font-semibold text-slate-500">
-          Aufgabenpaket
+          Importquelle
           <textarea
             value={rawInput}
             onChange={(event) => setRawInput(event.target.value)}
@@ -168,24 +186,43 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="break-words text-sm font-semibold text-slate-950">{task.title || "Ohne Titel"}</h3>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {task.taskType} · {task.priority} · {task.ownerName || "ohne Assignee"} · Review: {task.reviewOwnerName || "ohne Review Owner"}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                      <UiBadge tone="white">{taskTypeLabel(task.taskType)}</UiBadge>
+                      <UiBadge tone="white">{task.packageTitle || "Ohne Initiative"}</UiBadge>
+                      <UiBadge tone="white">{task.sprintId ? sprintNameById.get(task.sprintId) || "Sprint nicht gefunden" : "Ohne Sprint"}</UiBadge>
+                      <UiBadge tone="white">{task.ownerName || "Ohne Assignee"}</UiBadge>
+                      <UiBadge tone="white">{task.hours}h</UiBadge>
+                    </div>
                   </div>
                   <UiBadge tone={task.errors.length ? "red" : "emerald"}>
                     {task.errors.length ? "Fehler" : "gültig"}
                   </UiBadge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-2">
+                  <div><span className="font-semibold text-slate-800">Priorität:</span> {task.priority}</div>
+                  <div><span className="font-semibold text-slate-800">Status:</span> {task.status}</div>
+                  <div><span className="font-semibold text-slate-800">Review:</span> {task.reviewOwnerName || "Ohne Review Owner"}</div>
+                  <div><span className="font-semibold text-slate-800">Bewertung:</span> {task.scoreRelevant ? "relevant" : "nicht bewertet"}</div>
                 </div>
                 {[...task.errors, ...task.warnings].length > 0 && (
                   <ul className="mt-3 grid gap-1 text-xs leading-5 text-slate-600">
                     {[...task.errors, ...task.warnings].map((item) => (
                       <li key={item} className="flex gap-2">
                         <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
-                        <span>{item}</span>
+                        <span>{intakeMessageLabel(item)}</span>
                       </li>
                     ))}
                   </ul>
                 )}
+                <details className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  <summary className="cursor-pointer list-none font-semibold text-slate-600">Importdetails anzeigen</summary>
+                  <div className="mt-2 grid gap-1">
+                    <div>Typ: {task.taskType}</div>
+                    <div>Initiative: {task.packageId || "nicht gesetzt"}</div>
+                    <div>Sprint: {task.sprintId || "nicht gesetzt"}</div>
+                    {task.parentTaskId && <div>Übergeordnetes Deliverable: {task.parentTaskId}</div>}
+                  </div>
+                </details>
               </article>
             ))}
           </div>

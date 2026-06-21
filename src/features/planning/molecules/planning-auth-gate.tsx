@@ -27,7 +27,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
           <AppBrand />
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {isLoadingState ? "Session aktiv" : "Geschützter Teamzugriff"}
+              {isLoadingState ? "Zugriff aktiv" : "Geschützter Teamzugriff"}
             </div>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">
               {isLoadingState

@@ -33,7 +33,7 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.match(route, /parent_task_id/);
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe liegt nur in der App/);
-  assert.match(route, /Nur Deliverables werden als eigenständige GitHub-Issues gespiegelt/);
+  assert.match(route, /Nur Deliverables können extern angelegt werden/);
   assert.match(route, /github_sync_status: "pending"/);
   assert.match(route, /github_sync_status: "synced"/);
   assert.match(route, /github_sync_status: "failed"/);
@@ -88,7 +88,7 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /GitHubSyncQueueSection/);
   assert.match(readinessUi, /Externe Ablage/);
-  assert.match(readinessUi, /Verknüpfte Issues aktualisieren/);
+  assert.match(readinessUi, /Externe Ablagen aktualisieren/);
   assert.match(ui, /createIfMissing: false/);
 });
 
@@ -134,15 +134,15 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const panelDependencies = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
   const relationshipForm = await readFile("src/features/tasks/molecules/task-relationship-form.tsx", "utf8");
   const panelRelationshipContract = `${panelDependencies}\n${relationshipForm}`;
-  assert.match(panelRelationshipContract, /Relationship hinzufügen/);
-  assert.match(panelRelationshipContract, /Relationship existiert bereits/);
-  assert.match(panelRelationshipContract, /Diese Relationship ist bereits gespeichert/);
+  assert.match(panelRelationshipContract, /Abhängigkeit hinzufügen/);
+  assert.match(panelRelationshipContract, /Abhängigkeit existiert bereits/);
+  assert.match(panelRelationshipContract, /Diese Abhängigkeit ist bereits gespeichert/);
   assert.match(panelDependencies, /relationMatchesDraft/);
   assert.match(detail, /useTaskDetailWorkflow/);
   assert.match(taskDetailWorkflow, /useTaskRelationships/);
   assert.match(detail, /task=\{task\}/);
-  assert.match(relationshipHook, /Relationship konnte nicht gespeichert werden/);
-  assert.match(relationshipHook, /Relationship konnte nicht entfernt werden/);
+  assert.match(relationshipHook, /Abhängigkeit konnte nicht gespeichert werden/);
+  assert.match(relationshipHook, /Abhängigkeit konnte nicht entfernt werden/);
   assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/relationships/);
   assert.match(taskApiClient, /method: "POST"/);
   assert.match(taskApiClient, /method: "DELETE"/);
@@ -155,8 +155,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipUi, /relationshipBadgeToneClass/);
   assert.match(detail, /TaskRelationshipsSection/);
   assert.match(relationshipSection, /RelationshipList/);
-  assert.match(`${relationshipSection}\n${relationshipForm}`, /Relationship hinzufügen/);
-  assert.match(`${relationshipSection}\n${relationshipForm}`, /Relationship existiert bereits/);
+  assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit hinzufügen/);
+  assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit existiert bereits/);
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);
@@ -215,24 +215,24 @@ test("app-only tasks are visibly marked without creating github issues", async (
 
   assert.match(ui, /GitHubMissingBadge/);
   assert.match(taskCard, /Nur in der App/);
-  assert.match(readinessUi, /Aufgaben ohne Issue bleiben in der App/);
-  assert.match(readinessUi, /Diese Liste bleibt dauerhaft erhalten/);
+  assert.match(readinessUi, /Ausgewählte Deliverables können zusätzlich extern abgelegt werden/);
+  assert.match(readinessUi, /bewusst extern angelegt/);
   assert.match(readinessUi, /task\.taskType === "deliverable"/);
   assert.doesNotMatch(readinessUi, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
-  assert.match(readinessUi, /Deliverables bleiben in der App/);
+  assert.match(readinessUi, /Diese Liste bleibt dauerhaft erhalten/);
   assert.match(readinessUi, /Extern anlegen/);
   assert.match(readinessUi, /Keine Aufgaben ohne externe Ablage/);
-  assert.match(taskCard, /Nur in der App: noch kein Issue verknüpft/);
+  assert.match(taskCard, /Nur in der App: noch nicht extern abgelegt/);
   assert.match(panel, /TaskDetailPanelSidebar/);
-  assert.match(panelSidebar, /Issue anlegen/);
+  assert.match(panelSidebar, /Extern anlegen/);
   assert.match(ui, /createIfMissing: true/);
   assert.match(ui, /onCreateGitHubIssue/);
   assert.match(detailGitHubSyncCard, /Noch nicht extern abgelegt/);
-  assert.match(detailGitHubSyncCard, /Issue anlegen/);
+  assert.match(detailGitHubSyncCard, /Extern anlegen/);
   assert.match(detail, /createIfMissing: true/);
   assert.match(detail, /githubState/);
-  assert.match(panelSidebar, /bewusst extern gespiegelt/);
-  assert.match(detailGitHubSyncCard, /bewusst extern gespiegelt/);
+  assert.match(panelSidebar, /außerhalb der App geführt/);
+  assert.match(detailGitHubSyncCard, /außerhalb der App geführt/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -427,7 +427,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(githubCommentsRoute, /listGitHubIssueComments/);
   assert.match(githubCommentsRoute, /getGitHubIssue/);
   assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
-  assert.match(githubCommentsRoute, /Evidence aus GitHub-Issue importiert/);
+  assert.match(githubCommentsRoute, /Nachweis aus externer Ablage importiert/);
   assert.match(githubCommentsRoute, /evidenceLink/);
   assert.match(githubCommentsRoute, /isAppMirroredComment/);
   assert.match(githubCommentsRoute, /task_external_comments/);
@@ -463,7 +463,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(commentTimeline, /activityToneClass/);
   assert.match(commentTimeline, /Status geändert/);
   assert.match(commentTimeline, /Review finalisiert/);
-  assert.match(commentTimeline, /Relationship/);
+  assert.match(commentTimeline, /Abhängigkeit/);
   assert.match(thread, /CommentBody/);
   assert.match(thread, /TaskCommentComposer/);
   assert.match(githubCommentImage, /<img\b/);

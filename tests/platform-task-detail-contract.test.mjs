@@ -49,11 +49,11 @@ test("task route opens the detail panel inside the planning shell", async () => 
   const taskDetailPanel = panel.slice(panel.indexOf("export function TaskDetailPanel"));
   assert.match(taskDetailPanel, /TaskDetailPanelBriefSection/);
   assert.match(panelBriefSection, /Aufgabenbrief/);
-  assert.ok(panelBriefSection.indexOf("Problem Statement") < panelBriefSection.indexOf("Intended Outcome"));
-  assert.ok(panelBriefSection.indexOf("Intended Outcome") < panelBriefSection.indexOf("Scope & Constraints"));
-  assert.ok(panelBriefSection.indexOf("Scope & Constraints") < panelBriefSection.indexOf("Acceptance Criteria"));
-  assert.ok(panelBriefSection.indexOf("Acceptance Criteria") < panelBriefSection.indexOf("Evidence Required"));
-  assert.ok(panelBriefSection.indexOf("Evidence Required") < panelBriefSection.indexOf("Definition of Done"));
+  assert.ok(panelBriefSection.indexOf("Problem") < panelBriefSection.indexOf("Zielbild"));
+  assert.ok(panelBriefSection.indexOf("Zielbild") < panelBriefSection.indexOf("Umfang & Grenzen"));
+  assert.ok(panelBriefSection.indexOf("Umfang & Grenzen") < panelBriefSection.indexOf("Abnahmekriterien"));
+  assert.ok(panelBriefSection.indexOf("Abnahmekriterien") < panelBriefSection.indexOf("Nachweis"));
+  assert.ok(panelBriefSection.indexOf("Nachweis") < panelBriefSection.indexOf("Qualitätsstandard"));
   assert.match(taskDetailPanel, /TaskDetailPanelContextSection/);
   assert.match(panelContextSection, /Fokus-Kontext/);
   assert.match(panelContextSection, /Begründende Decisions/);
@@ -65,7 +65,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelDependenciesSection, /RelationshipList/);
   assert.match(panelDependenciesSection, /CommentBody/);
   const relationshipForm = await readFile("src/features/tasks/molecules/task-relationship-form.tsx", "utf8");
-  assert.match(`${panelDependenciesSection}\n${relationshipForm}`, /Relationship hinzufügen/);
+  assert.match(`${panelDependenciesSection}\n${relationshipForm}`, /Abhängigkeit hinzufügen/);
   assert.match(taskDetailPanel, /TaskDetailPanelSubIssuesSection/);
   assert.match(panelSubIssuesSection, /Sub-Issues/);
   assert.match(panelSubIssuesSection, /Noch keine Sub-Issues/);
@@ -93,7 +93,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(panelSidebarSection, /Zum Review-Blatt/);
   assert.match(panelSidebarSection, /onOpenReview/);
   assert.match(panelSidebarSection, /Self-Review/);
-  assert.match(panelSidebarSection, /GitHub/);
+  assert.match(panelSidebarSection, /Externe Ablage/);
   assert.match(panelSidebarSection, /Aufgabe löschen/);
   assert.match(page, /title="Kommentare"/);
   assert.match(page, /<div className="mx-auto max-w-7xl px-6 py-6">/);
@@ -120,7 +120,7 @@ test("task route opens the detail panel inside the planning shell", async () => 
   assert.match(page, /TaskSubIssuesSection/);
   assert.ok(page.indexOf("TaskSubIssuesSection") < page.indexOf("title=\"Kommentare\""));
   assert.match(subIssuesSection, /Sub-Issues/);
-  assert.match(subIssuesSection, /nicht score-relevant/);
+  assert.match(subIssuesSection, /nicht bewertet/);
 });
 
 test("task detail page supports github-like sidebar metadata and milestones", async () => {
@@ -195,9 +195,9 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(page, /TaskGitHubSyncCard/);
   assert.match(page, /TaskBlockerCard/);
   assert.match(briefSection, /Aufgabenbrief/);
-  assert.match(briefSection, /Problem Statement/);
-  assert.match(briefSection, /Acceptance Criteria/);
-  assert.match(briefSection, /Definition of Done/);
+  assert.match(briefSection, /Problem/);
+  assert.match(briefSection, /Abnahmekriterien/);
+  assert.match(briefSection, /Qualitätsstandard/);
   assert.match(briefSection, /TaskChecklist/);
   assert.match(briefSection, /onChecklistChange/);
   assert.match(contextSection, /Fokus-Kontext/);
@@ -209,9 +209,9 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(evidenceSection, /CommentBody/);
   assert.match(header, /Zur Planung/);
   assert.match(header, /Aufgabendetail/);
-  assert.match(header, /statusBadgeTone/);
-  assert.match(header, /priorityBadgeTone/);
-  assert.match(relationshipsSection, /Relationships/);
+  assert.doesNotMatch(header, /statusBadgeTone/);
+  assert.doesNotMatch(header, /priorityBadgeTone/);
+  assert.match(relationshipsSection, /Abhängigkeiten/);
   assert.match(relationshipsSection, /Wartet auf/);
   assert.match(relationshipsSection, /Verknüpft mit/);
   assert.match(relationshipsSection, /onRelationDraftChange/);

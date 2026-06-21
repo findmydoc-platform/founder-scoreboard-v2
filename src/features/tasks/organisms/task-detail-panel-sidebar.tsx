@@ -4,9 +4,9 @@ import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
-import { hasGitHubIssue, reviewLabel, syncLabel } from "@/lib/platform";
+import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
+import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import {
   assigneeOptions,
@@ -62,6 +62,8 @@ export function TaskDetailPanelSidebar({
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
   const canSyncExistingGitHubIssue = hasGitHubIssue(task);
+  const externalSyncPending = task.githubSyncStatus === "pending";
+  const externalSyncProblem = task.githubSyncStatus === "failed" || Boolean(task.githubSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = canManageTaskMeta
     ? taskStatuses
@@ -245,35 +247,36 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Anlegen..." : "Issue anlegen"}
+              {task.githubSyncStatus === "pending" ? "Anlegen..." : "Extern anlegen"}
             </button>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
           )}
         </div>
         <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
-          <p className="break-words font-medium text-slate-800">{hasGitHubIssue(task) ? "Verknüpft" : "Nur in der App"} · {syncLabel(task.githubSyncStatus)}</p>
+          <p className="break-words font-medium text-slate-800">
+            {externalSyncPending
+              ? "Externe Ablage wird aktualisiert."
+              : externalSyncProblem
+                ? "Externe Ablage braucht Aufmerksamkeit."
+                : hasGitHubIssue(task)
+                  ? "Diese Aufgabe ist extern abgelegt."
+                  : "Diese Aufgabe ist aktuell nur in der App."}
+          </p>
           {task.githubIssueUrl ? (
             <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-blue-700 hover:underline">
               <Link2 size={15} className="shrink-0" />
-              <span className="truncate">Verknüpftes Issue öffnen</span>
+              <span className="truncate">Externe Ablage öffnen</span>
             </a>
           ) : (
             <p className="text-slate-500">Noch nicht extern abgelegt.</p>
           )}
           {!hasGitHubIssue(task) && (
             <p className="text-xs text-slate-500">
-              Nutze „Issue anlegen“ nur, wenn diese Aufgabe bewusst extern gespiegelt werden soll.
+              Extern anlegen nur, wenn diese Aufgabe auch außerhalb der App geführt werden soll.
             </p>
           )}
-          <details className="mt-1 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-slate-500">Ablagedetails anzeigen</summary>
-            <div className="mt-2 grid gap-1 text-xs text-slate-500">
-              <p className="break-words">Repository: {task.githubRepo || "findmydoc-platform/management"}</p>
-              {task.githubLastSyncedAt && <p>Zuletzt gespiegelt: {task.githubLastSyncedAt}</p>}
-              {task.githubSyncError && <p className="break-words text-red-700">{task.githubSyncError}</p>}
-            </div>
-          </details>
+          {externalSyncProblem && <p className="text-xs font-semibold text-amber-700">Verbindung prüfen und erneut versuchen.</p>}
         </div>
       </section>
 
@@ -281,7 +284,7 @@ export function TaskDetailPanelSidebar({
         <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
           <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
           <p className="mt-1 text-xs leading-5 text-red-800">
-            Löscht die Aufgabe aus der App. Ein verknüpftes GitHub-Issue wird vorher geschlossen und als Test/Löschung markiert.
+            Löscht die Aufgabe aus der App. Eine bestehende externe Ablage wird vorher geschlossen.
           </p>
           <button
             type="button"

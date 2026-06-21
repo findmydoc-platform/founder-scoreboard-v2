@@ -58,11 +58,11 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-3">
-          <ReviewTextBlock label="Problem Statement" value={task.problemStatement || task.description || "Kein Problem Statement hinterlegt."} />
-          <ReviewTextBlock label="Intended Outcome" value={task.intendedOutcome || "Kein Intended Outcome hinterlegt."} />
-          <ReviewTextBlock label="Acceptance Criteria" value={task.acceptanceCriteria || task.definitionOfDone || "Keine Acceptance Criteria hinterlegt."} />
-          <ReviewTextBlock label="Definition of Done Snapshot" value={task.definitionOfDone || "Keine Definition of Done hinterlegt."} />
-          <ReviewTextBlock label="Evidence Required / Abhängigkeiten" value={[task.evidenceRequired || "Kein erwarteter Nachweis hinterlegt.", task.evidenceLink || task.issueUrl || "Noch kein Evidence-Link hinterlegt.", task.dependsOn || "Keine harte Abhängigkeit erfasst."].join("\n")} />
+          <ReviewTextBlock label="Problem" value={task.problemStatement || task.description || "Kein Problem hinterlegt."} />
+          <ReviewTextBlock label="Zielbild" value={task.intendedOutcome || "Kein Zielbild hinterlegt."} />
+          <ReviewTextBlock label="Abnahmekriterien" value={task.acceptanceCriteria || task.definitionOfDone || "Keine Abnahmekriterien hinterlegt."} />
+          <ReviewTextBlock label="Qualitätsstandard" value={task.definitionOfDone || "Kein Qualitätsstandard hinterlegt."} />
+          <ReviewTextBlock label="Nachweis / Abhängigkeiten" value={[task.evidenceRequired || "Kein erwarteter Nachweis hinterlegt.", task.evidenceLink || task.issueUrl || "Noch kein Nachweis-Link hinterlegt.", task.dependsOn || "Keine harte Abhängigkeit erfasst."].join("\n")} />
           <textarea
             value={comment}
             onChange={(event) => setComment(event.target.value)}

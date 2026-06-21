@@ -140,7 +140,7 @@ export function useTaskCreateCommand({
             relatedTaskId: draft.relatedTaskId,
             note: draft.relationNote,
           });
-          if (!relationResponse.ok || !relationBody?.relation) throw new Error(relationBody?.error || "Relationship konnte nicht gespeichert werden.");
+          if (!relationResponse.ok || !relationBody?.relation) throw new Error(relationBody?.error || "Abhängigkeit konnte nicht gespeichert werden.");
           setData((current) => ({
             ...current,
             taskRelations: [relationBody.relation!, ...current.taskRelations],
@@ -154,7 +154,7 @@ export function useTaskCreateCommand({
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
           const { response: syncResponse, body: syncBody } = await taskApi.syncTaskToGitHubRequest(apiClient, body.task.id, { createIfMissing: true });
-          if (!syncResponse.ok || !syncBody?.task) throw new Error(syncBody?.error || "GitHub-Issue konnte nicht angelegt werden.");
+          if (!syncResponse.ok || !syncBody?.task) throw new Error(syncBody?.error || "Externe Ablage konnte nicht angelegt werden.");
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),

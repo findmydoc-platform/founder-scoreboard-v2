@@ -43,7 +43,7 @@ export function TaskRelationshipsSection({
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-slate-950">Relationships</h3>
+      <h3 className="text-sm font-semibold text-slate-950">Abhängigkeiten</h3>
       <div className="mt-2 grid gap-2">
         <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
         <RelationshipList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />

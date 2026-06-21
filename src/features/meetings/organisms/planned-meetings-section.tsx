@@ -82,7 +82,7 @@ export function PlannedMeetingsSection({
               )}
               {meeting.googleCalendarSyncStatus === "failed" && (
                 <UiNotice tone="warning" className="mt-3 text-xs font-semibold leading-normal">
-                  Google Sync fehlgeschlagen: {meeting.googleCalendarSyncError || "Konfiguration prüfen."}
+                  Kalender konnte nicht aktualisiert werden. Bitte Verbindung prüfen und erneut versuchen.
                 </UiNotice>
               )}
             </article>

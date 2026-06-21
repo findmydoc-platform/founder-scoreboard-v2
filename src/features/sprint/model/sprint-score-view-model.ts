@@ -15,8 +15,8 @@ export function reviewChecklistScore(checklist: { acceptanceCriteriaMet?: boolea
 }
 
 export const reviewChecklistItems = [
-  ["acceptanceCriteriaMet", "Acceptance Criteria erfüllt", "2,5 Punkte"],
-  ["evidenceProvided", "Evidence/Link liegt vor", "2,5 Punkte"],
+  ["acceptanceCriteriaMet", "Abnahmekriterien erfüllt", "2,5 Punkte"],
+  ["evidenceProvided", "Nachweis/Link liegt vor", "2,5 Punkte"],
   ["communicationClear", "Ergebnis und Kommunikation nachvollziehbar", "2,5 Punkte"],
   ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt", "2,5 Punkte"],
 ] as const;

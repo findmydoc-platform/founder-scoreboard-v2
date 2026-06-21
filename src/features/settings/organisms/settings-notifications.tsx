@@ -207,10 +207,10 @@ export function SettingsNotificationsSection({
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Persönlich</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDmNotifications.length}</div>
-            <div className="mt-1 text-xs text-slate-500">{googleChatDmReadyProfiles}/{data.profiles.length} Profile bereit</div>
+            <div className="mt-1 text-xs text-slate-500">{googleChatDmReadyProfiles}/{data.profiles.length} Teammitglieder erreichbar</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nur In-App</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">In der App</div>
             <div className="mt-1 text-2xl font-semibold text-slate-950">{inAppOnlyNotifications.length}</div>
           </div>
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
@@ -218,7 +218,7 @@ export function SettingsNotificationsSection({
             <div className="mt-1 text-2xl font-semibold text-slate-950">{failedDigestNotifications.length}</div>
           </div>
           <div className="rounded-md bg-red-50 px-3 py-2 text-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-red-700">Persönlich fehlgeschlagen</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-red-700">Persönlich offen</div>
             <div className="mt-1 text-2xl font-semibold text-red-900">{failedDirectDmDeliveries.length}</div>
           </div>
         </div>
@@ -244,14 +244,14 @@ export function SettingsNotificationsSection({
         )}
         <details className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
           <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Zustelldetails anzeigen
+            Letzte Sendungen anzeigen
           </summary>
           {recentDeliveries.length > 0 && (
             <div className="mt-3 grid gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Letzte Zustellversuche</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Letzte Sendungen</div>
               {recentDeliveries.map((delivery) => (
                 <div key={delivery.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-xs text-slate-600">
-                  <span>{notificationChannelLabel(data.notificationEvents.find((event) => event.id === delivery.eventId)?.type || "system")} · Event #{delivery.eventId} · {delivery.target || "kein Ziel"}</span>
+                  <span>{notificationChannelLabel(data.notificationEvents.find((event) => event.id === delivery.eventId)?.type || "system")} · {deliveryModeLabel(delivery.deliveryMode)}</span>
                   <span className="font-semibold">{delivery.status}</span>
                 </div>
               ))}
@@ -259,7 +259,7 @@ export function SettingsNotificationsSection({
           )}
           <div className="mt-4 grid gap-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Zustellversuche</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sendungen</div>
               <div className="flex flex-wrap gap-1">
                 {(["all", "failed", "sent", "direct_dm", "webhook_digest"] as DeliveryFilter[]).map((filter) => (
                   <UiButton
@@ -277,14 +277,13 @@ export function SettingsNotificationsSection({
               <div key={delivery.id} className="grid gap-2 rounded-md bg-white px-3 py-2 text-xs text-slate-600 md:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0">
                   <div className="flex flex-wrap gap-2">
-                    <span className="font-semibold text-slate-800">Event #{delivery.eventId}</span>
+                    <span className="font-semibold text-slate-800">Hinweis</span>
                     <span>{notificationChannelLabel(data.notificationEvents.find((event) => event.id === delivery.eventId)?.type || "system")}</span>
                     <span>{deliveryModeLabel(delivery.deliveryMode)}</span>
                     <span>{delivery.digestSize ? `${delivery.digestSize} Hinweis${delivery.digestSize === 1 ? "" : "e"}` : "Einzelversuch"}</span>
                     <span>{formatDate(delivery.createdAt)}</span>
                   </div>
-                  <div className="mt-1 truncate">{delivery.target || "kein Ziel"}</div>
-                  {delivery.lastError && <div className="mt-1 line-clamp-2 text-red-700">{delivery.lastError}</div>}
+                  {delivery.lastError && <div className="mt-1 line-clamp-2 text-red-700">Zustellung konnte nicht abgeschlossen werden.</div>}
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <UiBadge tone={delivery.status === "sent" ? "emerald" : delivery.status === "failed" ? "red" : "amber"} className="font-semibold">

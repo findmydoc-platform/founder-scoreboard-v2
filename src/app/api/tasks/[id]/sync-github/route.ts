@@ -170,7 +170,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
     return NextResponse.json({
-      error: "Nur Deliverables werden als eigenständige GitHub-Issues gespiegelt.",
+      error: "Nur Deliverables können extern angelegt werden.",
       task: {
         githubSyncStatus: task.githubSyncStatus,
         githubSyncError: task.githubSyncError,

@@ -24,7 +24,7 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
     <UiBadge
       tone="amber"
       size="xs"
-      title="Nur in der App: noch kein Issue verknüpft."
+      title="Nur in der App: noch nicht extern abgelegt."
       className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}
     >
       Nur in der App
@@ -49,8 +49,8 @@ export function TaskCard({
   allTasks,
   statusOptions,
   statusDisabled = false,
-  showStatus = true,
-  showStatusControl = true,
+  showStatus = false,
+  showStatusControl = false,
   onOpen,
   onStatusChange,
   onDragStart,
