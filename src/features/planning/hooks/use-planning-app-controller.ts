@@ -13,6 +13,7 @@ import { useNotificationCommands } from "@/features/planning/hooks/use-notificat
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningBoardState } from "@/features/planning/hooks/use-planning-board-state";
 import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
+import { usePlanningHeaderPrimaryAction } from "@/features/planning/hooks/use-planning-header-primary-action";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningTaskSelection } from "@/features/planning/hooks/use-planning-task-selection";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
@@ -47,11 +48,6 @@ type PlanningAppControllerOptions = {
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
   initialReviewTaskId?: string;
-};
-
-type HeaderPrimaryAction = {
-  label: string;
-  onClick: () => void;
 };
 
 export function usePlanningAppController({
@@ -232,57 +228,13 @@ export function usePlanningAppController({
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters, workspace });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
-  const headerPrimaryAction: HeaderPrimaryAction | null = (() => {
-    if (workspace === "planning") {
-      return {
-        label: "Neue Aufgabe",
-        onClick: () => setTaskDialogDefaults({ taskType: "deliverable" }),
-      };
-    }
-
-    if (workspace === "mine") {
-      return {
-        label: "Vorschlag erstellen",
-        onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
-      };
-    }
-
-    if (workspace === "sprint") {
-      return {
-        label: "Aufgabe hinzufügen",
-        onClick: () =>
-          setTaskDialogDefaults({
-            taskType: "deliverable",
-            sprintId: activeSprint?.id || "",
-            startDate: activeSprint?.startDate || "",
-            endDate: activeSprint?.endDate || "",
-          }),
-      };
-    }
-
-    if (workspace === "decisions") {
-      return {
-        label: "Neue Decision",
-        onClick: () => document.getElementById("decision-create")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      };
-    }
-
-    if (workspace === "projects") {
-      return {
-        label: "Neue Initiative",
-        onClick: () => setInitiativeDialogDefaults({}),
-      };
-    }
-
-    if (workspace === "settings") {
-      return {
-        label: "Feedback erfassen",
-        onClick: () => setFeedbackDialogOpen(true),
-      };
-    }
-
-    return null;
-  })();
+  const headerPrimaryAction = usePlanningHeaderPrimaryAction({
+    activeSprint,
+    setFeedbackDialogOpen,
+    setInitiativeDialogDefaults,
+    setTaskDialogDefaults,
+    workspace,
+  });
 
   const taskMutationCommands = useTaskMutationCommands({
     ...commandContext,

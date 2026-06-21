@@ -227,6 +227,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   const ui = await readPlanningSurface();
   const meetingUi = await readFeatureSurface("src/features/meetings");
   const meetingLogic = await readFile("src/features/meetings/model/meeting-finder.ts", "utf8");
+  const meetingOptions = await readFile("src/features/meetings/model/meeting-options.ts", "utf8");
   const meetingViewModel = await readFile("src/features/meetings/model/meeting-finder-view-model.ts", "utf8");
   const meetingAvailabilityHook = await readFile("src/features/meetings/hooks/use-meeting-availability-editor.ts", "utf8");
   const availabilityDialogUi = await readFile("src/features/meetings/organisms/meeting-availability-dialog.tsx", "utf8");
@@ -321,7 +322,7 @@ test("meeting finder manages working hours blockers and guarded availability", a
   assert.match(availabilityFormsUi, /Blocker eintragen/);
   assert.match(availabilityFormsUi, /Art des Blockers/);
   assert.match(availabilityDialogUi, /Blocker-Titel/);
-  assert.match(meetingLogic, /Kundentermin/);
+  assert.match(meetingOptions, /Kundentermin/);
   assert.match(meetingAvailabilityHook, /availabilityTypeForBlockerKind/);
   assert.match(meetingAvailabilityHook, /blockerKindForAvailability/);
   assert.match(availabilityDialogUi, /Ganztägig blockieren/);
