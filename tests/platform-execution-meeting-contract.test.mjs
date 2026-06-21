@@ -151,6 +151,8 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
   const promotionMigration = await readFile("supabase/0034_promote_assigned_proposals.sql", "utf8");
   const ui = await readPlanningSurface();
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
@@ -166,15 +168,15 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(route, /taskType === "proposal" \? null/);
   assert.match(route, /Deliverables brauchen Initiative und Sprint/);
   assert.match(updateRoute, /shouldPromoteProposal/);
-  assert.match(updateRoute, /currentTask\.task_type === "proposal"/);
-  assert.match(updateRoute, /effectiveStatus !== "Vorschlag"/);
+  assert.match(updateRoutePolicy, /currentTask\.task_type === "proposal"/);
+  assert.match(updateRoutePolicy, /effectiveStatus !== "Vorschlag"/);
   assert.match(updateRoute, /update\.task_type = "deliverable"/);
   assert.match(updateRoute, /update\.score_relevant = true/);
   assert.match(promotionMigration, /task_type = 'proposal'/);
   assert.match(promotionMigration, /status <> 'Vorschlag'/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
-  assert.match(updateRoute, /Nur Vorschläge können ohne Assignee bleiben/);
+  assert.match(updateRoutePolicy, /Nur Vorschläge können ohne Assignee bleiben/);
   assert.match(ui, /NewTaskDialog/);
   assert.match(display, /Nicht zugeordnet/);
   assert.match(newTaskUi, /Vorschläge können bewusst ohne Assignee bleiben/);

@@ -397,6 +397,8 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   const previewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
 
   assert.match(agents, /Task Intake, KI-gestützte Aufgabenerstellung und Bulk-Planung sind CEO-only/);
@@ -416,8 +418,8 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(intakeUi, /Team-KI bleibt getrennt vom CEO Intake/);
   assert.match(intakeUi, /keine persönlichen langlebigen API-Tokens/);
   assert.match(intakeUi, /Planung, RACI, Sprint, Review Owner, Punkte und Erledigt bleiben geschützt/);
-  assert.match(taskRoute, /Founder können Aufgaben nur in Review geben/);
-  assert.match(taskRoute, /Diese Felder sind geschützt/);
+  assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
+  assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
   assert.match(commentsRoute, /requireFounder/);
 });

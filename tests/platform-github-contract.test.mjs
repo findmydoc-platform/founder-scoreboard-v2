@@ -162,14 +162,16 @@ test("task relationships use github-like blocked by and blocking semantics", asy
 
 test("github sync queue is reopened by task comments blockers and relationship changes", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
 
-  assert.match(taskRoute, /payload\.githubSyncStatus === undefined/);
-  assert.match(taskRoute, /github_sync_status = "not_synced"/);
+  assert.match(taskRoutePolicy, /payload\.githubSyncStatus === undefined/);
+  assert.match(taskRoutePolicy, /github_sync_status = "not_synced"/);
   assert.match(commentsRoute, /github_sync_status: githubSyncError \? "failed" : "not_synced"/);
   assert.match(commentsRoute, /github_sync_error: githubSyncError \|\| null/);
   assert.match(blockersRoute, /github_sync_status: "not_synced"/);

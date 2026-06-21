@@ -5,13 +5,15 @@ import assert from "node:assert/strict";
 
 test("founders can only move or change status for their own tasks", async () => {
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const routePolicy = `${route}\n${routeHelpers}`;
   const app = await readPlanningSurface();
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
-  assert.match(route, /taskOwnedByProfile/);
-  assert.match(route, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
+  assert.match(routePolicy, /taskOwnedByProfile/);
+  assert.match(routePolicy, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
   assert.match(app, /canChangeTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(app, /onDragStart=\{canUpdateStatus && onDragStart \? onDragStart : undefined\}/);

@@ -127,6 +127,8 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const migration = await readFile("supabase/0011_milestones_task_detail.sql", "utf8");
   const creatorMigration = await readFile("supabase/0017_task_created_by.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
+  const routePolicy = `${route}\n${routeHelpers}`;
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
@@ -152,11 +154,11 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(creatorMigration, /created_by text references profiles/);
   assert.match(route, /milestoneId/);
   assert.match(route, /packageId/);
-  assert.match(route, /deadline/);
+  assert.match(routePolicy, /deadline/);
   assert.match(route, /dependsOn/);
-  assert.match(route, /evidenceLink/);
-  assert.match(route, /Diese Felder sind geschützt/);
-  assert.match(route, /Founder können Aufgaben nur in Review geben/);
+  assert.match(routePolicy, /evidenceLink/);
+  assert.match(routePolicy, /Diese Felder sind geschützt/);
+  assert.match(routePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(data, /milestones/);
   assert.match(dataMappers, /createdBy/);
   assert.match(types, /export type Milestone/);
