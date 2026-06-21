@@ -69,9 +69,9 @@ function DataSourceCard({
   return (
     <div className={className}>
       <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-        Datenquelle: <span className="font-semibold">{source === "supabase" ? "Supabase" : "Seed-Fallback"}</span>
+        Datenquelle: <span className="font-semibold">{source === "supabase" ? "Supabase" : "Lokaler Fallback"}</span>
         <br />
-        {source === "supabase" ? "Änderungen werden in Postgres gespeichert." : localStateLoaded ? "Änderungen werden lokal im Browser gespeichert." : "Lokaler Status wird geladen."}
+        {source === "supabase" ? "Änderungen werden in Postgres gespeichert." : localStateLoaded ? "Demo-Daten werden nur per Import geladen." : "Lokaler Status wird geladen."}
       </div>
       {authAvailable && (
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">

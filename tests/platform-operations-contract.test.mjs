@@ -526,8 +526,12 @@ test("local seed state persists task overrides in browser storage", async () => 
   assert.match(ui, /useLocalPlanningState/);
   assert.match(ui, /persistLocalPlanningTasks\(nextData\.tasks\)/);
   assert.match(localStateHook, /localStateKey = "fmd-planning-local-state-v1"/);
+  assert.match(localStateHook, /localDataKey = "fmd-planning-local-data-v1"/);
+  assert.match(localStateHook, /export function persistLocalPlanningData/);
   assert.match(localStateHook, /if \(source === "supabase"\) return/);
+  assert.match(localStateHook, /window\.localStorage\.getItem\(localDataKey\)/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localStateKey\)/);
+  assert.match(localStateHook, /window\.localStorage\.setItem\(localDataKey, JSON\.stringify\(data\)\)/);
   assert.match(localStateHook, /window\.localStorage\.setItem\(localStateKey, JSON\.stringify\(changedTasks\)\)/);
   assert.match(localStateHook, /setLocalStateLoaded\(true\)/);
 });

@@ -10,28 +10,15 @@ npm run dev
 
 Die App läuft standardmäßig auf `http://localhost:3000`.
 
-## Datenimport
-
-Das Import-Script liest das alte Dashboard aus `../docs/findmydoc/founder-task-dashboard.html` und den lokalen State aus `../docs/findmydoc/dashboard-state.json`.
-
-```bash
-npm run import:legacy
-```
-
-Ausgabe:
-
-- `src/lib/generated/seed-data.ts` für lokale Seed-Daten
-- `supabase/schema.sql` für das Datenbankschema
-- `supabase/seed.sql` für Schema plus importierte Startdaten
-
 ## Supabase
 
 1. Supabase-Projekt anlegen.
-2. `supabase/seed.sql` im SQL Editor ausführen.
+2. Supabase-Migrationen aus `supabase/` anwenden.
 3. `.env.example` nach `.env.local` kopieren und Werte setzen.
-4. App neu starten.
+4. Optional für Supabase-Demo-Import `SUPABASE_SERVICE_ROLE_KEY` oder `SUPABASE_SECRET_KEY` setzen.
+5. App starten und den Header-Button `Demo Import` ausführen.
 
-Ohne Supabase-ENV nutzt die App den Seed-Fallback. UI-Änderungen werden dann dauerhaft im lokalen Browser gespeichert.
+Ohne Supabase-ENV oder bei fehlenden Core-Daten startet die App mit einem leeren lokalen Fallback. Demo-Daten aus `src/lib/seed/source.json` werden nur durch den lokalen `Demo Import` Button geladen. Mit leerer Supabase-Bootstrap-Datenbank schreibt der Button nach Supabase; ohne passende ENV befüllt er den lokalen Browser-State.
 
 ## Rollen und Zugriff
 
@@ -102,7 +89,7 @@ Die Hierarchie aus Epic / Meilenstein, Group Commitment, Deliverable und Sub-Iss
 npm run verify:hierarchy
 ```
 
-Erwartet werden aktuell 5 Profile, 5 Packages und 54 Tasks.
+Erwartet werden aktuell 5 Profile, 5 Packages und mindestens die 14 Demo-Tasks aus `src/lib/seed/source.json`.
 
 Die Auth-Zuordnung prüft dieser Befehl:
 

@@ -109,6 +109,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /useDecisionCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,
+        /useDemoSeedImport/,
       ],
       excludes: [
         /planningApi\.|taskApi\./,

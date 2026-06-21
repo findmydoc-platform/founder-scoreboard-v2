@@ -1,6 +1,7 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
 type Props = {
@@ -33,6 +34,7 @@ export default async function ReviewPage({ params }: Props) {
         initialData={data}
         source={source}
         authRequired
+        demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
         initialReviewTaskId={id}
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
@@ -42,5 +44,5 @@ export default async function ReviewPage({ params }: Props) {
   }
 
   const { data, source } = await getPlanningData();
-  return <PlanningApp key={`review-${id}`} initialData={data} source={source} authRequired={false} initialReviewTaskId={id} />;
+  return <PlanningApp key={`review-${id}`} initialData={data} source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
 }

@@ -9,6 +9,7 @@ type Props = {
   initialData: PlanningData;
   source: "seed" | "supabase";
   authRequired: boolean;
+  demoSeedImportAvailable?: boolean;
   initialTaskId?: string;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -21,6 +22,7 @@ export function PlanningApp({
   initialData,
   source,
   authRequired,
+  demoSeedImportAvailable = false,
   initialTaskId = "",
   initialAuthUser = null,
   initialCurrentProfile = null,
@@ -32,6 +34,7 @@ export function PlanningApp({
     initialData,
     source,
     authRequired,
+    demoSeedImportAvailable,
     initialTaskId,
     initialAuthUser,
     initialCurrentProfile,
