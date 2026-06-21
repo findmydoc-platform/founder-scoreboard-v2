@@ -248,7 +248,9 @@ test("planning data loader separates query loading from public orchestration", a
 test("task row descriptor covers planning UI mapping fields", async () => {
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
-  const mappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const profileMappers = await readFile("src/lib/planning-profile-mappers.ts", "utf8");
+  const taskMappers = await readFile("src/lib/planning-task-mappers.ts", "utf8");
+  const mappers = `${profileMappers}\n${taskMappers}`;
 
   assert.match(loader, /select\(taskRowSelect\)/);
   assert.match(mappers, /profileNameById/);
@@ -687,7 +689,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
 test("notification preferences are editable per profile and event type", async () => {
   const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const teamDraftHook = await readFile("src/features/team/hooks/use-team-profile-drafts.ts", "utf8");
@@ -714,7 +716,7 @@ test("notification preferences are editable per profile and event type", async (
 
 test("decision audit loads before and after data for collapsible diffs", async () => {
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataMappers = await readFile("src/lib/planning-data-mappers.ts", "utf8");
+  const dataMappers = await readFile("src/lib/planning-activity-mappers.ts", "utf8");
   const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(data, /before_data,after_data/);
