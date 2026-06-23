@@ -26,11 +26,11 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.match(providerAuth, /x-github-provider-token/);
   assert.match(providerAuth, /githubUserForToken/);
   assert.match(providerAuth, /GitHub-Verbindung passt nicht zum angemeldeten Teamprofil/);
-  assert.match(route, /buildSyncContext/);
-  assert.match(route, /task_comments/);
-  assert.match(route, /task_blockers/);
-  assert.match(route, /task_activity/);
-  assert.match(route, /parent_task_id/);
+  assert.doesNotMatch(route, /buildSyncContext/);
+  assert.doesNotMatch(route, /task_comments/);
+  assert.doesNotMatch(route, /task_blockers/);
+  assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
+  assert.doesNotMatch(route, /parent_task_id/);
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe liegt nur in der App/);
   assert.match(route, /Nur Deliverables können extern angelegt werden/);
@@ -56,7 +56,7 @@ test("operational leads can delete test tasks and close linked github issues", a
   assert.match(panelSidebar, /Aufgabe löschen/);
 });
 
-test("github issue export includes structure review blockers and comments", async () => {
+test("github issue export includes only the task brief and FounderOps source", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
   const ui = await readPlanningSurface();
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
@@ -70,17 +70,22 @@ test("github issue export includes structure review blockers and comments", asyn
   assert.match(github, /review:ready/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Intended Outcome/);
+  assert.match(github, /Scope & Constraints/);
   assert.match(github, /Acceptance Criteria/);
-  assert.match(github, /Score-relevant/);
-  assert.match(github, /Offene Blocker/);
-  assert.match(github, /Relationships/);
-  assert.match(github, /Wartet auf/);
-  assert.match(github, /Blockiert/);
-  assert.match(github, /Letzte Kommentare/);
-  assert.match(github, /Aktivitätsprotokoll/);
-  assert.match(github, /Parent Deliverable/);
-  assert.match(github, /Source of Truth/);
-  assert.match(github, /linkedIssueNumber/);
+  assert.match(github, /Evidence Required/);
+  assert.match(github, /Definition of Done/);
+  assert.match(github, /Open in FounderOps/);
+  assert.match(github, /APP_URL/);
+  assert.match(github, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
+  assert.match(github, /One-way sync; edit task state in FounderOps/);
+  assert.doesNotMatch(github, /Score-relevant/);
+  assert.doesNotMatch(github, /Offene Blocker/);
+  assert.doesNotMatch(github, /Letzte Kommentare/);
+  assert.doesNotMatch(github, /Aktivitätsprotokoll/);
+  assert.doesNotMatch(github, /Planning Metadata/);
+  assert.doesNotMatch(github, /Founder Scoreboard v2 Task ID/);
+  assert.doesNotMatch(github, /Sync-Ziel/);
+  assert.doesNotMatch(github, /Bestehendes GitHub Issue/);
   assert.match(github, /task\.issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
   assert.match(ui, /syncTaskToGitHub/);
@@ -178,13 +183,13 @@ test("github sync queue is reopened by task comments blockers and relationship c
   assert.match(commentsRoute, /github_sync_error: githubSyncError \|\| null/);
   assert.match(blockersRoute, /github_sync_status: "not_synced"/);
   assert.match(relationshipsRoute, /github_sync_status: "not_synced"/);
-  assert.match(syncRoute, /task_relationship_edges/);
-  assert.match(syncRoute, /activitiesResult/);
-  assert.match(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
+  assert.doesNotMatch(syncRoute, /task_relationship_edges/);
+  assert.doesNotMatch(syncRoute, /activitiesResult/);
+  assert.doesNotMatch(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
   assert.match(github, /Problem Statement/);
-  assert.match(github, /Review fällig bis/);
-  assert.match(github, /Priorität/);
-  assert.match(github, /Verknüpft mit/);
+  assert.doesNotMatch(github, /Review fällig bis/);
+  assert.doesNotMatch(github, /Priorität/);
+  assert.doesNotMatch(github, /Verknüpft mit/);
 });
 
 test("github sync verification is read-only and checks the management repo", async () => {

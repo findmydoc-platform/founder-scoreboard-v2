@@ -52,18 +52,16 @@ Damit bleiben Kommentare und Historie in GitHub erhalten, während die aktuelle 
 
 Die App bleibt führend. GitHub im Repo `findmydoc-platform/management` ist ein One-way-Backup und eine nachvollziehbare Dokumentation.
 
-Gespiegelte GitHub-Issues müssen die Struktur explizit enthalten:
+Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungskern:
 
-- `Epic / Milestone`
-- `Initiative`
-- `RACI: Accountable / Responsible / Consulted / Informed`
-- `Sprint`
-- `Typ`
 - `Problem Statement`
 - `Intended Outcome`
+- `Scope & Constraints`
 - `Acceptance Criteria`
 - `Evidence Required`
 - `Definition of Done`
-- `Source of Truth`
+- einen kurzen FounderOps-Rücklink mit One-way-Sync-Hinweis
+
+Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können später über native GitHub-Mittel wie Labels, Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
 
 Alte Workflows oder Templates im Management-Repo dürfen nicht als Quelle der Wahrheit verwendet werden. Sie können später ersetzt oder gelöscht werden, aber nur nach expliziter Freigabe.
