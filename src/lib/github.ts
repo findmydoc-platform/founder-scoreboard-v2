@@ -3,27 +3,6 @@ import type { Task } from "./types";
 const owner = process.env.GITHUB_SYNC_OWNER || "findmydoc-platform";
 const repo = process.env.GITHUB_SYNC_REPO || "management";
 
-export type GitHubTaskSyncContext = {
-  packageTitle?: string;
-  packageGoal?: string;
-  packageSuccessCriteria?: string;
-  raciAccountable?: string;
-  raciResponsible?: string;
-  raciConsulted?: string;
-  raciInformed?: string;
-  milestoneTitle?: string;
-  milestoneTargetDate?: string;
-  sprintName?: string;
-  sprintRange?: string;
-  sprintReviewDueAt?: string;
-  parentTitle?: string;
-  parentGitHubUrl?: string;
-  relationships?: Array<{ label: string; title: string; issueUrl?: string; issueNumber?: number | null; status?: string; owner?: string }>;
-  comments?: Array<{ author: string; comment: string; createdAt: string }>;
-  blockers?: Array<{ author: string; reason: string; impact: string; needsHelpFrom: string; status: string; createdAt: string }>;
-  activities?: Array<{ message: string; createdAt: string }>;
-};
-
 export function hasGitHubSyncEnv() {
   return true;
 }
@@ -39,12 +18,6 @@ function githubRawUrl(path: string) {
 
 function taskTypeLabel(task: Task) {
   if (task.taskType === "proposal") return "Vorschlag";
-  if (task.taskType === "sub_issue") return "Sub-Issue";
-  return "Deliverable";
-}
-
-function githubTypeLabel(task: Task) {
-  if (task.taskType === "proposal") return "Proposal";
   if (task.taskType === "sub_issue") return "Sub-Issue";
   return "Deliverable";
 }
@@ -71,13 +44,6 @@ function lines(value?: string) {
     .map((line) => (line.startsWith("- ") || line.startsWith("* ") ? line : `- ${line}`));
 }
 
-function relationshipLabel(value: string) {
-  if (value === "blocked_by") return "Wartet auf";
-  if (value === "blocks") return "Blockiert";
-  if (value === "relates_to") return "Verknüpft mit";
-  return value;
-}
-
 export function taskIssueTitle(task: Task) {
   return `[${taskTypeLabel(task)}] ${task.title}`;
 }
@@ -98,21 +64,36 @@ export function taskIssueLabels(task: Task) {
   ].filter(Boolean);
 }
 
-export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
-  const comments = (context.comments || []).slice(0, 10).map((comment) =>
-    `- ${comment.createdAt}: ${comment.author} - ${comment.comment}`,
-  );
-  const blockers = (context.blockers || []).slice(0, 10).map((blocker) =>
-    `- ${blocker.status}: ${blocker.author} - ${blocker.reason}${blocker.impact ? ` | Impact: ${blocker.impact}` : ""}${blocker.needsHelpFrom ? ` | Hilfe: ${blocker.needsHelpFrom}` : ""}`,
-  );
-  const activities = (context.activities || []).slice(0, 15).map((activity) =>
-    `- ${activity.createdAt}: ${activity.message}`,
-  );
-  const relationships = (context.relationships || []).map((relation) => {
-    const issueRef = relation.issueNumber ? `#${relation.issueNumber}` : relation.issueUrl || "";
-    return `- ${relationshipLabel(relation.label)}: ${issueRef ? `${issueRef} ` : ""}${relation.title}${relation.status ? ` (${relation.status})` : ""}${relation.owner ? ` - ${relation.owner}` : ""}`;
-  });
+function isPrivateHostname(hostname: string) {
+  const value = hostname.toLowerCase();
+  if (value === "localhost" || value === "0.0.0.0" || value === "::1" || value === "[::1]") return true;
+  if (value.endsWith(".local") || value.endsWith(".internal") || value.endsWith(".lan") || value.endsWith(".test") || value.endsWith(".example")) return true;
+  if (/^127\./.test(value) || /^10\./.test(value) || /^192\.168\./.test(value)) return true;
+  const private172 = value.match(/^172\.(\d{1,2})\./);
+  return Boolean(private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31);
+}
 
+function founderOpsTaskUrl(taskId: string) {
+  const configured = process.env.APP_URL?.trim();
+  if (!configured) return "";
+
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== "https:" || isPrivateHostname(url.hostname)) return "";
+    const basePath = url.pathname.replace(/\/$/, "");
+    return `${url.origin}${basePath}/tasks/${encodeURIComponent(taskId)}`;
+  } catch {
+    return "";
+  }
+}
+
+function sourceLine(task: Task) {
+  const taskUrl = founderOpsTaskUrl(task.id);
+  const source = taskUrl ? `[Open in FounderOps](${taskUrl})` : "FounderOps";
+  return `Source: ${source}. One-way sync; edit task state in FounderOps.`;
+}
+
+export function taskIssueBody(task: Task) {
   return [
     "## Problem Statement",
     task.problemStatement || task.description || "_Nicht gesetzt._",
@@ -129,50 +110,8 @@ export function taskIssueBody(task: Task, context: GitHubTaskSyncContext = {}) {
     "",
     ...compactSection("Definition of Done", lines(task.definitionOfDone)),
     "",
-    ...compactSection("Struktur", [
-      `- Typ: ${githubTypeLabel(task)}`,
-      `- Epic / Milestone: ${context.milestoneTitle || task.milestoneId || "ohne Epic"}`,
-      context.milestoneTargetDate ? `- Epic-Zieltermin: ${context.milestoneTargetDate}` : "",
-      `- Initiative: ${context.packageTitle || task.packageId || "ohne Initiative"}`,
-      context.packageGoal ? `- Initiative-Ziel: ${context.packageGoal}` : "",
-      context.packageSuccessCriteria ? `- Initiative-Erfolgskriterien: ${context.packageSuccessCriteria}` : "",
-      context.raciAccountable ? `- RACI Accountable: ${context.raciAccountable}` : "",
-      context.raciResponsible ? `- RACI Responsible: ${context.raciResponsible}` : "",
-      context.raciConsulted ? `- RACI Consulted: ${context.raciConsulted}` : "",
-      context.raciInformed ? `- RACI Informed: ${context.raciInformed}` : "",
-      `- Sprint: ${context.sprintName || task.sprintId || "nicht zugewiesen"}`,
-      context.sprintRange ? `- Sprint-Zeitraum: ${context.sprintRange}` : "",
-      context.sprintReviewDueAt ? `- Review fällig bis: ${context.sprintReviewDueAt}` : "",
-      context.parentTitle ? `- Parent Deliverable: ${context.parentTitle}` : "",
-      context.parentGitHubUrl ? `- Parent GitHub Issue: ${context.parentGitHubUrl}` : "",
-      `- Template: ${task.dodTemplateVersion || "founder-deliverable-v2"}`,
-    ]),
-    "",
-    "## Planning Metadata",
-    `- Owner: ${task.owner}`,
-    `- Status: ${task.status}`,
-    `- Priorität: ${task.priority}`,
-    `- Workstream: ${task.workstream || "offen"}`,
-    `- Zeitraum: ${task.startDate || "offen"} bis ${task.endDate || "offen"}`,
-    `- Review: ${task.reviewStatus}`,
-    `- Punkte: ${task.scorePoints}`,
-    `- Score-relevant: ${task.scoreRelevant ? "ja" : "nein"}`,
-    `- Evidence: ${task.evidenceLink || task.issueUrl || "offen"}`,
-    "",
-    ...compactSection("Offene Blocker", blockers),
-    "",
-    ...compactSection("Relationships", relationships),
-    "",
-    ...compactSection("Letzte Kommentare", comments),
-    "",
-    ...compactSection("Aktivitätsprotokoll", activities),
-    "",
-    "## Source of Truth",
-    `- Founder Scoreboard v2 Task ID: ${task.id}`,
-    `- Sync-Ziel: ${owner}/${repo}`,
-    `- Bestehendes GitHub Issue: ${linkedIssueNumber(task) ? `#${linkedIssueNumber(task)}` : "noch nicht verknüpft"}`,
-    "",
-    "_One-way Sync aus Founder Scoreboard v2. Änderungen in GitHub werden nicht automatisch zurückgeschrieben._",
+    "---",
+    sourceLine(task),
   ].join("\n");
 }
 
@@ -206,13 +145,13 @@ export async function githubUserForToken(token: string) {
   return response.json() as Promise<{ login: string }>;
 }
 
-export async function upsertGitHubIssue(task: Task, context: GitHubTaskSyncContext = {}, token = "") {
+export async function upsertGitHubIssue(task: Task, token = "") {
   if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const headers = githubHeaders(token);
   const payload = {
     title: taskIssueTitle(task),
-    body: taskIssueBody(task, context),
+    body: taskIssueBody(task),
     labels: taskIssueLabels(task),
     state: task.status === "Erledigt" ? "closed" : "open",
   };

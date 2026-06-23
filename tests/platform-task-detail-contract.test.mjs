@@ -250,7 +250,6 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   const skill = await readFile(".agents/skills/fmd-planning-structure/SKILL.md", "utf8");
   const initiativeSkill = await readFile(".agents/skills/fmd-initiative-planning/SKILL.md", "utf8");
   const initiativeRoute = await readFile("src/app/api/initiatives/route.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
   const ui = await readPlanningSurface();
   const display = await readFile("src/lib/display.ts", "utf8");
   const projectsOverview = await readFile("src/features/projects/organisms/projects-overview.tsx", "utf8");
@@ -273,9 +272,7 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(initiativeRoute, /Initiative-Owner ist erforderlich/);
   assert.match(initiativeRoute, /accountableProfileId/);
   assert.match(initiativeRoute, /responsibleProfileIds/);
-  assert.match(github, /Epic \/ Milestone/);
-  assert.match(github, /Initiative/);
-  assert.match(github, /RACI Accountable/);
+  assert.match(docs, /nicht als Text-Snapshot in die Issue-Beschreibung/);
   assert.match(projectsOverview, /Epic \/ Meilenstein/);
   assert.match(projectsOverview, /Aktives Projekt/);
   assert.match(projectsOverview, /Erfolgskriterien/);
