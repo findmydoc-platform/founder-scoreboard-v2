@@ -62,6 +62,8 @@ Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungsker
 - `Definition of Done`
 - einen kurzen FounderOps-Rücklink mit One-way-Sync-Hinweis
 
-Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können später über native GitHub-Mittel wie Labels, Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
+Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können über native GitHub-Mittel wie Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
+
+`blocked_by` und `blocks` werden als native GitHub Issue Dependencies gespiegelt, wenn beide FounderOps-Aufgaben mit GitHub-Issues verknüpft sind. `relates_to` bleibt FounderOps-intern, weil GitHub dafür keine echte native Beziehung anbietet und Body- oder Kommentar-Links keinen Relationships-Ersatz bilden.
 
 Alte Workflows oder Templates im Management-Repo dürfen nicht als Quelle der Wahrheit verwendet werden. Sie können später ersetzt oder gelöscht werden, aber nur nach expliziter Freigabe.

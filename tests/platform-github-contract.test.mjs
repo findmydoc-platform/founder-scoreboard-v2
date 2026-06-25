@@ -23,6 +23,8 @@ test("github sync route keeps the app as source of truth", async () => {
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /requireMatchingGitHubProviderToken/);
+  assert.match(route, /syncGitHubIssueDependencies/);
+  assert.match(route, /githubDependencyContext/);
   assert.match(providerAuth, /x-github-provider-token/);
   assert.match(providerAuth, /githubUserForToken/);
   assert.match(providerAuth, /GitHub-Verbindung passt nicht zum angemeldeten Teamprofil/);
@@ -31,6 +33,7 @@ test("github sync route keeps the app as source of truth", async () => {
   assert.doesNotMatch(route, /task_blockers/);
   assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
   assert.doesNotMatch(route, /parent_task_id/);
+  assert.match(route, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe liegt nur in der App/);
   assert.match(route, /Nur Deliverables können extern angelegt werden/);
@@ -78,8 +81,11 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(github, /APP_URL/);
   assert.match(github, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(github, /One-way sync; edit task state in FounderOps/);
+  assert.match(github, /syncGitHubIssueDependencies/);
+  assert.match(github, /dependencies\/blocked_by/);
   assert.doesNotMatch(github, /Score-relevant/);
   assert.doesNotMatch(github, /Offene Blocker/);
+  assert.doesNotMatch(github, /Relationships/);
   assert.doesNotMatch(github, /Letzte Kommentare/);
   assert.doesNotMatch(github, /Aktivitätsprotokoll/);
   assert.doesNotMatch(github, /Planning Metadata/);
@@ -100,6 +106,7 @@ test("github issue export includes only the task brief and FounderOps source", a
 test("task relationships use github-like blocked by and blocking semantics", async () => {
   const migration = await readFile("supabase/0016_task_relationship_edges.sql", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
@@ -163,6 +170,11 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit hinzufügen/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit existiert bereits/);
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
+  assert.match(github, /blockedIssueNumber/);
+  assert.match(github, /blockingIssueNumber/);
+  assert.match(github, /desiredByBlocked/);
+  assert.match(github, /removeGitHubIssueBlockedBy/);
+  assert.match(github, /issueDependencyGitHubApiVersion = "2026-03-10"/);
   assert.match(script, /task_dependencies/);
   assert.match(script, /relation_type: "blocked_by"/);
 });
@@ -183,7 +195,9 @@ test("github sync queue is reopened by task comments blockers and relationship c
   assert.match(commentsRoute, /github_sync_error: githubSyncError \|\| null/);
   assert.match(blockersRoute, /github_sync_status: "not_synced"/);
   assert.match(relationshipsRoute, /github_sync_status: "not_synced"/);
-  assert.doesNotMatch(syncRoute, /task_relationship_edges/);
+  assert.match(syncRoute, /task_relationship_edges/);
+  assert.match(syncRoute, /syncGitHubIssueDependencies/);
+  assert.match(syncRoute, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.doesNotMatch(syncRoute, /activitiesResult/);
   assert.doesNotMatch(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
   assert.match(github, /Problem Statement/);
