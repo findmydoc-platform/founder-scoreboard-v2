@@ -2,6 +2,23 @@ import type { Task } from "./types";
 
 const owner = process.env.GITHUB_SYNC_OWNER || "findmydoc-platform";
 const repo = process.env.GITHUB_SYNC_REPO || "management";
+const defaultGitHubApiVersion = "2022-11-28";
+const issueDependencyGitHubApiVersion = "2026-03-10";
+
+export type GitHubIssueDependencyInput = {
+  blockedIssueNumber: number;
+  blockingIssueNumber: number;
+};
+
+type GitHubIssueReference = {
+  id: number;
+  number: number;
+  html_url: string;
+};
+
+type GitHubIssueDependency = GitHubIssueReference & {
+  repository_url?: string;
+};
 
 export function hasGitHubSyncEnv() {
   return true;
@@ -115,12 +132,12 @@ export function taskIssueBody(task: Task) {
   ].join("\n");
 }
 
-function githubHeaders(token: string) {
+function githubHeaders(token: string, apiVersion = defaultGitHubApiVersion) {
   return {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
-    "x-github-api-version": "2022-11-28",
+    "x-github-api-version": apiVersion,
   };
 }
 
@@ -175,6 +192,94 @@ export async function upsertGitHubIssue(task: Task, token = "") {
   });
   if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
   return response.json() as Promise<{ number: number; html_url: string }>;
+}
+
+export async function listGitHubIssueBlockedBy(issueNumber: number, token: string) {
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`, {
+    method: "GET",
+    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependencies konnten nicht geladen werden"));
+  return response.json() as Promise<GitHubIssueDependency[]>;
+}
+
+export async function addGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string) {
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by`, {
+    method: "POST",
+    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
+    body: JSON.stringify({ issue_id: blockingIssueId }),
+  });
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependency konnte nicht erstellt werden"));
+  return response.json() as Promise<GitHubIssueDependency>;
+}
+
+export async function removeGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string) {
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by/${blockingIssueId}`, {
+    method: "DELETE",
+    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
+  });
+  if (response.status === 404) return;
+  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependency konnte nicht entfernt werden"));
+}
+
+export async function syncGitHubIssueDependencies({
+  currentIssueNumber,
+  desiredDependencies,
+  managedIssueNumbers,
+}: {
+  currentIssueNumber: number;
+  desiredDependencies: GitHubIssueDependencyInput[];
+  managedIssueNumbers: number[];
+}, token: string) {
+  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+
+  const managedNumbers = new Set(managedIssueNumbers);
+  const desiredByBlocked = new Map<number, Set<number>>();
+  for (const dependency of desiredDependencies) {
+    if (dependency.blockedIssueNumber === dependency.blockingIssueNumber) continue;
+    const current = desiredByBlocked.get(dependency.blockedIssueNumber) || new Set<number>();
+    current.add(dependency.blockingIssueNumber);
+    desiredByBlocked.set(dependency.blockedIssueNumber, current);
+  }
+
+  const issueCache = new Map<number, GitHubIssueReference>();
+  const issueReference = async (issueNumber: number) => {
+    const cached = issueCache.get(issueNumber);
+    if (cached) return cached;
+    const issue = await getGitHubIssue(issueNumber, token);
+    issueCache.set(issueNumber, issue);
+    return issue;
+  };
+
+  const blockedIssueNumbers = new Set([currentIssueNumber, ...desiredDependencies.map((dependency) => dependency.blockedIssueNumber)]);
+  for (const blockedIssueNumber of blockedIssueNumbers) {
+    const existing = await listGitHubIssueBlockedBy(blockedIssueNumber, token);
+    const existingManaged = new Map(
+      existing
+        .filter((dependency) => managedNumbers.has(dependency.number))
+        .map((dependency) => [dependency.number, dependency]),
+    );
+    const desiredBlockingNumbers = desiredByBlocked.get(blockedIssueNumber) || new Set<number>();
+
+    for (const blockingIssueNumber of desiredBlockingNumbers) {
+      if (existingManaged.has(blockingIssueNumber)) continue;
+      const blockingIssue = await issueReference(blockingIssueNumber);
+      await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token);
+    }
+
+    if (blockedIssueNumber !== currentIssueNumber) continue;
+    for (const existingDependency of existingManaged.values()) {
+      if (desiredBlockingNumbers.has(existingDependency.number)) continue;
+      await removeGitHubIssueBlockedBy(blockedIssueNumber, existingDependency.id, token);
+    }
+  }
 }
 
 export async function archiveGitHubIssue(issueNumber: number, token: string) {
@@ -237,7 +342,7 @@ export async function getGitHubIssue(issueNumber: number, token: string) {
     cache: "no-store",
   });
   if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue konnte nicht geladen werden"));
-  return response.json() as Promise<{ number: number; body?: string | null; html_url: string }>;
+  return response.json() as Promise<{ id: number; number: number; body?: string | null; html_url: string }>;
 }
 
 export async function uploadGitHubAttachment(
