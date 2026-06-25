@@ -206,6 +206,33 @@ test("github sync queue is reopened by task comments blockers and relationship c
   assert.doesNotMatch(github, /Verknüpft mit/);
 });
 
+test("github sync maps the visible task assignee to native github assignees", async () => {
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const github = await readFile("src/lib/github.ts", "utf8");
+
+  assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
+  assert.match(syncRoute, /profileGitHubLoginById/);
+  assert.match(syncRoute, /const assigneeProfileId = data\.owner \|\| data\.assignee \|\| ""/);
+  assert.match(syncRoute, /upsertGitHubIssue\(task, githubUserToken, \{ login: assigneeLogin \}\)/);
+  assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
+  assert.match(syncRoute, /Warnung:/);
+  assert.match(syncRoute, /github_sync_status: "synced"/);
+  assert.match(syncRoute, /github_sync_error: null/);
+  assert.match(syncRoute, /warnings/);
+  assert.doesNotMatch(syncRoute, /review_owner_profile_id/);
+  assert.doesNotMatch(syncRoute, /packages"\)/);
+
+  assert.match(github, /GitHubIssueAssigneeInput/);
+  assert.match(github, /repos\/\$\{owner\}\/\$\{repo\}\/assignees\/\$\{encodeURIComponent\(login\)\}/);
+  assert.match(github, /response\.status === 204/);
+  assert.match(github, /response\.status === 404/);
+  assert.match(github, /payload\.assignees = \[assigneeLogin\]/);
+  assert.match(github, /GitHub-Assignee @\$\{assigneeLogin\} ist im Repository nicht zuweisbar/);
+  assert.match(github, /GitHub-Assignee nicht gesetzt/);
+  assert.match(github, /labels: taskIssueLabels\(task\)/);
+  assert.doesNotMatch(github, /owner:assignee|assignee:owner|review-owner|initiative-owner/i);
+});
+
 test("github sync verification is read-only and checks the management repo", async () => {
   const script = await readFile("scripts/verify-github-sync.mjs", "utf8");
   const pkg = await readFile("package.json", "utf8");

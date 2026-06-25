@@ -36,6 +36,12 @@ type RelationshipTaskRow = {
   issue_url?: string | null;
 };
 
+type SyncProfileRow = {
+  id: string;
+  name: string;
+  github_login?: string | null;
+};
+
 function issueFromGitHubUrl(value?: string | null) {
   const match = (value || "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:$|[?#])/i);
   if (!match) return null;
@@ -134,12 +140,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (error || !data) return apiError(error?.message || "Aufgabe nicht gefunden.", 404);
 
   const profileNameById = new Map<string, string>();
+  const profileGitHubLoginById = new Map<string, string>();
   const involvedProfileIds = [data.owner, data.assignee].filter((value): value is string => typeof value === "string" && Boolean(value));
   if (involvedProfileIds.length) {
-    const profiles = await supabase.from("profiles").select("id,name").in("id", involvedProfileIds);
-    for (const profile of profiles.data || []) profileNameById.set(profile.id, profile.name);
+    const profiles = await supabase.from("profiles").select("id,name,github_login").in("id", involvedProfileIds);
+    for (const profile of (profiles.data || []) as SyncProfileRow[]) {
+      profileNameById.set(profile.id, profile.name);
+      if (profile.github_login) profileGitHubLoginById.set(profile.id, profile.github_login);
+    }
   }
   const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
+  const assigneeProfileId = data.owner || data.assignee || "";
+  const assigneeLogin = assigneeProfileId ? profileGitHubLoginById.get(assigneeProfileId) || "" : "";
   const hasExistingGitHubIssue = hasLinkedGitHubIssue(task);
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
@@ -165,11 +177,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   await supabase.from("tasks").update({ github_sync_status: "pending", github_sync_error: null }).eq("id", id);
 
   try {
-    const issue = await upsertGitHubIssue(task, githubUserToken);
+    const issue = await upsertGitHubIssue(task, githubUserToken, { login: assigneeLogin });
     const dependencyContext = await githubDependencyContext(supabase, id, issue.number);
     await syncGitHubIssueDependencies(dependencyContext, githubUserToken);
     const syncedAt = new Date().toISOString();
     const githubRepo = githubRepoSlug();
+    const warnings = issue.warnings || [];
 
     await supabase.from("tasks").update({
       github_repo: githubRepo,
@@ -181,12 +194,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }).eq("id", id);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: `GitHub-Spiegelung ausgeführt: ${githubRepo}#${issue.number}`,
+      message: [`GitHub-Spiegelung ausgeführt: ${githubRepo}#${issue.number}`, ...warnings.map((warning) => `Warnung: ${warning}`)].join(" · "),
     });
 
     return NextResponse.json({
       ok: true,
       issue,
+      warnings,
       task: {
         githubRepo,
         githubIssueNumber: issue.number,

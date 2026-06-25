@@ -20,6 +20,18 @@ type GitHubIssueDependency = GitHubIssueReference & {
   repository_url?: string;
 };
 
+export type GitHubIssueAssigneeInput = {
+  login?: string;
+};
+
+type GitHubIssuePayload = {
+  title: string;
+  body: string;
+  labels: string[];
+  state: string;
+  assignees?: string[];
+};
+
 export function hasGitHubSyncEnv() {
   return true;
 }
@@ -162,16 +174,41 @@ export async function githubUserForToken(token: string) {
   return response.json() as Promise<{ login: string }>;
 }
 
-export async function upsertGitHubIssue(task: Task, token = "") {
+async function assignableGitHubLogin(login: string, token: string) {
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/assignees/${encodeURIComponent(login)}`, {
+    method: "GET",
+    headers: githubHeaders(token),
+    cache: "no-store",
+  });
+  if (response.status === 204) return true;
+  if (response.status === 404) return false;
+  return null;
+}
+
+export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHubIssueAssigneeInput = {}) {
   if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
   const headers = githubHeaders(token);
-  const payload = {
+  const payload: GitHubIssuePayload = {
     title: taskIssueTitle(task),
     body: taskIssueBody(task),
     labels: taskIssueLabels(task),
     state: task.status === "Erledigt" ? "closed" : "open",
   };
+  const warnings: string[] = [];
+  const assigneeLogin = assignee.login?.trim();
+  if (assigneeLogin) {
+    const isAssignable = await assignableGitHubLogin(assigneeLogin, token);
+    if (isAssignable) {
+      payload.assignees = [assigneeLogin];
+    } else if (isAssignable === false) {
+      warnings.push(`GitHub-Assignee @${assigneeLogin} ist im Repository nicht zuweisbar.`);
+    } else {
+      warnings.push(`GitHub-Assignee @${assigneeLogin} konnte nicht geprüft werden.`);
+    }
+  } else {
+    warnings.push("GitHub-Assignee nicht gesetzt: Das verantwortliche Profil hat keinen GitHub-Login.");
+  }
 
   const issueNumber = linkedIssueNumber(task);
 
@@ -182,7 +219,8 @@ export async function upsertGitHubIssue(task: Task, token = "") {
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Update fehlgeschlagen"));
-    return response.json() as Promise<{ number: number; html_url: string }>;
+    const issue = await response.json() as { number: number; html_url: string };
+    return { ...issue, warnings };
   }
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
@@ -191,7 +229,8 @@ export async function upsertGitHubIssue(task: Task, token = "") {
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
-  return response.json() as Promise<{ number: number; html_url: string }>;
+  const issue = await response.json() as { number: number; html_url: string };
+  return { ...issue, warnings };
 }
 
 export async function listGitHubIssueBlockedBy(issueNumber: number, token: string) {
