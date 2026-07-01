@@ -82,7 +82,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           allTasks={data.tasks}
           relations={data.taskRelations}
           pending={isPending}
-          githubProviderTokenAvailable={controller.githubProviderTokenAvailable}
+          githubAppConnected={controller.githubAppConnected}
           commentImportPending={commentImportPendingTaskIds.has(selectedTask.id)}
           onClose={closeTaskPanel}
           onUpdate={(patch) => updateTask(selectedTask, patch)}

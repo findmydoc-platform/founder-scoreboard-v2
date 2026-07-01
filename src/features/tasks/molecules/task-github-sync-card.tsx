@@ -8,7 +8,7 @@ export function TaskGitHubSyncCard({
   githubState,
   canSyncExistingGitHubIssue,
   pending,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   onSyncGitHub,
   onCreateGitHubIssue,
 }: {
@@ -16,7 +16,7 @@ export function TaskGitHubSyncCard({
   githubState: GitHubSyncState;
   canSyncExistingGitHubIssue: boolean;
   pending: boolean;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   onSyncGitHub: () => void;
   onCreateGitHubIssue: () => void;
 }) {
@@ -34,7 +34,7 @@ export function TaskGitHubSyncCard({
         {canSyncExistingGitHubIssue ? (
           <button
             type="button"
-            disabled={pending || syncPending || !githubProviderTokenAvailable}
+            disabled={pending || syncPending || !githubAppConnected}
             onClick={onSyncGitHub}
             className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -43,7 +43,7 @@ export function TaskGitHubSyncCard({
         ) : taskType === "deliverable" ? (
           <button
             type="button"
-            disabled={pending || syncPending || !githubProviderTokenAvailable}
+            disabled={pending || syncPending || !githubAppConnected}
             onClick={onCreateGitHubIssue}
           className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
         >

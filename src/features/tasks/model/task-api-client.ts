@@ -13,7 +13,6 @@ export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, p
 export function deleteTaskRequest(apiClient: BrowserApiClient, taskId: string) {
   return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}`, {
     method: "DELETE",
-    includeGitHubToken: true,
     jsonContentType: false,
   });
 }
@@ -28,7 +27,6 @@ export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
 export function syncTaskToGitHubRequest(apiClient: BrowserApiClient, taskId: string, options: { createIfMissing?: boolean } = {}) {
   return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
-    includeGitHubToken: true,
     json: { createIfMissing: Boolean(options.createIfMissing) },
   });
 }
@@ -36,7 +34,6 @@ export function syncTaskToGitHubRequest(apiClient: BrowserApiClient, taskId: str
 export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string) {
   return apiClient.requestJson<{ error?: string; githubSyncError?: string; comment?: PlanningData["taskComments"][number] }>(`/api/tasks/${taskId}/comments`, {
     method: "POST",
-    includeGitHubToken: true,
     json: { comment },
   });
 }
@@ -45,14 +42,12 @@ export function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId:
   const formData = new FormData();
   formData.append("file", file);
   return apiClient.requestForm<{ error?: string; markdown?: string }>(`/api/tasks/${taskId}/attachments`, formData, {
-    includeGitHubToken: true,
   });
 }
 
 export function importGitHubCommentsRequest(apiClient: BrowserApiClient, taskId: string) {
   return apiClient.requestJson<{ error?: string; imported?: number; evidenceLink?: string; comments?: TaskExternalComment[] }>(`/api/tasks/${taskId}/github-comments`, {
     method: "POST",
-    includeGitHubToken: true,
   });
 }
 
@@ -92,6 +87,5 @@ export function reopenTaskReviewRequest(apiClient: BrowserApiClient, taskId: str
 
 export function loadGitHubAssetBlob(apiClient: BrowserApiClient, href: string) {
   return apiClient.requestBlob(`/api/github-assets?url=${encodeURIComponent(href)}`, {
-    includeGitHubToken: true,
   });
 }

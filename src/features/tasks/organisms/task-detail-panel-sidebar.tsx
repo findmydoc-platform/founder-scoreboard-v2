@@ -28,7 +28,7 @@ type Props = {
   canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
   pending: boolean;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   onUpdate: (patch: Partial<Task>) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
@@ -46,7 +46,7 @@ export function TaskDetailPanelSidebar({
   canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
   pending,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   onUpdate,
   onSyncGitHub,
   onOpenReview,
@@ -234,7 +234,7 @@ export function TaskDetailPanelSidebar({
           {canSyncExistingGitHubIssue ? (
             <button
               type="button"
-              disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
+              disabled={pending || task.githubSyncStatus === "pending" || !githubAppConnected}
               onClick={() => onSyncGitHub()}
               className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -243,7 +243,7 @@ export function TaskDetailPanelSidebar({
           ) : task.taskType === "deliverable" ? (
             <button
               type="button"
-              disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
+              disabled={pending || task.githubSyncStatus === "pending" || !githubAppConnected}
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -288,7 +288,7 @@ export function TaskDetailPanelSidebar({
           </p>
           <button
             type="button"
-            disabled={pending || (hasGitHubIssue(task) && !githubProviderTokenAvailable)}
+            disabled={pending || (hasGitHubIssue(task) && !githubAppConnected)}
             onClick={onDelete}
             className="mt-3 inline-flex h-8 items-center gap-2 rounded-md border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >

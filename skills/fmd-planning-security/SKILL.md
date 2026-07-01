@@ -1,6 +1,6 @@
 ---
 name: fmd-planning-security
-description: Use when changing or reviewing Founder Scoreboard authentication, logout, Supabase sessions, API authorization guards, role mapping, provider tokens, RLS policies, SQL grants, or any code path that could expose planning data without a valid team session.
+description: Use when changing or reviewing Founder Scoreboard authentication, logout, Supabase sessions, API authorization guards, role mapping, GitHub App tokens, RLS policies, SQL grants, or any code path that could expose planning data without a valid team session.
 ---
 
 # FMD Planning Security
@@ -13,11 +13,11 @@ Keep Founder Scoreboard data private to mapped team users and make security-rele
 
 ## Required workflow
 
-1. Identify the trust boundary first: browser session, API route, Supabase service role, anon client, GitHub provider token, or RLS policy.
+1. Identify the trust boundary first: browser session, API route, Supabase service role, anon client, GitHub App installation token, encrypted GitHub App user token vault, or RLS policy.
 2. Fail closed when `REQUIRE_SUPABASE_AUTH=true`: do not render, serialize, cache, or fetch planning data until a valid Supabase session has been checked.
 3. Treat logout as a security transition: revoke or clear the session, clear local protected state, close sensitive panels, and show a visible German status message.
 4. Check every write API for `requireFounder`, `requireOperationalLead`, `requireCEO`, or an equally explicit role guard.
-5. Never persist or log Supabase access tokens, refresh tokens, GitHub `provider_token`, or Authorization headers.
+5. Never persist or log Supabase access tokens, refresh tokens, raw GitHub tokens, or Authorization headers. Encrypted server-side GitHub App user tokens are allowed only in the service-role-only token vault.
 6. Add or update a focused contract test for any auth, role, guard, logout, RLS, grant, or data-loading change.
 
 ## Project checks

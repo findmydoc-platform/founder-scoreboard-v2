@@ -39,6 +39,7 @@ const result = {
   project: project.name,
   range: project.range_label,
   profiles: await count("profiles"),
+  githubAppConnections: await count("github_app_user_tokens"),
   packages: await count("packages"),
   tasks: await count("tasks"),
   dependencies: await count("task_dependencies"),

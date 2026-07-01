@@ -67,7 +67,7 @@ export function TaskDetailPage({
     detailsEditing,
     error,
     githubCommentImportPending,
-    githubProviderTokenAvailable,
+    githubAppConnected,
     githubReconnectFailed,
     githubState,
     importGitHubComments,
@@ -146,7 +146,7 @@ export function TaskDetailPage({
         actions={(
           <GitHubConnectionStatus
             authenticated={source === "supabase"}
-            available={githubProviderTokenAvailable}
+            available={githubAppConnected}
             failed={githubReconnectFailed}
             busy={isPending}
             onReconnect={reconnectGitHub}
@@ -232,7 +232,7 @@ export function TaskDetailPage({
               githubState={githubState}
               canSyncExistingGitHubIssue={canSyncExistingGitHubIssue}
               pending={isPending}
-              githubProviderTokenAvailable={githubProviderTokenAvailable}
+              githubAppConnected={githubAppConnected}
               onSyncGitHub={() => syncGitHub()}
               onCreateGitHubIssue={() => syncGitHub({ createIfMissing: true })}
             />

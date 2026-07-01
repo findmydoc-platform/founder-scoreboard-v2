@@ -61,7 +61,7 @@ const result = {
   },
   env: {
     requireSupabaseAuth: process.env.REQUIRE_SUPABASE_AUTH === "true",
-    githubSyncMode: "logged_in_github_user_provider_token",
+    githubSyncMode: "github_app_installation_token",
     googleChatConfigured: Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL),
     googleChatDeliveryEnabled: process.env.GOOGLE_CHAT_DELIVERY_ENABLED === "true",
     googleChatReady: Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL) && process.env.GOOGLE_CHAT_DELIVERY_ENABLED === "true",

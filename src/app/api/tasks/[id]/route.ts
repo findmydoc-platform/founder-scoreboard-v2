@@ -20,7 +20,7 @@ import {
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { archiveGitHubIssue } from "@/lib/github";
-import { optionalMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -269,10 +269,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   let githubClosed = false;
   if (issueNumber) {
     try {
-      const token = await optionalMatchingGitHubProviderToken(request, permission.profile);
-      if (!token) {
-        return apiError("Für extern abgelegte Aufgaben bitte die Verbindung im Header erneuern und dann erneut löschen.", 409);
-      }
+      const token = await getGitHubAppInstallationToken();
       await archiveGitHubIssue(issueNumber, token);
       githubClosed = true;
     } catch (error) {

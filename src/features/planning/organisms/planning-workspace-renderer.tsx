@@ -250,7 +250,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           source={source}
           authAvailable={controller.authAvailable}
           authUserEmail={controller.authUser?.email || ""}
-          githubProviderTokenAvailable={controller.githubProviderTokenAvailable}
+          githubAppConnected={controller.githubAppConnected}
           pending={isPending}
           feedbackMessage={feedbackMessage}
           selectedFeedbackId={selectedFeedbackId}

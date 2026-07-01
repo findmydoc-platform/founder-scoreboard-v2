@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
-import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
 function isAppMirroredComment(body: string) {
@@ -20,11 +20,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const apiContext = await requireApiContext(request, requireFounder);
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { supabase } = apiContext;
 
-  let githubUserToken = "";
+  let githubInstallationToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und aktualisiere die Kommentare.");
+    githubInstallationToken = await getGitHubAppInstallationToken();
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     return apiError(message, 401);
@@ -48,8 +48,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let importedEvidenceLink = "";
   try {
     const [issue, comments] = await Promise.all([
-      getGitHubIssue(issueNumber, githubUserToken),
-      listGitHubIssueComments(issueNumber, githubUserToken),
+      getGitHubIssue(issueNumber, githubInstallationToken),
+      listGitHubIssueComments(issueNumber, githubInstallationToken),
     ]);
     githubComments = comments;
     importedEvidenceLink = extractEvidenceFromIssueBody(issue.body || "");
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const message = githubError instanceof Error ? githubError.message : "GitHub-Kommentare konnten nicht geladen werden.";
     return NextResponse.json(
       {
-        error: `${message}. Bitte einmal ausloggen und erneut mit GitHub anmelden. Falls es danach weiter fehlschlägt, muss die OAuth-App Zugriff auf die private Organisation findmydoc-platform bzw. das management-Repo bekommen.`,
+        error: `${message}. Falls es danach weiter fehlschlägt, muss die GitHub App Zugriff auf findmydoc-platform/management haben.`,
       },
       { status: 502 },
     );

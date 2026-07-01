@@ -33,5 +33,5 @@ The following patterns are intentionally left feature-local:
 - Relationship, review, status, and notification mapping functions, because their tone decisions are domain model behavior.
 - Custom select and date picker internals, because they are already shared controls and include portal/focus behavior beyond token drift.
 - Auth, Supabase, GitHub Sync, and controller code, because Issue #21 must not merge with the infra or workflow-logic scopes from Issues #19 and #20.
-- `TaskGitHubSyncCard` is left feature-local because its surface is tied to GitHub provider-token availability and sync state; that belongs with the later infra-boundary work, not the neutral primitive pass.
-- `GitHubCommentImage` keeps its local loading/error placeholders because the component owns authenticated GitHub asset proxy behavior and provider-token refresh side effects.
+- `TaskGitHubSyncCard` is left feature-local because its surface is tied to GitHub App connection state and sync state; that belongs with the later infra-boundary work, not the neutral primitive pass.
+- `GitHubCommentImage` keeps its local loading/error placeholders because the component owns authenticated GitHub asset proxy behavior through the server-side GitHub App layer.

@@ -13,7 +13,7 @@ type UseTaskCollaborationCommandsOptions = PlanningCommandContext & {
 export function useTaskCollaborationCommands({
   apiClient,
   currentProfile,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   selectedTask,
   setData,
   setSaveError,
@@ -147,13 +147,13 @@ export function useTaskCollaborationCommands({
   useEffect(() => {
     if (!selectedTask) return;
     if (source !== "supabase") return;
-    if (!githubProviderTokenAvailable) return;
+    if (!githubAppConnected) return;
     if (!hasGitHubIssue(selectedTask)) return;
     if (autoImportedGitHubCommentsRef.current.has(selectedTask.id)) return;
 
     autoImportedGitHubCommentsRef.current.add(selectedTask.id);
     importGitHubComments(selectedTask, { silent: true });
-  }, [githubProviderTokenAvailable, importGitHubComments, selectedTask, source]);
+  }, [githubAppConnected, importGitHubComments, selectedTask, source]);
 
   const reportTaskBlocker = (task: Task, payload: { reason: string; impact: string; needsHelpFrom: string }) => {
     if (!currentProfile) {

@@ -12,6 +12,12 @@
     "health": false
   },
   {
+    "name": "github_app_user_tokens",
+    "table": "github_app_user_tokens",
+    "select": "profile_id,github_login,github_user_id,access_token_expires_at,refresh_token_expires_at,connected_at,refreshed_at,last_used_at,revoked_at,last_error,updated_at",
+    "health": false
+  },
+  {
     "name": "notification_preferences",
     "table": "notification_preferences",
     "select": "id,profile_id,channel,event_type,enabled",

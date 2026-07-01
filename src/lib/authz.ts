@@ -133,6 +133,10 @@ export function requireOperationalLead(request: NextRequest) {
   return requirePlatformRole(request, ["ceo", "deputy"]);
 }
 
+export function requireTeamMember(request: NextRequest) {
+  return requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
+}
+
 export async function requireTaskReviewer(
   request: NextRequest,
   task: { review_owner_profile_id?: string | null },

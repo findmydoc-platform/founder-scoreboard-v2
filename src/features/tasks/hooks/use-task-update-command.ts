@@ -20,7 +20,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "canChangeTaskStatus"
   | "canManageTaskMeta"
   | "data"
-  | "githubProviderTokenAvailable"
+  | "githubAppConnected"
   | "setData"
   | "setSaveError"
   | "source"
@@ -37,7 +37,7 @@ export function useTaskUpdateCommand({
   canChangeTaskStatus,
   canManageTaskMeta,
   data,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   setData,
   setSaveError,
   setStatusGuardNotice,
@@ -109,7 +109,7 @@ export function useTaskUpdateCommand({
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         }
-        if (normalizedPatch.status && hasGitHubIssue(task) && githubProviderTokenAvailable && canManageTaskMeta) {
+        if (normalizedPatch.status && hasGitHubIssue(task) && githubAppConnected && canManageTaskMeta) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {

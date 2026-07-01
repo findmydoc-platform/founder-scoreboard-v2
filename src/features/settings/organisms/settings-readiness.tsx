@@ -10,13 +10,13 @@ export function SystemStatusSection({
   source,
   authAvailable,
   authUserEmail,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   googleChatReady,
 }: {
   source: "seed" | "supabase";
   authAvailable: boolean;
   authUserEmail: string;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   googleChatReady: boolean;
 }) {
   return (
@@ -32,9 +32,9 @@ export function SystemStatusSection({
           <span className="min-w-0 whitespace-normal break-words font-semibold text-slate-900 sm:max-w-48 sm:text-right">{authAvailable ? authUserEmail || "Bereit zum Anmelden" : "Nicht eingerichtet"}</span>
         </div>
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-slate-500">GitHub-Verbindung</span>
-          <span className={`min-w-0 whitespace-normal break-words font-semibold ${githubProviderTokenAvailable ? "text-emerald-700" : "text-amber-700"}`}>
-            {githubProviderTokenAvailable ? "verbunden" : "neu anmelden nötig"}
+          <span className="text-slate-500">GitHub-App</span>
+          <span className={`min-w-0 whitespace-normal break-words font-semibold ${githubAppConnected ? "text-emerald-700" : "text-amber-700"}`}>
+            {githubAppConnected ? "verbunden" : "Verbindung nötig"}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -51,13 +51,13 @@ export function SystemStatusSection({
 export function GitHubSyncQueueSection({
   tasks,
   pending,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   onSyncLinkedGitHubTasks,
   onCreateGitHubIssue,
 }: {
   tasks: Task[];
   pending: boolean;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   onSyncLinkedGitHubTasks: () => void;
   onCreateGitHubIssue: (task: Task) => void;
 }) {
@@ -82,7 +82,7 @@ export function GitHubSyncQueueSection({
           </p>
         </div>
         <UiButton
-          disabled={pending || !linkedSyncQueue.length || !githubProviderTokenAvailable}
+          disabled={pending || !linkedSyncQueue.length || !githubAppConnected}
           onClick={onSyncLinkedGitHubTasks}
           className="w-full sm:w-auto"
         >
@@ -148,7 +148,7 @@ export function GitHubSyncQueueSection({
                     </div>
                   </div>
                   <UiButton
-                    disabled={pending || task.githubSyncStatus === "pending" || !githubProviderTokenAvailable}
+                    disabled={pending || task.githubSyncStatus === "pending" || !githubAppConnected}
                     onClick={() => onCreateGitHubIssue(task)}
                     variant="amber"
                     size="compact"

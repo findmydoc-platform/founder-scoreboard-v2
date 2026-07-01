@@ -47,7 +47,7 @@ export function GitHubConnectionStatus({
         className={`relative grid h-9 w-9 place-items-center rounded-md border bg-white text-slate-700 hover:bg-slate-50 ${
           needsAction ? "border-amber-200" : "border-slate-200"
         }`}
-        aria-label={needsAction ? "GitHub-Verbindung erneuern" : "GitHub-Verbindung aktiv"}
+        aria-label={needsAction ? "GitHub-App verbinden" : "GitHub-App verbunden"}
       >
         <GitHubMark />
         <span
@@ -63,14 +63,14 @@ export function GitHubConnectionStatus({
             <div className="min-w-0">
               <div className="flex items-center gap-2 font-semibold text-slate-950">
                 {available ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertTriangle size={16} className="text-amber-600" />}
-                GitHub-Verbindung
+                GitHub-App-Verbindung
               </div>
               <p className="mt-2 leading-5 text-slate-600">
                 {available
                   ? "GitHub-Sync, Kommentare und Anhänge sind verbunden."
                   : failed
-                    ? "Die automatische Erneuerung hat nicht geklappt. Starte die Verbindung einmal manuell neu."
-                    : "GitHub-Sync, Kommentare und Anhänge brauchen eine frische Autorisierung."}
+                    ? "Die GitHub-App-Verbindung muss einmal neu verbunden werden."
+                    : "GitHub-Sync, Kommentare und Anhänge brauchen eine GitHub-App-Verbindung."}
               </p>
             </div>
             <button
@@ -90,7 +90,7 @@ export function GitHubConnectionStatus({
               className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw size={15} />
-              {busy ? "GitHub wird geöffnet..." : "GitHub-Verbindung erneuern"}
+              {busy ? "GitHub wird geöffnet..." : "GitHub-App verbinden"}
             </button>
           )}
         </section>

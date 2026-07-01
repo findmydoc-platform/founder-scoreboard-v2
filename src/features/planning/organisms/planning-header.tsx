@@ -21,7 +21,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     devRoleSwitchAvailable,
     dismissNotification,
     filtersAvailable,
-    githubProviderTokenAvailable,
+    githubAppConnected,
     githubReauthFailed,
     headerPrimaryAction,
     importDemoSeed,
@@ -119,7 +119,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           />
           <GitHubConnectionStatus
             authenticated={Boolean(authUser)}
-            available={githubProviderTokenAvailable}
+            available={githubAppConnected}
             failed={githubReauthFailed}
             busy={authBusy}
             onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
