@@ -555,17 +555,19 @@ test("header actions are workspace aware", async () => {
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 
-test("planning filters survive task detail route remounts", async () => {
+test("planning filters stay in session while task panel opens without routing", async () => {
   const ui = await readPlanningSurface();
   const taskRoute = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
 
-  assert.match(taskRoute, /<PlanningApp key=\{id\}/);
+  assert.match(taskRoute, /<TaskDetailPage/);
+  assert.match(taskRoute, /PlanningApp/);
+  assert.doesNotMatch(taskRoute, /initialTaskId/);
   assert.match(ui, /planningFiltersSessionKey = "fmd-planning-filters-v1"/);
   assert.match(ui, /function readPlanningFiltersFromSession\(\): PlanningFilters/);
   assert.match(ui, /window\.sessionStorage\.getItem\(planningFiltersSessionKey\)/);
   assert.match(ui, /useState<PlanningFilters>\(\(\) => readPlanningFiltersFromSession\(\)\)/);
   assert.match(ui, /window\.sessionStorage\.setItem\(planningFiltersSessionKey, JSON\.stringify\(filters\)\)/);
-  assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+  assert.doesNotMatch(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
 });
 
 test("mine workspace follows the effective current profile", async () => {

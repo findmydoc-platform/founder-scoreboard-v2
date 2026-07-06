@@ -61,17 +61,15 @@ type UsePlanningViewStateOptions = {
   initialData: PlanningData;
   initialFocusedReviewTaskId: string;
   initialReviewTaskId: string;
-  initialTaskId: string;
 };
 
 export function usePlanningViewState({
   initialData,
   initialFocusedReviewTaskId,
   initialReviewTaskId,
-  initialTaskId,
 }: UsePlanningViewStateOptions) {
   const [view, setView] = useState<ViewMode>("board");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId || null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(initialFocusedReviewTaskId);
   const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
   const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>("open");

@@ -167,7 +167,8 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning task selection hook",
       path: "src/features/planning/hooks/use-planning-task-selection.ts",
-      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /openReviewSheet/, /window\.history\.length/, /addEventListener\("keydown"/],
+      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /openReviewSheet/, /setSelectedTaskId\(taskId\)/, /addEventListener\("keydown"/],
+      excludes: [/window\.history\.length|router\.back\(\)|router\.push\(`\/tasks/],
     },
     {
       label: "planning data refresh hook",

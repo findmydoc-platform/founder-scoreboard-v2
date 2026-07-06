@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useDecisionCommands } from "@/features/decisions/hooks/use-decision-commands";
 import { useExecutionCommands } from "@/features/execution/hooks/use-execution-commands";
@@ -41,7 +41,6 @@ type PlanningAppControllerOptions = {
   source: "seed" | "supabase";
   authRequired: boolean;
   demoSeedImportAvailable?: boolean;
-  initialTaskId?: string;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
@@ -54,7 +53,6 @@ export function usePlanningAppController({
   source,
   authRequired,
   demoSeedImportAvailable = false,
-  initialTaskId = "",
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
@@ -62,7 +60,6 @@ export function usePlanningAppController({
   initialReviewTaskId = "",
 }: PlanningAppControllerOptions) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
@@ -104,7 +101,6 @@ export function usePlanningAppController({
     initialData: safeInitialData,
     initialFocusedReviewTaskId: searchParams.get("reviewTask") || "",
     initialReviewTaskId,
-    initialTaskId,
   });
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState("");
@@ -186,8 +182,6 @@ export function usePlanningAppController({
 
   const taskSelection = usePlanningTaskSelection({
     data,
-    fullTaskView: searchParams.get("view") === "full",
-    pathname,
     router,
     selectedReviewDetailTaskId,
     selectedTaskId,
@@ -197,7 +191,6 @@ export function usePlanningAppController({
   });
   const {
     closeTaskPanel,
-    fullTaskView,
     openReviewSheet,
     openTaskPanel,
     selectedTask,
@@ -328,7 +321,6 @@ export function usePlanningAppController({
     filters,
     filtersAvailable,
     focusedReviewTaskId,
-    fullTaskView,
     githubAppConnected,
     githubReauthFailed,
     headerPrimaryAction,

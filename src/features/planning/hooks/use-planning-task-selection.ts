@@ -6,14 +6,11 @@ import { packageById, sortTasks } from "@/features/planning/model/planning-app-m
 import type { PlanningData, Task } from "@/lib/types";
 
 type PlanningTaskSelectionRouter = {
-  back: () => void;
   push: (href: string) => void;
 };
 
 type UsePlanningTaskSelectionOptions = {
   data: PlanningData;
-  fullTaskView: boolean;
-  pathname: string | null;
   router: PlanningTaskSelectionRouter;
   selectedReviewDetailTaskId: string;
   selectedTaskId: string | null;
@@ -24,8 +21,6 @@ type UsePlanningTaskSelectionOptions = {
 
 export function usePlanningTaskSelection({
   data,
-  fullTaskView,
-  pathname,
   router,
   selectedReviewDetailTaskId,
   selectedTaskId,
@@ -44,19 +39,11 @@ export function usePlanningTaskSelection({
 
   const openTaskPanel = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
-    router.push(`/tasks/${encodeURIComponent(taskId)}`);
-  }, [router, setSelectedTaskId]);
+  }, [setSelectedTaskId]);
 
   const closeTaskPanel = useCallback(() => {
     setSelectedTaskId(null);
-    if (pathname?.startsWith("/tasks/")) {
-      if (window.history.length > 1) {
-        router.back();
-      } else {
-        router.push("/");
-      }
-    }
-  }, [pathname, router, setSelectedTaskId]);
+  }, [setSelectedTaskId]);
 
   const openReviewSheet = useCallback((task: Task) => {
     setSelectedTaskId(null);
@@ -84,7 +71,6 @@ export function usePlanningTaskSelection({
 
   return {
     closeTaskPanel,
-    fullTaskView,
     openReviewSheet,
     openTaskPanel,
     selectedPackage,
