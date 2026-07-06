@@ -416,7 +416,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /update\.review_owner_profile_id/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
-  assert.match(taskRoute, /payload\.reviewOwnerProfileId !== undefined && permission\.profile\?\.platformRole !== "ceo"/);
+  assert.match(taskRoute, /payload\.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest/);
+  assert.match(taskRoute, /requestedReviewOwnerProfileId = canSetReviewOwner/);
   assert.match(taskRoute, /task\.review_requested/);
   assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
   assert.match(taskRoute, /deine Accountable-Review/);

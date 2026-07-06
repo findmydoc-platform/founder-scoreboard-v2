@@ -96,6 +96,8 @@ export function buildClientTaskUpdatePatch(
 }
 
 export function taskUpdateRequestPayload(patch: Partial<Task>): TaskUpdatePayload {
+  const isReviewRequest = patch.status === "Review" || patch.reviewStatus === "requested";
+
   return {
     status: patch.status,
     owner: patch.ownerId || patch.owner,
@@ -106,9 +108,9 @@ export function taskUpdateRequestPayload(patch: Partial<Task>): TaskUpdatePayloa
     deadline: patch.deadline,
     note: patch.note,
     reviewStatus: patch.reviewStatus,
-    reviewOwnerProfileId: patch.reviewOwnerProfileId,
+    reviewOwnerProfileId: isReviewRequest ? undefined : patch.reviewOwnerProfileId,
     scorePoints: patch.scorePoints,
-    scoreFinal: patch.scoreFinal,
+    scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
     githubSyncStatus: patch.githubSyncStatus,
     sprintId: patch.sprintId,
     milestoneId: patch.milestoneId,

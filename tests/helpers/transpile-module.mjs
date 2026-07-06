@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import ts from "typescript";
 
-export async function loadTranspiledModule(path) {
+const nodeRequire = createRequire(import.meta.url);
+
+export async function loadTranspiledModule(path, mocks = {}) {
   const source = await readFile(path, "utf8");
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: {
@@ -10,6 +13,10 @@ export async function loadTranspiledModule(path) {
     },
   });
   const cjsModule = { exports: {} };
-  Function("exports", "module", outputText)(cjsModule.exports, cjsModule);
+  const localRequire = (specifier) => {
+    if (Object.prototype.hasOwnProperty.call(mocks, specifier)) return mocks[specifier];
+    return nodeRequire(specifier);
+  };
+  Function("exports", "module", "require", outputText)(cjsModule.exports, cjsModule, localRequire);
   return cjsModule.exports;
 }
