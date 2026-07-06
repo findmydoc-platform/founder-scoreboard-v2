@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireOperationalLead } from "@/lib/authz";
 import { githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
-import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -126,10 +126,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireOperationalLead, {});
   if (!apiContext.ok) return apiContext.response;
 
-  const { payload, permission, supabase } = apiContext;
-  let githubUserToken = "";
+  const { payload, supabase } = apiContext;
+  let githubInstallationToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und starte die Spiegelung erneut.");
+    githubInstallationToken = await getGitHubAppInstallationToken();
   } catch (tokenError) {
     const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
     return apiError(message, 401);
@@ -177,9 +177,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   await supabase.from("tasks").update({ github_sync_status: "pending", github_sync_error: null }).eq("id", id);
 
   try {
-    const issue = await upsertGitHubIssue(task, githubUserToken, { login: assigneeLogin });
+    const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const dependencyContext = await githubDependencyContext(supabase, id, issue.number);
-    await syncGitHubIssueDependencies(dependencyContext, githubUserToken);
+    await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
     const syncedAt = new Date().toISOString();
     const githubRepo = githubRepoSlug();
     const warnings = issue.warnings || [];

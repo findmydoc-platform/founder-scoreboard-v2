@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
-import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { apiError, authzError } from "@/lib/api-response";
 
 function isAllowedGitHubAssetUrl(value: string) {
@@ -33,11 +33,10 @@ export async function GET(request: NextRequest) {
 
   let token = "";
   try {
-    token = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+    token = await getGitHubAppInstallationToken();
   } catch (error) {
     const message = error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.";
-    const status = message.includes("nicht verfügbar") ? 401 : 403;
-    return apiError(message, status);
+    return apiError(message, 502);
   }
 
   const response = await fetch(url, {

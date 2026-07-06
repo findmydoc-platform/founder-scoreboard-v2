@@ -67,7 +67,7 @@ export function useTaskDetailWorkflow({
   const [detailsEditSnapshot, setDetailsEditSnapshot] = useState<TaskDetailsDraft | null>(null);
   const [githubState, setGithubState] = useState(() => buildTaskDetailGitHubState(task));
   const [currentRole, setCurrentRole] = useState<Profile["platformRole"] | "">(source === "seed" ? "ceo" : "");
-  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
+  const [githubAppConnected, setGithubAppConnected] = useState(false);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [apiClient] = useState(() => createBrowserApiClient());
   const [isPending, startTransition] = useTransition();
@@ -134,8 +134,8 @@ export function useTaskDetailWorkflow({
     let active = true;
     apiClient.getAuthSnapshot().then((snapshot) => {
       if (!active) return;
-      setGithubProviderTokenAvailable(snapshot.githubProviderTokenAvailable);
-      if (snapshot.githubProviderTokenAvailable) setGithubReconnectFailed(false);
+      setGithubAppConnected(snapshot.githubAppConnected);
+      if (snapshot.githubAppConnected) setGithubReconnectFailed(false);
       const login = snapshot.githubLogin;
       const profile = profiles.find((item) => item.githubLogin === login);
       setCurrentRole(profile?.platformRole || "");
@@ -149,7 +149,7 @@ export function useTaskDetailWorkflow({
   const reconnectGitHub = async () => {
     setError("");
     setGithubReconnectFailed(false);
-    const { error: githubError } = await apiClient.startGitHubOAuth();
+    const { error: githubError } = await apiClient.startGitHubAppConnect();
 
     if (githubError) {
       setGithubReconnectFailed(true);
@@ -289,7 +289,7 @@ export function useTaskDetailWorkflow({
     detailsEditing,
     error,
     githubCommentImportPending,
-    githubProviderTokenAvailable,
+    githubAppConnected,
     githubReconnectFailed,
     githubState,
     importGitHubComments,

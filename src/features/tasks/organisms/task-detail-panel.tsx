@@ -35,7 +35,7 @@ export function TaskDetailPanel({
   allTasks,
   relations,
   pending,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   onClose,
   onUpdate,
   onAddComment,
@@ -71,7 +71,7 @@ export function TaskDetailPanel({
   allTasks: Task[];
   relations: TaskRelation[];
   pending: boolean;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => void;
@@ -153,7 +153,7 @@ export function TaskDetailPanel({
             canManageReviewOwner={canManageReviewOwner}
             canChangeTaskStatus={canChangeTaskStatus}
             pending={pending}
-            githubProviderTokenAvailable={githubProviderTokenAvailable}
+            githubAppConnected={githubAppConnected}
             onUpdate={onUpdate}
             onSyncGitHub={onSyncGitHub}
             onOpenReview={onOpenReview}

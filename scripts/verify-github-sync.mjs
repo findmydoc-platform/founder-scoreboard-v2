@@ -37,8 +37,8 @@ const syncQueue = linkedDeliverables.filter((task) => ["not_synced", "failed", "
 
 const result = {
   repo: repoSlug,
-  syncMode: "logged_in_github_user_provider_token",
-  note: "CLI prüft Supabase-Mapping und Sync-Queue. Echte GitHub-Schreibrechte werden bewusst im Browser mit dem eingeloggten GitHub-User geprüft.",
+  syncMode: "github_app_installation_token",
+  note: "CLI prüft Supabase-Mapping und Sync-Queue. GitHub-Schreibrechte laufen serverseitig über die GitHub App; Kommentare und Anhänge nutzen gespeicherte GitHub-App-User-Tokens.",
   tasks: {
     total: tasks.length,
     deliverables: deliverables.length,

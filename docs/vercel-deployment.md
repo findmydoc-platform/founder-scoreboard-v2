@@ -38,6 +38,12 @@ REQUIRE_SUPABASE_AUTH=true
 APP_URL=https://founder-ops.findmydoc.eu
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
+GITHUB_APP_ID=
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_INSTALLATION_ID=
+GITHUB_TOKEN_ENCRYPTION_KEY=
 GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_CHAT_PRIVATE_KEY=
@@ -57,7 +63,7 @@ The repository also contains `.github/workflows/google-chat-digest.yml` for this
 
 Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.
 
-Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, comments, and attachments must use the logged-in user's GitHub OAuth provider token from the active Supabase session, so GitHub shows the real actor.
+Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, dependency sync, GitHub comment import, private asset proxying, and issue archival use the configured GitHub App installation token. User-authored comments and attachments use encrypted GitHub App user tokens stored server-side in Supabase with refresh rotation. Raw GitHub tokens must never be sent to the browser, logged, or returned from API responses.
 
 ## GitHub Actions Workflow Shape
 
@@ -111,7 +117,18 @@ Before production login works, configure Supabase Auth:
 - The GitHub OAuth App callback remains the Supabase callback URL, for example `https://<supabase-project-ref>.supabase.co/auth/v1/callback`.
 - Ensure every team profile has `github_login`.
 - Ensure `profiles.platform_role` is one of `ceo`, `founder`, `deputy`, or `viewer`.
-- Keep the runtime aligned with `docs/auth-flow.md`: Supabase session cookies are SSR-managed, planning data is loaded only after server-side role authorization, and GitHub provider tokens are not persisted.
+- Keep the runtime aligned with `docs/auth-flow.md`: Supabase session cookies are SSR-managed, planning data is loaded only after server-side role authorization, and GitHub API credentials come from the GitHub App layer, not browser-provided provider tokens.
+
+## GitHub App Runtime
+
+Before production GitHub features work, configure the GitHub App owned by `findmydoc-platform`:
+
+- Install the app on `findmydoc-platform/management`.
+- Set `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_INSTALLATION_ID`, and either `GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_PATH`.
+- Set `GITHUB_TOKEN_ENCRYPTION_KEY` to a base64 value that decodes to exactly 32 bytes.
+- Configure the GitHub App user authorization callback URL as `https://founder-ops.findmydoc.eu/api/github-app/callback`.
+- Keep the webhook secret reserved for the later inbound webhook phase; the current runtime does not require `GITHUB_APP_WEBHOOK_SECRET`.
+- Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
 
 ## Verification
 
@@ -145,7 +162,7 @@ Check after a successful deployment:
 - `/api/health` returns `200` and `status: "ready"`.
 - GitHub login works.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
-- GitHub reconnect is available from the central header/notification area when a provider token is missing.
+- GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.
 - CEO user can edit tasks.
 - Founder user cannot edit CEO-only metadata.
 - GitHub avatar images load.

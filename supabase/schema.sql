@@ -14,6 +14,22 @@ create table if not exists projects (
   range_label text
 );
 
+create table if not exists github_app_user_tokens (
+  profile_id text primary key references profiles(id) on delete cascade,
+  github_login text not null,
+  github_user_id bigint,
+  encrypted_access_token text not null,
+  encrypted_refresh_token text,
+  access_token_expires_at timestamptz,
+  refresh_token_expires_at timestamptz,
+  connected_at timestamptz not null default now(),
+  refreshed_at timestamptz,
+  last_used_at timestamptz,
+  revoked_at timestamptz,
+  last_error text,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists packages (
   id text primary key,
     project_id text not null references projects(id) on delete cascade,
@@ -190,6 +206,8 @@ create table if not exists founder_events (
 
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
+create index if not exists github_app_user_tokens_github_login_idx on github_app_user_tokens(github_login);
+create index if not exists github_app_user_tokens_refresh_idx on github_app_user_tokens(refresh_token_expires_at);
   create index if not exists packages_project_id_idx on packages(project_id);
   create index if not exists packages_owner_id_idx on packages(owner_id);
   create index if not exists packages_accountable_profile_id_idx on packages(accountable_profile_id);
@@ -222,6 +240,7 @@ create index if not exists founder_events_participant_profile_ids_idx on founder
 grant usage on schema public to anon, authenticated, service_role;
 grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant select, insert, update, delete on github_app_user_tokens to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 create or replace function public.current_profile_role()
@@ -235,6 +254,7 @@ as $$
 $$;
 
 alter table profiles enable row level security;
+alter table github_app_user_tokens enable row level security;
 alter table projects enable row level security;
 alter table packages enable row level security;
 alter table tasks enable row level security;

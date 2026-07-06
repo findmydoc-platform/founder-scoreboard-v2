@@ -18,7 +18,7 @@ export function SettingsOverview({
   source,
   authAvailable,
   authUserEmail,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   pending,
   feedbackMessage,
   selectedFeedbackId,
@@ -39,7 +39,7 @@ export function SettingsOverview({
   source: "seed" | "supabase";
   authAvailable: boolean;
   authUserEmail: string;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
   pending: boolean;
   feedbackMessage: string;
   selectedFeedbackId: number | null;
@@ -64,13 +64,13 @@ export function SettingsOverview({
         source={source}
         authAvailable={authAvailable}
         authUserEmail={authUserEmail}
-        githubProviderTokenAvailable={githubProviderTokenAvailable}
+        githubAppConnected={githubAppConnected}
         googleChatReady={googleChatReady}
       />
       <GitHubSyncQueueSection
         tasks={data.tasks}
         pending={pending}
-        githubProviderTokenAvailable={githubProviderTokenAvailable}
+        githubAppConnected={githubAppConnected}
         onSyncLinkedGitHubTasks={onSyncLinkedGitHubTasks}
         onCreateGitHubIssue={onCreateGitHubIssue}
       />

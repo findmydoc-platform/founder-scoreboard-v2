@@ -1,14 +1,15 @@
 # Authentication Flow
 
-This document is the source of truth for the FounderOps web authentication flow. It covers the Supabase session, role authorization, GitHub provider-token handling, and the UI states shown during reloads or reconnects.
+This document is the source of truth for the FounderOps web authentication flow. It covers the Supabase session, role authorization, reload-stable GitHub App connections, and the UI states shown during reconnects.
 
 ## Principles
 
 - Supabase owns the user session and refresh token through SSR-compatible auth cookies.
 - `profiles.platform_role` is the application authorization boundary.
 - Planning data is never rendered or serialized in strict auth mode until the request has a verified Supabase user and a mapped profile role.
-- The GitHub provider token is used only for user-attributed GitHub writes and stays in browser memory.
-- The app may store short-lived reconnect metadata in `sessionStorage`, but it must not store Supabase tokens, refresh tokens, GitHub provider tokens, or `Authorization` headers.
+- GitHub issue sync, dependencies, GitHub comment import, private asset proxying, and issue archival use server-side GitHub App installation tokens.
+- User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation.
+- GitHub App user tokens are never exposed to the browser, logs, GitHub issues, API responses, or documentation.
 - GitHub reconnect UI is centralized in the header/notification area. GitHub-dependent cards may show disabled actions, but they must not repeat their own reconnect button or start OAuth automatically.
 
 ## Production Boot
@@ -25,9 +26,12 @@ flowchart TD
   G -- "Yes" --> I["Load planning data on the server"]
   I --> J["Render app with initial data and current profile"]
   J --> K["Client hook adopts SSR auth state"]
+  K --> L["Client checks /api/github-app/status with Supabase bearer token"]
 ```
 
 ## Supabase GitHub Login
+
+Supabase GitHub login is only the application login path. It restores the FounderOps session after reloads and maps the user to a team profile. It is not used as the GitHub API credential for FounderOps GitHub operations.
 
 ```mermaid
 sequenceDiagram
@@ -49,6 +53,31 @@ sequenceDiagram
   APP->>APP: Verify session and role before loading data
 ```
 
+## GitHub App Connect
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant UI as Browser UI
+  participant APP as /api/github-app/connect
+  participant GH as GitHub App OAuth
+  participant CB as /api/github-app/callback
+  participant DB as Supabase service role
+
+  U->>UI: Click central GitHub App connect action
+  UI->>APP: GET /api/github-app/connect?next=...
+  APP->>APP: Verify Supabase cookie session and team profile
+  APP->>APP: Create signed short-lived state
+  APP-->>GH: Redirect to GitHub App user authorization
+  GH-->>CB: Redirect with code and state
+  CB->>CB: Validate state and current Supabase session
+  CB->>GH: Exchange code for GitHub App user token
+  CB->>GH: Read /user login
+  CB->>CB: Require login to match profiles.github_login
+  CB->>DB: Store encrypted access and refresh tokens
+  CB-->>UI: Redirect to safe relative next path
+```
+
 ## Runtime UI States
 
 ```mermaid
@@ -59,53 +88,46 @@ stateDiagram-v2
   CheckingSession --> LoadingPlanningData: user and role accepted
   LoadingPlanningData --> AppReady: planning data loaded
   LoadingPlanningData --> LoadError: API or data load failed
-  AppReady --> GitHubAvailable: provider token in memory
-  AppReady --> GitHubReconnectNeeded: provider token missing in GitHub context
-  GitHubReconnectNeeded --> GitHubReconnectStarted: user clicks central header action
-  GitHubReconnectStarted --> GitHubAvailable: provider token returned
-  GitHubReconnectStarted --> GitHubReconnectFailed: session returned without provider token
-  GitHubReconnectFailed --> GitHubReconnectStarted: user retries from header
+  AppReady --> GitHubAppConnected: /api/github-app/status connected
+  AppReady --> GitHubAppReconnectNeeded: no saved token, revoked token, login mismatch, or refresh failed
+  GitHubAppReconnectNeeded --> GitHubAppConnectStarted: user clicks central header action
+  GitHubAppConnectStarted --> GitHubAppConnected: callback stores encrypted token
+  GitHubAppConnectStarted --> GitHubAppReconnectNeeded: callback fails or user cancels
   AppReady --> LoggedOut: user signs out
   LoggedOut --> LoginGate
 ```
 
-## GitHub Provider Token Reconnect
+## GitHub API Credential Rules
 
 ```mermaid
 sequenceDiagram
   participant UI as App UI
-  participant H as Auth Hook
-  participant SS as sessionStorage
-  participant SB as Supabase Auth
-  participant GH as GitHub API
   participant API as App API
+  participant VAULT as GitHub App token vault
+  participant GH as GitHub API
 
-  UI->>H: Open GitHub-dependent context or central header status
-  H->>H: Check in-memory provider token
-  alt provider token exists
-    UI->>API: Send x-github-provider-token for GitHub write
-    API->>GH: Write as logged-in user
-  else provider token missing
-    H->>UI: Keep app session active and show central header status
-    UI->>H: User clicks central reconnect action
-    H->>SS: Store reconnect metadata only
-    H->>SB: Start GitHub OAuth reconnect
-    SB-->>H: Session callback
-    alt provider token returned
-      H->>H: Keep provider token in memory
-      H->>SS: Clear reconnect metadata
-      UI->>API: Retry user-triggered GitHub action when clicked
-    else provider token still missing
-      H->>UI: Show centralized header reconnect warning
-    end
+  UI->>API: Sync issue, import comments, archive issue, or load private GitHub asset
+  API->>GH: Use short-lived GitHub App installation token
+  GH-->>API: Result
+  API-->>UI: Return non-secret response
+
+  UI->>API: Create comment or upload attachment
+  API->>VAULT: Load encrypted user token for current profile
+  alt access token expires soon
+    VAULT->>GH: Refresh GitHub App user token
+    VAULT->>VAULT: Store encrypted rotated tokens
   end
+  API->>GH: Write user-authored content with GitHub App user token
+  GH-->>API: Result
+  API-->>UI: Return non-secret response
 ```
 
 ## Scenario Expectations
 
-- Page reload with a valid session: the server verifies the cookie session, loads planning data, and the client shows either the app or a loading shell. It must not flash the login gate.
-- Browser closed and reopened: Supabase cookies restore the session when still valid; otherwise the login gate appears without serialized planning data.
-- Laptop standby then resume: the proxy and client refresh paths refresh the Supabase session. If only the GitHub provider token is missing, the app remains usable and exposes one central reconnect action for GitHub-backed actions. It must not start OAuth only because a task was opened.
+- Page reload with a valid session: the server verifies the cookie session, loads planning data, and the client checks `/api/github-app/status`. It must not flash the login gate.
+- Browser closed and reopened: Supabase cookies restore the app session when still valid; the saved encrypted GitHub App user token keeps GitHub comments and attachments usable without another manual reconnect.
+- Laptop standby then resume: the proxy and client refresh paths refresh the Supabase session. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
+- Missing, revoked, expired, or mismatched GitHub App user connection: the app remains usable and exposes one central reconnect action for GitHub-backed user-authored actions. It must not start OAuth only because a task was opened.
 - Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
 
 ## Token Handling
@@ -113,12 +135,13 @@ sequenceDiagram
 Allowed:
 
 - Supabase SSR auth cookies managed by `@supabase/ssr`.
-- In-memory GitHub provider token for the active tab/session.
-- Reconnect metadata in `sessionStorage`, limited to user id, reason, return path, and timestamp.
+- Process-memory GitHub App installation token cache.
+- Encrypted GitHub App user access and refresh tokens in `github_app_user_tokens`, readable only through service-role server code.
 
 Forbidden:
 
-- Persisting GitHub provider tokens in `localStorage`, `sessionStorage`, IndexedDB, Supabase, logs, or GitHub issues.
+- Sending raw GitHub tokens to the browser or accepting `x-github-provider-token` request headers.
+- Persisting raw GitHub tokens in `localStorage`, `sessionStorage`, IndexedDB, logs, GitHub issues, API responses, or documentation.
 - Persisting Supabase access tokens, refresh tokens, or `Authorization` headers outside Supabase auth cookies.
 - Adding multiple component-local reconnect buttons across GitHub-dependent cards.
 - Starting GitHub OAuth automatically when a user opens a task, settings page, or other GitHub-dependent view.

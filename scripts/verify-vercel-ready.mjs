@@ -26,6 +26,12 @@ const requiredEnvKeys = [
   "APP_URL",
   "GITHUB_SYNC_OWNER",
   "GITHUB_SYNC_REPO",
+  "GITHUB_APP_ID",
+  "GITHUB_APP_CLIENT_ID",
+  "GITHUB_APP_CLIENT_SECRET",
+  "GITHUB_APP_PRIVATE_KEY",
+  "GITHUB_APP_INSTALLATION_ID",
+  "GITHUB_TOKEN_ENCRYPTION_KEY",
   "GOOGLE_CHAT_WEBHOOK_URL",
   "GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL",
   "GOOGLE_CHAT_PRIVATE_KEY",
@@ -75,7 +81,7 @@ for (const key of requiredEnvKeys) {
   if (!new RegExp(`^${key}=`, "m").test(envExample)) failures.push(`.env.example missing ${key}`);
 }
 if (/^GITHUB_SYNC_TOKEN=/m.test(envExample)) {
-  failures.push(".env.example must not include GITHUB_SYNC_TOKEN; production sync must use the logged-in GitHub user provider token.");
+  failures.push(".env.example must not include GITHUB_SYNC_TOKEN; production sync must use GitHub App installation tokens.");
 }
 
 const supabase = await read("src/lib/supabase.ts");
@@ -108,6 +114,9 @@ for (const marker of [
   productionDomain,
   "Operational event messages stay inside the application",
   "GitHub OAuth App owned by `findmydoc-platform`",
+  "GitHub App Runtime",
+  "GITHUB_APP_INSTALLATION_ID",
+  "GITHUB_TOKEN_ENCRYPTION_KEY",
   "Do not configure a shared `GITHUB_SYNC_TOKEN`",
   "GitHub Actions job logs",
   "Git-metadata-free runner directory",
@@ -143,7 +152,7 @@ for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel bu
 }
 
 const workspaceRules = await read("AGENTS.md");
-for (const marker of ["provider_token", "Never persist or log provider tokens"]) {
+for (const marker of ["GitHub App installation tokens", "GitHub App user tokens", "Never expose raw GitHub tokens"]) {
   if (!workspaceRules.includes(marker)) failures.push(`AGENTS.md missing Vercel/security marker: ${marker}`);
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { getRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { getBrowserSupabase } from "@/lib/supabase";
 
 type BrowserApiClientOptions = {
@@ -11,7 +10,6 @@ type BrowserApiClientOptions = {
 type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   body?: BodyInit | null;
   headers?: HeadersInit;
-  includeGitHubToken?: boolean;
   json?: unknown;
   jsonContentType?: boolean;
 };
@@ -23,7 +21,7 @@ export type BrowserApiJsonResult<T> = {
 
 export type BrowserAuthSnapshot = {
   githubLogin: string;
-  githubProviderTokenAvailable: boolean;
+  githubAppConnected: boolean;
 };
 
 function currentRelativeUrl() {
@@ -42,12 +40,11 @@ export function createBrowserApiClient({
   async function readSession() {
     const session = await getBrowserSupabase()?.auth.getSession();
     const currentSession = session?.data.session || null;
-    rememberGitHubProviderToken(currentSession?.provider_token);
     return currentSession;
   }
 
   async function buildRequest(input: RequestInfo | URL, options: BrowserApiRequestOptions = {}) {
-    const { body: requestBody, headers: requestHeaders, includeGitHubToken, json, jsonContentType, ...requestInit } = options;
+    const { body: requestBody, headers: requestHeaders, json, jsonContentType, ...requestInit } = options;
     const session = await readSession();
     const headers = new Headers(requestHeaders);
     const method = (requestInit.method || "GET").toUpperCase();
@@ -69,11 +66,6 @@ export function createBrowserApiClient({
 
     if (devProfileOverrideEnabled && devProfileId && !headers.has("x-fmd-dev-profile-id")) {
       headers.set("x-fmd-dev-profile-id", devProfileId);
-    }
-
-    const githubProviderToken = includeGitHubToken ? getRememberedGitHubProviderToken() : "";
-    if (githubProviderToken && !headers.has("x-github-provider-token")) {
-      headers.set("x-github-provider-token", githubProviderToken);
     }
 
     return fetch(input, {
@@ -107,23 +99,22 @@ export function createBrowserApiClient({
 
   async function getAuthSnapshot(): Promise<BrowserAuthSnapshot> {
     const session = await readSession();
+    let githubAppConnected = false;
+    if (session?.access_token) {
+      const status = await fetch("/api/github-app/status", {
+        headers: { authorization: `Bearer ${session.access_token}` },
+      }).then((response) => response.ok ? response.json() : null).catch(() => null) as { connected?: boolean } | null;
+      githubAppConnected = Boolean(status?.connected);
+    }
     return {
       githubLogin: authLoginFromSession(session),
-      githubProviderTokenAvailable: hasRememberedGitHubProviderToken(),
+      githubAppConnected,
     };
   }
 
-  async function startGitHubOAuth() {
-    const supabase = getBrowserSupabase();
-    if (!supabase) return { error: new Error("Supabase Auth is not configured.") };
-
-    return supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(currentRelativeUrl())}`,
-        scopes: "repo read:user user:email",
-      },
-    });
+  async function startGitHubAppConnect() {
+    window.location.assign(`/api/github-app/connect?next=${encodeURIComponent(currentRelativeUrl())}`);
+    return { error: null };
   }
 
   return {
@@ -131,7 +122,7 @@ export function createBrowserApiClient({
     requestBlob,
     requestForm,
     requestJson,
-    startGitHubOAuth,
+    startGitHubAppConnect,
   };
 }
 

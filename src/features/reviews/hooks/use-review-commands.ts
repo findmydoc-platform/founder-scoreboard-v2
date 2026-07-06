@@ -9,7 +9,7 @@ type TaskSyncCommand = (task: Task, options?: { createIfMissing?: boolean; silen
 
 export function useReviewCommands({
   apiClient,
-  githubProviderTokenAvailable,
+  githubAppConnected,
   setData,
   setSaveError,
   source,
@@ -42,7 +42,7 @@ export function useReviewCommands({
       try {
         const { response, body } = await taskApi.reviewTaskRequest(apiClient, task.id, { decision: reviewStatus, points: scorePoints, checklist, comment });
         if (!response.ok) throw new Error(body?.error || "Review konnte nicht gespeichert werden.");
-        if (hasGitHubIssue(task) && githubProviderTokenAvailable) {
+        if (hasGitHubIssue(task) && githubAppConnected) {
           syncTaskToGitHub({ ...task, status: nextStatus, reviewStatus, scorePoints, scoreFinal }, { silent: true });
         }
       } catch (error) {

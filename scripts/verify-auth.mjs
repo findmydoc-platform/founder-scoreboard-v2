@@ -15,6 +15,12 @@ if (profileError) throw new Error(`profiles: ${profileError.message}`);
 const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
 if (authError) throw new Error(`auth.users: ${authError.message}`);
 
+const { data: githubAppConnections, error: githubAppConnectionError } = await supabase
+  .from("github_app_user_tokens")
+  .select("profile_id,github_login,revoked_at,last_error");
+
+if (githubAppConnectionError) throw new Error(`github_app_user_tokens: ${githubAppConnectionError.message}`);
+
 const authUserIds = new Set(authUsers.users.map((user) => user.id));
 const authGithubLogins = new Set(
   authUsers.users
@@ -35,6 +41,8 @@ const result = {
   legacyAuthLinked: linked.length,
   githubMapped: githubMapped.length,
   githubAuthenticated: githubAuthenticated.length,
+  githubAppConnections: (githubAppConnections || []).filter((connection) => !connection.revoked_at).length,
+  githubAppRevokedConnections: (githubAppConnections || []).filter((connection) => connection.revoked_at).length,
   ceos: ceos.map((profile) => ({ id: profile.id, name: profile.name, githubLogin: profile.github_login })),
   missingGithub: missingGithub.map((profile) => ({
     id: profile.id,

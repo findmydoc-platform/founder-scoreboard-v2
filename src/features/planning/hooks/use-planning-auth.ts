@@ -1,10 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clearRememberedGitHubProviderToken, hasRememberedGitHubProviderToken, rememberGitHubProviderToken } from "@/lib/github-provider-token";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, PlanningDataResponse } from "@/lib/types";
-
-const githubReauthAttemptKey = "fmd-planning-github-reauth-v1";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -46,31 +43,6 @@ function currentRelativeUrl() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
 }
 
-function removeGitHubReauthAttempt() {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(githubReauthAttemptKey);
-}
-
-export function markGitHubReauthAttempt(userId: string, reason: string) {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(githubReauthAttemptKey, JSON.stringify({
-    userId,
-    reason,
-    returnTo: currentRelativeUrl(),
-    startedAt: Date.now(),
-  }));
-}
-
-export function hasGitHubReauthAttempt(userId: string) {
-  if (typeof window === "undefined") return false;
-  try {
-    const parsed = JSON.parse(window.sessionStorage.getItem(githubReauthAttemptKey) || "{}") as { userId?: string };
-    return parsed.userId === userId;
-  } catch {
-    return false;
-  }
-}
-
 export function usePlanningAuth({
   authRequired,
   source,
@@ -89,7 +61,7 @@ export function usePlanningAuth({
   const [authChecked, setAuthChecked] = useState(!authRequired || Boolean(initialAuthUser));
   const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || initialProtectedDataLoaded);
   const [serverCurrentProfile, setServerCurrentProfile] = useState<AuthenticatedProfile | null>(initialCurrentProfile);
-  const [githubProviderTokenAvailable, setGithubProviderTokenAvailable] = useState(false);
+  const [githubAppConnected, setGithubAppConnected] = useState(false);
   const [githubReauthFailed, setGithubReauthFailed] = useState(false);
   const [authError, setAuthError] = useState(initialAuthError);
   const [authNotice, setAuthNotice] = useState("");
@@ -104,17 +76,28 @@ export function usePlanningAuth({
 
     let active = true;
 
+    const refreshGitHubAppConnectionState = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+      if (!active) return;
+      if (!session?.access_token) {
+        setGithubAppConnected(false);
+        setGithubReauthFailed(false);
+        return;
+      }
+      const status = await fetch("/api/github-app/status", {
+        headers: { authorization: `Bearer ${session.access_token}` },
+      }).then((response) => response.ok ? response.json() : null).catch(() => null) as { connected?: boolean; needsReconnect?: boolean } | null;
+      if (!active) return;
+      setGithubAppConnected(Boolean(status?.connected));
+      setGithubReauthFailed(Boolean(status?.needsReconnect && !status?.connected));
+    };
+
     const applySessionState = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
       if (!active) return;
-      rememberGitHubProviderToken(session?.provider_token);
-      if (session?.provider_token) {
-        removeGitHubReauthAttempt();
+      if (!session?.user) {
+        setGithubAppConnected(false);
         setGithubReauthFailed(false);
-      } else if (session?.user && hasGitHubReauthAttempt(session.user.id)) {
-        setGithubReauthFailed(true);
       }
       setAuthUser(session?.user || null);
-      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
       setAuthChecked(true);
     };
 
@@ -125,9 +108,11 @@ export function usePlanningAuth({
       if (expiresSoon) {
         const refreshed = await supabase.auth.refreshSession();
         applySessionState(refreshed.data.session || sessionData.session);
+        await refreshGitHubAppConnectionState(refreshed.data.session || sessionData.session);
         return;
       }
       applySessionState(sessionData.session);
+      await refreshGitHubAppConnectionState(sessionData.session);
     };
 
     refreshSessionState().catch(() => {
@@ -136,23 +121,14 @@ export function usePlanningAuth({
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      rememberGitHubProviderToken(session?.provider_token);
-      if (session?.provider_token) {
-        removeGitHubReauthAttempt();
-        setGithubReauthFailed(false);
-      } else if (session?.user && hasGitHubReauthAttempt(session.user.id)) {
-        setGithubReauthFailed(true);
-      }
       setAuthUser(session?.user || null);
-      setGithubProviderTokenAvailable(hasRememberedGitHubProviderToken());
       setAuthChecked(true);
+      refreshGitHubAppConnectionState(session).catch(() => undefined);
       setAuthError("");
       if (event === "SIGNED_IN") setAuthNotice("");
       if (event === "SIGNED_OUT") {
-        clearRememberedGitHubProviderToken();
-        removeGitHubReauthAttempt();
         setGithubReauthFailed(false);
-        setGithubProviderTokenAvailable(false);
+        setGithubAppConnected(false);
         protectedDataUserIdRef.current = "";
         protectedPlanningDataCache = null;
         setServerCurrentProfile(null);
@@ -263,15 +239,14 @@ export function usePlanningAuth({
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
-    if (options.clearReconnectGuard) {
-      removeGitHubReauthAttempt();
+    const next = currentRelativeUrl();
+    if (options.githubReconnect) {
       setGithubReauthFailed(false);
-    }
-    if (options.githubReconnect && authUser?.id) {
-      markGitHubReauthAttempt(authUser.id, "manual_reconnect");
+      window.location.assign(`/api/github-app/connect?next=${encodeURIComponent(next)}`);
+      setAuthBusy(false);
+      return;
     }
 
-    const next = currentRelativeUrl();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -288,7 +263,7 @@ export function usePlanningAuth({
       if (options.githubReconnect) setGithubReauthFailed(true);
       return;
     }
-  }, [authUser]);
+  }, []);
 
   const signOut = async () => {
     const supabase = getBrowserSupabase();
@@ -297,10 +272,8 @@ export function usePlanningAuth({
     setAuthBusy(true);
     setAuthError("");
     setAuthNotice("");
-    clearRememberedGitHubProviderToken();
-    removeGitHubReauthAttempt();
     setGithubReauthFailed(false);
-    setGithubProviderTokenAvailable(false);
+    setGithubAppConnected(false);
 
     const { error } = await supabase.auth.signOut({ scope: "global" });
     if (error) {
@@ -313,7 +286,7 @@ export function usePlanningAuth({
     protectedPlanningDataCache = null;
     setServerCurrentProfile(null);
     setAuthUser(null);
-    setGithubProviderTokenAvailable(false);
+    setGithubAppConnected(false);
     setData(safeInitialData);
     setProtectedDataLoaded(false);
     onSignedOut();
@@ -327,7 +300,7 @@ export function usePlanningAuth({
     authChecked,
     protectedDataLoaded,
     setProtectedDataLoaded,
-    githubProviderTokenAvailable,
+    githubAppConnected,
     githubReauthFailed,
     authError,
     authNotice,

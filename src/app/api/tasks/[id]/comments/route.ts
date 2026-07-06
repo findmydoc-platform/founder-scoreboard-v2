@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { createGitHubIssueComment } from "@/lib/github";
-import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { GitHubAppUserTokenRequiredError, getGitHubAppUserToken } from "@/lib/github-app";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -32,6 +32,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const githubIssueNumber = Number(task.github_issue_number || task.issue_number || 0);
   const hasLinkedGitHubIssue = Number.isInteger(githubIssueNumber) && githubIssueNumber > 0;
+  let githubUserToken = "";
+
+  if (hasLinkedGitHubIssue) {
+    try {
+      githubUserToken = await getGitHubAppUserToken(supabase, permission.profile);
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";
+      return apiError(message, syncError instanceof GitHubAppUserTokenRequiredError ? 401 : 502);
+    }
+  }
 
   const { data: created, error: insertError } = await supabase
     .from("task_comments")
@@ -48,7 +58,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let githubSyncError = "";
   if (hasLinkedGitHubIssue) {
     try {
-      const githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und kommentiere dann.");
       await createGitHubIssueComment(githubIssueNumber, comment, githubUserToken, `fmd-comment-id:${created.id}`);
     } catch (syncError) {
       githubSyncError = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
-import { requireMatchingGitHubProviderToken } from "@/lib/github-provider-auth";
+import { GitHubAppUserTokenRequiredError, getGitHubAppUserToken } from "@/lib/github-app";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -54,9 +54,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let githubUserToken = "";
   try {
-    githubUserToken = await requireMatchingGitHubProviderToken(request, permission.profile, "GitHub-Verbindung fehlt. Bitte melde dich erneut mit GitHub an und wiederhole den Upload.");
+    githubUserToken = await getGitHubAppUserToken(supabase, permission.profile);
   } catch (error) {
-    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", 403);
+    return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

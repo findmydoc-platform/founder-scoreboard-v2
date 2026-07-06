@@ -104,20 +104,20 @@ Erwartung:
 
 Voraussetzung:
 - GitHub OAuth Login ist aktiv.
-- Der eingeloggte GitHub-User hat Zugriff auf `findmydoc-platform/management`.
-- Die Supabase OAuth Session enthält einen GitHub User-Token.
+- Die GitHub App ist auf `findmydoc-platform/management` installiert.
+- Der eingeloggte GitHub-User hat die GitHub App einmal über den Header verbunden.
 
 Check:
 1. `npm run verify:github-sync` ausführen.
 2. Task öffnen.
-3. Falls der GitHub User-Token fehlt, die GitHub-Verbindung zentral im Header erneuern.
+3. Falls die GitHub-App-Verbindung fehlt oder abgelaufen ist, die Verbindung zentral im Header erneuern.
 4. `Jetzt spiegeln` klicken.
 5. Link zum GitHub Issue prüfen.
 
 Erwartung:
 - Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
 - GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
-- Issue wird im Management-Repo im Namen des eingeloggten GitHub-Users erstellt oder aktualisiert.
+- Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
 - Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
 - Body enthält Epic / Meilenstein, Initiative, Sprint, Review, Score, Blocker und Kommentare.
 - GitHub bleibt one-way Backup, nicht führendes System.
