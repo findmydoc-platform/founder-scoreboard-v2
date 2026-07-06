@@ -10,7 +10,6 @@ import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { ReviewDetailPage } from "@/features/reviews/templates/review-detail-page";
-import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
@@ -25,12 +24,10 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     authChecked,
     authError,
     authUser,
-    commentImportNotice,
     currentProfile,
     data,
     filters,
     filtersAvailable,
-    fullTaskView,
     githubAppConnected,
     isPending,
     localStateLoaded,
@@ -40,15 +37,8 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     releaseSidebarFocus,
     reopenReviewTask,
     reviewTask,
-    selectedPackage,
     selectedReviewDetailTask,
     selectedReviewDetailTaskId,
-    selectedTask,
-    selectedTaskActivity,
-    selectedTaskBlockers,
-    selectedTaskComments,
-    selectedTaskExternalComments,
-    selectedTaskSubIssues,
     setFilters,
     setMobileNavOpen,
     setWorkspace,
@@ -106,31 +96,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         source={source}
         onReview={reviewTask}
         onReopen={reopenReviewTask}
-      />
-    );
-  }
-
-  if (fullTaskView && selectedTask) {
-    return (
-      <TaskDetailPage
-        task={selectedTask}
-        pack={selectedPackage}
-        packages={data.packages}
-        sprint={data.sprints.find((sprint) => sprint.id === selectedTask.sprintId)}
-        subIssues={selectedTaskSubIssues}
-        comments={selectedTaskComments}
-        externalComments={selectedTaskExternalComments}
-        activities={selectedTaskActivity}
-        blockers={selectedTaskBlockers}
-        taskRelations={data.taskRelations}
-        allTasks={data.tasks}
-        profiles={data.profiles}
-        sprints={data.sprints}
-        milestones={data.milestones}
-        decisions={data.decisions}
-        decisionTaskLinks={data.decisionTaskLinks}
-        source={source}
-        commentImportNotice={commentImportNotice}
       />
     );
   }

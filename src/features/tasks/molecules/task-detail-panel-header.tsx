@@ -19,7 +19,7 @@ export function TaskDetailPanelHeader({ task, onClose }: Props) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <UiLinkButton
-            href={`/tasks/${task.id}?view=full`}
+            href={`/tasks/${task.id}`}
             size="mdXs"
           >
             <Maximize2 size={14} />

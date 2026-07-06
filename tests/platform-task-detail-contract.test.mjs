@@ -3,7 +3,7 @@ import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("task route opens the detail panel inside the planning shell", async () => {
+test("task route renders full page while planning shell opens task panel locally", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const ui = await readPlanningSurface();
@@ -24,27 +24,31 @@ test("task route opens the detail panel inside the planning shell", async () => 
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
 
   assert.match(route, /getPlanningData/);
+  assert.match(route, /notFound/);
   assert.match(route, /PlanningApp/);
   assert.match(route, /TaskDetailPage/);
-  assert.match(route, /view === "full"/);
-  assert.match(route, /initialTaskId=\{id\}/);
-  assert.match(ui, /initialTaskId/);
+  assert.match(route, /<TaskDetailPage/);
+  assert.match(route, /emptyPlanningData/);
+  assert.doesNotMatch(route, /view === "full"/);
+  assert.doesNotMatch(route, /initialTaskId=\{id\}/);
+  assert.doesNotMatch(ui, /initialTaskId/);
   assert.match(ui, /useSearchParams/);
-  assert.match(ui, /fullTaskView/);
-  assert.match(ui, /searchParams\.get\("view"\) === "full"/);
+  assert.doesNotMatch(ui, /fullTaskView/);
+  assert.doesNotMatch(ui, /searchParams\.get\("view"\) === "full"/);
   assert.match(ui, /openTaskPanel/);
-  assert.match(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
+  assert.doesNotMatch(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
   assert.match(ui, /openReviewSheet/);
   assert.match(ui, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
-  assert.match(ui, /router\.back\(\)/);
+  assert.doesNotMatch(ui, /router\.back\(\)/);
+  assert.doesNotMatch(ui, /window\.history\.length/);
   assert.match(ui, /event\.key !== "Backspace"/);
   assert.match(ui, /TaskDetailPanel/);
-  assert.match(ui, /<TaskDetailPage/);
   assert.match(panel, /bg-slate-950\/\[0\.03\]/);
   assert.match(panel, /TaskDetailPanelHeader/);
   assert.match(panelHeader, /aria-label="Detailpanel schließen"/);
   assert.match(panelHeader, /Große Ansicht/);
-  assert.match(panelHeader, /view=full/);
+  assert.match(panelHeader, /href=\{`\/tasks\/\$\{task\.id\}`\}/);
+  assert.doesNotMatch(panelHeader, /view=full/);
   assert.doesNotMatch(panelHeader, /statusBadgeTone|priorityBadgeTone/);
   const taskDetailPanel = panel.slice(panel.indexOf("export function TaskDetailPanel"));
   assert.match(taskDetailPanel, /TaskDetailPanelBriefSection/);
