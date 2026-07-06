@@ -17,6 +17,8 @@ const reviewStatuses = new Set(["not_requested", "requested", "accepted", "parti
 const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
 
 export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
+  const isImplicitReviewScoreReset = startsTaskReviewRequest(payload) && payload.scoreFinal === false && payload.scorePoints === undefined;
+
   return [
     payload.owner !== undefined ? "Owner" : "",
     payload.priority !== undefined ? "Priorität" : "",
@@ -24,7 +26,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
     payload.sprintId !== undefined ? "Sprint" : "",
     payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
     payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
-    payload.scorePoints !== undefined || payload.scoreFinal !== undefined ? "Score" : "",
+    payload.scorePoints !== undefined || (payload.scoreFinal !== undefined && !isImplicitReviewScoreReset) ? "Score" : "",
   ].filter(Boolean);
 }
 

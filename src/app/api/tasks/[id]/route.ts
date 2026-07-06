@@ -43,13 +43,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  const startsReviewRequest = startsTaskReviewRequest(payload);
+  const canSetReviewOwner = permission.profile?.platformRole === "ceo";
   const restrictedFields = restrictedTaskUpdateFields(payload);
 
   if (!isOperationalLead && restrictedFields.length) {
     return apiError(`Diese Felder sind geschützt: ${restrictedFields.join(", ")}.`, 403);
   }
 
-  if (payload.reviewOwnerProfileId !== undefined && permission.profile?.platformRole !== "ceo") {
+  if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest) {
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
   }
 
@@ -131,7 +133,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!reviewStatusGuard.ok) return apiError(reviewStatusGuard.error, reviewStatusGuard.status);
   applyTaskScoreUpdateFields(update, payload);
 
-  if (payload.reviewOwnerProfileId !== undefined) {
+  if (payload.reviewOwnerProfileId !== undefined && canSetReviewOwner) {
     const nextReviewOwner = profileId(payload.reviewOwnerProfileId);
     if (nextReviewOwner) {
       const { data: reviewOwner, error: reviewOwnerError } = await supabase
@@ -144,7 +146,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_owner_profile_id = nextReviewOwner || null;
   }
 
-  const startsReviewRequest = startsTaskReviewRequest(payload);
   if (startsReviewRequest) {
     if (currentTask.score_final) {
       return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
@@ -165,7 +166,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.status = "Review";
     update.review_status = "requested";
     update.score_final = false;
-    update.review_owner_profile_id = typeof payload.reviewOwnerProfileId === "string" ? profileId(payload.reviewOwnerProfileId) || null : reviewOwnerProfileId || null;
+    const requestedReviewOwnerProfileId = canSetReviewOwner && typeof payload.reviewOwnerProfileId === "string" ? profileId(payload.reviewOwnerProfileId) || null : undefined;
+    update.review_owner_profile_id = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
     update.review_requested_at = new Date().toISOString();
   }
 
