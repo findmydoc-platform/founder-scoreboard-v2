@@ -1,4 +1,4 @@
-import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, Profile, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -393,6 +393,22 @@ export type DbNotificationPreference = {
   channel: NotificationPreference["channel"];
   event_type: string;
   enabled: boolean;
+};
+
+export type DbProfileUiPreference = {
+  profile_id: string;
+  default_workspace: string | null;
+  default_task_view: ProfileUiPreference["defaultTaskView"] | null;
+  planning_filters: Partial<PlanningFilterPreferences> | null;
+  expanded_package_ids: string[] | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbProfileFeatureTourAcknowledgement = {
+  profile_id: string;
+  tour_id: ProfileFeatureTourAcknowledgement["tourId"];
+  seen_at: string;
 };
 
 export type DbFeedbackItem = {

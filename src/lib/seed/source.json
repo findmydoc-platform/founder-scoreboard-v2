@@ -296,6 +296,8 @@
     "notificationEvents": [],
     "notificationDeliveries": [],
     "notificationPreferences": [],
+    "profileUiPreferences": [],
+    "profileFeatureTourAcknowledgements": [],
     "feedbackItems": [],
     "events": [],
     "meetingAttendance": [],

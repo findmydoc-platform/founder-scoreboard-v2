@@ -24,6 +24,18 @@
     "health": true
   },
   {
+    "name": "profile_ui_preferences",
+    "table": "profile_ui_preferences",
+    "select": "profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,updated_at",
+    "health": true
+  },
+  {
+    "name": "profile_feature_tour_acknowledgements",
+    "table": "profile_feature_tour_acknowledgements",
+    "select": "profile_id,tour_id,seen_at",
+    "health": true
+  },
+  {
     "name": "notification_events.dedupe_key",
     "table": "notification_events",
     "select": "id,dedupe_key",

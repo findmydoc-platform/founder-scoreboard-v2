@@ -37,6 +37,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setView,
+    setWorkspace,
     showNotifications,
     signIn,
     signOut,
@@ -131,6 +132,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               busy={authBusy}
               onSignIn={signIn}
               onSignOut={signOut}
+              onOpenProfile={() => setWorkspace("profile")}
             />
           )}
           <button

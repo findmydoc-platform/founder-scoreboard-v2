@@ -219,6 +219,7 @@ export function useMeetingAvailabilityEditor({
     closeAvailabilityDialog,
     saveAvailabilityDialog,
     deleteAvailabilityDialogEntry,
+    openAvailabilityCreateDialog,
     beginCalendarSelection,
     extendCalendarSelection,
     finishCalendarSelection,

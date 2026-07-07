@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
+import { mapAuditEntry, mapAvailability, mapDecision, mapDecisionComment, mapDecisionTaskLink, mapFeedbackItem, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapProfileFeatureTourAcknowledgement, mapProfileUiPreference, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
 import { taskRowSelect } from "./planning-data-row-types";
-import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import type { DbAuditEntry, DbAvailability, DbDecision, DbDecisionComment, DbDecisionTaskLink, DbFeedbackItem, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
 import type { PlanningData } from "./types";
 
 const founderProjectId = "findmydoc-founder-execution";
 
 export async function loadPlanningDataRows(supabase: SupabaseClient) {
-  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, feedbackResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
+  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, decisionResult, commentResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, decisionTaskLinkResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, profileUiPreferenceResult, profileFeatureTourAcknowledgementResult, feedbackResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult, availabilityResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", founderProjectId).single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at").order("name"),
     supabase.from("packages").select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order").order("sort_order"),
@@ -35,6 +35,8 @@ export async function loadPlanningDataRows(supabase: SupabaseClient) {
     supabase.from("notification_events").select("id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,status,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("notification_deliveries").select("id,event_id,channel,status,attempts,target,payload,last_error,delivered_at,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
+    supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,created_at,updated_at").order("profile_id"),
+    supabase.from("profile_feature_tour_acknowledgements").select("profile_id,tour_id,seen_at").order("seen_at", { ascending: false }),
     supabase.from("feedback_items").select("id,type,status,severity,profile_id,title,description,page_url,created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("fmd_tools").select("id,name,category,kind,description,url,owner,status,sort_order").order("sort_order"),
     supabase.from("founder_events").select("id,title,category,starts_at,ends_at,location,description,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status,created_by,created_at,updated_at").order("starts_at", { ascending: true }).limit(200),
@@ -68,6 +70,8 @@ export async function loadPlanningDataRows(supabase: SupabaseClient) {
     notificationResult,
     notificationDeliveryResult,
     notificationPreferenceResult,
+    profileUiPreferenceResult,
+    profileFeatureTourAcknowledgementResult,
     feedbackResult,
     fmdToolResult,
     eventResult,
@@ -120,6 +124,8 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
     notificationEvents: rows.notificationResult.error ? [] : (rows.notificationResult.data as DbNotificationEvent[]).map(mapNotificationEvent),
     notificationDeliveries: rows.notificationDeliveryResult.error ? [] : (rows.notificationDeliveryResult.data as DbNotificationDelivery[]).map(mapNotificationDelivery),
     notificationPreferences: rows.notificationPreferenceResult.error ? [] : (rows.notificationPreferenceResult.data as DbNotificationPreference[]).map(mapNotificationPreference),
+    profileUiPreferences: rows.profileUiPreferenceResult.error ? [] : (rows.profileUiPreferenceResult.data as DbProfileUiPreference[]).map(mapProfileUiPreference),
+    profileFeatureTourAcknowledgements: rows.profileFeatureTourAcknowledgementResult.error ? [] : (rows.profileFeatureTourAcknowledgementResult.data as DbProfileFeatureTourAcknowledgement[]).map(mapProfileFeatureTourAcknowledgement),
     feedbackItems: rows.feedbackResult.error ? [] : (rows.feedbackResult.data as DbFeedbackItem[]).map(mapFeedbackItem),
     fmdTools: rows.fmdToolResult.error ? [] : (rows.fmdToolResult.data as DbFmdTool[]).map(mapFmdTool),
     events: rows.eventResult.error ? [] : (rows.eventResult.data as DbFounderEvent[]).map(mapFounderEvent),

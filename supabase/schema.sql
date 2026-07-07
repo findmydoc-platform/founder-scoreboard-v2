@@ -3,9 +3,21 @@ create table if not exists profiles (
   auth_user_id uuid unique references auth.users(id) on delete set null,
   name text not null,
   role text not null check (role in ('admin', 'member', 'viewer')),
+  platform_role text not null default 'founder' check (platform_role in ('ceo', 'founder', 'deputy', 'viewer')),
+  org_role text,
+  github_login text,
+  deputy_for text references profiles(id) on delete set null,
+  deputy_active_from date,
+  deputy_active_until date,
   focus text,
   weekly_capacity integer not null default 6,
-  profile_color text not null default '#64748b' check (profile_color ~ '^#[0-9A-Fa-f]{6}$')
+  profile_color text not null default '#64748b' check (profile_color ~ '^#[0-9A-Fa-f]{6}$'),
+  google_chat_user_id text,
+  google_chat_dm_space text,
+  notifications_enabled boolean not null default true,
+  google_calendar_email text,
+  google_calendar_sync_enabled boolean not null default false,
+  google_calendar_last_synced_at timestamptz
 );
 
 create table if not exists projects (
@@ -28,6 +40,25 @@ create table if not exists github_app_user_tokens (
   revoked_at timestamptz,
   last_error text,
   updated_at timestamptz not null default now()
+);
+
+create table if not exists profile_ui_preferences (
+  profile_id text primary key references profiles(id) on delete cascade,
+  default_workspace text not null default 'planning'
+    check (default_workspace in ('planning', 'execution', 'mine', 'reviews', 'events', 'sprint', 'decisions', 'meetings', 'projects', 'tools', 'team', 'settings', 'ceo-intake', 'profile')),
+  default_task_view text not null default 'board'
+    check (default_task_view in ('board', 'structure', 'table', 'gantt')),
+  planning_filters jsonb not null default '{"query":"","owner":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
+  expanded_package_ids text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists profile_feature_tour_acknowledgements (
+  profile_id text not null references profiles(id) on delete cascade,
+  tour_id text not null,
+  seen_at timestamptz not null default now(),
+  primary key (profile_id, tour_id)
 );
 
 create table if not exists packages (
@@ -206,8 +237,12 @@ create table if not exists founder_events (
 
 
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
+create index if not exists profiles_platform_role_idx on profiles(platform_role);
+create index if not exists profiles_github_login_idx on profiles(lower(github_login));
+create index if not exists profiles_google_calendar_sync_idx on profiles(google_calendar_sync_enabled, google_calendar_email) where google_calendar_sync_enabled = true and google_calendar_email is not null;
 create index if not exists github_app_user_tokens_github_login_idx on github_app_user_tokens(github_login);
 create index if not exists github_app_user_tokens_refresh_idx on github_app_user_tokens(refresh_token_expires_at);
+create index if not exists profile_feature_tour_acknowledgements_tour_idx on profile_feature_tour_acknowledgements(tour_id, seen_at);
   create index if not exists packages_project_id_idx on packages(project_id);
   create index if not exists packages_owner_id_idx on packages(owner_id);
   create index if not exists packages_accountable_profile_id_idx on packages(accountable_profile_id);
@@ -238,8 +273,8 @@ create index if not exists founder_events_reminder_generated_at_idx on founder_e
 create index if not exists founder_events_participant_profile_ids_idx on founder_events using gin(participant_profile_ids);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
-grant insert, update, delete on profiles, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant select, insert, update, delete on github_app_user_tokens to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
@@ -253,8 +288,20 @@ as $$
   select role from public.profiles where auth_user_id = auth.uid()
 $$;
 
+create or replace function public.current_platform_role()
+returns text
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select platform_role from public.profiles where auth_user_id = auth.uid()
+$$;
+
 alter table profiles enable row level security;
 alter table github_app_user_tokens enable row level security;
+alter table profile_ui_preferences enable row level security;
+alter table profile_feature_tour_acknowledgements enable row level security;
 alter table projects enable row level security;
 alter table packages enable row level security;
 alter table tasks enable row level security;
@@ -277,6 +324,30 @@ drop policy if exists "profiles_update_self_or_admin" on profiles;
 create policy "profiles_update_self_or_admin" on profiles for update to authenticated
 using (auth_user_id = auth.uid() or public.current_profile_role() = 'admin')
 with check (auth_user_id = auth.uid() or public.current_profile_role() = 'admin');
+
+drop policy if exists "profile_ui_preferences_select_self_or_operational" on profile_ui_preferences;
+create policy "profile_ui_preferences_select_self_or_operational" on profile_ui_preferences for select to authenticated
+using (
+  public.current_platform_role() in ('ceo', 'deputy')
+  or profile_id in (select id from profiles where auth_user_id = auth.uid())
+);
+
+drop policy if exists "profile_ui_preferences_write_self" on profile_ui_preferences;
+create policy "profile_ui_preferences_write_self" on profile_ui_preferences for all to authenticated
+using (profile_id in (select id from profiles where auth_user_id = auth.uid()))
+with check (profile_id in (select id from profiles where auth_user_id = auth.uid()));
+
+drop policy if exists "profile_feature_tour_acknowledgements_select_self_or_operational" on profile_feature_tour_acknowledgements;
+create policy "profile_feature_tour_acknowledgements_select_self_or_operational" on profile_feature_tour_acknowledgements for select to authenticated
+using (
+  public.current_platform_role() in ('ceo', 'deputy')
+  or profile_id in (select id from profiles where auth_user_id = auth.uid())
+);
+
+drop policy if exists "profile_feature_tour_acknowledgements_write_self" on profile_feature_tour_acknowledgements;
+create policy "profile_feature_tour_acknowledgements_write_self" on profile_feature_tour_acknowledgements for all to authenticated
+using (profile_id in (select id from profiles where auth_user_id = auth.uid()))
+with check (profile_id in (select id from profiles where auth_user_id = auth.uid()));
 
 drop policy if exists "projects_select_team" on projects;
 create policy "projects_select_team" on projects for select to authenticated using (auth.uid() is not null);

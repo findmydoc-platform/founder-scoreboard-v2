@@ -35,6 +35,8 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     notificationEvents: data.notificationEvents || [],
     notificationDeliveries: data.notificationDeliveries || [],
     notificationPreferences: data.notificationPreferences || [],
+    profileUiPreferences: data.profileUiPreferences || [],
+    profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements || [],
     feedbackItems: data.feedbackItems || [],
     fmdTools: data.fmdTools || [],
     events: data.events || [],
@@ -68,6 +70,7 @@ export const workspaceLabels: Record<Workspace, string> = {
   team: "Team",
   settings: "Einstellungen",
   "ceo-intake": "CEO Intake",
+  profile: "Mein Profil",
 };
 
 export const workspaceSubtitles: Record<Workspace, string> = {
@@ -84,6 +87,7 @@ export const workspaceSubtitles: Record<Workspace, string> = {
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   settings: "Teamzugriff und Benachrichtigungen.",
   "ceo-intake": "CEO-only Import für freigegebene Aufgabenpakete.",
+  profile: "Deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
 };
 
 export const planningWorkspaces: Workspace[] = ["planning", "mine"];

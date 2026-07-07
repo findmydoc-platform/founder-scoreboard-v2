@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { DecisionTaskLink, FeedbackItem, FounderEvent, Meeting, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { DecisionTaskLink, FeedbackItem, FounderEvent, Meeting, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 
 export function requestPlanningData(apiClient: BrowserApiClient) {
   return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>("/api/planning-data");
@@ -81,6 +81,25 @@ export function updateNotificationPreferenceRequest(apiClient: BrowserApiClient,
   return apiClient.requestJson<{ error?: string; preference?: NotificationPreference }>("/api/notification-preferences", {
     method: "PATCH",
     json: payload,
+  });
+}
+
+export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, payload: unknown) {
+  return apiClient.requestJson<{
+    error?: string;
+    profile?: Profile;
+    uiPreference?: ProfileUiPreference;
+    notificationPreferences?: NotificationPreference[];
+  }>("/api/profile-settings", {
+    method: "PATCH",
+    json: payload,
+  });
+}
+
+export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, tourId: string) {
+  return apiClient.requestJson<{ error?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
+    method: "POST",
+    json: { tourId },
   });
 }
 

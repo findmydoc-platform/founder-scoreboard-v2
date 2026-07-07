@@ -21,6 +21,7 @@ export function MeetingAvailabilityDialog({
   blockerEndTime,
   blockerNote,
   saveDisabled,
+  showProfileSelect = true,
   onClose,
   onDelete,
   onSave,
@@ -49,6 +50,7 @@ export function MeetingAvailabilityDialog({
   blockerEndTime: string;
   blockerNote: string;
   saveDisabled: boolean;
+  showProfileSelect?: boolean;
   onClose: () => void;
   onDelete: () => void;
   onSave: () => void;
@@ -88,6 +90,7 @@ export function MeetingAvailabilityDialog({
             blockerStartTime={blockerStartTime}
             blockerEndTime={blockerEndTime}
             blockerNote={blockerNote}
+            showProfileSelect={showProfileSelect}
             profileAriaLabel="Profil wählen"
             titlePlaceholder="Titel, z. B. Kundentermin, Fokuszeit, Urlaub"
             titleAriaLabel="Blocker-Titel"
