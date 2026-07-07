@@ -19,6 +19,8 @@ import { usePlanningTaskSelection } from "@/features/planning/hooks/use-planning
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
+import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
+import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
 import { useFeedbackCommands } from "@/features/settings/hooks/use-feedback-commands";
@@ -256,6 +258,22 @@ export function usePlanningAppController({
     setStatusGuardTaskId,
     updateTask,
   });
+  useProfileUiPreferenceSync({
+    apiClient,
+    currentProfileId,
+    data,
+    expandedPackages: boardState.expandedPackages,
+    filters,
+    protectedDataLoaded,
+    setData,
+    setExpandedPackageIds: boardState.setExpandedPackageIds,
+    setFilters,
+    setView,
+    setWorkspace,
+    source,
+    view,
+    workspace,
+  });
   const eventCommands = useFounderEventCommands(commandContext);
   const meetingCommands = useMeetingCommands(commandContext);
   const decisionCommands = useDecisionCommands(commandContext);
@@ -269,6 +287,7 @@ export function usePlanningAppController({
     sprintPlanningOptions,
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
+  const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
   const feedbackCommands = useFeedbackCommands({
     ...commandContext,
     setFeedbackDialogOpen,
@@ -389,6 +408,7 @@ export function usePlanningAppController({
     ...initiativeCommands,
     ...meetingCommands,
     ...notificationCommands,
+    ...ownProfileSettingsCommands,
     ...profileSettingsCommands,
     ...reviewCommands,
     ...sprintCommands,

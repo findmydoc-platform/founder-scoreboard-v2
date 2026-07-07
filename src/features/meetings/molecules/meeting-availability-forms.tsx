@@ -23,6 +23,7 @@ export function MeetingAvailabilityForms({
   blockerStartTime,
   blockerEndTime,
   blockerNote,
+  showProfileSelects = true,
   onWorkProfileChange,
   onBlockerProfileChange,
   onWorkWeekdaysChange,
@@ -56,6 +57,7 @@ export function MeetingAvailabilityForms({
   blockerStartTime: string;
   blockerEndTime: string;
   blockerNote: string;
+  showProfileSelects?: boolean;
   onWorkProfileChange: (value: string) => void;
   onBlockerProfileChange: (value: string) => void;
   onWorkWeekdaysChange: (value: string[]) => void;
@@ -79,9 +81,15 @@ export function MeetingAvailabilityForms({
     <>
       <UiPanel>
         <h2 className="text-base font-semibold text-slate-950">Arbeitszeiten pflegen</h2>
-        <p className="mt-1 text-sm text-slate-500">Regelmäßige findmydoc-Zeit pro Person und mehrere Wochentage in einem Schritt.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          {showProfileSelects
+            ? "Regelmäßige findmydoc-Zeit pro Person und mehrere Wochentage in einem Schritt."
+            : "Regelmäßige findmydoc-Zeit für dein Profil und mehrere Wochentage in einem Schritt."}
+        </p>
         <div className="mt-4 grid gap-3">
-          <CustomSelect value={normalizedWorkProfileId} onChange={onWorkProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileSelectOptions} />
+          {showProfileSelects && (
+            <CustomSelect value={normalizedWorkProfileId} onChange={onWorkProfileChange} disabled={!canManageAvailability || !profileOptions.length || pending} className="h-9 text-sm" options={profileSelectOptions} />
+          )}
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
               <UiButton onClick={() => onWorkWeekdaysChange(["1", "2", "3", "4", "5"])} size="sm">
@@ -140,6 +148,7 @@ export function MeetingAvailabilityForms({
             blockerStartTime={blockerStartTime}
             blockerEndTime={blockerEndTime}
             blockerNote={blockerNote}
+            showProfileSelect={showProfileSelects}
             titlePlaceholder="Titel"
             kindAriaLabel="Art des Blockers"
             startDateAriaLabel="Blocker Startdatum"

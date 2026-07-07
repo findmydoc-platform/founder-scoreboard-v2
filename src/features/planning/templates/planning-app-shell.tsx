@@ -9,6 +9,7 @@ import { PlanningFilters } from "@/features/planning/organisms/planning-filters"
 import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
+import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
 import { ReviewDetailPage } from "@/features/reviews/templates/review-detail-page";
 
 type PlanningAppShellProps = {
@@ -118,6 +119,15 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
 
       <main className="lg:pl-16">
         <PlanningHeader controller={controller} />
+
+        <FeatureTourProvider
+          apiClient={controller.apiClient}
+          currentProfile={currentProfile}
+          data={data}
+          setData={controller.setData}
+          setWorkspace={setWorkspace}
+          source={source}
+        />
 
         <GitHubAppReconnectBanner
           authenticated={Boolean(authUser)}

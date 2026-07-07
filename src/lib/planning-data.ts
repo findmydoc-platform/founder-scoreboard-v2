@@ -30,6 +30,8 @@ export const emptyPlanningData: PlanningData = {
   notificationEvents: [],
   notificationDeliveries: [],
   notificationPreferences: [],
+  profileUiPreferences: [],
+  profileFeatureTourAcknowledgements: [],
   feedbackItems: [],
   fmdTools: [],
   events: [],

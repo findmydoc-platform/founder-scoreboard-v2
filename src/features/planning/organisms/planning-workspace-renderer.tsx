@@ -7,6 +7,7 @@ import { DecisionLogOverview } from "@/features/decisions/organisms/decision-log
 import { ExecutionLayerOverview } from "@/features/execution/organisms/execution-layer-overview";
 import { MeetingFinderOverview } from "@/features/meetings/organisms/meeting-finder-overview";
 import { ProjectsOverview } from "@/features/projects/organisms/projects-overview";
+import { ProfileSettingsOverview } from "@/features/profile/organisms/profile-settings-overview";
 import { ReviewWorkspaceOverview } from "@/features/reviews/organisms/review-workspace-overview";
 import { SettingsOverview } from "@/features/settings/organisms/settings-overview";
 import { SprintScoreTableOverview } from "@/features/sprint/organisms/sprint-score-overview";
@@ -38,7 +39,9 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     dispatchNotifications,
     editDecision,
     eventMessage,
+    expandedPackages,
     feedbackMessage,
+    filters,
     focusedReviewTaskId,
     googleChatStatus,
     hygieneAlerts,
@@ -59,6 +62,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     reviewStatusFilter,
     reviewTask,
     saveProfileSettings,
+    saveOwnProfileSettings,
     selectedFeedbackId,
     sendGoogleChatTest,
     setData,
@@ -82,6 +86,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateSprintCommitment,
     updateTask,
     upsertFocusItem,
+    view,
     workspace,
   } = controller;
 
@@ -177,8 +182,23 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           tasks={data.tasks}
           pending={isPending}
           canManageTeam={source === "seed" || currentProfile?.platformRole === "ceo"}
-          currentProfileId={currentProfile?.id || ""}
           onSaveProfileSettings={saveProfileSettings}
+        />
+      )}
+      {workspace === "profile" && (
+        <ProfileSettingsOverview
+          data={data}
+          currentProfile={currentProfile}
+          expandedPackages={expandedPackages}
+          filters={filters}
+          pending={isPending}
+          source={source}
+          view={view}
+          workspace={workspace}
+          onCreateAvailability={createAvailability}
+          onUpdateAvailability={updateAvailability}
+          onDeleteAvailability={deleteAvailability}
+          onSaveOwnProfileSettings={saveOwnProfileSettings}
         />
       )}
       {workspace === "sprint" && (

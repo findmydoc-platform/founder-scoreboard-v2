@@ -1,5 +1,5 @@
-import type { Milestone, Package, Profile } from "./types";
-import type { DbMilestone, DbPackage, DbProfile } from "./planning-data-row-types";
+import type { Milestone, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ViewMode } from "./types";
+import type { DbMilestone, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-data-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
   volkan: "#22c55e",
@@ -11,6 +11,36 @@ const fallbackProfileColors: Record<string, string> = {
 
 function profileColor(id: string, value?: string | null) {
   return value || fallbackProfileColors[id] || "#64748b";
+}
+
+const defaultPlanningFilters: PlanningFilterPreferences = {
+  query: "",
+  owner: "Alle",
+  status: "Alle",
+  priority: "Alle",
+  packageId: "Alle",
+  quick: "",
+};
+
+function filterString(value: unknown, fallback: string) {
+  return typeof value === "string" ? value : fallback;
+}
+
+function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
+  if (!value || typeof value !== "object") return defaultPlanningFilters;
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
+  return {
+    query: filterString(candidate.query, defaultPlanningFilters.query),
+    owner: filterString(candidate.owner, defaultPlanningFilters.owner),
+    status: filterString(candidate.status, defaultPlanningFilters.status),
+    priority: filterString(candidate.priority, defaultPlanningFilters.priority),
+    packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),
+    quick: filterString(candidate.quick, defaultPlanningFilters.quick),
+  };
+}
+
+function mapViewMode(value: unknown): ViewMode {
+  return value === "structure" || value === "table" || value === "gantt" ? value : "board";
 }
 
 export function mapProfile(row: DbProfile): Profile {
@@ -33,6 +63,26 @@ export function mapProfile(row: DbProfile): Profile {
     googleCalendarEmail: row.google_calendar_email || "",
     googleCalendarSyncEnabled: Boolean(row.google_calendar_sync_enabled),
     googleCalendarLastSyncedAt: row.google_calendar_last_synced_at || "",
+  };
+}
+
+export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPreference {
+  return {
+    profileId: row.profile_id,
+    defaultWorkspace: row.default_workspace || "planning",
+    defaultTaskView: mapViewMode(row.default_task_view),
+    planningFilters: mapPlanningFilters(row.planning_filters),
+    expandedPackageIds: row.expanded_package_ids || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapProfileFeatureTourAcknowledgement(row: DbProfileFeatureTourAcknowledgement): ProfileFeatureTourAcknowledgement {
+  return {
+    profileId: row.profile_id,
+    tourId: row.tour_id,
+    seenAt: row.seen_at,
   };
 }
 

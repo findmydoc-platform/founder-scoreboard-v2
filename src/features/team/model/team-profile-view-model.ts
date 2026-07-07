@@ -1,45 +1,33 @@
-import { googleChatDigestEventTypes } from "@/lib/notification-policy";
-export { profileColor } from "@/lib/profile-style";
-import type { PlanningData, PlatformRole, Profile } from "@/lib/types";
+import { formatDate } from "@/lib/display";
+import { taskBelongsToProfile } from "@/lib/platform";
+import { normalizeStatus } from "@/lib/status";
+import type { PlatformRole, Profile, Task } from "@/lib/types";
 
 export const platformRoleOptions: PlatformRole[] = ["ceo", "founder", "deputy", "viewer"];
-
-export const profileColorOptions = [
-  { value: "#22c55e", label: "Mint" },
-  { value: "#3b82f6", label: "Blau" },
-  { value: "#f59e0b", label: "Gelb" },
-  { value: "#8b5cf6", label: "Lila" },
-  { value: "#ec4899", label: "Pink" },
-  { value: "#14b8a6", label: "Türkis" },
-  { value: "#ef4444", label: "Rot" },
-  { value: "#64748b", label: "Schiefer" },
-];
 
 export const profileDraftFields: Array<keyof Profile> = [
   "platformRole",
   "orgRole",
   "githubLogin",
-  "googleChatUserId",
-  "googleChatDmSpace",
-  "notificationsEnabled",
-  "googleCalendarSyncEnabled",
-  "googleCalendarEmail",
-  "focus",
-  "color",
   "weeklyCapacity",
   "deputyFor",
   "deputyActiveFrom",
   "deputyActiveUntil",
 ];
 
-export type ProfileCardDraft = {
-  profile: Partial<Profile>;
-  notificationEvents: Record<string, boolean>;
+export type TeamProfileDraft = Partial<Pick<Profile, (typeof profileDraftFields)[number]>>;
+
+export type TeamMemberStats = {
+  highPriorityTasks: number;
+  loadHours: number;
+  openTasks: number;
 };
 
-export function eventEnabled(data: PlanningData, profileId: string, eventType: string) {
-  const preference = data.notificationPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
-  return preference?.enabled !== false;
+export function roleOptionLabel(role: PlatformRole) {
+  if (role === "ceo") return "CEO";
+  if (role === "founder") return "Founder";
+  if (role === "deputy") return "Deputy";
+  return "Viewer";
 }
 
 export function sameProfileValue(left: unknown, right: unknown) {
@@ -55,11 +43,24 @@ export function activeDeputyProfiles(profiles: Profile[], today: string) {
   });
 }
 
-export function profileHasDraftChanges(data: PlanningData, profile: Profile, draft?: ProfileCardDraft) {
+export function profileHasDraftChanges(profile: Profile, draft?: TeamProfileDraft) {
   if (!draft) return false;
-  const profileDirty = profileDraftFields.some((field) => field in draft.profile && !sameProfileValue(draft.profile[field], profile[field]));
-  const eventsDirty = googleChatDigestEventTypes.some((eventType) =>
-    eventType in draft.notificationEvents && draft.notificationEvents[eventType] !== eventEnabled(data, profile.id, eventType)
-  );
-  return profileDirty || eventsDirty;
+  return profileDraftFields.some((field) => field in draft && !sameProfileValue(draft[field], profile[field]));
+}
+
+export function teamMemberStats(tasks: Task[], profile: Profile): TeamMemberStats {
+  const ownedTasks = tasks.filter((task) => taskBelongsToProfile(task, profile));
+  const openTasks = ownedTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
+  return {
+    highPriorityTasks: openTasks.filter((task) => ["P0", "P1"].includes(task.priority)).length,
+    loadHours: ownedTasks.reduce((sum, task) => sum + task.hours, 0),
+    openTasks: openTasks.length,
+  };
+}
+
+export function deputyLabel(profile: Profile, profiles: Profile[]) {
+  if (profile.platformRole !== "deputy" || !profile.deputyFor) return "";
+  const represented = profiles.find((item) => item.id === profile.deputyFor);
+  const representedName = represented?.name || profile.deputyFor;
+  return profile.deputyActiveUntil ? `Vertritt ${representedName} bis ${formatDate(profile.deputyActiveUntil)}` : `Vertritt ${representedName}`;
 }

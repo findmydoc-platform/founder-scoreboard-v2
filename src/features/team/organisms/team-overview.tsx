@@ -1,368 +1,79 @@
 "use client";
 
-import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
-import { CustomSelect } from "@/shared/atoms/custom-select";
+import { useTeamProfileDialog } from "@/features/team/hooks/use-team-profile-dialog";
 import { useTeamProfileDrafts } from "@/features/team/hooks/use-team-profile-drafts";
-import { activeDeputyProfiles, platformRoleOptions, profileColor, profileColorOptions } from "@/features/team/model/team-profile-view-model";
-import { formatDate } from "@/lib/display";
-import { googleChatDigestEventTypes, notificationEventLabel } from "@/lib/notification-policy";
-import { roleLabel, taskBelongsToProfile } from "@/lib/platform";
-import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, PlatformRole, Profile, Task } from "@/lib/types";
-import { UiBadge, UiButton, UiField, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { TeamMemberCard } from "@/features/team/molecules/team-member-card";
+import { TeamRoleSummary } from "@/features/team/molecules/team-role-summary";
+import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile-view-model";
+import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
+import type { PlanningData, Profile, Task } from "@/lib/types";
 
 export function TeamOverview({
   data,
   tasks,
   pending,
   canManageTeam,
-  currentProfileId,
   onSaveProfileSettings,
 }: {
   data: PlanningData;
   tasks: Task[];
   pending: boolean;
   canManageTeam: boolean;
-  currentProfileId: string;
-  onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, notificationEvents: Record<string, boolean>) => Promise<void>;
+  onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, eventPatch: Record<string, boolean>) => Promise<void>;
 }) {
+  const { closeProfileDialog, editingProfile, openProfileDialog } = useTeamProfileDialog(data.profiles);
   const {
-    draftEventEnabled,
     draftFor,
     isProfileDirty,
     profileSaveMessage,
     resetProfileDraft,
     saveProfileDraft,
     savingProfileId,
-    setNotificationDraft,
     setProfileDraft,
-  } = useTeamProfileDrafts({ data, onSaveProfileSettings });
+  } = useTeamProfileDrafts({ onSaveProfileSettings });
   const today = new Date().toISOString().slice(0, 10);
-  const activeDeputies = activeDeputyProfiles(data.profiles, today);
+  const editingDraftProfile = editingProfile ? draftFor(editingProfile) : null;
+  const editingDirty = editingProfile ? isProfileDirty(editingProfile) : false;
+  const editingSaving = Boolean(editingProfile && savingProfileId === editingProfile.id);
+
+  const saveDialog = async () => {
+    if (!editingProfile) return;
+    await saveProfileDraft(editingProfile);
+    closeProfileDialog();
+  };
 
   return (
     <div className="grid gap-4">
-      <UiPanel>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">Rollen & Vertretung</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              CEO verwaltet Rollen, Kapazitäten und Vertretungen. Integrationen bleiben bei Bedarf pro Profil erreichbar.
-            </p>
-          </div>
-          <UiBadge tone={canManageTeam ? "emerald" : "slate"} size="md">
-            {canManageTeam ? "CEO-Bearbeitung aktiv" : "Nur Ansicht"}
-          </UiBadge>
-        </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {platformRoleOptions.map((role) => {
-            const count = data.profiles.filter((profile) => profile.platformRole === role).length;
-            return (
-              <div key={role} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                <div className="text-xs font-semibold text-slate-500">{role === "ceo" ? "CEO" : role === "founder" ? "Founder" : role === "deputy" ? "Deputy" : "Viewer"}</div>
-                <div className="mt-1 text-lg font-semibold text-slate-950">{count}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
-          {activeDeputies.length ? (
-            activeDeputies.map((profile) => {
-              const represented = data.profiles.find((item) => item.id === profile.deputyFor);
-              return (
-                <div key={profile.id}>
-                  <span className="font-semibold text-slate-800">{profile.name}</span> vertritt {represented?.name || profile.deputyFor} {profile.deputyActiveUntil ? `bis ${formatDate(profile.deputyActiveUntil)}` : "ohne Enddatum"}.
-                </div>
-              );
-            })
-          ) : (
-            "Aktuell ist keine aktive Deputy-Vertretung gesetzt."
-          )}
-        </div>
-      </UiPanel>
+      <TeamRoleSummary profiles={data.profiles} today={today} />
 
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-      {data.profiles.map((profile) => {
-        const draftProfile = draftFor(profile);
-        const ownedTasks = tasks.filter((task) => taskBelongsToProfile(task, profile));
-        const openTasks = ownedTasks.filter((task) => normalizeStatus(task.status) !== "Erledigt");
-        const highPriority = ownedTasks.filter((task) => ["P0", "P1"].includes(task.priority));
-        const load = ownedTasks.reduce((sum, task) => sum + task.hours, 0);
-        const isDeputy = draftProfile.platformRole === "deputy";
-        const canEditProfile = canManageTeam;
-        const canEditNotificationEvents = canManageTeam || currentProfileId === profile.id;
-        const enabledPreferenceCount = googleChatDigestEventTypes.filter((eventType) => draftEventEnabled(profile.id, eventType)).length;
-        const dirty = isProfileDirty(profile);
-        const saving = savingProfileId === profile.id;
-        return (
-          <UiPanel key={profile.id} as="article">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: profileColor(draftProfile) }} />
-                  <h2 className="text-base font-semibold text-slate-950">{draftProfile.name}</h2>
-                </div>
-                <p className="mt-1 text-sm leading-5 text-slate-500">{draftProfile.focus || "Kein Fokus hinterlegt."}</p>
-                <p className="mt-1 text-xs text-slate-500">{draftProfile.githubLogin ? `@${draftProfile.githubLogin}` : "Nicht verbunden"}</p>
-              </div>
-              <UiBadge tone="white">{roleLabel(draftProfile)}</UiBadge>
-            </div>
-            <div className="mt-4 grid grid-cols-4 gap-2 text-sm">
-              <div className="rounded-md bg-slate-50 p-2">
-                <div className="text-xs text-slate-500">Offen</div>
-                <div className="font-semibold text-slate-900">{openTasks.length}</div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-2">
-                <div className="text-xs text-slate-500">Hoch</div>
-                <div className="font-semibold text-slate-900">{highPriority.length}</div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-2">
-                <div className="text-xs text-slate-500">Last</div>
-                <div className="font-semibold text-slate-900">{load}h</div>
-              </div>
-              <div className="rounded-md bg-slate-50 p-2">
-                <div className="text-xs text-slate-500">Kap.</div>
-                <div className="font-semibold text-slate-900">{draftProfile.weeklyCapacity}h</div>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
-                <span className={`text-xs font-semibold ${dirty ? "text-amber-700" : "text-slate-500"}`}>
-                  {dirty ? "Ungespeicherte Änderungen" : "Keine Änderungen"}
-                </span>
-                <div className="flex gap-2">
-                  <UiButton
-                    type="button"
-                    disabled={!dirty || saving}
-                    onClick={() => resetProfileDraft(profile.id)}
-                    size="sm"
-                  >
-                    Zurücksetzen
-                  </UiButton>
-                  <UiButton
-                    type="button"
-                    disabled={!dirty || saving || pending}
-                    onClick={() => void saveProfileDraft(profile)}
-                    size="sm"
-                    variant="primary"
-                  >
-                    {saving ? "Speichert..." : "Speichern"}
-                  </UiButton>
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <UiField>
-                  Plattformrolle
-                  <CustomSelect
-                    value={draftProfile.platformRole}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(value) => {
-                      const platformRole = value as PlatformRole;
-                      setProfileDraft(profile.id, {
-                        platformRole,
-                        orgRole: platformRole === "ceo" ? "CEO" : platformRole === "founder" ? "Founder" : platformRole === "deputy" ? "Deputy" : "Viewer",
-                        deputyFor: platformRole === "deputy" ? draftProfile.deputyFor || data.profiles.find((item) => item.platformRole === "ceo")?.id || "" : "",
-                        deputyActiveFrom: platformRole === "deputy" ? draftProfile.deputyActiveFrom : "",
-                        deputyActiveUntil: platformRole === "deputy" ? draftProfile.deputyActiveUntil : "",
-                      });
-                    }}
-                    className="h-9 text-sm"
-                    options={platformRoleOptions.map((role) => ({ value: role, label: role === "ceo" ? "CEO" : role === "founder" ? "Founder" : role === "deputy" ? "Deputy" : "Viewer" }))}
-                  />
-                </UiField>
-                <UiField>
-                  Org-Rolle
-                  <UiTextInput
-                    value={draftProfile.orgRole}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(event) => setProfileDraft(profile.id, { orgRole: event.target.value })}
-                    textTone="muted"
-                  />
-                </UiField>
-              </div>
-              <details className="rounded-md border border-slate-200 bg-white p-3">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                  Externe Verbindungen bearbeiten
-                  <span className="ml-2 font-normal text-slate-500">Profil, Hinweise, Kalender</span>
-                </summary>
-                <div className="mt-3 grid gap-3">
-                  <UiField>
-                    Externes Profil
-                    <UiTextInput
-                      value={draftProfile.githubLogin}
-                      disabled={saving || pending || !canEditProfile}
-                      onChange={(event) => setProfileDraft(profile.id, { githubLogin: event.target.value })}
-                      textTone="muted"
-                      placeholder="Profilname"
-                    />
-                  </UiField>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <UiField>
-                      Chat-Konto
-                      <UiTextInput
-                        value={draftProfile.googleChatUserId || ""}
-                        disabled={saving || pending || !canEditProfile}
-                        onChange={(event) => setProfileDraft(profile.id, { googleChatUserId: event.target.value })}
-                        textTone="muted"
-                        placeholder="optional"
-                      />
-                    </UiField>
-                    <UiField>
-                      Persönliche Chat-Zustellung
-                      <UiTextInput
-                        value={draftProfile.googleChatDmSpace || ""}
-                        disabled={saving || pending || !canEditProfile}
-                        onChange={(event) => setProfileDraft(profile.id, { googleChatDmSpace: event.target.value })}
-                        textTone="muted"
-                        placeholder="optional"
-                      />
-                    </UiField>
-                  </div>
-                  <label className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                    <span>
-                      Google-Chat-Benachrichtigungen
-                      <span className="mt-0.5 block text-[11px] font-normal text-slate-500">Deaktiviert Hinweise außerhalb der App für dieses Profil.</span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={draftProfile.notificationsEnabled !== false}
-                      disabled={saving || pending || !canEditProfile}
-                      onChange={(event) => setProfileDraft(profile.id, { notificationsEnabled: event.target.checked })}
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600 disabled:opacity-60"
-                    />
-                  </label>
-                  <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-semibold text-blue-900">Kalenderverbindung</div>
-                        <p className="mt-0.5 text-[11px] leading-4 text-blue-700">Kalendertermine werden bei freien Slots berücksichtigt.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draftProfile.googleCalendarSyncEnabled)}
-                        disabled={saving || pending || !canEditProfile || !draftProfile.googleCalendarEmail}
-                        onChange={(event) => setProfileDraft(profile.id, { googleCalendarSyncEnabled: event.target.checked })}
-                        className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600 disabled:opacity-60"
-                        aria-label="Kalenderverbindung aktivieren"
-                      />
-                    </div>
-                    <UiField className="mt-3 text-blue-900">
-                      Kalender-E-Mail
-                      <UiTextInput
-                        value={draftProfile.googleCalendarEmail || ""}
-                        disabled={saving || pending || !canEditProfile}
-                        onChange={(event) => setProfileDraft(profile.id, { googleCalendarEmail: event.target.value })}
-                        borderTone="info"
-                        textTone="muted"
-                        placeholder="name@findmydoc.eu"
-                      />
-                    </UiField>
-                    <p className="mt-2 text-[11px] leading-4 text-blue-700">
-                      Zuletzt aktualisiert: {draftProfile.googleCalendarLastSyncedAt ? formatDate(draftProfile.googleCalendarLastSyncedAt) : "noch nicht aktualisiert"}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-white p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-xs font-semibold text-slate-700">Chat-Hinweise</div>
-                        <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Profil entscheidet, welche Hinweise es außerhalb der App bekommen soll.</p>
-                      </div>
-                      <UiBadge size="xs">{enabledPreferenceCount}/{googleChatDigestEventTypes.length}</UiBadge>
-                    </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {googleChatDigestEventTypes.map((eventType) => {
-                        const enabled = draftEventEnabled(profile.id, eventType);
-                        return (
-                          <label key={eventType} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600">
-                            <span className="min-w-0 truncate">{notificationEventLabel(eventType)}</span>
-                            <input
-                              type="checkbox"
-                              checked={enabled}
-                              disabled={saving || pending || draftProfile.notificationsEnabled === false || !canEditNotificationEvents}
-                              onChange={(event) => setNotificationDraft(profile.id, eventType, event.target.checked)}
-                              className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 disabled:opacity-60"
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </details>
-              <UiField>
-                Fokus
-                <UiTextArea
-                  value={draftProfile.focus || ""}
-                  disabled={saving || pending || !canEditProfile}
-                  onChange={(event) => setProfileDraft(profile.id, { focus: event.target.value })}
-                  textTone="muted"
-                />
-              </UiField>
-              <div className="grid gap-2">
-                <div className="text-xs font-semibold text-slate-500">Post-it-Farbe</div>
-                <div className="flex flex-wrap gap-2">
-                  {profileColorOptions.map((color) => {
-                    const active = profileColor(draftProfile).toLowerCase() === color.value.toLowerCase();
-                    return (
-                      <button
-                        key={color.value}
-                        type="button"
-                        disabled={saving || pending || !canEditProfile}
-                        onClick={() => setProfileDraft(profile.id, { color: color.value })}
-                        className={`grid h-8 w-8 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-60 ${active ? "border-slate-900 ring-2 ring-slate-200" : "border-slate-200 hover:border-slate-400"}`}
-                        title={color.label}
-                        aria-label={`${color.label} als Post-it-Farbe wählen`}
-                      >
-                        <span className="h-5 w-5 rounded-sm" style={{ backgroundColor: color.value }} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <UiField>
-                  Kapazität
-                  <UiTextInput
-                    type="number"
-                    min={0}
-                    max={80}
-                    value={draftProfile.weeklyCapacity}
-                    disabled={saving || pending || !canEditProfile}
-                    onChange={(event) => setProfileDraft(profile.id, { weeklyCapacity: Number(event.target.value) })}
-                    textTone="muted"
-                  />
-                </UiField>
-                <UiField>
-                  Vertreter für
-                  <CustomSelect
-                    value={draftProfile.deputyFor || ""}
-                    disabled={saving || pending || !isDeputy || !canEditProfile}
-                    onChange={(value) => setProfileDraft(profile.id, { deputyFor: value })}
-                    className="h-9 text-sm"
-                    options={[{ value: "", label: "Keine Vertretung" }, ...data.profiles.filter((item) => item.platformRole === "ceo" || item.id === draftProfile.deputyFor).map((item) => ({ value: item.id, label: item.name }))]}
-                  />
-                </UiField>
-                <div className="grid grid-cols-2 gap-2">
-                  <UiField>
-                    Von
-                    <CustomDatePicker value={draftProfile.deputyActiveFrom || ""} disabled={saving || pending || !isDeputy || !canEditProfile} onChange={(value) => setProfileDraft(profile.id, { deputyActiveFrom: value })} className="h-9 text-sm" />
-                  </UiField>
-                  <UiField>
-                    Bis
-                    <CustomDatePicker value={draftProfile.deputyActiveUntil || ""} disabled={saving || pending || !isDeputy || !canEditProfile} onChange={(value) => setProfileDraft(profile.id, { deputyActiveUntil: value })} className="h-9 text-sm" />
-                  </UiField>
-                </div>
-              </div>
-              <p className="text-xs leading-5 text-slate-500">
-                Rollen und Stammdaten sind CEO-geschützt. Integrationsdetails bleiben in der aufgeklappten Bearbeitung.
-              </p>
-            </div>
-          </UiPanel>
-        );
-      })}
+      <div className="grid gap-2">
+        {data.profiles.map((profile) => (
+          <TeamMemberCard
+            key={profile.id}
+            canManageTeam={canManageTeam}
+            deputyText={deputyLabel(profile, data.profiles)}
+            profile={profile}
+            stats={teamMemberStats(tasks, profile)}
+            onEdit={() => openProfileDialog(profile.id)}
+          />
+        ))}
       </div>
       {profileSaveMessage && (
         <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">{profileSaveMessage}</div>
+      )}
+      {editingDraftProfile && (
+        <TeamProfileEditDialog
+          canManageTeam={canManageTeam}
+          dirty={editingDirty}
+          draftProfile={editingDraftProfile}
+          pending={pending}
+          profiles={data.profiles}
+          saving={editingSaving}
+          onClose={closeProfileDialog}
+          onPatch={(patch) => setProfileDraft(editingDraftProfile.id, patch)}
+          onReset={() => resetProfileDraft(editingDraftProfile.id)}
+          onSave={saveDialog}
+        />
       )}
     </div>
   );

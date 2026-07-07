@@ -64,6 +64,8 @@ const result = {
   decisionTaskLinks: await count("decision_task_links"),
   notifications: await count("notification_events"),
   notificationDeliveries: await count("notification_deliveries"),
+  profileUiPreferences: await count("profile_ui_preferences"),
+  profileFeatureTourAcknowledgements: await count("profile_feature_tour_acknowledgements"),
   meetings: await count("meetings"),
   meetingAttendance: await count("meeting_attendance"),
   events: await count("founder_events"),

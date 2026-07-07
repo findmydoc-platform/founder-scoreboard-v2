@@ -325,6 +325,31 @@ export type NotificationPreference = {
   enabled: boolean;
 };
 
+export type PlanningFilterPreferences = {
+  query: string;
+  owner: string;
+  status: string;
+  priority: string;
+  packageId: string;
+  quick: string;
+};
+
+export type ProfileUiPreference = {
+  profileId: string;
+  defaultWorkspace: string;
+  defaultTaskView: ViewMode;
+  planningFilters: PlanningFilterPreferences;
+  expandedPackageIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProfileFeatureTourAcknowledgement = {
+  profileId: string;
+  tourId: string;
+  seenAt: string;
+};
+
 export type FeedbackItem = {
   id: number;
   type: "bug" | "feature";
@@ -464,6 +489,8 @@ export type PlanningData = {
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];
   notificationPreferences: NotificationPreference[];
+  profileUiPreferences: ProfileUiPreference[];
+  profileFeatureTourAcknowledgements: ProfileFeatureTourAcknowledgement[];
   feedbackItems: FeedbackItem[];
   fmdTools: FmdTool[];
   events: FounderEvent[];

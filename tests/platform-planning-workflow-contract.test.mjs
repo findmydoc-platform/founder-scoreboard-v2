@@ -64,13 +64,14 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
     {
       label: "team overview shell",
       path: "src/features/team/organisms/team-overview.tsx",
-      matches: [/useTeamProfileDrafts/],
+      matches: [/useTeamProfileDrafts/, /useTeamProfileDialog/, /TeamMemberCard/, /TeamProfileEditDialog/],
       excludes: [/useState|setDrafts|profileDraftFields|sameProfileValue/],
     },
     {
       label: "team profile draft hook",
       path: "src/features/team/hooks/use-team-profile-drafts.ts",
-      matches: [/onSaveProfileSettings/, /setNotificationDraft/],
+      matches: [/onSaveProfileSettings/, /saveProfileDraft/],
+      excludes: [/setNotificationDraft|draftEventEnabled|notificationEvents/],
     },
     {
       label: "team profile view model",
@@ -662,6 +663,9 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const ui = await readPlanningSurface();
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
+  const teamCard = await readFile("src/features/team/molecules/team-member-card.tsx", "utf8");
+  const teamSummary = await readFile("src/features/team/molecules/team-role-summary.tsx", "utf8");
+  const teamDialog = await readFile("src/features/team/organisms/team-profile-edit-dialog.tsx", "utf8");
   const teamModel = await readFile("src/features/team/model/team-profile-view-model.ts", "utf8");
 
   assert.match(route, /requireCEO/);
@@ -680,43 +684,77 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(data, /google_calendar_last_synced_at/);
   assert.match(ui, /TeamOverview/);
   assert.match(teamUi, /useTeamProfileDrafts/);
-  assert.match(teamModel, /profileColorOptions/);
-  assert.match(teamUi, /Post-it-Farbe/);
-  assert.match(teamUi, /Chat-Konto/);
-  assert.match(teamUi, /Persönliche Chat-Zustellung/);
-  assert.match(teamUi, /Google-Chat-Benachrichtigungen/);
-  assert.match(teamUi, /Kalender-E-Mail/);
-  assert.match(teamUi, /CEO-Bearbeitung aktiv/);
-  assert.match(teamUi, /Nur Ansicht/);
+  assert.match(teamUi, /TeamProfileEditDialog/);
+  assert.match(teamUi, /TeamMemberCard/);
+  assert.doesNotMatch(teamUi, /lg:grid-cols-2/);
+  assert.doesNotMatch(teamUi, /xl:grid-cols-3/);
+  assert.match(teamModel, /profileDraftFields/);
+  assert.match(teamModel, /teamMemberStats/);
+  assert.doesNotMatch(teamCard, /Post-it-Farbe/);
+  assert.doesNotMatch(teamCard, /profileColor/);
+  assert.doesNotMatch(teamCard, /GitHub-Login/);
+  assert.doesNotMatch(teamCard, /Chat-Konto/);
+  assert.doesNotMatch(teamCard, /Persönliche Chat-Zustellung/);
+  assert.doesNotMatch(teamCard, /Google-Chat-Benachrichtigungen/);
+  assert.doesNotMatch(teamCard, /Kalender-E-Mail/);
+  assert.match(teamCard, /Bearbeiten/);
+  assert.match(teamCard, /Offene Aufgaben/);
+  assert.match(teamCard, /P0\/P1 offen/);
+  assert.match(teamCard, /Geplante Last/);
+  assert.match(teamCard, /Wochenkapazität/);
+  assert.match(teamCard, /Info/);
+  assert.match(teamCard, /title=\{definition\.description\}/);
+  assert.match(teamCard, /aria-label=\{definition\.description\}/);
+  assert.doesNotMatch(teamCard, /role="tooltip"/);
+  assert.match(teamCard, /lg:flex-nowrap/);
+  assert.match(teamCard, /gap-x-6/);
+  assert.match(teamCard, /lg:grid-cols-\[minmax\(220px,0\.8fr\)_minmax\(520px,2fr\)_auto\]/);
+  assert.match(teamSummary, /CEO · \{profile\.name\}/);
+  assert.doesNotMatch(teamSummary, /CEO-Bearbeitung aktiv/);
+  assert.doesNotMatch(teamSummary, /Nur Ansicht/);
   assert.match(teamUi, /canManageTeam/);
-  assert.match(teamUi, /Aktuell ist keine aktive Deputy-Vertretung gesetzt/);
-  assert.match(teamUi, /Rollen und Stammdaten sind CEO-geschützt/);
+  assert.match(teamSummary, /Aktuell ist keine aktive Deputy-Vertretung gesetzt/);
+  assert.match(teamDialog, /if \(!canManageTeam\) return null/);
+  assert.match(teamDialog, /Plattformrolle/);
+  assert.match(teamDialog, /Org-Rolle/);
+  assert.match(teamDialog, /GitHub-Login/);
+  assert.match(teamDialog, /Kapazität/);
+  assert.match(teamDialog, /Vertreter für/);
+  assert.match(teamDialog, /Von/);
+  assert.match(teamDialog, /Bis/);
+  assert.match(teamDialog, /draftProfile\.platformRole === "deputy"/);
+  assert.match(teamDialog, /CEO-Verwaltung für Rolle, Kapazität, GitHub-Zuordnung und Vertretung/);
 });
 
 test("notification preferences are editable per profile and event type", async () => {
   const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
+  const selfRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
-  const teamDraftHook = await readFile("src/features/team/hooks/use-team-profile-drafts.ts", "utf8");
+  const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
+  const profileNotifications = await readFile("src/features/profile/molecules/profile-notification-section.tsx", "utf8");
+  const ownProfileCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(route, /requireFounder/);
+  assert.match(selfRoute, /requireTeamMember/);
   assert.match(route, /notification_preferences/);
+  assert.match(selfRoute, /notification_preferences/);
   assert.match(route, /allowedEventTypes/);
+  assert.match(selfRoute, /allowedEventTypes/);
   assert.match(route, /Keine Berechtigung für diese Benachrichtigungseinstellung/);
   assert.match(route, /notification_preference\.update/);
   assert.match(data, /notificationPreferenceResult/);
   assert.match(dataMappers, /mapNotificationPreference/);
   assert.match(types, /export type NotificationPreference/);
-  assert.match(teamUi, /Chat-Hinweise/);
-  assert.match(teamUi, /onSaveProfileSettings/);
-  assert.match(teamUi, /Ungespeicherte Änderungen/);
-  assert.match(teamUi, /Speichern/);
-  assert.match(teamUi, /notificationEventLabel/);
-  assert.match(teamDraftHook, /setNotificationDraft/);
-  assert.match(teamDraftHook, /Profil konnte nicht gespeichert werden/);
+  assert.match(profileNotifications, /Benachrichtigungen/);
+  assert.match(profileUi, /onSaveOwnProfileSettings/);
+  assert.match(profileUi, /Ungespeicherte Änderungen/);
+  assert.match(profileUi, /data-profile-save-bar/);
+  assert.match(profileNotifications, /notificationEventLabel/);
+  assert.match(ownProfileCommands, /notificationEvents/);
+  assert.match(ownProfileCommands, /Profil konnte nicht gespeichert werden/);
   assert.match(policy, /GoogleChatDigestEventType/);
   assert.match(policy, /Review angefragt/);
 });

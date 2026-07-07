@@ -1,7 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { Users } from "lucide-react";
+import { Settings, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 function getUserMetadataString(user: User | null, key: string) {
@@ -15,6 +15,7 @@ export function AuthControl({
   busy,
   onSignIn,
   onSignOut,
+  onOpenProfile,
   variant = "header",
 }: {
   user: User | null;
@@ -22,6 +23,7 @@ export function AuthControl({
   busy: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
+  onOpenProfile?: () => void;
   variant?: "header" | "gate";
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,12 @@ export function AuthControl({
     window.addEventListener("pointerdown", closeOnOutside);
     return () => window.removeEventListener("pointerdown", closeOnOutside);
   }, [open]);
+
+  useEffect(() => {
+    const openAccountMenu = () => setOpen(true);
+    window.addEventListener("fmd:open-account-menu", openAccountMenu);
+    return () => window.removeEventListener("fmd:open-account-menu", openAccountMenu);
+  }, []);
 
   if (!user) {
     return (
@@ -103,6 +111,7 @@ export function AuthControl({
           if (event.key === "Escape") setOpen(false);
         }}
         aria-label="Account-Menü öffnen"
+        data-tour-id="account-menu-trigger"
         className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white p-0.5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
       >
         {avatarUrl ? (
@@ -141,6 +150,18 @@ export function AuthControl({
                 {user.email && <div className="truncate text-xs text-slate-500">{user.email}</div>}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenProfile?.();
+              }}
+              data-tour-id="profile-menu-link"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <Settings size={16} />
+              Mein Profil
+            </button>
             <button
               type="button"
               onClick={onSignOut}

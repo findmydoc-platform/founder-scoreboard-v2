@@ -20,6 +20,7 @@ type MeetingBlockerFormFieldsProps = {
   blockerStartTime: string;
   blockerEndTime: string;
   blockerNote: string;
+  showProfileSelect?: boolean;
   profileAriaLabel?: string;
   titlePlaceholder: string;
   titleAriaLabel?: string;
@@ -54,6 +55,7 @@ export function MeetingBlockerFormFields({
   blockerStartTime,
   blockerEndTime,
   blockerNote,
+  showProfileSelect = true,
   profileAriaLabel,
   titlePlaceholder,
   titleAriaLabel,
@@ -76,14 +78,16 @@ export function MeetingBlockerFormFields({
 }: MeetingBlockerFormFieldsProps) {
   return (
     <>
-      <CustomSelect
-        value={normalizedBlockerProfileId}
-        onChange={onBlockerProfileChange}
-        disabled={!canManageAvailability || !profileOptions.length || pending}
-        className="h-9 text-sm"
-        options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]}
-        aria-label={profileAriaLabel}
-      />
+      {showProfileSelect && (
+        <CustomSelect
+          value={normalizedBlockerProfileId}
+          onChange={onBlockerProfileChange}
+          disabled={!canManageAvailability || !profileOptions.length || pending}
+          className="h-9 text-sm"
+          options={profileOptions.length ? profileOptions : [{ value: "", label: "Kein Profil" }]}
+          aria-label={profileAriaLabel}
+        />
+      )}
       <UiTextInput
         value={blockerTitle}
         onChange={(event) => onBlockerTitleChange(event.target.value)}

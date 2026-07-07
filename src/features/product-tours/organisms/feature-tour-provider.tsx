@@ -1,0 +1,147 @@
+"use client";
+
+import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { driver } from "driver.js";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
+import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
+import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import * as planningApi from "@/features/planning/model/planning-api-client";
+import { featureTours, profileSettingsTourId } from "@/features/product-tours/model/feature-tour-registry";
+
+type FeatureTourProviderProps = {
+  apiClient: BrowserApiClient;
+  currentProfile: Profile | null;
+  data: PlanningData;
+  setData: Dispatch<SetStateAction<PlanningData>>;
+  setWorkspace: (workspace: AppWorkspace) => void;
+  source: "seed" | "supabase";
+};
+
+function waitForElement(selector: string, timeoutMs = 8000) {
+  const existing = document.querySelector(selector);
+  if (existing) return Promise.resolve(existing);
+
+  return new Promise<Element | null>((resolve) => {
+    const timeout = window.setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, timeoutMs);
+    const observer = new MutationObserver(() => {
+      const element = document.querySelector(selector);
+      if (!element) return;
+      window.clearTimeout(timeout);
+      observer.disconnect();
+      resolve(element);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+function upsertAcknowledgement(
+  data: PlanningData,
+  acknowledgement: ProfileFeatureTourAcknowledgement,
+) {
+  return {
+    ...data,
+    profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements.some((item) =>
+      item.profileId === acknowledgement.profileId && item.tourId === acknowledgement.tourId
+    )
+      ? data.profileFeatureTourAcknowledgements.map((item) =>
+        item.profileId === acknowledgement.profileId && item.tourId === acknowledgement.tourId ? acknowledgement : item,
+      )
+      : [acknowledgement, ...data.profileFeatureTourAcknowledgements],
+  };
+}
+
+export function FeatureTourProvider({
+  apiClient,
+  currentProfile,
+  data,
+  setData,
+  setWorkspace,
+  source,
+}: FeatureTourProviderProps) {
+  const tour = featureTours.find((item) => item.id === profileSettingsTourId);
+  const hasSeenTour = useMemo(() => {
+    if (!currentProfile || !tour) return true;
+    return data.profileFeatureTourAcknowledgements.some((item) => item.profileId === currentProfile.id && item.tourId === tour.id);
+  }, [currentProfile, data.profileFeatureTourAcknowledgements, tour]);
+  const startedTourRef = useRef("");
+
+  useEffect(() => {
+    if (!tour || !currentProfile || hasSeenTour || startedTourRef.current === tour.id) return;
+    const activeTour = tour;
+    let active = true;
+    let seenMarked = false;
+    startedTourRef.current = activeTour.id;
+
+    const markSeen = async () => {
+      if (seenMarked || !active) return;
+      seenMarked = true;
+      if (source !== "supabase") {
+        setData((current) => upsertAcknowledgement(current, {
+          profileId: currentProfile.id,
+          tourId: activeTour.id,
+          seenAt: new Date().toISOString(),
+        }));
+        return;
+      }
+      const { response, body } = await planningApi.markProfileFeatureTourSeenRequest(apiClient, activeTour.id);
+      if (response.ok && body?.acknowledgement) {
+        setData((current) => upsertAcknowledgement(current, body.acknowledgement!));
+      }
+    };
+
+    async function startTour() {
+      const trigger = await waitForElement(activeTour.requiredSelectors[0]);
+      if (!active || !trigger) {
+        startedTourRef.current = "";
+        return;
+      }
+
+      window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
+      const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
+      if (!active || !menuItem) {
+        startedTourRef.current = "";
+        return;
+      }
+
+      const driverObject = driver({
+        allowClose: true,
+        animate: true,
+        doneBtnText: "Fertig",
+        nextBtnText: "Weiter",
+        prevBtnText: "Zurück",
+        showButtons: ["next", "close"],
+        showProgress: true,
+        stagePadding: 6,
+        stageRadius: 8,
+        steps: activeTour.steps.map((step, index) => ({
+          ...step,
+          popover: {
+            ...step.popover,
+            onPopoverRender: () => {
+              if (index === 0) markSeen().catch(() => undefined);
+            },
+            onDoneClick: (_element, _step, opts) => {
+              opts.driver.destroy();
+              setWorkspace("profile");
+            },
+          },
+        })),
+      });
+
+      driverObject.drive();
+    }
+
+    startTour().catch(() => {
+      startedTourRef.current = "";
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [apiClient, currentProfile, hasSeenTour, setData, setWorkspace, source, tour]);
+
+  return null;
+}

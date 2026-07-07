@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { appNavItems, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { appWorkspaceIds, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 
 const workspaceStateKey = "fmd-planning-workspace-v1";
 
 function workspaceFromValue(value: string | null) {
-  return appNavItems.find((item) => item.id === value)?.id || null;
+  return appWorkspaceIds.find((id) => id === value) || null;
 }
 
 export function usePlanningWorkspace(initialWorkspace: AppWorkspace = "planning") {
   const restoredRef = useRef(false);
+  const [restored, setRestored] = useState(false);
   const [workspace, setWorkspace] = useState<AppWorkspace>(initialWorkspace);
 
   useEffect(() => {
@@ -18,11 +19,14 @@ export function usePlanningWorkspace(initialWorkspace: AppWorkspace = "planning"
     const urlWorkspace = workspaceFromValue(new URLSearchParams(window.location.search).get("workspace"));
     const storedWorkspace = workspaceFromValue(window.localStorage.getItem(workspaceStateKey));
     const nextWorkspace = urlWorkspace || storedWorkspace;
-    if (nextWorkspace) window.queueMicrotask(() => setWorkspace(nextWorkspace));
+    window.queueMicrotask(() => {
+      if (nextWorkspace) setWorkspace(nextWorkspace);
+      setRestored(true);
+    });
   }, []);
 
   useEffect(() => {
-    if (!restoredRef.current) return;
+    if (!restored) return;
 
     window.localStorage.setItem(workspaceStateKey, workspace);
     const url = new URL(window.location.href);
@@ -32,7 +36,7 @@ export function usePlanningWorkspace(initialWorkspace: AppWorkspace = "planning"
       url.searchParams.set("workspace", workspace);
     }
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [workspace]);
+  }, [restored, workspace]);
 
   return { workspace, setWorkspace };
 }

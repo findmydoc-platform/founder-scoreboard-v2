@@ -20,7 +20,8 @@ import Link from "next/link";
 import { forwardRef, useEffect } from "react";
 import { AppBrand } from "@/shared/atoms/app-brand";
 
-export type AppWorkspace = "planning" | "execution" | "mine" | "reviews" | "events" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings" | "ceo-intake";
+export type AppWorkspace = "planning" | "execution" | "mine" | "reviews" | "events" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 export const appNavItems = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/" },
@@ -36,7 +37,10 @@ export const appNavItems = [
   { id: "tools", label: "FMD-Tools", icon: Wrench, href: "/?workspace=tools" },
   { id: "team", label: "Team", icon: Users, href: "/?workspace=team" },
   { id: "settings", label: "Einstellungen", icon: Settings, href: "/?workspace=settings" },
-] satisfies Array<{ id: AppWorkspace; label: string; icon: typeof LayoutDashboard; href: string; ceoOnly?: boolean }>;
+] satisfies Array<{ id: VisibleAppWorkspace; label: string; icon: typeof LayoutDashboard; href: string; ceoOnly?: boolean }>;
+
+export const hiddenWorkspaceIds = ["profile"] as const satisfies readonly AppWorkspace[];
+export const appWorkspaceIds = [...appNavItems.map((item) => item.id), ...hiddenWorkspaceIds] as const satisfies readonly AppWorkspace[];
 
 type AppSidebarProps = {
   activeWorkspace?: AppWorkspace;

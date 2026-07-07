@@ -89,6 +89,10 @@ export function usePlanningBoardState({
     setExpandedPackages(Object.fromEntries(data.packages.map((pack) => [pack.id, !collapsed])));
   };
 
+  const setExpandedPackageIds = (packageIds: string[]) => {
+    setExpandedPackages(Object.fromEntries(packageIds.map((packageId) => [packageId, true])));
+  };
+
   return {
     dragOverStatus,
     draggedTaskId,
@@ -97,6 +101,7 @@ export function usePlanningBoardState({
     expandedPackages,
     setAllPackageCollapse,
     setDragOverStatus,
+    setExpandedPackageIds,
     startTaskDrag,
     togglePackageCollapse,
   };

@@ -389,6 +389,10 @@ test("workspace selection survives page refreshes", async () => {
   assert.match(ui, /usePlanningWorkspace/);
   assert.match(workspaceHook, /workspaceStateKey/);
   assert.match(workspaceHook, /URLSearchParams\(window\.location\.search\)/);
+  assert.match(workspaceHook, /const \[restored, setRestored\] = useState\(false\)/);
+  assert.match(workspaceHook, /if \(!restored\) return/);
+  assert.match(workspaceHook, /setRestored\(true\)/);
+  assert.match(workspaceHook, /window\.queueMicrotask/);
   assert.match(workspaceHook, /window\.localStorage\.setItem\(workspaceStateKey, workspace\)/);
   assert.match(workspaceHook, /url\.searchParams\.set\("workspace", workspace\)/);
 });
@@ -541,6 +545,7 @@ test("local seed state persists task overrides in browser storage", async () => 
   assert.match(localStateHook, /if \(source === "supabase"\) return/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localDataKey\)/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localStateKey\)/);
+  assert.match(localStateHook, /normalizePlanningData\(parsedData \|\| current\)/);
   assert.match(localStateHook, /window\.localStorage\.setItem\(localDataKey, JSON\.stringify\(data\)\)/);
   assert.match(localStateHook, /window\.localStorage\.setItem\(localStateKey, JSON\.stringify\(changedTasks\)\)/);
   assert.match(localStateHook, /setLocalStateLoaded\(true\)/);
