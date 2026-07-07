@@ -34,8 +34,8 @@ Sprint is a time container for Deliverables, not a parent level.
 Run after meaningful changes:
 
 ```bash
-npm test
-npm run verify:hierarchy
-npm run lint
-npm run build
+pnpm test
+pnpm run verify:hierarchy
+pnpm run lint
+pnpm run build
 ```

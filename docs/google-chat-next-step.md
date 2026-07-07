@@ -65,7 +65,7 @@ Noch offen:
 
 1. `GOOGLE_CHAT_WEBHOOK_URL` lokal und später in Deployment-ENV setzen.
 2. `GOOGLE_CHAT_DELIVERY_ENABLED=false` als sicheren Standard beibehalten.
-3. Vor echter Aktivierung `npm run verify:google-chat` ausführen.
+3. Vor echter Aktivierung `pnpm run verify:google-chat` ausführen.
 4. Optional: private DM-Zustellung mit Google Chat App/Bot später ergänzen.
 
 ## Offene Punkte für persönliche DMs

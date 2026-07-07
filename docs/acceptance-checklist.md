@@ -7,13 +7,13 @@ Stand: 2026-05-25
 Diese Checks sollen bewusst mit echter CEO-Session im Browser laufen. Automatische Read-only-Prüfungen laufen über:
 
 ```bash
-npm run verify:supabase
-npm run verify:auth
-npm run verify:operational
-npm run verify:github-sync
-npm test
-npm run lint
-npm run build
+pnpm run verify:supabase
+pnpm run verify:auth
+pnpm run verify:operational
+pnpm run verify:github-sync
+pnpm test
+pnpm run lint
+pnpm run build
 ```
 
 ## Login und Basiszustand
@@ -27,7 +27,7 @@ npm run build
 Erwartung:
 - Datenquelle ist Supabase.
 - Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
-- `npm run verify:supabase` und `npm run verify:auth` bestätigen Schema, Profile und Rollen.
+- `pnpm run verify:supabase` und `pnpm run verify:auth` bestätigen Schema, Profile und Rollen.
 - Navigation zeigt Planung, Sprint & Score, Decision Log, Meeting Finder, Team, Einstellungen.
 
 ## Planung und Task-Erstellung
@@ -107,7 +107,7 @@ Voraussetzung:
 - Der eingeloggte GitHub-User hat die GitHub App einmal über den Header verbunden.
 
 Check:
-1. `npm run verify:github-sync` ausführen.
+1. `pnpm run verify:github-sync` ausführen.
 2. Task öffnen.
 3. Falls die GitHub-App-Verbindung fehlt oder abgelaufen ist, die Verbindung zentral im Header erneuern.
 4. `Jetzt spiegeln` klicken.

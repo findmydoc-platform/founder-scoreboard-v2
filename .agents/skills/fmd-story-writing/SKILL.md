@@ -101,6 +101,6 @@ Before finishing a new or revised story, verify:
 - DoD is not mixed with Acceptance Criteria.
 - Protected stories were not silently rewritten.
 - German visible text uses real UTF-8 umlauts.
-- Persisted German task/story text was checked after DB or GitHub writes. In `fmd-planning`, run `npm run verify:task-utf8` after writing German task content into Supabase.
+- Persisted German task/story text was checked after DB or GitHub writes. In `fmd-planning`, run `pnpm run verify:task-utf8` after writing German task content into Supabase.
 
 For examples, read `references/examples.md` when writing or reviewing a complex story.

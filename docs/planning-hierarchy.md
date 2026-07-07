@@ -42,7 +42,7 @@ Vorgehen:
 
 1. Supabase bleibt führend.
 2. Bestehende GitHub-Issues werden über `scripts/plan-github-issue-linking.mjs` per normalisiertem Titel vorgeschlagen.
-3. Exakte Treffer können mit `npm run plan:github-linking -- --apply` in Supabase verknüpft werden.
+3. Exakte Treffer können mit `pnpm run plan:github-linking -- --apply` in Supabase verknüpft werden.
 4. Danach aktualisiert der normale Task-Sync das bestehende Issue per `PATCH`, statt ein neues Issue zu öffnen.
 5. Unsichere oder mehrdeutige Treffer bleiben unberührt und werden manuell entschieden.
 

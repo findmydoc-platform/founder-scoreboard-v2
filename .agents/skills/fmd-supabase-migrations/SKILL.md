@@ -31,8 +31,8 @@ Codex may create and apply additive Supabase SQL for this project when the task 
 3. Keep migrations idempotent where practical with `if not exists`, `on conflict`, and guarded `do $$` blocks.
 4. Update `supabase/schema.sql` when the baseline schema should reflect the new structure.
 5. Add or update the narrowest verification script or contract test.
-6. Apply SQL with `npm run apply:sql -- supabase/<file>.sql` when credentials and network access are available.
-7. Run the relevant verification command: usually `npm run verify:supabase`, plus `npm run verify:auth` for auth/RLS/grants.
+6. Apply SQL with `pnpm run apply:sql -- supabase/<file>.sql` when credentials and network access are available.
+7. Run the relevant verification command: usually `pnpm run verify:supabase`, plus `pnpm run verify:auth` for auth/RLS/grants.
 
 ## Output
 

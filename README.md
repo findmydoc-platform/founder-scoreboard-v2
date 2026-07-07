@@ -5,7 +5,7 @@ Factro-inspirierte Planungs-App für das interne findmydoc Founder-Board.
 ## Entwicklung
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Die App läuft standardmäßig auf `http://localhost:3000`.
@@ -72,7 +72,7 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 Der sichere Rollout steht in `docs/google-chat-rollout.md`. Der lokale Check läuft mit:
 
 ```bash
-npm run verify:google-chat
+pnpm run verify:google-chat
 ```
 
 ## Supabase prüfen
@@ -80,13 +80,13 @@ npm run verify:google-chat
 Nach dem Eintragen der `.env.local` prüft dieser Befehl, ob die wichtigsten Tabellen erreichbar und befüllt sind:
 
 ```bash
-npm run verify:supabase
+pnpm run verify:supabase
 ```
 
 Die Hierarchie aus Epic / Meilenstein, Group Commitment, Deliverable und Sub-Issue prüft:
 
 ```bash
-npm run verify:hierarchy
+pnpm run verify:hierarchy
 ```
 
 Erwartet werden aktuell 5 Profile, 5 Packages und mindestens die 14 Demo-Tasks aus `src/lib/seed/source.json`.
@@ -94,7 +94,7 @@ Erwartet werden aktuell 5 Profile, 5 Packages und mindestens die 14 Demo-Tasks a
 Die Auth-Zuordnung prüft dieser Befehl:
 
 ```bash
-npm run verify:auth
+pnpm run verify:auth
 ```
 
 Er meldet fehlende GitHub-Logins, fehlende Rollen oder veraltete `auth_user_id`-Verknüpfungen, bevor `REQUIRE_SUPABASE_AUTH=true` aktiviert wird.
@@ -102,13 +102,13 @@ Er meldet fehlende GitHub-Logins, fehlende Rollen oder veraltete `auth_user_id`-
 Der operative Smoke-Test prüft Supabase, Health, Server-Render und Kernmarker der UI:
 
 ```bash
-npm run verify:operational
+pnpm run verify:operational
 ```
 
 Der GitHub-Sync-Check prüft read-only, ob Supabase-Mapping, Sync Queue und App-only-Deliverables sauber erkennbar sind. Echte GitHub-Schreibrechte werden im Browser mit dem eingeloggten GitHub-User geprüft:
 
 ```bash
-npm run verify:github-sync
+pnpm run verify:github-sync
 ```
 
 Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.

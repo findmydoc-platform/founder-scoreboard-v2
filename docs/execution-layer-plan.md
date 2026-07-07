@@ -88,7 +88,7 @@ Nutzen:
 - Supabase-Änderungen nur additiv: neue Tabellen, Spalten, Views, Policies, Grants und Indizes sind erlaubt; keine destruktiven Änderungen ohne explizite Bestätigung.
 - UI-Controls müssen die bestehenden Custom-Komponenten nutzen; keine nativen Selects oder Browser-Datepicker.
 - Deutsche sichtbare Texte müssen echte UTF-8-Umlaute verwenden.
-- Nach Frontend-, API- oder Datenmodelländerungen `npm test`, `npm run lint` und `npm run build` ausführen.
+- Nach Frontend-, API- oder Datenmodelländerungen `pnpm test`, `pnpm run lint` und `pnpm run build` ausführen.
 
 ## Vorgeschlagene Reihenfolge
 

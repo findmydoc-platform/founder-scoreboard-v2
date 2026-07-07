@@ -66,28 +66,35 @@ jobs:
           echo "ready=$ready" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
+      - name: Setup pnpm
+        if: steps.preview_guard.outputs.ready == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+          run_install: false
+
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         if: steps.preview_guard.outputs.ready == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
         if: steps.preview_guard.outputs.ready == 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Pull Vercel Environment Variables for Preview
         if: steps.preview_guard.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        run: pnpm dlx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
       - name: Build Vercel Output
         if: steps.preview_guard.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="$VERCEL_TOKEN"
+        run: pnpm dlx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="$VERCEL_TOKEN"
 
       - name: Deploy Prebuilt Output to Vercel Preview
         if: steps.preview_guard.outputs.ready == 'true'

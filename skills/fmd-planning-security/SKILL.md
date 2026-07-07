@@ -25,16 +25,16 @@ Keep Founder Scoreboard data private to mapped team users and make security-rele
 Run after meaningful security changes:
 
 ```bash
-npm test
-npm run lint
-npm run build
+pnpm test
+pnpm run lint
+pnpm run build
 ```
 
 Run when Supabase setup or auth mapping changes:
 
 ```bash
-npm run verify:auth
-npm run verify:supabase
+pnpm run verify:auth
+pnpm run verify:supabase
 ```
 
 ## Red flags
