@@ -159,7 +159,8 @@ npm run verify:auth
 Check after a successful deployment:
 
 - Deployment URL opens.
-- `/api/health` returns `200` and `status: "ready"`.
+- `/api/health` returns `200` and `status: "ready"` for base Supabase readiness.
+- `npm run verify:supabase`, `npm run verify:auth`, and `npm run verify:operational` pass when production Supabase env is available locally.
 - GitHub login works.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
 - GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.

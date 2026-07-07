@@ -318,14 +318,24 @@ test("event reminders use the existing notification pipeline", async () => {
   assert.match(deliveryRoute, /shouldSendToGoogleChatDm/);
 });
 
-test("health and supabase verification detect operational migrations", async () => {
+test("health is slim while verification scripts detect operational migrations", async () => {
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const operational = await readFile("scripts/verify-operational.mjs", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
-  assert.match(health, /planning-schema-checks\.json/);
+  assert.match(health, /coreTablesReachable/);
+  assert.match(health, /usesSupabaseData/);
+  assert.match(health, /supabaseConfigured/);
+  assert.match(health, /authRequired/);
+  assert.doesNotMatch(health, /planning-schema-checks\.json/);
+  assert.doesNotMatch(health, /githubSyncMode/);
+  assert.doesNotMatch(health, /googleChatDeliveryStatus/);
+  assert.doesNotMatch(health, /tasksMin/);
+  assert.doesNotMatch(health, /counts/);
+  assert.doesNotMatch(health, /expected/);
+  assert.doesNotMatch(health, /schemaReady/);
   assert.match(schemaChecks, /profiles\.google_chat/);
   assert.match(schemaChecks, /notification_preferences/);
   assert.match(schemaChecks, /tasks\.carryover/);
@@ -334,11 +344,6 @@ test("health and supabase verification detect operational migrations", async () 
   assert.match(schemaChecks, /tasks\.template_v2/);
   assert.match(schemaChecks, /task_relationship_edges/);
   assert.match(schemaChecks, /task_external_comments/);
-  assert.match(health, /githubSyncMode/);
-  assert.match(health, /googleChatDeliveryStatus/);
-  assert.match(health, /tasksMin/);
-  assert.match(health, /counts\.tasks >= expected\.tasksMin/);
-  assert.match(health, /schemaReady/);
   assert.match(verify, /0008_google_chat_delivery\.sql/);
   assert.match(verify, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /notification_events\.dedupe_key/);

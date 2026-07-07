@@ -115,4 +115,4 @@ Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.
 
 ## Health Check
 
-Die Route `/api/health` liefert eine kompakte Readiness-Prüfung ohne Secrets. Ohne Supabase oder bei falschen Counts antwortet sie mit `503` und `status: "degraded"`. Nach erfolgreicher Supabase-Anbindung und korrektem Seed antwortet sie mit `200` und `status: "ready"`.
+Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Tiefere Schema-, Auth-, GitHub- und fachliche Rollout-Prüfungen laufen über `verify:supabase`, `verify:auth`, `verify:github-sync` und `verify:operational`.

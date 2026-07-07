@@ -137,7 +137,7 @@ test("execution layer adds focus board hygiene alerts and decision task links", 
   assert.match(decisionTaskRoute, /Decision-Verknüpfung entfernt/);
   assert.match(decisionTaskRoute, /Mit Decision verknüpft/);
   assert.match(verify, /planning-schema-checks\.json/);
-  assert.match(health, /planning-schema-checks\.json/);
+  assert.doesNotMatch(health, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /task_focus_items/);
   assert.match(schemaChecks, /decision_task_links/);
   assert.match(schema, /create table if not exists task_focus_items/);
