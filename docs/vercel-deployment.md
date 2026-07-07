@@ -94,7 +94,7 @@ GitHub Actions executes the production flow in this order:
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
-`npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
+`pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
 
 ## Vercel Hobby Private Repository Author Block
 
@@ -135,23 +135,23 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 Run from the repository root:
 
 ```bash
-npm test
-npm run lint
-npm run build
-npm run verify:release
-npm run verify:vercel-ready
-npm run vercel:build
+pnpm test
+pnpm run lint
+pnpm run build
+pnpm run verify:release
+pnpm run verify:vercel-ready
+pnpm run vercel:build
 ```
 
-Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `npm audit --audit-level=moderate`.
+Run `pnpm run build` as its own command before `pnpm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `pnpm audit --audit-level=moderate`.
 
-If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs, the workflow summary, and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
+If `pnpm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs, the workflow summary, and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
 
 If production Supabase env is present locally, also run:
 
 ```bash
-npm run verify:supabase
-npm run verify:auth
+pnpm run verify:supabase
+pnpm run verify:auth
 ```
 
 ## Post-Deploy Checks
@@ -160,7 +160,7 @@ Check after a successful deployment:
 
 - Deployment URL opens.
 - `/api/health` returns `200` and `status: "ready"` for base Supabase readiness.
-- `npm run verify:supabase`, `npm run verify:auth`, and `npm run verify:operational` pass when production Supabase env is available locally.
+- `pnpm run verify:supabase`, `pnpm run verify:auth`, and `pnpm run verify:operational` pass when production Supabase env is available locally.
 - GitHub login works.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
 - GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.

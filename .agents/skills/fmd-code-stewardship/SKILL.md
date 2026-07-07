@@ -12,7 +12,7 @@ Improve maintainability through small, behavior-preserving changes. Prefer code 
 ## Required Workflow
 
 1. Read the relevant files and nearby call sites before proposing edits.
-2. Run `npm run audit:stewardship` first when the task is broad, vague, or asks for cleanup, slimming down, architecture, spaghetti-code reduction, or general code quality.
+2. Run `pnpm run audit:stewardship` first when the task is broad, vague, or asks for cleanup, slimming down, architecture, spaghetti-code reduction, or general code quality.
 3. Identify the behavior contract before editing: user flow, API response shape, data mutation, auth boundary, Supabase schema expectation, or GitHub sync side effect.
 4. Make the smallest coherent improvement that preserves that contract.
 5. Avoid mixed-purpose commits: do not combine feature work, visual redesign, schema changes, and cleanup unless the user explicitly asks for that scope.
@@ -55,17 +55,17 @@ Improve maintainability through small, behavior-preserving changes. Prefer code 
 Use the narrowest check that covers the edit, then broaden when touching shared behavior.
 
 ```bash
-npm run audit:stewardship
-npm test
-npm run lint
-npm run build
+pnpm run audit:stewardship
+pnpm test
+pnpm run lint
+pnpm run build
 ```
 
 Run domain checks when relevant:
 
 ```bash
-npm run verify:hierarchy
-npm run verify:auth
-npm run verify:supabase
-npm run verify:github-sync
+pnpm run verify:hierarchy
+pnpm run verify:auth
+pnpm run verify:supabase
+pnpm run verify:github-sync
 ```

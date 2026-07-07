@@ -52,9 +52,9 @@ Keep the Founder Scoreboard deployment pipeline ready through GitHub Actions, wi
    - Deployment URL and inspection details are written by the shared deploy script.
 
 3. GitHub Actions build step:
-   - `vercel.json` sets `installCommand` to `npm ci`.
-   - `vercel.json` sets `buildCommand` to `npm run vercel:build`.
-   - `npm run vercel:build` runs `npm run verify:deploy` before `npm run build`.
+   - `vercel.json` sets `installCommand` to `pnpm install --frozen-lockfile`.
+   - `vercel.json` sets `buildCommand` to `pnpm run vercel:build`.
+   - `pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
 
 ## Required GitHub Environment Secrets
 
@@ -89,15 +89,15 @@ The planned Google Chat app endpoint is `https://founderops.findmydoc.eu/api/goo
 Run from the repository root:
 
 ```bash
-npm test
-npm run lint
-npm run build
-npm run verify:release
-npm run verify:vercel-ready
-npm run vercel:build
+pnpm test
+pnpm run lint
+pnpm run build
+pnpm run verify:release
+pnpm run verify:vercel-ready
+pnpm run vercel:build
 ```
 
-Run `npm run build` as its own command before `npm run verify:release` when diagnosing build failures. If `npm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
+Run `pnpm run build` as its own command before `pnpm run verify:release` when diagnosing build failures. If `pnpm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
 
 ## AI Guidance: Vercel Hobby Private Author Block
 
@@ -108,8 +108,8 @@ For `TEAM_ACCESS_REQUIRED` or commit-author access messages, keep GitHub Actions
 For production Supabase env validation, also run:
 
 ```bash
-npm run verify:supabase
-npm run verify:auth
+pnpm run verify:supabase
+pnpm run verify:auth
 ```
 
 ## Post-Deploy Checks

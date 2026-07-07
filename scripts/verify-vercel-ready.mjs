@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 
 const requiredFiles = [
   "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
   "vercel.json",
   "next.config.ts",
   "src/app/page.tsx",
@@ -56,20 +58,25 @@ for (const file of requiredFiles) {
 }
 
 const packageJson = JSON.parse(await read("package.json"));
+const pnpmWorkspace = await read("pnpm-workspace.yaml");
 for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
-if (!packageJson.scripts?.["verify:deploy"]?.includes("npm test")) failures.push("verify:deploy must run npm test.");
-if (!packageJson.scripts?.["vercel:build"]?.includes("npm run verify:deploy")) failures.push("vercel:build must run verify:deploy before build.");
-if (!packageJson.scripts?.["vercel:build"]?.includes("npm run build")) failures.push("vercel:build must run npm run build.");
+if (packageJson.packageManager !== "pnpm@10.13.1") failures.push("package.json must pin packageManager to pnpm@10.13.1.");
+for (const marker of ["overrides:", "js-yaml: 4.3.0", "postcss: 8.5.15", "onlyBuiltDependencies:", "sharp", "unrs-resolver"]) {
+  if (!pnpmWorkspace.includes(marker)) failures.push(`pnpm-workspace.yaml missing: ${marker}`);
+}
+if (!packageJson.scripts?.["verify:deploy"]?.includes("pnpm test")) failures.push("verify:deploy must run pnpm test.");
+if (!packageJson.scripts?.["vercel:build"]?.includes("pnpm run verify:deploy")) failures.push("vercel:build must run verify:deploy before build.");
+if (!packageJson.scripts?.["vercel:build"]?.includes("pnpm run build")) failures.push("vercel:build must run pnpm run build.");
 
 if (!packageJson.dependencies?.next) failures.push("Next.js dependency missing.");
 if (!packageJson.dependencies?.["@supabase/supabase-js"]) failures.push("Supabase client dependency missing.");
 
 const vercelJson = JSON.parse(await read("vercel.json"));
 if (vercelJson.framework !== "nextjs") failures.push("vercel.json must set framework to nextjs.");
-if (vercelJson.installCommand !== "npm ci") failures.push("vercel.json must set installCommand to npm ci.");
-if (vercelJson.buildCommand !== "npm run vercel:build") failures.push("vercel.json must set buildCommand to npm run vercel:build.");
+if (vercelJson.installCommand !== "pnpm install --frozen-lockfile") failures.push("vercel.json must set installCommand to pnpm install --frozen-lockfile.");
+if (vercelJson.buildCommand !== "pnpm run vercel:build") failures.push("vercel.json must set buildCommand to pnpm run vercel:build.");
 
 const nextConfig = await read("next.config.ts");
 if (!nextConfig.includes("avatars.githubusercontent.com")) {
@@ -204,7 +211,7 @@ for (const marker of [
   ".vercel/output",
   ".vercel/project.json",
   "package.json",
-  "package-lock.json",
+  "pnpm-lock.yaml",
   "node_modules",
   ".next/package.json",
   "Refusing to deploy: staging directory contains Git metadata.",
@@ -238,7 +245,7 @@ for (const marker of [
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
 if (ciWorkflowPresent) {
   const ci = await read(".github/workflows/ci.yml");
-  for (const marker of ["npm ci", "node --test tests/*.test.mjs", "npm run build", "npm run verify:release"]) {
+  for (const marker of ["pnpm install --frozen-lockfile", "node --test tests/*.test.mjs", "pnpm run build", "pnpm run verify:release"]) {
     if (!ci.includes(marker)) failures.push(`.github/workflows/ci.yml missing: ${marker}`);
   }
 }

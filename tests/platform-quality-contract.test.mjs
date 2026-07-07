@@ -260,11 +260,11 @@ test("german utf8 guard verifies persisted task text", async () => {
   assert.match(script, /Supabase/);
   assert.match(skill, /f\?r/);
   assert.match(skill, /U\+00C3/);
-  assert.match(skill, /npm run verify:task-utf8/);
-  assert.match(storySkill, /npm run verify:task-utf8/);
+  assert.match(skill, /pnpm run verify:task-utf8/);
+  assert.match(storySkill, /pnpm run verify:task-utf8/);
   assert.match(rules, /fmd-german-utf8/);
   assert.match(rules, /Supabase or GitHub/);
-  assert.match(rules, /npm run verify:task-utf8/);
+  assert.match(rules, /pnpm run verify:task-utf8/);
 });
 
 test("agent rules and stewardship skill document atomic UI drift guards", async () => {

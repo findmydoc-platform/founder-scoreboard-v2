@@ -53,7 +53,7 @@ if [[ ! -f ".vercel/project.json" ]]; then
 fi
 
 if [[ ! -d "node_modules" ]]; then
-  echo "node_modules is missing. Run npm ci before deploying prebuilt output." >&2
+  echo "node_modules is missing. Run pnpm install --frozen-lockfile before deploying prebuilt output." >&2
   exit 1
 fi
 
@@ -85,7 +85,7 @@ git archive HEAD | tar -x -C "${staging_dir}"
 cp -R ".vercel/output" "${staging_dir}/.vercel/output"
 cp ".vercel/project.json" "${staging_dir}/.vercel/project.json"
 cp "package.json" "${staging_dir}/package.json"
-cp "package-lock.json" "${staging_dir}/package-lock.json"
+cp "pnpm-lock.yaml" "${staging_dir}/pnpm-lock.yaml"
 cp -R "node_modules" "${staging_dir}/node_modules"
 cp -R ".next" "${staging_dir}/.next"
 
@@ -127,7 +127,7 @@ add_env_flag_if_present() {
   fi
 }
 
-deploy_command=(npx "vercel@${vercel_cli_version}" deploy --prebuilt --yes --no-wait --token="${VERCEL_TOKEN}" "${deploy_target_args[@]}")
+deploy_command=(pnpm dlx "vercel@${vercel_cli_version}" deploy --prebuilt --yes --no-wait --token="${VERCEL_TOKEN}" "${deploy_target_args[@]}")
 if [[ -n "${VERCEL_ORG_ID:-}" ]]; then
   deploy_command+=(--scope="${VERCEL_ORG_ID}")
 fi
@@ -161,7 +161,7 @@ fi
 
 echo "deploymentUrl=${deployment_url}" >> "${GITHUB_OUTPUT}"
 
-inspect_command=(npx "vercel@${vercel_cli_version}" inspect "${deployment_url}" --format=json --token="${VERCEL_TOKEN}")
+inspect_command=(pnpm dlx "vercel@${vercel_cli_version}" inspect "${deployment_url}" --format=json --token="${VERCEL_TOKEN}")
 if [[ -n "${VERCEL_ORG_ID:-}" ]]; then
   inspect_command+=(--scope="${VERCEL_ORG_ID}")
 fi

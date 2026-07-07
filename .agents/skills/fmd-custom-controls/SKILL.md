@@ -36,8 +36,8 @@ rg '<select|</select|<option|type="date"|type="datetime-local"' src -n
 Run:
 
 ```bash
-npm test
-npm run lint
+pnpm test
+pnpm run lint
 ```
 
 Visually inspect at least one changed dropdown or calendar when a dev server is practical.

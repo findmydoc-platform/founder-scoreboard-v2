@@ -24,9 +24,9 @@ Also reject corrupted text such as `f?r`, `L?sung`, `T?rkei`, `D?sseldorf`, moji
 3. Avoid shell or PowerShell write paths for German prose unless the persisted result is verified afterwards. Prefer `apply_patch`, UTF-8 source files, or structured API payloads.
 4. Before finishing, search edited visible text for suspicious fallbacks such as `fuer`, `zurueck`, `waehlen`, `loeschen`, `naechst`, `koennen`, `moech`, `groess`, `schliess`, `Ueber`, `Aender`, and `Oeff`.
 5. Before finishing, search edited or generated content for corrupted UTF-8 markers: `?` inside German words, `Ã`, `Â`, or `�`.
-6. If German task/story text was written into Supabase or synced to GitHub, verify the stored text, not only the local source. In `fmd-planning`, run `npm run verify:task-utf8` after task/story DB writes.
+6. If German task/story text was written into Supabase or synced to GitHub, verify the stored text, not only the local source. In `fmd-planning`, run `pnpm run verify:task-utf8` after task/story DB writes.
 7. Do not change technical identifiers, URLs, CSS classes, API fields, database columns, migration names, or environment variables only because they contain ASCII fallbacks.
-8. Run `npm test` after changing user-facing German copy so the UI policy guard can catch regressions.
+8. Run `pnpm test` after changing user-facing German copy so the UI policy guard can catch regressions.
 
 ## Common replacements
 
