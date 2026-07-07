@@ -1,65 +1,31 @@
 import { NextResponse } from "next/server";
-import { googleChatDeliveryStatus } from "@/lib/google-chat";
-import planningSchemaCheckConfig from "@/lib/planning-schema-checks.json";
 import { getPlanningData } from "@/lib/planning-data";
-import { seedData } from "@/lib/seed";
 import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
-const expected = {
-  profiles: seedData.profiles.length,
-  packages: seedData.packages.length,
-  tasksMin: seedData.tasks.length,
-};
+const coreTables = ["profiles", "packages", "tasks"] as const;
 
-type SchemaCheckConfig = {
-  name: string;
-  table: string;
-  select?: string;
-  healthSelect?: string;
-  verifySelect?: string;
-  health: boolean;
-};
-
-const schemaChecks = (planningSchemaCheckConfig as SchemaCheckConfig[])
-  .filter((check) => check.health)
-  .map((check) => ({
-    name: check.name,
-    table: check.table,
-    select: check.healthSelect || check.select || check.verifySelect || "id",
-  }));
-
-async function checkSchema() {
+async function coreTablesReachable() {
   const supabase = getServerSupabase();
-  if (!supabase) return schemaChecks.map((check) => ({ name: check.name, ok: false, error: "Supabase env missing" }));
+  if (!supabase) return false;
 
-  return Promise.all(schemaChecks.map(async (check) => {
-    const { error } = await supabase.from(check.table).select(check.select).limit(1);
-    return {
-      name: check.name,
-      ok: !error,
-      error: error?.message || "",
-    };
+  const checks = await Promise.all(coreTables.map(async (table) => {
+    const { error } = await supabase.from(table).select("id").limit(1);
+    return !error;
   }));
+  return checks.every(Boolean);
 }
 
 export async function GET() {
   const startedAt = Date.now();
-  const [{ data, source }, schema] = await Promise.all([getPlanningData(), checkSchema()]);
+  const [{ source }, coreTablesReady] = await Promise.all([getPlanningData(), coreTablesReachable()]);
 
-  const counts = {
-    profiles: data.profiles.length,
-    packages: data.packages.length,
-    tasks: data.tasks.length,
+  const checks = {
+    supabaseConfigured: hasSupabaseEnv(),
+    usesSupabaseData: source === "supabase",
+    coreTablesReachable: coreTablesReady,
   };
 
-  const countChecks = {
-    profiles: counts.profiles === expected.profiles,
-    packages: counts.packages === expected.packages,
-    tasks: counts.tasks >= expected.tasksMin,
-  };
-
-  const schemaReady = schema.every((check) => check.ok);
-  const ready = source === "supabase" && countChecks.profiles && countChecks.packages && countChecks.tasks && schemaReady;
+  const ready = Object.values(checks).every(Boolean);
 
   return NextResponse.json(
     {
@@ -68,13 +34,8 @@ export async function GET() {
       env: {
         supabaseConfigured: hasSupabaseEnv(),
         authRequired: requiresSupabaseAuth(),
-        githubSyncMode: "logged_in_user",
-        googleChat: googleChatDeliveryStatus(),
       },
-      counts,
-      expected,
-      checks: countChecks,
-      schema,
+      checks,
       durationMs: Date.now() - startedAt,
     },
     {

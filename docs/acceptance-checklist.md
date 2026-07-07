@@ -22,13 +22,12 @@ npm run build
 2. Mit GitHub anmelden.
 3. Seite neu laden.
 4. Unten links muss der Teamzugriff die angemeldete Session zeigen.
-5. `/api/health` muss `status: "ready"` melden.
+5. `/api/health` muss `status: "ready"` für die Basis-Readiness melden.
 
 Erwartung:
 - Datenquelle ist Supabase.
 - Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
-- 5 Profile sind vorhanden.
-- Volkan/MehmetVolkan ist CEO.
+- `npm run verify:supabase` und `npm run verify:auth` bestätigen Schema, Profile und Rollen.
 - Navigation zeigt Planung, Sprint & Score, Decision Log, Meeting Finder, Team, Einstellungen.
 
 ## Planung und Task-Erstellung
