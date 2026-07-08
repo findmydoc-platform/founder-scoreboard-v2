@@ -17,6 +17,7 @@ export type TaskIntakeInput = {
   packageId?: unknown;
   milestoneId?: unknown;
   sprintId?: unknown;
+  assignee?: unknown;
   owner?: unknown;
   priority?: unknown;
   status?: unknown;
@@ -66,8 +67,8 @@ export type TaskIntakePreviewTask = {
   packageTitle: string;
   milestoneId: string;
   sprintId: string;
-  ownerId: string;
-  ownerName: string;
+  assigneeId: string;
+  assigneeName: string;
   priority: string;
   status: TaskStatus;
   workstream: string;
@@ -112,7 +113,7 @@ function isoDate(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function ownerFromInitiative(initiative?: TaskIntakeInitiative) {
+function assigneeFromInitiative(initiative?: TaskIntakeInitiative) {
   return initiative?.responsibleProfileIds[0] || initiative?.ownerId || initiative?.accountableProfileId || "";
 }
 
@@ -152,12 +153,12 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     if (taskType === "sub_issue" && !parentTaskId) errors.push("Sub-Issues brauchen ein Deliverable.");
     if (parentTaskId && !context.parentTaskIds.has(parentTaskId)) errors.push(`Parent-Task wurde nicht gefunden: ${parentTaskId}.`);
 
-    const requestedOwner = valueAsText(rawTask.owner, 120);
-    const fallbackOwner = ownerFromInitiative(initiative);
-    const ownerProfile = profileById(context.profiles, requestedOwner || fallbackOwner);
-    if (requestedOwner && !ownerProfile) errors.push(`Assignee wurde nicht gefunden: ${requestedOwner}.`);
-    if (!requestedOwner && !ownerProfile && taskType !== "proposal") errors.push("Assignee fehlt und konnte nicht aus der Initiative abgeleitet werden.");
-    if (!requestedOwner && ownerProfile) warnings.push(`Assignee aus Initiative-RACI gesetzt: ${ownerProfile.name}.`);
+    const requestedAssignee = valueAsText(rawTask.assignee, 120) || valueAsText(rawTask.owner, 120);
+    const fallbackAssignee = assigneeFromInitiative(initiative);
+    const assigneeProfile = profileById(context.profiles, requestedAssignee || fallbackAssignee);
+    if (requestedAssignee && !assigneeProfile) errors.push(`Zuständige Person wurde nicht gefunden: ${requestedAssignee}.`);
+    if (!requestedAssignee && !assigneeProfile && taskType !== "proposal") errors.push("Zuständigkeit fehlt und konnte nicht aus der Initiative abgeleitet werden.");
+    if (!requestedAssignee && assigneeProfile) warnings.push(`Zuständigkeit aus Initiative-RACI gesetzt: ${assigneeProfile.name}.`);
 
     const reviewOwnerId = initiative?.accountableProfileId || initiative?.ownerId || "";
     const reviewOwnerProfile = reviewOwnerId ? profileById(context.profiles, reviewOwnerId) : null;
@@ -193,8 +194,8 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
       packageTitle: initiative?.title || "",
       milestoneId,
       sprintId,
-      ownerId: ownerProfile?.id || "",
-      ownerName: ownerProfile?.name || "",
+      assigneeId: assigneeProfile?.id || "",
+      assigneeName: assigneeProfile?.name || "",
       priority,
       status,
       workstream: valueAsText(rawTask.workstream, 120),

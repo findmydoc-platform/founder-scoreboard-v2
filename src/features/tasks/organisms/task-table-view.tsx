@@ -1,7 +1,7 @@
 import { AlertTriangle, Link2 } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { GitHubMissingBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
-import { dateRange, taskOwnerOptions } from "@/lib/display";
+import { dateRange, taskAssigneeOptions } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
@@ -35,7 +35,7 @@ export function TaskTableView({
         <DataTable minWidth={1320}>
         <DataTableHead>
           <tr>
-            {["Status", "Ablage", "Assignee", "Priorität", "Bereich", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Qualitätsstandard"].map((head) => (
+            {["Status", "Ablage", "Zuständig", "Priorität", "Bereich", "Aufgabe", "Aufwand", "Zeitraum", "Zieltermin", "Abhängigkeit", "Qualitätsstandard"].map((head) => (
               <DataHeaderCell key={head}>{head}</DataHeaderCell>
             ))}
           </tr>
@@ -61,7 +61,7 @@ export function TaskTableView({
                   )}
                 </DataCell>
                 <DataCell>
-                  <CustomSelect value={task.owner} onChange={(value) => onUpdateTask(task, { owner: value })} className="h-8 w-36 text-xs" options={taskOwnerOptions(task.taskType, profiles)} />
+                  <CustomSelect value={task.assigneeId || task.assignee} onChange={(value) => onUpdateTask(task, { assignee: value, assigneeId: value })} className="h-8 w-36 text-xs" options={taskAssigneeOptions(task.taskType, profiles)} />
                 </DataCell>
                 <DataCell><UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge></DataCell>
                 <DataCell className="text-slate-600">{task.workstream}</DataCell>

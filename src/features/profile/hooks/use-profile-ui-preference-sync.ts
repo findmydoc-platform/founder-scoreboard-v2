@@ -77,10 +77,14 @@ export function useProfileUiPreferenceSync({
     if (!preference) return;
 
     setView(preference.defaultTaskView);
-    setFilters(preference.planningFilters);
+    setFilters({
+      ...preference.planningFilters,
+      assignee: preference.defaultWorkspace === "mine" ? "Alle" : preference.planningFilters.assignee,
+      quick: preference.defaultWorkspace === "mine" ? "mine" : preference.planningFilters.quick,
+    });
     setExpandedPackageIds(preference.expandedPackageIds);
     if (!urlHasWorkspace() && preference.defaultWorkspace !== "profile") {
-      setWorkspace(preference.defaultWorkspace as AppWorkspace);
+      setWorkspace(preference.defaultWorkspace === "mine" ? "planning" : preference.defaultWorkspace as AppWorkspace);
     }
   }, [currentProfileId, preference, setExpandedPackageIds, setFilters, setView, setWorkspace]);
 

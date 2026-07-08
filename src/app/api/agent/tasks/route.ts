@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const result = await getAgentTasks({
-    owner: searchParams.get("owner") || undefined,
+    assignee: searchParams.get("assignee") || searchParams.get("owner") || undefined,
     sprint: searchParams.get("sprint") || undefined,
     initiative: searchParams.get("initiative") || undefined,
     status: searchParams.get("status") || undefined,

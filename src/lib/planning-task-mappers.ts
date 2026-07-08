@@ -15,11 +15,11 @@ function profileName(lookup: TaskProfileLookup, profileId?: string | null) {
 }
 
 export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, options: MapTaskRowOptions = {}): Task {
-  const ownerId = row.owner || "";
-  const assigneeId = row.assignee || "";
+  const assigneeId = row.assignee || row.owner || "";
+  const ownerId = row.owner || assigneeId;
   const createdById = row.created_by || "";
-  const owner = profileName(profiles, row.owner);
-  const assignee = profileName(profiles, row.assignee) || owner;
+  const assignee = profileName(profiles, assigneeId);
+  const owner = profileName(profiles, ownerId) || assignee;
   const createdBy = profileName(profiles, row.created_by);
 
   return {
@@ -29,10 +29,10 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     description: row.description || "",
     status: row.status || "Offen",
     priority: row.priority || "P2",
-    ownerId,
-    owner,
     assigneeId,
     assignee,
+    ownerId,
+    owner,
     createdById,
     createdBy,
     workstream: row.workstream || "",

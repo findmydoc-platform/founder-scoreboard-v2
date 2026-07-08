@@ -45,7 +45,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
           packageForTask={(task) => packageById(data.packages, task.packageId)}
-          ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.name === task.owner))}
+          ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={(task) => openTaskPanel(task.id)}
           onCreateTask={setTaskDialogDefaults}
           onUpdateTask={updateTask}
@@ -65,7 +65,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           expandedPackages={expandedPackages}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
-          ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.name === task.owner))}
+          ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={(task) => openTaskPanel(task.id)}
           onUpdateTask={updateTask}
           onTogglePackage={togglePackageCollapse}

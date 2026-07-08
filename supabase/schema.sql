@@ -45,7 +45,7 @@ create table if not exists profile_ui_preferences (
     check (default_workspace in ('planning', 'execution', 'mine', 'reviews', 'events', 'sprint', 'projects', 'tools', 'team', 'settings', 'ceo-intake', 'profile')),
   default_task_view text not null default 'board'
     check (default_task_view in ('board', 'structure', 'table', 'gantt')),
-  planning_filters jsonb not null default '{"query":"","owner":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
+  planning_filters jsonb not null default '{"query":"","assignee":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
   expanded_package_ids text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -276,6 +276,7 @@ create index if not exists tasks_project_id_idx on tasks(project_id);
 create index if not exists tasks_package_id_idx on tasks(package_id);
 create index if not exists tasks_status_idx on tasks(status);
 create index if not exists tasks_owner_idx on tasks(owner);
+create index if not exists tasks_assignee_idx on tasks(assignee);
 create index if not exists tasks_review_owner_profile_id_idx on tasks(review_owner_profile_id);
 create index if not exists tasks_review_requested_at_idx on tasks(review_requested_at);
 create index if not exists meetings_sprint_id_idx on meetings(sprint_id);

@@ -170,8 +170,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         dodTemplateVersion: task.dod_template_version,
         status: outcome === "communicated_blocker" ? "Blockiert" : "Offen",
         priority: task.priority,
-        owner: task.owner,
-        assignee: task.assignee,
+        owner: task.owner || task.assignee,
+        assignee: task.assignee || task.owner,
         workstream: task.workstream,
         sortOrder: task.sort_order + 10000,
         startDate: nextSprint.start_date || null,
@@ -190,11 +190,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         carryoverCount: Number(task.carryover_count || 0) + 1,
       }));
 
-      if (task.owner) {
+      const assignee = task.assignee || task.owner;
+      if (assignee) {
         notifications.push({
           type: "sprint.task_carried_over",
           actor_profile_id: permission.profile?.id || null,
-          recipient_profile_id: task.owner,
+          recipient_profile_id: assignee,
           entity_type: "task",
           entity_id: task.id,
           title: `Carry-over: ${task.title}`,
@@ -255,7 +256,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     id: task.id,
     title: task.title,
     status: task.status,
-    owner: task.owner ? profileNameById.get(task.owner) || task.owner : "",
+    assigneeId: task.assignee || task.owner || "",
+    assignee: task.assignee ? profileNameById.get(task.assignee) || task.assignee : task.owner ? profileNameById.get(task.owner) || task.owner : "",
+    ownerId: task.owner || task.assignee || "",
+    owner: task.owner ? profileNameById.get(task.owner) || task.owner : task.assignee ? profileNameById.get(task.assignee) || task.assignee : "",
     reviewStatus: (task.review_status || "not_requested") as Task["reviewStatus"],
     scorePoints: Number(task.score_points || 0),
     scoreFinal: Boolean(task.score_final),

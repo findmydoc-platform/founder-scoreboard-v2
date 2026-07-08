@@ -10,7 +10,7 @@ import { addDaysIso } from "@/lib/planning-schedule";
 
 export type PlanningFilters = {
   query: string;
-  owner: string;
+  assignee: string;
   status: string;
   priority: string;
   packageId: string;
@@ -21,7 +21,7 @@ const planningFiltersSessionKey = "fmd-planning-filters-v1";
 
 const defaultPlanningFilters: PlanningFilters = {
   query: "",
-  owner: "Alle",
+  assignee: "Alle",
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
@@ -39,7 +39,7 @@ function normalizePlanningFilters(value: unknown): PlanningFilters {
 
   return {
     query: isFilterString(candidate.query) ? candidate.query : defaultPlanningFilters.query,
-    owner: isFilterString(candidate.owner) ? candidate.owner : defaultPlanningFilters.owner,
+    assignee: isFilterString(candidate.assignee) ? candidate.assignee : isFilterString((candidate as { owner?: unknown }).owner) ? (candidate as { owner: string }).owner : defaultPlanningFilters.assignee,
     status: isFilterString(candidate.status) ? candidate.status : defaultPlanningFilters.status,
     priority: isFilterString(candidate.priority) ? candidate.priority : defaultPlanningFilters.priority,
     packageId: isFilterString(candidate.packageId) ? candidate.packageId : defaultPlanningFilters.packageId,

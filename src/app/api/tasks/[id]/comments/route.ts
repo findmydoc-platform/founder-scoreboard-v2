@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,owner,github_issue_number,github_issue_url,issue_number,issue_url")
+    .select("id,title,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url")
     .eq("id", id)
     .single();
 
@@ -76,7 +76,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   ));
 
   const recipients = new Set<string>();
-  if (task.owner && task.owner !== permission.profile?.id && !mentionedRecipients.has(task.owner)) recipients.add(task.owner);
+  const assignee = task.assignee || task.owner;
+  if (assignee && assignee !== permission.profile?.id && !mentionedRecipients.has(assignee)) recipients.add(assignee);
 
   const leads = (profiles || []).filter((profile) => ["ceo", "deputy"].includes(profile.platform_role));
   leads?.forEach((lead) => {

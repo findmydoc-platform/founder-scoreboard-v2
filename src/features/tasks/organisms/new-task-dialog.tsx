@@ -5,7 +5,7 @@ import { InitiativeRaciList } from "@/features/projects/molecules/initiative-rac
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
-import { taskOwnerOptions } from "@/lib/display";
+import { taskAssigneeOptions } from "@/lib/display";
 import {
   initiativeOptions,
   milestoneOptions,
@@ -31,7 +31,7 @@ export type NewTaskDraft = {
   milestoneId: string;
   packageId: string;
   sprintId: string;
-  owner: string;
+  assignee: string;
   priority: string;
   status: string;
   workstream: string;
@@ -61,8 +61,8 @@ export function NewTaskDialog({
 }) {
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
   const initialTaskType = defaults.taskType || "deliverable";
-  const fallbackOwner = data.profiles[0]?.name || "Volkan";
-  const defaultOwner = defaults.owner || (initialTaskType === "proposal" ? "" : fallbackOwner);
+  const fallbackAssignee = data.profiles[0]?.id || "volkan";
+  const defaultAssignee = defaults.assignee || (initialTaskType === "proposal" ? "" : fallbackAssignee);
   const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const initiativesForDefaultMilestone = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({
@@ -78,7 +78,7 @@ export function NewTaskDialog({
     milestoneId: defaultMilestoneId,
     packageId: defaults.packageId || initiativesForDefaultMilestone[0]?.id || data.packages[0]?.id || "",
     sprintId: defaults.sprintId || activeSprint?.id || "",
-    owner: defaultOwner,
+    assignee: defaultAssignee,
     priority: defaults.priority || "P2",
     status: defaults.status || "Offen",
     workstream: defaults.workstream || "",
@@ -129,7 +129,7 @@ export function NewTaskDialog({
                 setDraft((current) => ({
                   ...current,
                   taskType: value as NewTaskDraft["taskType"],
-                  owner: value === "proposal" ? "" : current.owner || fallbackOwner,
+                  assignee: value === "proposal" ? "" : current.assignee || fallbackAssignee,
                   createGitHubIssue: value === "deliverable" ? current.createGitHubIssue : false,
                 }))
               }
@@ -210,7 +210,7 @@ export function NewTaskDialog({
 
           <UiField>
             Abnahmekriterien
-            <UiTextArea value={draft.acceptanceCriteria} onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))} minHeight="xl" inputPadding="md" leading="relaxed" placeholder="Ein Kriterium pro Zeile. Nur messbare Punkte, die der Owner beeinflussen kann." />
+            <UiTextArea value={draft.acceptanceCriteria} onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))} minHeight="xl" inputPadding="md" leading="relaxed" placeholder="Ein Kriterium pro Zeile. Nur messbare Punkte, die zuständige Personen beeinflussen können." />
           </UiField>
 
           <UiField>
@@ -220,12 +220,12 @@ export function NewTaskDialog({
 
           <div className="grid gap-3 sm:grid-cols-4">
             <UiSelectField
-              label="Assignee"
-              value={draft.owner}
-              onChange={(value) => setDraft((current) => ({ ...current, owner: value }))}
-              options={taskOwnerOptions(draft.taskType, data.profiles)}
+              label="Zuständig"
+              value={draft.assignee}
+              onChange={(value) => setDraft((current) => ({ ...current, assignee: value }))}
+              options={taskAssigneeOptions(draft.taskType, data.profiles)}
             >
-              {draft.taskType === "proposal" && <span className="text-[11px] font-normal leading-4 text-slate-500">Vorschläge können bewusst ohne Assignee bleiben.</span>}
+              {draft.taskType === "proposal" && <span className="text-[11px] font-normal leading-4 text-slate-500">Vorschläge können bewusst ohne Zuständigkeit bleiben.</span>}
             </UiSelectField>
             <UiSelectField
               label="Priorität"

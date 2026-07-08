@@ -62,7 +62,7 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     dod_template_version: input.dodTemplateVersion || "founder-deliverable-v2",
     status: input.status,
     priority: input.priority,
-    owner: input.owner || null,
+    owner: input.owner || input.assignee || null,
     assignee: input.assignee || input.owner || null,
     created_by: input.createdBy || null,
     workstream: input.workstream ?? null,

@@ -40,7 +40,7 @@ export function expandedPackageIds(expandedPackages: Record<string, boolean>) {
 export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilterPreferences {
   return {
     query: filters.query || "",
-    owner: filters.owner || "Alle",
+    assignee: filters.assignee || "Alle",
     status: filters.status || "Alle",
     priority: filters.priority || "Alle",
     packageId: filters.packageId || "Alle",
@@ -70,7 +70,7 @@ export function buildInitialDraft({
     color: currentProfile.color || "#64748b",
     notificationsEnabled: currentProfile.notificationsEnabled !== false,
     notificationEvents: Object.fromEntries(googleChatDigestEventTypes.map((eventType) => [eventType, eventEnabled(data, currentProfile.id, eventType)])),
-    defaultWorkspace: (profileUiPreference?.defaultWorkspace as AppWorkspace) || (workspace === "profile" ? "planning" : workspace),
+    defaultWorkspace: profileUiPreference?.defaultWorkspace === "mine" ? "planning" : (profileUiPreference?.defaultWorkspace as AppWorkspace) || (workspace === "profile" ? "planning" : workspace),
     defaultTaskView: profileUiPreference?.defaultTaskView || view,
     planningFilters: defaultFilters(profileUiPreference?.planningFilters || filters),
     expandedPackageIds: profileUiPreference?.expandedPackageIds || expandedPackageIds(expandedPackages),

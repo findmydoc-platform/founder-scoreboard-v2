@@ -141,7 +141,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const profileNameById = new Map<string, string>();
   const profileGitHubLoginById = new Map<string, string>();
-  const involvedProfileIds = [data.owner, data.assignee].filter((value): value is string => typeof value === "string" && Boolean(value));
+  const involvedProfileIds = [data.assignee, data.owner].filter((value): value is string => typeof value === "string" && Boolean(value));
   if (involvedProfileIds.length) {
     const profiles = await supabase.from("profiles").select("id,name,github_login").in("id", involvedProfileIds);
     for (const profile of (profiles.data || []) as SyncProfileRow[]) {
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
   }
   const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
-  const assigneeProfileId = data.owner || data.assignee || "";
+  const assigneeProfileId = data.assignee || "";
   const assigneeLogin = assigneeProfileId ? profileGitHubLoginById.get(assigneeProfileId) || "" : "";
   const hasExistingGitHubIssue = hasLinkedGitHubIssue(task);
 

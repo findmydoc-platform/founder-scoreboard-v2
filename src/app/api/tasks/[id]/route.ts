@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: TaskRouteDbUpdate = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -94,13 +94,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  if (payload.owner !== undefined) {
-    const nextOwner = profileId(payload.owner);
-    if (!nextOwner && currentTask?.task_type !== "proposal") {
-      return apiError("Nur Vorschläge können ohne Assignee bleiben.", 400);
+  if (payload.assignee !== undefined || payload.owner !== undefined) {
+    const nextAssignee = profileId(payload.assignee || payload.owner);
+    if (!nextAssignee && currentTask?.task_type !== "proposal") {
+      return apiError("Nur Vorschläge können ohne Zuständigkeit bleiben.", 400);
     }
-    update.owner = nextOwner || null;
-    update.assignee = nextOwner || null;
+    update.assignee = nextAssignee || null;
+    update.owner = nextAssignee || null;
   }
 
   applyTaskBriefUpdateFields(update, payload);

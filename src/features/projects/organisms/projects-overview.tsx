@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
-import { dateRange, formatDate, initiativeMetaLabel, taskOwnerLabel } from "@/lib/display";
+import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
@@ -192,7 +192,7 @@ function DeliverableTable({ tasks }: { tasks: Task[] }) {
             <span className="block truncate font-semibold text-slate-950">{task.title}</span>
             <span className="mt-0.5 block text-xs text-slate-500">{task.priority} · {task.workstream || "ohne Bereich"}</span>
           </span>
-          <span className="truncate text-slate-700">{taskOwnerLabel(task)}</span>
+          <span className="truncate text-slate-700">{taskAssigneeLabel(task)}</span>
           <span className="text-slate-700">{normalizeStatus(task.status)}</span>
           <span className="text-slate-700">{task.hours}h</span>
           <span className="truncate text-slate-700">{dateRange(task)}</span>

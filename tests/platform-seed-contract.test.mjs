@@ -94,7 +94,7 @@ test("seedData is assembled from source.json defaults and stable core ids", asyn
   assert.match(shared, /export function createPlanningSeed/);
   assert.match(shared, /export function defineTask/);
   assert.match(shared, /profileNameById/);
-  assert.match(shared, /owner: profileNameById\.get\(ownerId\)/);
+  assert.match(shared, /const ownerId = input\.ownerId \|\| assigneeId/);
   assert.match(shared, /assignee: profileNameById\.get\(assigneeId\)/);
 
   assert.equal(source.project.id, "findmydoc-founder-execution");
@@ -110,7 +110,6 @@ test("seedData is assembled from source.json defaults and stable core ids", asyn
   }
 
   for (const task of source.tasks) {
-    assert.ok(task.ownerId, `${task.id} should store ownerId`);
     assert.ok(task.assigneeId, `${task.id} should store assigneeId`);
     assert.equal(Object.hasOwn(task, "owner"), false, `${task.id} should not store display owner`);
     assert.equal(Object.hasOwn(task, "assignee"), false, `${task.id} should not store display assignee`);

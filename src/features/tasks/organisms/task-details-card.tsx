@@ -4,14 +4,14 @@ import { CalendarDays, Pencil, Save, X } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiativeOptionLabel, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
+import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiativeOptionLabel, taskAssigneeLabel, taskAssigneeOptions } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
 import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
-export type TaskDetailsMeta = Pick<Task, "status" | "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewStatus" | "reviewOwnerProfileId">;
-export type TaskDetailsDraft = Pick<TaskDetailsMeta, "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewOwnerProfileId">;
+export type TaskDetailsMeta = Pick<Task, "status" | "priority" | "assignee" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewStatus" | "reviewOwnerProfileId">;
+export type TaskDetailsDraft = Pick<TaskDetailsMeta, "priority" | "assignee" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline" | "reviewOwnerProfileId">;
 
 function formatDate(value: string) {
   return formatDisplayDate(value, { includeYear: true });
@@ -27,8 +27,8 @@ function availableStatusOptions(status: string, canManageTaskMeta: boolean) {
   return taskStatuses.filter((item) => item !== "Erledigt");
 }
 
-function ownerOptionsForTask(taskType: Task["taskType"], profiles: Profile[]) {
-  return taskOwnerOptions(taskType, profiles);
+function assigneeOptionsForTask(taskType: Task["taskType"], profiles: Profile[]) {
+  return taskAssigneeOptions(taskType, profiles);
 }
 
 type Props = {
@@ -36,7 +36,7 @@ type Props = {
   meta: TaskDetailsMeta;
   detailsDraft: TaskDetailsDraft;
   creatorProfile?: Profile;
-  ownerProfile?: Profile;
+  assigneeProfile?: Profile;
   currentPackage?: Package;
   currentSprint?: Sprint;
   currentMilestone?: Milestone;
@@ -63,7 +63,7 @@ export function TaskDetailsCard({
   meta,
   detailsDraft,
   creatorProfile,
-  ownerProfile,
+  assigneeProfile,
   currentPackage,
   currentSprint,
   currentMilestone,
@@ -85,7 +85,7 @@ export function TaskDetailsCard({
   onSaveDetails,
 }: Props) {
   const reviewOwnerProfile = profiles.find((profile) => profile.id === meta.reviewOwnerProfileId);
-  const selfReview = Boolean(meta.reviewOwnerProfileId && (task.ownerId === meta.reviewOwnerProfileId || task.owner === meta.reviewOwnerProfileId));
+  const selfReview = Boolean(meta.reviewOwnerProfileId && (task.assigneeId === meta.reviewOwnerProfileId || task.assignee === meta.reviewOwnerProfileId));
 
   return (
     <UiPanel padding="lg">
@@ -139,8 +139,8 @@ export function TaskDetailsCard({
         {canManageTaskMeta && detailsEditing ? (
           <>
             <label className="grid gap-1 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">
-              Assignee
-              <CustomSelect value={detailsDraft.owner} onChange={(value) => onDetailsDraftChange({ owner: value })} className="h-9 text-sm" options={ownerOptionsForTask(task.taskType, profiles)} />
+              Zuständig
+              <CustomSelect value={detailsDraft.assignee} onChange={(value) => onDetailsDraftChange({ assignee: value })} className="h-9 text-sm" options={assigneeOptionsForTask(task.taskType, profiles)} />
             </label>
             <label className="grid gap-1 text-xs font-semibold text-slate-500">
               Priorität
@@ -162,7 +162,7 @@ export function TaskDetailsCard({
         ) : (
           <>
             {[
-              ["Assignee", ownerProfile?.name || taskOwnerLabel({ owner: meta.owner })],
+              ["Zuständig", assigneeProfile?.name || taskAssigneeLabel({ assignee: meta.assignee })],
               ["Priorität", meta.priority],
               ["Initiative", currentPackage ? currentPackage.title : "ohne Initiative"],
               ["Sprint", currentSprint?.name || "Kein Sprint"],

@@ -20,17 +20,18 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     devProfileId,
     devRoleSwitchAvailable,
     dismissNotification,
+    filters,
     filtersAvailable,
     githubAppConnected,
     githubReauthFailed,
     headerPrimaryAction,
     importDemoSeed,
-    mineOwnerName,
     mobileNavOpen,
     openNotification,
     saveError,
     setDevProfileId,
     setFeedbackDialogOpen,
+    setFilters,
     setMobileNavOpen,
     setShowFilters,
     setShowNotifications,
@@ -84,9 +85,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             <div className="mt-1 text-sm text-slate-500">
               {workspace === "planning"
                 ? data.project.range
-                : workspace === "mine"
-                  ? `Fokus auf die Aufgaben von ${mineOwnerName} für die operative Steuerung.`
-                  : workspaceSubtitles[workspace]}
+                : workspaceSubtitles[workspace]}
             </div>
           </div>
         </div>
@@ -166,25 +165,56 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
         </div>
       </div>
 
-      {filtersAvailable && <div className="flex flex-wrap items-center gap-2 px-4 pb-3 lg:px-6">
-        {viewTabs.map((tab) => {
-          const Icon = tab.icon;
-          const active = view === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setView(tab.id)}
-              className={`inline-flex h-9 shrink-0 items-center gap-2 border-b-2 px-2 text-sm font-semibold ${
-                active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <Icon size={16} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>}
+      {filtersAvailable && (
+        <div className="grid gap-2 px-4 pb-3 lg:px-6">
+          <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2" data-tour-id="planning-task-scope">
+            <div className="text-xs font-semibold uppercase text-slate-500">Aufgaben</div>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {[
+                { id: "", label: "Alle" },
+                { id: "mine", label: "Meine" },
+              ].map((scope) => {
+                const active = filters.quick === scope.id || (!scope.id && filters.quick !== "mine");
+                return (
+                  <button
+                    key={scope.label}
+                    type="button"
+                    onClick={() => setFilters({ ...filters, quick: scope.id, assignee: "Alle" })}
+                    className={`inline-flex h-8 shrink-0 items-center border-b-2 px-1 text-sm font-semibold ${
+                      active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                    aria-pressed={active}
+                  >
+                    {scope.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2">
+            <div className="text-xs font-semibold uppercase text-slate-500">Ansicht</div>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {viewTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = view === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setView(tab.id)}
+                    className={`inline-flex h-8 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-semibold ${
+                      active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

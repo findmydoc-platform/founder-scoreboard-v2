@@ -7,7 +7,7 @@ import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 export type PlanningFiltersValue = {
   query: string;
-  owner: string;
+  assignee: string;
   status: string;
   priority: string;
   packageId: string;
@@ -35,7 +35,7 @@ export function PlanningFilters({ filters, profiles, packages, quickFilters, onC
             placeholder="Nach Aufgabe, Ziel, Bereich oder externer Ablage suchen"
           />
         </label>
-        <CustomSelect value={filters.owner} onChange={(value) => onChange({ ...filters, owner: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...profiles.map((profile) => ({ value: profile.name, label: profile.name }))]} />
+        <CustomSelect value={filters.assignee} onChange={(value) => onChange({ ...filters, assignee: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Zuständigen" }, ...profiles.map((profile) => ({ value: profile.id, label: profile.name }))]} />
         <CustomSelect value={filters.status} onChange={(value) => onChange({ ...filters, status: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} />
         <CustomSelect value={filters.priority} onChange={(value) => onChange({ ...filters, priority: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle" }, ...["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))]} />
         <CustomSelect value={filters.packageId} onChange={(value) => onChange({ ...filters, packageId: value })} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Initiativen" }, ...packages.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))]} />

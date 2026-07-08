@@ -2,10 +2,13 @@ import type { DriveStep } from "driver.js";
 
 export const workspaceCleanupTourId = "workspace-cleanup-v2";
 export const profileSettingsTourId = "profile-settings-v1";
+export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
 
 export const featureTours = [
   {
     id: workspaceCleanupTourId,
+    openAccountMenu: true,
+    doneWorkspace: "profile",
     requiredSelectors: ["[data-tour-id='workspace-nav-planning']", "[data-tour-id='profile-menu-link']"],
     steps: [
       {
@@ -39,7 +42,25 @@ export const featureTours = [
     ] satisfies DriveStep[],
   },
   {
+    id: planningMyTasksScopeTourId,
+    targetWorkspace: "planning",
+    requiredSelectors: ["[data-tour-id='planning-task-scope']"],
+    steps: [
+      {
+        element: "[data-tour-id='planning-task-scope']",
+        popover: {
+          title: "Meine Aufgaben",
+          description: "Meine filtert die Planung auf Aufgaben, für die du zuständig bist. Board, Struktur, Tabelle und Gantt bleiben die Ansicht.",
+          side: "bottom",
+          align: "start",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
     id: profileSettingsTourId,
+    openAccountMenu: true,
+    doneWorkspace: "profile",
     requiredSelectors: ["[data-tour-id='account-menu-trigger']", "[data-tour-id='profile-menu-link']"],
     steps: [
       {

@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
-import { dateRange, taskOwnerLabel } from "@/lib/display";
+import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
@@ -45,7 +45,7 @@ export function SprintTaskTables({
             <DataTableHead>
               <tr>
                 <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                <DataHeaderCell>Assignee</DataHeaderCell>
+                <DataHeaderCell>Zuständig</DataHeaderCell>
                 <DataHeaderCell>Status</DataHeaderCell>
                 <DataHeaderCell>Review-Status</DataHeaderCell>
                 <DataHeaderCell>CEO-Score</DataHeaderCell>
@@ -71,7 +71,7 @@ export function SprintTaskTables({
                       </div>
                     )}
                   </DataCell>
-                  <DataCell className="text-slate-700">{taskOwnerLabel(task)}</DataCell>
+                  <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                   <DataCell>
                     <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className="h-8 w-32 text-xs font-semibold" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
                   </DataCell>
@@ -123,7 +123,7 @@ export function SprintTaskTables({
               <DataTableHead>
                 <tr>
                   <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                  <DataHeaderCell>Assignee</DataHeaderCell>
+                  <DataHeaderCell>Zuständig</DataHeaderCell>
                   <DataHeaderCell>Aktueller Sprint</DataHeaderCell>
                   <DataHeaderCell>Zuweisung</DataHeaderCell>
                 </tr>
@@ -139,7 +139,7 @@ export function SprintTaskTables({
                         </button>
                         <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
                       </DataCell>
-                      <DataCell className="text-slate-700">{taskOwnerLabel(task)}</DataCell>
+                      <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                       <DataCell className="text-slate-700">{currentSprint?.name || "ohne Sprint"}</DataCell>
                       <DataCell>
                         <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />

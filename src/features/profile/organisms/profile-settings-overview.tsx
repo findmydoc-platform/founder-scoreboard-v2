@@ -82,7 +82,7 @@ function ProfileSettingsForm({
     { value: "profile", label: "Mein Profil" },
   ];
   const viewOptions = viewTabs.map((item) => ({ value: item.id, label: item.label }));
-  const ownerOptions = [{ value: "Alle", label: "Alle" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
+  const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const statusOptions = [{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }));
   const packageOptions = [{ value: "Alle", label: "Alle" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.title }))];
@@ -205,7 +205,7 @@ function ProfileSettingsForm({
               priorityOptions={priorityOptions}
               quickFilterOptions={quickFilterOptions}
               statusOptions={statusOptions}
-              ownerOptions={ownerOptions}
+              assigneeOptions={assigneeOptions}
               viewOptions={viewOptions}
               workspaceOptions={workspaceOptions}
               onAdvancedBoardOpenChange={setAdvancedBoardOpen}

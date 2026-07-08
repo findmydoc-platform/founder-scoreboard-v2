@@ -4,7 +4,7 @@ import { useState, type DragEvent } from "react";
 import type { PlanningData, Task, TaskStatus } from "@/lib/types";
 import {
   createTaskDragPreview,
-  founderTaskOwnershipGuardMessage,
+  founderTaskAssignmentGuardMessage,
   transparentDragImage,
 } from "@/features/planning/model/planning-app-model";
 import { normalizeStatus } from "@/lib/status";
@@ -31,7 +31,7 @@ export function usePlanningBoardState({
   const startTaskDrag = (task: Task, event: DragEvent<HTMLElement>) => {
     if (!canChangeTaskStatus(task)) {
       event.preventDefault();
-      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardNotice(founderTaskAssignmentGuardMessage());
       setStatusGuardTaskId(task.id);
       return;
     }
@@ -69,7 +69,7 @@ export function usePlanningBoardState({
     setDragOverStatus(null);
     if (!task || normalizeStatus(task.status) === status) return;
     if (!canChangeTaskStatus(task)) {
-      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardNotice(founderTaskAssignmentGuardMessage());
       setStatusGuardTaskId(task.id);
       return;
     }

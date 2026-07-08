@@ -3,7 +3,7 @@
 import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange, taskOwnerLabel } from "@/lib/display";
+import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
 import type { Package, Task, TaskRelation, TaskStatus } from "@/lib/types";
@@ -130,7 +130,7 @@ export function TaskCard({
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-500">
         <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
-          <span className="truncate">{pack?.title || "ohne Initiative"} · {taskOwnerLabel(task)}</span>
+          <span className="truncate">{pack?.title || "ohne Initiative"} · {taskAssigneeLabel(task)}</span>
         </span>
         <span className="shrink-0">{dateRange(task)}</span>
       </div>

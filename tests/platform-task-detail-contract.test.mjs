@@ -72,7 +72,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(taskDetailPanel, /TaskDetailPanelSubIssuesSection/);
   assert.match(panelSubIssuesSection, /Sub-Issues/);
   assert.match(panelSubIssuesSection, /Noch keine Sub-Issues/);
-  assert.match(panelSubIssuesSection, /taskOwnerLabel/);
+  assert.match(panelSubIssuesSection, /taskAssigneeLabel/);
   assert.match(taskDetailPanel, /TaskDetailPanelBlockerSection/);
   assert.match(panelBlockerSection, /Blocker früh melden/);
   assert.match(panelBlockerSection, /Blocker melden/);
@@ -180,7 +180,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(taskDetailState, /buildDetailsPackagePatch/);
   assert.match(taskDetailState, /buildDetailsMilestonePatch/);
   assert.match(taskDetailState, /taskRelationsFor/);
-  assert.match(taskDetailState, /taskOwnerLabel/);
+  assert.match(taskDetailState, /taskAssigneeLabel/);
   assert.match(taskDetailState, /linkedFocusItems/);
   assert.match(taskDetailState, /relationTargetOptions/);
   assert.match(taskDetailState, /canManageTaskMeta/);
@@ -221,11 +221,11 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(relationshipsSection, /Legacy-Notiz/);
   assert.match(subIssuesSection, /Sub-Issues/);
   assert.match(subIssuesSection, /Noch keine Sub-Issues/);
-  assert.match(subIssuesSection, /taskOwnerLabel/);
+  assert.match(subIssuesSection, /taskAssigneeLabel/);
   assert.match(detailsCard, /Priorität/);
   assert.match(detailsCard, /Meilenstein/);
   assert.match(detailsCard, /Erstellt von/);
-  assert.match(detailsCard, /Assignee/);
+  assert.match(detailsCard, /Zuständig/);
   assert.match(detailsCard, /canManageReviewOwner/);
   assert.match(detailsCard, /reviewOwnerProfileId/);
   assert.match(detailsCard, /Nur CEO kann den Review Owner ändern/);
@@ -285,7 +285,7 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(projectsOverview, /aria-expanded=\{isMilestoneOpen\}/);
   assert.match(projectsOverview, /InitiativeTreeItem/);
   assert.match(projectsOverview, /DeliverableTable/);
-  assert.match(projectsOverview, /taskOwnerLabel/);
+  assert.match(projectsOverview, /taskAssigneeLabel/);
   assert.match(projectsOverview, /\/tasks\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(display, /initiativeMetaLabel/);
   assert.match(ui, /Initiative/);

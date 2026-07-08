@@ -88,7 +88,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
-          onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, owner: selectedTask.owner, status: "Offen" })}
+          onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, assignee: selectedTask.assigneeId || selectedTask.assignee, status: "Offen" })}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onOpenReview={() => openReviewSheet(selectedTask)}
           onDelete={() => deleteTask(selectedTask)}

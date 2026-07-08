@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,owner,review_owner_profile_id,sprint_id,score_final")
+    .select("id,title,assignee,owner,review_owner_profile_id,sprint_id,score_final")
     .eq("id", id)
     .single();
 
@@ -74,11 +74,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       body: "Diese Aufgabe wartet erneut auf Review.",
     });
   }
-  if (task.owner && task.owner !== task.review_owner_profile_id) {
+  const assignee = task.assignee || task.owner;
+  if (assignee && assignee !== task.review_owner_profile_id) {
     notifications.push({
       type: "task.review_requested",
       actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: task.owner,
+      recipient_profile_id: assignee,
       entity_type: "task",
       entity_id: id,
       title: `Review wieder geöffnet: ${task.title}`,

@@ -1,9 +1,10 @@
-import { reviewOwnerForTask, taskOwnerPatch } from "@/features/planning/model/planning-app-model";
+import { reviewOwnerForTask, taskAssigneePatch } from "@/features/planning/model/planning-app-model";
 import { slugify } from "@/lib/slug";
 import type { Package, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
   status?: string;
+  assignee?: string;
   owner?: string;
   reviewOwnerProfileId?: string;
   priority?: string;
@@ -39,6 +40,7 @@ export type CurrentTaskForActivity = {
   review_owner_profile_id?: string | null;
   review_requested_at?: string | null;
   score_final?: boolean | null;
+  assignee?: string | null;
   owner?: string | null;
   priority?: string | null;
   sprint_id?: string | null;
@@ -60,10 +62,10 @@ export function profileId(value?: string) {
   return slugify(value || "");
 }
 
-export function taskOwnedByProfile(task: { owner?: string | null }, profile?: { id?: string; name?: string } | null) {
-  if (!profile || !task.owner) return false;
-  const owner = task.owner;
-  return owner === profile.id || owner === profile.name || owner === profileId(profile.name);
+export function taskAssignedToProfile(task: { assignee?: string | null; owner?: string | null }, profile?: { id?: string; name?: string } | null) {
+  const assignee = task.assignee || task.owner || "";
+  if (!profile || !assignee) return false;
+  return assignee === profile.id || assignee === profile.name || assignee === profileId(profile.name);
 }
 
 export function buildClientTaskUpdatePatch(
@@ -73,8 +75,8 @@ export function buildClientTaskUpdatePatch(
   packages: Package[],
   reviewRequestedAt = new Date().toISOString(),
 ): NormalizedClientTaskPatch {
-  let normalizedPatch = patch.owner !== undefined || patch.ownerId !== undefined
-    ? { ...patch, ...taskOwnerPatch(patch.ownerId || patch.owner || "", profiles) }
+  let normalizedPatch = patch.assignee !== undefined || patch.assigneeId !== undefined || patch.owner !== undefined || patch.ownerId !== undefined
+    ? { ...patch, ...taskAssigneePatch(patch.assigneeId || patch.assignee || patch.ownerId || patch.owner || "", profiles) }
     : patch;
 
   if (normalizedPatch.status === "Review" || normalizedPatch.reviewStatus === "requested") {
@@ -100,7 +102,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>): TaskUpdatePayloa
 
   return {
     status: patch.status,
-    owner: patch.ownerId || patch.owner,
+    assignee: patch.assigneeId || patch.assignee || patch.ownerId || patch.owner,
     priority: patch.priority,
     packageId: patch.packageId,
     startDate: patch.startDate,
@@ -140,7 +142,7 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.reviewOwnerProfileId !== undefined && payload.reviewOwnerProfileId !== currentTask?.review_owner_profile_id) {
     messages.push(`Review Owner geändert: ${formatChange(currentTask?.review_owner_profile_id, payload.reviewOwnerProfileId)}`);
   }
-  if (payload.owner !== undefined && payload.owner !== currentTask?.owner) messages.push(`Owner geändert: ${formatChange(currentTask?.owner, payload.owner)}`);
+  if (payload.assignee !== undefined && payload.assignee !== (currentTask?.assignee || currentTask?.owner)) messages.push(`Zuständigkeit geändert: ${formatChange(currentTask?.assignee || currentTask?.owner, payload.assignee)}`);
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
   if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
@@ -168,6 +170,8 @@ export function buildTaskUpdateResponsePatch(
   if (startsReviewRequest || update.review_owner_profile_id !== undefined) {
     return {
       id,
+      ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
+      ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
       ...(update.status ? { status: String(update.status) } : {}),
       ...(update.review_status ? { reviewStatus: String(update.review_status) as Task["reviewStatus"] } : {}),
       ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
@@ -181,6 +185,8 @@ export function buildTaskUpdateResponsePatch(
   if (Object.keys(update).length) {
     return {
       id,
+      ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
+      ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
     };

@@ -10,7 +10,7 @@ export function BoardSettingsSection({
   advancedBoardOpen,
   data,
   draft,
-  ownerOptions,
+  assigneeOptions,
   packageOptions,
   priorityOptions,
   quickFilterOptions,
@@ -27,7 +27,7 @@ export function BoardSettingsSection({
   advancedBoardOpen: boolean;
   data: PlanningData;
   draft: ProfileSettingsDraft;
-  ownerOptions: Array<{ value: string; label: string }>;
+  assigneeOptions: Array<{ value: string; label: string }>;
   packageOptions: Array<{ value: string; label: string }>;
   priorityOptions: Array<{ value: string; label: string }>;
   quickFilterOptions: Array<{ value: string; label: string }>;
@@ -66,8 +66,8 @@ export function BoardSettingsSection({
             <SettingsRow label="Filter" align="start">
               <div className="grid gap-2 md:min-w-96 md:grid-cols-2">
                 <UiField as="div">
-                  Owner
-                  <CustomSelect value={draft.planningFilters.owner} onChange={(owner) => onPlanningFiltersChange({ owner })} options={ownerOptions} className="h-9 text-sm" />
+                  Zuständig
+                  <CustomSelect value={draft.planningFilters.assignee} onChange={(assignee) => onPlanningFiltersChange({ assignee })} options={assigneeOptions} className="h-9 text-sm" />
                 </UiField>
                 <UiField as="div">
                   Status

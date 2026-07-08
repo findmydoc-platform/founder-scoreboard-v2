@@ -55,7 +55,6 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   execution: "Execution",
-  mine: "Meine Aufgaben",
   reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
@@ -70,7 +69,6 @@ export const workspaceLabels: Record<Workspace, string> = {
 export const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   execution: "Heute-Modus, Hygiene-Alerts und Review-Steuerung.",
-  mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
   reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Weekly Updates, Punkte und Sprintabschluss.",
@@ -82,10 +80,9 @@ export const workspaceSubtitles: Record<Workspace, string> = {
   profile: "Deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
 };
 
-export const planningWorkspaces: Workspace[] = ["planning", "mine"];
+export const planningWorkspaces: Workspace[] = ["planning"];
 
 export const quickFilters = [
-  { id: "mine", label: "Meine Aufgaben" },
   { id: "open", label: "Offen" },
   { id: "blocked", label: "Blockiert" },
   { id: "week", label: "Diese Woche" },
@@ -93,19 +90,19 @@ export const quickFilters = [
   { id: "evidence", label: "Ohne Evidence" },
 ];
 
-export function profileForOwnerValue(profiles: Profile[], value?: string) {
+export function profileForAssigneeValue(profiles: Profile[], value?: string) {
   return profiles.find((profile) => profile.id === value || profile.name === value) || null;
 }
 
-export function taskOwnerPatch(ownerValue: string, profiles: Profile[]): Partial<Task> {
-  const profile = profileForOwnerValue(profiles, ownerValue);
-  const ownerId = profile?.id || "";
-  const owner = profile?.name || ownerValue || "";
+export function taskAssigneePatch(assigneeValue: string, profiles: Profile[]): Partial<Task> {
+  const profile = profileForAssigneeValue(profiles, assigneeValue);
+  const assigneeId = profile?.id || "";
+  const assignee = profile?.name || assigneeValue || "";
   return {
-    ownerId,
-    owner,
-    assigneeId: ownerId,
-    assignee: owner,
+    assigneeId,
+    assignee,
+    ownerId: assigneeId,
+    owner: assignee,
   };
 }
 
@@ -191,7 +188,7 @@ export function taskText(task: Task) {
   return [
     task.title,
     task.description,
-    task.owner,
+    task.assignee,
     task.workstream,
     task.priority,
     task.definitionOfDone,
@@ -237,7 +234,7 @@ export function founderStatusGuardMessage(status: TaskStatus) {
   return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
 }
 
-export function founderTaskOwnershipGuardMessage() {
+export function founderTaskAssignmentGuardMessage() {
   return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
 }
 
@@ -284,8 +281,8 @@ export function buildHygieneAlerts(data: PlanningData) {
     const latestSignal = latestTaskSignal(task.id, data.taskComments, data.taskActivity);
     const staleDays = daysSinceIso(latestSignal || task.startDate || task.endDate);
 
-    if (task.priority === "P0" && !task.owner && task.taskType !== "proposal") {
-      alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Assignee", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Assignee festlegen und nächsten Schritt notieren.", taskId: task.id });
+    if (task.priority === "P0" && !task.assignee && task.taskType !== "proposal") {
+      alerts.push({ id: `p0-assignee-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Zuständigkeit", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Zuständigkeit festlegen und nächsten Schritt notieren.", taskId: task.id });
     }
     if (!task.acceptanceCriteria?.trim()) {
       alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Abnahmekriterien fehlen", description: "Ohne Abnahmekriterien ist Review und Score schwammig.", recommendedAction: "Abnahmekriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });

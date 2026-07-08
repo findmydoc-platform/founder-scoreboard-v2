@@ -1,10 +1,11 @@
-import { taskOwnedByProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
+import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 export type TaskRouteDbUpdate = Record<string, string | number | boolean | null>;
 
 type CurrentTaskForRoute = {
+  assignee?: string | null;
   owner?: string | null;
   status?: string | null;
   task_type?: string | null;
@@ -20,7 +21,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   const isImplicitReviewScoreReset = startsTaskReviewRequest(payload) && payload.scoreFinal === false && payload.scorePoints === undefined;
 
   return [
-    payload.owner !== undefined ? "Owner" : "",
+    payload.assignee !== undefined || payload.owner !== undefined ? "Zuständig" : "",
     payload.priority !== undefined ? "Priorität" : "",
     payload.packageId !== undefined ? "Initiative" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
@@ -45,7 +46,7 @@ export function validateTaskStatusUpdate({
   if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
     return { ok: false, error: "Ungültiger Status.", status: 400 };
   }
-  if (!isOperationalLead && !taskOwnedByProfile(currentTask, profile)) {
+  if (!isOperationalLead && !taskAssignedToProfile(currentTask, profile)) {
     return { ok: false, error: "Founder können nur den Status ihrer eigenen Aufgaben ändern.", status: 403 };
   }
   if (!isOperationalLead && payload.status === "Erledigt") {
@@ -85,18 +86,19 @@ export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: T
 
 export function proposalPromotionState(currentTask: {
   task_type?: string | null;
+  assignee?: string | null;
   owner?: string | null;
   status?: string | null;
   package_id?: string | null;
   sprint_id?: string | null;
 }, update: TaskRouteDbUpdate) {
-  const effectiveOwner = typeof update.owner === "string" ? update.owner : currentTask.owner || "";
+  const effectiveAssignee = typeof update.assignee === "string" ? update.assignee : currentTask.assignee || currentTask.owner || "";
   const effectiveStatus = typeof update.status === "string" ? update.status : currentTask.status || "";
   const effectivePackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
   const effectiveSprintId = typeof update.sprint_id === "string" ? update.sprint_id : currentTask.sprint_id || "";
   const shouldPromoteProposal =
     currentTask.task_type === "proposal" &&
-    Boolean(effectiveOwner) &&
+    Boolean(effectiveAssignee) &&
     effectiveStatus !== "Vorschlag";
 
   return { effectivePackageId, effectiveSprintId, shouldPromoteProposal };

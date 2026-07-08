@@ -94,7 +94,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         <UiPanel padding="xl">
           <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Assignee haben hier keinen Zugriff.
+            Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Zuständige haben hier keinen Zugriff.
           </p>
         </UiPanel>
       )}

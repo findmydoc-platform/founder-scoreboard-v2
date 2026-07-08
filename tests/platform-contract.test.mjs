@@ -12,7 +12,7 @@ test("founders can only move or change status for their own tasks", async () => 
   const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
-  assert.match(routePolicy, /taskOwnedByProfile/);
+  assert.match(routePolicy, /taskAssignedToProfile/);
   assert.match(routePolicy, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
   assert.match(app, /canChangeTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
