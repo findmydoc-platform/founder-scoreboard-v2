@@ -7,6 +7,7 @@ import type { AuthenticatedProfile, PlanningData } from "@/lib/types";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { setProtectedPlanningDataCache } from "@/features/planning/hooks/use-planning-auth";
 import { normalizePlanningData } from "@/features/planning/model/planning-app-model";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 type UsePlanningDataRefreshOptions = {
   apiClient: BrowserApiClient;
@@ -15,6 +16,7 @@ type UsePlanningDataRefreshOptions = {
   setData: Dispatch<SetStateAction<PlanningData>>;
   setProtectedDataLoaded: Dispatch<SetStateAction<boolean>>;
   source: "seed" | "supabase";
+  workspace: AppWorkspace;
 };
 
 export function usePlanningDataRefresh({
@@ -24,6 +26,7 @@ export function usePlanningDataRefresh({
   setData,
   setProtectedDataLoaded,
   source,
+  workspace,
 }: UsePlanningDataRefreshOptions) {
   const applyPlanningDataUpdate = useCallback((updater: (current: PlanningData) => PlanningData) => {
     setData((current) => {
@@ -41,7 +44,7 @@ export function usePlanningDataRefresh({
 
   const refreshPlanningData = useCallback(async () => {
     if (source !== "supabase" || !authUser?.id) return;
-    const { response: refreshResponse, body: refreshPayload } = await planningApi.requestPlanningData(apiClient);
+    const { response: refreshResponse, body: refreshPayload } = await planningApi.requestPlanningData(apiClient, workspace);
     if (!refreshResponse.ok || !refreshPayload?.data) return;
     const nextData = normalizePlanningData(refreshPayload.data);
     setProtectedPlanningDataCache({
@@ -51,7 +54,7 @@ export function usePlanningDataRefresh({
     });
     setData(nextData);
     setProtectedDataLoaded(true);
-  }, [apiClient, authUser, serverCurrentProfile, setData, setProtectedDataLoaded, source]);
+  }, [apiClient, authUser, serverCurrentProfile, setData, setProtectedDataLoaded, source, workspace]);
 
   return { applyPlanningDataUpdate, refreshPlanningData };
 }

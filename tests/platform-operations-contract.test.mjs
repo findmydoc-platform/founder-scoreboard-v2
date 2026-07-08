@@ -395,6 +395,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
   const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
@@ -429,18 +430,22 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.match(rootPage, /redirect\(`\$\{workspacePath\(workspace\)\}/);
   assert.match(rootPage, /rawWorkspace === "mine"/);
-  assert.match(workspacePage, /workspaceDataScopes/);
-  assert.match(workspacePage, /getPlanningData\(workspaceDataScopes\[initialWorkspace\]\)/);
-  assert.match(workspacePage, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
-  assert.match(workspacePage, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
-  assert.match(workspacePage, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*feedbackItems: true,[\s\S]*\}/);
-  assert.match(workspacePage, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
-  assert.match(workspacePage, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
+  assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\)\)/);
+  assert.match(dataScopes, /export const workspaceDataScopes/);
+  assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
+  assert.match(dataScopes, /planningDataWorkspaceFromValue/);
+  assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
+  assert.match(dataScopes, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
+  assert.match(dataScopes, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*feedbackItems: true,[\s\S]*\}/);
+  assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
+  assert.match(dataScopes, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
   assert.match(dataLoader, /export type PlanningDataQueryScope/);
   assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
   assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
   assert.match(planningData, /getPlanningData\(scope\?: PlanningDataQueryScope\)/);
-  assert.match(planningDataApi, /getPlanningData\(\)/);
+  assert.match(planningDataApi, /planningDataWorkspaceFromValue\(rawWorkspace\)/);
+  assert.match(planningDataApi, /apiError\("Unknown planning workspace\.", 400\)/);
+  assert.match(planningDataApi, /getPlanningData\(workspace \? getPlanningDataScopeForWorkspace\(workspace\) : undefined\)/);
   assert.match(workspaceHook, /workspaceStateKey/);
   assert.match(workspaceHook, /workspacePath\(initialWorkspace\)/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);

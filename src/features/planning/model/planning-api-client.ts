@@ -2,9 +2,11 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { FeedbackItem, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
-export function requestPlanningData(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>("/api/planning-data");
+export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+  return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
 }
 
 export function importDemoSeedRequest(apiClient: BrowserApiClient) {
