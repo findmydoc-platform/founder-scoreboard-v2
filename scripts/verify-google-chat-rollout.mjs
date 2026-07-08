@@ -7,7 +7,7 @@ const envExample = await readFile(".env.example", "utf8");
 const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
 const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
 const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
-const digestWorkflow = await readFile(".github/workflows/google-chat-digest.yml", "utf8");
+const releaseWorkflow = await readFile(".github/workflows/send-release-google-chat.yml", "utf8");
 
 function googleChatDeliveryStatus() {
   const webhookConfigured = Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL);
@@ -31,7 +31,7 @@ const requiredChecks = [
   ["env example documents pipeline header", envExample.includes("x-founderops-delivery-secret")],
   ["rollout documents disabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=false")],
   ["rollout documents enabled state", rollout.includes("GOOGLE_CHAT_DELIVERY_ENABLED=true")],
-  ["rollout documents weekday schedule", rollout.includes("09:00 Europe/Berlin")],
+  ["rollout documents release workflow", rollout.includes(".github/workflows/send-release-google-chat.yml")],
   ["rollout documents delivery secret", rollout.includes("FOUNDEROPS_DELIVERY_SECRET")],
   ["rollout documents phase 1 production app url", rollout.includes("APP_URL=https://founder-ops.findmydoc.eu")],
   ["rollout documents pipeline header", rollout.includes("x-founderops-delivery-secret")],
@@ -42,9 +42,10 @@ const requiredChecks = [
   ["delivery route supports pipeline secret header", deliverRoute.includes("x-founderops-delivery-secret") && deliverRoute.includes("FOUNDEROPS_DELIVERY_SECRET")],
   ["delivery route supports event id retry", deliverRoute.includes("eventIds") && deliverRoute.includes("maxExplicitEventIds")],
   ["delivery route supports test delivery", deliverRoute.includes("testDelivery") && deliverRoute.includes("direct_dm")],
-  ["github digest workflow exists", digestWorkflow.includes("name: Google Chat Digest")],
-  ["github digest workflow uses weekday schedule", digestWorkflow.includes("cron: \"0 7 * * 1-5\"")],
-  ["github digest workflow uses secret header", digestWorkflow.includes("x-founderops-delivery-secret") && digestWorkflow.includes("FOUNDEROPS_DELIVERY_SECRET")],
+  ["github release workflow exists", releaseWorkflow.includes("name: Send Release Google Chat")],
+  ["github release workflow accepts payload json", releaseWorkflow.includes("message_payload_json")],
+  ["github release workflow uses webhook secret", releaseWorkflow.includes("GOOGLE_CHAT_WEBHOOK_URL")],
+  ["github release workflow does not call notification digest", !releaseWorkflow.includes("/api/notifications/generate-digest") && !releaseWorkflow.includes("/api/notifications/deliver")],
   ["delivery route supports direct dm spaces", deliverRoute.includes("sendGoogleChatSpaceDigest") && deliverRoute.includes("isGoogleChatDmSpace")],
   ["chat event route exists", eventRoute.includes("FounderOps Google Chat Events")],
   ["chat event route stays gated", eventRoute.includes("googleChatDeliveryStatus")],

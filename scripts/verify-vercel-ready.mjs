@@ -15,7 +15,7 @@ const requiredFiles = [
   ".github/workflows/deploy-preview.yml",
   ".github/workflows/deploy-production.yml",
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
-  ".github/workflows/google-chat-digest.yml",
+  ".github/workflows/send-release-google-chat.yml",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -96,8 +96,10 @@ if (!supabase.includes("SUPABASE_SERVICE_ROLE_KEY")) failures.push("Server Supab
 if (!supabase.includes("REQUIRE_SUPABASE_AUTH")) failures.push("Production auth gate env is missing.");
 
 const page = await read("src/app/page.tsx");
+const workspacePage = await read("src/app/(workspaces)/workspace-page.tsx");
 if (!page.includes('dynamic = "force-dynamic"')) failures.push("Home page should force dynamic rendering for auth/data readiness.");
-if (!page.includes("requiresSupabaseAuth")) failures.push("Home page should respect REQUIRE_SUPABASE_AUTH.");
+if (!page.includes("redirect(")) failures.push("Home page should redirect into routed workspaces.");
+if (!workspacePage.includes("requiresSupabaseAuth")) failures.push("Workspace page should respect REQUIRE_SUPABASE_AUTH.");
 
 const health = await read("src/app/api/health/route.ts");
 for (const marker of ["status", "ready", "supabaseConfigured", "authRequired"]) {
@@ -181,7 +183,7 @@ for (const marker of [
 }
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
-const googleChatDigestWorkflow = await read(".github/workflows/google-chat-digest.yml");
+const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
 }
@@ -230,16 +232,26 @@ for (const marker of [
 }
 
 for (const marker of [
-  "name: Google Chat Digest",
-  "cron: \"0 7 * * 1-5\"",
+  "name: Send Release Google Chat",
   "workflow_dispatch",
-  "name: production",
+  "message_payload_json",
+  "release_tag",
+  "permissions: {}",
+  "cancel-in-progress: false",
+  "GOOGLE_CHAT_WEBHOOK_URL",
+  "messageReplyOption",
+  "Google Chat Release Notification",
+]) {
+  if (!googleChatReleaseWorkflow.includes(marker)) failures.push(`send-release-google-chat.yml missing: ${marker}`);
+}
+for (const banned of [
+  "/api/notifications/generate-digest",
+  "/api/notifications/deliver",
   "FOUNDEROPS_DELIVERY_SECRET",
   "x-founderops-delivery-secret",
-  "https://founder-ops.findmydoc.eu/api/notifications/generate-digest",
-  "https://founder-ops.findmydoc.eu/api/notifications/deliver",
+  "cron: \"0 7 * * 1-5\"",
 ]) {
-  if (!googleChatDigestWorkflow.includes(marker)) failures.push(`google-chat-digest.yml missing: ${marker}`);
+  if (googleChatReleaseWorkflow.includes(banned)) failures.push(`send-release-google-chat.yml must not include: ${banned}`);
 }
 
 const ciWorkflowPresent = existsSync(".github/workflows/ci.yml");
@@ -266,7 +278,7 @@ console.log(JSON.stringify({
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
-    workflows: ["deploy-preview", "deploy-production", "google-chat-digest"],
+    workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,
     skill: "fmd-vercel-readiness",

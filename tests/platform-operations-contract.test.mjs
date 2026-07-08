@@ -110,7 +110,7 @@ test("google chat rollout is documented and verified before delivery activation"
   const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
   const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
-  const digestWorkflow = await readFile(".github/workflows/google-chat-digest.yml", "utf8");
+  const releaseWorkflow = await readFile(".github/workflows/send-release-google-chat.yml", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
@@ -122,9 +122,10 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(envExample, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
-  assert.match(rollout, /09:00 Europe\/Berlin/);
+  assert.match(rollout, /\.github\/workflows\/send-release-google-chat\.yml/);
   assert.match(rollout, /x-founderops-delivery-secret/);
   assert.match(rollout, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(rollout, /message_payload_json/);
   assert.match(rollout, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /Rollback/);
   assert.match(rollout, /\/api\/google-chat\/events/);
@@ -134,21 +135,20 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(script, /FOUNDEROPS_DELIVERY_SECRET/);
   assert.match(script, /x-founderops-delivery-secret/);
+  assert.match(script, /send-release-google-chat\.yml/);
   assert.doesNotMatch(script, /settings-notifications\.tsx/);
   assert.doesNotMatch(script, /Test-Sammelmeldung|Direktnachricht|Zustelldetails anzeigen/);
-  assert.match(digestWorkflow, /name: Google Chat Digest/);
-  assert.match(digestWorkflow, /cron: "0 7 \* \* 1-5"/);
-  assert.match(digestWorkflow, /workflow_dispatch/);
-  assert.match(digestWorkflow, /name: production/);
-  assert.match(digestWorkflow, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(digestWorkflow, /x-founderops-delivery-secret/);
-  assert.match(digestWorkflow, /Generate focus reminders/);
-  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/generate-digest/);
-  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/deliver/);
-  assert.ok(
-    digestWorkflow.indexOf("/api/notifications/generate-digest") < digestWorkflow.indexOf("/api/notifications/deliver"),
-    "workflow must generate reminders before delivery",
-  );
+  assert.match(releaseWorkflow, /name: Send Release Google Chat/);
+  assert.match(releaseWorkflow, /workflow_dispatch/);
+  assert.match(releaseWorkflow, /message_payload_json/);
+  assert.match(releaseWorkflow, /release_tag/);
+  assert.match(releaseWorkflow, /permissions: \{\}/);
+  assert.match(releaseWorkflow, /GOOGLE_CHAT_WEBHOOK_URL/);
+  assert.match(releaseWorkflow, /messageReplyOption/);
+  assert.doesNotMatch(releaseWorkflow, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.doesNotMatch(releaseWorkflow, /x-founderops-delivery-secret/);
+  assert.doesNotMatch(releaseWorkflow, /api\/notifications\/generate-digest/);
+  assert.doesNotMatch(releaseWorkflow, /api\/notifications\/deliver/);
   assert.match(script, /chat event route exists/);
   assert.match(deliverRoute, /googleChatDeliveryStatus/);
   assert.match(deliverRoute, /x-founderops-delivery-secret/);
@@ -198,6 +198,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /FOUNDEROPS_DELIVERY_SECRET/);
   assert.match(verify, /verify:google-chat/);
+  assert.match(verify, /send-release-google-chat\.yml/);
   assert.match(verify, /GITHUB_SYNC_TOKEN/);
   assert.match(verify, /founder-ops\.findmydoc\.eu/);
   assert.match(pkg, /verify:release/);
@@ -219,8 +220,8 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /Run `pnpm run build` as its own command/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(deployment, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(deployment, /09:00 Europe\/Berlin/);
-  assert.match(deployment, /x-founderops-delivery-secret/);
+  assert.match(deployment, /send-release-google-chat\.yml/);
+  assert.match(deployment, /message_payload_json/);
   assert.match(deployment, /founder-ops\.findmydoc\.eu/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /pnpm run verify:deploy/);
