@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireOperationalLead } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { getGitHubAppConnectionStatus, getGitHubAppInstallationToken } from "@/lib/github-app";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -42,6 +42,16 @@ type SyncProfileRow = {
   github_login?: string | null;
 };
 
+type LoadedSyncTask =
+  | {
+      ok: true;
+      data: TaskRowForMapping & { owner?: string | null; assignee?: string | null };
+      task: Task;
+      assigneeLogin: string;
+      hasExistingGitHubIssue: boolean;
+    }
+  | { ok: false; response: NextResponse };
+
 function issueFromGitHubUrl(value?: string | null) {
   const match = (value || "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:$|[?#])/i);
   if (!match) return null;
@@ -49,6 +59,25 @@ function issueFromGitHubUrl(value?: string | null) {
     repo: `${match[1]}/${match[2]}`,
     number: Number(match[3]),
   };
+}
+
+function linkedIssueNumber(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
+  if (task.githubIssueNumber) return task.githubIssueNumber;
+
+  const githubIssue = issueFromGitHubUrl(task.githubIssueUrl);
+  if (githubIssue?.repo === githubRepoSlug()) return githubIssue.number;
+
+  const legacyNumber = Number(task.issueNumber || 0);
+  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
+
+  const legacyIssue = issueFromGitHubUrl(task.issueUrl);
+  return legacyIssue?.repo === githubRepoSlug() ? legacyIssue.number : null;
+}
+
+function githubSyncResourceKey(task: Task, createIfMissing: boolean) {
+  const issueNumber = linkedIssueNumber(task);
+  if (issueNumber) return `github:${githubRepoSlug()}#${issueNumber}`;
+  return createIfMissing ? `task:${task.id}:create-github-issue` : `task:${task.id}:github-sync`;
 }
 
 function rowIssueNumber(row: RelationshipTaskRow, currentTaskId: string, currentIssueNumber: number) {
@@ -122,22 +151,9 @@ async function githubDependencyContext(supabase: SupabaseClient, taskId: string,
   };
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireOperationalLead, {});
-  if (!apiContext.ok) return apiContext.response;
-
-  const { payload, supabase } = apiContext;
-  let githubInstallationToken = "";
-  try {
-    githubInstallationToken = await getGitHubAppInstallationToken();
-  } catch (tokenError) {
-    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
-    return apiError(message, 401);
-  }
-
-  const { id } = await context.params;
+async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<LoadedSyncTask> {
   const { data, error } = await supabase.from("tasks").select("*").eq("id", id).single();
-  if (error || !data) return apiError(error?.message || "Aufgabe nicht gefunden.", 404);
+  if (error || !data) return { ok: false, response: apiError(error?.message || "Aufgabe nicht gefunden.", 404) };
 
   const profileNameById = new Map<string, string>();
   const profileGitHubLoginById = new Map<string, string>();
@@ -149,14 +165,68 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       if (profile.github_login) profileGitHubLoginById.set(profile.id, profile.github_login);
     }
   }
+
   const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
   const assigneeProfileId = data.assignee || "";
   const assigneeLogin = assigneeProfileId ? profileGitHubLoginById.get(assigneeProfileId) || "" : "";
-  const hasExistingGitHubIssue = hasLinkedGitHubIssue(task);
+
+  return {
+    ok: true,
+    data: data as TaskRowForMapping & { owner?: string | null; assignee?: string | null },
+    task,
+    assigneeLogin,
+    hasExistingGitHubIssue: hasLinkedGitHubIssue(task),
+  };
+}
+
+async function acquireGitHubSyncLock(supabase: SupabaseClient, resourceKey: string, taskId: string, profileId: string) {
+  const { data, error } = await supabase.rpc("try_acquire_github_issue_sync_lock", {
+    p_resource_key: resourceKey,
+    p_task_id: taskId,
+    p_locked_by_profile_id: profileId || null,
+    p_ttl_seconds: 600,
+  });
+  if (error) throw new Error(`GitHub-Sync-Lock konnte nicht gesetzt werden: ${error.message}`);
+  return typeof data === "string" && data ? data : null;
+}
+
+async function releaseGitHubSyncLock(supabase: SupabaseClient, resourceKey: string, lockToken: string) {
+  await supabase.rpc("release_github_issue_sync_lock", {
+    p_resource_key: resourceKey,
+    p_lock_token: lockToken,
+  });
+}
+
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireTeamMember, {});
+  if (!apiContext.ok) return apiContext.response;
+
+  const { payload, permission, supabase } = apiContext;
+  const githubConnection = await getGitHubAppConnectionStatus(supabase, permission.profile);
+  if (!githubConnection.connected) {
+    return NextResponse.json({
+      code: "github_app_connection_required",
+      error: "GitHub-App-Verbindung fehlt oder ist abgelaufen. Bitte verbinde GitHub einmal neu.",
+    }, { status: 401 });
+  }
+
+  let githubInstallationToken = "";
+  try {
+    githubInstallationToken = await getGitHubAppInstallationToken();
+  } catch (tokenError) {
+    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
+    return apiError(message, 401);
+  }
+
+  const { id } = await context.params;
+  const loaded = await loadTaskForSync(supabase, id);
+  if (!loaded.ok) return loaded.response;
+
+  let { assigneeLogin, hasExistingGitHubIssue, task } = loaded;
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
     return NextResponse.json({
-      error: "Nur Deliverables können extern angelegt werden.",
+      error: "Nur Deliverables können als GitHub Issue angelegt werden.",
       task: {
         githubSyncStatus: task.githubSyncStatus,
         githubSyncError: task.githubSyncError,
@@ -166,7 +236,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (!hasExistingGitHubIssue && !payload.createIfMissing) {
     return NextResponse.json({
-      error: "Diese Aufgabe liegt nur in der App. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
+      error: "Diese Aufgabe hat noch kein GitHub Issue. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
       task: {
         githubSyncStatus: task.githubSyncStatus,
         githubSyncError: "",
@@ -174,9 +244,53 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }, { status: 409 });
   }
 
-  await supabase.from("tasks").update({ github_sync_status: "pending", github_sync_error: null }).eq("id", id);
+  const resourceKey = githubSyncResourceKey(task, Boolean(payload.createIfMissing));
+  let lockToken = "";
+  try {
+    lockToken = await acquireGitHubSyncLock(supabase, resourceKey, id, permission.profile?.id || "") || "";
+  } catch (lockError) {
+    const message = lockError instanceof Error ? lockError.message : "GitHub-Sync-Lock konnte nicht gesetzt werden.";
+    return apiError(message, 500);
+  }
+
+  if (!lockToken) {
+    return NextResponse.json({
+      code: "github_sync_locked",
+      error: "GitHub-Sync läuft bereits für diese Aufgabe oder dieses Issue.",
+      task: {
+        githubSyncStatus: "pending",
+        githubSyncError: "GitHub-Sync läuft bereits.",
+      },
+    }, { status: 409 });
+  }
 
   try {
+    const reloaded = await loadTaskForSync(supabase, id);
+    if (!reloaded.ok) return reloaded.response;
+    ({ assigneeLogin, hasExistingGitHubIssue, task } = reloaded);
+
+    if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
+      return NextResponse.json({
+        error: "Nur Deliverables können als GitHub Issue angelegt werden.",
+        task: {
+          githubSyncStatus: task.githubSyncStatus,
+          githubSyncError: task.githubSyncError,
+        },
+      }, { status: 400 });
+    }
+
+    if (!hasExistingGitHubIssue && !payload.createIfMissing) {
+      return NextResponse.json({
+        error: "Diese Aufgabe hat noch kein GitHub Issue. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
+        task: {
+          githubSyncStatus: task.githubSyncStatus,
+          githubSyncError: "",
+        },
+      }, { status: 409 });
+    }
+
+    await supabase.from("tasks").update({ github_sync_status: "pending", github_sync_error: null }).eq("id", id);
+
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const dependencyContext = await githubDependencyContext(supabase, id, issue.number);
     await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
@@ -194,7 +308,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }).eq("id", id);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: [`GitHub-Spiegelung ausgeführt: ${githubRepo}#${issue.number}`, ...warnings.map((warning) => `Warnung: ${warning}`)].join(" · "),
+      message: [`GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`, ...warnings.map((warning) => `Warnung: ${warning}`)].join(" · "),
     });
 
     return NextResponse.json({
@@ -211,11 +325,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       },
     });
   } catch (syncError) {
-    const message = syncError instanceof Error ? syncError.message : "GitHub-Spiegelung fehlgeschlagen.";
+    const message = syncError instanceof Error ? syncError.message : "GitHub-Sync fehlgeschlagen.";
     await supabase.from("tasks").update({ github_sync_status: "failed", github_sync_error: message }).eq("id", id);
     await supabase.from("task_activity").insert({
       task_id: id,
-      message: `GitHub-Spiegelung fehlgeschlagen: ${message}`,
+      message: `GitHub-Sync fehlgeschlagen: ${message}`,
     });
     return NextResponse.json({
       error: message,
@@ -224,5 +338,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         githubSyncError: message,
       },
     }, { status: 502 });
+  } finally {
+    await releaseGitHubSyncLock(supabase, resourceKey, lockToken);
   }
 }

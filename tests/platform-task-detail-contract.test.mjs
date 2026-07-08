@@ -96,7 +96,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(panelSidebarSection, /Zum Review-Blatt/);
   assert.match(panelSidebarSection, /onOpenReview/);
   assert.match(panelSidebarSection, /Self-Review/);
-  assert.match(panelSidebarSection, /Externe Ablage/);
+  assert.match(panelSidebarSection, /GitHub Issue/);
   assert.match(panelSidebarSection, /Aufgabe löschen/);
   assert.match(page, /title="Kommentare"/);
   assert.match(page, /<div className="mx-auto max-w-7xl px-6 py-6">/);
@@ -235,8 +235,8 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(detailsCard, /onStatusChange/);
   assert.match(blockerCard, /Keine Blocker gemeldet/);
   assert.match(blockerCard, /openBlockerCount/);
-  assert.match(detailGitHubSyncCard, /Externe Ablage/);
-  assert.match(detailGitHubSyncCard, /Jetzt spiegeln/);
+  assert.match(detailGitHubSyncCard, /GitHub Issue/);
+  assert.match(detailGitHubSyncCard, /Sync/);
   assert.match(comments, /TaskCommentTimeline/);
   assert.match(commentTimeline, /github\.com\/\$\{login\}\.png/);
   assert.match(app, /TaskDetailPanel/);

@@ -24,12 +24,38 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
     <UiBadge
       tone="amber"
       size="xs"
-      title="Nur in der App: noch nicht extern abgelegt."
+      title="Kein GitHub Issue angelegt."
       className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}
     >
-      Nur in der App
+      Kein Issue
     </UiBadge>
   );
+}
+
+export function GitHubSyncStatusBadge({ task, compact = false }: { task: Task; compact?: boolean }) {
+  if (!hasGitHubIssue(task)) return <GitHubMissingBadge compact={compact} />;
+  if (task.githubSyncStatus === "pending") {
+    return (
+      <UiBadge tone="amber" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
+        Sync läuft
+      </UiBadge>
+    );
+  }
+  if (task.githubSyncStatus === "failed") {
+    return (
+      <UiBadge tone="red" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
+        Sync fehlgeschlagen
+      </UiBadge>
+    );
+  }
+  if (task.githubSyncStatus !== "synced") {
+    return (
+      <UiBadge tone="blue" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
+        GitHub offen
+      </UiBadge>
+    );
+  }
+  return null;
 }
 
 export function RelationBadge({ label, count, tone = "slate" }: { label: string; count: number; tone?: Extract<UiTone, "amber" | "blue" | "slate"> }) {
@@ -73,7 +99,6 @@ export function TaskCard({
   isDragging?: boolean;
 }) {
   const normalized = normalizeStatus(task.status);
-  const missingGitHub = !hasGitHubIssue(task);
   const relationGroups = taskRelationsFor(task.id, relations);
   const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
 
@@ -122,7 +147,7 @@ export function TaskCard({
         <UiBadge size="xs" className="text-[11px]">
           {task.hours}h
         </UiBadge>
-        {missingGitHub && <GitHubMissingBadge />}
+        <GitHubSyncStatusBadge task={task} />
         <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
         <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
       </div>

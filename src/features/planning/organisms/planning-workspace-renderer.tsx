@@ -11,6 +11,7 @@ import { SettingsOverview } from "@/features/settings/organisms/settings-overvie
 import { SprintScoreTableOverview } from "@/features/sprint/organisms/sprint-score-overview";
 import { FmdToolsOverview } from "@/features/tools/organisms/fmd-tools-overview";
 import { TeamOverview } from "@/features/team/organisms/team-overview";
+import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 type PlanningWorkspaceRendererProps = {
@@ -35,6 +36,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     filters,
     focusedReviewTaskId,
     googleChatStatus,
+    githubAppConnected,
+    githubSyncQueueOpen,
     hygieneAlerts,
     isPending,
     lockSprint,
@@ -54,6 +57,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     sendGoogleChatTest,
     setData,
     setFocusedReviewTaskId,
+    setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setReviewOwnerFilter,
     setReviewStatusFilter,
@@ -220,11 +224,19 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onDispatchNotifications={dispatchNotifications}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
-          onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
-          onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
           onSelectFeedback={setSelectedFeedbackId}
         />
       )}
+      <TaskGitHubSyncQueue
+        open={githubSyncQueueOpen}
+        tasks={data.tasks}
+        pending={isPending}
+        githubAppConnected={githubAppConnected}
+        onClose={() => setGithubSyncQueueOpen(false)}
+        onOpenTask={(task) => openTaskPanel(task.id)}
+        onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
+        onSyncTaskToGitHub={syncTaskToGitHub}
+      />
       <PlanningTaskViewRenderer controller={controller} />
     </section>
   );

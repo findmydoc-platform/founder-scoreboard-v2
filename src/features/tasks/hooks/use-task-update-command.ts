@@ -109,7 +109,7 @@ export function useTaskUpdateCommand({
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         }
-        if (normalizedPatch.status && hasGitHubIssue(task) && githubAppConnected && canManageTaskMeta) {
+        if (normalizedPatch.status && hasGitHubIssue(task) && githubAppConnected) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {

@@ -1,6 +1,6 @@
 import { AlertTriangle, Link2 } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { GitHubMissingBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
+import { GitHubSyncStatusBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
@@ -51,13 +51,13 @@ export function TaskTableView({
                   <CustomSelect value={normalizeStatus(task.status)} disabled={!canUpdateStatus} onChange={(value) => onUpdateTask(task, { status: value })} className="h-8 w-32 text-xs" options={(canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
                 </DataCell>
                 <DataCell>
-                  {hasGitHubIssue(task) ? (
+                  {hasGitHubIssue(task) && task.githubSyncStatus === "synced" ? (
                     <UiBadge tone="blue" className="gap-1">
                       <Link2 size={13} />
                       verknüpft
                     </UiBadge>
                   ) : (
-                    <GitHubMissingBadge />
+                    <GitHubSyncStatusBadge task={task} />
                   )}
                 </DataCell>
                 <DataCell>

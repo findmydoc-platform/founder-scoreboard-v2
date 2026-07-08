@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto;
+
 create table if not exists profiles (
   id text primary key,
   auth_user_id uuid unique references auth.users(id) on delete set null,
@@ -37,6 +39,17 @@ create table if not exists github_app_user_tokens (
   revoked_at timestamptz,
   last_error text,
   updated_at timestamptz not null default now()
+);
+
+create table if not exists github_issue_sync_locks (
+  resource_key text primary key,
+  task_id text references tasks(id) on delete cascade,
+  locked_by_profile_id text references profiles(id) on delete set null,
+  lock_token uuid not null,
+  locked_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  constraint github_issue_sync_locks_resource_key_present check (length(trim(resource_key)) > 0),
+  constraint github_issue_sync_locks_expires_after_locked check (expires_at > locked_at)
 );
 
 create table if not exists profile_ui_preferences (
@@ -266,6 +279,8 @@ create index if not exists profiles_platform_role_idx on profiles(platform_role)
 create index if not exists profiles_github_login_idx on profiles(lower(github_login));
 create index if not exists github_app_user_tokens_github_login_idx on github_app_user_tokens(github_login);
 create index if not exists github_app_user_tokens_refresh_idx on github_app_user_tokens(refresh_token_expires_at);
+create index if not exists github_issue_sync_locks_task_idx on github_issue_sync_locks(task_id);
+create index if not exists github_issue_sync_locks_expires_idx on github_issue_sync_locks(expires_at);
 create index if not exists profile_feature_tour_acknowledgements_tour_idx on profile_feature_tour_acknowledgements(tour_id, seen_at);
   create index if not exists packages_project_id_idx on packages(project_id);
   create index if not exists packages_owner_id_idx on packages(owner_id);
@@ -302,6 +317,7 @@ grant usage on schema public to anon, authenticated, service_role;
 grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant select, insert, update, delete on github_app_user_tokens to service_role;
+grant select, insert, update, delete on github_issue_sync_locks to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
 create or replace function public.current_profile_role()
@@ -324,8 +340,86 @@ as $$
   select platform_role from public.profiles where auth_user_id = auth.uid()
 $$;
 
+create or replace function public.try_acquire_github_issue_sync_lock(
+  p_resource_key text,
+  p_task_id text default null,
+  p_locked_by_profile_id text default null,
+  p_ttl_seconds integer default 600
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lock_token uuid := gen_random_uuid();
+begin
+  if p_resource_key is null or length(trim(p_resource_key)) = 0 then
+    raise exception 'github sync resource key is required';
+  end if;
+
+  insert into public.github_issue_sync_locks (
+    resource_key,
+    task_id,
+    locked_by_profile_id,
+    lock_token,
+    locked_at,
+    expires_at
+  )
+  values (
+    trim(p_resource_key),
+    nullif(p_task_id, ''),
+    nullif(p_locked_by_profile_id, ''),
+    v_lock_token,
+    now(),
+    now() + make_interval(secs => greatest(coalesce(p_ttl_seconds, 600), 1))
+  )
+  on conflict (resource_key) do update
+    set task_id = excluded.task_id,
+        locked_by_profile_id = excluded.locked_by_profile_id,
+        lock_token = excluded.lock_token,
+        locked_at = excluded.locked_at,
+        expires_at = excluded.expires_at
+    where public.github_issue_sync_locks.expires_at <= now()
+  returning lock_token into v_lock_token;
+
+  if not found then
+    return null;
+  end if;
+
+  return v_lock_token;
+end;
+$$;
+
+create or replace function public.release_github_issue_sync_lock(
+  p_resource_key text,
+  p_lock_token uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_deleted integer := 0;
+begin
+  delete from public.github_issue_sync_locks
+  where resource_key = trim(p_resource_key)
+    and lock_token = p_lock_token;
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted > 0;
+end;
+$$;
+
+revoke all on function public.try_acquire_github_issue_sync_lock(text, text, text, integer) from public;
+revoke all on function public.release_github_issue_sync_lock(text, uuid) from public;
+grant execute on function public.try_acquire_github_issue_sync_lock(text, text, text, integer) to service_role;
+grant execute on function public.release_github_issue_sync_lock(text, uuid) to service_role;
+
 alter table profiles enable row level security;
 alter table github_app_user_tokens enable row level security;
+alter table github_issue_sync_locks enable row level security;
 alter table profile_ui_preferences enable row level security;
 alter table profile_feature_tour_acknowledgements enable row level security;
 alter table projects enable row level security;

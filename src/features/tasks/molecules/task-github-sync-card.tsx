@@ -29,7 +29,7 @@ export function TaskGitHubSyncCard({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
           <GitBranch size={16} />
-          Externe Ablage
+          GitHub Issue
         </h2>
         {canSyncExistingGitHubIssue ? (
           <button
@@ -38,7 +38,7 @@ export function TaskGitHubSyncCard({
             onClick={onSyncGitHub}
             className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {syncPending ? "Sync..." : "Jetzt spiegeln"}
+            {syncPending ? "Sync..." : "Sync"}
           </button>
         ) : taskType === "deliverable" ? (
           <button
@@ -47,29 +47,29 @@ export function TaskGitHubSyncCard({
             onClick={onCreateGitHubIssue}
           className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-            {syncPending ? "Anlegen..." : "Extern anlegen"}
+            {syncPending ? "Anlegen..." : "GitHub Issue anlegen"}
           </button>
         ) : null}
       </div>
       <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
         <p className="font-medium text-slate-800">
           {syncPending
-            ? "Externe Ablage wird aktualisiert."
+            ? "GitHub-Sync läuft."
             : hasSyncProblem
-              ? "Externe Ablage braucht Aufmerksamkeit."
+              ? "GitHub-Sync braucht Aufmerksamkeit."
               : hasExternalLink
-                ? "Diese Aufgabe ist extern abgelegt."
-                : "Diese Aufgabe ist aktuell nur in der App."}
+                ? "Diese Aufgabe ist mit GitHub verknüpft."
+                : "Diese Aufgabe hat noch kein GitHub Issue."}
         </p>
         {hasExternalLink ? (
           <a href={githubState.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-700 hover:underline">
             <Link2 size={14} />
-            Externe Ablage öffnen
+            GitHub Issue öffnen
           </a>
         ) : (
-          <p className="text-slate-500">Noch nicht extern abgelegt.</p>
+          <p className="text-slate-500">Noch kein GitHub Issue.</p>
         )}
-        {!canSyncExistingGitHubIssue && <p className="text-xs text-slate-500">Extern anlegen nur, wenn diese Aufgabe auch außerhalb der App geführt werden soll.</p>}
+        {!canSyncExistingGitHubIssue && <p className="text-xs text-slate-500">GitHub Issue nur bewusst anlegen.</p>}
         {hasSyncProblem && <p className="text-xs font-semibold text-amber-700">Verbindung prüfen und erneut versuchen.</p>}
       </div>
     </section>

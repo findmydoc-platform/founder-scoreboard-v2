@@ -107,6 +107,7 @@ export function usePlanningAppController({
   const [saveError, setSaveError] = useState("");
   const [statusGuardNotice, setStatusGuardNotice] = useState("");
   const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
+  const [githubSyncQueueOpen, setGithubSyncQueueOpen] = useState(false);
 
   const clearSelectedTask = useCallback(() => setSelectedTaskId(null), [setSelectedTaskId]);
   const {
@@ -344,6 +345,7 @@ export function usePlanningAppController({
     focusedReviewTaskId,
     githubAppConnected,
     githubReauthFailed,
+    githubSyncQueueOpen,
     headerPrimaryAction,
     hygieneAlerts,
     initiativeDialogDefaults,
@@ -375,6 +377,7 @@ export function usePlanningAppController({
     setFeedbackDialogOpen,
     setFilters,
     setFocusedReviewTaskId,
+    setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setMobileNavOpen,
     setReviewOwnerFilter,
@@ -393,6 +396,7 @@ export function usePlanningAppController({
     signIn,
     signOut,
     sprintPlanningOptions,
+    source,
     statusGuardNotice,
     statusGuardTask,
     taskDialogDefaults,
