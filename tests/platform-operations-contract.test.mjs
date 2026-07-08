@@ -390,6 +390,10 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const rootPage = await readFile("src/app/page.tsx", "utf8");
+  const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
+  const planningData = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
     "execution",
@@ -423,6 +427,18 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   }
   assert.match(rootPage, /redirect\(`\$\{workspacePath\(workspace\)\}/);
   assert.match(rootPage, /rawWorkspace === "mine"/);
+  assert.match(workspacePage, /workspaceDataScopes/);
+  assert.match(workspacePage, /getPlanningData\(workspaceDataScopes\[initialWorkspace\]\)/);
+  assert.match(workspacePage, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
+  assert.match(workspacePage, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
+  assert.match(workspacePage, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*feedbackItems: true,[\s\S]*\}/);
+  assert.match(workspacePage, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
+  assert.match(workspacePage, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
+  assert.match(dataLoader, /export type PlanningDataQueryScope/);
+  assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
+  assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
+  assert.match(planningData, /getPlanningData\(scope\?: PlanningDataQueryScope\)/);
+  assert.match(planningDataApi, /getPlanningData\(\)/);
   assert.match(workspaceHook, /workspaceStateKey/);
   assert.match(workspaceHook, /workspacePath\(initialWorkspace\)/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);

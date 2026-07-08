@@ -1,4 +1,4 @@
-import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows } from "./planning-data-loader";
+import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, type PlanningDataQueryScope } from "./planning-data-loader";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData } from "./types";
 
@@ -37,11 +37,11 @@ export const emptyPlanningData: PlanningData = {
   audit: [],
 };
 
-export async function getPlanningData(): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
+export async function getPlanningData(scope?: PlanningDataQueryScope): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
   if (!supabase) return { data: emptyPlanningData, source: "seed" };
 
-  const rows = await loadPlanningDataRows(supabase);
+  const rows = await loadPlanningDataRows(supabase, scope);
   if (hasCorePlanningDataError(rows)) {
     return { data: emptyPlanningData, source: "seed" };
   }
