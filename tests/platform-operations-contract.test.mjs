@@ -432,6 +432,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(rootPage, /rawWorkspace === "mine"/);
   assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\)\)/);
   assert.match(dataScopes, /export const workspaceDataScopes/);
+  assert.match(dataScopes, /export const taskDetailPageDataScope/);
   assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
   assert.match(dataScopes, /planningDataWorkspaceFromValue/);
   assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);

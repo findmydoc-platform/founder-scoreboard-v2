@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 
 test("task route renders full page while planning shell opens task panel locally", async () => {
   const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
+  const detailDataRoute = await readFile("src/app/api/tasks/[id]/detail-data/route.ts", "utf8");
+  const detailData = await readFile("src/lib/task-detail-data.ts", "utf8");
   const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const ui = await readPlanningSurface();
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
@@ -24,6 +26,16 @@ test("task route renders full page while planning shell opens task panel locally
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
 
   assert.match(route, /getPlanningData/);
+  assert.match(route, /taskDetailPageDataScope/);
+  assert.match(route, /loadTaskDetailData\(supabase, id\)/);
+  assert.match(detailDataRoute, /requirePlatformRole\(currentRequest, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(detailDataRoute, /loadTaskDetailData\(apiContext\.supabase, id\)/);
+  assert.match(detailData, /export type TaskDetailData/);
+  assert.match(detailData, /task_comments/);
+  assert.match(detailData, /task_external_comments/);
+  assert.match(detailData, /task_blockers/);
+  assert.match(detailData, /task_activity/);
+  assert.match(detailData, /task_relationship_edges/);
   assert.match(route, /notFound/);
   assert.match(route, /PlanningApp/);
   assert.match(route, /TaskDetailPage/);
@@ -43,6 +55,9 @@ test("task route renders full page while planning shell opens task panel locally
   assert.doesNotMatch(ui, /window\.history\.length/);
   assert.match(ui, /event\.key !== "Backspace"/);
   assert.match(ui, /TaskDetailPanel/);
+  assert.match(ui, /useTaskDetailDataLoader/);
+  assert.match(ui, /requestTaskDetailData/);
+  assert.match(ui, /mergeTaskDetailData/);
   assert.match(panel, /bg-slate-950\/\[0\.03\]/);
   assert.match(panel, /TaskDetailPanelHeader/);
   assert.match(panelHeader, /aria-label="Detailpanel schließen"/);
@@ -70,6 +85,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(panelSubIssuesSection, /Noch keine Sub-Issues/);
   assert.match(panelSubIssuesSection, /taskAssigneeLabel/);
   assert.match(taskDetailPanel, /TaskDetailPanelBlockerSection/);
+  assert.match(taskDetailPanel, /Kommentare, Blocker und Verlauf werden geladen/);
   assert.match(panelBlockerSection, /Blocker früh melden/);
   assert.match(panelBlockerSection, /Blocker melden/);
   assert.match(panelBlockerSection, /Noch kein Blocker gemeldet/);

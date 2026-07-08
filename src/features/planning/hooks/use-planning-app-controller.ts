@@ -25,6 +25,7 @@ import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
+import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
 import { taskBelongsToProfile } from "@/lib/platform";
 import { findCurrentSprint } from "@/lib/planning-schedule";
@@ -198,6 +199,13 @@ export function usePlanningAppController({
     openTaskPanel,
     selectedTask,
   } = taskSelection;
+  const taskDetailDataLoader = useTaskDetailDataLoader({
+    apiClient,
+    applyPlanningDataUpdate,
+    selectedTask,
+    source,
+    startTransition,
+  });
 
   const unreadNotifications = useMemo(() => {
     const pending = data.notificationEvents.filter((event) => event.status === "pending");
@@ -355,6 +363,8 @@ export function usePlanningAppController({
     selectedTaskActivity: taskSelection.selectedTaskActivity,
     selectedTaskBlockers: taskSelection.selectedTaskBlockers,
     selectedTaskComments: taskSelection.selectedTaskComments,
+    selectedTaskDetailError: taskDetailDataLoader.selectedTaskDetailError,
+    selectedTaskDetailLoading: taskDetailDataLoader.selectedTaskDetailLoading,
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
     setData,

@@ -22,17 +22,13 @@ const baseWorkspaceDataScope = {
   audit: false,
 } satisfies PlanningDataQueryScope;
 
-const taskWorkspaceDataScope = {
+export const taskDetailPageDataScope = {
   ...baseWorkspaceDataScope,
-  taskComments: true,
-  taskExternalComments: true,
-  taskBlockers: true,
-  taskActivity: true,
-  taskFocusItems: true,
+  taskRelations: false,
 } satisfies PlanningDataQueryScope;
 
 export const workspaceDataScopes = {
-  planning: taskWorkspaceDataScope,
+  planning: baseWorkspaceDataScope,
   reviews: baseWorkspaceDataScope,
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
