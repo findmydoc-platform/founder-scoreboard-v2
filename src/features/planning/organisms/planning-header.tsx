@@ -23,6 +23,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     dismissNotification,
     filters,
     filtersAvailable,
+    githubConnectionState,
     githubAppConnected,
     githubReauthFailed,
     githubSyncQueueOpen,
@@ -132,6 +133,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             available={githubAppConnected}
             failed={githubReauthFailed}
             busy={authBusy}
+            state={githubConnectionState}
             onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
           />
           {showGitHubSyncTrigger && (

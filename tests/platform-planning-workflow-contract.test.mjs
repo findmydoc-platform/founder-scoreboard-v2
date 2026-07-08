@@ -382,6 +382,54 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(authHook, /\/api\/planning-data\?workspace=\$\{encodeURIComponent\(workspace\)\}/);
 });
 
+test("workspace loading shells are route-specific and data-free", async () => {
+  const shell = await readFile("src/features/planning/templates/workspace-loading-shell.tsx", "utf8");
+  const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
+  const groupLoading = await readFile("src/app/(workspaces)/loading.tsx", "utf8");
+  const planningLoading = await readFile("src/app/(workspaces)/planning/loading.tsx", "utf8");
+  const reviewsLoading = await readFile("src/app/(workspaces)/reviews/loading.tsx", "utf8");
+  const eventsLoading = await readFile("src/app/(workspaces)/events/loading.tsx", "utf8");
+  const sprintLoading = await readFile("src/app/(workspaces)/sprint/loading.tsx", "utf8");
+  const projectsLoading = await readFile("src/app/(workspaces)/projects/loading.tsx", "utf8");
+  const toolsLoading = await readFile("src/app/(workspaces)/tools/loading.tsx", "utf8");
+  const teamLoading = await readFile("src/app/(workspaces)/team/loading.tsx", "utf8");
+  const settingsLoading = await readFile("src/app/(workspaces)/settings/loading.tsx", "utf8");
+  const ceoIntakeLoading = await readFile("src/app/(workspaces)/ceo-intake/loading.tsx", "utf8");
+  const profileLoading = await readFile("src/app/(workspaces)/profile/loading.tsx", "utf8");
+  const reviewDetailLoading = await readFile("src/app/reviews/[id]/loading.tsx", "utf8");
+  const taskDetailLoading = await readFile("src/app/tasks/[id]/loading.tsx", "utf8");
+
+  assert.match(shell, /export function WorkspaceLoadingShell/);
+  assert.match(shell, /export function WorkspaceContentSkeleton/);
+  assert.match(shell, /function PlanningContentSkeleton/);
+  assert.match(shell, /function ReviewContentSkeleton/);
+  assert.match(shell, /function EventsContentSkeleton/);
+  assert.match(shell, /function GenericWorkspaceSkeleton/);
+  assert.match(shell, /function DetailContentSkeleton/);
+  assert.match(shell, /variant === "review-detail" \|\| variant === "task-detail"/);
+  assert.doesNotMatch(shell, /PlanningData|getPlanningData|emptyPlanningData|data\.tasks|authUser|provider_token/);
+
+  assert.match(groupLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
+  assert.match(planningLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
+  assert.match(reviewsLoading, /WorkspaceLoadingShell workspace="reviews" variant="reviews"/);
+  assert.match(eventsLoading, /WorkspaceLoadingShell workspace="events" variant="events"/);
+  assert.match(sprintLoading, /WorkspaceLoadingShell workspace="sprint" variant="sprint"/);
+  assert.match(projectsLoading, /WorkspaceLoadingShell workspace="projects" variant="projects"/);
+  assert.match(toolsLoading, /WorkspaceLoadingShell workspace="tools" variant="tools"/);
+  assert.match(teamLoading, /WorkspaceLoadingShell workspace="team" variant="team"/);
+  assert.match(settingsLoading, /WorkspaceLoadingShell workspace="settings" variant="settings"/);
+  assert.match(ceoIntakeLoading, /WorkspaceLoadingShell workspace="ceo-intake" variant="ceo-intake"/);
+  assert.match(profileLoading, /WorkspaceLoadingShell workspace="profile" variant="profile"/);
+  assert.match(reviewDetailLoading, /WorkspaceLoadingShell workspace="reviews" variant="review-detail"/);
+  assert.match(taskDetailLoading, /WorkspaceLoadingShell workspace="planning" variant="task-detail"/);
+
+  assert.match(renderer, /WorkspaceContentSkeleton/);
+  assert.match(renderer, /EventsWorkspacePanelLoading/);
+  assert.match(renderer, /ReviewsWorkspacePanelLoading/);
+  assert.match(renderer, /GenericWorkspacePanelLoading/);
+  assert.doesNotMatch(renderer, /function WorkspacePanelLoading|const WorkspacePanelLoading/);
+});
+
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");

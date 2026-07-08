@@ -2,7 +2,6 @@ import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
 import { PlanningAuthGate } from "@/features/planning/molecules/planning-auth-gate";
-import { GitHubAppReconnectBanner } from "@/features/planning/molecules/github-app-reconnect-banner";
 import { PlanningMetrics } from "@/features/planning/molecules/planning-metrics";
 import { quickFilters } from "@/features/planning/model/planning-app-model";
 import { PlanningFilters } from "@/features/planning/organisms/planning-filters";
@@ -29,7 +28,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     data,
     filters,
     filtersAvailable,
-    githubAppConnected,
     isPending,
     localStateLoaded,
     metrics,
@@ -126,14 +124,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           setData={controller.setData}
           setWorkspace={setWorkspace}
           source={source}
-        />
-
-        <GitHubAppReconnectBanner
-          authenticated={Boolean(authUser)}
-          profileId={currentProfile?.id || ""}
-          githubAppConnected={githubAppConnected}
-          busy={authBusy}
-          onConnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
         />
 
         {filtersAvailable && <PlanningMetrics metrics={metrics} />}
