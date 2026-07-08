@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { GitHubAppConnectionState } from "@/features/planning/model/github-app-connection";
 
 function GitHubMark() {
   return (
@@ -16,17 +17,34 @@ export function GitHubConnectionStatus({
   available,
   failed,
   busy,
+  state,
   onReconnect,
 }: {
   authenticated: boolean;
   available: boolean;
   failed: boolean;
   busy: boolean;
+  state?: GitHubAppConnectionState;
   onReconnect: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const needsAction = authenticated && !available;
+  const effectiveState: GitHubAppConnectionState = state || (available ? "connected" : failed ? "reconnect_required" : "missing");
+  const isNeutral = effectiveState === "checking" || effectiveState === "unknown";
+  const needsAction = authenticated && (effectiveState === "missing" || effectiveState === "reconnect_required");
+  const isConnected = effectiveState === "connected";
+  const statusLabel = isNeutral ? "GitHub-App-Status wird geprüft" : needsAction ? "GitHub-App verbinden" : "GitHub-App verbunden";
+  const statusDotClass = isNeutral ? "bg-slate-300" : needsAction ? "bg-amber-500" : "bg-emerald-500";
+  const buttonBorderClass = needsAction ? "border-amber-200" : "border-slate-200";
+  const message = isConnected
+    ? "GitHub-Sync, Kommentare und Anhänge sind verbunden."
+    : effectiveState === "reconnect_required"
+      ? "Die GitHub-App-Verbindung muss einmal neu verbunden werden."
+      : effectiveState === "missing"
+        ? "GitHub-Sync, Kommentare und Anhänge brauchen eine GitHub-App-Verbindung."
+        : effectiveState === "checking"
+          ? "GitHub-Status wird geprüft. Sync-Aktionen bleiben bis zur Prüfung gesperrt."
+          : "GitHub-Status ist gerade nicht verfügbar. Sync-Aktionen bleiben gesperrt, bis der Status geprüft ist.";
 
   useEffect(() => {
     if (!open) return;
@@ -44,17 +62,11 @@ export function GitHubConnectionStatus({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`relative grid h-9 w-9 place-items-center rounded-md border bg-white text-slate-700 hover:bg-slate-50 ${
-          needsAction ? "border-amber-200" : "border-slate-200"
-        }`}
-        aria-label={needsAction ? "GitHub-App verbinden" : "GitHub-App verbunden"}
+        className={`relative grid h-9 w-9 place-items-center rounded-md border bg-white text-slate-700 hover:bg-slate-50 ${buttonBorderClass}`}
+        aria-label={statusLabel}
       >
         <GitHubMark />
-        <span
-          className={`absolute bottom-1 right-1 h-2.5 w-2.5 rounded-full border-2 border-white ${
-            needsAction ? "bg-amber-500" : "bg-emerald-500"
-          }`}
-        />
+        <span className={`absolute bottom-1 right-1 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotClass}`} />
       </button>
 
       {open && (
@@ -62,16 +74,16 @@ export function GitHubConnectionStatus({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 font-semibold text-slate-950">
-                {available ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertTriangle size={16} className="text-amber-600" />}
+                {isConnected ? (
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                ) : needsAction ? (
+                  <AlertTriangle size={16} className="text-amber-600" />
+                ) : (
+                  <RefreshCw size={16} className="text-slate-500" />
+                )}
                 GitHub-App-Verbindung
               </div>
-              <p className="mt-2 leading-5 text-slate-600">
-                {available
-                  ? "GitHub-Sync, Kommentare und Anhänge sind verbunden."
-                  : failed
-                    ? "Die GitHub-App-Verbindung muss einmal neu verbunden werden."
-                    : "GitHub-Sync, Kommentare und Anhänge brauchen eine GitHub-App-Verbindung."}
-              </p>
+              <p className="mt-2 leading-5 text-slate-600">{message}</p>
             </div>
             <button
               type="button"
@@ -82,7 +94,7 @@ export function GitHubConnectionStatus({
               <X size={14} />
             </button>
           </div>
-          {!available && (
+          {needsAction && (
             <button
               type="button"
               onClick={onReconnect}
