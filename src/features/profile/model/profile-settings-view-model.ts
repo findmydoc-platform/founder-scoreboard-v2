@@ -1,15 +1,13 @@
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
-import type { AvailabilityEntry, PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
+import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 
-export type ProfileSettingsSectionId = "profile" | "notifications" | "calendar" | "availability" | "board";
+export type ProfileSettingsSectionId = "profile" | "notifications" | "board";
 
 export type ProfileSettingsDraft = {
   focus: string;
   color: string;
   notificationsEnabled: boolean;
-  googleCalendarEmail: string;
-  googleCalendarSyncEnabled: boolean;
   notificationEvents: Record<string, boolean>;
   defaultWorkspace: AppWorkspace;
   defaultTaskView: ViewMode;
@@ -71,8 +69,6 @@ export function buildInitialDraft({
     focus: currentProfile.focus || "",
     color: currentProfile.color || "#64748b",
     notificationsEnabled: currentProfile.notificationsEnabled !== false,
-    googleCalendarEmail: currentProfile.googleCalendarEmail || "",
-    googleCalendarSyncEnabled: Boolean(currentProfile.googleCalendarSyncEnabled),
     notificationEvents: Object.fromEntries(googleChatDigestEventTypes.map((eventType) => [eventType, eventEnabled(data, currentProfile.id, eventType)])),
     defaultWorkspace: (profileUiPreference?.defaultWorkspace as AppWorkspace) || (workspace === "profile" ? "planning" : workspace),
     defaultTaskView: profileUiPreference?.defaultTaskView || view,
@@ -87,13 +83,4 @@ export function serializeDraft(draft: ProfileSettingsDraft) {
     expandedPackageIds: [...draft.expandedPackageIds].sort(),
     notificationEvents: Object.fromEntries(Object.entries(draft.notificationEvents).sort(([left], [right]) => left.localeCompare(right))),
   });
-}
-
-function availabilityDateValue(entry: AvailabilityEntry) {
-  if (entry.type === "working_hours") return `weekday-${entry.weekday ?? 0}`;
-  return entry.startDate || entry.endDate || "";
-}
-
-export function sortAvailabilityEntries(entries: AvailabilityEntry[]) {
-  return [...entries].sort((left, right) => availabilityDateValue(left).localeCompare(availabilityDateValue(right)) || left.startTime.localeCompare(right.startTime));
 }

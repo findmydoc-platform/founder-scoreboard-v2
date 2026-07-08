@@ -4,17 +4,18 @@ import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surf
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("platform migration contains the role, decision, score and sync contracts", async () => {
+test("platform migration contains the role, score and sync contracts", async () => {
   const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
+  const cleanup = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
 
   assert.match(sql, /platform_role text/);
   assert.match(sql, /github_login text unique/);
-  assert.match(sql, /decision_log/);
-  assert.match(sql, /decision_confirmations/);
   assert.match(sql, /audit_log/);
   assert.match(sql, /review_status/);
   assert.match(sql, /github_sync_status/);
   assert.match(sql, /current_platform_role/);
+  assert.match(cleanup, /drop table if exists decision_log cascade/);
+  assert.match(cleanup, /drop table if exists availability cascade/);
 });
 
 test("github sync route keeps the app as source of truth", async () => {

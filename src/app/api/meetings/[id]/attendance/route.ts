@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const profileId = payload.profileId || permission.profile?.id || "";
   if (!profileId) return apiError("Profil ist erforderlich.", 400);
   if (!isLead && profileId !== permission.profile?.id) {
-    return apiError("Founder können nur ihre eigene Meeting-Rückmeldung ändern.", 403);
+    return apiError("Founder können nur ihre eigene Weekly-Rückmeldung ändern.", 403);
   }
 
   const status = payload.status && statuses.has(payload.status) ? payload.status : "pending";
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const absenceReason = cleanText(payload.absenceReason, 2000);
   const writtenUpdate = cleanText(payload.writtenUpdate, 4000);
   if (!isLead && status !== "pending" && !absenceReason) {
-    return apiError("Für eine Meeting-Rückmeldung ist ein konkreter Grund erforderlich.", 400);
+    return apiError("Für eine Weekly-Rückmeldung ist ein konkreter Grund erforderlich.", 400);
   }
 
   const reasonAccepted = isLead ? Boolean(payload.reasonAccepted) : false;
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at")
     .single();
 
-  if (error || !attendance) return apiError(error?.message || "Meeting-Rückmeldung konnte nicht gespeichert werden.", 500);
+  if (error || !attendance) return apiError(error?.message || "Weekly-Rückmeldung konnte nicht gespeichert werden.", 500);
 
   if (!isLead && status !== "pending") {
     const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         recipient_profile_id: lead.id,
         entity_type: "meeting",
         entity_id: String(meetingId),
-        title: `Meeting-Rückmeldung: ${meeting.title}`,
+        title: `Weekly-Rückmeldung: ${meeting.title}`,
         body: `${profileId}: ${status}${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
       }));
     if (notifications.length) await supabase.from("notification_events").insert(notifications);
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       recipient_profile_id: profileId,
       entity_type: "meeting",
       entity_id: String(meetingId),
-      title: `Meeting bewertet: ${meeting.title}`,
+      title: `Weekly bewertet: ${meeting.title}`,
       body: `${status} · ${points} Punkte${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
     });
   }

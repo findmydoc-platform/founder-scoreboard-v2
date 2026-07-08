@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Clock3, LayoutDashboard, UserRound } from "lucide-react";
+import { Bell, LayoutDashboard, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ProfileSettingsSectionId } from "@/features/profile/model/profile-settings-view-model";
 import { classNames } from "@/shared/atoms/ui-primitives";
@@ -6,8 +6,6 @@ import { classNames } from "@/shared/atoms/ui-primitives";
 export const profileSettingsSections: Array<{ id: ProfileSettingsSectionId; label: string; description: string; icon: ReactNode }> = [
   { id: "profile", label: "Profil", description: "Identität, Fokus und Farbe", icon: <UserRound size={16} /> },
   { id: "notifications", label: "Benachrichtigungen", description: "Google-Chat-Hinweise", icon: <Bell size={16} /> },
-  { id: "calendar", label: "Kalender", description: "E-Mail und Sync", icon: <CalendarDays size={16} /> },
-  { id: "availability", label: "Verfügbarkeit", description: "Arbeitszeiten und Blocker", icon: <Clock3 size={16} /> },
   { id: "board", label: "Board", description: "Start und Ansicht", icon: <LayoutDashboard size={16} /> },
 ];
 

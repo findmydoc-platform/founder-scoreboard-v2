@@ -65,7 +65,6 @@ export function ExecutionHygieneAlerts({
             { value: "review", label: "Review" },
             { value: "evidence", label: "Evidence" },
             { value: "dependency", label: "Abhängigkeit" },
-            { value: "decision", label: "Decision" },
             { value: "sync", label: "Sync" },
           ]}
         />

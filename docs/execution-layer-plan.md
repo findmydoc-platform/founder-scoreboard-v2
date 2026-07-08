@@ -8,9 +8,8 @@ Der Founder Scoreboard soll nicht nur Planung, Reviews und Dokumentation abbilde
 
 - Focus Board / Heute-Modus
 - Aging & Hygiene Alerts
-- Decision-to-Task Links
 
-Andere Agents und Chats sollen diese Planung berücksichtigen, bevor sie weitere Task-, Decision-, Sprint- oder Review-Flows erweitern.
+Andere Agents und Chats sollen diese Planung berücksichtigen, bevor sie weitere Task-, Sprint- oder Review-Flows erweitern.
 
 ## 1. Focus Board / Heute-Modus
 
@@ -52,35 +51,15 @@ Nutzen:
 - Frühere Eskalation.
 - Weniger manuelle Kontrolle.
 
-## 3. Decision-to-Task Links
-
-Zweck: Entscheidungen sollen operativ nachvollziehbar werden. Aus einer Decision muss erkennbar sein, welche Aufgaben daraus entstanden sind oder welche Aufgaben dadurch begründet werden.
-
-Geplanter Umfang:
-
-- Aufgaben mit Decisions verknüpfen.
-- Aus einer Decision direkte Folgeaufgaben erzeugen.
-- In der Aufgaben-Detailseite anzeigen, welche Decision die Aufgabe begründet.
-- In der Decision-Detailansicht anzeigen, welche Aufgaben daraus folgen.
-- Optionaler Hinweis, wenn eine Decision gelockt ist, aber noch keine Folgeaufgabe existiert.
-
-Nutzen:
-
-- Bessere Nachvollziehbarkeit.
-- Weniger vergessene Folgearbeit.
-- Klareres Warum hinter Aufgaben.
-- Entscheidungen bleiben nicht nur Dokumentation, sondern werden in Arbeit übersetzt.
-
 ## Umsetzungsstand
 
-- Datenmodell, Supabase-Migration, RLS/Grants, Schema-Verify und Health Check sind für Focus Items und Decision-Task Links angelegt.
+- Datenmodell, Supabase-Migration, RLS/Grants, Schema-Verify und Health Check sind für Focus Items angelegt.
 - Execution ist als eigener Workspace in der gemeinsamen App-Shell verfügbar.
 - Heute-Fokus unterstützt maximal drei Aufgaben pro Person, nächsten Schritt, Statuswechsel, Entfernen, Verschieben offener Fokusaufgaben und Vorschläge aus Task-Signalen.
 - Tagesabschluss zeigt Abschlussquote, offene Fokusaufgaben und direkte Abschlussaktionen für erledigt, blockiert, verschoben oder Entscheidung nötig.
 - Team-Fokus heute und Fokus-Verlauf zeigen, ob der Tagesfokus nicht nur individuell, sondern über das Team hinweg gesetzt und abgeschlossen wird.
-- Hygiene Alerts prüfen Qualität, Blocker, Review-Aging, Evidence, Abhängigkeiten, fehlende Updates, GitHub-Sync und gelockte Decisions ohne Folgeaufgabe. Jeder Alert zeigt eine nächste Aktion und kann als Fokusaktion übernommen werden.
-- Decision-Folgearbeit kann bestehende Aufgaben verknüpfen, Links entfernen und neue Folgeaufgaben aus Decisions erzeugen. Pro Decision wird sichtbar, wie viele Folgeaufgaben offen, erledigt oder blockiert sind.
-- Aufgaben-Detailseite und Detailpanel zeigen Fokus-Kontext und begründende Decisions.
+- Hygiene Alerts prüfen Qualität, Blocker, Review-Aging, Evidence, Abhängigkeiten, fehlende Updates und GitHub-Sync. Jeder Alert zeigt eine nächste Aktion und kann als Fokusaktion übernommen werden.
+- Aufgaben-Detailseite und Detailpanel zeigen Fokus-Kontext.
 
 ## Umsetzungshinweise
 
@@ -92,8 +71,7 @@ Nutzen:
 
 ## Vorgeschlagene Reihenfolge
 
-1. Gemeinsames Datenmodell für Focus, Hygiene und Decision-Links ergänzen.
+1. Gemeinsames Datenmodell für Focus und Hygiene ergänzen.
 2. Hygiene-Signale zuerst als berechnete, nachvollziehbare Checks implementieren.
 3. Focus Board als neue operative Ansicht in der bestehenden App-Shell ergänzen.
-4. Decision-to-Task Links in Decision Log und Aufgaben-Detailseite integrieren.
-5. Contract Tests für alle drei Workflows ergänzen.
+4. Contract Tests für beide Workflows ergänzen.

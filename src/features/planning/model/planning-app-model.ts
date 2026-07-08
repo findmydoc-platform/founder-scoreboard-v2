@@ -23,15 +23,12 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     founderStrikeStates: data.founderStrikeStates || [],
     strikeEvents: data.strikeEvents || [],
     scoreObjections: data.scoreObjections || [],
-    decisions: data.decisions || [],
-    decisionComments: data.decisionComments || [],
     taskComments: data.taskComments || [],
     taskExternalComments: data.taskExternalComments || [],
     taskBlockers: data.taskBlockers || [],
     taskRelations: data.taskRelations || [],
     taskActivity: data.taskActivity || [],
     taskFocusItems: data.taskFocusItems || [],
-    decisionTaskLinks: data.decisionTaskLinks || [],
     notificationEvents: data.notificationEvents || [],
     notificationDeliveries: data.notificationDeliveries || [],
     notificationPreferences: data.notificationPreferences || [],
@@ -43,7 +40,6 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     meetings: data.meetings || [],
     meetingAttendance: data.meetingAttendance || [],
     audit: data.audit || [],
-    availability: data.availability || [],
   };
 }
 
@@ -63,8 +59,6 @@ export const workspaceLabels: Record<Workspace, string> = {
   reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
-  decisions: "Decision Log",
-  meetings: "Meeting Finder",
   projects: "Meilensteine & Initiativen",
   tools: "FMD-Tools",
   team: "Team",
@@ -75,13 +69,11 @@ export const workspaceLabels: Record<Workspace, string> = {
 
 export const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
-  execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
+  execution: "Heute-Modus, Hygiene-Alerts und Review-Steuerung.",
   mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
   reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
-  sprint: "Review Queue, Punkte und Sprintabschluss.",
-  decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
-  meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
+  sprint: "Weekly Updates, Punkte und Sprintabschluss.",
   projects: "Epic-, Meilenstein- und Initiative-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
@@ -257,13 +249,12 @@ export function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Pack
 export type HygieneAlert = {
   id: string;
   severity: "critical" | "warning" | "info";
-  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "decision" | "sync";
+  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "sync";
   title: string;
   description: string;
   recommendedAction: string;
   focusStatus?: TaskFocusItem["status"];
   taskId?: string;
-  decisionId?: number;
 };
 
 export function daysSinceIso(value: string, today = new Date()) {
@@ -319,13 +310,6 @@ export function buildHygieneAlerts(data: PlanningData) {
     }
     if (task.githubSyncStatus === "failed") {
       alerts.push({ id: `sync-${task.id}`, severity: "warning", area: "sync", title: "GitHub-Sync fehlgeschlagen", description: task.githubSyncError || "Die Aufgabe konnte nicht sauber nach GitHub gespiegelt werden.", recommendedAction: "GitHub-Sync prüfen und Aufgabe erneut spiegeln.", taskId: task.id });
-    }
-  }
-
-  for (const decision of data.decisions) {
-    const links = data.decisionTaskLinks.filter((link) => link.decisionId === decision.id);
-    if (decision.status === "locked" && !links.length) {
-      alerts.push({ id: `decision-followup-${decision.id}`, severity: "warning", area: "decision", title: "Decision ohne Folgeaufgabe", description: "Die Decision ist gelockt, aber noch mit keiner Aufgabe verknüpft.", recommendedAction: "Folgeaufgabe erstellen oder bestehende Aufgabe verknüpfen.", focusStatus: "needs_decision", decisionId: decision.id });
     }
   }
 

@@ -4,7 +4,7 @@ Stand: 2026-05-29
 
 ## Ziel
 
-Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Decisions, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
+Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
 
 Operative Event Messages bleiben in der Applikation. Ein möglicher Google-Chat-Pfad über eine Pipeline ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
 
@@ -78,7 +78,6 @@ Erzeugte Reminder:
 - Nacharbeit
 - offene Blocker
 - offene Aufgabenvorschläge
-- offene Decision-Bestätigungen
 - fällige oder überfällige Sprint-Reviews
 - überfällige Deliverables
 
@@ -136,7 +135,6 @@ Persönliche DMs sind erlaubt für:
 - `task.mention`
 - `task.blocker_reported`
 - `task.deadline_overdue`
-- `decision.confirmation_requested`
 
 Normale `task.comment`-Events, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Gezielte Kommentar-Erwähnungen erzeugen `task.mention` und dürfen persönlich per DM zugestellt werden. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
 
@@ -201,7 +199,7 @@ Die Profile enthalten Felder für persönliche Zustellung:
 - `profiles.google_chat_dm_space`
 - `profiles.notifications_enabled`
 
-Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Meeting-Rückmeldungen und Feedback.
+Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Weekly-Rückmeldungen und Feedback.
 
 ## Zustelllogik
 

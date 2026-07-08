@@ -7,12 +7,11 @@ import type { PlanningData, Profile, Task, TaskFocusItem } from "@/lib/types";
 export type HygieneAlert = {
   id: string;
   severity: "critical" | "warning" | "info";
-  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "decision" | "sync";
+  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "sync";
   title: string;
   description: string;
   recommendedAction: string;
   taskId?: string;
-  decisionId?: number;
   focusStatus?: TaskFocusItem["status"];
 };
 
@@ -21,12 +20,6 @@ export type HygieneAlertAreaFilter = "all" | HygieneAlert["area"];
 
 function isOpenReviewTask(task: Task) {
   return !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-}
-
-export function decisionStatusLabel(status: "draft" | "open_for_confirmation" | "locked") {
-  if (status === "locked") return "Gelockt";
-  if (status === "open_for_confirmation") return "Zur Bestätigung offen";
-  return "Entwurf";
 }
 
 function priorityScore(value: string) {
@@ -81,7 +74,6 @@ export function buildExecutionLayerViewModel({
     criticalAlerts: hygieneAlerts.filter((alert) => alert.severity === "critical" && (isOperationalLead || !alert.taskId || executionTaskIds.has(alert.taskId))).length,
     reviewQueue: executionTasks.filter(isOpenReviewTask).length,
     openBlockers: executionTasks.filter((task) => normalizeStatus(task.status) === "Blockiert" || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)).length,
-    decisionsWithoutTasks: data.decisions.filter((decision) => decision.status === "locked" && !data.decisionTaskLinks.some((link) => link.decisionId === decision.id)).length,
   };
   const openReviewTasks = data.tasks
     .filter(isOpenReviewTask)

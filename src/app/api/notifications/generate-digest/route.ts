@@ -28,18 +28,6 @@ type BlockerRow = {
   status: string;
 };
 
-type DecisionRow = {
-  id: number;
-  title: string;
-  context: string | null;
-  required_profile_ids: string[] | null;
-};
-
-type ConfirmationRow = {
-  decision_id: number;
-  profile_id: string;
-};
-
 type SprintRow = {
   id: string;
   name: string;
@@ -175,8 +163,6 @@ export async function POST(request: NextRequest) {
   const [
     taskResult,
     blockerResult,
-    decisionResult,
-    confirmationResult,
     sprintResult,
     eventResult,
     profileResult,
@@ -192,16 +178,6 @@ export async function POST(request: NextRequest) {
       .eq("status", "open")
       .order("created_at", { ascending: false })
       .limit(100),
-    supabase
-      .from("decision_log")
-      .select("id,title,context,required_profile_ids")
-      .eq("status", "open_for_confirmation")
-      .order("updated_at", { ascending: false })
-      .limit(50),
-    supabase
-      .from("decision_confirmations")
-      .select("decision_id,profile_id")
-      .limit(500),
     supabase
       .from("sprints")
       .select("id,name,status,review_due_at")
@@ -222,16 +198,11 @@ export async function POST(request: NextRequest) {
       .limit(100),
   ]);
 
-  const firstError = [taskResult, blockerResult, decisionResult, confirmationResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
+  const firstError = [taskResult, blockerResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
   if (firstError) return apiError(firstError.message, 500);
 
   const tasks = (taskResult.data || []) as TaskRow[];
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
-  const confirmations = (confirmationResult.data || []) as ConfirmationRow[];
-  const confirmedByDecision = new Map<number, Set<string>>();
-  for (const confirmation of confirmations) {
-    confirmedByDecision.set(confirmation.decision_id, new Set([...(confirmedByDecision.get(confirmation.decision_id) || []), confirmation.profile_id]));
-  }
 
   const candidates: ReminderCandidate[] = [];
   for (const task of tasks) {
@@ -303,36 +274,6 @@ export async function POST(request: NextRequest) {
       body: `${blocker.reason}${blocker.impact ? ` Impact: ${blocker.impact}` : ""}`.slice(0, 700),
       dedupeKey: dedupeKey("task.blocker_reported", "task", blocker.task_id, today),
     });
-  }
-
-  for (const decision of (decisionResult.data || []) as DecisionRow[]) {
-    const required = decision.required_profile_ids || [];
-    const confirmed = confirmedByDecision.get(decision.id) || new Set<string>();
-    const missing = required.filter((profileId) => !confirmed.has(profileId));
-    if (!required.length) {
-      candidates.push({
-        type: "decision.confirmation_requested",
-        actorProfileId: null,
-        recipientProfileId: null,
-        entityType: "decision",
-        entityId: String(decision.id),
-        title: `Decision wartet auf Bestätigung: ${decision.title}`,
-        body: decision.context || "Diese Decision ist offen für Bestätigung.",
-        dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today),
-      });
-    }
-    for (const profileId of missing) {
-      candidates.push({
-        type: "decision.confirmation_requested",
-        actorProfileId: null,
-        recipientProfileId: profileId,
-        entityType: "decision",
-        entityId: String(decision.id),
-        title: `Decision wartet auf Bestätigung: ${decision.title}`,
-        body: decision.context || "Diese Decision ist offen für Bestätigung.",
-        dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today, profileId),
-      });
-    }
   }
 
   for (const sprint of (sprintResult.data || []) as SprintRow[]) {

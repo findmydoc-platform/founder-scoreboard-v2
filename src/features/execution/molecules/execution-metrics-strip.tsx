@@ -4,7 +4,6 @@ type ExecutionMetrics = {
   criticalAlerts: number;
   reviewQueue: number;
   openBlockers: number;
-  decisionsWithoutTasks: number;
 };
 
 export function ExecutionMetricsStrip({

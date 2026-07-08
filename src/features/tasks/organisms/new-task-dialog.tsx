@@ -44,8 +44,6 @@ export type NewTaskDraft = {
   relationType: TaskRelationType;
   relatedTaskId: string;
   relationNote: string;
-  decisionId: number;
-  decisionLinkNote: string;
 };
 
 export function NewTaskDialog({
@@ -93,8 +91,6 @@ export function NewTaskDialog({
     relationType: defaults.relationType || "blocked_by",
     relatedTaskId: defaults.relatedTaskId || "",
     relationNote: defaults.relationNote || "",
-    decisionId: defaults.decisionId || 0,
-    decisionLinkNote: defaults.decisionLinkNote || "",
   });
   const parentTask = data.tasks.find((task) => task.id === draft.parentTaskId);
   const visibleInitiatives = data.packages.filter((pack) => !draft.milestoneId || !pack.milestoneId || pack.milestoneId === draft.milestoneId);
@@ -180,13 +176,6 @@ export function NewTaskDialog({
             >
               {parentTask && <span className="text-xs font-normal text-slate-500">Sub-Issues unter {parentTask.title} sind nicht score-relevant.</span>}
             </UiSelectField>
-          )}
-
-          {draft.decisionId > 0 && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-sm text-blue-950">
-              <div className="font-semibold">Wird als Decision-Folgeaufgabe verknüpft</div>
-              <p className="mt-1 text-xs leading-5 text-blue-800">{draft.decisionLinkNote || "Diese Aufgabe folgt aus einer Decision."}</p>
-            </div>
           )}
 
           <UiField>

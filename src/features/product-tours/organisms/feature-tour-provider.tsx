@@ -6,7 +6,7 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { featureTours, profileSettingsTourId } from "@/features/product-tours/model/feature-tour-registry";
+import { featureTours } from "@/features/product-tours/model/feature-tour-registry";
 
 type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
@@ -61,7 +61,14 @@ export function FeatureTourProvider({
   setWorkspace,
   source,
 }: FeatureTourProviderProps) {
-  const tour = featureTours.find((item) => item.id === profileSettingsTourId);
+  const tour = useMemo(() => {
+    if (!currentProfile) return null;
+    return featureTours.find((item) =>
+      !data.profileFeatureTourAcknowledgements.some((acknowledgement) =>
+        acknowledgement.profileId === currentProfile.id && acknowledgement.tourId === item.id
+      )
+    ) || null;
+  }, [currentProfile, data.profileFeatureTourAcknowledgements]);
   const hasSeenTour = useMemo(() => {
     if (!currentProfile || !tour) return true;
     return data.profileFeatureTourAcknowledgements.some((item) => item.profileId === currentProfile.id && item.tourId === tour.id);

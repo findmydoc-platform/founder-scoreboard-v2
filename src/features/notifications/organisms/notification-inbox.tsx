@@ -16,8 +16,7 @@ function notificationTypeLabel(type: string) {
   if (type === "task.comment") return "Kommentar";
   if (type === "task.proposed") return "Vorschlag";
   if (type === "sprint.task_carried_over") return "Carry-over";
-  if (type === "meeting.attendance_updated") return "Meeting";
-  if (type.startsWith("decision.")) return "Decision";
+  if (type === "meeting.attendance_updated") return "Weekly";
   return "Hinweis";
 }
 

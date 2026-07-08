@@ -28,7 +28,7 @@ Erwartung:
 - Datenquelle ist Supabase.
 - Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
 - `pnpm run verify:supabase` und `pnpm run verify:auth` bestätigen Schema, Profile und Rollen.
-- Navigation zeigt Planung, Sprint & Score, Decision Log, Meeting Finder, Team, Einstellungen.
+- Navigation zeigt Planung, Sprint & Score, Team, Einstellungen und Mein Profil über das Account-Menü.
 
 ## Planung und Task-Erstellung
 
@@ -64,12 +64,12 @@ Erwartung:
 2. Sprint-Daten prüfen: Start, Ende, Review bis, Status.
 3. Commitment pro Founder setzen: Lite, Standard, Heavy oder Away.
 4. Wochenstunden erfassen.
-5. Meeting-Anwesenheit und schriftliches Update testen.
+5. Weekly Updates testen: Anwesenheit, schriftliches Update, akzeptierter Grund und Punkte.
 
 Erwartung:
 - Scoreboard ist tabellarisch.
 - Commitments bleiben nach Reload erhalten.
-- Meeting-Punkte sind separat von Task-Punkten sichtbar.
+- Weekly-Punkte sind separat von Task-Punkten sichtbar.
 
 ## Sprintabschluss und Carry-over
 
@@ -84,20 +84,6 @@ Erwartung:
 - Kommunizierter Blocker wird als `accepted_carryover` markiert.
 - Carry-over-Aufgabe zeigt Ursprung und Grund im Detailpanel.
 - Notification-Event `sprint.task_carried_over` entsteht.
-
-## Decision Log
-
-1. Decision als CEO erstellen.
-2. Decision editieren.
-3. Audit Trail ausklappen.
-4. Einwand erfassen.
-5. Bestätigung testen.
-
-Erwartung:
-- Edit ist CEO-only.
-- Audit zeigt Vorher/Nachher.
-- Einwände sind sichtbar.
-- Nach allen erforderlichen Bestätigungen wird gelockt.
 
 ## GitHub Sync
 

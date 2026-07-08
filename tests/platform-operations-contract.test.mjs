@@ -43,7 +43,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(generatorRoute, /Europe\/Berlin/);
   assert.match(generatorRoute, /task\.deadline_overdue/);
   assert.match(generatorRoute, /sprint\.review_due/);
-  assert.match(generatorRoute, /decision\.confirmation_requested/);
+  assert.doesNotMatch(generatorRoute, /decision\.confirmation_requested/);
   assert.match(generatorRoute, /review_owner_profile_id/);
   assert.match(generatorRoute, /recipientProfileId: reviewOwnerProfileId/);
   assert.match(generatorRoute, /deine Accountable-Review/);
@@ -553,15 +553,13 @@ test("local seed state persists task overrides in browser storage", async () => 
 
 test("header actions are workspace aware", async () => {
   const ui = await readPlanningSurface();
-  const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
   assert.match(ui, /label: "Neue Aufgabe"/);
   assert.match(ui, /label: "Vorschlag erstellen"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
-  assert.match(ui, /label: "Neue Decision"/);
-  assert.match(decisionUi, /id="decision-create"/);
+  assert.doesNotMatch(ui, /label: "Neue Decision"|decision-create/);
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 

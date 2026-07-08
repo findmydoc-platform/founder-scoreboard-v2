@@ -1,5 +1,5 @@
-import type { AvailabilityEntry, Decision, FounderSprintScore, FounderStrikeState, ScoreObjection, Sprint, SprintCommitment, StrikeEvent } from "./types";
-import type { DbAvailability, DbDecision, DbFounderSprintScore, DbFounderStrikeState, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "./planning-data-row-types";
+import type { FounderSprintScore, FounderStrikeState, ScoreObjection, Sprint, SprintCommitment, StrikeEvent } from "./types";
+import type { DbFounderSprintScore, DbFounderStrikeState, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "./planning-data-row-types";
 
 export function mapSprint(row: DbSprint): Sprint {
   return {
@@ -10,20 +10,6 @@ export function mapSprint(row: DbSprint): Sprint {
     endDate: row.end_date || "",
     reviewDueAt: row.review_due_at || "",
     scoreLocked: row.score_locked,
-  };
-}
-
-export function mapDecision(row: DbDecision): Decision {
-  return {
-    id: row.id,
-    title: row.title,
-    context: row.context || "",
-    decision: row.decision || "",
-    status: row.status,
-    requiredProfileIds: row.required_profile_ids || [],
-    confirmedProfileIds: row.decision_confirmations?.map((item) => item.profile_id) || [],
-    createdBy: row.created_by || "",
-    lockedAt: row.locked_at || "",
   };
 }
 
@@ -95,25 +81,5 @@ export function mapScoreObjection(row: DbScoreObjection): ScoreObjection {
     secondReviewDecision: row.second_review_decision || "",
     secondReviewedAt: row.second_reviewed_at || "",
     createdAt: row.created_at,
-  };
-}
-
-export function mapAvailability(row: DbAvailability): AvailabilityEntry {
-  return {
-    id: row.id,
-    profileId: row.profile_id,
-    type: row.type,
-    title: row.title || "",
-    blockerKind: row.blocker_kind || (row.source === "google_calendar" ? "calendar_event" : row.type === "working_hours" ? "working_hours" : row.type === "vacation" ? "vacation" : row.type === "sick" ? "sick" : "on_business"),
-    weekday: row.weekday,
-    startDate: row.start_date || "",
-    endDate: row.end_date || "",
-    startTime: row.start_time?.slice(0, 5) || "",
-    endTime: row.end_time?.slice(0, 5) || "",
-    note: row.note || "",
-    source: row.source || "manual",
-    externalId: row.external_id || "",
-    externalCalendarId: row.external_calendar_id || "",
-    syncedAt: row.synced_at || "",
   };
 }

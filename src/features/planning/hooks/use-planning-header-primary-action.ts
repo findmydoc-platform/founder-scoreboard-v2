@@ -53,13 +53,6 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
-  if (workspace === "decisions") {
-    return {
-      label: "Neue Decision",
-      onClick: () => document.getElementById("decision-create")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    };
-  }
-
   if (workspace === "projects") {
     return {
       label: "Neue Initiative",

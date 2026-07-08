@@ -29,8 +29,6 @@ type ProfileSettingsPayload = Partial<{
   focus: string;
   color: string;
   notificationsEnabled: boolean;
-  googleCalendarEmail: string;
-  googleCalendarSyncEnabled: boolean;
   notificationEvents: Record<string, boolean>;
   uiPreferences: UiPreferencesPayload;
 }>;
@@ -56,8 +54,6 @@ const allowedWorkspaces = new Set([
   "reviews",
   "events",
   "sprint",
-  "decisions",
-  "meetings",
   "projects",
   "tools",
   "team",
@@ -133,22 +129,13 @@ export async function PATCH(request: NextRequest) {
     if (value === undefined) return apiError("Benachrichtigungsstatus ist ungültig.", 400);
     profileUpdate.notifications_enabled = value;
   }
-  if (payload.googleCalendarEmail !== undefined) {
-    profileUpdate.google_calendar_email = cleanOptionalText(payload.googleCalendarEmail, 240) || null;
-  }
-  if (payload.googleCalendarSyncEnabled !== undefined) {
-    const value = cleanBoolean(payload.googleCalendarSyncEnabled);
-    if (value === undefined) return apiError("Kalenderstatus ist ungültig.", 400);
-    profileUpdate.google_calendar_sync_enabled = value;
-  }
-
   let profile: ReturnType<typeof mapProfile> | undefined;
   if (Object.keys(profileUpdate).length) {
     const { data: profileRow, error } = await supabase
       .from("profiles")
       .update(profileUpdate)
       .eq("id", profileId)
-      .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at")
+      .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled")
       .single<DbProfile>();
     if (error) return apiError(error.message, 500);
     profile = mapProfile(profileRow);

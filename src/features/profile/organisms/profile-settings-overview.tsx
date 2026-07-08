@@ -1,13 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { MeetingAvailabilityDialog } from "@/features/meetings/organisms/meeting-availability-dialog";
-import { useMeetingAvailabilityEditor } from "@/features/meetings/hooks/use-meeting-availability-editor";
+import { useState } from "react";
 import { appNavItems, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
-import { AvailabilitySettingsSection } from "@/features/profile/molecules/profile-availability-section";
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
-import { CalendarSettingsSection } from "@/features/profile/molecules/profile-calendar-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
@@ -16,16 +12,13 @@ import {
   defaultFilters,
   expandedPackageIds,
   serializeDraft,
-  sortAvailabilityEntries,
   type ProfileSettingsDraft,
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
-import { addDaysIso, currentIsoDate } from "@/lib/planning-schedule";
 import { taskStatuses } from "@/lib/status";
-import type { AvailabilityEntry, PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
+import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
-import { timeToMinutes } from "@/features/meetings/model/meeting-finder";
 
 type ProfileSettingsOverviewProps = {
   data: PlanningData;
@@ -36,10 +29,7 @@ type ProfileSettingsOverviewProps = {
   source: "seed" | "supabase";
   view: ViewMode;
   workspace: AppWorkspace;
-  onCreateAvailability: (entry: Omit<AvailabilityEntry, "id">) => void;
-  onDeleteAvailability: (entry: AvailabilityEntry) => void;
   onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
-  onUpdateAvailability: (entry: AvailabilityEntry, patch: Partial<Omit<AvailabilityEntry, "id" | "source" | "externalId" | "externalCalendarId" | "syncedAt">>) => void;
 };
 
 export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
@@ -73,10 +63,7 @@ function ProfileSettingsForm({
   source,
   view,
   workspace,
-  onCreateAvailability,
-  onDeleteAvailability,
   onSaveOwnProfileSettings,
-  onUpdateAvailability,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null }) {
   const initialDraft = buildInitialDraft({ currentProfile, data, expandedPackages, filters, profileUiPreference, view, workspace });
@@ -87,29 +74,6 @@ function ProfileSettingsForm({
   const [message, setMessage] = useState("");
   const draftSnapshot = serializeDraft(draft);
   const isDirty = draftSnapshot !== savedSnapshot;
-
-  const profileOptions = useMemo(
-    () => [{ value: currentProfile.id, label: currentProfile.name }],
-    [currentProfile],
-  );
-  const availability = useMemo(
-    () => data.availability.filter((entry) => entry.profileId === currentProfile.id),
-    [currentProfile.id, data.availability],
-  );
-  const workingHours = sortAvailabilityEntries(availability.filter((entry) => entry.type === "working_hours"));
-  const blockers = sortAvailabilityEntries(availability.filter((entry) => entry.type !== "working_hours"));
-  const today = currentIsoDate();
-  const calendarDates = Array.from({ length: 7 }, (_, index) => addDaysIso(today, index));
-  const availabilityEditor = useMeetingAvailabilityEditor({
-    today,
-    editableProfiles: [currentProfile],
-    defaultEditableProfileId: currentProfile.id,
-    canManageAvailability: false,
-    currentProfileId: currentProfile.id,
-    onCreateAvailability,
-    onUpdateAvailability,
-    onDeleteAvailability,
-  });
 
   const workspaceOptions = [
     ...appNavItems
@@ -174,8 +138,6 @@ function ProfileSettingsForm({
         focus: draft.focus,
         color: draft.color,
         notificationsEnabled: draft.notificationsEnabled,
-        googleCalendarEmail: draft.googleCalendarEmail,
-        googleCalendarSyncEnabled: draft.googleCalendarSyncEnabled,
       },
       notificationEvents: draft.notificationEvents,
       uiPreferences: {
@@ -188,12 +150,6 @@ function ProfileSettingsForm({
     setSavedSnapshot(nextSnapshot);
     setMessage(source === "supabase" ? "Gespeichert." : "Lokal gespeichert.");
   };
-
-  const saveAvailabilityDialogDisabled =
-    pending ||
-    !availabilityEditor.normalizedBlockerProfileId ||
-    !availabilityEditor.blockerTitle.trim() ||
-    (!availabilityEditor.blockerAllDay && timeToMinutes(availabilityEditor.blockerStartTime) >= timeToMinutes(availabilityEditor.blockerEndTime));
 
   return (
     <div className="min-w-0 pb-24">
@@ -240,26 +196,6 @@ function ProfileSettingsForm({
               onEventChange={updateNotificationEvent}
             />
           )}
-          {activeSection === "calendar" && (
-            <CalendarSettingsSection
-              draft={draft}
-              pending={pending}
-              onEmailChange={(email) => updateDraft("googleCalendarEmail", email)}
-              onSyncChange={(enabled) => updateDraft("googleCalendarSyncEnabled", enabled)}
-            />
-          )}
-          {activeSection === "availability" && (
-            <AvailabilitySettingsSection
-              availability={availability}
-              blockers={blockers}
-              calendarDates={calendarDates}
-              pending={pending}
-              today={today}
-              workingHours={workingHours}
-              editor={availabilityEditor}
-              onDeleteAvailability={onDeleteAvailability}
-            />
-          )}
           {activeSection === "board" && (
             <BoardSettingsSection
               advancedBoardOpen={advancedBoardOpen}
@@ -297,39 +233,6 @@ function ProfileSettingsForm({
             )}
           </div>
         </div>
-      )}
-
-      {availabilityEditor.availabilityDialogMode && (
-        <MeetingAvailabilityDialog
-          mode={availabilityEditor.availabilityDialogMode}
-          hasEditingAvailability={Boolean(availabilityEditor.editingAvailability)}
-          normalizedBlockerProfileId={availabilityEditor.normalizedBlockerProfileId}
-          profileOptions={profileOptions}
-          canManageAvailability={false}
-          pending={pending}
-          blockerTitle={availabilityEditor.blockerTitle}
-          blockerKind={availabilityEditor.blockerKind}
-          blockerStartDate={availabilityEditor.blockerStartDate}
-          blockerEndDate={availabilityEditor.blockerEndDate}
-          blockerAllDay={availabilityEditor.blockerAllDay}
-          blockerStartTime={availabilityEditor.blockerStartTime}
-          blockerEndTime={availabilityEditor.blockerEndTime}
-          blockerNote={availabilityEditor.blockerNote}
-          saveDisabled={saveAvailabilityDialogDisabled}
-          showProfileSelect={false}
-          onClose={availabilityEditor.closeAvailabilityDialog}
-          onDelete={availabilityEditor.deleteAvailabilityDialogEntry}
-          onSave={availabilityEditor.saveAvailabilityDialog}
-          onBlockerProfileChange={availabilityEditor.setBlockerProfileId}
-          onBlockerTitleChange={availabilityEditor.setBlockerTitle}
-          onBlockerKindChange={availabilityEditor.setBlockerKind}
-          onBlockerStartDateChange={availabilityEditor.setBlockerStartDate}
-          onBlockerEndDateChange={availabilityEditor.setBlockerEndDate}
-          onBlockerAllDayChange={availabilityEditor.setBlockerAllDay}
-          onBlockerStartTimeChange={availabilityEditor.setBlockerStartTime}
-          onBlockerEndTimeChange={availabilityEditor.setBlockerEndTime}
-          onBlockerNoteChange={availabilityEditor.setBlockerNote}
-        />
       )}
     </div>
   );

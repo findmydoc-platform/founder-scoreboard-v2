@@ -60,9 +60,6 @@ export function mapProfile(row: DbProfile): Profile {
     googleChatUserId: row.google_chat_user_id || "",
     googleChatDmSpace: row.google_chat_dm_space || "",
     notificationsEnabled: row.notifications_enabled !== false,
-    googleCalendarEmail: row.google_calendar_email || "",
-    googleCalendarSyncEnabled: Boolean(row.google_calendar_sync_enabled),
-    googleCalendarLastSyncedAt: row.google_calendar_last_synced_at || "",
   };
 }
 

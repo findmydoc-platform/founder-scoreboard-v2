@@ -14,6 +14,11 @@ type SprintRow = {
   score_locked: boolean;
 };
 
+type ExistingMeetingRow = {
+  sprint_id: string;
+  title: string;
+};
+
 type CreateSprintPlanPayload = {
   firstSprintNumber?: number;
   anchorStartDate?: string;
@@ -117,6 +122,50 @@ export async function POST(request: NextRequest) {
 
   if (insertError) return apiError(insertError.message, 500);
 
+  const createdRows = ((created || []) as SprintRow[]);
+  const sprintIds = createdRows.map((sprint) => sprint.id);
+  if (sprintIds.length) {
+    const { data: existingMeetings, error: existingMeetingError } = await supabase
+      .from("meetings")
+      .select("sprint_id,title")
+      .in("sprint_id", sprintIds);
+
+    if (existingMeetingError) return apiError(existingMeetingError.message, 500);
+
+    const existingMeetingKeys = new Set(
+      ((existingMeetings || []) as ExistingMeetingRow[]).map((meeting) =>
+        `${meeting.sprint_id}:${meeting.title.toLowerCase()}`
+      ),
+    );
+    const weeklyRows = createdRows.flatMap((sprint) => {
+      const firstTitle = `${sprint.name} Weekly 1`;
+      const secondTitle = `${sprint.name} Weekly 2`;
+      return [
+        {
+          sprint_id: sprint.id,
+          title: firstTitle,
+          meeting_at: `${addDaysIso(sprint.start_date || new Date().toISOString().slice(0, 10), 6)}T18:00:00.000Z`,
+          duration_minutes: 60,
+          status: "planned",
+          agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
+        },
+        {
+          sprint_id: sprint.id,
+          title: secondTitle,
+          meeting_at: `${sprint.end_date || sprint.start_date || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`,
+          duration_minutes: 60,
+          status: "planned",
+          agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
+        },
+      ].filter((meeting) => !existingMeetingKeys.has(`${meeting.sprint_id}:${meeting.title.toLowerCase()}`));
+    });
+
+    if (weeklyRows.length) {
+      const { error: meetingError } = await supabase.from("meetings").insert(weeklyRows);
+      if (meetingError) return apiError(meetingError.message, 500);
+    }
+  }
+
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
     action: "sprint.plan_create",
@@ -126,5 +175,5 @@ export async function POST(request: NextRequest) {
     ...auditRequestMetadata(request),
   });
 
-  return NextResponse.json({ ok: true, sprints: ((created || []) as SprintRow[]).map(mapSprint) });
+  return NextResponse.json({ ok: true, sprints: createdRows.map(mapSprint) });
 }

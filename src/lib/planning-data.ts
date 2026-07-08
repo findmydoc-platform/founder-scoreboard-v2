@@ -18,15 +18,12 @@ export const emptyPlanningData: PlanningData = {
   founderStrikeStates: [],
   strikeEvents: [],
   scoreObjections: [],
-  decisions: [],
-  decisionComments: [],
   taskComments: [],
   taskExternalComments: [],
   taskBlockers: [],
   taskRelations: [],
   taskActivity: [],
   taskFocusItems: [],
-  decisionTaskLinks: [],
   notificationEvents: [],
   notificationDeliveries: [],
   notificationPreferences: [],
@@ -38,7 +35,6 @@ export const emptyPlanningData: PlanningData = {
   meetings: [],
   meetingAttendance: [],
   audit: [],
-  availability: [],
 };
 
 export async function getPlanningData(): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {

@@ -108,7 +108,6 @@ export async function buildAgentContext() {
         openReviewCount: openReviewTasks.length,
         tasksWithoutEvidenceCount: tasksWithoutEvidence.length,
         blockedTaskCount: blockedTasks.length,
-        decisionsOpenForConfirmation: data.decisions.filter((decision) => decision.status === "open_for_confirmation").length,
       },
       constraints: agentConstraints(),
     },
