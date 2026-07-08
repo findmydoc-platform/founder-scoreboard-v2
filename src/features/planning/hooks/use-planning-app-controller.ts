@@ -129,6 +129,7 @@ export function usePlanningAppController({
     source,
     safeInitialData,
     taskCount: data.tasks.length,
+    workspace,
     initialAuthUser,
     initialCurrentProfile,
     initialProtectedDataLoaded,
@@ -166,6 +167,7 @@ export function usePlanningAppController({
     setData,
     setProtectedDataLoaded,
     source,
+    workspace,
   });
 
   const commandContext = {

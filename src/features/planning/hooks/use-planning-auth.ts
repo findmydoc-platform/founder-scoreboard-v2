@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, PlanningDataResponse } from "@/lib/types";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -24,6 +25,7 @@ type UsePlanningAuthOptions = {
   source: "seed" | "supabase";
   safeInitialData: PlanningData;
   taskCount: number;
+  workspace: AppWorkspace;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
@@ -48,6 +50,7 @@ export function usePlanningAuth({
   source,
   safeInitialData,
   taskCount,
+  workspace,
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
@@ -191,7 +194,7 @@ export function usePlanningAuth({
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
       try {
-        const response = await fetch("/api/planning-data", {
+        const response = await fetch(`/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -230,7 +233,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [authRequired, authUser, normalizePlanningData, protectedDataLoaded, safeInitialData, setData, source, taskCount]);
+  }, [authRequired, authUser, normalizePlanningData, protectedDataLoaded, safeInitialData, setData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     const supabase = getBrowserSupabase();

@@ -140,7 +140,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning data refresh hook",
       path: "src/features/planning/hooks/use-planning-data-refresh.ts",
-      matches: [/setProtectedPlanningDataCache/],
+      matches: [/setProtectedPlanningDataCache/, /requestPlanningData\(apiClient, workspace\)/],
     },
     {
       label: "planning task view model hook",
@@ -345,7 +345,7 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.doesNotMatch(authControl, /GitHub-Rechte fehlen/);
   assert.doesNotMatch(authControl, /Login öffnen/);
   assert.match(authHook, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
-  assert.match(authHook, /\/api\/planning-data/);
+  assert.match(authHook, /\/api\/planning-data\?workspace=\$\{encodeURIComponent\(workspace\)\}/);
 });
 
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
