@@ -5,7 +5,7 @@ import type { PlanningCommandContext } from "@/features/planning/hooks/planning-
 import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import {
   founderStatusGuardMessage,
-  founderTaskOwnershipGuardMessage,
+  founderTaskAssignmentGuardMessage,
 } from "@/features/planning/model/planning-app-model";
 import type { TaskSyncCommand } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
@@ -58,7 +58,7 @@ export function useTaskUpdateCommand({
     const normalizedPatch = normalized.patch;
 
     if (normalizedPatch.status && !canChangeTaskStatus(task)) {
-      setStatusGuardNotice(founderTaskOwnershipGuardMessage());
+      setStatusGuardNotice(founderTaskAssignmentGuardMessage());
       setStatusGuardTaskId(task.id);
       return;
     }

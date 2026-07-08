@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,owner,status")
+    .select("id,title,assignee,owner,status")
     .eq("id", id)
     .single();
 

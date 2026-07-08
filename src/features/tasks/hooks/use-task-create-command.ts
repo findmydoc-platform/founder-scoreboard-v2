@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import {
-  profileForOwnerValue,
+  profileForAssigneeValue,
   reviewOwnerForTask,
 } from "@/features/planning/model/planning-app-model";
 import * as taskApi from "@/features/tasks/model/task-api-client";
@@ -30,9 +30,9 @@ export function useTaskCreateCommand({
   const createTask = (draft: NewTaskDraft) => {
     setSaveError("");
 
-    const ownerProfile = profileForOwnerValue(data.profiles, draft.owner || currentProfile?.id || "");
-    const ownerId = draft.taskType === "proposal" && !draft.owner ? "" : ownerProfile?.id || "";
-    const owner = ownerId ? ownerProfile?.name || "" : "";
+    const assigneeProfile = profileForAssigneeValue(data.profiles, draft.assignee || currentProfile?.id || "");
+    const assigneeId = draft.taskType === "proposal" && !draft.assignee ? "" : assigneeProfile?.id || "";
+    const assignee = assigneeId ? assigneeProfile?.name || "" : "";
     const localTask: Task = {
       id: `local-${Date.now()}`,
       order: data.tasks.length + 1,
@@ -46,10 +46,10 @@ export function useTaskCreateCommand({
       dodTemplateVersion: "founder-deliverable-v2",
       status: draft.taskType === "proposal" ? "Vorschlag" : draft.status || "Offen",
       priority: draft.priority || "P2",
-      ownerId,
-      owner,
-      assigneeId: ownerId,
-      assignee: owner,
+      assigneeId,
+      assignee,
+      ownerId: assigneeId,
+      owner: assignee,
       createdById: currentProfile?.id || "",
       workstream: draft.workstream,
       packageId: draft.packageId,
@@ -97,7 +97,7 @@ export function useTaskCreateCommand({
       let createdTaskCommitted = false;
 
       try {
-        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...draft, owner: ownerId || draft.owner });
+        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...draft, assignee: assigneeId || draft.assignee });
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
         setData((current) => ({

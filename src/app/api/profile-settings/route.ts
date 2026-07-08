@@ -64,7 +64,7 @@ const allowedWorkspaces = new Set([
 const allowedTaskViews = new Set<ViewMode>(["board", "structure", "table", "gantt"]);
 const defaultPlanningFilters: PlanningFilterPreferences = {
   query: "",
-  owner: "Alle",
+  assignee: "Alle",
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
@@ -82,10 +82,10 @@ function cleanBoolean(value: unknown) {
 
 function cleanFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & { owner?: unknown };
   return {
     query: typeof candidate.query === "string" ? candidate.query.slice(0, 120) : defaultPlanningFilters.query,
-    owner: typeof candidate.owner === "string" ? candidate.owner.slice(0, 120) : defaultPlanningFilters.owner,
+    assignee: typeof candidate.assignee === "string" ? candidate.assignee.slice(0, 120) : typeof candidate.owner === "string" ? candidate.owner.slice(0, 120) : defaultPlanningFilters.assignee,
     status: typeof candidate.status === "string" ? candidate.status.slice(0, 80) : defaultPlanningFilters.status,
     priority: typeof candidate.priority === "string" ? candidate.priority.slice(0, 20) : defaultPlanningFilters.priority,
     packageId: typeof candidate.packageId === "string" ? candidate.packageId.slice(0, 160) : defaultPlanningFilters.packageId,

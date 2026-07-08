@@ -47,7 +47,8 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(generatorRoute, /review_owner_profile_id/);
   assert.match(generatorRoute, /recipientProfileId: reviewOwnerProfileId/);
   assert.match(generatorRoute, /deine Accountable-Review/);
-  assert.match(generatorRoute, /recipientProfileId: task\.owner/);
+  assert.match(generatorRoute, /const assignee = task\.assignee \|\| task\.owner/);
+  assert.match(generatorRoute, /recipientProfileId: assignee/);
   assert.match(generatorRoute, /recipientProfileId: profileId/);
   assert.doesNotMatch(generatorRoute, /task\.comment/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
@@ -418,7 +419,7 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(ui, /canUseCeoIntake = currentProfile\?\.platformRole === "ceo"/);
   assert.match(ui, /workspace === "ceo-intake" && authChecked && !canUseCeoIntake/);
   assert.match(ui, /CeoTaskIntake/);
-  assert.match(ui, /Deputy, Founder, Accountable, Responsible und Assignee/);
+  assert.match(ui, /Deputy, Founder, Accountable, Responsible und Zuständige/);
   assert.match(previewRoute, /requireCEO/);
   assert.match(commitRoute, /requireCEO/);
   assert.doesNotMatch(previewRoute, /requireOperationalLead/);
@@ -557,8 +558,8 @@ test("header actions are workspace aware", async () => {
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
   assert.match(ui, /label: "Neue Aufgabe"/);
-  assert.match(ui, /label: "Vorschlag erstellen"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
+  assert.match(ui, /data-tour-id="planning-task-scope"/);
   assert.doesNotMatch(ui, /label: "Neue Decision"|decision-create/);
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
@@ -578,17 +579,30 @@ test("planning filters stay in session while task panel opens without routing", 
   assert.doesNotMatch(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
 });
 
-test("mine workspace follows the effective current profile", async () => {
+test("planning personal scope follows the effective current profile", async () => {
   const ui = await readPlanningSurface();
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
+  const filters = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
+  const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
+  const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
 
   assert.match(ui, /serverCurrentProfile/);
   assert.match(ui, /currentProfileId: serverCurrentProfile\?\.id/);
   assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
-  assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => taskBelongsToProfile\(task, currentProfile\)\)/);
-  assert.match(ui, /Fokus auf die Aufgaben von \$\{mineOwnerName\}/);
+  assert.match(header, /data-tour-id="planning-task-scope"/);
+  assert.match(header, /Aufgaben/);
+  assert.match(header, /label: "Meine"/);
+  assert.match(header, /assignee: "Alle"/);
+  assert.match(header, /Ansicht/);
+  assert.doesNotMatch(filters, /Meine Aufgaben/);
+  assert.match(workspaceHook, /if \(value === "mine"\) return "planning"/);
+  assert.match(controller, /legacyMineWorkspace/);
   assert.doesNotMatch(ui, /currentProfile\?\.name \|\| "Volkan"/);
   assert.doesNotMatch(ui, /currentProfile\?\.id \|\| "volkan"/);
-  assert.doesNotMatch(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === "Volkan"\)/);
+  assert.doesNotMatch(sidebar, /id: "mine"/);
+  assert.doesNotMatch(ui, /workspace === "mine"\)/);
+  assert.doesNotMatch(ui, /task\.owner === "Volkan"/);
 });
 
 test("gantt uses sprint dates for scheduled tasks", async () => {

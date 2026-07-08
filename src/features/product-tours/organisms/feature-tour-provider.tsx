@@ -62,21 +62,17 @@ export function FeatureTourProvider({
   source,
 }: FeatureTourProviderProps) {
   const tour = useMemo(() => {
-    if (!currentProfile) return null;
+    if (!currentProfile) return undefined;
     return featureTours.find((item) =>
       !data.profileFeatureTourAcknowledgements.some((acknowledgement) =>
         acknowledgement.profileId === currentProfile.id && acknowledgement.tourId === item.id
       )
-    ) || null;
+    );
   }, [currentProfile, data.profileFeatureTourAcknowledgements]);
-  const hasSeenTour = useMemo(() => {
-    if (!currentProfile || !tour) return true;
-    return data.profileFeatureTourAcknowledgements.some((item) => item.profileId === currentProfile.id && item.tourId === tour.id);
-  }, [currentProfile, data.profileFeatureTourAcknowledgements, tour]);
   const startedTourRef = useRef("");
 
   useEffect(() => {
-    if (!tour || !currentProfile || hasSeenTour || startedTourRef.current === tour.id) return;
+    if (!tour || !currentProfile || startedTourRef.current === tour.id) return;
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
@@ -100,17 +96,23 @@ export function FeatureTourProvider({
     };
 
     async function startTour() {
+      if ("targetWorkspace" in activeTour && activeTour.targetWorkspace) {
+        setWorkspace(activeTour.targetWorkspace);
+      }
+
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
       if (!active || !trigger) {
         startedTourRef.current = "";
         return;
       }
 
-      window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
-      const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
-      if (!active || !menuItem) {
-        startedTourRef.current = "";
-        return;
+      if ("openAccountMenu" in activeTour && activeTour.openAccountMenu) {
+        window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
+        const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!active || !menuItem) {
+          startedTourRef.current = "";
+          return;
+        }
       }
 
       const driverObject = driver({
@@ -132,7 +134,9 @@ export function FeatureTourProvider({
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
-              setWorkspace("profile");
+              if ("doneWorkspace" in activeTour && activeTour.doneWorkspace) {
+                setWorkspace(activeTour.doneWorkspace);
+              }
             },
           },
         })),
@@ -148,7 +152,7 @@ export function FeatureTourProvider({
     return () => {
       active = false;
     };
-  }, [apiClient, currentProfile, hasSeenTour, setData, setWorkspace, source, tour]);
+  }, [apiClient, currentProfile, setData, setWorkspace, source, tour]);
 
   return null;
 }

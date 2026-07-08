@@ -91,6 +91,8 @@ export function isUsefulActivity(message: string) {
     "Sprint",
     "Priorität",
     "Evidence",
+    "Zuständigkeit",
+    "Assignee",
     "Owner",
     "Nacharbeit",
     "Priorität",
@@ -115,7 +117,7 @@ function describeActivity(message: string) {
   if (normalized.startsWith("Blocker")) return { title, detail, tone: "red" as const, icon: AlertCircle };
   if (normalized.startsWith("Kommentar")) return { title, detail, tone: "slate" as const, icon: MessageSquare };
   if (normalized.startsWith("Anhang")) return { title, detail, tone: "slate" as const, icon: Paperclip };
-  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
+  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Zuständigkeit") || normalized.startsWith("Assignee") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
 
   return { title, detail, tone: "slate" as const, icon: Clock3 };
 }

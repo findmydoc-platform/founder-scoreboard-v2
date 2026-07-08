@@ -10,6 +10,7 @@ type TaskRow = {
   description: string | null;
   status: string | null;
   priority: string | null;
+  assignee: string | null;
   owner: string | null;
   end_date: string | null;
   review_status: string | null;
@@ -131,9 +132,10 @@ function dedupeKey(type: string, entityType: string, entityId: string, dateKey: 
 }
 
 function taskBody(task: TaskRow, fallback: string) {
-  const owner = task.owner ? `Owner: ${task.owner}. ` : "";
+  const assignee = task.assignee || task.owner;
+  const assigneeText = assignee ? `Zuständig: ${assignee}. ` : "";
   const priority = task.priority ? `Priorität: ${task.priority}. ` : "";
-  return `${owner}${priority}${task.description || fallback}`.slice(0, 700);
+  return `${assigneeText}${priority}${task.description || fallback}`.slice(0, 700);
 }
 
 function eventBody(event: FounderEventRow) {
@@ -169,7 +171,7 @@ export async function POST(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id,title,description,status,priority,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
+      .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
     supabase
@@ -207,12 +209,13 @@ export async function POST(request: NextRequest) {
   const candidates: ReminderCandidate[] = [];
   for (const task of tasks) {
     if (isDoneTask(task)) continue;
+    const assignee = task.assignee || task.owner;
 
     if (task.review_status === "requested") {
       const reviewOwnerProfileId = task.review_owner_profile_id || null;
       candidates.push({
         type: "task.review_requested",
-        actorProfileId: task.owner,
+        actorProfileId: assignee,
         recipientProfileId: reviewOwnerProfileId,
         entityType: "task",
         entityId: task.id,
@@ -225,20 +228,20 @@ export async function POST(request: NextRequest) {
     if (task.review_status === "changes_requested" || task.status === "Nacharbeit") {
       candidates.push({
         type: "task.review_rework",
-        actorProfileId: task.owner,
-        recipientProfileId: task.owner,
+        actorProfileId: assignee,
+        recipientProfileId: assignee,
         entityType: "task",
         entityId: task.id,
         title: `Nacharbeit offen: ${task.title}`,
         body: taskBody(task, "Für dieses Deliverable ist Nacharbeit offen."),
-        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today, task.owner || groupRecipient),
+        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today, assignee || groupRecipient),
       });
     }
 
     if (task.task_type === "proposal" || task.status === "Vorschlag") {
       candidates.push({
         type: "task.proposed",
-        actorProfileId: task.owner,
+        actorProfileId: assignee,
         recipientProfileId: null,
         entityType: "task",
         entityId: task.id,
@@ -251,13 +254,13 @@ export async function POST(request: NextRequest) {
     if (task.task_type === "deliverable" && isDueTodayOrOverdue(task.end_date, today)) {
       candidates.push({
         type: "task.deadline_overdue",
-        actorProfileId: task.owner,
-        recipientProfileId: task.owner,
+        actorProfileId: assignee,
+        recipientProfileId: assignee,
         entityType: "task",
         entityId: task.id,
         title: `Überfällig: ${task.title}`,
         body: taskBody(task, `Zieltermin war ${task.end_date}. Bitte Status, Review oder Blocker klären.`),
-        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, task.owner || groupRecipient),
+        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, assignee || groupRecipient),
       });
     }
   }

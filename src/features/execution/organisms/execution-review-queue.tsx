@@ -39,7 +39,7 @@ export function ExecutionReviewQueue({
       <div className="mt-4 grid gap-2 md:grid-cols-2">
         {visibleTasks.slice(0, 8).map((task) => {
           const reviewOwner = profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
-          const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+          const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
           const reviewOverdue = overdueReviewTasks.some((item) => item.id === task.id);
           return (
             <article key={task.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">

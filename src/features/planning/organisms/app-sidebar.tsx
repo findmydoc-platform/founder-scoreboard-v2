@@ -3,7 +3,6 @@
 import {
   Archive,
   CalendarClock,
-  CheckCircle2,
   ClipboardCheck,
   GanttChart,
   LayoutDashboard,
@@ -18,13 +17,12 @@ import Link from "next/link";
 import { forwardRef, useEffect } from "react";
 import { AppBrand } from "@/shared/atoms/app-brand";
 
-export type AppWorkspace = "planning" | "execution" | "mine" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "execution" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 export const appNavItems = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/" },
   { id: "execution", label: "Execution", icon: Target, href: "/?workspace=execution" },
-  { id: "mine", label: "Meine Aufgaben", icon: CheckCircle2, href: "/?workspace=mine" },
   { id: "reviews", label: "Reviews", icon: ClipboardCheck, href: "/?workspace=reviews" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/?workspace=events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/?workspace=ceo-intake", ceoOnly: true },

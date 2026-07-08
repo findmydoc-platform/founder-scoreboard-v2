@@ -15,7 +15,7 @@ function profileColor(id: string, value?: string | null) {
 
 const defaultPlanningFilters: PlanningFilterPreferences = {
   query: "",
-  owner: "Alle",
+  assignee: "Alle",
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
@@ -28,10 +28,10 @@ function filterString(value: unknown, fallback: string) {
 
 function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & { owner?: unknown };
   return {
     query: filterString(candidate.query, defaultPlanningFilters.query),
-    owner: filterString(candidate.owner, defaultPlanningFilters.owner),
+    assignee: filterString(candidate.assignee, filterString(candidate.owner, defaultPlanningFilters.assignee)),
     status: filterString(candidate.status, defaultPlanningFilters.status),
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
     packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),

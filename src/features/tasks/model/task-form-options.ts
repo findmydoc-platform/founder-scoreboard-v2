@@ -1,4 +1,4 @@
-import { initiativeOptionLabel, taskOwnerLabel, taskOwnerOptions } from "@/lib/display";
+import { initiativeOptionLabel, taskAssigneeLabel, taskAssigneeOptions } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import type { CustomSelectOption } from "@/shared/atoms/custom-select";
@@ -38,7 +38,7 @@ export function initiativeOptions(packages: Package[]): CustomSelectOption[] {
 }
 
 export function assigneeOptions(taskType: TaskType, profiles: Profile[]): CustomSelectOption[] {
-  return taskOwnerOptions(taskType, profiles);
+  return taskAssigneeOptions(taskType, profiles);
 }
 
 export function relatedTaskOptions(tasks: Task[]): CustomSelectOption[] {
@@ -46,6 +46,6 @@ export function relatedTaskOptions(tasks: Task[]): CustomSelectOption[] {
     { value: "", label: "Keine Abhängigkeit" },
     ...tasks
       .filter((task) => task.taskType !== "sub_issue")
-      .map((task) => ({ value: task.id, label: `${task.title} · ${taskOwnerLabel(task)}` })),
+      .map((task) => ({ value: task.id, label: `${task.title} · ${taskAssigneeLabel(task)}` })),
   ];
 }

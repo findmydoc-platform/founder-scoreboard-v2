@@ -159,11 +159,11 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(promotionMigration, /status <> 'Vorschlag'/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
-  assert.match(updateRoutePolicy, /Nur Vorschläge können ohne Assignee bleiben/);
+  assert.match(updateRoutePolicy, /Nur Vorschläge können ohne Zuständigkeit bleiben/);
   assert.match(ui, /NewTaskDialog/);
   assert.match(display, /Nicht zugeordnet/);
-  assert.match(newTaskUi, /Vorschläge können bewusst ohne Assignee bleiben/);
-  assert.match(newTaskUi, /taskOwnerOptions\(draft\.taskType, data\.profiles\)/);
+  assert.match(newTaskUi, /Vorschläge können bewusst ohne Zuständigkeit bleiben/);
+  assert.match(newTaskUi, /taskAssigneeOptions\(draft\.taskType, data\.profiles\)/);
   assert.match(newTaskUi, /Sub-Issues/);
   assert.match(newTaskUi, /werden nicht bewertet/);
   assert.match(newTaskUi, /Zusätzlich extern anlegen/);

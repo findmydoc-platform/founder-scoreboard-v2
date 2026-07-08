@@ -78,6 +78,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(registry, /workspace-nav-planning/);
   assert.match(registry, /workspace-nav-sprint/);
   assert.match(registry, /profile-settings-v1/);
+  assert.match(registry, /planning-my-tasks-scope-v1/);
   assert.match(registry, /account-menu-trigger/);
   assert.match(registry, /profile-menu-link/);
   assert.match(registry, /Navigation bereinigt/);
@@ -91,7 +92,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(provider, /fmd:open-account-menu/);
   assert.match(provider, /onPopoverRender/);
   assert.match(provider, /if \(index === 0\) markSeen\(\)/);
-  assert.match(provider, /setWorkspace\("profile"\)/);
+  assert.match(provider, /setWorkspace\(activeTour\.doneWorkspace\)/);
   assert.match(client, /markProfileFeatureTourSeenRequest/);
 });
 

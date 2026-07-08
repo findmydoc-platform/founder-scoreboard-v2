@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { dateRange } from "@/lib/display";
+import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/features/sprint/model/sprint-score-view-model";
 import type { Task } from "@/lib/types";
@@ -43,7 +43,7 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
           <div>
             <h2 className="text-base font-semibold text-slate-950">{task.title}</h2>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <UiBadge tone="white" size="xs">{task.owner}</UiBadge>
+              <UiBadge tone="white" size="xs">{taskAssigneeLabel(task)}</UiBadge>
               <UiBadge tone="white" size="xs">{task.priority}</UiBadge>
               <UiBadge tone="white" size="xs">{task.hours}h</UiBadge>
               <UiBadge tone="white" size="xs">{dateRange(task)}</UiBadge>

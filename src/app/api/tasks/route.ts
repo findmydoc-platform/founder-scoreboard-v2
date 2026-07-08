@@ -22,6 +22,7 @@ type CreateTaskPayload = {
   packageId?: string;
   milestoneId?: string;
   sprintId?: string;
+  assignee?: string;
   owner?: string;
   priority?: string;
   status?: string;
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
   const scoreRelevant = taskType === "deliverable";
   const status = taskType === "proposal" ? "Vorschlag" : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
   const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
-  const owner = profileId(payload.owner) || (taskType === "proposal" ? null : permission.profile?.id || null);
+  const assignee = profileId(payload.assignee || payload.owner) || (taskType === "proposal" ? null : permission.profile?.id || null);
   const reviewOwnerProfileId = packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
 
@@ -96,11 +97,11 @@ export async function POST(request: NextRequest) {
   if (taskType === "sub_issue") {
     const { data: parent, error: parentError } = await supabase
       .from("tasks")
-      .select("id,owner,title")
+      .select("id,assignee,owner,title")
       .eq("id", parentTaskId)
       .single();
     if (parentError || !parent) return apiError("Deliverable wurde nicht gefunden.", 404);
-    if (!isOperationalLead && parent.owner !== permission.profile?.id) {
+    if (!isOperationalLead && (parent.assignee || parent.owner) !== permission.profile?.id) {
       return apiError("Founder können nur eigene Deliverables verfeinern.", 403);
     }
   }
@@ -129,8 +130,8 @@ export async function POST(request: NextRequest) {
     evidenceRequired: cleanText(payload.evidenceRequired, 4000),
     status,
     priority,
-    owner,
-    assignee: owner,
+    owner: assignee,
+    assignee,
     createdBy: permission.profile?.id || null,
     workstream: cleanText(payload.workstream, 120),
     sortOrder,
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
   const { data: created, error: insertError } = await supabase.from("tasks").insert(insert).select("*").single();
   if (insertError || !created) return apiError(insertError?.message || "Aufgabe konnte nicht erstellt werden.", 500);
 
-  const profileIds = [...new Set([created.owner, created.assignee, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
+  const profileIds = [...new Set([created.assignee, created.owner, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
   const { data: profileRows } = profileIds.length
     ? await supabase.from("profiles").select("id,name").in("id", profileIds)
     : { data: [] };

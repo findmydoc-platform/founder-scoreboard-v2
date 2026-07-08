@@ -4,7 +4,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const planningAppModelMock = {
   reviewOwnerForTask: () => "accountable",
-  taskOwnerPatch: () => ({}),
+  taskAssigneePatch: () => ({}),
 };
 
 const slugMock = {
@@ -58,7 +58,7 @@ test("score and review owner payload fields remain available outside review requ
 
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
-    "@/features/tasks/model/task-mutation-contract": { taskOwnedByProfile: () => true },
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": { taskStatuses: ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
   });
 

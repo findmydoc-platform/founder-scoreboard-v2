@@ -67,7 +67,7 @@ export function usePlanningAppController({
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
   const { localStateLoaded } = useLocalPlanningState({ source, setData });
-  const { workspace, setWorkspace } = usePlanningWorkspace();
+  const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace();
   const {
     feedbackDialogOpen,
     filters,
@@ -151,7 +151,6 @@ export function usePlanningAppController({
     currentGithubLogin,
     currentProfileId: serverCurrentProfile?.id || "",
   });
-  const mineOwnerName = currentProfile?.name || "deinem Profil";
   const currentProfileId = currentProfile?.id || "";
   const canUseCeoIntake = currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
@@ -218,7 +217,12 @@ export function usePlanningAppController({
     }
   }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
 
-  const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters, workspace });
+  useEffect(() => {
+    if (!legacyMineWorkspace) return;
+    setFilters((current) => ({ ...current, assignee: "Alle", quick: "mine" }));
+  }, [legacyMineWorkspace, setFilters]);
+
+  const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerPrimaryAction = usePlanningHeaderPrimaryAction({
@@ -347,7 +351,6 @@ export function usePlanningAppController({
     isPending,
     localStateLoaded,
     metrics,
-    mineOwnerName,
     mobileNavOpen,
     openReviewSheet,
     openTaskPanel,

@@ -1,4 +1,4 @@
-import { taskOwnerLabel } from "@/lib/display";
+import { taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskFocusItem, TaskRelation } from "@/lib/types";
@@ -13,7 +13,7 @@ export type EditableTaskState = Pick<
   Task,
   | "status"
   | "priority"
-  | "owner"
+  | "assignee"
   | "packageId"
   | "sprintId"
   | "milestoneId"
@@ -39,7 +39,7 @@ export type TaskDetailGitHubState = Pick<
 
 export type TaskDetailDetailsDraft = Pick<
   EditableTaskState,
-  "priority" | "owner" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline"
+  "priority" | "assignee" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline"
   | "reviewOwnerProfileId"
 >;
 
@@ -52,7 +52,7 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
   return {
     status: normalizeStatus(task.status),
     priority: task.priority,
-    owner: task.owner,
+    assignee: task.assignee,
     packageId: task.packageId,
     sprintId: task.sprintId,
     milestoneId: task.milestoneId || "",
@@ -86,7 +86,7 @@ export function buildTaskBriefDraft(task: Task): TaskBriefDraft {
 export function buildTaskDetailsDraft(meta: EditableTaskState): TaskDetailDetailsDraft {
   return {
     priority: meta.priority,
-    owner: meta.owner,
+    assignee: meta.assignee,
     packageId: meta.packageId,
     sprintId: meta.sprintId,
     milestoneId: meta.milestoneId,
@@ -130,7 +130,7 @@ export function linkedFocusItemsForTask(taskId: string, focusItems: TaskFocusIte
 export function relationTargetOptionsForTask(task: Task, allTasks: Task[]) {
   return allTasks
     .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
-    .map((item) => ({ value: item.id, label: `${item.title} · ${taskOwnerLabel(item)}` }));
+    .map((item) => ({ value: item.id, label: `${item.title} · ${taskAssigneeLabel(item)}` }));
 }
 
 export function buildTaskDetailViewModel({
@@ -164,10 +164,10 @@ export function buildTaskDetailViewModel({
   focusItems: TaskFocusItem[];
   currentRole: Profile["platformRole"] | "";
 }) {
-  const ownerProfile = profiles.find((profile) => profile.name === meta.owner || profile.id === meta.owner);
+  const assigneeProfile = profiles.find((profile) => profile.name === meta.assignee || profile.id === meta.assignee);
   const creatorProfile = profiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
     || profiles.find((profile) => profile.platformRole === "ceo")
-    || ownerProfile;
+    || assigneeProfile;
   const currentSprint = sprints.find((item) => item.id === meta.sprintId) || sprint;
   const currentMilestone = milestones.find((item) => item.id === meta.milestoneId);
   const currentPackage = packages.find((item) => item.id === meta.packageId) || pack;
@@ -185,7 +185,7 @@ export function buildTaskDetailViewModel({
   });
 
   return {
-    ownerProfile,
+    assigneeProfile,
     creatorProfile,
     currentSprint,
     currentMilestone,

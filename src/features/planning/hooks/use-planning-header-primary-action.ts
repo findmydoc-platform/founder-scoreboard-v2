@@ -33,13 +33,6 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
-  if (workspace === "mine") {
-    return {
-      label: "Vorschlag erstellen",
-      onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
-    };
-  }
-
   if (workspace === "sprint") {
     return {
       label: "Aufgabe hinzufügen",

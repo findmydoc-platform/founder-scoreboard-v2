@@ -129,7 +129,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning board state hook",
       path: "src/features/planning/hooks/use-planning-board-state.ts",
-      matches: [/event\.dataTransfer\.setData/, /founderTaskOwnershipGuardMessage/],
+      matches: [/event\.dataTransfer\.setData/, /founderTaskAssignmentGuardMessage/],
     },
     {
       label: "planning task selection hook",
@@ -174,18 +174,18 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(contract, /export function taskUpdateRequestPayload/);
   assert.match(contract, /export function buildTaskUpdateResponsePatch/);
   assert.match(contract, /export function activityMessages/);
-  assert.match(contract, /export function taskOwnedByProfile/);
+  assert.match(contract, /export function taskAssignedToProfile/);
   assert.match(contract, /Final bewertete Aufgaben können nicht erneut in Review gegeben werden/);
 
   assert.match(taskUpdateCommand, /buildClientTaskUpdatePatch/);
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
-  assert.doesNotMatch(taskUpdateCommand, /taskOwnerPatch/);
+  assert.doesNotMatch(taskUpdateCommand, /taskAssigneePatch/);
 
   assert.match(updateRoute, /buildTaskUpdateResponsePatch/);
   assert.match(updateRoute, /activityMessages/);
-  assert.match(updateRoutePolicy, /taskOwnedByProfile/);
+  assert.match(updateRoutePolicy, /taskAssignedToProfile/);
   assert.doesNotMatch(updateRoute, /function activityMessages/);
-  assert.doesNotMatch(updateRoute, /function taskOwnedByProfile/);
+  assert.doesNotMatch(updateRoute, /function taskAssignedToProfile/);
   assert.doesNotMatch(updateRoute, /function profileId/);
 });
 

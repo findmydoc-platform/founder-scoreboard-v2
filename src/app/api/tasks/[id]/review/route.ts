@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,sprint_id,title,status,owner,review_owner_profile_id")
+    .select("id,sprint_id,title,status,assignee,owner,review_owner_profile_id")
     .eq("id", id)
     .single();
 
@@ -118,11 +118,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     message: decision === "changes_requested" ? `Nacharbeit angefordert: ${comment || "ohne Kommentar"}` : `Review finalisiert: ${decision}, ${points} Punkte`,
   });
 
-  if (task.owner && task.owner !== permission.profile?.id) {
+  const assignee = task.assignee || task.owner;
+  if (assignee && assignee !== permission.profile?.id) {
     await supabase.from("notification_events").insert({
       type: decision === "changes_requested" ? "task.review_rework" : "task.review_completed",
       actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: task.owner,
+      recipient_profile_id: assignee,
       entity_type: "task",
       entity_id: id,
       title: decision === "changes_requested" ? `Nacharbeit: ${task.title}` : `Review abgeschlossen: ${task.title}`,
@@ -152,4 +153,3 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     },
   });
 }
-

@@ -24,7 +24,7 @@ const sampleTasks = {
       taskType: "deliverable",
       packageId: "initiative-id",
       sprintId: "sprint-2",
-      owner: "sebastian",
+      assignee: "sebastian",
       priority: "P1",
       hours: 4,
       problemStatement: "Was ist aktuell unklar oder kaputt?",
@@ -57,7 +57,7 @@ function intakeMessageLabel(message: string) {
   if (message.startsWith("Epic / Meilenstein wurde nicht gefunden:")) return "Epic oder Meilenstein wurde nicht gefunden. Bitte eine vorhandene Zuordnung verwenden.";
   if (message.startsWith("Sprint wurde nicht gefunden:")) return "Sprint wurde nicht gefunden. Bitte einen offenen Sprint aus der Zuordnungshilfe verwenden.";
   if (message.startsWith("Parent-Task wurde nicht gefunden:")) return "Übergeordnetes Deliverable wurde nicht gefunden. Bitte eine vorhandene Aufgabe verwenden.";
-  if (message.startsWith("Assignee wurde nicht gefunden:")) return "Assignee wurde nicht gefunden. Bitte ein Teammitglied aus der Zuordnungshilfe verwenden.";
+  if (message.startsWith("Zuständige Person wurde nicht gefunden:")) return "Zuständige Person wurde nicht gefunden. Bitte ein Teammitglied aus der Zuordnungshilfe verwenden.";
   if (message.startsWith("Status auf Offen gesetzt")) return "Status wurde auf Offen gesetzt, weil der importierte Wert nicht bekannt ist.";
   return message;
 }
@@ -190,7 +190,7 @@ export function CeoTaskIntake({ source, profiles, packages, sprints, apiClient, 
                       <UiBadge tone="white">{taskTypeLabel(task.taskType)}</UiBadge>
                       <UiBadge tone="white">{task.packageTitle || "Ohne Initiative"}</UiBadge>
                       <UiBadge tone="white">{task.sprintId ? sprintNameById.get(task.sprintId) || "Sprint nicht gefunden" : "Ohne Sprint"}</UiBadge>
-                      <UiBadge tone="white">{task.ownerName || "Ohne Assignee"}</UiBadge>
+                      <UiBadge tone="white">{task.assigneeName || "Ohne Zuständigkeit"}</UiBadge>
                       <UiBadge tone="white">{task.hours}h</UiBadge>
                     </div>
                   </div>

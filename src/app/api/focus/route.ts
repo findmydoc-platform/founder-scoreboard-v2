@@ -48,11 +48,11 @@ export async function POST(request: NextRequest) {
   const focusDate = payload.focusDate || todayIso();
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,owner")
+    .select("id,assignee,owner")
     .eq("id", taskId)
     .single();
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
-  if (!isOperationalLead && task.owner !== permission.profile?.id) {
+  if (!isOperationalLead && (task.assignee || task.owner) !== permission.profile?.id) {
     return apiError("Founder können nur eigene Aufgaben in den Fokus nehmen.", 403);
   }
   const { data: existingFocus } = await supabase

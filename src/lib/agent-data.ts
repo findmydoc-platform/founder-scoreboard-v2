@@ -4,6 +4,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
 
 export type AgentTaskFilters = {
+  assignee?: string;
   owner?: string;
   sprint?: string;
   initiative?: string;
@@ -42,10 +43,10 @@ function initiativePublic(pack: Package) {
   };
 }
 
-function taskMatchesOwner(task: Task, owner = "") {
-  if (!owner) return true;
-  const normalized = owner.toLowerCase();
-  return task.ownerId?.toLowerCase() === normalized || task.owner.toLowerCase() === normalized || task.assigneeId?.toLowerCase() === normalized;
+function taskMatchesAssignee(task: Task, assignee = "") {
+  if (!assignee) return true;
+  const normalized = assignee.toLowerCase();
+  return task.assigneeId?.toLowerCase() === normalized || task.assignee.toLowerCase() === normalized || task.ownerId?.toLowerCase() === normalized || task.owner.toLowerCase() === normalized;
 }
 
 function taskHasEvidence(task: Task) {
@@ -119,7 +120,7 @@ export async function getAgentTasks(filters: AgentTaskFilters) {
   const limit = Math.min(Math.max(Number(filters.limit || 50), 1), 200);
   const tasks = data.tasks
     .filter((task) => task.taskType !== "sub_issue")
-    .filter((task) => taskMatchesOwner(task, filters.owner))
+    .filter((task) => taskMatchesAssignee(task, filters.assignee || filters.owner))
     .filter((task) => !filters.sprint || task.sprintId === filters.sprint)
     .filter((task) => !filters.initiative || task.packageId === filters.initiative)
     .filter((task) => !filters.status || normalizeStatus(task.status) === normalizeStatus(filters.status))
@@ -137,9 +138,8 @@ export async function getAgentTasks(filters: AgentTaskFilters) {
         taskType: task.taskType,
         status: normalizeStatus(task.status),
         priority: task.priority,
-        ownerId: task.ownerId || "",
-        owner: task.owner,
         assigneeId: task.assigneeId || "",
+        assignee: task.assignee,
         sprintId: task.sprintId,
         initiativeId: task.packageId,
         initiativeTitle: initiative?.title || "",

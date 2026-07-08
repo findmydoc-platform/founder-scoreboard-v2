@@ -19,12 +19,12 @@ export function dateRange(task: Pick<Task, "startDate" | "endDate" | "deadline">
   return `${formatDate(task.startDate, options)} - ${formatDate(task.endDate, options)}`;
 }
 
-export function taskOwnerLabel(task: Pick<Task, "owner"> | { owner: string }) {
-  return task.owner || unassignedAssigneeLabel;
+export function taskAssigneeLabel(task: Pick<Task, "assignee"> | { assignee: string }) {
+  return task.assignee || unassignedAssigneeLabel;
 }
 
-export function taskOwnerOptions(taskType: Task["taskType"], profiles: Profile[]) {
-  const options = profiles.map((profile) => ({ value: profile.name, label: profile.name }));
+export function taskAssigneeOptions(taskType: Task["taskType"], profiles: Profile[]) {
+  const options = profiles.map((profile) => ({ value: profile.id, label: profile.name }));
   return taskType === "proposal" ? [{ value: "", label: unassignedAssigneeLabel }, ...options] : options;
 }
 

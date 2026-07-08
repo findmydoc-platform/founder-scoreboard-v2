@@ -1,6 +1,6 @@
 "use client";
 
-import { taskOwnerLabel } from "@/lib/display";
+import { taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Task } from "@/lib/types";
@@ -138,7 +138,7 @@ export function GitHubSyncQueueSection({
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-1 font-semibold text-slate-900">{task.title}</div>
                     <div className="mt-1 flex flex-wrap gap-1 text-xs text-slate-500">
-                      <span>{taskOwnerLabel(task)}</span>
+                      <span>{taskAssigneeLabel(task)}</span>
                       <span>·</span>
                       <span>{normalizeStatus(task.status)}</span>
                       <span>·</span>

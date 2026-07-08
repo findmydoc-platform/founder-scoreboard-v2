@@ -4,16 +4,17 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 test("display helpers preserve shared labels and date formatting", async () => {
   const display = await loadTranspiledModule("src/lib/display.ts");
+  const profiles = [{ id: "volkan", name: "Volkan" }];
 
   assert.equal(display.unassignedAssigneeLabel, "Nicht zugeordnet");
-  assert.equal(display.taskOwnerLabel({ owner: "" }), "Nicht zugeordnet");
-  assert.equal(display.taskOwnerLabel({ owner: "Volkan" }), "Volkan");
-  assert.deepEqual(display.taskOwnerOptions("proposal", [{ name: "Volkan" }]), [
+  assert.equal(display.taskAssigneeLabel({ assignee: "" }), "Nicht zugeordnet");
+  assert.equal(display.taskAssigneeLabel({ assignee: "Volkan" }), "Volkan");
+  assert.deepEqual(display.taskAssigneeOptions("proposal", profiles), [
     { value: "", label: "Nicht zugeordnet" },
-    { value: "Volkan", label: "Volkan" },
+    { value: "volkan", label: "Volkan" },
   ]);
-  assert.deepEqual(display.taskOwnerOptions("deliverable", [{ name: "Volkan" }]), [
-    { value: "Volkan", label: "Volkan" },
+  assert.deepEqual(display.taskAssigneeOptions("deliverable", profiles), [
+    { value: "volkan", label: "Volkan" },
   ]);
 
   assert.equal(display.initiativeOptionLabel({ title: "Initiative A" }), "Initiative A");

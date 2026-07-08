@@ -114,7 +114,7 @@ export function TaskDetailPage({
   });
 
   const {
-    ownerProfile,
+    assigneeProfile,
     creatorProfile,
     currentSprint,
     currentMilestone,
@@ -196,7 +196,7 @@ export function TaskDetailPage({
               meta={meta}
               detailsDraft={detailsDraft}
               creatorProfile={creatorProfile}
-              ownerProfile={ownerProfile}
+              assigneeProfile={assigneeProfile}
               currentPackage={currentPackage}
               currentSprint={currentSprint}
               currentMilestone={currentMilestone}

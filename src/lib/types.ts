@@ -68,10 +68,10 @@ export type Task = {
   description: string;
   status: string;
   priority: string;
-  ownerId?: string;
-  owner: string;
   assigneeId?: string;
   assignee: string;
+  ownerId?: string;
+  owner: string;
   createdById?: string;
   createdBy?: string;
   workstream: string;
@@ -293,7 +293,7 @@ export type NotificationPreference = {
 
 export type PlanningFilterPreferences = {
   query: string;
-  owner: string;
+  assignee: string;
   status: string;
   priority: string;
   packageId: string;

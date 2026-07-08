@@ -4,8 +4,8 @@ import seedSource from "./source.json";
 type EmptySeedCollections = Omit<PlanningData, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
 type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubSyncStatus" | "githubLastSyncedAt" | "githubSyncError" | "taskType" | "parentTaskId" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee"> & Partial<SeedTaskDefaults> & {
-  ownerId: string;
-  assigneeId?: string;
+  assigneeId: string;
+  ownerId?: string;
 };
 
 type SeedSource = {
@@ -35,8 +35,8 @@ export const seedTaskDefinitions = source.tasks;
 const profileNameById = new Map(seedProfiles.map((profile) => [profile.id, profile.name]));
 
 export function defineTask(input: SeedTaskInput): Task {
-  const ownerId = input.ownerId;
-  const assigneeId = input.assigneeId || ownerId;
+  const assigneeId = input.assigneeId;
+  const ownerId = input.ownerId || assigneeId;
 
   return {
     ...taskDefaults,

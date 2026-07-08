@@ -4,7 +4,7 @@ import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
+import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
@@ -52,12 +52,12 @@ export function TaskDetailPanelSidebar({
   onOpenReview,
   onDelete,
 }: Props) {
-  const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
+  const assigneeProfile = teamProfiles.find((profile) => profile.name === task.assignee || profile.id === task.assignee);
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
-  const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+  const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
   const creatorProfile = teamProfiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
     || teamProfiles.find((profile) => profile.platformRole === "ceo")
-    || ownerProfile;
+    || assigneeProfile;
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
@@ -96,9 +96,9 @@ export function TaskDetailPanelSidebar({
           {canManageTaskMeta ? (
             <>
               <UiSelectField
-                label="Assignee"
-                value={task.owner}
-                onChange={(value) => onUpdate({ owner: value })}
+                label="Zuständig"
+                value={task.assigneeId || task.assignee}
+                onChange={(value) => onUpdate({ assignee: value, assigneeId: value })}
                 options={assigneeOptions(task.taskType, teamProfiles)}
               />
               <UiSelectField label="Priorität" value={task.priority} onChange={(value) => onUpdate({ priority: value })} options={priorityOptions} />
@@ -106,8 +106,8 @@ export function TaskDetailPanelSidebar({
           ) : (
             <>
               <div>
-                <div className="text-xs font-semibold text-slate-500">Assignee</div>
-                <div className="mt-1 flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800">{taskOwnerLabel(task)}</div>
+                <div className="text-xs font-semibold text-slate-500">Zuständig</div>
+                <div className="mt-1 flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800">{taskAssigneeLabel(task)}</div>
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-500">Priorität</div>
