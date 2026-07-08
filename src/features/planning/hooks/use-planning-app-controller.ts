@@ -1,54 +1,14 @@
 "use client";
 
-import type { User } from "@supabase/supabase-js";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useFounderEventCommands } from "@/features/events/hooks/use-founder-event-commands";
-import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-import";
-import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
-import { useNotificationCommands } from "@/features/planning/hooks/use-notification-commands";
-import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
-import { usePlanningBoardState } from "@/features/planning/hooks/use-planning-board-state";
-import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
-import { usePlanningHeaderPrimaryAction } from "@/features/planning/hooks/use-planning-header-primary-action";
-import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
+import { useRouter } from "next/navigation";
+import { useRef } from "react";
+import { usePlanningBootstrapState, type PlanningBootstrapStateOptions } from "@/features/planning/hooks/use-planning-bootstrap-state";
+import { usePlanningCommandRegistry } from "@/features/planning/hooks/use-planning-command-registry";
+import { usePlanningDerivedState } from "@/features/planning/hooks/use-planning-derived-state";
 import { usePlanningTaskSelection } from "@/features/planning/hooks/use-planning-task-selection";
-import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
-import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
-import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
-import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
-import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
-import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
-import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
-import { useFeedbackCommands } from "@/features/settings/hooks/use-feedback-commands";
-import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
-import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
-import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
-import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
-import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
-import { taskBelongsToProfile } from "@/lib/platform";
-import { findCurrentSprint } from "@/lib/planning-schedule";
-import { hasSupabaseEnv } from "@/lib/supabase";
-import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
-import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import {
-  normalizePlanningData,
-  planningWorkspaces,
-} from "@/features/planning/model/planning-app-model";
 
-type PlanningAppControllerOptions = {
-  initialData: PlanningData;
-  initialWorkspace: AppWorkspace;
-  source: "seed" | "supabase";
-  authRequired: boolean;
-  demoSeedImportAvailable?: boolean;
-  initialAuthUser?: User | null;
-  initialCurrentProfile?: AuthenticatedProfile | null;
-  initialProtectedDataLoaded?: boolean;
-  initialAuthError?: string;
-  initialReviewTaskId?: string;
-};
+type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialData,
@@ -63,113 +23,88 @@ export function usePlanningAppController({
   initialReviewTaskId = "",
 }: PlanningAppControllerOptions) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const sidebarRef = useRef<HTMLElement | null>(null);
-  const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
-  const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const [data, setData] = useState(initialClientData);
-  const { localStateLoaded } = useLocalPlanningState({ source, setData });
-  const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
+  const bootstrap = usePlanningBootstrapState({
+    initialData,
+    initialWorkspace,
+    source,
+    authRequired,
+    demoSeedImportAvailable,
+    initialAuthUser,
+    initialCurrentProfile,
+    initialProtectedDataLoaded,
+    initialAuthError,
+    initialReviewTaskId,
+  });
   const {
+    actualProfile,
+    apiClient,
+    applyPlanningDataUpdate,
+    authAvailable,
+    authBusy,
+    authChecked,
+    authError,
+    authNotice,
+    authUser,
+    canChangeTaskStatus,
+    canManageTaskMeta,
+    canUseCeoIntake,
+    currentProfile,
+    currentProfileId,
+    data,
+    devProfileId,
+    devRoleSwitchAvailable,
     feedbackDialogOpen,
     filters,
     focusedReviewTaskId,
+    githubAppConnected,
+    githubReauthFailed,
+    githubSyncQueueOpen,
+    isPending,
     initiativeDialogDefaults,
+    localStateLoaded,
     mobileNavOpen,
+    protectedDataLoaded,
+    refreshPlanningData,
     reviewOwnerFilter,
     reviewStatusFilter,
+    saveError,
     selectedFeedbackId,
     selectedReviewDetailTaskId,
     selectedTaskId,
+    setData,
+    setDevProfileId,
     setFeedbackDialogOpen,
     setFilters,
     setFocusedReviewTaskId,
+    setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setMobileNavOpen,
     setReviewOwnerFilter,
     setReviewStatusFilter,
+    setSaveError,
     setSelectedFeedbackId,
     setSelectedTaskId,
     setShowFilters,
     setShowNotifications,
     setSprintPlanningOptions,
+    setStatusGuardNotice,
+    setStatusGuardTaskId,
     setTaskDialogDefaults,
     setView,
+    setWorkspace,
     showFilters,
     showNotifications,
-    sprintPlanningOptions,
-    taskDialogDefaults,
-    view,
-  } = usePlanningViewState({
-    initialData: safeInitialData,
-    initialFocusedReviewTaskId: searchParams.get("reviewTask") || "",
-    initialReviewTaskId,
-  });
-  const [isPending, startTransition] = useTransition();
-  const [saveError, setSaveError] = useState("");
-  const [statusGuardNotice, setStatusGuardNotice] = useState("");
-  const [statusGuardTaskId, setStatusGuardTaskId] = useState<string | null>(null);
-  const [githubSyncQueueOpen, setGithubSyncQueueOpen] = useState(false);
-
-  const clearSelectedTask = useCallback(() => setSelectedTaskId(null), [setSelectedTaskId]);
-  const {
-    authUser,
-    serverCurrentProfile,
-    authChecked,
-    protectedDataLoaded,
-    setProtectedDataLoaded,
-    githubAppConnected,
-    githubReauthFailed,
-    authError,
-    authNotice,
-    authBusy,
     signIn,
     signOut,
-  } = usePlanningAuth({
-    authRequired,
-    source,
-    safeInitialData,
-    taskCount: data.tasks.length,
+    sprintPlanningOptions,
+    startTransition,
+    statusGuardNotice,
+    statusGuardTaskId,
+    taskDialogDefaults,
+    view,
     workspace,
-    initialAuthUser,
-    initialCurrentProfile,
-    initialProtectedDataLoaded,
-    initialAuthError,
-    setData,
-    normalizePlanningData,
-    onSignedOut: clearSelectedTask,
-  });
-
-  const authAvailable = hasSupabaseEnv();
-  const currentGithubLogin = String(authUser?.user_metadata?.user_name || authUser?.user_metadata?.preferred_username || "");
-  const {
-    actualProfile,
-    currentProfile,
-    devProfileId,
-    setDevProfileId,
-    devRoleSwitchAvailable,
-    apiClient,
-  } = usePlanningRequestContext({
-    source,
-    profiles: data.profiles,
-    currentGithubLogin,
-    currentProfileId: serverCurrentProfile?.id || "",
-  });
-  const currentProfileId = currentProfile?.id || "";
-  const canUseCeoIntake = currentProfile?.platformRole === "ceo";
-  const canManageTaskMeta = source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const canChangeTaskStatus = useCallback((task: Task) => (
-    canManageTaskMeta || taskBelongsToProfile(task, currentProfile)
-  ), [canManageTaskMeta, currentProfile]);
-  const { applyPlanningDataUpdate, refreshPlanningData } = usePlanningDataRefresh({
-    apiClient,
-    authUser,
-    serverCurrentProfile,
-    setData,
-    setProtectedDataLoaded,
-    source,
-    workspace,
-  });
+  } = bootstrap;
 
   const commandContext = {
     apiClient,
@@ -207,107 +142,50 @@ export function usePlanningAppController({
     startTransition,
   });
 
-  const unreadNotifications = useMemo(() => {
-    const pending = data.notificationEvents.filter((event) => event.status === "pending");
-    if (!currentProfile) return pending;
-    return pending.filter((event) => event.recipientProfileId === currentProfile.id);
-  }, [currentProfile, data.notificationEvents]);
-  useEffect(() => {
-    if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
-      setWorkspace("planning");
-    }
-  }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
-
-  useEffect(() => {
-    if (!legacyMineWorkspace) return;
-    setFilters((current) => ({ ...current, assignee: "Alle", quick: "mine" }));
-  }, [legacyMineWorkspace, setFilters]);
-
-  const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
-  const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
-  const filtersAvailable = planningWorkspaces.includes(workspace);
-  const headerPrimaryAction = usePlanningHeaderPrimaryAction({
-    activeSprint,
+  const derivedState = usePlanningDerivedState({
+    authChecked,
+    canUseCeoIntake,
+    currentProfile,
+    data,
+    filters,
+    legacyMineWorkspace: bootstrap.legacyMineWorkspace,
     setFeedbackDialogOpen,
+    setFilters,
     setInitiativeDialogDefaults,
     setTaskDialogDefaults,
+    setWorkspace,
+    statusGuardTaskId,
     workspace,
   });
-
-  const taskMutationCommands = useTaskMutationCommands({
-    ...commandContext,
+  const commandRegistry = usePlanningCommandRegistry({
+    apiClient,
     closeTaskPanel,
+    commandContext,
+    currentProfileId,
+    data,
+    filters,
+    openTaskPanel,
+    protectedDataLoaded,
+    refreshPlanningData,
+    selectedTask,
+    setFeedbackDialogOpen,
+    setFilters,
+    setInitiativeDialogDefaults,
+    setSelectedFeedbackId,
+    setShowNotifications,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
-  });
-  const { syncTaskToGitHub, updateTask } = taskMutationCommands;
-  const taskCollaborationCommands = useTaskCollaborationCommands({
-    ...commandContext,
-    selectedTask,
-  });
-  const initiativeCommands = useInitiativeCommands({
-    ...commandContext,
-    setInitiativeDialogDefaults,
-  });
-  const boardState = usePlanningBoardState({
-    canChangeTaskStatus,
-    data,
-    setStatusGuardNotice,
-    setStatusGuardTaskId,
-    updateTask,
-  });
-  useProfileUiPreferenceSync({
-    apiClient,
-    currentProfileId,
-    data,
-    expandedPackages: boardState.expandedPackages,
-    filters,
-    protectedDataLoaded,
-    setData,
-    setExpandedPackageIds: boardState.setExpandedPackageIds,
-    setFilters,
     setView,
     setWorkspace,
     source,
+    sprintPlanningOptions,
     view,
     workspace,
   });
-  const eventCommands = useFounderEventCommands(commandContext);
-  const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);
-  const reviewCommands = useReviewCommands({
-    ...commandContext,
-    syncTaskToGitHub,
-  });
-  const sprintCommands = useSprintCommands({
-    ...commandContext,
-    refreshPlanningData,
-    sprintPlanningOptions,
-  });
-  const profileSettingsCommands = useProfileSettingsCommands(commandContext);
-  const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
-  const feedbackCommands = useFeedbackCommands({
-    ...commandContext,
-    setFeedbackDialogOpen,
-    setSelectedFeedbackId,
-  });
-  const notificationCommands = useNotificationCommands({
-    ...commandContext,
-    openTaskPanel,
-    refreshPlanningData,
-    setSelectedFeedbackId,
-    setShowNotifications,
-    setWorkspace,
-    workspace,
-  });
-  const { demoSeedImportPending, importDemoSeed } = useDemoSeedImport({
-    apiClient,
-    setData,
-    setSaveError,
-    source,
-  });
+  const { boardState, demoSeedImport } = commandRegistry;
+  const { demoSeedImportPending, importDemoSeed } = demoSeedImport;
 
-  const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;
   const releaseSidebarFocus = () => {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement && sidebarRef.current?.contains(activeElement)) {
@@ -335,17 +213,17 @@ export function usePlanningAppController({
     devRoleSwitchAvailable,
     feedbackDialogOpen,
     filters,
-    filtersAvailable,
+    filtersAvailable: derivedState.filtersAvailable,
     focusedReviewTaskId,
     githubAppConnected,
     githubReauthFailed,
     githubSyncQueueOpen,
-    headerPrimaryAction,
+    headerPrimaryAction: derivedState.headerPrimaryAction,
     initiativeDialogDefaults,
     importDemoSeed,
     isPending,
     localStateLoaded,
-    metrics,
+    metrics: derivedState.metrics,
     mobileNavOpen,
     openReviewSheet,
     openTaskPanel,
@@ -393,25 +271,25 @@ export function usePlanningAppController({
     sprintPlanningOptions,
     source,
     statusGuardNotice,
-    statusGuardTask,
+    statusGuardTask: derivedState.statusGuardTask,
     taskDialogDefaults,
-    unreadNotifications,
+    unreadNotifications: derivedState.unreadNotifications,
     view,
-    visibleTasks,
+    visibleTasks: derivedState.visibleTasks,
     workspace,
     setWorkspace,
     ...boardState,
-    ...eventCommands,
-    ...feedbackCommands,
-    ...initiativeCommands,
-    ...notificationCommands,
-    ...ownProfileSettingsCommands,
-    ...profileSettingsCommands,
-    ...reviewCommands,
-    ...sprintCommands,
-    ...weeklyAttendanceCommands,
-    ...taskCollaborationCommands,
-    ...taskMutationCommands,
+    ...commandRegistry.eventCommands,
+    ...commandRegistry.feedbackCommands,
+    ...commandRegistry.initiativeCommands,
+    ...commandRegistry.notificationCommands,
+    ...commandRegistry.ownProfileSettingsCommands,
+    ...commandRegistry.profileSettingsCommands,
+    ...commandRegistry.reviewCommands,
+    ...commandRegistry.sprintCommands,
+    ...commandRegistry.weeklyAttendanceCommands,
+    ...commandRegistry.taskCollaborationCommands,
+    ...commandRegistry.taskMutationCommands,
   };
 }
 
