@@ -40,6 +40,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           profiles={data.profiles}
           relations={data.taskRelations}
           allTasks={data.tasks}
+          blockers={data.taskBlockers}
           draggedTaskId={draggedTaskId}
           dragOverStatus={dragOverStatus}
           canChangeTaskStatus={canChangeTaskStatus}
@@ -62,6 +63,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           visibleTasks={visibleTasks}
           relations={data.taskRelations}
           allTasks={data.tasks}
+          blockers={data.taskBlockers}
           expandedPackages={expandedPackages}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
@@ -79,6 +81,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           profiles={data.profiles}
           relations={data.taskRelations}
           allTasks={data.tasks}
+          blockers={data.taskBlockers}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
           onOpenTask={(task) => openTaskPanel(task.id)}

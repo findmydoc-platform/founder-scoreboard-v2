@@ -1,7 +1,7 @@
 import { taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskFocusItem, TaskRelation } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskRelation } from "@/lib/types";
 
 export type TaskRelationshipRows = {
   waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
@@ -120,13 +120,6 @@ export function buildTaskRelationshipRows(task: Task, tasks: Task[], relations: 
   };
 }
 
-export function linkedFocusItemsForTask(taskId: string, focusItems: TaskFocusItem[]) {
-  return focusItems
-    .filter((item) => item.taskId === taskId)
-    .sort((left, right) => right.focusDate.localeCompare(left.focusDate) || left.position - right.position)
-    .slice(0, 5);
-}
-
 export function relationTargetOptionsForTask(task: Task, allTasks: Task[]) {
   return allTasks
     .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
@@ -146,7 +139,6 @@ export function buildTaskDetailViewModel({
   blockers,
   relations,
   allTasks,
-  focusItems,
   currentRole,
 }: {
   task: Task;
@@ -161,7 +153,6 @@ export function buildTaskDetailViewModel({
   blockers: TaskBlocker[];
   relations: TaskRelation[];
   allTasks: Task[];
-  focusItems: TaskFocusItem[];
   currentRole: Profile["platformRole"] | "";
 }) {
   const assigneeProfile = profiles.find((profile) => profile.name === meta.assignee || profile.id === meta.assignee);
@@ -174,7 +165,6 @@ export function buildTaskDetailViewModel({
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const openBlockers = blockers.filter((blocker) => blocker.status === "open");
   const { waitsOn, blocks, related } = buildTaskRelationshipRows(task, allTasks, relations);
-  const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const canManageTaskMeta = currentRole === "ceo" || currentRole === "deputy";
   const canSyncExistingGitHubIssue = hasGitHubIssue({
@@ -195,7 +185,6 @@ export function buildTaskDetailViewModel({
     waitsOn,
     blocks,
     related,
-    linkedFocusItems,
     relationTargetOptions,
     canManageTaskMeta,
     canSyncExistingGitHubIssue,

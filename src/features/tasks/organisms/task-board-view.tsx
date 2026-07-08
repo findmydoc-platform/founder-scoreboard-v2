@@ -3,7 +3,7 @@ import type { DragEvent } from "react";
 import { EmptyColumn, TaskCard } from "@/features/tasks/molecules/task-card";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
-import type { Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
   statuses: TaskStatus[];
@@ -12,6 +12,7 @@ type TaskBoardViewProps = {
   profiles: Profile[];
   relations: TaskRelation[];
   allTasks: Task[];
+  blockers: TaskBlocker[];
   draggedTaskId: string | null;
   dragOverStatus: TaskStatus | null;
   canChangeTaskStatus: (task: Task) => boolean;
@@ -34,6 +35,7 @@ export function TaskBoardView({
   profiles,
   relations,
   allTasks,
+  blockers,
   draggedTaskId,
   dragOverStatus,
   canChangeTaskStatus,
@@ -90,6 +92,7 @@ export function TaskBoardView({
                     ownerColor={ownerColorForTask(task)}
                     relations={relations}
                     allTasks={allTasks}
+                    blockers={blockers}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
                     statusDisabled={!canUpdateStatus}
                     showStatus={false}

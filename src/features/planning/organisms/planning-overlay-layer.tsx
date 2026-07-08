@@ -73,7 +73,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           packages={data.packages}
           sprints={data.sprints}
           milestones={data.milestones}
-          focusItems={data.taskFocusItems}
           canManageTaskMeta={canManageTaskMeta}
           canManageReviewOwner={currentProfile?.platformRole === "ceo"}
           canChangeTaskStatus={canChangeTaskStatus(selectedTask)}

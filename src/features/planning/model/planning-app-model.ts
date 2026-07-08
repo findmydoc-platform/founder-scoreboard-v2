@@ -3,10 +3,9 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
-import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
-import type { Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskComment, TaskFocusItem, TaskStatus, ViewMode } from "@/lib/types";
+import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
 
@@ -54,7 +53,6 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
-  execution: "Execution",
   reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
@@ -68,7 +66,6 @@ export const workspaceLabels: Record<Workspace, string> = {
 
 export const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
-  execution: "Heute-Modus, Hygiene-Alerts und Review-Steuerung.",
   reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Weekly Updates, Punkte und Sprintabschluss.",
@@ -84,6 +81,7 @@ export const planningWorkspaces: Workspace[] = ["planning"];
 
 export const quickFilters = [
   { id: "open", label: "Offen" },
+  { id: "critical", label: "Kritisch" },
   { id: "blocked", label: "Blockiert" },
   { id: "week", label: "Diese Woche" },
   { id: "high", label: "Hohe Priorität" },
@@ -241,74 +239,4 @@ export function founderTaskAssignmentGuardMessage() {
 export function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Package[]) {
   const initiative = packages.find((item) => item.id === task.packageId);
   return initiative?.accountableProfileId || initiative?.ownerId || "";
-}
-
-export type HygieneAlert = {
-  id: string;
-  severity: "critical" | "warning" | "info";
-  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "sync";
-  title: string;
-  description: string;
-  recommendedAction: string;
-  focusStatus?: TaskFocusItem["status"];
-  taskId?: string;
-};
-
-export function daysSinceIso(value: string, today = new Date()) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return Math.floor((today.getTime() - date.getTime()) / 86400000);
-}
-
-export function latestTaskSignal(taskId: string, comments: TaskComment[], activities: TaskActivity[]) {
-  const dates = [
-    ...comments.filter((comment) => comment.taskId === taskId).map((comment) => comment.createdAt),
-    ...activities.filter((activity) => activity.taskId === taskId).map((activity) => activity.createdAt),
-  ];
-  return dates.sort().at(-1) || "";
-}
-
-export function buildHygieneAlerts(data: PlanningData) {
-  const alerts: HygieneAlert[] = [];
-  const openStatuses = new Set(["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert"]);
-
-  for (const task of data.tasks) {
-    const status = normalizeStatus(task.status);
-    if (!openStatuses.has(status)) continue;
-    const relationGroups = taskRelationsFor(task.id, data.taskRelations);
-    const openBlockers = data.taskBlockers.filter((blocker) => blocker.taskId === task.id && blocker.status === "open");
-    const latestSignal = latestTaskSignal(task.id, data.taskComments, data.taskActivity);
-    const staleDays = daysSinceIso(latestSignal || task.startDate || task.endDate);
-
-    if (task.priority === "P0" && !task.assignee && task.taskType !== "proposal") {
-      alerts.push({ id: `p0-assignee-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Zuständigkeit", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Zuständigkeit festlegen und nächsten Schritt notieren.", taskId: task.id });
-    }
-    if (!task.acceptanceCriteria?.trim()) {
-      alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Abnahmekriterien fehlen", description: "Ohne Abnahmekriterien ist Review und Score schwammig.", recommendedAction: "Abnahmekriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
-    }
-    if (!task.definitionOfDone?.trim()) {
-      alerts.push({ id: `dod-${task.id}`, severity: "warning", area: "quality", title: "Qualitätsstandard fehlt", description: "Die Aufgabe hat kein klares Fertig-Kriterium.", recommendedAction: "Qualitätsstandard ergänzen und Review-Erwartung klären.", taskId: task.id });
-    }
-    if (status === "Blockiert" && !openBlockers.length) {
-      alerts.push({ id: `blocker-comment-${task.id}`, severity: "critical", area: "blocker", title: "Blockiert ohne Blocker-Meldung", description: "Der Status ist blockiert, aber es fehlt eine konkrete Blocker-Meldung.", recommendedAction: "Blocker mit Ursache, Auswirkung und benötigter Hilfe erfassen.", focusStatus: "blocked", taskId: task.id });
-    }
-    if (status === "Review" && (daysSinceIso(task.endDate) || 0) >= 2) {
-      alerts.push({ id: `review-aging-${task.id}`, severity: "warning", area: "review", title: "Review wartet zu lange", description: "Diese Aufgabe liegt mindestens zwei Tage in Review.", recommendedAction: "Review aktiv anstoßen oder Nacharbeit klar markieren.", taskId: task.id });
-    }
-    if (task.sprintId && status !== "Erledigt" && !task.evidenceLink && !task.githubIssueUrl && !task.issueUrl) {
-      alerts.push({ id: `evidence-${task.id}`, severity: "info", area: "evidence", title: "Nachweis fehlt", description: "Sprint-Arbeit sollte einen Nachweis-Link haben.", recommendedAction: "Nachweis-Link oder externe Ablage ergänzen.", taskId: task.id });
-    }
-    if (relationGroups.waitsOn.length && hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
-      alerts.push({ id: `waits-on-${task.id}`, severity: "warning", area: "dependency", title: "Wartet auf offene Aufgabe", description: "Eine Abhängigkeit ist noch offen und kann den Abschluss verschieben.", recommendedAction: "Abhängigkeit prüfen und Blocker oder Folgeaktion klären.", focusStatus: "blocked", taskId: task.id });
-    }
-    if (staleDays !== null && staleDays >= 2 && status !== "Erledigt") {
-      alerts.push({ id: `stale-${task.id}`, severity: "info", area: "focus", title: "Kein Update seit 48 Stunden", description: "Es gibt seit mindestens zwei Tagen keinen Kommentar oder Aktivitätseintrag.", recommendedAction: "Kurzstatus oder nächsten Schritt ergänzen.", taskId: task.id });
-    }
-    if (task.githubSyncStatus === "failed") {
-      alerts.push({ id: `sync-${task.id}`, severity: "warning", area: "sync", title: "GitHub-Sync fehlgeschlagen", description: task.githubSyncError || "Die Aufgabe konnte nicht sauber nach GitHub gespiegelt werden.", recommendedAction: "GitHub-Sync prüfen und Aufgabe erneut spiegeln.", taskId: task.id });
-    }
-  }
-
-  return alerts;
 }
