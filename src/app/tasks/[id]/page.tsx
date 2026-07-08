@@ -14,7 +14,7 @@ export default async function TaskPage({ params }: Props) {
   if (hasSupabaseEnv() && requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {
-      return <PlanningApp initialData={emptyPlanningData} source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
+      return <PlanningApp initialData={emptyPlanningData} initialWorkspace="planning" source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
     }
   }
 

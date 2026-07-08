@@ -22,6 +22,7 @@ test("task route renders full page while planning shell opens task panel locally
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const brand = await readFile("src/shared/atoms/app-brand.tsx", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
 
   assert.match(route, /getPlanningData/);
   assert.match(route, /notFound/);
@@ -112,8 +113,8 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(sidebar, /appNavItems/);
   assert.match(sidebar, /Hauptnavigation/);
   assert.doesNotMatch(sidebar, /Meeting Finder/);
-  assert.match(sidebar, /FMD-Tools/);
-  assert.match(sidebar, /Sprint & Score/);
+  assert.match(routes, /FMD-Tools/);
+  assert.match(routes, /Sprint & Score/);
   assert.doesNotMatch(sidebar, /Decision Log/);
   assert.match(sidebar, /AppBrand/);
   assert.match(ui, /AppBrand/);

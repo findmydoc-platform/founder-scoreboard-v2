@@ -31,6 +31,7 @@ import { taskBelongsToProfile } from "@/lib/platform";
 import { currentIsoDate, findCurrentSprint } from "@/lib/planning-schedule";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import {
   buildHygieneAlerts,
   normalizePlanningData,
@@ -39,6 +40,7 @@ import {
 
 type PlanningAppControllerOptions = {
   initialData: PlanningData;
+  initialWorkspace: AppWorkspace;
   source: "seed" | "supabase";
   authRequired: boolean;
   demoSeedImportAvailable?: boolean;
@@ -51,6 +53,7 @@ type PlanningAppControllerOptions = {
 
 export function usePlanningAppController({
   initialData,
+  initialWorkspace,
   source,
   authRequired,
   demoSeedImportAvailable = false,
@@ -67,7 +70,7 @@ export function usePlanningAppController({
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
   const { localStateLoaded } = useLocalPlanningState({ source, setData });
-  const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace();
+  const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const {
     feedbackDialogOpen,
     filters,
@@ -188,7 +191,6 @@ export function usePlanningAppController({
     selectedTaskId,
     setFocusedReviewTaskId,
     setSelectedTaskId,
-    setWorkspace,
   });
   const {
     closeTaskPanel,

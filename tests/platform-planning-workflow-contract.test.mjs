@@ -318,7 +318,7 @@ test("story writing skill protects approved stories and enforces template guardr
 });
 
 test("strict auth gates planning data until a valid session is present", async () => {
-  const page = await readFile("src/app/page.tsx", "utf8");
+  const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const serverAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
@@ -416,7 +416,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 });
 
 test("review workspace has direct review detail routes filters and reopen guard", async () => {
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const app = await readPlanningSurface();
   const workspace = await readFile("src/features/reviews/organisms/review-workspace-overview.tsx", "utf8");
   const detail = await readFile("src/features/reviews/templates/review-detail-page.tsx", "utf8");
@@ -426,8 +426,9 @@ test("review workspace has direct review detail routes filters and reopen guard"
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
 
-  assert.match(sidebar, /reviews/);
-  assert.match(sidebar, /Reviews/);
+  assert.match(routes, /id: "reviews"/);
+  assert.match(routes, /label: "Reviews"/);
+  assert.match(routes, /href: "\/reviews"/);
   assert.match(app, /workspace === "reviews"/);
   assert.match(app, /ReviewWorkspaceOverview/);
   assert.match(app, /reviewStatusFilter/);
@@ -445,6 +446,8 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(detail, /TaskReviewSheet/);
   assert.match(detail, /Review nicht gefunden/);
+  assert.match(detail, /href="\/reviews"/);
+  assert.doesNotMatch(detail, /\/\?workspace=reviews/);
   assert.match(sheet, /Review wieder öffnen/);
   assert.match(model, /isOpenReviewTask/);
   assert.match(model, /isCompletedReviewTask/);

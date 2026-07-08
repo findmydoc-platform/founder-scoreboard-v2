@@ -39,7 +39,7 @@ test("execution layer keeps focus board and hygiene alerts without decision link
   const ui = await readPlanningSurface();
   const executionUi = await readFeatureSurface("src/features/execution");
   const executionViewModel = await readFile("src/features/execution/model/execution-layer-view-model.ts", "utf8");
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
@@ -56,7 +56,8 @@ test("execution layer keeps focus board and hygiene alerts without decision link
 
   assert.match(migration, /create table if not exists task_focus_items/);
   assert.match(migration, /unique \(profile_id, task_id, focus_date\)/);
-  assert.match(sidebar, /Execution/);
+  assert.match(routes, /label: "Execution"/);
+  assert.match(routes, /href: "\/execution"/);
   assert.match(ui, /ExecutionLayerOverview/);
   assert.match(executionUi, /Heute-Fokus/);
   assert.match(executionUi, /Meine Reviews/);

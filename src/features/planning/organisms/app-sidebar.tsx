@@ -1,44 +1,16 @@
 "use client";
 
-import {
-  Archive,
-  CalendarClock,
-  ClipboardCheck,
-  GanttChart,
-  LayoutDashboard,
-  Settings,
-  Target,
-  Users,
-  WandSparkles,
-  Wrench,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import Link from "next/link";
 import { forwardRef, useEffect } from "react";
+import { appNavItems, appWorkspaceIds, hiddenWorkspaceIds, type AppWorkspace, type VisibleAppWorkspace } from "@/features/planning/model/workspace-routes";
 import { AppBrand } from "@/shared/atoms/app-brand";
 
-export type AppWorkspace = "planning" | "execution" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
-export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
-
-export const appNavItems = [
-  { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/" },
-  { id: "execution", label: "Execution", icon: Target, href: "/?workspace=execution" },
-  { id: "reviews", label: "Reviews", icon: ClipboardCheck, href: "/?workspace=reviews" },
-  { id: "events", label: "Events", icon: CalendarClock, href: "/?workspace=events" },
-  { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/?workspace=ceo-intake", ceoOnly: true },
-  { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/?workspace=sprint" },
-  { id: "projects", label: "Meilensteine", icon: Archive, href: "/?workspace=projects" },
-  { id: "tools", label: "FMD-Tools", icon: Wrench, href: "/?workspace=tools" },
-  { id: "team", label: "Team", icon: Users, href: "/?workspace=team" },
-  { id: "settings", label: "Einstellungen", icon: Settings, href: "/?workspace=settings" },
-] satisfies Array<{ id: VisibleAppWorkspace; label: string; icon: typeof LayoutDashboard; href: string; ceoOnly?: boolean }>;
-
-export const hiddenWorkspaceIds = ["profile"] as const satisfies readonly AppWorkspace[];
-export const appWorkspaceIds = [...appNavItems.map((item) => item.id), ...hiddenWorkspaceIds] as const satisfies readonly AppWorkspace[];
+export { appNavItems, appWorkspaceIds, hiddenWorkspaceIds };
+export type { AppWorkspace, VisibleAppWorkspace };
 
 type AppSidebarProps = {
   activeWorkspace?: AppWorkspace;
-  onSelect?: (workspace: AppWorkspace) => void;
   source?: "seed" | "supabase";
   localStateLoaded?: boolean;
   authAvailable?: boolean;
@@ -72,7 +44,6 @@ function AccessCard({
 
 export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppSidebar({
   activeWorkspace = "planning",
-  onSelect,
   authAvailable = false,
   authUserEmail = "",
   currentPlatformRole = "",
@@ -105,19 +76,6 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
         <span className={variant === "desktop" ? "w-0 overflow-hidden whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:w-auto group-hover:opacity-100 group-focus-within:w-auto group-focus-within:opacity-100" : "truncate"}>{item.label}</span>
       </>
     );
-    const handleSelect = () => {
-      onSelect?.(item.id);
-      if (variant === "mobile") onMobileClose?.();
-    };
-
-    if (onSelect) {
-      return (
-        <button key={item.id} type="button" onClick={handleSelect} title={item.label} className={className} data-tour-id={`workspace-nav-${item.id}`}>
-          {content}
-        </button>
-      );
-    }
-
     return (
       <Link key={item.id} href={item.href} title={item.label} className={className} data-tour-id={`workspace-nav-${item.id}`} onClick={variant === "mobile" ? onMobileClose : undefined}>
         {content}
