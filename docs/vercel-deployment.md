@@ -51,17 +51,17 @@ GOOGLE_CHAT_DELIVERY_ENABLED=false
 FOUNDEROPS_DELIVERY_SECRET=
 ```
 
-For Phase 1, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of Phase 1.
+For operational in-app delivery, set `GOOGLE_CHAT_WEBHOOK_URL` to the incoming webhook of the renamed `FounderOps` Google Chat space and set `GOOGLE_CHAT_DELIVERY_ENABLED=true` only after a controlled test. Personal FounderOps DMs need `GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_CHAT_PRIVATE_KEY`, and `profiles.google_chat_dm_space` values in Supabase, and stay out of the release channel.
 
-For Phase 2, Sebastian's external pipeline calls `POST https://founder-ops.findmydoc.eu/api/notifications/deliver` on weekdays at `09:00 Europe/Berlin` with header `x-founderops-delivery-secret: <FOUNDEROPS_DELIVERY_SECRET>` and body `{ "limit": 20 }`.
+The GitHub Actions release channel uses `.github/workflows/send-release-google-chat.yml`. It accepts `message_payload_json`, reads the `GOOGLE_CHAT_WEBHOOK_URL` repository secret, and posts release details or deployment summaries only.
 
 For Phase 4, private FounderOps DMs use the Google Chat API and are limited to personal action items. Missing or invalid `profiles.google_chat_dm_space` values are logged as failed `direct_dm` deliveries and are not redirected into the group webhook.
 
 For Phase 5, use the Settings delivery cockpit after every secret change or deployment. Check readiness, send `testDelivery=webhook_digest`, send `testDelivery=direct_dm` to one profile with a valid `spaces/...`, and use `eventIds` retry only for failed pending events. Rollback remains `GOOGLE_CHAT_DELIVERY_ENABLED=false`.
 
-The repository also contains `.github/workflows/google-chat-digest.yml` for this job. It runs against the `production` GitHub Environment and requires `FOUNDEROPS_DELIVERY_SECRET` there. Vercel Production must use the same `FOUNDEROPS_DELIVERY_SECRET` plus `GOOGLE_CHAT_WEBHOOK_URL` and `GOOGLE_CHAT_DELIVERY_ENABLED=true`.
+Operational delivery endpoints still accept `FOUNDEROPS_DELIVERY_SECRET`, but the GitHub Actions release workflow must not call `/api/notifications/generate-digest` or `/api/notifications/deliver`.
 
-Operational event messages stay inside the application. If a Google Chat release channel is used later, it must stay separate and may only carry release details or deployment summaries.
+Operational event messages stay inside the application. The Google Chat release channel stays separate and may only carry release details or deployment summaries.
 
 Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, dependency sync, GitHub comment import, private asset proxying, and issue archival use the configured GitHub App installation token. User-authored comments and attachments use encrypted GitHub App user tokens stored server-side in Supabase with refresh rotation. Raw GitHub tokens must never be sent to the browser, logged, or returned from API responses.
 
