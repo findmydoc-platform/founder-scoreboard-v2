@@ -391,13 +391,13 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const rootPage = await readFile("src/app/page.tsx", "utf8");
+  const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
   const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
-    "execution",
     "reviews",
     "events",
     "ceo-intake",
@@ -412,7 +412,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(ui, /usePlanningWorkspace/);
   assert.doesNotMatch(`${sidebar}\n${routes}`, /\/\?workspace=/);
   assert.match(routes, /href: "\/planning"/);
-  assert.match(routes, /href: "\/execution"/);
+  assert.doesNotMatch(routes, /href: "\/execution"|id: "execution"/);
   assert.match(routes, /href: "\/reviews"/);
   assert.match(routes, /href: "\/events"/);
   assert.match(routes, /href: "\/ceo-intake"/);
@@ -426,6 +426,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
     assert.match(page, /renderWorkspacePage/);
     assert.match(page, /dynamic = "force-dynamic"/);
   }
+  assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.match(rootPage, /redirect\(`\$\{workspacePath\(workspace\)\}/);
   assert.match(rootPage, /rawWorkspace === "mine"/);
   assert.match(workspacePage, /workspaceDataScopes/);

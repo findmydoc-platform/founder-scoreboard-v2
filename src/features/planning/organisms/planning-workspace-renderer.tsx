@@ -9,7 +9,6 @@ import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 const CeoTaskIntake = dynamic(() => import("@/features/intake/organisms/ceo-task-intake").then((mod) => mod.CeoTaskIntake), { loading: WorkspacePanelLoading });
 const EventsOverview = dynamic(() => import("@/features/events/organisms/events-overview").then((mod) => mod.EventsOverview), { loading: WorkspacePanelLoading });
-const ExecutionLayerOverview = dynamic(() => import("@/features/execution/organisms/execution-layer-overview").then((mod) => mod.ExecutionLayerOverview), { loading: WorkspacePanelLoading });
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: WorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: WorkspacePanelLoading });
 const ReviewWorkspaceOverview = dynamic(() => import("@/features/reviews/organisms/review-workspace-overview").then((mod) => mod.ReviewWorkspaceOverview), { loading: WorkspacePanelLoading });
@@ -48,7 +47,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     createScoreObjection,
     createSprintPlan,
     currentProfile,
-    currentProfileFocusItems,
     data,
     dispatchNotifications,
     eventMessage,
@@ -59,12 +57,10 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     googleChatStatus,
     githubAppConnected,
     githubSyncQueueOpen,
-    hygieneAlerts,
     isPending,
     lockSprint,
     notificationDispatchMessage,
     openTaskPanel,
-    removeFocusItem,
     reopenReviewTask,
     apiClient,
     retryNotificationDelivery,
@@ -93,7 +89,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateSprint,
     updateSprintCommitment,
     updateTask,
-    upsertFocusItem,
     view,
     workspace,
   } = controller;
@@ -145,18 +140,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
             successCriteria: initiative.successCriteria || "",
             scopeConstraints: initiative.scopeConstraints || "",
           })}
-        />
-      )}
-      {workspace === "execution" && (
-        <ExecutionLayerOverview
-          data={data}
-          currentProfile={currentProfile}
-          focusItems={currentProfileFocusItems}
-          hygieneAlerts={hygieneAlerts}
-          pending={isPending}
-          onOpenTask={(task) => openTaskPanel(task.id)}
-          onSetFocus={upsertFocusItem}
-          onRemoveFocus={removeFocusItem}
         />
       )}
       {workspace === "reviews" && (

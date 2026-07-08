@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
-import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
 import {
   buildDetailsMilestonePatch,
@@ -32,7 +32,6 @@ type UseTaskDetailWorkflowOptions = {
   profiles: Profile[];
   sprints: Sprint[];
   milestones: Milestone[];
-  focusItems: TaskFocusItem[];
   source: "seed" | "supabase";
   commentImportNotice: string;
 };
@@ -51,7 +50,6 @@ export function useTaskDetailWorkflow({
   profiles,
   sprints,
   milestones,
-  focusItems,
   source,
   commentImportNotice,
 }: UseTaskDetailWorkflowOptions) {
@@ -114,7 +112,6 @@ export function useTaskDetailWorkflow({
     blockers,
     relations,
     allTasks,
-    focusItems,
     currentRole,
   });
   const detailsDraft: TaskDetailsDraft = buildTaskDetailsDraft(meta);

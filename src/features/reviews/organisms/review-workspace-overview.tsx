@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge, UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
+import { ReviewTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { buildReviewWorkspaceViewModel, isBlockedReviewTask, reviewStatusFilterOptions, type ReviewOwnerFilter, type ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
@@ -105,6 +106,9 @@ export function ReviewWorkspaceOverview({
                     <Link href={`/reviews/${encodeURIComponent(task.id)}`} className="block truncate font-semibold text-slate-950 hover:text-blue-700">
                       {task.title}
                     </Link>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <ReviewTaskAttentionBadges task={task} />
+                    </div>
                     <div className="mt-1 truncate text-xs text-slate-500">{task.priority} · {task.hours}h · {task.workstream || "ohne Bereich"}</div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{taskAssigneeLabel(task)}</td>

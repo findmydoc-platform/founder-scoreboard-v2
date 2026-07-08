@@ -11,7 +11,6 @@ test("task route renders full page while planning shell opens task panel locally
   const panelBlockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
   const panelHeader = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
   const panelBriefSection = await readFile("src/features/tasks/molecules/task-detail-panel-brief-section.tsx", "utf8");
-  const panelContextSection = await readFile("src/features/tasks/molecules/task-detail-panel-context-section.tsx", "utf8");
   const panelDependenciesSection = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
   const panelSubIssuesSection = await readFile("src/features/tasks/molecules/task-detail-panel-sub-issues-section.tsx", "utf8");
   const panelNotesSection = await readFile("src/features/tasks/molecules/task-detail-panel-notes-section.tsx", "utf8");
@@ -59,11 +58,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.ok(panelBriefSection.indexOf("Umfang & Grenzen") < panelBriefSection.indexOf("Abnahmekriterien"));
   assert.ok(panelBriefSection.indexOf("Abnahmekriterien") < panelBriefSection.indexOf("Nachweis"));
   assert.ok(panelBriefSection.indexOf("Nachweis") < panelBriefSection.indexOf("Qualitätsstandard"));
-  assert.match(taskDetailPanel, /TaskDetailPanelContextSection/);
-  assert.match(panelContextSection, /Fokus-Kontext/);
-  assert.doesNotMatch(panelContextSection, /Begründende Decisions|decisionStatusLabel/);
-  assert.match(panelContextSection, /Kein nächster Schritt hinterlegt/);
-  assert.ok(taskDetailPanel.indexOf("TaskDetailPanelBriefSection") < taskDetailPanel.indexOf("TaskDetailPanelContextSection"));
+  assert.doesNotMatch(taskDetailPanel, /TaskDetailPanelContextSection|Fokus-Kontext/);
   assert.match(taskDetailPanel, /TaskDetailPanelDependenciesSection/);
   assert.match(panelDependenciesSection, /Abhängigkeiten & Evidence/);
   assert.match(panelDependenciesSection, /RelationshipList/);
@@ -136,7 +131,6 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const page = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
-  const contextSection = await readFile("src/features/tasks/molecules/task-context-section.tsx", "utf8");
   const detailsCard = await readFile("src/features/tasks/organisms/task-details-card.tsx", "utf8");
   const evidenceSection = await readFile("src/features/tasks/molecules/task-evidence-link-section.tsx", "utf8");
   const header = await readFile("src/features/tasks/molecules/task-detail-header.tsx", "utf8");
@@ -182,7 +176,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(taskDetailState, /buildDetailsMilestonePatch/);
   assert.match(taskDetailState, /taskRelationsFor/);
   assert.match(taskDetailState, /taskAssigneeLabel/);
-  assert.match(taskDetailState, /linkedFocusItems/);
+  assert.doesNotMatch(taskDetailState, /linkedFocusItems|linkedFocusItemsForTask/);
   assert.match(taskDetailState, /relationTargetOptions/);
   assert.match(taskDetailState, /canManageTaskMeta/);
   assert.match(taskDetailState, /canSyncExistingGitHubIssue/);
@@ -190,7 +184,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(taskDetailWorkflow, /detailsEditSnapshot/);
   assert.match(page, /briefEditing/);
   assert.match(page, /TaskBriefSection/);
-  assert.match(page, /TaskContextSection/);
+  assert.doesNotMatch(page, /TaskContextSection|Fokus-Kontext/);
   assert.match(page, /TaskDetailHeader/);
   assert.match(page, /TaskDetailsCard/);
   assert.match(page, /TaskEvidenceLinkSection/);
@@ -204,10 +198,6 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(briefSection, /Qualitätsstandard/);
   assert.match(briefSection, /TaskChecklist/);
   assert.match(briefSection, /onChecklistChange/);
-  assert.match(contextSection, /Fokus-Kontext/);
-  assert.doesNotMatch(contextSection, /Begründende Decisions/);
-  assert.match(contextSection, /focusStatusLabel/);
-  assert.match(contextSection, /Kein nächster Schritt hinterlegt/);
   assert.match(evidenceSection, /Evidence Link/);
   assert.match(evidenceSection, /onEvidenceLinkSave/);
   assert.match(evidenceSection, /CommentBody/);

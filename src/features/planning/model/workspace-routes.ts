@@ -5,7 +5,6 @@ import {
   GanttChart,
   LayoutDashboard,
   Settings,
-  Target,
   UserCircle,
   Users,
   WandSparkles,
@@ -13,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type AppWorkspace = "planning" | "execution" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 type WorkspaceRoute = {
@@ -31,7 +30,6 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
-  { id: "execution", label: "Execution", icon: Target, href: "/execution" },
   { id: "reviews", label: "Reviews", icon: ClipboardCheck, href: "/reviews" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
@@ -53,7 +51,7 @@ export function workspacePath(workspace: AppWorkspace) {
 }
 
 export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
-  if (value === "mine") return "planning";
+  if (value === "mine" || value === "execution") return "planning";
   return appWorkspaceIds.find((id) => id === value) || null;
 }
 

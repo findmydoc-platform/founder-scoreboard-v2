@@ -3,20 +3,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("profile workspace is hidden from sidebar but reachable from account menu", async () => {
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
-
-  const navItems = sidebar.match(/export const appNavItems = \[([\s\S]*?)\] satisfies/)?.[1] || "";
+  const profileSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
+  const profileModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
+  const profileRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
   assert.match(routes, /AppWorkspace = .*"profile"/);
   assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
   assert.match(routes, /href: "\/profile"/);
-  assert.doesNotMatch(navItems, /profile/);
+  assert.match(routes, /id: "profile".*hidden: true/s);
+  assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
+  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(profileSync, /value === "mine" \|\| value === "execution"/);
+  assert.match(profileModel, /value === "mine" \|\| value === "execution"/);
+  assert.doesNotMatch(profileRoute, /"execution",/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
   assert.match(authControl, /data-tour-id="profile-menu-link"/);

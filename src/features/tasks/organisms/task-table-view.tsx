@@ -1,10 +1,11 @@
 import { AlertTriangle, Link2 } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { GitHubSyncStatusBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
+import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge } from "@/shared/atoms/ui-primitives";
 import { DataCell, DataEmptyRow, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead } from "@/shared/molecules/data-surface";
 
@@ -13,6 +14,7 @@ type TaskTableViewProps = {
   profiles: Profile[];
   relations: TaskRelation[];
   allTasks: Task[];
+  blockers: TaskBlocker[];
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
   onOpenTask: (task: Task) => void;
@@ -24,6 +26,7 @@ export function TaskTableView({
   profiles,
   relations,
   allTasks,
+  blockers,
   canChangeTaskStatus,
   statusOptionsForTask,
   onOpenTask,
@@ -70,6 +73,9 @@ export function TaskTableView({
                     {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
                     <span>{task.title}</span>
                   </button>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <PlanningTaskAttentionBadges task={task} data={{ taskBlockers: blockers, taskRelations: relations, tasks: allTasks }} excludeIds={["sync-failed", "waiting"]} compact />
+                  </div>
                   <p className="mt-1 line-clamp-2 text-xs text-slate-500">{task.description}</p>
                 </DataCell>
                 <DataCell>{task.hours}h</DataCell>

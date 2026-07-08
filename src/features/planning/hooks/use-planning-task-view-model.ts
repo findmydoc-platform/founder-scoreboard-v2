@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
 import { isThisWeek, sortTasks, taskText } from "@/features/planning/model/planning-app-model";
+import { taskHasCriticalAttention, taskHasMissingEvidenceAttention } from "@/features/tasks/model/task-attention-signals";
 import { hasOpenWaitingRelation, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile } from "@/lib/types";
@@ -32,15 +33,16 @@ export function usePlanningTaskViewModel({
           !filters.quick ||
           (filters.quick === "mine" && taskBelongsToProfile(task, currentProfile)) ||
           (filters.quick === "open" && normalized === "Offen") ||
+          (filters.quick === "critical" && taskHasCriticalAttention(task, data)) ||
           (filters.quick === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn))) ||
           (filters.quick === "week" && isThisWeek(task)) ||
           (filters.quick === "high" && ["P0", "P1"].includes(task.priority)) ||
-          (filters.quick === "evidence" && !task.evidenceLink && !task.issueUrl);
+          (filters.quick === "evidence" && taskHasMissingEvidenceAttention(task));
 
         return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
       }),
     );
-  }, [currentProfile, data.tasks, filters]);
+  }, [currentProfile, data, filters]);
 
   const visibleTasks = filteredTasks;
 

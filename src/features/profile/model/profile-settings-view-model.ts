@@ -48,6 +48,10 @@ export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilt
   };
 }
 
+function normalizedDefaultWorkspace(value: string) {
+  return value === "mine" || value === "execution" ? "planning" : value as AppWorkspace;
+}
+
 export function buildInitialDraft({
   currentProfile,
   data,
@@ -70,7 +74,7 @@ export function buildInitialDraft({
     color: currentProfile.color || "#64748b",
     notificationsEnabled: currentProfile.notificationsEnabled !== false,
     notificationEvents: Object.fromEntries(googleChatDigestEventTypes.map((eventType) => [eventType, eventEnabled(data, currentProfile.id, eventType)])),
-    defaultWorkspace: profileUiPreference?.defaultWorkspace === "mine" ? "planning" : (profileUiPreference?.defaultWorkspace as AppWorkspace) || (workspace === "profile" ? "planning" : workspace),
+    defaultWorkspace: profileUiPreference?.defaultWorkspace ? normalizedDefaultWorkspace(profileUiPreference.defaultWorkspace) : (workspace === "profile" ? "planning" : workspace),
     defaultTaskView: profileUiPreference?.defaultTaskView || view,
     planningFilters: defaultFilters(profileUiPreference?.planningFilters || filters),
     expandedPackageIds: profileUiPreference?.expandedPackageIds || expandedPackageIds(expandedPackages),

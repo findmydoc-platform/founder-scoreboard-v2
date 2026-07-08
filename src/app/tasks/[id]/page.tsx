@@ -39,7 +39,6 @@ export default async function TaskPage({ params }: Props) {
       profiles={data.profiles}
       sprints={data.sprints}
       milestones={data.milestones}
-      focusItems={data.taskFocusItems}
       source={source}
     />
   );

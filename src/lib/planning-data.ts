@@ -5,7 +5,7 @@ import type { PlanningData } from "./types";
 export const emptyPlanningData: PlanningData = {
   project: {
     id: "findmydoc-founder-execution",
-    name: "findmydoc Founder Execution",
+    name: "findmydoc Planning",
     range: "Geschützter Teamzugriff",
   },
   profiles: [],

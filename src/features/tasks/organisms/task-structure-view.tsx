@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { initiativeMetaLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
-import type { Package, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
@@ -11,6 +11,7 @@ type TaskStructureViewProps = {
   visibleTasks: Task[];
   relations: TaskRelation[];
   allTasks: Task[];
+  blockers: TaskBlocker[];
   expandedPackages: Record<string, boolean>;
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
@@ -26,6 +27,7 @@ export function TaskStructureView({
   visibleTasks,
   relations,
   allTasks,
+  blockers,
   expandedPackages,
   canChangeTaskStatus,
   statusOptionsForTask,
@@ -75,6 +77,7 @@ export function TaskStructureView({
                       ownerColor={ownerColorForTask(task)}
                       relations={relations}
                       allTasks={allTasks}
+                      blockers={blockers}
                       statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
                       statusDisabled={!canUpdateStatus}
                       showStatus={false}

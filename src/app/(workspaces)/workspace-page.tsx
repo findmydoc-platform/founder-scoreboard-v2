@@ -38,7 +38,6 @@ const taskWorkspaceDataScope = {
 
 const workspaceDataScopes = {
   planning: taskWorkspaceDataScope,
-  execution: taskWorkspaceDataScope,
   reviews: baseWorkspaceDataScope,
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {

@@ -147,11 +147,6 @@ test("planning app controller delegates command domains and stays a thin compose
       path: "src/features/planning/hooks/use-planning-task-view-model.ts",
       matches: [/hasOpenWaitingRelation/],
     },
-    {
-      label: "execution commands",
-      path: "src/features/execution/hooks/use-execution-commands.ts",
-      matches: [/saveFocusItemRequest/],
-    },
     { label: "initiative commands", path: "src/features/projects/hooks/use-initiative-commands.ts", matches: [/saveInitiativeRequest/] },
     { label: "sprint commands", path: "src/features/sprint/hooks/use-sprint-commands.ts", matches: [/lockSprintRequest/, /createScoreObjectionRequest/] },
     { label: "profile commands", path: "src/features/team/hooks/use-profile-settings-commands.ts", matches: [/updateProfileRequest/] },

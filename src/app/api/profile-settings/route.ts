@@ -49,7 +49,6 @@ const blockedSelfServiceFields = new Set([
 const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
 const allowedWorkspaces = new Set([
   "planning",
-  "execution",
   "mine",
   "reviews",
   "events",

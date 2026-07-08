@@ -3,7 +3,6 @@
 import type { User } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useExecutionCommands } from "@/features/execution/hooks/use-execution-commands";
 import { useFounderEventCommands } from "@/features/events/hooks/use-founder-event-commands";
 import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-import";
 import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
@@ -28,12 +27,11 @@ import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-se
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
 import { taskBelongsToProfile } from "@/lib/platform";
-import { currentIsoDate, findCurrentSprint } from "@/lib/planning-schedule";
+import { findCurrentSprint } from "@/lib/planning-schedule";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import {
-  buildHygieneAlerts,
   normalizePlanningData,
   planningWorkspaces,
 } from "@/features/planning/model/planning-app-model";
@@ -204,16 +202,6 @@ export function usePlanningAppController({
     if (!currentProfile) return pending;
     return pending.filter((event) => event.recipientProfileId === currentProfile.id);
   }, [currentProfile, data.notificationEvents]);
-  const hygieneAlerts = useMemo(() => buildHygieneAlerts(data), [data]);
-  const todayFocusDate = currentIsoDate();
-  const currentProfileFocusItems = useMemo(() => {
-    if (!currentProfileId) return [];
-    return data.taskFocusItems
-      .filter((item) => item.profileId === currentProfileId && item.focusDate === todayFocusDate)
-      .sort((left, right) => left.position - right.position)
-      .slice(0, 3);
-  }, [currentProfileId, data.taskFocusItems, todayFocusDate]);
-
   useEffect(() => {
     if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
       setWorkspace("planning");
@@ -251,11 +239,6 @@ export function usePlanningAppController({
   const initiativeCommands = useInitiativeCommands({
     ...commandContext,
     setInitiativeDialogDefaults,
-  });
-  const executionCommands = useExecutionCommands({
-    ...commandContext,
-    currentProfileFocusItems,
-    todayFocusDate,
   });
   const boardState = usePlanningBoardState({
     canChangeTaskStatus,
@@ -335,7 +318,6 @@ export function usePlanningAppController({
     canUseCeoIntake,
     closeTaskPanel,
     currentProfile,
-    currentProfileFocusItems,
     data,
     demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable,
     demoSeedImportPending,
@@ -349,7 +331,6 @@ export function usePlanningAppController({
     githubReauthFailed,
     githubSyncQueueOpen,
     headerPrimaryAction,
-    hygieneAlerts,
     initiativeDialogDefaults,
     importDemoSeed,
     isPending,
@@ -409,7 +390,6 @@ export function usePlanningAppController({
     setWorkspace,
     ...boardState,
     ...eventCommands,
-    ...executionCommands,
     ...feedbackCommands,
     ...initiativeCommands,
     ...notificationCommands,

@@ -3,10 +3,11 @@
 import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
-import type { Package, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 
 function cardHexToRgba(hex: string, alpha: number) {
@@ -73,6 +74,7 @@ export function TaskCard({
   ownerColor,
   relations,
   allTasks,
+  blockers,
   statusOptions,
   statusDisabled = false,
   showStatus = false,
@@ -88,6 +90,7 @@ export function TaskCard({
   ownerColor: string;
   relations: TaskRelation[];
   allTasks: Task[];
+  blockers: TaskBlocker[];
   statusOptions: TaskStatus[];
   statusDisabled?: boolean;
   showStatus?: boolean;
@@ -148,6 +151,7 @@ export function TaskCard({
           {task.hours}h
         </UiBadge>
         <GitHubSyncStatusBadge task={task} />
+        <PlanningTaskAttentionBadges task={task} data={{ taskBlockers: blockers, taskRelations: relations, tasks: allTasks }} excludeIds={["sync-failed", "waiting"]} />
         <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
         <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
       </div>

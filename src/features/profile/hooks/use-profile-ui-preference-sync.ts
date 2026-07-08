@@ -35,6 +35,10 @@ function expandedPackageIds(expandedPackages: Record<string, boolean>) {
     .map(([packageId]) => packageId);
 }
 
+function normalizedDefaultWorkspace(value: string) {
+  return value === "mine" || value === "execution" ? "planning" : value as AppWorkspace;
+}
+
 function upsertUiPreference(
   data: PlanningData,
   profileId: string,
@@ -84,7 +88,7 @@ export function useProfileUiPreferenceSync({
     });
     setExpandedPackageIds(preference.expandedPackageIds);
     if (!pathHasWorkspace() && preference.defaultWorkspace !== "profile") {
-      setWorkspace(preference.defaultWorkspace === "mine" ? "planning" : preference.defaultWorkspace as AppWorkspace);
+      setWorkspace(normalizedDefaultWorkspace(preference.defaultWorkspace));
     }
   }, [currentProfileId, preference, setExpandedPackageIds, setFilters, setView, setWorkspace]);
 
