@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { packageById, sortTasks } from "@/features/planning/model/planning-app-model";
 import type { PlanningData, Task } from "@/lib/types";
 
@@ -16,7 +15,6 @@ type UsePlanningTaskSelectionOptions = {
   selectedTaskId: string | null;
   setFocusedReviewTaskId: (taskId: string) => void;
   setSelectedTaskId: (taskId: string | null) => void;
-  setWorkspace: (workspace: AppWorkspace) => void;
 };
 
 export function usePlanningTaskSelection({
@@ -26,7 +24,6 @@ export function usePlanningTaskSelection({
   selectedTaskId,
   setFocusedReviewTaskId,
   setSelectedTaskId,
-  setWorkspace,
 }: UsePlanningTaskSelectionOptions) {
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
   const selectedReviewDetailTask = data.tasks.find((task) => task.id === selectedReviewDetailTaskId) || null;
@@ -48,9 +45,8 @@ export function usePlanningTaskSelection({
   const openReviewSheet = useCallback((task: Task) => {
     setSelectedTaskId(null);
     setFocusedReviewTaskId(task.id);
-    setWorkspace("reviews");
     router.push(`/reviews/${encodeURIComponent(task.id)}`);
-  }, [router, setFocusedReviewTaskId, setSelectedTaskId, setWorkspace]);
+  }, [router, setFocusedReviewTaskId, setSelectedTaskId]);
 
   useEffect(() => {
     if (!selectedTaskId) return;

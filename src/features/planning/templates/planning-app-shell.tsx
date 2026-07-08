@@ -107,7 +107,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         ref={sidebarRef}
         onMouseLeave={releaseSidebarFocus}
         activeWorkspace={workspace}
-        onSelect={setWorkspace}
         source={source}
         localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}

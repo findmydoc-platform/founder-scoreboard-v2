@@ -31,7 +31,7 @@ export function ReviewDetailPage({ data, task, currentProfile, pending, source, 
           <UiPanel padding="xl">
             <h1 className="text-lg font-semibold text-slate-950">Review nicht gefunden</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">Diese Aufgabe existiert nicht oder ist aktuell keine Review.</p>
-            <UiLinkButton href="/?workspace=reviews" variant="blue" className="mt-4">
+            <UiLinkButton href="/reviews" variant="blue" className="mt-4">
               Zur Review-Zentrale
             </UiLinkButton>
           </UiPanel>
@@ -54,7 +54,7 @@ export function ReviewDetailPage({ data, task, currentProfile, pending, source, 
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review</div>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">{task.title}</h1>
           </div>
-          <UiLinkButton href="/?workspace=reviews">
+          <UiLinkButton href="/reviews">
             Zur Review-Zentrale
           </UiLinkButton>
         </div>

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 test("profile workspace is hidden from sidebar but reachable from account menu", async () => {
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -11,10 +12,11 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
 
   const navItems = sidebar.match(/export const appNavItems = \[([\s\S]*?)\] satisfies/)?.[1] || "";
 
-  assert.match(sidebar, /AppWorkspace = .*"profile"/);
-  assert.match(sidebar, /hiddenWorkspaceIds = \["profile"\]/);
+  assert.match(routes, /AppWorkspace = .*"profile"/);
+  assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
+  assert.match(routes, /href: "\/profile"/);
   assert.doesNotMatch(navItems, /profile/);
-  assert.match(workspaceHook, /appWorkspaceIds/);
+  assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
   assert.match(authControl, /data-tour-id="profile-menu-link"/);

@@ -1,27 +1,20 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function ReviewPage({ params }: Props) {
-  const { id } = await params;
-
+export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (hasSupabaseEnv() && requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {
       return (
         <PlanningApp
-          key={`review-${id}`}
           initialData={emptyPlanningData}
-          initialWorkspace="reviews"
+          initialWorkspace={initialWorkspace}
           source="supabase"
           authRequired
-          initialReviewTaskId={id}
           initialAuthUser={auth.user}
           initialAuthError={auth.error}
         />
@@ -31,13 +24,11 @@ export default async function ReviewPage({ params }: Props) {
     const { data, source } = await getPlanningData();
     return (
       <PlanningApp
-        key={`review-${id}`}
         initialData={data}
-        initialWorkspace="reviews"
+        initialWorkspace={initialWorkspace}
         source={source}
         authRequired
         demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
-        initialReviewTaskId={id}
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
         initialProtectedDataLoaded
@@ -46,5 +37,13 @@ export default async function ReviewPage({ params }: Props) {
   }
 
   const { data, source } = await getPlanningData();
-  return <PlanningApp key={`review-${id}`} initialData={data} initialWorkspace="reviews" source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
+  return (
+    <PlanningApp
+      initialData={data}
+      initialWorkspace={initialWorkspace}
+      source={source}
+      authRequired={false}
+      demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
+    />
+  );
 }
