@@ -26,9 +26,6 @@ export type Profile = {
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
-  googleCalendarEmail?: string;
-  googleCalendarSyncEnabled?: boolean;
-  googleCalendarLastSyncedAt?: string;
 };
 
 export type Project = {
@@ -197,27 +194,6 @@ export type ScoreObjection = {
   createdAt: string;
 };
 
-export type Decision = {
-  id: number;
-  title: string;
-  context: string;
-  decision: string;
-  status: "draft" | "open_for_confirmation" | "locked";
-  requiredProfileIds: string[];
-  confirmedProfileIds: string[];
-  createdBy: string;
-  lockedAt: string;
-};
-
-export type DecisionComment = {
-  id: number;
-  decisionId: number;
-  profileId: string;
-  type: "comment" | "objection";
-  comment: string;
-  createdAt: string;
-};
-
 export type TaskComment = {
   id: number;
   taskId: string;
@@ -278,16 +254,6 @@ export type TaskFocusItem = {
   status: "planned" | "done" | "blocked" | "deferred" | "needs_decision";
   createdAt: string;
   updatedAt: string;
-};
-
-export type DecisionTaskLink = {
-  id: number;
-  decisionId: number;
-  taskId: string;
-  linkType: "follows_from" | "supports" | "blocks_decision";
-  note: string;
-  createdBy: string;
-  createdAt: string;
 };
 
 export type NotificationEvent = {
@@ -400,12 +366,6 @@ export type Meeting = {
   durationMinutes?: number;
   status: "planned" | "done" | "cancelled";
   agenda: string;
-  googleCalendarId?: string;
-  googleCalendarEventId?: string;
-  googleCalendarHtmlLink?: string;
-  googleCalendarSyncStatus?: "not_synced" | "synced" | "skipped" | "failed";
-  googleCalendarSyncError?: string;
-  googleCalendarSyncedAt?: string;
 };
 
 export type MeetingAttendanceStatus = "pending" | "present" | "excused" | "late_excused" | "unexcused" | "no_show";
@@ -434,37 +394,6 @@ export type AuditEntry = {
   afterData?: Record<string, unknown> | null;
 };
 
-export type AvailabilityEntry = {
-  id: number;
-  profileId: string;
-  type: "working_hours" | "busy" | "vacation" | "sick";
-  title: string;
-  blockerKind:
-    | "working_hours"
-    | "on_business"
-    | "customer_appointment"
-    | "internal_meeting"
-    | "focus_time"
-    | "admin"
-    | "travel"
-    | "private_appointment"
-    | "vacation"
-    | "sick"
-    | "care"
-    | "calendar_event"
-    | "other";
-  weekday: number | null;
-  startDate: string;
-  endDate: string;
-  startTime: string;
-  endTime: string;
-  note: string;
-  source?: "manual" | "google_calendar";
-  externalId?: string;
-  externalCalendarId?: string;
-  syncedAt?: string;
-};
-
 export type PlanningData = {
   project: Project;
   profiles: Profile[];
@@ -477,15 +406,12 @@ export type PlanningData = {
   founderStrikeStates: FounderStrikeState[];
   strikeEvents: StrikeEvent[];
   scoreObjections: ScoreObjection[];
-  decisions: Decision[];
-  decisionComments: DecisionComment[];
   taskComments: TaskComment[];
   taskExternalComments: TaskExternalComment[];
   taskBlockers: TaskBlocker[];
   taskRelations: TaskRelation[];
   taskActivity: TaskActivity[];
   taskFocusItems: TaskFocusItem[];
-  decisionTaskLinks: DecisionTaskLink[];
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];
   notificationPreferences: NotificationPreference[];
@@ -497,7 +423,6 @@ export type PlanningData = {
   meetings: Meeting[];
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];
-  availability: AvailabilityEntry[];
 };
 
 export type PlanningDataResponse = {

@@ -65,7 +65,7 @@ function digestTypeLabel(type: string) {
   if (type === "task.review_requested") return "Review";
   if (type === "task.proposed") return "Vorschlag";
   if (type === "sprint.task_carried_over") return "Carry-over";
-  if (type.startsWith("decision.")) return "Decision";
+  if (type === "meeting.attendance_updated") return "Weekly";
   return "Hinweis";
 }
 

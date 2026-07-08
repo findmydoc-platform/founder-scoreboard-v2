@@ -60,8 +60,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.ok(panelBriefSection.indexOf("Nachweis") < panelBriefSection.indexOf("Qualitätsstandard"));
   assert.match(taskDetailPanel, /TaskDetailPanelContextSection/);
   assert.match(panelContextSection, /Fokus-Kontext/);
-  assert.match(panelContextSection, /Begründende Decisions/);
-  assert.match(panelContextSection, /decisionStatusLabel/);
+  assert.doesNotMatch(panelContextSection, /Begründende Decisions|decisionStatusLabel/);
   assert.match(panelContextSection, /Kein nächster Schritt hinterlegt/);
   assert.ok(taskDetailPanel.indexOf("TaskDetailPanelBriefSection") < taskDetailPanel.indexOf("TaskDetailPanelContextSection"));
   assert.match(taskDetailPanel, /TaskDetailPanelDependenciesSection/);
@@ -112,10 +111,10 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(ui, /AppSidebar/);
   assert.match(sidebar, /appNavItems/);
   assert.match(sidebar, /Hauptnavigation/);
-  assert.match(sidebar, /Meeting Finder/);
+  assert.doesNotMatch(sidebar, /Meeting Finder/);
   assert.match(sidebar, /FMD-Tools/);
   assert.match(sidebar, /Sprint & Score/);
-  assert.match(sidebar, /Decision Log/);
+  assert.doesNotMatch(sidebar, /Decision Log/);
   assert.match(sidebar, /AppBrand/);
   assert.match(ui, /AppBrand/);
   assert.match(brand, /cross-mark\.svg/);
@@ -205,7 +204,7 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(briefSection, /TaskChecklist/);
   assert.match(briefSection, /onChecklistChange/);
   assert.match(contextSection, /Fokus-Kontext/);
-  assert.match(contextSection, /Begründende Decisions/);
+  assert.doesNotMatch(contextSection, /Begründende Decisions/);
   assert.match(contextSection, /focusStatusLabel/);
   assert.match(contextSection, /Kein nächster Schritt hinterlegt/);
   assert.match(evidenceSection, /Evidence Link/);

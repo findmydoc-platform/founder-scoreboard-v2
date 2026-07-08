@@ -67,15 +67,12 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningData {
     strikeEvents: emptySeedCollections.strikeEvents,
     scoreObjections: emptySeedCollections.scoreObjections,
     milestones: emptySeedCollections.milestones,
-    decisions: emptySeedCollections.decisions,
-    decisionComments: emptySeedCollections.decisionComments,
     taskComments: emptySeedCollections.taskComments,
     taskExternalComments: emptySeedCollections.taskExternalComments,
     taskBlockers: emptySeedCollections.taskBlockers,
     taskRelations: emptySeedCollections.taskRelations,
     taskActivity: emptySeedCollections.taskActivity,
     taskFocusItems: emptySeedCollections.taskFocusItems,
-    decisionTaskLinks: emptySeedCollections.decisionTaskLinks,
     notificationEvents: emptySeedCollections.notificationEvents,
     notificationDeliveries: emptySeedCollections.notificationDeliveries,
     notificationPreferences: emptySeedCollections.notificationPreferences,
@@ -87,6 +84,5 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningData {
     meetings: seedMeetings,
     meetingAttendance: emptySeedCollections.meetingAttendance,
     audit: emptySeedCollections.audit,
-    availability: emptySeedCollections.availability,
   };
 }

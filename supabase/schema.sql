@@ -14,10 +14,7 @@ create table if not exists profiles (
   profile_color text not null default '#64748b' check (profile_color ~ '^#[0-9A-Fa-f]{6}$'),
   google_chat_user_id text,
   google_chat_dm_space text,
-  notifications_enabled boolean not null default true,
-  google_calendar_email text,
-  google_calendar_sync_enabled boolean not null default false,
-  google_calendar_last_synced_at timestamptz
+  notifications_enabled boolean not null default true
 );
 
 create table if not exists projects (
@@ -45,7 +42,7 @@ create table if not exists github_app_user_tokens (
 create table if not exists profile_ui_preferences (
   profile_id text primary key references profiles(id) on delete cascade,
   default_workspace text not null default 'planning'
-    check (default_workspace in ('planning', 'execution', 'mine', 'reviews', 'events', 'sprint', 'decisions', 'meetings', 'projects', 'tools', 'team', 'settings', 'ceo-intake', 'profile')),
+    check (default_workspace in ('planning', 'execution', 'mine', 'reviews', 'events', 'sprint', 'projects', 'tools', 'team', 'settings', 'ceo-intake', 'profile')),
   default_task_view text not null default 'board'
     check (default_task_view in ('board', 'structure', 'table', 'gantt')),
   planning_filters jsonb not null default '{"query":"","owner":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
@@ -110,6 +107,45 @@ create table if not exists tasks (
 alter table tasks add column if not exists review_owner_profile_id text references profiles(id) on delete set null;
 alter table tasks add column if not exists review_requested_at timestamptz;
 
+create table if not exists sprints (
+  id text primary key,
+  project_id text not null references projects(id) on delete cascade,
+  name text not null,
+  status text not null default 'planning' check (status in ('planning', 'active', 'review', 'closed')),
+  start_date date,
+  end_date date,
+  review_due_at timestamptz,
+  score_locked boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists meetings (
+  id bigint generated always as identity primary key,
+  sprint_id text not null references sprints(id) on delete cascade,
+  title text not null,
+  meeting_at timestamptz not null,
+  duration_minutes integer not null default 60 check (duration_minutes between 15 and 480),
+  status text not null default 'planned' check (status in ('planned', 'done', 'cancelled')),
+  agenda text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists meeting_attendance (
+  id bigint generated always as identity primary key,
+  meeting_id bigint not null references meetings(id) on delete cascade,
+  profile_id text not null references profiles(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'present', 'excused', 'late_excused', 'unexcused', 'no_show')),
+  absence_reason text,
+  reason_accepted boolean not null default false,
+  written_update text,
+  points integer not null default 0 check (points between 0 and 4),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (meeting_id, profile_id)
+);
+
 create table if not exists task_dependencies (
   id bigint generated always as identity primary key,
   task_id text not null references tasks(id) on delete cascade,
@@ -148,17 +184,6 @@ create table if not exists task_focus_items (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (profile_id, task_id, focus_date)
-);
-
-create table if not exists decision_task_links (
-  id bigserial primary key,
-  decision_id bigint not null references decision_log(id) on delete cascade,
-  task_id text not null references tasks(id) on delete cascade,
-  link_type text not null default 'follows_from' check (link_type in ('follows_from', 'supports', 'blocks_decision')),
-  note text not null default '',
-  created_by text references profiles(id),
-  created_at timestamptz not null default now(),
-  unique (decision_id, task_id)
 );
 
 create table if not exists founder_sprint_scores (
@@ -239,7 +264,6 @@ create table if not exists founder_events (
 create index if not exists profiles_auth_user_id_idx on profiles(auth_user_id);
 create index if not exists profiles_platform_role_idx on profiles(platform_role);
 create index if not exists profiles_github_login_idx on profiles(lower(github_login));
-create index if not exists profiles_google_calendar_sync_idx on profiles(google_calendar_sync_enabled, google_calendar_email) where google_calendar_sync_enabled = true and google_calendar_email is not null;
 create index if not exists github_app_user_tokens_github_login_idx on github_app_user_tokens(github_login);
 create index if not exists github_app_user_tokens_refresh_idx on github_app_user_tokens(refresh_token_expires_at);
 create index if not exists profile_feature_tour_acknowledgements_tour_idx on profile_feature_tour_acknowledgements(tour_id, seen_at);
@@ -254,13 +278,14 @@ create index if not exists tasks_status_idx on tasks(status);
 create index if not exists tasks_owner_idx on tasks(owner);
 create index if not exists tasks_review_owner_profile_id_idx on tasks(review_owner_profile_id);
 create index if not exists tasks_review_requested_at_idx on tasks(review_requested_at);
+create index if not exists meetings_sprint_id_idx on meetings(sprint_id);
+create index if not exists meeting_attendance_meeting_idx on meeting_attendance(meeting_id);
+create index if not exists meeting_attendance_profile_idx on meeting_attendance(profile_id);
 create index if not exists task_dependencies_task_id_idx on task_dependencies(task_id);
 create index if not exists task_links_task_id_idx on task_links(task_id);
 create index if not exists task_activity_task_id_idx on task_activity(task_id);
 create index if not exists task_focus_items_profile_date_idx on task_focus_items(profile_id, focus_date, position);
 create index if not exists task_focus_items_task_idx on task_focus_items(task_id);
-create index if not exists decision_task_links_decision_idx on decision_task_links(decision_id);
-create index if not exists decision_task_links_task_idx on decision_task_links(task_id);
 create index if not exists founder_sprint_scores_sprint_idx on founder_sprint_scores(sprint_id);
 create index if not exists founder_sprint_scores_profile_idx on founder_sprint_scores(profile_id);
 create index if not exists strike_events_profile_sprint_idx on strike_events(profile_id, sprint_id);
@@ -273,8 +298,8 @@ create index if not exists founder_events_reminder_generated_at_idx on founder_e
 create index if not exists founder_events_participant_profile_ids_idx on founder_events using gin(participant_profile_ids);
 
 grant usage on schema public to anon, authenticated, service_role;
-grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
-grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, task_dependencies, task_links, task_notes, task_activity, task_focus_items, decision_task_links, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
 grant select, insert, update, delete on github_app_user_tokens to service_role;
 grant usage, select on all sequences in schema public to authenticated, service_role;
 
@@ -305,12 +330,14 @@ alter table profile_feature_tour_acknowledgements enable row level security;
 alter table projects enable row level security;
 alter table packages enable row level security;
 alter table tasks enable row level security;
+alter table sprints enable row level security;
+alter table meetings enable row level security;
+alter table meeting_attendance enable row level security;
 alter table task_dependencies enable row level security;
 alter table task_links enable row level security;
 alter table task_notes enable row level security;
 alter table task_activity enable row level security;
 alter table task_focus_items enable row level security;
-alter table decision_task_links enable row level security;
 alter table founder_sprint_scores enable row level security;
 alter table founder_strike_state enable row level security;
 alter table strike_events enable row level security;
@@ -373,6 +400,36 @@ create policy "tasks_write_members" on tasks for all to authenticated
 using (public.current_profile_role() in ('admin', 'member'))
 with check (public.current_profile_role() in ('admin', 'member'));
 
+drop policy if exists "sprints_select_team" on sprints;
+create policy "sprints_select_team" on sprints for select to authenticated using (auth.uid() is not null);
+
+drop policy if exists "sprints_write_operational" on sprints;
+create policy "sprints_write_operational" on sprints for all to authenticated
+using (public.current_platform_role() in ('ceo', 'deputy'))
+with check (public.current_platform_role() in ('ceo', 'deputy'));
+
+drop policy if exists "meetings_select_team" on meetings;
+create policy "meetings_select_team" on meetings for select to authenticated using (auth.uid() is not null);
+
+drop policy if exists "meetings_write_operational" on meetings;
+create policy "meetings_write_operational" on meetings for all to authenticated
+using (public.current_platform_role() in ('ceo', 'deputy'))
+with check (public.current_platform_role() in ('ceo', 'deputy'));
+
+drop policy if exists "meeting_attendance_select_team" on meeting_attendance;
+create policy "meeting_attendance_select_team" on meeting_attendance for select to authenticated using (auth.uid() is not null);
+
+drop policy if exists "meeting_attendance_write_team" on meeting_attendance;
+create policy "meeting_attendance_write_team" on meeting_attendance for all to authenticated
+using (
+  public.current_platform_role() in ('ceo', 'deputy')
+  or profile_id in (select id from profiles where auth_user_id = auth.uid())
+)
+with check (
+  public.current_platform_role() in ('ceo', 'deputy')
+  or profile_id in (select id from profiles where auth_user_id = auth.uid())
+);
+
 drop policy if exists "task_dependencies_select_team" on task_dependencies;
 create policy "task_dependencies_select_team" on task_dependencies for select to authenticated using (auth.uid() is not null);
 
@@ -409,14 +466,6 @@ create policy "task_focus_items_select_team" on task_focus_items for select to a
 
 drop policy if exists "task_focus_items_write_team" on task_focus_items;
 create policy "task_focus_items_write_team" on task_focus_items for all to authenticated
-using (auth.uid() is not null)
-with check (auth.uid() is not null);
-
-drop policy if exists "decision_task_links_select_team" on decision_task_links;
-create policy "decision_task_links_select_team" on decision_task_links for select to authenticated using (auth.uid() is not null);
-
-drop policy if exists "decision_task_links_write_team" on decision_task_links;
-create policy "decision_task_links_write_team" on decision_task_links for all to authenticated
 using (auth.uid() is not null)
 with check (auth.uid() is not null);
 

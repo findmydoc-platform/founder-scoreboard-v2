@@ -131,7 +131,7 @@ export function SprintMeetingAttendanceSection({
           </DataTable>
         </DataOverflow>
       ) : (
-        <UiEmptyState className="m-4">Nach Migration 0029 werden pro Sprint zwei Weekly-Meetings angelegt.</UiEmptyState>
+        <UiEmptyState className="m-4">Pro Sprint werden zwei Weekly-Einträge angelegt.</UiEmptyState>
       )}
     </DataSurface>
   );

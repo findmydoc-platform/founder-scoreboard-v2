@@ -3,10 +3,8 @@
 import {
   Archive,
   CalendarClock,
-  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
-  FileText,
   GanttChart,
   LayoutDashboard,
   Settings,
@@ -20,7 +18,7 @@ import Link from "next/link";
 import { forwardRef, useEffect } from "react";
 import { AppBrand } from "@/shared/atoms/app-brand";
 
-export type AppWorkspace = "planning" | "execution" | "mine" | "reviews" | "events" | "sprint" | "decisions" | "meetings" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "execution" | "mine" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 export const appNavItems = [
@@ -31,8 +29,6 @@ export const appNavItems = [
   { id: "events", label: "Events", icon: CalendarClock, href: "/?workspace=events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/?workspace=ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/?workspace=sprint" },
-  { id: "decisions", label: "Decision Log", icon: FileText, href: "/?workspace=decisions" },
-  { id: "meetings", label: "Meeting Finder", icon: CalendarDays, href: "/?workspace=meetings" },
   { id: "projects", label: "Meilensteine", icon: Archive, href: "/?workspace=projects" },
   { id: "tools", label: "FMD-Tools", icon: Wrench, href: "/?workspace=tools" },
   { id: "team", label: "Team", icon: Users, href: "/?workspace=team" },
@@ -118,14 +114,14 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
 
     if (onSelect) {
       return (
-        <button key={item.id} type="button" onClick={handleSelect} title={item.label} className={className}>
+        <button key={item.id} type="button" onClick={handleSelect} title={item.label} className={className} data-tour-id={`workspace-nav-${item.id}`}>
           {content}
         </button>
       );
     }
 
     return (
-      <Link key={item.id} href={item.href} title={item.label} className={className} onClick={variant === "mobile" ? onMobileClose : undefined}>
+      <Link key={item.id} href={item.href} title={item.label} className={className} data-tour-id={`workspace-nav-${item.id}`} onClick={variant === "mobile" ? onMobileClose : undefined}>
         {content}
       </Link>
     );

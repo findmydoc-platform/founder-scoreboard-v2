@@ -95,12 +95,6 @@ async function upsertMeetings(supabase: SupabaseClient) {
       status: meeting.status,
       agenda: meeting.agenda || null,
       duration_minutes: meeting.durationMinutes || 60,
-      google_calendar_id: textOrNull(meeting.googleCalendarId),
-      google_calendar_event_id: textOrNull(meeting.googleCalendarEventId),
-      google_calendar_html_link: textOrNull(meeting.googleCalendarHtmlLink),
-      google_calendar_sync_status: meeting.googleCalendarSyncStatus || "not_synced",
-      google_calendar_sync_error: meeting.googleCalendarSyncError || "",
-      google_calendar_synced_at: textOrNull(meeting.googleCalendarSyncedAt),
     };
 
     const result = existing?.id

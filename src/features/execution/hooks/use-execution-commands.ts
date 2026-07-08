@@ -2,7 +2,7 @@
 
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import type { DecisionTaskLink, Task, TaskFocusItem } from "@/lib/types";
+import type { Task, TaskFocusItem } from "@/lib/types";
 
 type UseExecutionCommandsOptions = PlanningCommandContext & {
   currentProfileFocusItems: TaskFocusItem[];
@@ -88,63 +88,7 @@ export function useExecutionCommands({
     });
   };
 
-  const linkDecisionTask = (decisionId: number, taskId: string, note: string) => {
-    setSaveError("");
-    const localLink: DecisionTaskLink = {
-      id: -Date.now(),
-      decisionId,
-      taskId,
-      linkType: "follows_from",
-      note,
-      createdBy: currentProfile?.id || "",
-      createdAt: new Date().toISOString(),
-    };
-
-    setData((current) => {
-      const exists = current.decisionTaskLinks.some((link) => link.decisionId === decisionId && link.taskId === taskId);
-      return exists ? current : { ...current, decisionTaskLinks: [localLink, ...current.decisionTaskLinks] };
-    });
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.linkDecisionTaskRequest(apiClient, decisionId, { taskId, linkType: "follows_from", note });
-        if (!response.ok || !body?.link) throw new Error(body?.error || "Decision-Link konnte nicht gespeichert werden.");
-        setData((current) => ({
-          ...current,
-          decisionTaskLinks: current.decisionTaskLinks.map((link) => (link.id === localLink.id ? body.link! : link)),
-        }));
-      } catch (error) {
-        setData((current) => ({ ...current, decisionTaskLinks: current.decisionTaskLinks.filter((link) => link.id !== localLink.id) }));
-        setSaveError(error instanceof Error ? error.message : "Decision-Link konnte nicht gespeichert werden.");
-      }
-    });
-  };
-
-  const removeDecisionTaskLink = (link: DecisionTaskLink) => {
-    setSaveError("");
-    setData((current) => ({
-      ...current,
-      decisionTaskLinks: current.decisionTaskLinks.filter((item) => item.id !== link.id),
-    }));
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.deleteDecisionTaskLinkRequest(apiClient, link.decisionId, link.id);
-        if (!response.ok) throw new Error(body?.error || "Decision-Link konnte nicht entfernt werden.");
-      } catch (error) {
-        setData((current) => ({ ...current, decisionTaskLinks: [link, ...current.decisionTaskLinks] }));
-        setSaveError(error instanceof Error ? error.message : "Decision-Link konnte nicht entfernt werden.");
-      }
-    });
-  };
-
   return {
-    linkDecisionTask,
-    removeDecisionTaskLink,
     removeFocusItem,
     upsertFocusItem,
   };

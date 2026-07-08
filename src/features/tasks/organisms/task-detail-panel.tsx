@@ -10,8 +10,8 @@ import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-det
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
-import { buildTaskRelationshipRows, linkedDecisionsForTask, linkedFocusItemsForTask, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
-import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType } from "@/lib/types";
+import { buildTaskRelationshipRows, linkedFocusItemsForTask, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
+import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType } from "@/lib/types";
 export function TaskDetailPanel({
   task,
   pack,
@@ -26,8 +26,6 @@ export function TaskDetailPanel({
   packages,
   sprints,
   milestones,
-  decisions,
-  decisionTaskLinks,
   focusItems,
   canManageTaskMeta,
   canManageReviewOwner,
@@ -62,8 +60,6 @@ export function TaskDetailPanel({
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
-  decisions: PlanningData["decisions"];
-  decisionTaskLinks: DecisionTaskLink[];
   focusItems: TaskFocusItem[];
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
@@ -92,7 +88,6 @@ export function TaskDetailPanel({
     note: "",
   });
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const linkedDecisions = linkedDecisionsForTask(task.id, decisions, decisionTaskLinks);
   const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
@@ -111,7 +106,7 @@ export function TaskDetailPanel({
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
           <main className="grid min-w-0 gap-4">
             <TaskDetailPanelBriefSection task={task} onUpdate={onUpdate} />
-            <TaskDetailPanelContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
+            <TaskDetailPanelContextSection linkedFocusItems={linkedFocusItems} profileName={profileName} />
             <TaskDetailPanelDependenciesSection
               task={task}
               relationshipGroups={relationshipGroups}

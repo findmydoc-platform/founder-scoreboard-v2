@@ -10,12 +10,6 @@ export function mapMeeting(row: DbMeeting): Meeting {
     durationMinutes: row.duration_minutes || 60,
     status: row.status,
     agenda: row.agenda || "",
-    googleCalendarId: row.google_calendar_id || "",
-    googleCalendarEventId: row.google_calendar_event_id || "",
-    googleCalendarHtmlLink: row.google_calendar_html_link || "",
-    googleCalendarSyncStatus: row.google_calendar_sync_status || "not_synced",
-    googleCalendarSyncError: row.google_calendar_sync_error || "",
-    googleCalendarSyncedAt: row.google_calendar_synced_at || "",
   };
 }
 

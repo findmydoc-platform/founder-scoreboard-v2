@@ -1,5 +1,5 @@
-import type { AuditEntry, DecisionComment, DecisionTaskLink, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
-import type { DbAuditEntry, DbDecisionComment, DbDecisionTaskLink, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import type { AuditEntry, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { DbAuditEntry, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
 
 export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
   return {
@@ -11,17 +11,6 @@ export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
     createdAt: row.created_at,
     beforeData: row.before_data,
     afterData: row.after_data,
-  };
-}
-
-export function mapDecisionComment(row: DbDecisionComment): DecisionComment {
-  return {
-    id: row.id,
-    decisionId: row.decision_id,
-    profileId: row.profile_id || "",
-    type: row.type,
-    comment: row.comment,
-    createdAt: row.created_at,
   };
 }
 
@@ -96,17 +85,5 @@ export function mapTaskFocusItem(row: DbTaskFocusItem): TaskFocusItem {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-export function mapDecisionTaskLink(row: DbDecisionTaskLink): DecisionTaskLink {
-  return {
-    id: row.id,
-    decisionId: row.decision_id,
-    taskId: row.task_id,
-    linkType: row.link_type,
-    note: row.note || "",
-    createdBy: row.created_by || "",
-    createdAt: row.created_at,
   };
 }

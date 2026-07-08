@@ -120,10 +120,8 @@ export function useNotificationCommands({
     } else if (event.entityType === "feedback") {
       setSelectedFeedbackId(Number(event.entityId) || null);
       setWorkspace("settings");
-    } else if (event.entityType === "decision") {
-      setWorkspace("decisions");
     } else if (event.entityType === "meeting") {
-      setWorkspace("meetings");
+      setWorkspace("sprint");
     }
     setShowNotifications(false);
   };

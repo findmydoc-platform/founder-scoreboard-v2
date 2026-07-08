@@ -40,28 +40,6 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
       matches: [/createBrowserApiClient/, /updateTaskRequest/, /syncTaskToGitHubRequest/, /useTaskComments/, /useTaskRelationships/, /detailsEditSnapshot/],
     },
     {
-      label: "meeting finder overview shell",
-      path: "src/features/meetings/organisms/meeting-finder-overview.tsx",
-      matches: [/useMeetingFinderControls/, /useMeetingAvailabilityEditor/],
-      excludes: [/buildMeetingFinderViewModel|useState|useRef|useCallback|useEffect/],
-    },
-    {
-      label: "meeting finder controls hook",
-      path: "src/features/meetings/hooks/use-meeting-finder-controls.ts",
-      matches: [/buildMeetingFinderViewModel/, /useMeetingCalendarDrag/, /calendarDrag/, /reserveSlot/, /openAvailabilityBlock/],
-      excludes: [/suppressBlockClickRef|setCalendarDrag|availabilityCalendarLabel/],
-    },
-    {
-      label: "meeting calendar drag hook",
-      path: "src/features/meetings/hooks/use-meeting-calendar-drag.ts",
-      matches: [/suppressBlockClickRef/, /beginCalendarBlockDrag/, /finishCalendarBlockDrag/, /availabilityCalendarLabel/],
-    },
-    {
-      label: "meeting availability editor hook",
-      path: "src/features/meetings/hooks/use-meeting-availability-editor.ts",
-      matches: [/saveAvailabilityDialog/],
-    },
-    {
       label: "team overview shell",
       path: "src/features/team/organisms/team-overview.tsx",
       matches: [/useTeamProfileDrafts/, /useTeamProfileDialog/, /TeamMemberCard/, /TeamProfileEditDialog/],
@@ -77,17 +55,6 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
       label: "team profile view model",
       path: "src/features/team/model/team-profile-view-model.ts",
       matches: [/profileHasDraftChanges/, /activeDeputyProfiles/],
-    },
-    {
-      label: "decision log shell",
-      path: "src/features/decisions/organisms/decision-log-overview.tsx",
-      matches: [/useDecisionLogWorkflow/],
-      excludes: [/useState|setObjectionDrafts|setOpenDecisions|setOpenAudits/],
-    },
-    {
-      label: "decision log workflow hook",
-      path: "src/features/decisions/hooks/use-decision-log-workflow.ts",
-      matches: [/requiredProfileIds/, /submitCreate/, /toggleEdit/],
     },
   ]);
 });
@@ -107,8 +74,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /usePlanningHeaderPrimaryAction/,
         /usePlanningTaskSelection/,
         /usePlanningTaskViewModel/,
-        /useMeetingCommands/,
-        /useDecisionCommands/,
+        /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,
         /useDemoSeedImport/,
@@ -116,7 +82,7 @@ test("planning app controller delegates command domains and stays a thin compose
       excludes: [
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
-        /createMeetingRequest|availabilityRequest|createDecisionRequest|lockSprintRequest/,
+        /updateMeetingAttendanceRequest|lockSprintRequest/,
         /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
@@ -141,7 +107,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task create command",
       path: "src/features/tasks/hooks/use-task-create-command.ts",
-      matches: [/createTaskRequest/, /linkDecisionTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
+      matches: [/createTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
     },
     {
       label: "task delete command",
@@ -184,14 +150,13 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "execution commands",
       path: "src/features/execution/hooks/use-execution-commands.ts",
-      matches: [/saveFocusItemRequest/, /linkDecisionTaskRequest/],
+      matches: [/saveFocusItemRequest/],
     },
     { label: "initiative commands", path: "src/features/projects/hooks/use-initiative-commands.ts", matches: [/saveInitiativeRequest/] },
     { label: "sprint commands", path: "src/features/sprint/hooks/use-sprint-commands.ts", matches: [/lockSprintRequest/, /createScoreObjectionRequest/] },
     { label: "profile commands", path: "src/features/team/hooks/use-profile-settings-commands.ts", matches: [/updateProfileRequest/] },
-    { label: "meeting commands", path: "src/features/meetings/hooks/use-meeting-commands.ts", matches: [/createMeetingRequest/, /availabilityRequest/] },
+    { label: "weekly attendance commands", path: "src/features/sprint/hooks/use-weekly-attendance-commands.ts", matches: [/updateMeetingAttendanceRequest/] },
     { label: "event commands", path: "src/features/events/hooks/use-founder-event-commands.ts", matches: [/createFounderEventRequest/] },
-    { label: "decision commands", path: "src/features/decisions/hooks/use-decision-commands.ts", matches: [/createDecisionRequest/] },
     { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/] },
     { label: "notification commands", path: "src/features/planning/hooks/use-notification-commands.ts", matches: [/runNotificationDeliveryRequest/] },
     { label: "feedback commands", path: "src/features/settings/hooks/use-feedback-commands.ts", matches: [/createFeedbackRequest/] },
@@ -617,44 +582,19 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
 });
 
-test("decision confirmation can lock decisions after required confirmations", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/confirm/route.ts", "utf8");
+test("decision log routes and data slices are removed by cleanup contract", async () => {
+  const cleanupMigration = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
 
-  assert.match(route, /requireFounder/);
-  assert.match(route, /open_for_confirmation/);
-  assert.match(route, /status: "locked"/);
-  assert.match(route, /confirm_and_lock/);
-});
-
-test("decision creation opens CEO decisions for confirmation", async () => {
-  const route = await readFile("src/app/api/decisions/route.ts", "utf8");
-
-  assert.match(route, /requireCEO/);
-  assert.match(route, /open_for_confirmation/);
-  assert.match(route, /requiredProfileIds/);
-  assert.match(route, /Entscheidungstext ist erforderlich/);
-});
-
-test("decision edit is CEO-only, audited, and resets confirmations", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/route.ts", "utf8");
-
-  assert.match(route, /requireCEO/);
-  assert.match(route, /Gelockte Decisions sind unveränderlich/);
-  assert.match(route, /decision_confirmations"\)\.delete/);
-  assert.match(route, /decision.update/);
-  assert.match(route, /before_data/);
-  assert.match(route, /after_data/);
-});
-
-test("decision objections are founder comments with audit trail", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/objections/route.ts", "utf8");
-  const sql = await readFile("supabase/0003_decision_comments.sql", "utf8");
-
-  assert.match(sql, /create table if not exists decision_comments/);
-  assert.match(route, /requireFounder/);
-  assert.match(route, /decision_comments/);
-  assert.match(route, /decision.objection/);
-  assert.match(route, /Gelockte Decisions können nicht mehr beanstandet werden/);
+  assert.match(cleanupMigration, /drop table if exists decision_task_links cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_comments cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_confirmations cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_log cascade/);
+  assert.doesNotMatch(apiClient, /createDecisionRequest|confirmDecisionRequest|objectDecisionRequest|linkDecisionTaskRequest/);
+  assert.doesNotMatch(dataLoader, /decision_log|decision_comments|decision_task_links/);
+  assert.doesNotMatch(types, /export type Decision|DecisionTaskLink|decisionTaskLinks/);
 });
 
 test("profile role management is CEO-only and keeps one CEO", async () => {
@@ -676,12 +616,10 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(route, /google_chat_user_id/);
   assert.match(route, /google_chat_dm_space/);
   assert.match(route, /notifications_enabled/);
-  assert.match(route, /google_calendar_email/);
-  assert.match(route, /google_calendar_sync_enabled/);
   assert.match(migration, /profile_color/);
   assert.match(migration, /profiles_profile_color_hex/);
   assert.match(data, /profile_color/);
-  assert.match(data, /google_calendar_last_synced_at/);
+  assert.doesNotMatch(data, /google_calendar_last_synced_at/);
   assert.match(ui, /TeamOverview/);
   assert.match(teamUi, /useTeamProfileDrafts/);
   assert.match(teamUi, /TeamProfileEditDialog/);
@@ -757,19 +695,6 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(ownProfileCommands, /Profil konnte nicht gespeichert werden/);
   assert.match(policy, /GoogleChatDigestEventType/);
   assert.match(policy, /Review angefragt/);
-});
-
-test("decision audit loads before and after data for collapsible diffs", async () => {
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataMappers = await readFile("src/lib/planning-activity-mappers.ts", "utf8");
-  const decisionUi = await readFeatureSurface("src/features/decisions");
-
-  assert.match(data, /before_data,after_data/);
-  assert.match(dataMappers, /beforeData: row.before_data/);
-  assert.match(decisionUi, /auditChanges/);
-  assert.match(decisionUi, /Audit Trail/);
-  assert.match(decisionUi, /Vorher/);
-  assert.match(decisionUi, /Nachher/);
 });
 
 test("board tasks can be dragged between status columns", async () => {

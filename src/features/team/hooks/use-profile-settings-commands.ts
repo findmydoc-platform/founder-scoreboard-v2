@@ -68,8 +68,6 @@ export function useProfileSettingsCommands({
         googleChatUserId: patch.googleChatUserId,
         googleChatDmSpace: patch.googleChatDmSpace,
         notificationsEnabled: patch.notificationsEnabled,
-        googleCalendarEmail: patch.googleCalendarEmail,
-        googleCalendarSyncEnabled: patch.googleCalendarSyncEnabled,
       });
       if (!profileResponse.ok) throw new Error(profileBody?.error || "Profil konnte nicht gespeichert werden.");
 

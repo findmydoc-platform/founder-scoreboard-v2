@@ -26,7 +26,7 @@ async function health() {
 async function pageSmoke() {
   const response = await fetch(appUrl, { cache: "no-store" });
   const html = await response.text();
-  const markers = ["Founder Planning", "Sprint &amp; Score", "Decision Log", "Meeting Finder", "Board"];
+  const markers = ["Founder Planning", "Sprint &amp; Score", "Weekly Updates", "Board"];
   const authGateEnabled = process.env.REQUIRE_SUPABASE_AUTH === "true";
   const markerResults = Object.fromEntries(markers.map((marker) => [marker, html.includes(marker)]));
 
@@ -57,7 +57,6 @@ const result = {
     meetings: await count("meetings"),
     notificationEvents: await count("notification_events"),
     notificationDeliveries: await count("notification_deliveries"),
-    decisions: await count("decision_log"),
   },
   env: {
     requireSupabaseAuth: process.env.REQUIRE_SUPABASE_AUTH === "true",

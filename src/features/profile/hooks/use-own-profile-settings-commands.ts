@@ -5,7 +5,7 @@ import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { NotificationPreference, Profile, ProfileUiPreference } from "@/lib/types";
 
 export type OwnProfileSettingsPatch = {
-  profilePatch?: Partial<Pick<Profile, "focus" | "color" | "notificationsEnabled" | "googleCalendarEmail" | "googleCalendarSyncEnabled">>;
+  profilePatch?: Partial<Pick<Profile, "focus" | "color" | "notificationsEnabled">>;
   notificationEvents?: Record<string, boolean>;
   uiPreferences?: Pick<ProfileUiPreference, "defaultWorkspace" | "defaultTaskView" | "planningFilters" | "expandedPackageIds">;
 };

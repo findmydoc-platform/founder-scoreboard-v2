@@ -10,13 +10,12 @@ Google Chat soll nicht zum Einzelspam werden. Die App sammelt operative Ereignis
 
 ## Gewünschte Benachrichtigungen
 
-- Decision Log: Founder/CEO müssen bestätigen.
 - Aufgaben: neue Zuweisung, Statusänderung, Kommentar/Nachfrage, Blocker.
 - Review: Founder reicht Aufgabe zur Review ein, CEO wird informiert.
 - Review-Ergebnis: Founder wird über Punkte, Teilannahme oder Nacharbeit informiert.
 - Sprint-Ende: Founder werden rechtzeitig an offene Deliverables erinnert.
 - Review-Deadline: Founder werden vor Sprintende erinnert, Review rechtzeitig einzureichen oder Blocker zu melden.
-- Meeting/Biweekly: Teilnahme, Abmeldung, schriftliches Update und Punkte lösen ebenfalls Benachrichtigungen aus.
+- Weekly Updates: Teilnahme, Abmeldung, schriftliches Update und Punkte lösen ebenfalls Benachrichtigungen aus.
 
 ## Technische Entscheidung
 
@@ -54,7 +53,7 @@ Erledigt:
 1. Task-Kommentare und Blocker-Meldungen erzeugen Events.
 2. Review-Deadline ist am Sprint modelliert.
 3. Notification-Outbox Tabellen/API sind ergänzt.
-4. Events beim Review-Anfragen, Review-Abschluss, Task-Kommentar, Blocker, Task-Vorschlag und Meeting-Rückmeldung werden erzeugt.
+4. Events beim Review-Anfragen, Review-Abschluss, Task-Kommentar, Blocker, Task-Vorschlag und Weekly-Rückmeldung werden erzeugt.
 5. Die Kopfzeile zeigt eine In-App-Notification-Inbox für persönliche Hinweise.
 6. Einstellungen zeigen Google Chat, Zustellstatus, Fehler und persönliche Event-Präferenzen.
 7. `/api/google-chat/events` ist als sichere Vorschau-Route vorbereitet.

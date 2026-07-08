@@ -6,12 +6,6 @@
     "health": true
   },
   {
-    "name": "profiles.google_calendar",
-    "table": "profiles",
-    "select": "id,google_calendar_email,google_calendar_sync_enabled,google_calendar_last_synced_at",
-    "health": false
-  },
-  {
     "name": "github_app_user_tokens",
     "table": "github_app_user_tokens",
     "select": "profile_id,github_login,github_user_id,access_token_expires_at,refresh_token_expires_at,connected_at,refreshed_at,last_used_at,revoked_at,last_error,updated_at",
@@ -160,21 +154,9 @@
     "health": true
   },
   {
-    "name": "decision_task_links",
-    "table": "decision_task_links",
-    "select": "id,decision_id,task_id,link_type,note,created_by",
-    "health": true
-  },
-  {
-    "name": "availability.calendar_sync",
-    "table": "availability",
-    "select": "id,title,blocker_kind,source,external_id,external_calendar_id,synced_at",
-    "health": false
-  },
-  {
-    "name": "meetings.google_calendar_sync",
+    "name": "meetings.weekly_score",
     "table": "meetings",
-    "select": "id,duration_minutes,google_calendar_id,google_calendar_event_id,google_calendar_sync_status",
+    "select": "id,sprint_id,title,meeting_at,duration_minutes,status,agenda",
     "health": false
   },
   {

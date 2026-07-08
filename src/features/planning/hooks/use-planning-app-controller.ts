@@ -3,10 +3,8 @@
 import type { User } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useDecisionCommands } from "@/features/decisions/hooks/use-decision-commands";
 import { useExecutionCommands } from "@/features/execution/hooks/use-execution-commands";
 import { useFounderEventCommands } from "@/features/events/hooks/use-founder-event-commands";
-import { useMeetingCommands } from "@/features/meetings/hooks/use-meeting-commands";
 import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-import";
 import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
 import { useNotificationCommands } from "@/features/planning/hooks/use-notification-commands";
@@ -25,6 +23,7 @@ import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
 import { useFeedbackCommands } from "@/features/settings/hooks/use-feedback-commands";
 import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
+import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
@@ -275,8 +274,7 @@ export function usePlanningAppController({
     workspace,
   });
   const eventCommands = useFounderEventCommands(commandContext);
-  const meetingCommands = useMeetingCommands(commandContext);
-  const decisionCommands = useDecisionCommands(commandContext);
+  const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);
   const reviewCommands = useReviewCommands({
     ...commandContext,
     syncTaskToGitHub,
@@ -401,17 +399,16 @@ export function usePlanningAppController({
     workspace,
     setWorkspace,
     ...boardState,
-    ...decisionCommands,
     ...eventCommands,
     ...executionCommands,
     ...feedbackCommands,
     ...initiativeCommands,
-    ...meetingCommands,
     ...notificationCommands,
     ...ownProfileSettingsCommands,
     ...profileSettingsCommands,
     ...reviewCommands,
     ...sprintCommands,
+    ...weeklyAttendanceCommands,
     ...taskCollaborationCommands,
     ...taskMutationCommands,
   };

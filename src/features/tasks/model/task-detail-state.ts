@@ -1,7 +1,7 @@
 import { taskOwnerLabel } from "@/lib/display";
 import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskBlocker, TaskFocusItem, TaskRelation } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskFocusItem, TaskRelation } from "@/lib/types";
 
 export type TaskRelationshipRows = {
   waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
@@ -120,13 +120,6 @@ export function buildTaskRelationshipRows(task: Task, tasks: Task[], relations: 
   };
 }
 
-export function linkedDecisionsForTask(taskId: string, decisions: PlanningData["decisions"], decisionTaskLinks: DecisionTaskLink[]) {
-  return decisionTaskLinks
-    .filter((link) => link.taskId === taskId)
-    .map((link) => ({ link, decision: decisions.find((decision) => decision.id === link.decisionId) }))
-    .filter((item) => item.decision);
-}
-
 export function linkedFocusItemsForTask(taskId: string, focusItems: TaskFocusItem[]) {
   return focusItems
     .filter((item) => item.taskId === taskId)
@@ -153,8 +146,6 @@ export function buildTaskDetailViewModel({
   blockers,
   relations,
   allTasks,
-  decisions,
-  decisionTaskLinks,
   focusItems,
   currentRole,
 }: {
@@ -170,8 +161,6 @@ export function buildTaskDetailViewModel({
   blockers: TaskBlocker[];
   relations: TaskRelation[];
   allTasks: Task[];
-  decisions: PlanningData["decisions"];
-  decisionTaskLinks: DecisionTaskLink[];
   focusItems: TaskFocusItem[];
   currentRole: Profile["platformRole"] | "";
 }) {
@@ -185,7 +174,6 @@ export function buildTaskDetailViewModel({
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const openBlockers = blockers.filter((blocker) => blocker.status === "open");
   const { waitsOn, blocks, related } = buildTaskRelationshipRows(task, allTasks, relations);
-  const linkedDecisions = linkedDecisionsForTask(task.id, decisions, decisionTaskLinks);
   const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const canManageTaskMeta = currentRole === "ceo" || currentRole === "deputy";
@@ -207,7 +195,6 @@ export function buildTaskDetailViewModel({
     waitsOn,
     blocks,
     related,
-    linkedDecisions,
     linkedFocusItems,
     relationTargetOptions,
     canManageTaskMeta,

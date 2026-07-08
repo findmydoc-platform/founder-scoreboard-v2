@@ -3,9 +3,7 @@ import { EventsOverview } from "@/features/events/organisms/events-overview";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { futureSprintDrafts, sortTasks } from "@/features/planning/model/planning-app-model";
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
-import { DecisionLogOverview } from "@/features/decisions/organisms/decision-log-overview";
 import { ExecutionLayerOverview } from "@/features/execution/organisms/execution-layer-overview";
-import { MeetingFinderOverview } from "@/features/meetings/organisms/meeting-finder-overview";
 import { ProjectsOverview } from "@/features/projects/organisms/projects-overview";
 import { ProfileSettingsOverview } from "@/features/profile/organisms/profile-settings-overview";
 import { ReviewWorkspaceOverview } from "@/features/reviews/organisms/review-workspace-overview";
@@ -22,22 +20,15 @@ type PlanningWorkspaceRendererProps = {
 
 export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorkspaceRendererProps) {
   const {
-    calendarSyncMessage,
     canManageTaskMeta,
     canUseCeoIntake,
-    confirmDecision,
-    createAvailability,
-    createDecision,
     createFounderEvent,
-    createMeetingFromSlot,
     createScoreObjection,
     createSprintPlan,
     currentProfile,
     currentProfileFocusItems,
     data,
-    deleteAvailability,
     dispatchNotifications,
-    editDecision,
     eventMessage,
     expandedPackages,
     feedbackMessage,
@@ -46,13 +37,9 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     googleChatStatus,
     hygieneAlerts,
     isPending,
-    linkDecisionTask,
     lockSprint,
-    meetingCreateMessage,
     notificationDispatchMessage,
-    objectDecision,
     openTaskPanel,
-    removeDecisionTaskLink,
     removeFocusItem,
     reopenReviewTask,
     apiClient,
@@ -72,15 +59,11 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setReviewStatusFilter,
     setSelectedFeedbackId,
     setSprintPlanningOptions,
-    setTaskDialogDefaults,
     sprintLockMessage,
     sprintPlanningOptions,
-    syncGoogleCalendar,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
-    updateAvailability,
     updateFounderEvent,
-    updateMeeting,
     updateMeetingAttendance,
     updateSprint,
     updateSprintCommitment,
@@ -149,9 +132,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onOpenTask={(task) => openTaskPanel(task.id)}
           onSetFocus={upsertFocusItem}
           onRemoveFocus={removeFocusItem}
-          onLinkDecisionTask={linkDecisionTask}
-          onRemoveDecisionTaskLink={removeDecisionTaskLink}
-          onCreateTask={(draft) => setTaskDialogDefaults(draft)}
         />
       )}
       {workspace === "reviews" && (
@@ -195,9 +175,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           source={source}
           view={view}
           workspace={workspace}
-          onCreateAvailability={createAvailability}
-          onUpdateAvailability={updateAvailability}
-          onDeleteAvailability={deleteAvailability}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
         />
       )}
@@ -222,46 +199,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           sprintLockMessage={sprintLockMessage}
           focusedReviewTaskId={focusedReviewTaskId}
           onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
-        />
-      )}
-      {workspace === "decisions" && (
-        <DecisionLogOverview
-          data={data}
-          currentProfileId={currentProfile?.id || ""}
-          pending={isPending}
-          onCreate={createDecision}
-          onConfirm={confirmDecision}
-          onEdit={editDecision}
-          onObject={objectDecision}
-          onRemoveDecisionTaskLink={removeDecisionTaskLink}
-          onCreateFollowUp={(decision) => setTaskDialogDefaults({
-            taskType: "deliverable",
-            title: `${decision.title} umsetzen`,
-            description: decision.context,
-            problemStatement: decision.context,
-            intendedOutcome: decision.decision,
-            acceptanceCriteria: decision.decision,
-            definitionOfDone: decision.decision,
-            decisionId: decision.id,
-            decisionLinkNote: "Folgeaufgabe aus Decision Log",
-          })}
-        />
-      )}
-      {workspace === "meetings" && (
-        <MeetingFinderOverview
-          data={data}
-          pending={isPending}
-          currentProfile={currentProfile}
-          canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
-          canCreateMeeting={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy" || currentProfile?.platformRole === "founder"}
-          calendarSyncMessage={calendarSyncMessage}
-          meetingCreateMessage={meetingCreateMessage}
-          onCreateAvailability={createAvailability}
-          onUpdateAvailability={updateAvailability}
-          onDeleteAvailability={deleteAvailability}
-          onSyncGoogleCalendar={syncGoogleCalendar}
-          onCreateMeeting={createMeetingFromSlot}
-          onUpdateMeeting={updateMeeting}
         />
       )}
       {workspace === "settings" && (
