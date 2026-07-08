@@ -29,6 +29,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskActivity,
     selectedTaskBlockers,
     selectedTaskComments,
+    selectedTaskDetailError,
+    selectedTaskDetailLoading,
     selectedTaskExternalComments,
     selectedTaskSubIssues,
     setFeedbackDialogOpen,
@@ -66,6 +68,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           comments={selectedTaskComments}
           externalComments={selectedTaskExternalComments}
           activities={selectedTaskActivity}
+          detailDataError={selectedTaskDetailError}
+          detailDataLoading={selectedTaskDetailLoading}
           commentImportNotice={commentImportNotice}
           blockers={selectedTaskBlockers}
           subIssues={selectedTaskSubIssues}

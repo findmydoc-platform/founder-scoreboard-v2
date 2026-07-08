@@ -17,6 +17,8 @@ export function TaskDetailPanel({
   comments,
   externalComments,
   activities,
+  detailDataError,
+  detailDataLoading,
   commentImportNotice,
   commentImportPending,
   blockers,
@@ -50,6 +52,8 @@ export function TaskDetailPanel({
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
+  detailDataError: string;
+  detailDataLoading: boolean;
   commentImportNotice: string;
   commentImportPending: boolean;
   blockers: TaskBlocker[];
@@ -117,6 +121,11 @@ export function TaskDetailPanel({
               onRemoveRelation={onRemoveRelation}
             />
             <TaskDetailPanelSubIssuesSection subIssues={subIssues} onCreateSubIssue={onCreateSubIssue} />
+            {(detailDataLoading || detailDataError) && (
+              <div className={detailDataError ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700" : "rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600"}>
+                {detailDataError || "Kommentare, Blocker und Verlauf werden geladen..."}
+              </div>
+            )}
             <TaskDetailPanelBlockerSection
               blockers={blockers}
               blockerDraft={blockerDraft}
