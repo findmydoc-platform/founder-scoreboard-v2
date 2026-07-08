@@ -78,10 +78,18 @@ test("profile preferences and feature tour acknowledgements are additive data sl
 
 test("driver tour waits for rendered targets and acknowledges only after popover render", async () => {
   const registry = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
+  const selection = await readFile("src/features/product-tours/model/feature-tour-selection.ts", "utf8");
   const provider = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
   const client = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
   assert.match(registry, /workspace-cleanup-v2/);
+  assert.match(registry, /backlog-prioritization-v1/);
+  assert.match(registry, /workspaceScope: "backlog"/);
+  assert.match(registry, /backlog-overview/);
+  assert.match(registry, /backlog-scope-tabs/);
+  assert.match(registry, /backlog-rank-table/);
+  assert.match(registry, /backlog-sprint-pane/);
+  assert.match(registry, /Vorschläge sind aus dem Planning-Board raus/);
   assert.match(registry, /workspace-nav-planning/);
   assert.match(registry, /workspace-nav-sprint/);
   assert.match(registry, /profile-settings-v1/);
@@ -92,8 +100,14 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(registry, /Meeting Finder und Decision Log/);
   assert.match(registry, /neu gedachte Aggregation/);
   assert.match(registry, /Kalender und Verfügbarkeit sind aus dem Profil raus/);
+  assert.match(selection, /tourAppliesToWorkspace/);
+  assert.match(selection, /tour\.workspaceScope === workspace/);
+  assert.match(selection, /profileHasSeenTour/);
+  assert.match(selection, /selectNextFeatureTour/);
+  assert.match(selection, /tours\.find/);
   assert.match(provider, /MutationObserver/);
-  assert.match(provider, /featureTours\.find/);
+  assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
+  assert.doesNotMatch(provider, /targetWorkspace/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[0\]\)/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[1\]\)/);
   assert.match(provider, /fmd:open-account-menu/);

@@ -33,6 +33,13 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
+  if (workspace === "backlog") {
+    return {
+      label: "Neuer Vorschlag",
+      onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
+    };
+  }
+
   if (workspace === "sprint") {
     return {
       label: "Aufgabe hinzufügen",

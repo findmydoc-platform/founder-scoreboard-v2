@@ -9,10 +9,12 @@ import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
+const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
 const EventsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="events" />;
 const ReviewsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="reviews" />;
 
 const CeoTaskIntake = dynamic(() => import("@/features/intake/organisms/ceo-task-intake").then((mod) => mod.CeoTaskIntake), { loading: GenericWorkspacePanelLoading });
+const BacklogOverview = dynamic(() => import("@/features/backlog/organisms/backlog-overview").then((mod) => mod.BacklogOverview), { loading: BacklogWorkspacePanelLoading });
 const EventsOverview = dynamic(() => import("@/features/events/organisms/events-overview").then((mod) => mod.EventsOverview), { loading: EventsWorkspacePanelLoading });
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
@@ -128,6 +130,17 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
             successCriteria: initiative.successCriteria || "",
             scopeConstraints: initiative.scopeConstraints || "",
           })}
+        />
+      )}
+      {workspace === "backlog" && (
+        <BacklogOverview
+          apiClient={apiClient}
+          canManageBacklog={canManageTaskMeta}
+          data={data}
+          onOpenTask={(task) => openTaskPanel(task.id)}
+          onUpdateTask={updateTask}
+          setData={setData}
+          source={source}
         />
       )}
       {workspace === "reviews" && (

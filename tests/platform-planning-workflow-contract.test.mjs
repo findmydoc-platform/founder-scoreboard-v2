@@ -384,8 +384,10 @@ test("strict auth gates planning data until a valid session is present", async (
 
 test("workspace loading shells are route-specific and data-free", async () => {
   const shell = await readFile("src/features/planning/templates/workspace-loading-shell.tsx", "utf8");
+  const backlogSkeleton = await readFile("src/features/backlog/organisms/backlog-content-skeleton.tsx", "utf8");
   const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
   const groupLoading = await readFile("src/app/(workspaces)/loading.tsx", "utf8");
+  const backlogLoading = await readFile("src/app/(workspaces)/backlog/loading.tsx", "utf8");
   const planningLoading = await readFile("src/app/(workspaces)/planning/loading.tsx", "utf8");
   const reviewsLoading = await readFile("src/app/(workspaces)/reviews/loading.tsx", "utf8");
   const eventsLoading = await readFile("src/app/(workspaces)/events/loading.tsx", "utf8");
@@ -402,6 +404,9 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(shell, /export function WorkspaceLoadingShell/);
   assert.match(shell, /export function WorkspaceContentSkeleton/);
   assert.match(shell, /function PlanningContentSkeleton/);
+  assert.match(shell, /BacklogContentSkeleton/);
+  assert.match(backlogSkeleton, /export function BacklogContentSkeleton/);
+  assert.match(backlogSkeleton, /overflow-x-scroll/);
   assert.match(shell, /function ReviewContentSkeleton/);
   assert.match(shell, /function EventsContentSkeleton/);
   assert.match(shell, /function GenericWorkspaceSkeleton/);
@@ -410,6 +415,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.doesNotMatch(shell, /PlanningData|getPlanningData|emptyPlanningData|data\.tasks|authUser|provider_token/);
 
   assert.match(groupLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
+  assert.match(backlogLoading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
   assert.match(planningLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
   assert.match(reviewsLoading, /WorkspaceLoadingShell workspace="reviews" variant="reviews"/);
   assert.match(eventsLoading, /WorkspaceLoadingShell workspace="events" variant="events"/);
@@ -424,6 +430,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(taskDetailLoading, /WorkspaceLoadingShell workspace="planning" variant="task-detail"/);
 
   assert.match(renderer, /WorkspaceContentSkeleton/);
+  assert.match(renderer, /BacklogWorkspacePanelLoading/);
   assert.match(renderer, /EventsWorkspacePanelLoading/);
   assert.match(renderer, /ReviewsWorkspacePanelLoading/);
   assert.match(renderer, /GenericWorkspacePanelLoading/);

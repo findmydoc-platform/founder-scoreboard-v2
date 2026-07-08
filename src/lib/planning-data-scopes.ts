@@ -29,6 +29,10 @@ export const taskDetailPageDataScope = {
 
 export const workspaceDataScopes = {
   planning: baseWorkspaceDataScope,
+  backlog: {
+    ...baseWorkspaceDataScope,
+    sprintCommitments: true,
+  },
   reviews: baseWorkspaceDataScope,
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
