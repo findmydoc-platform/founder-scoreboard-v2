@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const issueNumber = Number(task.github_issue_number || task.issue_number || 0);
   if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-    return apiError("Diese Aufgabe ist noch nicht extern abgelegt.", 409);
+    return apiError("Diese Aufgabe hat noch kein GitHub Issue.", 409);
   }
 
   let githubComments: Awaited<ReturnType<typeof listGitHubIssueComments>>;

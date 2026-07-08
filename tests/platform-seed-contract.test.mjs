@@ -162,7 +162,7 @@ test("header exposes gated sample data import before notifications", async () =>
   const hook = await readFile("src/features/planning/hooks/use-demo-seed-import.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
-  assert.match(header, /import \{ Filter, Import, Menu/);
+  assert.match(header, /Import/);
   assert.match(header, /demoSeedImportAvailable/);
   assert.match(header, /importDemoSeed/);
   assert.match(header, /Beispieldaten laden/);

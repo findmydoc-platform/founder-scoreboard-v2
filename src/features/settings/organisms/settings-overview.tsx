@@ -1,9 +1,9 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import { GitHubSyncQueueSection, SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
+import { SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
 import { SprintPlanningSection, type SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
-import type { NotificationDelivery, PlanningData, Task } from "@/lib/types";
+import type { NotificationDelivery, PlanningData } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -31,8 +31,6 @@ export function SettingsOverview({
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
-  onSyncLinkedGitHubTasks,
-  onCreateGitHubIssue,
   onSelectFeedback,
 }: {
   data: PlanningData;
@@ -52,8 +50,6 @@ export function SettingsOverview({
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
-  onSyncLinkedGitHubTasks: () => void;
-  onCreateGitHubIssue: (task: Task) => void;
   onSelectFeedback: (id: number) => void;
 }) {
   const googleChatReady = Boolean(googleChatStatus?.ready);
@@ -66,13 +62,6 @@ export function SettingsOverview({
         authUserEmail={authUserEmail}
         githubAppConnected={githubAppConnected}
         googleChatReady={googleChatReady}
-      />
-      <GitHubSyncQueueSection
-        tasks={data.tasks}
-        pending={pending}
-        githubAppConnected={githubAppConnected}
-        onSyncLinkedGitHubTasks={onSyncLinkedGitHubTasks}
-        onCreateGitHubIssue={onCreateGitHubIssue}
       />
       <SettingsNotificationsSection
         data={data}

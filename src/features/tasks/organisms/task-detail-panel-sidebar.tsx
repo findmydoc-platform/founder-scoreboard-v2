@@ -228,8 +228,8 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">Externe Ablage</h3>
-            <p className="mt-1 text-xs text-slate-500">Optional in GitHub spiegeln.</p>
+            <h3 className="text-sm font-semibold text-slate-950">GitHub Issue</h3>
+            <p className="mt-1 text-xs text-slate-500">Mit der GitHub-Arbeitsfläche abgleichen.</p>
           </div>
           {canSyncExistingGitHubIssue ? (
             <button
@@ -238,7 +238,7 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub()}
               className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Sync..." : "Jetzt spiegeln"}
+              {task.githubSyncStatus === "pending" ? "Sync..." : "Sync"}
             </button>
           ) : task.taskType === "deliverable" ? (
             <button
@@ -247,7 +247,7 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Anlegen..." : "Extern anlegen"}
+              {task.githubSyncStatus === "pending" ? "Anlegen..." : "GitHub Issue anlegen"}
             </button>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
@@ -256,24 +256,24 @@ export function TaskDetailPanelSidebar({
         <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
           <p className="break-words font-medium text-slate-800">
             {externalSyncPending
-              ? "Externe Ablage wird aktualisiert."
+              ? "GitHub-Sync läuft."
               : externalSyncProblem
-                ? "Externe Ablage braucht Aufmerksamkeit."
+                ? "GitHub-Sync braucht Aufmerksamkeit."
                 : hasGitHubIssue(task)
-                  ? "Diese Aufgabe ist extern abgelegt."
-                  : "Diese Aufgabe ist aktuell nur in der App."}
+                  ? "Diese Aufgabe ist mit GitHub verknüpft."
+                  : "Diese Aufgabe hat noch kein GitHub Issue."}
           </p>
           {task.githubIssueUrl ? (
             <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-blue-700 hover:underline">
               <Link2 size={15} className="shrink-0" />
-              <span className="truncate">Externe Ablage öffnen</span>
+              <span className="truncate">GitHub Issue öffnen</span>
             </a>
           ) : (
-            <p className="text-slate-500">Noch nicht extern abgelegt.</p>
+            <p className="text-slate-500">Noch kein GitHub Issue.</p>
           )}
           {!hasGitHubIssue(task) && (
             <p className="text-xs text-slate-500">
-              Extern anlegen nur, wenn diese Aufgabe auch außerhalb der App geführt werden soll.
+              GitHub Issue nur bewusst anlegen.
             </p>
           )}
           {externalSyncProblem && <p className="text-xs font-semibold text-amber-700">Verbindung prüfen und erneut versuchen.</p>}
@@ -284,7 +284,7 @@ export function TaskDetailPanelSidebar({
         <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
           <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
           <p className="mt-1 text-xs leading-5 text-red-800">
-            Löscht die Aufgabe aus der App. Eine bestehende externe Ablage wird vorher geschlossen.
+            Löscht die Aufgabe aus der App. Ein bestehendes GitHub Issue wird vorher geschlossen.
           </p>
           <button
             type="button"

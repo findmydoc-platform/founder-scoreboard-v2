@@ -12,6 +12,12 @@
     "health": false
   },
   {
+    "name": "github_issue_sync_locks",
+    "table": "github_issue_sync_locks",
+    "select": "resource_key,task_id,locked_by_profile_id,lock_token,locked_at,expires_at",
+    "health": false
+  },
+  {
     "name": "notification_preferences",
     "table": "notification_preferences",
     "select": "id,profile_id,channel,event_type,enabled",

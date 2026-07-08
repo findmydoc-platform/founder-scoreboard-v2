@@ -25,7 +25,7 @@ export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
 }
 
 export function syncTaskToGitHubRequest(apiClient: BrowserApiClient, taskId: string, options: { createIfMissing?: boolean } = {}) {
-  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/sync-github`, {
+  return apiClient.requestJson<{ code?: string; error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
     json: { createIfMissing: Boolean(options.createIfMissing) },
   });

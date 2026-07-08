@@ -94,9 +94,9 @@ Voraussetzung:
 
 Check:
 1. `pnpm run verify:github-sync` ausführen.
-2. Task öffnen.
+2. Planning öffnen und die GitHub-Sync-Queue im Header öffnen.
 3. Falls die GitHub-App-Verbindung fehlt oder abgelaufen ist, die Verbindung zentral im Header erneuern.
-4. `Jetzt spiegeln` klicken.
+4. `Offene Issues syncen` oder an einem Task `Sync` klicken.
 5. Link zum GitHub Issue prüfen.
 
 Erwartung:
@@ -104,8 +104,9 @@ Erwartung:
 - GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
 - Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
 - Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
-- Body enthält Epic / Meilenstein, Initiative, Sprint, Review, Score, Blocker und Kommentare.
-- GitHub bleibt one-way Backup, nicht führendes System.
+- Body enthält den Aufgabenbrief mit Problem, Zielbild, Scope, Abnahmekriterien, Nachweis und Definition of Done.
+- Parallele Syncs derselben Aufgabe oder desselben GitHub Issues werden als laufender Sync angezeigt, nicht als Fehler.
+- GitHub Issues sind die native Arbeitsfläche für Issue-Inhalte; FounderOps ergänzt Planung, Review und Score-Kontext.
 
 ## Google Chat
 
