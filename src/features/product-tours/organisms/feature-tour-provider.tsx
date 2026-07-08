@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "
 import { driver } from "driver.js";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { featureTours } from "@/features/product-tours/model/feature-tour-registry";
+import { selectNextFeatureTour } from "@/features/product-tours/model/feature-tour-selection";
 
 type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
@@ -15,6 +16,7 @@ type FeatureTourProviderProps = {
   setData: Dispatch<SetStateAction<PlanningData>>;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "seed" | "supabase";
+  workspace: AppWorkspace;
 };
 
 function waitForElement(selector: string, timeoutMs = 8000) {
@@ -60,15 +62,12 @@ export function FeatureTourProvider({
   setData,
   setWorkspace,
   source,
+  workspace,
 }: FeatureTourProviderProps) {
   const tour = useMemo(() => {
     if (!currentProfile) return undefined;
-    return featureTours.find((item) =>
-      !data.profileFeatureTourAcknowledgements.some((acknowledgement) =>
-        acknowledgement.profileId === currentProfile.id && acknowledgement.tourId === item.id
-      )
-    );
-  }, [currentProfile, data.profileFeatureTourAcknowledgements]);
+    return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
+  }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
   const startedTourRef = useRef("");
 
   useEffect(() => {
@@ -96,8 +95,8 @@ export function FeatureTourProvider({
     };
 
     async function startTour() {
-      if ("targetWorkspace" in activeTour && activeTour.targetWorkspace) {
-        setWorkspace(activeTour.targetWorkspace);
+      if (activeTour.startWorkspace) {
+        setWorkspace(activeTour.startWorkspace);
       }
 
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
@@ -106,7 +105,7 @@ export function FeatureTourProvider({
         return;
       }
 
-      if ("openAccountMenu" in activeTour && activeTour.openAccountMenu) {
+      if (activeTour.openAccountMenu) {
         window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
         const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
         if (!active || !menuItem) {
@@ -134,7 +133,7 @@ export function FeatureTourProvider({
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
-              if ("doneWorkspace" in activeTour && activeTour.doneWorkspace) {
+              if (activeTour.doneWorkspace) {
                 setWorkspace(activeTour.doneWorkspace);
               }
             },

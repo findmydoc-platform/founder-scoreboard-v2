@@ -1,10 +1,66 @@
 import type { DriveStep } from "driver.js";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+
+export type FeatureTourDefinition = {
+  doneWorkspace?: AppWorkspace;
+  id: string;
+  openAccountMenu?: boolean;
+  requiredSelectors: readonly string[];
+  startWorkspace?: AppWorkspace;
+  steps: readonly DriveStep[];
+  workspaceScope?: AppWorkspace;
+};
 
 export const workspaceCleanupTourId = "workspace-cleanup-v2";
 export const profileSettingsTourId = "profile-settings-v1";
 export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
+export const backlogTourId = "backlog-prioritization-v1";
 
 export const featureTours = [
+  {
+    id: backlogTourId,
+    workspaceScope: "backlog",
+    requiredSelectors: ["[data-tour-id='backlog-overview']"],
+    steps: [
+      {
+        element: "[data-tour-id='backlog-overview']",
+        popover: {
+          title: "Backlog priorisieren",
+          description: "Hier entscheidet ihr die Reihenfolge. Die Priorität bleibt fachliche Dringlichkeit, der Rang zeigt, was als Nächstes in einen Sprint gezogen werden soll.",
+          side: "bottom",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='backlog-scope-tabs']",
+        popover: {
+          title: "Vorschläge sind hier gebündelt",
+          description: "Vorschläge sind aus dem Planning-Board raus. Im Backlog kannst du sie getrennt prüfen, vorbereiten und erst dann für einen Sprint einplanen.",
+          side: "bottom",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='backlog-rank-table']",
+        popover: {
+          title: "Rangfolge statt Statusspalte",
+          description: "Ziehe Aufgaben nach oben oder unten. Wenn Spalten zu breit werden, scrollt die Tabelle horizontal, ohne die Sprint-Planung rechts zu verlieren.",
+          side: "top",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='backlog-sprint-pane']",
+        popover: {
+          title: "In Sprints ziehen",
+          description: "Ziehe bereite Aufgaben auf einen offenen Sprint. Der Sprint bleibt ein Zeitcontainer; Initiative und Deliverable-Struktur bleiben unverändert.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: workspaceCleanupTourId,
     openAccountMenu: true,
@@ -43,7 +99,7 @@ export const featureTours = [
   },
   {
     id: planningMyTasksScopeTourId,
-    targetWorkspace: "planning",
+    workspaceScope: "planning",
     requiredSelectors: ["[data-tour-id='planning-task-scope']"],
     steps: [
       {
@@ -84,4 +140,4 @@ export const featureTours = [
       },
     ] satisfies DriveStep[],
   },
-] as const;
+] as const satisfies readonly FeatureTourDefinition[];

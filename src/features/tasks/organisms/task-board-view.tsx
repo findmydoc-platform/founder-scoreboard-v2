@@ -77,7 +77,7 @@ export function TaskBoardView({
                 <h2 className="text-sm font-semibold text-slate-800">{status}</h2>
                 <span className="text-xs text-slate-500">({tasks.length})</span>
               </div>
-              <button type="button" onClick={() => onCreateTask({ status, taskType: status === "Vorschlag" ? "proposal" : "deliverable" })} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white" aria-label="Aufgabe hinzufügen">
+              <button type="button" onClick={() => onCreateTask({ status, taskType: "deliverable" })} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white" aria-label="Aufgabe hinzufügen">
                 <Plus size={15} />
               </button>
             </div>

@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   GanttChart,
   LayoutDashboard,
+  ListOrdered,
   Settings,
   UserCircle,
   Users,
@@ -12,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type AppWorkspace = "planning" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "backlog" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 type WorkspaceRoute = {
@@ -30,6 +31,7 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
+  { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
   { id: "reviews", label: "Reviews", icon: ClipboardCheck, href: "/reviews" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },

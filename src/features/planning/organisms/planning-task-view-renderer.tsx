@@ -1,10 +1,12 @@
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { packageById, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
-import { taskStatuses } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
 import { TaskBoardView } from "@/features/tasks/organisms/task-board-view";
 import { TaskStructureView } from "@/features/tasks/organisms/task-structure-view";
 import { TaskTableView } from "@/features/tasks/organisms/task-table-view";
+
+const planningBoardStatuses = taskStatuses.filter((status) => status !== "Vorschlag");
 
 export function PlanningTaskViewRenderer({ controller }: { controller: PlanningAppController }) {
   const {
@@ -30,12 +32,16 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   if (!filtersAvailable) return null;
 
+  const planningBoardTasks = visibleTasks.filter((task) => (
+    task.taskType !== "proposal" && normalizeStatus(task.status) !== "Vorschlag"
+  ));
+
   return (
     <>
       {view === "board" && (
         <TaskBoardView
-          statuses={taskStatuses}
-          visibleTasks={visibleTasks}
+          statuses={planningBoardStatuses}
+          visibleTasks={planningBoardTasks}
           packages={data.packages}
           profiles={data.profiles}
           relations={data.taskRelations}

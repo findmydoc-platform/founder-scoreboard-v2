@@ -11,6 +11,13 @@ export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, p
   });
 }
 
+export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: Array<{ id: string; sortOrder: number }>) {
+  return apiClient.requestJson<{ error?: string; updates?: Array<{ id: string; sortOrder: number }> }>("/api/tasks/backlog-order", {
+    method: "PATCH",
+    json: { updates },
+  });
+}
+
 export function deleteTaskRequest(apiClient: BrowserApiClient, taskId: string) {
   return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}`, {
     method: "DELETE",

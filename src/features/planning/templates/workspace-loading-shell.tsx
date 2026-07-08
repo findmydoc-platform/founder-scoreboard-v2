@@ -1,7 +1,9 @@
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { workspaceLabels, workspaceSubtitles } from "@/features/planning/model/planning-app-model";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+import { BacklogContentSkeleton } from "@/features/backlog/organisms/backlog-content-skeleton";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
+import { UiSkeletonChips, UiSkeletonPulse as Pulse } from "@/shared/atoms/skeleton-primitives";
 
 export type WorkspaceLoadingVariant = AppWorkspace | "review-detail" | "task-detail" | "generic";
 
@@ -12,6 +14,7 @@ type WorkspaceLoadingShellProps = {
 
 const loadingTitles: Record<AppWorkspace, string> = {
   planning: "Projekt wird geladen",
+  backlog: "Backlog wird geladen",
   reviews: "Reviews werden geladen",
   events: "Events werden geladen",
   sprint: "Sprint & Score wird geladen",
@@ -22,10 +25,6 @@ const loadingTitles: Record<AppWorkspace, string> = {
   "ceo-intake": "CEO Intake wird geladen",
   profile: "Profil wird geladen",
 };
-
-function Pulse({ className }: { className: string }) {
-  return <div className={`animate-pulse rounded bg-slate-200 ${className}`} />;
-}
 
 function HeaderLoading({ workspace }: { workspace: AppWorkspace }) {
   return (
@@ -60,13 +59,7 @@ function MetricSkeleton({ columns = 4 }: { columns?: 3 | 4 }) {
 }
 
 function ChipSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {Array.from({ length: count }).map((_, index) => (
-        <Pulse key={index} className={index === 0 ? "h-9 w-20 bg-slate-100" : "h-9 w-28 bg-slate-100"} />
-      ))}
-    </div>
-  );
+  return <UiSkeletonChips count={count} />;
 }
 
 function PlanningBoardSkeleton() {
@@ -267,6 +260,7 @@ function DetailContentSkeleton({ variant }: { variant: "review-detail" | "task-d
 
 export function WorkspaceContentSkeleton({ variant = "generic" }: { variant?: WorkspaceLoadingVariant }) {
   if (variant === "planning") return <PlanningContentSkeleton />;
+  if (variant === "backlog") return <BacklogContentSkeleton />;
   if (variant === "reviews") return <ReviewContentSkeleton />;
   if (variant === "events") return <EventsContentSkeleton />;
   if (variant === "review-detail" || variant === "task-detail") return <DetailContentSkeleton variant={variant} />;

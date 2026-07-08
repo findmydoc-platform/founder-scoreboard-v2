@@ -124,6 +124,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           setData={controller.setData}
           setWorkspace={setWorkspace}
           source={source}
+          workspace={workspace}
         />
 
         {filtersAvailable && <PlanningMetrics metrics={metrics} />}

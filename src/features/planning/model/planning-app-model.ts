@@ -53,6 +53,7 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
+  backlog: "Backlog",
   reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
@@ -66,6 +67,7 @@ export const workspaceLabels: Record<Workspace, string> = {
 
 export const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
+  backlog: "Sprint-Backlog priorisieren und in Sprints ziehen.",
   reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Weekly Updates, Punkte und Sprintabschluss.",
