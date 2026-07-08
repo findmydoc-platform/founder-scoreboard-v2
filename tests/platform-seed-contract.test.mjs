@@ -159,6 +159,7 @@ test("header exposes gated sample data import before notifications", async () =>
   const app = await readFile("src/features/planning/PlanningApp.tsx", "utf8");
   const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
+  const commandRegistry = await readFile("src/features/planning/hooks/use-planning-command-registry.ts", "utf8");
   const hook = await readFile("src/features/planning/hooks/use-demo-seed-import.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
@@ -174,7 +175,7 @@ test("header exposes gated sample data import before notifications", async () =>
   assert.match(app, /demoSeedImportAvailable\?: boolean/);
   assert.match(controller, /demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable/);
   assert.match(controller, /demoSeedImportPending/);
-  assert.match(controller, /useDemoSeedImport/);
+  assert.match(commandRegistry, /useDemoSeedImport/);
   assert.match(hook, /window\.location\.reload\(\)/);
   assert.match(hook, /importDemoSeedRequest/);
   assert.match(hook, /source === "seed"/);

@@ -61,6 +61,9 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
 
 test("planning app controller delegates command domains and stays a thin composer", async () => {
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
+  const bootstrapState = await readFile("src/features/planning/hooks/use-planning-bootstrap-state.ts", "utf8");
+  const derivedState = await readFile("src/features/planning/hooks/use-planning-derived-state.ts", "utf8");
+  const commandRegistry = await readFile("src/features/planning/hooks/use-planning-command-registry.ts", "utf8");
 
   assert.ok(controller.split(/\r?\n/).length < 500);
   await assertFileContracts([
@@ -68,12 +71,43 @@ test("planning app controller delegates command domains and stays a thin compose
       label: "planning app controller",
       source: controller,
       matches: [
+        /usePlanningBootstrapState/,
+        /usePlanningCommandRegistry/,
+        /usePlanningDerivedState/,
+        /usePlanningTaskSelection/,
+        /useTaskDetailDataLoader/,
+      ],
+      excludes: [
+        /planningApi\.|taskApi\./,
+        /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
+        /updateMeetingAttendanceRequest|lockSprintRequest/,
+        /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/,
+        /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
+        /window\.history\.length|addEventListener\("keydown"/,
+      ],
+    },
+    {
+      label: "planning bootstrap state",
+      source: bootstrapState,
+      matches: [
+        /usePlanningAuth/,
+        /usePlanningDataRefresh/,
+        /usePlanningRequestContext/,
+        /usePlanningViewState/,
+        /usePlanningWorkspace/,
+      ],
+    },
+    {
+      label: "planning derived state",
+      source: derivedState,
+      matches: [/usePlanningHeaderPrimaryAction/, /usePlanningTaskViewModel/],
+    },
+    {
+      label: "planning command registry",
+      source: commandRegistry,
+      matches: [
         /useTaskMutationCommands/,
         /useTaskCollaborationCommands/,
-        /usePlanningDataRefresh/,
-        /usePlanningHeaderPrimaryAction/,
-        /usePlanningTaskSelection/,
-        /usePlanningTaskViewModel/,
         /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,

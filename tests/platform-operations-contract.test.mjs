@@ -478,7 +478,7 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(routes, /ceoOnly: true/);
   assert.match(routes, /href: "\/ceo-intake"/);
   assert.match(sidebar, /currentPlatformRole === "ceo"/);
-  assert.match(ui, /canUseCeoIntake = currentProfile\?\.platformRole === "ceo"/);
+  assert.match(ui, /canUseCeoIntake = requestContext\.currentProfile\?\.platformRole === "ceo"/);
   assert.match(ui, /workspace === "ceo-intake" && authChecked && !canUseCeoIntake/);
   assert.match(ui, /CeoTaskIntake/);
   assert.match(ui, /Deputy, Founder, Accountable, Responsible und Zuständige/);
@@ -649,7 +649,7 @@ test("planning personal scope follows the effective current profile", async () =
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
 
   assert.match(ui, /serverCurrentProfile/);
-  assert.match(ui, /currentProfileId: serverCurrentProfile\?\.id/);
+  assert.match(ui, /currentProfileId: auth\.serverCurrentProfile\?\.id/);
   assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(header, /data-tour-id="planning-task-scope"/);
   assert.match(header, /Aufgaben/);
