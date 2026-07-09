@@ -368,6 +368,7 @@ export type DbFmdTool = {
   url: string | null;
   owner: string | null;
   status: FmdTool["status"];
+  is_curated: boolean | null;
   sort_order: number;
 };
 

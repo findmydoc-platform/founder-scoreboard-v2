@@ -169,6 +169,7 @@ export async function importDemoSeed(supabase: SupabaseClient): Promise<DemoSeed
     url: textOrNull(tool.url),
     owner: textOrNull(tool.owner),
     status: tool.status,
+    is_curated: tool.isCurated,
     sort_order: tool.sortOrder,
   }));
   const toolResult = await supabase.from("fmd_tools").upsert(toolRows, { onConflict: "id" });

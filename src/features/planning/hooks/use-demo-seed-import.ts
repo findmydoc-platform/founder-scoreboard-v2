@@ -30,6 +30,13 @@ export function useDemoSeedImport({
 
     setSaveError("");
     setDemoSeedImportPending(true);
+
+    if (source === "seed") {
+      importIntoBrowser();
+      setDemoSeedImportPending(false);
+      return;
+    }
+
     try {
       const { response, body } = await importDemoSeedRequest(apiClient);
       if (response.ok) {
@@ -37,24 +44,8 @@ export function useDemoSeedImport({
         return;
       }
 
-      if (source === "seed") {
-        importIntoBrowser();
-        setDemoSeedImportPending(false);
-        return;
-      }
-
       throw new Error(body?.error || "Demo-Import konnte nicht ausgeführt werden.");
     } catch (error) {
-      if (source === "seed") {
-        try {
-          importIntoBrowser();
-          setDemoSeedImportPending(false);
-          return;
-        } catch {
-          // Fall through to the visible error.
-        }
-      }
-
       setSaveError(error instanceof Error ? error.message : "Demo-Import konnte nicht ausgeführt werden.");
       setDemoSeedImportPending(false);
     }

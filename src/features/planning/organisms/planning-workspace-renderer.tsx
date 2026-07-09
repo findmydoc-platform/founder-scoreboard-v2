@@ -43,6 +43,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     expandedPackages,
     filters,
     focusedReviewTaskId,
+    fmdToolMessage,
+    fmdToolPending,
     googleChatStatus,
     githubAppConnected,
     githubSyncQueueOpen,
@@ -69,6 +71,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setSprintPlanningOptions,
     sprintLockMessage,
     sprintPlanningOptions,
+    createFmdTool,
+    updateFmdTool,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateFounderEvent,
@@ -162,7 +166,17 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onUpdateEvent={updateFounderEvent}
         />
       )}
-      {workspace === "tools" && <FmdToolsOverview tools={data.fmdTools} />}
+      {workspace === "tools" && (
+        <FmdToolsOverview
+          tools={data.fmdTools}
+          source={source}
+          currentProfile={currentProfile}
+          pending={fmdToolPending}
+          message={fmdToolMessage}
+          onCreateTool={createFmdTool}
+          onUpdateTool={updateFmdTool}
+        />
+      )}
       {workspace === "team" && (
         <TeamOverview
           data={data}

@@ -53,6 +53,7 @@ export function mapFmdTool(row: DbFmdTool): FmdTool {
     url: row.url || "",
     owner: row.owner || "",
     status: row.status,
+    isCurated: Boolean(row.is_curated),
     sortOrder: row.sort_order,
   };
 }

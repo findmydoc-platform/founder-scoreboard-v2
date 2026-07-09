@@ -125,7 +125,7 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(sidebar, /appNavItems/);
   assert.match(sidebar, /Hauptnavigation/);
   assert.doesNotMatch(sidebar, /Meeting Finder/);
-  assert.match(routes, /FMD-Tools/);
+  assert.match(routes, /Werkzeugraum/);
   assert.match(routes, /Sprint & Score/);
   assert.doesNotMatch(sidebar, /Decision Log/);
   assert.match(sidebar, /AppBrand/);

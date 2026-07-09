@@ -101,7 +101,20 @@ test("seedData is assembled from source.json defaults and stable core ids", asyn
   assert.deepEqual(source.profiles.map((profile) => profile.id), ["volkan", "sebastian", "anil", "ozen", "youssef"]);
   assert.deepEqual(source.packages.map((pkg) => pkg.id), ["GC1", "GC2", "GC3", "GC4", "GC5"]);
   assert.deepEqual(source.sprints.map((sprint) => sprint.id), ["sprint-1"]);
-  assert.equal(source.fmdTools.length, 6);
+  assert.equal(source.fmdTools.length, 11);
+  assert.deepEqual(source.fmdTools.map((tool) => tool.id), [
+    "email-signature-tool",
+    "investor-calculator",
+    "liquidity-planning-calculator",
+    "offer-calculator",
+    "sebastian-crawler",
+    "tool-repos",
+    "clinic-outreach-crm",
+    "notion-docs-source",
+    "pitchdeck-site",
+    "brand-asset-library",
+    "google-drive-assets",
+  ]);
   assert.equal(source.meetings.length, 1);
   assert.equal(source.tasks.length, 14);
 
