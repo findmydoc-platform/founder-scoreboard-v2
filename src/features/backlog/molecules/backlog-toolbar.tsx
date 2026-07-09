@@ -7,12 +7,7 @@ type BacklogToolbarProps = {
 
 export function BacklogToolbar({ onQueryChange, query }: BacklogToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Backlog</div>
-        <h2 className="text-xl font-semibold text-slate-950">Sprint-Backlog priorisieren</h2>
-        <p className="mt-1 text-sm text-slate-500">Vorschläge und ungeplante Deliverables in Rangfolge bringen.</p>
-      </div>
+    <div className="flex flex-wrap items-center justify-end gap-3">
       <div className="relative min-w-[260px]">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input
