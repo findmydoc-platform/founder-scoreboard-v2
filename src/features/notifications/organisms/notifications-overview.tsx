@@ -17,11 +17,11 @@ type GoogleChatStatusSummary = {
   pending?: number;
 };
 
-type PersonalNotificationFilter = "pending" | "dismissed" | "all";
+type PersonalNotificationFilter = "pending" | "done" | "all";
 
 const personalFilterLabels: Record<PersonalNotificationFilter, string> = {
   pending: "Offen",
-  dismissed: "Erledigt",
+  done: "Erledigt",
   all: "Alle",
 };
 
@@ -33,14 +33,14 @@ function isToday(value: string) {
 
 function eventStatusTone(status: NotificationEvent["status"]) {
   if (status === "pending") return "amber";
-  if (status === "dismissed") return "slate";
+  if (status === "dismissed" || status === "resolved") return "slate";
   if (status === "sent") return "emerald";
   return "red";
 }
 
 function eventStatusLabel(status: NotificationEvent["status"]) {
   if (status === "pending") return "offen";
-  if (status === "dismissed") return "erledigt";
+  if (status === "dismissed" || status === "resolved") return "erledigt";
   if (status === "sent") return "sent";
   return "failed";
 }
@@ -51,7 +51,12 @@ function profileName(profiles: Profile[], profileId: string) {
 
 function personalFilterCount(filter: PersonalNotificationFilter, notifications: NotificationEvent[]) {
   if (filter === "all") return notifications.length;
+  if (filter === "done") return notifications.filter((event) => isPersonalNotificationDone(event)).length;
   return notifications.filter((event) => event.status === filter).length;
+}
+
+function isPersonalNotificationDone(event: NotificationEvent) {
+  return event.status === "dismissed" || event.status === "resolved";
 }
 
 function shouldShowTypeBadge(type: NotificationEvent["type"]) {
@@ -92,10 +97,11 @@ export function NotificationsOverview({
   );
   const filteredPersonalNotifications = personalNotifications.filter((event) => {
     if (personalFilter === "all") return true;
+    if (personalFilter === "done") return isPersonalNotificationDone(event);
     return event.status === personalFilter;
   });
   const personalOpenCount = personalNotifications.filter((event) => event.status === "pending").length;
-  const personalDismissedCount = personalNotifications.filter((event) => event.status === "dismissed").length;
+  const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
   const outboxPendingCount = googleChatStatus?.pending ?? data.notificationEvents.filter((event) => event.status === "pending").length;
   const deliveryErrorCount = data.notificationDeliveries.filter((delivery) => delivery.status === "failed").length
@@ -115,11 +121,11 @@ export function NotificationsOverview({
             <div>
               <h2 className="text-base font-semibold text-slate-950">Für mich</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {personalOpenCount} offen · {personalDismissedCount} erledigt · {personalTodayCount} heute
+                {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
               </p>
             </div>
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
-              {(["pending", "dismissed", "all"] as PersonalNotificationFilter[]).map((filter) => (
+              {(["pending", "done", "all"] as PersonalNotificationFilter[]).map((filter) => (
                 <button
                   key={filter}
                   type="button"

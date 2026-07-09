@@ -1,5 +1,6 @@
 import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, type PlanningDataQueryScope } from "./planning-data-loader";
 import { isOperationalLeadRole } from "./platform";
+import { persistResolvedNotificationEvents } from "./notification-resolution";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData, PlatformRole } from "./types";
 
@@ -66,8 +67,10 @@ export async function getPlanningData(scope?: PlanningDataQueryScope, access?: P
     return { data: emptyPlanningData, source: "seed" };
   }
 
+  const data = await persistResolvedNotificationEvents(supabase, mapPlanningDataRows(rows));
+
   return {
     source: "supabase",
-    data: filterPlanningDataForWorkspaceAccess(mapPlanningDataRows(rows), access),
+    data: filterPlanningDataForWorkspaceAccess(data, access),
   };
 }

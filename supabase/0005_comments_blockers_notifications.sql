@@ -29,7 +29,7 @@ create table if not exists notification_events (
   entity_id text not null,
   title text not null,
   body text,
-  status text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'dismissed')),
+  status text not null default 'pending' check (status in ('pending', 'sent', 'failed', 'dismissed', 'resolved')),
   created_at timestamptz not null default now()
 );
 
