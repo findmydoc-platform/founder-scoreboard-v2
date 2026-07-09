@@ -107,13 +107,11 @@ export function BacklogRankTable({
                   <button type="button" onClick={() => onOpenTask(item.task)} className="text-left font-semibold text-slate-950 hover:text-blue-700">
                     {item.task.title}
                   </button>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{item.task.description}</p>
                 </DataCell>
                 <DataCell><UiBadge tone={typeTone(item.task)}>{typeLabel(item.task)}</UiBadge></DataCell>
                 <DataCell className="max-w-40 text-xs text-slate-600">{item.initiative?.title || "Nicht gesetzt"}</DataCell>
                 <DataCell className="text-xs text-slate-600">{taskAssigneeLabel(item.task)}</DataCell>
                 <DataCell><UiBadge tone={priorityBadgeTone(item.task.priority)}>{item.task.priority}</UiBadge></DataCell>
-                <DataCell>{item.task.hours}h</DataCell>
                 <DataCell><BacklogReadiness item={item} /></DataCell>
                 <DataCell>
                   <span className="inline-flex items-center gap-2 text-xs text-slate-600">
