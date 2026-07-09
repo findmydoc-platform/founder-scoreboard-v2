@@ -272,7 +272,13 @@ test("founder events are modeled as team-visible operational reminders", async (
   assert.match(app, /workspace === "events"/);
   assert.match(app, /EventsOverview/);
   assert.match(app, /canManageEvents=\{canManageTaskMeta\}/);
+  assert.match(app, /HeaderEventCalendar/);
   assert.match(ui, /Event-Zentrale/);
+  assert.match(ui, /Kalender öffnen/);
+  assert.match(ui, /buildEventsByDay/);
+  assert.match(ui, /eventDayKeys/);
+  assert.match(ui, /Nächste Events/);
+  assert.match(ui, /dayEvents\.slice\(0, 3\)/);
   assert.match(ui, /Alle aktiven Profile/);
   assert.match(ui, /Ausgewählte Profile/);
   assert.match(types, /export type FounderEvent/);

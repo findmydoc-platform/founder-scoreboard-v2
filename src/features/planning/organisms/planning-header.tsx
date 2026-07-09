@@ -1,4 +1,5 @@
 import { Filter, GitBranch, Import, Plus, X } from "lucide-react";
+import { HeaderEventCalendar } from "@/features/events/molecules/header-event-calendar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
@@ -111,6 +112,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               {demoSeedImportPending ? "Lädt..." : "Beispieldaten laden"}
             </button>
           )}
+          <HeaderEventCalendar events={data.events} />
           <NotificationInbox
             notifications={unreadNotifications}
             profiles={data.profiles}
