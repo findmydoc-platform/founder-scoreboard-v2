@@ -86,7 +86,7 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   assert.doesNotMatch(taskSignals, /48 Stunden|stale|Kein Update/);
   assert.match(taskSignalBadges, /maxVisible = 2/);
   assert.match(taskCard, /TaskCardRiskBadges/);
-  assert.match(taskTable, /PlanningTaskAttentionBadges/);
+  assert.match(taskTable, /TaskTableRiskBadges/);
   assert.match(reviewUi, /ReviewTaskAttentionBadges/);
   assert.doesNotMatch(ui, /Decision-Link entfernen|Decision-Folgearbeit|Folgeaufgabe aus Decision/);
   assert.doesNotMatch(planningApiClient, /api\/decisions\/\$\{decisionId\}\/tasks/);
