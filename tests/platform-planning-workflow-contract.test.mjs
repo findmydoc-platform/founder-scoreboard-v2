@@ -528,6 +528,9 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(model, /label: "Abgeschlossen"/);
   assert.match(model, /label: "Nacharbeit"/);
   assert.match(model, /label: "Geblockt"/);
+  assert.match(workspace, /metrics\.total === 0/);
+  assert.match(workspace, /Noch keine Reviews/);
+  assert.match(workspace, /href="\/sprint"/);
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(detail, /TaskReviewSheet/);
   assert.match(detail, /Review nicht gefunden/);

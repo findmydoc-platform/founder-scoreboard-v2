@@ -42,6 +42,24 @@ export function ReviewWorkspaceOverview({
   };
   const showStatusColumn = statusFilter === "all";
 
+  if (metrics.total === 0) {
+    return (
+      <UiPanel>
+        <div className="grid gap-3 py-6 text-center">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Noch keine Reviews</h2>
+            <p className="mt-1 text-sm text-slate-600">Sobald Sprint-Aufgaben zur Accountable-Review gehen, erscheint hier die Review-Zentrale.</p>
+          </div>
+          <div>
+            <UiLinkButton href="/sprint" variant="blue" size="md">
+              Reviews im Sprint vorbereiten
+            </UiLinkButton>
+          </div>
+        </div>
+      </UiPanel>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <UiPanel>
