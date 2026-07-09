@@ -630,9 +630,20 @@ test("local seed state persists task overrides in browser storage", async () => 
 
 test("header actions are workspace aware", async () => {
   const ui = await readPlanningSurface();
+  const header = await readFile("src/features/planning/organisms/app-header.tsx", "utf8");
+  const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
+  const model = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
+  assert.match(header, /description: string/);
+  assert.doesNotMatch(header, /subtitle/);
+  assert.match(planningHeader, /description=\{description\}/);
+  assert.match(planningHeader, /Zeitraum: \$\{data\.project\.range\}/);
+  assert.match(model, /workspaceDescriptions: Record<Workspace, string>/);
+  assert.match(model, /planning: "Zeigt die Gesamtplanung/);
+  assert.match(model, /backlog: "Zeigt priorisierte Aufgaben/);
+  assert.doesNotMatch(model, /workspaceSubtitles/);
   assert.match(ui, /label: "Neue Aufgabe"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
   assert.match(ui, /data-tour-id="planning-task-scope"/);

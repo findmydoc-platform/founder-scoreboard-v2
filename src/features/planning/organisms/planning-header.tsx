@@ -4,7 +4,7 @@ import type { PlanningAppController } from "@/features/planning/hooks/use-planni
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
-import { viewTabs, workspaceLabels, workspaceSubtitles } from "@/features/planning/model/planning-app-model";
+import { viewTabs, workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
 import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
 import { hasGitHubIssue } from "@/lib/platform";
@@ -60,14 +60,16 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
   const missingGitHubIssues = githubSyncDeliverables.filter((task) => !hasGitHubIssue(task));
   const githubSyncQueueCount = linkedGitHubQueue.length + missingGitHubIssues.length;
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
-  const subtitle = workspace === "planning" ? data.project.range : workspaceSubtitles[workspace];
+  const description = workspace === "planning"
+    ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
+    : workspaceDescriptions[workspace];
   const startFeatureTour = () => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour"));
 
   return (
     <AppHeader
       mobileNavOpen={mobileNavOpen}
       onOpenMobileNav={() => setMobileNavOpen(true)}
-      subtitle={subtitle}
+      description={description}
       title={title}
       notices={(
         <>
