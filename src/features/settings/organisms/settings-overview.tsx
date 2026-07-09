@@ -1,7 +1,6 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import { SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
 import { SprintPlanningSection, type SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import type { NotificationDelivery, PlanningData } from "@/lib/types";
 
@@ -15,10 +14,6 @@ type GoogleChatStatusSummary = {
 
 export function SettingsOverview({
   data,
-  source,
-  authAvailable,
-  authUserEmail,
-  githubAppConnected,
   pending,
   notificationDispatchMessage,
   googleChatStatus,
@@ -31,10 +26,6 @@ export function SettingsOverview({
   onSendGoogleChatTest,
 }: {
   data: PlanningData;
-  source: "seed" | "supabase";
-  authAvailable: boolean;
-  authUserEmail: string;
-  githubAppConnected: boolean;
   pending: boolean;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;
@@ -46,17 +37,8 @@ export function SettingsOverview({
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
 }) {
-  const googleChatReady = Boolean(googleChatStatus?.ready);
-
   return (
-    <div className="grid grid-cols-1 min-w-0 gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-      <SystemStatusSection
-        source={source}
-        authAvailable={authAvailable}
-        authUserEmail={authUserEmail}
-        githubAppConnected={githubAppConnected}
-        googleChatReady={googleChatReady}
-      />
+    <div className="grid grid-cols-1 min-w-0 gap-4">
       <SettingsNotificationsSection
         data={data}
         pending={pending}

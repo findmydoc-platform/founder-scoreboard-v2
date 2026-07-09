@@ -210,10 +210,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
       {workspace === "settings" && (
         <SettingsOverview
           data={data}
-          source={source}
-          authAvailable={controller.authAvailable}
-          authUserEmail={controller.authUser?.email || ""}
-          githubAppConnected={controller.githubAppConnected}
           pending={isPending}
           notificationDispatchMessage={notificationDispatchMessage}
           googleChatStatus={googleChatStatus}
