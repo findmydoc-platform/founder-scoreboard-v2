@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { driver } from "driver.js";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
@@ -68,10 +68,17 @@ export function FeatureTourProvider({
     if (!currentProfile) return undefined;
     return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
   }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
+  const [tourRequested, setTourRequested] = useState(false);
   const startedTourRef = useRef("");
 
   useEffect(() => {
-    if (!tour || !currentProfile || startedTourRef.current === tour.id) return;
+    const startFeatureTour = () => setTourRequested(true);
+    window.addEventListener("fmd:start-feature-tour", startFeatureTour);
+    return () => window.removeEventListener("fmd:start-feature-tour", startFeatureTour);
+  }, []);
+
+  useEffect(() => {
+    if (!tourRequested || !tour || !currentProfile || startedTourRef.current === tour.id) return;
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
@@ -102,6 +109,7 @@ export function FeatureTourProvider({
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
       if (!active || !trigger) {
         startedTourRef.current = "";
+        setTourRequested(false);
         return;
       }
 
@@ -110,6 +118,7 @@ export function FeatureTourProvider({
         const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
         if (!active || !menuItem) {
           startedTourRef.current = "";
+          setTourRequested(false);
           return;
         }
       }
@@ -142,16 +151,18 @@ export function FeatureTourProvider({
       });
 
       driverObject.drive();
+      setTourRequested(false);
     }
 
     startTour().catch(() => {
       startedTourRef.current = "";
+      setTourRequested(false);
     });
 
     return () => {
       active = false;
     };
-  }, [apiClient, currentProfile, setData, setWorkspace, source, tour]);
+  }, [apiClient, currentProfile, setData, setWorkspace, source, tour, tourRequested]);
 
   return null;
 }

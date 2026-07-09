@@ -80,6 +80,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   const registry = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
   const selection = await readFile("src/features/product-tours/model/feature-tour-selection.ts", "utf8");
   const provider = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
+  const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const client = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
   assert.match(registry, /workspace-cleanup-v2/);
@@ -105,6 +106,12 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(selection, /profileHasSeenTour/);
   assert.match(selection, /selectNextFeatureTour/);
   assert.match(selection, /tours\.find/);
+  assert.match(header, /HelpCircle/);
+  assert.match(header, /fmd:start-feature-tour/);
+  assert.match(header, /Hilfe anzeigen/);
+  assert.match(provider, /window\.addEventListener\("fmd:start-feature-tour"/);
+  assert.match(provider, /tourRequested/);
+  assert.match(provider, /if \(!tourRequested \|\| !tour/);
   assert.match(provider, /MutationObserver/);
   assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
   assert.doesNotMatch(provider, /targetWorkspace/);
