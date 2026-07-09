@@ -48,11 +48,17 @@ export function fmdToolStatusFromUrl(url: string): FmdTool["status"] {
   return url.trim() ? "active" : "missing_link";
 }
 
+export function hasFmdToolLink(tool: FmdTool) {
+  return Boolean(tool.url.trim());
+}
+
 export function sortFmdTools(tools: FmdTool[]) {
   return [...tools].sort((a, b) => {
-    const byOrder = a.sortOrder - b.sortOrder;
-    if (byOrder) return byOrder;
-    return a.name.localeCompare(b.name, "de");
+    const byLinkAvailability = Number(hasFmdToolLink(b)) - Number(hasFmdToolLink(a));
+    if (byLinkAvailability) return byLinkAvailability;
+    const byName = a.name.localeCompare(b.name, "de");
+    if (byName) return byName;
+    return a.sortOrder - b.sortOrder;
   });
 }
 

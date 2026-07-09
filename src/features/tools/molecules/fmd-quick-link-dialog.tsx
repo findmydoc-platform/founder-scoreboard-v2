@@ -9,7 +9,7 @@ import {
   maxCuratedFmdToolLinks,
   type FmdToolDraft,
 } from "@/features/tools/model/fmd-tools";
-import type { FmdToolDialogMode } from "@/features/tools/model/fmd-tool-registry-view";
+import type { FmdQuickLinkDialogMode } from "@/features/tools/model/fmd-quick-links-view";
 import {
   classNames,
   UiButton,
@@ -19,7 +19,7 @@ import {
   UiTextInput,
 } from "@/shared/atoms/ui-primitives";
 
-export function FmdToolRegistryDialog({
+export function FmdQuickLinkDialog({
   mode,
   draft,
   pending,
@@ -30,7 +30,7 @@ export function FmdToolRegistryDialog({
   onDraftChange,
   onSubmit,
 }: {
-  mode: FmdToolDialogMode;
+  mode: FmdQuickLinkDialogMode;
   draft: FmdToolDraft;
   pending: boolean;
   currentProfile: Profile | null;
@@ -40,7 +40,7 @@ export function FmdToolRegistryDialog({
   onDraftChange: (draft: FmdToolDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const title = mode === "edit" ? "Tool bearbeiten" : "Tool eintragen";
+  const title = mode === "edit" ? "Link bearbeiten" : "Link eintragen";
   const submitLabel = mode === "edit" ? "Speichern" : "Eintragen";
   const patchDraft = (patch: Partial<FmdToolDraft>) => onDraftChange({ ...draft, ...patch });
   const linkPresent = Boolean(draft.url.trim());
@@ -141,7 +141,7 @@ export function FmdToolRegistryDialog({
               inputPadding="mdBlock"
               required
               minLength={8}
-              placeholder="Wofür wird das Werkzeug genutzt?"
+              placeholder="Wofür wird der Link genutzt?"
             />
           </UiField>
         </div>

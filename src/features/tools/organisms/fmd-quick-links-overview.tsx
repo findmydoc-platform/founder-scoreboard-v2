@@ -6,20 +6,21 @@ import type { FmdTool, Profile } from "@/lib/types";
 import {
   defaultFmdToolDraft,
   draftFromFmdTool,
+  hasFmdToolLink,
   maxCuratedFmdToolLinks,
   sortFmdTools,
   type FmdToolDraft,
 } from "@/features/tools/model/fmd-tools";
-import { FmdToolRegistryDialog } from "@/features/tools/molecules/fmd-tool-registry-dialog";
-import { FmdToolRegistryRow } from "@/features/tools/molecules/fmd-tool-registry-row";
+import { FmdQuickLinkCard } from "@/features/tools/molecules/fmd-quick-link-card";
+import { FmdQuickLinkDialog } from "@/features/tools/molecules/fmd-quick-link-dialog";
 import {
-  canEditFmdTools,
-  categoryCountsForTools,
+  canEditFmdQuickLinks,
+  categoryCountsForLinks,
   categoryTabs,
-  filterFmdTools,
-  type FmdToolCategoryFilter,
-  type FmdToolDialogMode,
-} from "@/features/tools/model/fmd-tool-registry-view";
+  filterFmdQuickLinks,
+  type FmdQuickLinkCategoryFilter,
+  type FmdQuickLinkDialogMode,
+} from "@/features/tools/model/fmd-quick-links-view";
 import {
   classNames,
   UiButton,
@@ -29,7 +30,7 @@ import {
   UiTextInput,
 } from "@/shared/atoms/ui-primitives";
 
-type FmdToolsOverviewProps = {
+type FmdQuickLinksOverviewProps = {
   tools?: FmdTool[];
   source: "seed" | "supabase";
   currentProfile: Profile | null;
@@ -39,7 +40,7 @@ type FmdToolsOverviewProps = {
   onUpdateTool: (tool: FmdTool, draft: FmdToolDraft) => boolean | Promise<boolean>;
 };
 
-export function FmdToolsOverview({
+export function FmdQuickLinksOverview({
   tools = [],
   source,
   currentProfile,
@@ -47,29 +48,36 @@ export function FmdToolsOverview({
   message = "",
   onCreateTool,
   onUpdateTool,
-}: FmdToolsOverviewProps) {
-  const [dialogMode, setDialogMode] = useState<FmdToolDialogMode | null>(null);
+}: FmdQuickLinksOverviewProps) {
+  const [dialogMode, setDialogMode] = useState<FmdQuickLinkDialogMode | null>(null);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [draft, setDraft] = useState<FmdToolDraft>(() => defaultFmdToolDraft(currentProfile?.name || ""));
-  const [categoryFilter, setCategoryFilter] = useState<FmdToolCategoryFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<FmdQuickLinkCategoryFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showMissingLinks, setShowMissingLinks] = useState(false);
 
   const sortedTools = useMemo(() => sortFmdTools(tools), [tools]);
+  const visibleByLinkTools = useMemo(
+    () => (showMissingLinks ? sortedTools : sortedTools.filter(hasFmdToolLink)),
+    [showMissingLinks, sortedTools],
+  );
   const createAllowed = source === "seed" || Boolean(currentProfile);
-  const canEditTools = canEditFmdTools(source, currentProfile);
+  const canEditLinks = canEditFmdQuickLinks(source, currentProfile);
   const editingTool = editingToolId ? sortedTools.find((tool) => tool.id === editingToolId) || null : null;
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase("de");
   const curatedLinkCount = sortedTools.filter((tool) => tool.isCurated && tool.url).length;
+  const missingLinkCount = sortedTools.filter((tool) => !hasFmdToolLink(tool)).length;
   const editedToolCountsAgainstLimit = Boolean(editingTool?.isCurated && editingTool.url);
   const curatedLimitReached = curatedLinkCount >= maxCuratedFmdToolLinks && !editedToolCountsAgainstLimit;
 
-  const categoryCounts = useMemo(() => categoryCountsForTools(sortedTools), [sortedTools]);
+  const categoryCounts = useMemo(() => categoryCountsForLinks(visibleByLinkTools), [visibleByLinkTools]);
   const filteredTools = useMemo(
-    () => filterFmdTools(sortedTools, categoryFilter, normalizedSearch),
-    [categoryFilter, normalizedSearch, sortedTools],
+    () => filterFmdQuickLinks(visibleByLinkTools, categoryFilter, normalizedSearch),
+    [categoryFilter, normalizedSearch, visibleByLinkTools],
   );
+  const emptyStateLabel = emptyQuickLinksLabel(sortedTools.length, showMissingLinks);
 
-  const filtersActive = categoryFilter !== "all" || Boolean(normalizedSearch);
+  const filtersActive = categoryFilter !== "all" || Boolean(normalizedSearch) || showMissingLinks;
 
   const openCreateDialog = () => {
     setEditingToolId(null);
@@ -92,6 +100,7 @@ export function FmdToolsOverview({
   const resetFilters = () => {
     setCategoryFilter("all");
     setSearchTerm("");
+    setShowMissingLinks(false);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -115,7 +124,7 @@ export function FmdToolsOverview({
               size="md"
             >
               <Plus size={16} />
-              Tool eintragen
+              Link eintragen
             </UiButton>
           </div>
 
@@ -148,7 +157,7 @@ export function FmdToolsOverview({
 
             <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
               <label className="relative min-w-0">
-                <span className="sr-only">Werkzeug suchen</span>
+                <span className="sr-only">Link suchen</span>
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <UiTextInput
                   type="search"
@@ -157,21 +166,47 @@ export function FmdToolsOverview({
                   inputSize="lg"
                   inputPadding="md"
                   className="w-full pl-9"
-                  placeholder="Suchen nach Tool, Owner, Kategorie..."
+                  placeholder="Suchen nach Link, Owner, Kategorie..."
                 />
               </label>
-              {filtersActive && (
-                <UiButton onClick={resetFilters} variant="ghost" size="sm" className="justify-self-start text-slate-500 lg:justify-self-end">
-                  Filter zurücksetzen
-                </UiButton>
-              )}
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                {missingLinkCount > 0 && (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showMissingLinks}
+                    aria-label="Fehlende Links anzeigen"
+                    onClick={() => setShowMissingLinks((value) => !value)}
+                    className={classNames(
+                      "inline-flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-100",
+                      showMissingLinks ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <span className="truncate">Fehlende Links</span>
+                    <span className={classNames(
+                      "rounded-full px-2 py-0.5 text-[11px]",
+                      showMissingLinks ? "bg-white text-amber-800" : "bg-slate-100 text-slate-500",
+                    )}>
+                      {missingLinkCount}
+                    </span>
+                    <span className={classNames("relative h-5 w-9 rounded-full transition", showMissingLinks ? "bg-amber-500" : "bg-slate-200")}>
+                      <span className={classNames("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition", showMissingLinks ? "left-4" : "left-0.5")} />
+                    </span>
+                  </button>
+                )}
+                {filtersActive && (
+                  <UiButton onClick={resetFilters} variant="ghost" size="sm" className="text-slate-500">
+                    Filter zurücksetzen
+                  </UiButton>
+                )}
+              </div>
             </div>
           </div>
 
           {message && <UiNotice tone="success" className="font-medium">{message}</UiNotice>}
           {!createAllowed && (
             <UiNotice tone="warning" className="font-medium">
-              Tool-Eintragung braucht ein angemeldetes Teamprofil.
+              Link-Eintragung braucht ein angemeldetes Teamprofil.
             </UiNotice>
           )}
         </div>
@@ -179,10 +214,10 @@ export function FmdToolsOverview({
         <div className="border-t border-slate-200 bg-slate-50/40 p-4 lg:p-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filteredTools.map((tool) => (
-              <FmdToolRegistryRow
+              <FmdQuickLinkCard
                 key={tool.id}
                 tool={tool}
-                canEditTools={canEditTools}
+                canEditLinks={canEditLinks}
                 onEdit={openEditDialog}
               />
             ))}
@@ -191,7 +226,7 @@ export function FmdToolsOverview({
           {!filteredTools.length && (
             <div className="p-4 lg:p-5">
               <UiEmptyState tone="muted" className="py-10">
-                {sortedTools.length ? "Keine Einträge für diese Filter." : "Noch keine Werkzeuge eingetragen."}
+                {emptyStateLabel}
               </UiEmptyState>
             </div>
           )}
@@ -199,7 +234,7 @@ export function FmdToolsOverview({
       </UiPanel>
 
       {dialogMode && (
-        <FmdToolRegistryDialog
+        <FmdQuickLinkDialog
           mode={dialogMode}
           draft={draft}
           pending={pending}
@@ -213,4 +248,9 @@ export function FmdToolsOverview({
       )}
     </div>
   );
+}
+
+function emptyQuickLinksLabel(toolCount: number, showMissingLinks: boolean) {
+  if (!toolCount) return "Noch keine Links eingetragen.";
+  return showMissingLinks ? "Keine Einträge für diese Filter." : "Keine verlinkten Einträge für diese Filter.";
 }

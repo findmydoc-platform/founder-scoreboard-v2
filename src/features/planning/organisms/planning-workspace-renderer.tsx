@@ -21,7 +21,7 @@ const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organis
 const ReviewWorkspaceOverview = dynamic(() => import("@/features/reviews/organisms/review-workspace-overview").then((mod) => mod.ReviewWorkspaceOverview), { loading: ReviewsWorkspacePanelLoading });
 const SettingsOverview = dynamic(() => import("@/features/settings/organisms/settings-overview").then((mod) => mod.SettingsOverview), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
-const FmdToolsOverview = dynamic(() => import("@/features/tools/organisms/fmd-tools-overview").then((mod) => mod.FmdToolsOverview), { loading: GenericWorkspacePanelLoading });
+const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
 
 type PlanningWorkspaceRendererProps = {
@@ -167,7 +167,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         />
       )}
       {workspace === "tools" && (
-        <FmdToolsOverview
+        <FmdQuickLinksOverview
           tools={data.fmdTools}
           source={source}
           currentProfile={currentProfile}

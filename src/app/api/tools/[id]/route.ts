@@ -39,7 +39,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
-  if (!id.trim()) return apiError("Werkzeug ist erforderlich.", 400);
+  if (!id.trim()) return apiError("Link ist erforderlich.", 400);
 
   const { data: current, error: currentError } = await supabase
     .from("fmd_tools")
@@ -47,7 +47,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .eq("id", id)
     .single();
 
-  if (currentError || !current) return apiError("Werkzeug wurde nicht gefunden.", 404);
+  if (currentError || !current) return apiError("Link wurde nicht gefunden.", 404);
 
   const name = cleanText(payload.name, 160);
   const description = cleanText(payload.description, 1200);
@@ -91,7 +91,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .select(fmdToolSelect)
     .single();
 
-  if (error || !updated) return apiError(error?.message || "Werkzeug konnte nicht gespeichert werden.", 500);
+  if (error || !updated) return apiError(error?.message || "Link konnte nicht gespeichert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

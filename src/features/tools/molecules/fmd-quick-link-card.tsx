@@ -10,13 +10,13 @@ import {
   UiButton,
 } from "@/shared/atoms/ui-primitives";
 
-export function FmdToolRegistryRow({
+export function FmdQuickLinkCard({
   tool,
-  canEditTools,
+  canEditLinks,
   onEdit,
 }: {
   tool: FmdTool;
-  canEditTools: boolean;
+  canEditLinks: boolean;
   onEdit: (tool: FmdTool) => void;
 }) {
   const cardTone = tool.url
@@ -68,7 +68,7 @@ export function FmdToolRegistryRow({
         </div>
       )}
 
-      {canEditTools && (
+      {canEditLinks && (
         <div className="absolute right-3 top-3 z-10">
           <IconTooltip label="Bearbeiten">
             <UiButton
@@ -77,7 +77,7 @@ export function FmdToolRegistryRow({
               size="iconXs"
               className="text-slate-600"
               aria-label={`${tool.name} bearbeiten`}
-              title="Tool bearbeiten"
+              title="Link bearbeiten"
             >
               <Pencil size={15} />
             </UiButton>

@@ -4,20 +4,20 @@ import {
   fmdToolCategoryOptions,
 } from "@/features/tools/model/fmd-tools";
 
-export type FmdToolCategoryFilter = FmdTool["category"] | "all";
-export type FmdToolDialogMode = "create" | "edit";
+export type FmdQuickLinkCategoryFilter = FmdTool["category"] | "all";
+export type FmdQuickLinkDialogMode = "create" | "edit";
 
-export const categoryTabs: Array<{ value: FmdToolCategoryFilter; label: string }> = [
+export const categoryTabs: Array<{ value: FmdQuickLinkCategoryFilter; label: string }> = [
   { value: "all", label: "Alle" },
   ...fmdToolCategoryOptions,
 ];
 
-export function canEditFmdTools(source: "seed" | "supabase", currentProfile: Profile | null) {
+export function canEditFmdQuickLinks(source: "seed" | "supabase", currentProfile: Profile | null) {
   return source === "seed" || Boolean(currentProfile);
 }
 
-export function categoryCountsForTools(tools: FmdTool[]) {
-  const counts: Record<FmdToolCategoryFilter, number> = {
+export function categoryCountsForLinks(tools: FmdTool[]) {
+  const counts: Record<FmdQuickLinkCategoryFilter, number> = {
     all: tools.length,
     tool: 0,
     repo: 0,
@@ -30,9 +30,9 @@ export function categoryCountsForTools(tools: FmdTool[]) {
   return counts;
 }
 
-export function filterFmdTools(
+export function filterFmdQuickLinks(
   tools: FmdTool[],
-  categoryFilter: FmdToolCategoryFilter,
+  categoryFilter: FmdQuickLinkCategoryFilter,
   query: string,
 ) {
   return tools.filter((tool) => {

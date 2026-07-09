@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     .select(fmdToolSelect)
     .single();
 
-  if (error || !created) return apiError(error?.message || "Werkzeug konnte nicht gespeichert werden.", 500);
+  if (error || !created) return apiError(error?.message || "Link konnte nicht gespeichert werden.", 500);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

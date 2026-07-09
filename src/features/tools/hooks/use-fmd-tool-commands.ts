@@ -94,20 +94,20 @@ export function useFmdToolCommands({
       ...current,
       fmdTools: sortFmdTools([...current.fmdTools, localTool]),
     }));
-    setFmdToolMessage(`Werkzeug eingetragen: ${localTool.name}`);
+    setFmdToolMessage(`Link eingetragen: ${localTool.name}`);
 
     if (source !== "supabase") return true;
 
     setFmdToolPending(true);
     try {
       const { response, body } = await planningApi.createFmdToolRequest(apiClient, prepared);
-      if (!response.ok || !body?.tool) throw new Error(body?.error || "Werkzeug konnte nicht gespeichert werden.");
+      if (!response.ok || !body?.tool) throw new Error(body?.error || "Link konnte nicht gespeichert werden.");
 
       setData((current) => ({
         ...current,
         fmdTools: sortFmdTools(current.fmdTools.map((tool) => (tool.id === localTool.id ? body.tool! : tool))),
       }));
-      setFmdToolMessage(`Werkzeug gespeichert: ${body.tool.name}`);
+      setFmdToolMessage(`Link gespeichert: ${body.tool.name}`);
       return true;
     } catch (error) {
       setData((current) => ({
@@ -115,7 +115,7 @@ export function useFmdToolCommands({
         fmdTools: current.fmdTools.filter((tool) => tool.id !== localTool.id),
       }));
       setFmdToolMessage("");
-      setSaveError(error instanceof Error ? error.message : "Werkzeug konnte nicht gespeichert werden.");
+      setSaveError(error instanceof Error ? error.message : "Link konnte nicht gespeichert werden.");
       return false;
     } finally {
       setFmdToolPending(false);
@@ -135,20 +135,20 @@ export function useFmdToolCommands({
       ...current,
       fmdTools: sortFmdTools(current.fmdTools.map((item) => (item.id === tool.id ? updatedTool : item))),
     }));
-    setFmdToolMessage(`Werkzeug aktualisiert: ${updatedTool.name}`);
+    setFmdToolMessage(`Link aktualisiert: ${updatedTool.name}`);
 
     if (source !== "supabase") return true;
 
     setFmdToolPending(true);
     try {
       const { response, body } = await planningApi.updateFmdToolRequest(apiClient, tool.id, prepared);
-      if (!response.ok || !body?.tool) throw new Error(body?.error || "Werkzeug konnte nicht gespeichert werden.");
+      if (!response.ok || !body?.tool) throw new Error(body?.error || "Link konnte nicht gespeichert werden.");
 
       setData((current) => ({
         ...current,
         fmdTools: sortFmdTools(current.fmdTools.map((item) => (item.id === tool.id ? body.tool! : item))),
       }));
-      setFmdToolMessage(`Werkzeug gespeichert: ${body.tool.name}`);
+      setFmdToolMessage(`Link gespeichert: ${body.tool.name}`);
       return true;
     } catch (error) {
       setData((current) => ({
@@ -156,7 +156,7 @@ export function useFmdToolCommands({
         fmdTools: sortFmdTools(current.fmdTools.map((item) => (item.id === tool.id ? tool : item))),
       }));
       setFmdToolMessage("");
-      setSaveError(error instanceof Error ? error.message : "Werkzeug konnte nicht gespeichert werden.");
+      setSaveError(error instanceof Error ? error.message : "Link konnte nicht gespeichert werden.");
       return false;
     } finally {
       setFmdToolPending(false);
