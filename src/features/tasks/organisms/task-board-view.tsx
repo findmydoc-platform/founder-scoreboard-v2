@@ -15,6 +15,7 @@ type TaskBoardViewProps = {
   allTasks: Task[];
   blockers: TaskBlocker[];
   draggedTaskId: string | null;
+  selectedTaskId?: string | null;
   dragOverStatus: TaskStatus | null;
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
@@ -38,6 +39,7 @@ export function TaskBoardView({
   allTasks,
   blockers,
   draggedTaskId,
+  selectedTaskId = null,
   dragOverStatus,
   canChangeTaskStatus,
   statusOptionsForTask,
@@ -109,6 +111,7 @@ export function TaskBoardView({
                     onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}
+                    isSelected={selectedTaskId === task.id}
                     isDragging={draggedTaskId === task.id}
                   />
                 );

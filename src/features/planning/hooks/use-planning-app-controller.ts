@@ -234,6 +234,7 @@ export function usePlanningAppController({
     selectedReviewDetailTask: taskSelection.selectedReviewDetailTask,
     selectedReviewDetailTaskId,
     selectedTask,
+    selectedTaskId,
     selectedTaskActivity: taskSelection.selectedTaskActivity,
     selectedTaskBlockers: taskSelection.selectedTaskBlockers,
     selectedTaskComments: taskSelection.selectedTaskComments,

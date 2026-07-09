@@ -151,6 +151,7 @@ export function TaskCard({
   onStatusChange,
   onDragStart,
   onDragEnd,
+  isSelected = false,
   isDragging,
 }: {
   task: Task;
@@ -170,6 +171,7 @@ export function TaskCard({
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
+  isSelected?: boolean;
   isDragging?: boolean;
 }) {
   const normalized = normalizeStatus(task.status);
@@ -179,9 +181,9 @@ export function TaskCard({
       draggable={Boolean(onDragStart)}
       onDragStart={(event) => onDragStart?.(task, event)}
       onDragEnd={onDragEnd}
-      className={`min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition ${
+      className={`min-w-0 max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition ${
         isDragging ? "scale-[0.98] cursor-grabbing border-dashed opacity-55 ring-2 ring-blue-200" : onDragStart ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-      }`}
+      } ${isSelected ? "border-blue-200 opacity-75 ring-1 ring-blue-200" : "border-slate-200"}`}
       style={{
         borderLeftColor: ownerColor,
         boxShadow: `inset 4px 0 0 ${ownerColor}, 0 1px 3px ${cardHexToRgba(ownerColor, 0.18)}`,
