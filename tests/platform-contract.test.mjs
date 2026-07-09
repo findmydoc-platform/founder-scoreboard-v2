@@ -11,15 +11,19 @@ test("founders can only move or change status for their own tasks", async () => 
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const statusControl = await readFile("src/features/tasks/atoms/task-status-control.tsx", "utf8");
 
   assert.match(routePolicy, /taskAssignedToProfile/);
   assert.match(routePolicy, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
+  assert.match(routePolicy, /Nur CEO kann sie wieder öffnen/);
   assert.match(app, /canChangeTaskStatus/);
+  assert.match(app, /canManageFinalTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(app, /onDragStart=\{canUpdateStatus && onDragStart \? onDragStart : undefined\}/);
   assert.match(taskCard, /statusDisabled/);
   assert.match(detailPanel, /canChangeTaskStatus/);
-  assert.match(detailSidebar, /disabled=\{!canChangeTaskStatus\}/);
+  assert.match(detailSidebar, /TaskStatusControl/);
+  assert.match(statusControl, /Nur CEO kann wieder öffnen/);
 });
 
 test("header overlays close on outside click and escape", async () => {

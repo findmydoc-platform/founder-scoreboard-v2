@@ -12,6 +12,7 @@ import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-wor
 import { normalizePlanningData } from "@/features/planning/model/planning-app-model";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { taskBelongsToProfile } from "@/lib/platform";
+import { normalizeStatus } from "@/lib/status";
 import { hasSupabaseEnv } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
 
@@ -84,9 +85,11 @@ export function usePlanningBootstrapState({
   const currentProfileId = requestContext.currentProfile?.id || "";
   const canUseCeoIntake = requestContext.currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = source === "seed" || requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
+  const canManageFinalTaskStatus = source === "seed" || requestContext.currentProfile?.platformRole === "ceo";
   const canChangeTaskStatus = useCallback((task: Task) => (
-    canManageTaskMeta || taskBelongsToProfile(task, requestContext.currentProfile)
-  ), [canManageTaskMeta, requestContext.currentProfile]);
+    (normalizeStatus(task.status) !== "Erledigt" || canManageFinalTaskStatus)
+    && (canManageTaskMeta || taskBelongsToProfile(task, requestContext.currentProfile))
+  ), [canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
   const dataRefresh = usePlanningDataRefresh({
     apiClient: requestContext.apiClient,
     authUser: auth.authUser,
@@ -104,6 +107,7 @@ export function usePlanningBootstrapState({
     ...viewState,
     authAvailable,
     canChangeTaskStatus,
+    canManageFinalTaskStatus,
     canManageTaskMeta,
     canUseCeoIntake,
     currentProfileId,

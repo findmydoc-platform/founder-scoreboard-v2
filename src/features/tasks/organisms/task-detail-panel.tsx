@@ -27,6 +27,7 @@ export function TaskDetailPanel({
   packages,
   sprints,
   milestones,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
@@ -62,6 +63,7 @@ export function TaskDetailPanel({
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
+  canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
@@ -148,6 +150,7 @@ export function TaskDetailPanel({
             packages={packages}
             sprints={sprints}
             milestones={milestones}
+            canManageFinalTaskStatus={canManageFinalTaskStatus}
             canManageTaskMeta={canManageTaskMeta}
             canManageReviewOwner={canManageReviewOwner}
             canChangeTaskStatus={canChangeTaskStatus}

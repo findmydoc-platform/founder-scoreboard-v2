@@ -1,5 +1,6 @@
 import { AlertTriangle, Link2 } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { GitHubSyncStatusBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
 import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
@@ -51,7 +52,14 @@ export function TaskTableView({
             return (
               <DataRow key={task.id}>
                 <DataCell>
-                  <CustomSelect value={normalizeStatus(task.status)} disabled={!canUpdateStatus} onChange={(value) => onUpdateTask(task, { status: value })} className="h-8 w-32 text-xs" options={(canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))} />
+                  <TaskStatusControl
+                    status={task.status}
+                    canChange={canUpdateStatus}
+                    onChange={(status) => onUpdateTask(task, { status })}
+                    options={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
+                    selectClassName="h-8 w-32 text-xs"
+                    compact
+                  />
                 </DataCell>
                 <DataCell>
                   {hasGitHubIssue(task) && task.githubSyncStatus === "synced" ? (

@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import {
+  founderCompletedTaskGuardMessage,
   founderStatusGuardMessage,
   founderTaskAssignmentGuardMessage,
 } from "@/features/planning/model/planning-app-model";
@@ -11,6 +12,7 @@ import type { TaskSyncCommand } from "@/features/tasks/hooks/task-mutation-comma
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { hasGitHubIssue } from "@/lib/platform";
+import { normalizeStatus } from "@/lib/status";
 import type { Task, TaskStatus } from "@/lib/types";
 
 type UseTaskUpdateCommandOptions = Pick<
@@ -18,6 +20,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "apiClient"
   | "applyPlanningDataUpdate"
   | "canChangeTaskStatus"
+  | "canManageFinalTaskStatus"
   | "canManageTaskMeta"
   | "data"
   | "githubAppConnected"
@@ -35,6 +38,7 @@ export function useTaskUpdateCommand({
   apiClient,
   applyPlanningDataUpdate,
   canChangeTaskStatus,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   data,
   githubAppConnected,
@@ -57,19 +61,31 @@ export function useTaskUpdateCommand({
     }
     const normalizedPatch = normalized.patch;
 
-    if (normalizedPatch.status && !canChangeTaskStatus(task)) {
-      setStatusGuardNotice(founderTaskAssignmentGuardMessage());
+    if (normalizedPatch.status && !canManageFinalTaskStatus && normalizeStatus(normalizedPatch.status) === "Erledigt") {
+      setStatusGuardNotice(founderStatusGuardMessage(normalizedPatch.status as TaskStatus));
       setStatusGuardTaskId(task.id);
       return;
     }
 
     if (normalizedPatch.status && !canManageTaskMeta) {
-      const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus);
+      const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus, task.status);
       if (guardedMessage) {
         setStatusGuardNotice(guardedMessage);
         setStatusGuardTaskId(task.id);
         return;
       }
+    }
+
+    if (normalizedPatch.status && normalizeStatus(task.status) === "Erledigt" && !canManageFinalTaskStatus) {
+      setStatusGuardNotice(founderCompletedTaskGuardMessage());
+      setStatusGuardTaskId(task.id);
+      return;
+    }
+
+    if (normalizedPatch.status && !canChangeTaskStatus(task)) {
+      setStatusGuardNotice(founderTaskAssignmentGuardMessage());
+      setStatusGuardTaskId(task.id);
+      return;
     }
 
     applyPlanningDataUpdate((current) => {
