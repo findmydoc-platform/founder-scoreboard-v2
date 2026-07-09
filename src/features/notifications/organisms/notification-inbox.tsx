@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { formatDate } from "@/lib/display";
@@ -69,7 +70,16 @@ export function NotificationInbox({
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
               <p className="mt-0.5 text-xs text-slate-500">Persönliche Hinweise bleiben hier, Google Chat bekommt nur Digests.</p>
             </div>
-            <UiBadge tone="slate" bordered={false}>{unreadCount}</UiBadge>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href="/notifications"
+                className="rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                onClick={onToggle}
+              >
+                Zum Center
+              </Link>
+              <UiBadge tone="slate" bordered={false}>{unreadCount}</UiBadge>
+            </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
             {notifications.length ? notifications.slice(0, 12).map((event) => {

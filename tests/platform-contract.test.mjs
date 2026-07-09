@@ -33,6 +33,7 @@ test("header overlays close on outside click and escape", async () => {
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
+  assert.match(notifications, /href="\/notifications"/);
   assert.match(calendar, /rootRef/);
   assert.match(calendar, /pointerdown/);
   assert.match(calendar, /Escape/);
