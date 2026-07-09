@@ -86,6 +86,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <TaskTableView
           visibleTasks={visibleTasks}
           profiles={data.profiles}
+          sprints={data.sprints}
           relations={data.taskRelations}
           allTasks={data.tasks}
           blockers={data.taskBlockers}
