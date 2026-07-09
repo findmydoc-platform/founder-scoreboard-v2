@@ -144,6 +144,7 @@ export function TaskCard({
   statusDisabled = false,
   showEffort = true,
   showDescription = true,
+  showOpenButton = true,
   showStatus = false,
   showStatusControl = false,
   onOpen,
@@ -162,6 +163,7 @@ export function TaskCard({
   statusDisabled?: boolean;
   showEffort?: boolean;
   showDescription?: boolean;
+  showOpenButton?: boolean;
   showStatus?: boolean;
   showStatusControl?: boolean;
   onOpen: (task: Task) => void;
@@ -196,14 +198,16 @@ export function TaskCard({
             <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.title}</span>
           </span>
         </button>
-        <button
-          type="button"
-          onClick={() => onOpen(task)}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-          aria-label="Aufgabe öffnen"
-        >
-          <PanelRight size={15} />
-        </button>
+        {showOpenButton && (
+          <button
+            type="button"
+            onClick={() => onOpen(task)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+            aria-label="Aufgabe öffnen"
+          >
+            <PanelRight size={15} />
+          </button>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {showStatus && (

@@ -102,6 +102,7 @@ export function TaskBoardView({
                     statusDisabled={!canUpdateStatus}
                     showEffort={false}
                     showDescription={false}
+                    showOpenButton={false}
                     showStatus={false}
                     showStatusControl={false}
                     onOpen={onOpenTask}
