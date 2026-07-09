@@ -491,7 +491,9 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Abnahmekriterien erfüllt/);
-  assert.match(sprintUi, /CEO-Score/);
+  assert.match(sprintUi, /Status \/ Review/);
+  assert.match(sprintUi, /Score/);
+  assert.match(sprintUi, /Risiko/);
   assert.match(appUi, /Nächster Schritt/);
   assert.match(reviewSheet, /Nachweis \/ Abhängigkeiten/);
   assert.match(reviewSheet, /Qualitätsstandard/);
