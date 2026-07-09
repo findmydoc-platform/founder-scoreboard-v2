@@ -5,9 +5,8 @@ import { useMemo, useState } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { NotificationOutboxPanel } from "@/features/notifications/organisms/notification-outbox-panel";
 import { formatDate } from "@/lib/display";
-import { shouldSendToGoogleChatDigest } from "@/lib/notification-policy";
 import type { NotificationDelivery, NotificationEvent, PlanningData, Profile } from "@/lib/types";
-import { classNames, UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
+import { classNames, UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -50,8 +49,13 @@ function profileName(profiles: Profile[], profileId: string) {
   return profiles.find((profile) => profile.id === profileId)?.name || "";
 }
 
-function dmReadyCount(profiles: Profile[]) {
-  return profiles.filter((profile) => /^spaces\/[A-Za-z0-9_-]+$/.test(profile.googleChatDmSpace || "")).length;
+function personalFilterCount(filter: PersonalNotificationFilter, notifications: NotificationEvent[]) {
+  if (filter === "all") return notifications.length;
+  return notifications.filter((event) => event.status === filter).length;
+}
+
+function shouldShowTypeBadge(type: NotificationEvent["type"]) {
+  return notificationTypeLabel(type) !== "Hinweis";
 }
 
 export function NotificationsOverview({
@@ -91,49 +95,28 @@ export function NotificationsOverview({
     return event.status === personalFilter;
   });
   const personalOpenCount = personalNotifications.filter((event) => event.status === "pending").length;
-  const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
   const personalDismissedCount = personalNotifications.filter((event) => event.status === "dismissed").length;
-  const googleChatPendingCount = googleChatStatus?.pending ?? data.notificationEvents.filter((event) => event.status === "pending" && shouldSendToGoogleChatDigest(event.type)).length;
+  const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
+  const outboxPendingCount = googleChatStatus?.pending ?? data.notificationEvents.filter((event) => event.status === "pending").length;
   const deliveryErrorCount = data.notificationDeliveries.filter((delivery) => delivery.status === "failed").length
     + data.notificationEvents.filter((event) => event.status === "failed").length;
-  const dmReadyProfiles = dmReadyCount(data.profiles);
-
-  const metricCards = [
-    { label: "Für mich offen", value: personalOpenCount, detail: `${personalNotifications.length} persönliche Hinweise`, tone: "slate" },
-    { label: "Heute", value: personalTodayCount, detail: "neu oder aktualisiert", tone: "slate" },
-    ...(canManageOutbox ? [
-      { label: "Google Chat pending", value: googleChatPendingCount, detail: "wartet auf Zustellung", tone: "slate" },
-      { label: "Fehler", value: deliveryErrorCount, detail: "bestehende Zustellfehler", tone: "red" },
-      { label: "DM-ready", value: `${dmReadyProfiles}/${data.profiles.length}`, detail: "Teammitglieder erreichbar", tone: "slate" },
-    ] : [
-      { label: "Erledigt", value: personalDismissedCount, detail: "geschlossene Hinweise", tone: "slate" },
-    ]),
-  ];
 
   return (
     <div className="grid min-w-0 gap-4">
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {metricCards.map((metric) => (
-          <div
-            key={metric.label}
-            className={classNames(
-              "rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm",
-              metric.tone === "red" && "border-red-100 bg-red-50",
-            )}
-          >
-            <div className={classNames("text-xs font-semibold uppercase tracking-wide text-slate-500", metric.tone === "red" && "text-red-700")}>{metric.label}</div>
-            <div className={classNames("mt-2 text-2xl font-semibold text-slate-950", metric.tone === "red" && "text-red-900")}>{metric.value}</div>
-            <div className="mt-1 text-xs text-slate-500">{metric.detail}</div>
-          </div>
-        ))}
+      <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
+        <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
+        {canManageOutbox && <span><strong className="text-slate-900">{outboxPendingCount}</strong> im Ausgang</span>}
+        {deliveryErrorCount > 0 && <span className="text-red-700"><strong>{deliveryErrorCount}</strong> Fehler</span>}
       </section>
 
-      <div className={classNames("grid min-w-0 gap-4", canManageOutbox && "xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]")}>
+      <div className={classNames("grid min-w-0 gap-4", canManageOutbox && "xl:grid-cols-[minmax(0,1fr)_minmax(360px,400px)]")}>
         <UiPanel padding="none" className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
             <div>
               <h2 className="text-base font-semibold text-slate-950">Für mich</h2>
-              <p className="mt-1 text-sm text-slate-500">Deine persönlichen Hinweise und Updates.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {personalOpenCount} offen · {personalDismissedCount} erledigt · {personalTodayCount} heute
+              </p>
             </div>
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
               {(["pending", "dismissed", "all"] as PersonalNotificationFilter[]).map((filter) => (
@@ -147,50 +130,44 @@ export function NotificationsOverview({
                   )}
                   aria-pressed={personalFilter === filter}
                 >
-                  {personalFilterLabels[filter]}
+                  {personalFilterLabels[filter]} {personalFilterCount(filter, personalNotifications)}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain">
-            <div className="min-w-[620px]">
-              <div className="grid grid-cols-[88px_minmax(0,1fr)_88px_76px_132px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-                <div>Typ</div>
-                <div>Hinweis</div>
-                <div>Von</div>
-                <div>Zeit</div>
-                <div className="text-right">Aktion</div>
-              </div>
+            <div className="min-w-0">
               {filteredPersonalNotifications.map((event) => {
                 const actorName = profileName(data.profiles, event.actorProfileId);
+                const showTypeBadge = shouldShowTypeBadge(event.type);
                 return (
-                  <article key={event.id} className="grid grid-cols-[88px_minmax(0,1fr)_88px_76px_132px] gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0">
-                    <div className="flex items-start">
-                      <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>
-                    </div>
-                    <button type="button" onClick={() => onOpenNotification(event)} className="min-w-0 text-left">
-                      <span className="block truncate font-semibold text-slate-900">{event.title}</span>
-                      {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
+                  <article key={event.id} className="group relative border-b border-slate-100 last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => onOpenNotification(event)}
+                      className="block w-full min-w-0 px-4 py-3 pr-12 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    >
+                      <span className="block truncate font-semibold text-slate-950">{event.title}</span>
+                      {event.body && <span className="mt-1 block line-clamp-2 text-sm leading-5 text-slate-600">{event.body}</span>}
+                      <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        {showTypeBadge && <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>}
+                        {personalFilter === "all" && <UiBadge tone={eventStatusTone(event.status)} size="xs">{eventStatusLabel(event.status)}</UiBadge>}
+                        <span>{actorName || "System"}</span>
+                        <span>·</span>
+                        <span>{formatDate(event.createdAt)}</span>
+                      </span>
                     </button>
-                    <div className="truncate text-slate-600">{actorName || "System"}</div>
-                    <div className="text-slate-500">{formatDate(event.createdAt)}</div>
-                    <div className="flex items-start justify-end gap-2">
-                      <UiBadge tone={eventStatusTone(event.status)} size="xs">{eventStatusLabel(event.status)}</UiBadge>
-                      <UiButton onClick={() => onOpenNotification(event)} size="compact" variant="blueOutline">
-                        Öffnen
-                      </UiButton>
-                      {event.status === "pending" && (
-                        <button
-                          type="button"
-                          onClick={() => onDismissNotification(event.id)}
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-700"
-                          aria-label="Notification schließen"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
+                    {event.status === "pending" && (
+                      <button
+                        type="button"
+                        onClick={() => onDismissNotification(event.id)}
+                        className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-700 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-200 group-hover:opacity-100"
+                        aria-label="Notification schließen"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </article>
                 );
               })}

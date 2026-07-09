@@ -73,7 +73,7 @@ export const workspaceDescriptions: Record<Workspace, string> = {
   projects: "Zeigt Epics, Meilensteine, Initiativen und deren Fortschritt.",
   tools: "Zeigt kuratierte externe Links und weitere Linkziele für das Team.",
   team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
-  notifications: "Zeigt persönliche Hinweise und den operativen Benachrichtigungsausgang.",
+  notifications: "Persönliche Hinweise und Ausgang.",
   "ceo-intake": "Zeigt den CEO-only Import für freigegebene Aufgabenpakete.",
   profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
 };

@@ -387,8 +387,9 @@ test("active founder feedback is removed while historical migration stays intact
   assert.equal(existsSync("src/features/settings/hooks/use-feedback-commands.ts"), false);
   assert.match(ui, /NotificationsOverview/);
   assert.match(notificationsOverviewUi, /NotificationOutboxPanel/);
-  assert.match(notificationOutboxUi, /Benachrichtigungsausgang und Zustellstatus/);
-  assert.match(notificationOutboxUi, /Nur für CEO & Deputy/);
+  assert.match(notificationOutboxUi, /Zustellung inaktiv/);
+  assert.match(notificationOutboxUi, /Sammelmeldung senden/);
+  assert.match(notificationOutboxUi, /Testversand/);
   assert.doesNotMatch(notificationOutboxUi, /Feedback-Eingang/);
   assert.doesNotMatch(ui, /FeedbackDialog/);
   assert.doesNotMatch(ui, /\/api\/feedback/);

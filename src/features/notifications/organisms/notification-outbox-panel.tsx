@@ -50,6 +50,7 @@ export function NotificationOutboxPanel({
   className?: string;
 }) {
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
+  const [testActionsOpen, setTestActionsOpen] = useState(false);
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
   const googleChatDigestNotifications = pendingNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
@@ -58,8 +59,8 @@ export function NotificationOutboxPanel({
   const failedDigestNotifications = failedNotifications.filter((event) => shouldSendToGoogleChatDigest(event.type));
   const dmReadyProfiles = data.profiles.filter((profile) => /^spaces\/[A-Za-z0-9_-]+$/.test(profile.googleChatDmSpace || ""));
   const googleChatDmReadyProfiles = dmReadyProfiles.length;
-  const failedDirectDmDeliveries = data.notificationDeliveries.filter((delivery) => delivery.status === "failed" && delivery.deliveryMode === "direct_dm");
   const failedDeliveries = data.notificationDeliveries.filter((delivery) => delivery.status === "failed");
+  const outboxErrorCount = failedDigestNotifications.length + failedDeliveries.length;
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
   const filteredDeliveries = data.notificationDeliveries.filter((delivery) => {
     if (deliveryFilter === "all") return true;
@@ -76,13 +77,12 @@ export function NotificationOutboxPanel({
     <UiPanel className={classNames("min-w-0", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-slate-950">Ausgang</h2>
-            <UiBadge tone="blue" size="xs">Nur für CEO & Deputy</UiBadge>
-          </div>
-          <p className="mt-1 text-sm text-slate-500">Operativer Benachrichtigungsausgang und Zustellstatus.</p>
+          <h2 className="text-base font-semibold text-slate-950">Ausgang</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {googleChatReady ? "Zustellung aktiv" : "Zustellung inaktiv"} · {googleChatDigestNotifications.length} Sammelmeldung · {outboxErrorCount} Fehler
+          </p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
           <UiButton
             disabled={pending || !googleChatReady || !googleChatDigestNotifications.length}
             onClick={onDispatchNotifications}
@@ -91,26 +91,41 @@ export function NotificationOutboxPanel({
             Sammelmeldung senden
           </UiButton>
           <UiButton
-            disabled={pending || !googleChatWebhookConfigured || !googleChatDeliveryEnabled}
-            onClick={() => onSendGoogleChatTest("webhook_digest")}
-            variant="blue"
+            onClick={() => setTestActionsOpen((open) => !open)}
+            variant="secondary"
           >
-            Test-Sammelmeldung
+            Testen
           </UiButton>
-          {dmReadyProfiles.slice(0, 3).map((profile) => (
-            <UiButton
-              key={profile.id}
-              disabled={pending || !googleChatApiConfigured || !googleChatDeliveryEnabled}
-              onClick={() => onSendGoogleChatTest("direct_dm", profile.id)}
-              className="max-w-48 truncate"
-              variant="emerald"
-              title={`Direktnachricht an ${profile.name} testen`}
-            >
-              Direktnachricht: {profile.name}
-            </UiButton>
-          ))}
         </div>
       </div>
+      {testActionsOpen && (
+        <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Testversand</div>
+          <div className="flex flex-wrap gap-2">
+            <UiButton
+              disabled={pending || !googleChatWebhookConfigured || !googleChatDeliveryEnabled}
+              onClick={() => onSendGoogleChatTest("webhook_digest")}
+              variant="secondary"
+              size="sm"
+            >
+              Test-Sammelmeldung
+            </UiButton>
+            {dmReadyProfiles.slice(0, 3).map((profile) => (
+              <UiButton
+                key={profile.id}
+                disabled={pending || !googleChatApiConfigured || !googleChatDeliveryEnabled}
+                onClick={() => onSendGoogleChatTest("direct_dm", profile.id)}
+                className="max-w-48 truncate"
+                variant="secondary"
+                size="sm"
+                title={`Direktnachricht an ${profile.name} testen`}
+              >
+                Direktnachricht: {profile.name}
+              </UiButton>
+            ))}
+          </div>
+        </div>
+      )}
       {!googleChatReady && (
         <UiNotice tone="warning" className="mt-3 break-words">
           Externe Zustellung ist nicht aktiv. Hinweise bleiben in der App, bis ein Admin die Zustellung bewusst verbindet.
@@ -121,53 +136,42 @@ export function NotificationOutboxPanel({
           Externe Zustellung ist aktiv. Aktiver Modus: {googleChatModeLabel}.
         </UiNotice>
       )}
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-5">
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sammelmeldung</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDigestNotifications.length}</div>
-        </div>
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Persönlich</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">{googleChatDmNotifications.length}</div>
-          <div className="mt-1 text-xs text-slate-500">{googleChatDmReadyProfiles}/{data.profiles.length} Teammitglieder erreichbar</div>
-        </div>
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">In der App</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">{inAppOnlyNotifications.length}</div>
-        </div>
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fehler</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">{failedDigestNotifications.length + failedDeliveries.length}</div>
-        </div>
-        <div className="rounded-md bg-red-50 px-3 py-2 text-sm">
-          <div className="text-xs font-semibold uppercase tracking-wide text-red-700">Persönlich offen</div>
-          <div className="mt-1 text-2xl font-semibold text-red-900">{failedDirectDmDeliveries.length}</div>
+      <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <span><strong className="text-slate-950">{googleChatDigestNotifications.length}</strong> Sammelmeldung</span>
+          <span><strong className="text-slate-950">{googleChatDmNotifications.length}</strong> persönlich</span>
+          <span><strong className="text-slate-950">{inAppOnlyNotifications.length}</strong> in der App</span>
+          <span className={outboxErrorCount ? "text-red-700" : ""}>
+            <strong>{outboxErrorCount}</strong> Fehler
+          </span>
+          <span>{googleChatDmReadyProfiles}/{data.profiles.length} DM-ready</span>
         </div>
       </div>
       {notificationDispatchMessage && (
         <UiNotice className="mt-3 leading-normal">{notificationDispatchMessage}</UiNotice>
       )}
-      <div className="mt-4 grid gap-2">
-        {googleChatDigestNotifications.slice(0, 5).map((event) => (
-          <div key={event.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium text-slate-800">{event.title}</span>
-              <span className="text-xs text-slate-500">{notificationChannelLabel(event.type)}</span>
-            </span>
-            <UiBadge tone="amber">pending</UiBadge>
-          </div>
-        ))}
-        {!googleChatDigestNotifications.length && <UiEmptyState>Keine Benachrichtigung wartet auf die Sammelmeldung.</UiEmptyState>}
-      </div>
-      {inAppOnlyNotifications.length > 0 && (
-        <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-          {inAppOnlyNotifications.length} Hinweis{inAppOnlyNotifications.length === 1 ? "" : "e"} bleiben bewusst nur in der App.
-        </div>
-      )}
-      <details className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <details className="mt-4 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-3">
         <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Letzte Sendungen anzeigen
+          Zustelldetails anzeigen
         </summary>
+        <div className="mt-3 grid gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wartet auf Sammelmeldung</div>
+          {googleChatDigestNotifications.slice(0, 5).map((event) => (
+            <div key={event.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-slate-800">{event.title}</span>
+                <span className="text-xs text-slate-500">{notificationChannelLabel(event.type)}</span>
+              </span>
+              <UiBadge tone="amber">pending</UiBadge>
+            </div>
+          ))}
+          {!googleChatDigestNotifications.length && <UiEmptyState>Keine Benachrichtigung wartet auf die Sammelmeldung.</UiEmptyState>}
+        </div>
+        {inAppOnlyNotifications.length > 0 && (
+          <div className="mt-3 rounded-md border border-slate-100 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+            {inAppOnlyNotifications.length} Hinweis{inAppOnlyNotifications.length === 1 ? "" : "e"} bleiben bewusst nur in der App.
+          </div>
+        )}
         {recentDeliveries.length > 0 && (
           <div className="mt-3 grid gap-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Letzte Sendungen</div>
