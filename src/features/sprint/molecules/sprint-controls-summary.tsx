@@ -39,88 +39,95 @@ export function SprintControlsSummary({
   onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
   onLockSprint: (sprintId: string) => void;
 }) {
+  const reviewDueLabel = sprint.reviewDueAt
+    ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt))
+    : "ohne Datum";
+  const summaryItems = [
+    { label: "Aufgaben", value: sprintTasks.length },
+    { label: "Review", value: reviewTasksCount },
+    { label: "Scores final", value: `${finalScores}/${sprintTasks.length}` },
+    { label: "Scores offen", value: openScores },
+    { label: "Ohne Sprint", value: unassignedTasksCount },
+  ];
+
   return (
     <UiPanel padding="none" className="min-w-0">
-      <div className="grid gap-3 border-b border-slate-100 p-4 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(150px,1fr))_auto] xl:items-end">
-        <label className="grid gap-1 text-xs font-semibold text-slate-500">
-          Sprint
-          <CustomSelect
-            value={sprint.id}
-            onChange={onSelectedSprintChange}
-            className="h-9 text-sm"
-            options={data.sprints.map((item) => ({
-              value: item.id,
-              label: item.name,
-              current: currentSprint?.id === item.id,
-              locked: data.tasks.some((task) => task.sprintId === item.id),
-            }))}
-          />
-        </label>
-        <div className="grid gap-1 text-xs font-semibold text-slate-500">
-          Start
-          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.startDate)}</div>
-        </div>
-        <div className="grid gap-1 text-xs font-semibold text-slate-500">
-          Ende
-          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">{formatDate(sprint.endDate)}</div>
-        </div>
-        <div className="grid gap-1 text-xs font-semibold text-slate-500">
-          Review bis
-          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-900">
-            {sprint.reviewDueAt ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt)) : "ohne Datum"}
+      <div className="flex flex-wrap items-end justify-between gap-3 p-4">
+        <div className="flex min-w-0 flex-wrap items-end gap-2">
+          <label className="grid min-w-56 gap-1 text-xs font-semibold text-slate-500">
+            Sprint
+            <CustomSelect
+              value={sprint.id}
+              onChange={onSelectedSprintChange}
+              className="h-9 text-sm"
+              options={data.sprints.map((item) => ({
+                value: item.id,
+                label: item.name,
+                current: currentSprint?.id === item.id,
+                locked: data.tasks.some((task) => task.sprintId === item.id),
+              }))}
+            />
+          </label>
+          {sprintIsCurrent && (
+            <span
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600"
+              aria-label="Aktueller Sprint"
+              title="Aktueller Sprint"
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]" />
+            </span>
+          )}
+          {sprintHasTasks && (
+            <UiBadge
+              size="xs"
+              className="h-9 gap-1.5"
+              aria-label={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
+              title={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
+            >
+              <Lock size={13} />
+              {sprintTasks.length}
+            </UiBadge>
+          )}
+          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600">
+            {formatDate(sprint.startDate)} - {formatDate(sprint.endDate)}
+          </div>
+          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600">
+            Review bis {reviewDueLabel}
           </div>
         </div>
-        <label className="grid gap-1 text-xs font-semibold text-slate-500">
-          Status
-          <CustomSelect
-            value={sprint.status}
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid min-w-36 gap-1 text-xs font-semibold text-slate-500">
+            Status
+            <CustomSelect
+              value={sprint.status}
+              disabled={sprintControlsDisabled || sprint.scoreLocked}
+              onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
+              className="h-9 text-sm"
+              options={[
+                { value: "planning", label: "Planung" },
+                { value: "active", label: "Aktiv" },
+                { value: "review", label: "Review" },
+                { value: "closed", label: "Abgeschlossen" },
+              ]}
+            />
+          </label>
+          <UiButton
+            type="button"
             disabled={sprintControlsDisabled || sprint.scoreLocked}
-            onChange={(value) => onUpdateSprint(sprint, { status: value as Sprint["status"] })}
-            className="h-9 text-sm"
-            options={[
-              { value: "planning", label: "Planung" },
-              { value: "active", label: "Aktiv" },
-              { value: "review", label: "Review" },
-              { value: "closed", label: "Abgeschlossen" },
-            ]}
-          />
-        </label>
-        <UiButton
-          type="button"
-          disabled={sprintControlsDisabled || sprint.scoreLocked}
-          onClick={() => onLockSprint(sprint.id)}
-        >
-          Sprint abschließen
-        </UiButton>
-      </div>
-      <div className="grid gap-3 px-4 py-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-5">
-        <div><span className="font-semibold text-slate-950">{sprintTasks.length}</span> Aufgaben im Sprint</div>
-        <div><span className="font-semibold text-slate-950">{reviewTasksCount}</span> im Review</div>
-        <div><span className="font-semibold text-slate-950">{finalScores}/{sprintTasks.length}</span> Scores final</div>
-        <div><span className="font-semibold text-slate-950">{openScores}</span> Scores offen</div>
-        <div><span className="font-semibold text-slate-950">{unassignedTasksCount}</span> ohne Sprint</div>
+            onClick={() => onLockSprint(sprint.id)}
+            className="h-9"
+          >
+            Sprint abschließen
+          </UiButton>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
-        {sprintIsCurrent && (
-          <span
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600"
-            aria-label="Aktueller Sprint"
-            title="Aktueller Sprint"
-          >
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]" />
+        {summaryItems.map((item) => (
+          <span key={item.label} className="inline-flex h-8 items-center gap-2 rounded-md bg-slate-50 px-3 text-xs font-semibold text-slate-600">
+            <span className="text-slate-950">{item.value}</span>
+            {item.label}
           </span>
-        )}
-        {sprintHasTasks && (
-          <UiBadge
-            size="xs"
-            className="h-7 gap-1.5"
-            aria-label={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
-            title={`${sprintTasks.length} verknüpfte Aufgaben, Zeitraum geschützt`}
-          >
-            <Lock size={13} />
-            {sprintTasks.length}
-          </UiBadge>
-        )}
+        ))}
       </div>
       {sprintLockMessage && (
         <UiNotice tone="info" radius="none" className="!border-x-0 !border-b-0 border-t-blue-100 px-4 py-3 font-medium">
