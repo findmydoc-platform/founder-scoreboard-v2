@@ -2,12 +2,14 @@
 
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { normalizeStatus } from "@/lib/status";
 import {
   assigneeOptions,
   initiativeOptions,
@@ -15,7 +17,7 @@ import {
   priorityOptions,
   sprintOptions,
 } from "@/features/tasks/model/task-form-options";
-import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -24,6 +26,7 @@ type Props = {
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
+  canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
@@ -42,6 +45,7 @@ export function TaskDetailPanelSidebar({
   packages,
   sprints,
   milestones,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
@@ -65,11 +69,7 @@ export function TaskDetailPanelSidebar({
   const externalSyncPending = task.githubSyncStatus === "pending";
   const externalSyncProblem = task.githubSyncStatus === "failed" || Boolean(task.githubSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-  const statusOptions = canManageTaskMeta
-    ? taskStatuses
-    : normalizeStatus(task.status) === "Nacharbeit"
-      ? (["In Arbeit", "Review", "Blockiert"] as TaskStatus[])
-      : taskStatuses.filter((status) => status !== "Erledigt");
+  const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
 
   const updatePackage = (packageId: string) => {
     const nextPackage = packages.find((item) => item.id === packageId);
@@ -86,13 +86,16 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-950">Steuerung</h3>
         <div className="mt-3 grid gap-3">
-          <UiSelectField
-            label="Status"
-            value={normalizeStatus(task.status)}
-            disabled={!canChangeTaskStatus}
-            onChange={(value) => onUpdate({ status: value })}
-            options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))}
-          />
+          <div>
+            <div className="text-xs font-semibold text-slate-500">Status</div>
+            <TaskStatusControl
+              status={task.status}
+              canChange={canChangeTaskStatus}
+              onChange={(status) => onUpdate({ status })}
+              options={statusOptions}
+              className="mt-1"
+            />
+          </div>
           {canManageTaskMeta ? (
             <>
               <UiSelectField

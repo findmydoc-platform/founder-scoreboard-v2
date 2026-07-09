@@ -11,6 +11,7 @@ const planningBoardStatuses = taskStatuses.filter((status) => status !== "Vorsch
 export function PlanningTaskViewRenderer({ controller }: { controller: PlanningAppController }) {
   const {
     canChangeTaskStatus,
+    canManageFinalTaskStatus,
     canManageTaskMeta,
     data,
     dragOverStatus,
@@ -50,7 +51,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           draggedTaskId={draggedTaskId}
           dragOverStatus={dragOverStatus}
           canChangeTaskStatus={canChangeTaskStatus}
-          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
+          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           packageForTask={(task) => packageById(data.packages, task.packageId)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={(task) => openTaskPanel(task.id)}
@@ -72,7 +73,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           blockers={data.taskBlockers}
           expandedPackages={expandedPackages}
           canChangeTaskStatus={canChangeTaskStatus}
-          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
+          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={(task) => openTaskPanel(task.id)}
           onUpdateTask={updateTask}
@@ -89,7 +90,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           allTasks={data.tasks}
           blockers={data.taskBlockers}
           canChangeTaskStatus={canChangeTaskStatus}
-          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta)}
+          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           onOpenTask={(task) => openTaskPanel(task.id)}
           onUpdateTask={updateTask}
         />

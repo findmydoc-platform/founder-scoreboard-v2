@@ -194,6 +194,7 @@ export function TaskDetailPage({
               currentPackage={currentPackage}
               currentSprint={currentSprint}
               currentMilestone={currentMilestone}
+              canManageFinalTaskStatus={source === "seed" || currentRole === "ceo"}
               canManageTaskMeta={canManageTaskMeta}
               canManageReviewOwner={currentRole === "ceo"}
               detailsEditing={detailsEditing}

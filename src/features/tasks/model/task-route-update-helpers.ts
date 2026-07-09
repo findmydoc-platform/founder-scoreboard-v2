@@ -1,5 +1,5 @@
 import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
-import { taskStatuses } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 export type TaskRouteDbUpdate = Record<string, string | number | boolean | null>;
@@ -34,11 +34,13 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
 export function validateTaskStatusUpdate({
   currentTask,
   isOperationalLead,
+  isCeo,
   payload,
   profile,
 }: {
   currentTask: CurrentTaskForRoute;
   isOperationalLead: boolean;
+  isCeo: boolean;
   payload: TaskUpdatePayload;
   profile?: AuthenticatedProfile | null;
 }): RouteGuardResult {
@@ -49,7 +51,10 @@ export function validateTaskStatusUpdate({
   if (!isOperationalLead && !taskAssignedToProfile(currentTask, profile)) {
     return { ok: false, error: "Founder können nur den Status ihrer eigenen Aufgaben ändern.", status: 403 };
   }
-  if (!isOperationalLead && payload.status === "Erledigt") {
+  if (!isCeo && normalizeStatus(currentTask.status || "") === "Erledigt" && payload.status !== "Erledigt") {
+    return { ok: false, error: "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.", status: 403 };
+  }
+  if (!isCeo && payload.status === "Erledigt") {
     return { ok: false, error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", status: 403 };
   }
   if (!isOperationalLead && currentTask.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
@@ -60,6 +65,19 @@ export function validateTaskStatusUpdate({
 
 export function applyTaskStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
   if (payload.status) update.status = payload.status;
+}
+
+export function applyFinalStatusReopen(update: TaskRouteDbUpdate, currentTask: CurrentTaskForRoute, payload: TaskUpdatePayload, isCeo: boolean) {
+  if (!isCeo || !payload.status) return;
+  if (normalizeStatus(currentTask.status || "") !== "Erledigt" || payload.status === "Erledigt") return;
+  update.score_final = false;
+  if (payload.status === "Review") {
+    update.review_status = "requested";
+    update.review_requested_at = new Date().toISOString();
+    return;
+  }
+  update.review_status = "not_requested";
+  update.review_requested_at = null;
 }
 
 export function applyTaskPriorityUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {

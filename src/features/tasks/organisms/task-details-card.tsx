@@ -2,6 +2,7 @@
 
 import { CalendarDays, Pencil, Save, X } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange as formatDateRange, formatDate as formatDisplayDate, initiativeOptionLabel, taskAssigneeLabel, taskAssigneeOptions } from "@/lib/display";
@@ -21,9 +22,11 @@ function dateRange(task: Pick<Task, "startDate" | "endDate" | "deadline">) {
   return formatDateRange(task, { includeYear: true });
 }
 
-function availableStatusOptions(status: string, canManageTaskMeta: boolean) {
-  if (canManageTaskMeta) return taskStatuses;
-  if (normalizeStatus(status) === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
+function availableStatusOptions(status: string, canManageTaskMeta: boolean, canManageFinalTaskStatus: boolean) {
+  if (canManageFinalTaskStatus) return taskStatuses;
+  const normalized = normalizeStatus(status);
+  if (normalized === "Erledigt") return ["Erledigt"] as TaskStatus[];
+  if (normalized === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
   return taskStatuses.filter((item) => item !== "Erledigt");
 }
 
@@ -40,6 +43,7 @@ type Props = {
   currentPackage?: Package;
   currentSprint?: Sprint;
   currentMilestone?: Milestone;
+  canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
   detailsEditing: boolean;
@@ -67,6 +71,7 @@ export function TaskDetailsCard({
   currentPackage,
   currentSprint,
   currentMilestone,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
   detailsEditing,
@@ -86,6 +91,7 @@ export function TaskDetailsCard({
 }: Props) {
   const reviewOwnerProfile = profiles.find((profile) => profile.id === meta.reviewOwnerProfileId);
   const selfReview = Boolean(meta.reviewOwnerProfileId && (task.assigneeId === meta.reviewOwnerProfileId || task.assignee === meta.reviewOwnerProfileId));
+  const canChangeStatus = canManageFinalTaskStatus || normalizeStatus(meta.status) !== "Erledigt";
 
   return (
     <UiPanel padding="lg">
@@ -130,7 +136,12 @@ export function TaskDetailsCard({
       <div className="mt-3 grid gap-3 text-sm">
         <label className="grid gap-1 text-xs font-semibold text-slate-500">
           Status
-          <CustomSelect value={normalizeStatus(meta.status)} onChange={(value) => onStatusChange(value as TaskStatus)} className="h-9 text-sm" options={availableStatusOptions(meta.status, canManageTaskMeta).map((status) => ({ value: status, label: status }))} />
+          <TaskStatusControl
+            status={meta.status}
+            canChange={canChangeStatus}
+            onChange={onStatusChange}
+            options={availableStatusOptions(meta.status, canManageTaskMeta, canManageFinalTaskStatus)}
+          />
         </label>
         <div className="border-t border-slate-100 pt-3">
           <div className="text-xs font-semibold text-slate-500">Erstellt von</div>

@@ -223,15 +223,24 @@ export function sortTasks(tasks: Task[]) {
   });
 }
 
-export function statusOptionsForRole(status: string, canManageTaskMeta: boolean) {
-  if (canManageTaskMeta) return taskStatuses;
-  if (normalizeStatus(status) === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
+export function statusOptionsForRole(status: string, canManageTaskMeta: boolean, canManageFinalTaskStatus = canManageTaskMeta) {
+  if (canManageFinalTaskStatus) return taskStatuses;
+  const normalized = normalizeStatus(status);
+  if (normalized === "Erledigt") return ["Erledigt"] as TaskStatus[];
+  if (normalized === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
   return taskStatuses.filter((item) => item !== "Erledigt");
 }
 
-export function founderStatusGuardMessage(status: TaskStatus) {
+export function founderStatusGuardMessage(status: TaskStatus, currentStatus?: string) {
+  if (currentStatus && normalizeStatus(currentStatus) === "Erledigt" && status !== "Erledigt") {
+    return founderCompletedTaskGuardMessage();
+  }
   if (status !== "Erledigt") return "";
   return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
+}
+
+export function founderCompletedTaskGuardMessage() {
+  return "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.";
 }
 
 export function founderTaskAssignmentGuardMessage() {

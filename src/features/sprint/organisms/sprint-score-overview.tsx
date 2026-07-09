@@ -188,6 +188,7 @@ export function SprintScoreTableOverview({
         sprintTasks={sprintTasks}
         otherTasks={otherTasks}
         pending={pending}
+        canManageFinalTaskStatus={currentProfile?.platformRole === "ceo"}
         canReviewTask={canReviewTask}
         reviewOwnerName={reviewOwnerName}
         isSelfReview={isSelfReview}

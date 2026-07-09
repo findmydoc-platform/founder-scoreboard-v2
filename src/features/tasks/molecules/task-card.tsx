@@ -2,7 +2,7 @@
 
 import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
-import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
@@ -165,13 +165,13 @@ export function TaskCard({
       </div>
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 border-t border-slate-100 pt-2">
         {showStatusControl ? (
-          <CustomSelect
-            value={normalized}
-            onChange={(value) => onStatusChange(task, value as TaskStatus)}
-            disabled={statusDisabled}
-            options={statusOptions.map((status) => ({ value: status, label: status }))}
-            className="h-8 w-32 text-xs"
-            aria-label="Status ändern"
+          <TaskStatusControl
+            status={normalized}
+            canChange={!statusDisabled}
+            onChange={(status) => onStatusChange(task, status)}
+            options={statusOptions}
+            selectClassName="h-8 w-32 text-xs"
+            compact={statusDisabled}
           />
         ) : (
           <span className="h-8 min-w-0 flex-1" aria-hidden="true" />

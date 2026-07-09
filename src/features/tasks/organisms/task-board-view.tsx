@@ -1,5 +1,6 @@
-import { Circle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { DragEvent } from "react";
+import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { EmptyColumn, TaskCard } from "@/features/tasks/molecules/task-card";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
@@ -78,8 +79,7 @@ export function TaskBoardView({
           >
             <div className="flex min-w-0 items-center justify-between border-b border-blue-100 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Circle size={15} className="text-blue-600" />
-                <h2 className="text-sm font-semibold text-slate-800">{status}</h2>
+                <TaskStatusBadge status={status} size="sm" />
                 <span className="text-xs text-slate-500">({tasks.length})</span>
               </div>
               <button type="button" onClick={() => onCreateTask({ status, taskType: "deliverable" })} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white" aria-label="Aufgabe hinzufügen">

@@ -794,10 +794,13 @@ test("board tasks can be dragged between status columns", async () => {
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
   assert.match(ui, /founderStatusGuardMessage/);
+  assert.match(ui, /founderCompletedTaskGuardMessage/);
   assert.match(ui, /Founder können Aufgaben nicht direkt auf Erledigt setzen/);
+  assert.match(ui, /Diese Aufgabe ist final erledigt/);
   assert.match(ui, /In Review verschieben/);
   assert.match(ui, /Als blockiert markieren/);
   assert.match(ui, /statusOptionsForRole/);
+  assert.match(ui, /canManageFinalTaskStatus/);
 });
 
 test("review workflow supports rework, suggestions, and sprint commitments", async () => {

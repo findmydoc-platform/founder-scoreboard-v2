@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
@@ -14,6 +15,7 @@ export function SprintTaskTables({
   sprintTasks,
   otherTasks,
   pending,
+  canManageFinalTaskStatus,
   canReviewTask,
   reviewOwnerName,
   isSelfReview,
@@ -28,6 +30,7 @@ export function SprintTaskTables({
   sprintTasks: Task[];
   otherTasks: Task[];
   pending: boolean;
+  canManageFinalTaskStatus: boolean;
   canReviewTask: (task: Task) => boolean;
   reviewOwnerName: (task: Task) => string;
   isSelfReview: (task: Task) => boolean;
@@ -73,7 +76,14 @@ export function SprintTaskTables({
                   </DataCell>
                   <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                   <DataCell>
-                    <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className="h-8 w-32 text-xs font-semibold" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
+                    <TaskStatusControl
+                      status={task.status}
+                      canChange={!pending && (canManageFinalTaskStatus || normalizeStatus(task.status) !== "Erledigt")}
+                      onChange={(status) => onChangeStatus(task, status)}
+                      options={canManageFinalTaskStatus ? taskStatuses : taskStatuses.filter((status) => status !== "Erledigt")}
+                      selectClassName="h-8 w-32 text-xs font-semibold"
+                      compact
+                    />
                   </DataCell>
                   <DataCell className="text-slate-700">
                     <div>{reviewLabel(task.reviewStatus)}</div>

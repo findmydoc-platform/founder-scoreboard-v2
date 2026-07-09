@@ -45,6 +45,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     updateTask,
     uploadTaskAttachment,
     canChangeTaskStatus,
+    canManageFinalTaskStatus,
     canManageTaskMeta,
     currentProfile,
   } = controller;
@@ -77,6 +78,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           packages={data.packages}
           sprints={data.sprints}
           milestones={data.milestones}
+          canManageFinalTaskStatus={canManageFinalTaskStatus}
           canManageTaskMeta={canManageTaskMeta}
           canManageReviewOwner={currentProfile?.platformRole === "ceo"}
           canChangeTaskStatus={canChangeTaskStatus(selectedTask)}
