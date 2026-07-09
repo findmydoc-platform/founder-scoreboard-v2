@@ -254,7 +254,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           </div>
         </div>
       )}
-      {!filtersAvailable && headerPrimaryAction && workspace !== "settings" && (
+      {!filtersAvailable && headerPrimaryAction && workspace !== "notifications" && (
         <div className="flex justify-end border-t border-slate-100 px-4 py-3 lg:px-6">
           {headerPrimaryAction && (
             <button

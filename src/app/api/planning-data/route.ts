@@ -12,6 +12,10 @@ export async function GET(request: NextRequest) {
   const workspace = planningDataWorkspaceFromValue(rawWorkspace);
   if (rawWorkspace && !workspace) return apiError("Unknown planning workspace.", 400);
 
-  const result = await getPlanningData(workspace ? getPlanningDataScopeForWorkspace(workspace) : undefined);
+  const result = await getPlanningData(workspace ? getPlanningDataScopeForWorkspace(workspace) : undefined, {
+    workspace,
+    currentProfileId: auth.profile?.id || null,
+    platformRole: auth.profile?.platformRole || null,
+  });
   return NextResponse.json({ ...result, currentProfile: auth.profile });
 }

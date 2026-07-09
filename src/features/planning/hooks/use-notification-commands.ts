@@ -60,7 +60,7 @@ export function useNotificationCommands({
   }, [apiClient, source]);
 
   useEffect(() => {
-    if (workspace !== "settings") return;
+    if (workspace !== "notifications") return;
     const timeout = window.setTimeout(() => {
       void refreshGoogleChatStatus();
     }, 0);

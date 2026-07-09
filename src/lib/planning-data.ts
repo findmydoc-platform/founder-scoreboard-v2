@@ -1,6 +1,7 @@
 import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, type PlanningDataQueryScope } from "./planning-data-loader";
+import { isOperationalLeadRole } from "./platform";
 import { getServerSupabase } from "./supabase";
-import type { PlanningData } from "./types";
+import type { PlanningData, PlatformRole } from "./types";
 
 export const emptyPlanningData: PlanningData = {
   project: {
@@ -36,7 +37,27 @@ export const emptyPlanningData: PlanningData = {
   audit: [],
 };
 
-export async function getPlanningData(scope?: PlanningDataQueryScope): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
+export type PlanningDataAccessScope = {
+  workspace?: string | null;
+  currentProfileId?: string | null;
+  platformRole?: PlatformRole | null;
+};
+
+export function filterPlanningDataForWorkspaceAccess(data: PlanningData, access?: PlanningDataAccessScope): PlanningData {
+  if (!access?.platformRole) return data;
+  if (isOperationalLeadRole(access.platformRole)) return data;
+
+  const currentProfileId = access.currentProfileId || "";
+  return {
+    ...data,
+    notificationEvents: currentProfileId
+      ? data.notificationEvents.filter((event) => event.recipientProfileId === currentProfileId)
+      : [],
+    notificationDeliveries: [],
+  };
+}
+
+export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
   if (!supabase) return { data: emptyPlanningData, source: "seed" };
 
@@ -47,6 +68,6 @@ export async function getPlanningData(scope?: PlanningDataQueryScope): Promise<{
 
   return {
     source: "supabase",
-    data: mapPlanningDataRows(rows),
+    data: filterPlanningDataForWorkspaceAccess(mapPlanningDataRows(rows), access),
   };
 }

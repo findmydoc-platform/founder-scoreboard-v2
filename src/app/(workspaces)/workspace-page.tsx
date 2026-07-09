@@ -5,9 +5,14 @@ import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import type { AuthenticatedProfile } from "@/lib/types";
 
-function loadWorkspacePlanningData(initialWorkspace: AppWorkspace) {
-  return getPlanningData(getPlanningDataScopeForWorkspace(initialWorkspace));
+function loadWorkspacePlanningData(initialWorkspace: AppWorkspace, profile?: AuthenticatedProfile | null) {
+  return getPlanningData(getPlanningDataScopeForWorkspace(initialWorkspace), {
+    workspace: initialWorkspace,
+    currentProfileId: profile?.id || null,
+    platformRole: profile?.platformRole || null,
+  });
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
@@ -26,7 +31,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
-    const { data, source } = await loadWorkspacePlanningData(initialWorkspace);
+    const { data, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
     return (
       <PlanningApp
         initialData={data}

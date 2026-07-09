@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, PlanningFilterPreferences, ProfileUiPreference, ViewMode } from "@/lib/types";
-import { workspaceFromPathname, type AppWorkspace } from "@/features/planning/model/workspace-routes";
+import { appWorkspaceFromValue, workspaceFromPathname, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 
@@ -36,7 +36,7 @@ function expandedPackageIds(expandedPackages: Record<string, boolean>) {
 }
 
 function normalizedDefaultWorkspace(value: string) {
-  return value === "mine" || value === "execution" ? "planning" : value as AppWorkspace;
+  return appWorkspaceFromValue(value) || "planning";
 }
 
 function upsertUiPreference(

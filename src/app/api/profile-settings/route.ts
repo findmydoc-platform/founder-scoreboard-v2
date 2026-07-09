@@ -56,7 +56,7 @@ const allowedWorkspaces = new Set([
   "projects",
   "tools",
   "team",
-  "settings",
+  "notifications",
   "ceo-intake",
   "profile",
 ]);
@@ -101,6 +101,11 @@ function cleanPackageIds(value: unknown) {
     .slice(0, 200);
 }
 
+function cleanDefaultWorkspace(value: unknown) {
+  if (value === "settings") return "notifications";
+  return typeof value === "string" && allowedWorkspaces.has(value) ? value : "planning";
+}
+
 function databaseStatus(error: { code?: string; message?: string } | null) {
   return error?.code === "42P01" ? 503 : 500;
 }
@@ -143,9 +148,7 @@ export async function PATCH(request: NextRequest) {
   let uiPreference: ProfileUiPreference | undefined;
   if (payload.uiPreferences && typeof payload.uiPreferences === "object") {
     const uiPayload = payload.uiPreferences;
-    const defaultWorkspace = typeof uiPayload.defaultWorkspace === "string" && allowedWorkspaces.has(uiPayload.defaultWorkspace)
-      ? uiPayload.defaultWorkspace
-      : "planning";
+    const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
       : "board";

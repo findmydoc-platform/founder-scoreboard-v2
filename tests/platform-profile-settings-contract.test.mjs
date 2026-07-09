@@ -19,8 +19,10 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
   assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
   assert.match(routes, /value === "mine" \|\| value === "execution"/);
-  assert.match(profileSync, /value === "mine" \|\| value === "execution"/);
-  assert.match(profileModel, /value === "mine" \|\| value === "execution"/);
+  assert.match(profileSync, /appWorkspaceFromValue\(value\) \|\| "planning"/);
+  assert.match(profileModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
+  assert.match(routes, /value === "settings"\) return "notifications"/);
+  assert.match(profileRoute, /value === "settings"\) return "notifications"/);
   assert.doesNotMatch(profileRoute, /"execution",/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
