@@ -21,6 +21,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     expandedPackages,
     filtersAvailable,
     openTaskPanel,
+    selectedTaskId,
     setAllPackageCollapse,
     setDragOverStatus,
     setTaskDialogDefaults,
@@ -49,6 +50,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           allTasks={data.tasks}
           blockers={data.taskBlockers}
           draggedTaskId={draggedTaskId}
+          selectedTaskId={selectedTaskId}
           dragOverStatus={dragOverStatus}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
