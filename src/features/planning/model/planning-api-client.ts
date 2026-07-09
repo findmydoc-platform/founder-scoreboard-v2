@@ -1,8 +1,11 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
+
+type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
 export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
@@ -125,6 +128,33 @@ export function runNotificationDeliveryRequest(apiClient: BrowserApiClient, payl
     method: "POST",
     json: payload,
   });
+}
+
+export function createFmdToolRequest(apiClient: BrowserApiClient, payload: FmdToolPayload) {
+  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>("/api/tools", {
+    method: "POST",
+    json: payload,
+  });
+}
+
+export function updateFmdToolRequest(apiClient: BrowserApiClient, toolId: string, payload: FmdToolPayload) {
+  return apiClient.requestJson<{ error?: string; tool?: FmdTool }>(`/api/tools/${encodeURIComponent(toolId)}`, {
+    method: "PATCH",
+    json: payload,
+  });
+}
+
+export function requestFmdToolMetadata(apiClient: BrowserApiClient, url: string) {
+  return apiClient.requestJson<{ error?: string; metadata?: FmdToolMetadataDraft }>("/api/tools/metadata", {
+    method: "POST",
+    json: { url },
+  });
+}
+
+export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiClient.requestForm<{ error?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
 }
 
 export function dismissNotificationRequest(apiClient: BrowserApiClient, eventId: number) {

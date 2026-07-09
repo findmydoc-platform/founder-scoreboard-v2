@@ -275,6 +275,7 @@ export function usePlanningAppController({
     setWorkspace,
     ...boardState,
     ...commandRegistry.eventCommands,
+    ...commandRegistry.fmdToolCommands,
     ...commandRegistry.initiativeCommands,
     ...commandRegistry.notificationCommands,
     ...commandRegistry.ownProfileSettingsCommands,

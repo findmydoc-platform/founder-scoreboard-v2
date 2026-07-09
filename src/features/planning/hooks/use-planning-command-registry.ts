@@ -16,6 +16,7 @@ import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
 import { useTaskCollaborationCommands } from "@/features/tasks/hooks/use-task-collaboration-commands";
 import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutation-commands";
+import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Task, ViewMode } from "@/lib/types";
@@ -123,6 +124,7 @@ export function usePlanningCommandRegistry({
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
+  const fmdToolCommands = useFmdToolCommands(commandContext);
   const notificationCommands = useNotificationCommands({
     ...commandContext,
     openTaskPanel,
@@ -142,6 +144,7 @@ export function usePlanningCommandRegistry({
     boardState,
     demoSeedImport,
     eventCommands,
+    fmdToolCommands,
     initiativeCommands,
     notificationCommands,
     ownProfileSettingsCommands,

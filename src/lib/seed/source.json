@@ -209,6 +209,9 @@
       "url": "https://mailsig.findmydoc.eu/",
       "owner": "Sebastian",
       "status": "active",
+      "isCurated": true,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 10
     },
     {
@@ -220,7 +223,38 @@
       "url": "",
       "owner": "Volkan",
       "status": "missing_link",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 20
+    },
+    {
+      "id": "liquidity-planning-calculator",
+      "name": "Finanz- und Liquiditätsplaner",
+      "category": "tool",
+      "kind": "Finance Tool",
+      "description": "Operativer Rechner für Cash, Runway, Szenarien und Liquiditätsplanung.",
+      "url": "",
+      "owner": "Volkan",
+      "status": "missing_link",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
+      "sortOrder": 30
+    },
+    {
+      "id": "offer-calculator",
+      "name": "Angebotsrechner",
+      "category": "tool",
+      "kind": "Web Tool",
+      "description": "Kalkulator für Angebotslogik, Preisannahmen und schnelle Szenariovergleiche im Klinikvertrieb.",
+      "url": "",
+      "owner": "Team",
+      "status": "planned",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
+      "sortOrder": 35
     },
     {
       "id": "sebastian-crawler",
@@ -231,7 +265,38 @@
       "url": "",
       "owner": "Sebastian",
       "status": "missing_link",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 40
+    },
+    {
+      "id": "tool-repos",
+      "name": "Tool-Repositories",
+      "category": "repo",
+      "kind": "GitHub",
+      "description": "Zentrale Ablage der Repos für interne findmydoc Tools und Automationen.",
+      "url": "https://github.com/findmydoc-platform/management",
+      "owner": "Team",
+      "status": "active",
+      "isCurated": true,
+      "previewImageUrl": "https://opengraph.githubassets.com/1/findmydoc-platform/management",
+      "previewImageSource": "og",
+      "sortOrder": 50
+    },
+    {
+      "id": "clinic-outreach-crm",
+      "name": "Klinik-Outreach CRM",
+      "category": "knowledge",
+      "kind": "Notion Database",
+      "description": "Arbeitsliste für Klinik-Prospects, Kontaktstatus, nächste Schritte und Messe-Follow-ups.",
+      "url": "",
+      "owner": "Anil",
+      "status": "planned",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
+      "sortOrder": 55
     },
     {
       "id": "notion-docs-source",
@@ -242,6 +307,9 @@
       "url": "https://www.notion.so/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db",
       "owner": "Team",
       "status": "active",
+      "isCurated": true,
+      "previewImageUrl": "https://www.notion.so/images/meta/default.png",
+      "previewImageSource": "og",
       "sortOrder": 60
     },
     {
@@ -253,7 +321,24 @@
       "url": "https://pitchdeck.findmydoc.eu/",
       "owner": "Youssef",
       "status": "active",
+      "isCurated": true,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 65
+    },
+    {
+      "id": "brand-asset-library",
+      "name": "Brand Asset Library",
+      "category": "asset",
+      "kind": "Asset Library",
+      "description": "Sammlung für Logos, Farben, Präsentationsbausteine und freigegebene Kommunikationsmaterialien.",
+      "url": "",
+      "owner": "Youssef",
+      "status": "planned",
+      "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
+      "sortOrder": 68
     },
     {
       "id": "google-drive-assets",
@@ -264,6 +349,9 @@
       "url": "https://drive.google.com/drive/shared-drives",
       "owner": "Team",
       "status": "active",
+      "isCurated": true,
+      "previewImageUrl": "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png",
+      "previewImageSource": "og",
       "sortOrder": 70
     }
   ],

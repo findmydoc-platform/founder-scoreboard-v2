@@ -368,6 +368,9 @@ export type DbFmdTool = {
   url: string | null;
   owner: string | null;
   status: FmdTool["status"];
+  is_curated: boolean | null;
+  preview_image_url: string | null;
+  preview_image_source: FmdTool["previewImageSource"] | null;
   sort_order: number;
 };
 

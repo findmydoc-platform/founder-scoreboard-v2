@@ -4,12 +4,12 @@ import {
   ClipboardCheck,
   GanttChart,
   LayoutDashboard,
+  Link2,
   ListOrdered,
   Settings,
   UserCircle,
   Users,
   WandSparkles,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,7 +37,7 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
   { id: "projects", label: "Meilensteine", icon: Archive, href: "/projects" },
-  { id: "tools", label: "FMD-Tools", icon: Wrench, href: "/tools" },
+  { id: "tools", label: "Quicklinks", icon: Link2, href: "/tools" },
   { id: "team", label: "Team", icon: Users, href: "/team" },
   { id: "settings", label: "Einstellungen", icon: Settings, href: "/settings" },
   { id: "profile", label: "Mein Profil", icon: UserCircle, href: "/profile", hidden: true },

@@ -19,7 +19,7 @@ const loadingTitles: Record<AppWorkspace, string> = {
   events: "Events werden geladen",
   sprint: "Sprint & Score wird geladen",
   projects: "Meilensteine werden geladen",
-  tools: "FMD-Tools werden geladen",
+  tools: "Quicklinks werden geladen",
   team: "Team wird geladen",
   settings: "Einstellungen werden geladen",
   "ceo-intake": "CEO Intake wird geladen",

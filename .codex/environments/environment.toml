@@ -7,12 +7,12 @@ script = "rtk bash scripts/codex-bootstrap.sh"
 [[actions]]
 name = "Run app"
 icon = "run"
-command = "rtk bash scripts/codex-pnpm.sh run dev -- --hostname 127.0.0.1 --port 3000"
+command = "rtk bash scripts/codex-pnpm.sh exec next dev --hostname 127.0.0.1 --port 3000"
 
 [[actions]]
 name = "Run app 3002"
 icon = "run"
-command = "rtk bash scripts/codex-pnpm.sh run dev -- --hostname 127.0.0.1 --port 3002"
+command = "rtk bash scripts/codex-pnpm.sh exec next dev --hostname 127.0.0.1 --port 3002"
 
 [[actions]]
 name = "Test"
