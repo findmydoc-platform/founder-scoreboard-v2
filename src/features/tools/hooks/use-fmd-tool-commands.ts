@@ -193,21 +193,17 @@ export function useFmdToolCommands({
     setFmdToolMessage("");
     const normalizedUrl = url.trim();
     if (!normalizedUrl) {
-      setSaveError("URL ist erforderlich.");
       return null;
     }
     if (!isValidHttpUrl(normalizedUrl)) {
-      setSaveError("Link muss mit http:// oder https:// beginnen.");
       return null;
     }
 
     try {
       const { response, body } = await planningApi.requestFmdToolMetadata(apiClient, normalizedUrl);
       if (!response.ok || !body?.metadata) throw new Error(body?.error || "Metadaten konnten nicht geladen werden.");
-      setFmdToolMessage("Metadaten geladen.");
       return body.metadata;
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Metadaten konnten nicht geladen werden.");
+    } catch {
       return null;
     }
   };

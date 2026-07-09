@@ -1,7 +1,7 @@
 "use client";
 
-import { ImageIcon, Link2, Loader2, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
-import { type ClipboardEvent, type DragEvent, type FormEvent, useRef, useState } from "react";
+import { CheckCircle2, ImageIcon, Link2, Loader2, Pencil, Plus, Trash2, Upload, X, XCircle } from "lucide-react";
+import { type ClipboardEvent, type DragEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import type { FmdTool, Profile } from "@/lib/types";
 import {
@@ -20,6 +20,24 @@ import {
   UiTextArea,
   UiTextInput,
 } from "@/shared/atoms/ui-primitives";
+
+const metadataLoadDelayMs = 900;
+
+type MetadataStatus = "idle" | "loading" | "success" | "error";
+
+type DialogNotice = {
+  tone: "success" | "danger";
+  message: string;
+};
+
+function isValidHttpUrl(value: string) {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
 
 export function FmdQuickLinkDialog({
   mode,
@@ -47,15 +65,21 @@ export function FmdQuickLinkDialog({
   onUploadPreviewImage: (file: File) => Promise<FmdToolPreviewImageUpload | null>;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [metadataPending, setMetadataPending] = useState(false);
+  const draftRef = useRef(draft);
+  const metadataDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metadataRequestIdRef = useRef(0);
+  const lastLoadedMetadataUrlRef = useRef("");
+  const [metadataStatus, setMetadataStatus] = useState<MetadataStatus>("idle");
   const [imagePending, setImagePending] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [localNotice, setLocalNotice] = useState("");
+  const [dialogNotice, setDialogNotice] = useState<DialogNotice | null>(null);
   const title = mode === "edit" ? "Link bearbeiten" : "Link eintragen";
   const submitLabel = mode === "edit" ? "Speichern" : "Eintragen";
   const patchDraft = (patch: Partial<FmdToolDraft>) => {
-    setLocalNotice("");
-    onDraftChange({ ...draft, ...patch });
+    const nextDraft = { ...draftRef.current, ...patch };
+    draftRef.current = nextDraft;
+    setDialogNotice(null);
+    onDraftChange(nextDraft);
   };
   const linkPresent = Boolean(draft.url.trim());
   const curateDisabled = pending || (!draft.isCurated && (!linkPresent || curatedLimitReached));
@@ -64,35 +88,80 @@ export function FmdQuickLinkDialog({
       ? `Es sind bereits ${maxCuratedFmdToolLinks} kuratierte Links gesetzt.`
       : "";
 
-  async function loadMetadata() {
-    setMetadataPending(true);
-    setLocalNotice("");
-    try {
-      const metadata = await onLoadMetadata(draft.url);
-      if (!metadata) return;
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
+  const loadMetadata = useCallback(async (url: string) => {
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) {
+      setMetadataStatus("idle");
+      return;
+    }
+    if (!isValidHttpUrl(normalizedUrl)) {
+      setMetadataStatus("error");
+      setDialogNotice({ tone: "danger", message: "Link muss mit http:// oder https:// beginnen." });
+      return;
+    }
+    if (lastLoadedMetadataUrlRef.current === normalizedUrl) return;
+
+    const requestId = metadataRequestIdRef.current + 1;
+    metadataRequestIdRef.current = requestId;
+    lastLoadedMetadataUrlRef.current = normalizedUrl;
+    setMetadataStatus("loading");
+    setDialogNotice(null);
+    try {
+      const metadata = await onLoadMetadata(normalizedUrl);
+      if (requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
+      if (!metadata) {
+        setMetadataStatus("error");
+        setDialogNotice({ tone: "danger", message: "Metadaten konnten nicht übernommen werden." });
+        return;
+      }
+
+      const currentDraft = draftRef.current;
       const nextDraft: FmdToolDraft = {
-        ...draft,
-        name: draft.name.trim() ? draft.name : metadata.title,
-        description: draft.description.trim() ? draft.description : metadata.description,
+        ...currentDraft,
+        name: currentDraft.name.trim() ? currentDraft.name : metadata.title,
+        description: currentDraft.description.trim() ? currentDraft.description : metadata.description,
       };
 
-      if (metadata.imageUrl && draft.previewImageSource !== "manual" && !draft.previewImageUrl.trim()) {
+      if (metadata.imageUrl && currentDraft.previewImageSource !== "manual" && !currentDraft.previewImageUrl.trim()) {
         nextDraft.previewImageUrl = metadata.imageUrl;
         nextDraft.previewImageSource = "og";
       }
 
+      draftRef.current = nextDraft;
       onDraftChange(nextDraft);
-      setLocalNotice("Metadaten übernommen.");
-    } finally {
-      setMetadataPending(false);
+      setMetadataStatus("success");
+      setDialogNotice({ tone: "success", message: metadata.title || metadata.description || metadata.imageUrl ? "Metadaten übernommen." : "Metadaten geprüft." });
+    } catch {
+      if (requestId !== metadataRequestIdRef.current || draftRef.current.url.trim() !== normalizedUrl) return;
+      setMetadataStatus("error");
+      setDialogNotice({ tone: "danger", message: "Metadaten konnten nicht übernommen werden." });
     }
-  }
+  }, [onDraftChange, onLoadMetadata]);
+
+  useEffect(() => {
+    if (metadataDebounceRef.current) clearTimeout(metadataDebounceRef.current);
+
+    const normalizedUrl = draft.url.trim();
+    if (!normalizedUrl) return undefined;
+    if (!isValidHttpUrl(normalizedUrl) || lastLoadedMetadataUrlRef.current === normalizedUrl) return undefined;
+
+    metadataDebounceRef.current = setTimeout(() => {
+      void loadMetadata(normalizedUrl);
+    }, metadataLoadDelayMs);
+
+    return () => {
+      if (metadataDebounceRef.current) clearTimeout(metadataDebounceRef.current);
+    };
+  }, [draft.url, loadMetadata]);
 
   async function handlePreviewFile(file: File | null | undefined) {
     if (!file || imagePending) return;
     setImagePending(true);
-    setLocalNotice("");
+    setDialogNotice(null);
     try {
       const uploaded = await onUploadPreviewImage(file);
       if (!uploaded) return;
@@ -101,7 +170,7 @@ export function FmdQuickLinkDialog({
         previewImageUrl: uploaded.imageUrl,
         previewImageSource: uploaded.source,
       });
-      setLocalNotice("Vorschaubild übernommen.");
+      setDialogNotice({ tone: "success", message: "Vorschaubild übernommen." });
     } finally {
       setImagePending(false);
     }
@@ -116,6 +185,19 @@ export function FmdQuickLinkDialog({
   function imageFileFromDrop(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.files).find((file) => file.type.startsWith("image/"));
   }
+
+  function triggerMetadataLoad() {
+    if (metadataDebounceRef.current) clearTimeout(metadataDebounceRef.current);
+    void loadMetadata(draftRef.current.url);
+  }
+
+  const metadataStatusLabel = metadataStatus === "loading"
+    ? "Metadaten werden geladen"
+    : metadataStatus === "success"
+      ? "Metadaten geladen"
+      : metadataStatus === "error"
+        ? "Metadaten konnten nicht geladen werden"
+        : "";
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={title}>
@@ -161,35 +243,44 @@ export function FmdQuickLinkDialog({
               placeholder={currentProfile?.name || "Team"}
             />
           </UiField>
-          <UiField>
+          <UiField className="lg:col-span-2">
             Link
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="relative">
               <UiTextInput
                 value={draft.url}
                 onChange={(event) => {
                   const url = event.target.value;
+                  const currentDraft = draftRef.current;
+                  lastLoadedMetadataUrlRef.current = "";
+                  setMetadataStatus("idle");
                   patchDraft({
                     url,
-                    isCurated: url.trim() ? draft.isCurated : false,
-                    previewImageUrl: draft.previewImageSource === "og" ? "" : draft.previewImageUrl,
-                    previewImageSource: draft.previewImageSource === "og" ? "none" : draft.previewImageSource,
+                    isCurated: url.trim() ? currentDraft.isCurated : false,
+                    previewImageUrl: currentDraft.previewImageSource === "og" ? "" : currentDraft.previewImageUrl,
+                    previewImageSource: currentDraft.previewImageSource === "og" ? "none" : currentDraft.previewImageSource,
                   });
                 }}
                 inputSize="lg"
                 inputPadding="md"
                 type="url"
+                onBlur={triggerMetadataLoad}
                 placeholder="https://..."
+                className="w-full pr-10"
               />
-              <UiButton
-                type="button"
-                onClick={loadMetadata}
-                disabled={pending || metadataPending || !linkPresent}
-                variant="blueOutline"
-                className="h-10"
+              <span
+                className={classNames(
+                  "pointer-events-none absolute right-3 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center",
+                  metadataStatus === "success" && "text-emerald-600",
+                  metadataStatus === "error" && "text-red-600",
+                  metadataStatus === "loading" && "text-blue-600",
+                )}
+                aria-live="polite"
               >
-                {metadataPending ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
-                Metadaten laden
-              </UiButton>
+                {metadataStatus === "loading" && <Loader2 size={16} className="animate-spin" />}
+                {metadataStatus === "success" && <CheckCircle2 size={16} />}
+                {metadataStatus === "error" && <XCircle size={16} />}
+                {metadataStatusLabel && <span className="sr-only">{metadataStatusLabel}</span>}
+              </span>
             </div>
           </UiField>
           <div className="grid gap-2 lg:col-span-2">
@@ -282,7 +373,6 @@ export function FmdQuickLinkDialog({
                 </div>
               </div>
             </div>
-            {localNotice && <UiNotice tone="success" size="compact">{localNotice}</UiNotice>}
           </div>
           <div className="grid gap-2 lg:col-span-2">
             <button
@@ -323,7 +413,14 @@ export function FmdQuickLinkDialog({
           </UiField>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+        <div className="sticky bottom-0 -mx-4 -mb-4 mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-white px-4 pb-4 pt-4 lg:-mx-5 lg:-mb-5 lg:px-5">
+          <div className="min-h-8 min-w-0 flex-1">
+            {dialogNotice && (
+              <UiNotice tone={dialogNotice.tone} size="compact" className="inline-flex min-h-8 max-w-full items-center font-medium">
+                {dialogNotice.message}
+              </UiNotice>
+            )}
+          </div>
           <UiButton type="button" onClick={onClose} disabled={pending || imagePending} variant="secondary">Abbrechen</UiButton>
           <UiButton type="submit" variant="primary" disabled={pending || imagePending}>
             {mode === "edit" ? <Pencil size={16} /> : <Plus size={16} />}

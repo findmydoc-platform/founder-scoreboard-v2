@@ -7,6 +7,7 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
   const ui = await readPlanningSurface();
   const toolsUi = await readFile("src/features/tools/organisms/fmd-quick-links-overview.tsx", "utf8");
+  const toolDialog = await readFile("src/features/tools/molecules/fmd-quick-link-dialog.tsx", "utf8");
   const toolRow = await readFile("src/features/tools/molecules/fmd-quick-link-card.tsx", "utf8");
   const toolsModel = await readFile("src/features/tools/model/fmd-tools.ts", "utf8");
   const quickLinks = await readFile("src/features/tools/molecules/fmd-tool-quick-links.tsx", "utf8");
@@ -45,6 +46,11 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolsSurface, /Link eintragen/);
   assert.match(toolsSurface, /role="dialog"/);
   assert.match(toolsSurface, /Link bearbeiten/);
+  assert.doesNotMatch(toolDialog, /Metadaten laden/);
+  assert.match(toolDialog, /metadataLoadDelayMs = 900/);
+  assert.match(toolDialog, /onBlur=\{triggerMetadataLoad\}/);
+  assert.match(toolDialog, /CheckCircle2/);
+  assert.match(toolDialog, /XCircle/);
   assert.match(toolsSurface, /Bearbeiten/);
   assert.match(toolsSurface, /CustomSelect/);
   assert.doesNotMatch(toolsSurface, /Status filtern/);
