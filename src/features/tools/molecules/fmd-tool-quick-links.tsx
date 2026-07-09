@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Link2, X } from "lucide-react";
+import { ExternalLink, ImageIcon, Link2, X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { curatedFmdToolLinks, fmdToolCategoryLabel, maxCuratedFmdToolLinks } from "@/features/tools/model/fmd-tools";
 import type { FmdTool } from "@/lib/types";
@@ -81,12 +81,28 @@ export function FmdToolQuickLinks({
                 rel="noreferrer"
                 className="group flex min-w-0 items-start justify-between gap-3 rounded-md border border-transparent p-2 text-left hover:border-blue-100 hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-blue-100"
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-slate-950">{tool.name}</span>
-                  <span className="mt-1 flex min-w-0 items-center gap-2 text-xs text-slate-500">
-                    <span className="truncate">{fmdToolCategoryLabel(tool.category)}</span>
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
-                    <span className="truncate">{linkHost(tool.url)}</span>
+                <span className="flex min-w-0 items-start gap-3">
+                  <span className="grid h-10 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 text-slate-300">
+                    {tool.previewImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={tool.previewImageUrl}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <ImageIcon size={16} />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-950">{tool.name}</span>
+                    <span className="mt-1 flex min-w-0 items-center gap-2 text-xs text-slate-500">
+                      <span className="truncate">{fmdToolCategoryLabel(tool.category)}</span>
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+                      <span className="truncate">{linkHost(tool.url)}</span>
+                    </span>
                   </span>
                 </span>
                 <ExternalLink size={14} className="mt-0.5 shrink-0 text-blue-600 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

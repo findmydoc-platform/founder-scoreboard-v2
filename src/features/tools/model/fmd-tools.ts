@@ -9,6 +9,20 @@ export type FmdToolDraft = {
   url: string;
   owner: string;
   isCurated: boolean;
+  previewImageUrl: string;
+  previewImageSource: FmdTool["previewImageSource"];
+};
+
+export type FmdToolMetadataDraft = {
+  title: string;
+  description: string;
+  imageUrl: string;
+  siteName: string;
+};
+
+export type FmdToolPreviewImageUpload = {
+  imageUrl: string;
+  source: Extract<FmdTool["previewImageSource"], "manual">;
 };
 
 export const fmdToolCategoryOptions: Array<{ value: FmdTool["category"]; label: string }> = [
@@ -30,6 +44,8 @@ export function defaultFmdToolDraft(owner = ""): FmdToolDraft {
     url: "",
     owner,
     isCurated: false,
+    previewImageUrl: "",
+    previewImageSource: "none",
   };
 }
 
@@ -41,6 +57,8 @@ export function draftFromFmdTool(tool: FmdTool): FmdToolDraft {
     url: tool.url,
     owner: tool.owner,
     isCurated: tool.isCurated,
+    previewImageUrl: tool.previewImageUrl || "",
+    previewImageSource: tool.previewImageSource || "none",
   };
 }
 

@@ -210,6 +210,8 @@
       "owner": "Sebastian",
       "status": "active",
       "isCurated": true,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 10
     },
     {
@@ -222,6 +224,8 @@
       "owner": "Volkan",
       "status": "missing_link",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 20
     },
     {
@@ -234,6 +238,8 @@
       "owner": "Volkan",
       "status": "missing_link",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 30
     },
     {
@@ -246,6 +252,8 @@
       "owner": "Team",
       "status": "planned",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 35
     },
     {
@@ -258,6 +266,8 @@
       "owner": "Sebastian",
       "status": "missing_link",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 40
     },
     {
@@ -270,6 +280,8 @@
       "owner": "Team",
       "status": "active",
       "isCurated": true,
+      "previewImageUrl": "https://opengraph.githubassets.com/1/findmydoc-platform/management",
+      "previewImageSource": "og",
       "sortOrder": 50
     },
     {
@@ -282,6 +294,8 @@
       "owner": "Anil",
       "status": "planned",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 55
     },
     {
@@ -294,6 +308,8 @@
       "owner": "Team",
       "status": "active",
       "isCurated": true,
+      "previewImageUrl": "https://www.notion.so/images/meta/default.png",
+      "previewImageSource": "og",
       "sortOrder": 60
     },
     {
@@ -306,6 +322,8 @@
       "owner": "Youssef",
       "status": "active",
       "isCurated": true,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 65
     },
     {
@@ -318,6 +336,8 @@
       "owner": "Youssef",
       "status": "planned",
       "isCurated": false,
+      "previewImageUrl": "",
+      "previewImageSource": "none",
       "sortOrder": 68
     },
     {
@@ -330,6 +350,8 @@
       "owner": "Team",
       "status": "active",
       "isCurated": true,
+      "previewImageUrl": "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png",
+      "previewImageSource": "og",
       "sortOrder": 70
     }
   ],

@@ -18,12 +18,26 @@ type FmdToolPayload = {
   owner?: string;
   status?: string;
   isCurated?: boolean;
+  previewImageUrl?: string;
+  previewImageSource?: string;
 };
 
 const toolCategories = new Set<FmdTool["category"]>(["tool", "repo", "knowledge", "asset"]);
-const fmdToolSelect = "id,name,category,kind,description,url,owner,status,is_curated,sort_order";
+const previewImageSources = new Set<FmdTool["previewImageSource"]>(["none", "og", "manual"]);
+const fmdToolSelect = "id,name,category,kind,description,url,owner,status,is_curated,preview_image_url,preview_image_source,sort_order";
 
 function normalizeToolUrl(value: string) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizePreviewImageUrl(value: string) {
   if (!value) return "";
   try {
     const url = new URL(value);
@@ -45,13 +59,18 @@ export async function POST(request: NextRequest) {
   const owner = cleanText(payload.owner, 120) || permission.profile?.name || "Team";
   const category = toolCategories.has(payload.category as FmdTool["category"]) ? payload.category as FmdTool["category"] : "tool";
   const normalizedUrl = normalizeToolUrl(cleanText(payload.url, 600));
+  const normalizedPreviewImageUrl = normalizePreviewImageUrl(cleanText(payload.previewImageUrl, 1000));
 
   if (name.length < 2) return apiError("Name ist erforderlich.", 400);
   if (description.length < 8) return apiError("Beschreibung muss mindestens 8 Zeichen haben.", 400);
   if (normalizedUrl === null) return apiError("Link muss mit http:// oder https:// beginnen.", 400);
+  if (normalizedPreviewImageUrl === null) return apiError("Vorschaubild muss mit http:// oder https:// beginnen.", 400);
 
   const status: FmdTool["status"] = normalizedUrl ? "active" : "missing_link";
   const isCurated = Boolean(payload.isCurated && normalizedUrl);
+  const previewImageSource = normalizedPreviewImageUrl && previewImageSources.has(payload.previewImageSource as FmdTool["previewImageSource"])
+    ? payload.previewImageSource as FmdTool["previewImageSource"]
+    : "none";
   if (isCurated) {
     const { count, error: countError } = await supabase
       .from("fmd_tools")
@@ -80,6 +99,8 @@ export async function POST(request: NextRequest) {
     owner,
     status,
     is_curated: isCurated,
+    preview_image_url: normalizedPreviewImageUrl || null,
+    preview_image_source: previewImageSource,
     sort_order: Number(maxRow?.sort_order || 0) + 10,
   };
 

@@ -10,6 +10,8 @@ import {
   maxCuratedFmdToolLinks,
   sortFmdTools,
   type FmdToolDraft,
+  type FmdToolMetadataDraft,
+  type FmdToolPreviewImageUpload,
 } from "@/features/tools/model/fmd-tools";
 import { FmdQuickLinkCard } from "@/features/tools/molecules/fmd-quick-link-card";
 import { FmdQuickLinkDialog } from "@/features/tools/molecules/fmd-quick-link-dialog";
@@ -37,7 +39,9 @@ type FmdQuickLinksOverviewProps = {
   pending?: boolean;
   message?: string;
   onCreateTool: (draft: FmdToolDraft) => boolean | Promise<boolean>;
+  onLoadMetadata: (url: string) => Promise<FmdToolMetadataDraft | null>;
   onUpdateTool: (tool: FmdTool, draft: FmdToolDraft) => boolean | Promise<boolean>;
+  onUploadPreviewImage: (file: File) => Promise<FmdToolPreviewImageUpload | null>;
 };
 
 export function FmdQuickLinksOverview({
@@ -47,7 +51,9 @@ export function FmdQuickLinksOverview({
   pending = false,
   message = "",
   onCreateTool,
+  onLoadMetadata,
   onUpdateTool,
+  onUploadPreviewImage,
 }: FmdQuickLinksOverviewProps) {
   const [dialogMode, setDialogMode] = useState<FmdQuickLinkDialogMode | null>(null);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -243,7 +249,9 @@ export function FmdQuickLinksOverview({
           curatedLimitReached={curatedLimitReached}
           onClose={closeDialog}
           onDraftChange={setDraft}
+          onLoadMetadata={onLoadMetadata}
           onSubmit={submit}
+          onUploadPreviewImage={onUploadPreviewImage}
         />
       )}
     </div>

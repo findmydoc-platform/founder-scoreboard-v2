@@ -1,7 +1,7 @@
 "use client";
 
-import { ExternalLink, Link2, Pencil, UserRound } from "lucide-react";
-import type { ReactNode } from "react";
+import { ExternalLink, ImageIcon, Link2, Pencil, UserRound } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import type { FmdTool } from "@/lib/types";
 import { fmdToolCategoryLabel } from "@/features/tools/model/fmd-tools";
 import {
@@ -23,31 +23,34 @@ export function FmdQuickLinkCard({
     ? "border-blue-100 bg-blue-50/35 hover:border-blue-300 hover:bg-blue-50"
     : "border-amber-200 bg-amber-50/60";
   const content = (
-    <>
-      <div className="min-w-0 pr-10">
-        <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-950">
-          <span className="truncate">{tool.name}</span>
-          {tool.url && <ExternalLink size={14} className="shrink-0 text-blue-600 transition group-hover/tool:translate-x-0.5 group-hover/tool:-translate-y-0.5" />}
-        </h3>
-        <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{tool.description}</p>
-      </div>
+    <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[104px_minmax(0,1fr)]">
+      <FmdQuickLinkPreviewImage tool={tool} />
+      <div className="flex min-w-0 flex-col justify-between gap-4 pr-8">
+        <div className="min-w-0">
+          <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-950">
+            <span className="truncate">{tool.name}</span>
+            {tool.url && <ExternalLink size={14} className="shrink-0 text-blue-600 transition group-hover/tool:translate-x-0.5 group-hover/tool:-translate-y-0.5" />}
+          </h3>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{tool.description}</p>
+        </div>
 
-      <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2">
-        <UiBadge tone="white" size="xs" className="max-w-full rounded-md">
-          <span className="truncate">{fmdToolCategoryLabel(tool.category)}</span>
-        </UiBadge>
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-500">
-          <UserRound size={13} className="shrink-0 text-slate-400" />
-          <span className="truncate">{tool.owner || "Team"}</span>
-        </span>
-        {!tool.url && (
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
-            <Link2 size={13} />
-            Link fehlt
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <UiBadge tone="white" size="xs" className="max-w-full rounded-md">
+            <span className="truncate">{fmdToolCategoryLabel(tool.category)}</span>
+          </UiBadge>
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <UserRound size={13} className="shrink-0 text-slate-400" />
+            <span className="truncate">{tool.owner || "Team"}</span>
           </span>
-        )}
+          {!tool.url && (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+              <Link2 size={13} />
+              Link fehlt
+            </span>
+          )}
+        </div>
       </div>
-    </>
+    </div>
   );
 
   return (
@@ -58,12 +61,12 @@ export function FmdQuickLinkCard({
           target="_blank"
           rel="noreferrer"
           aria-label={`${tool.name} extern öffnen`}
-          className="flex min-h-40 min-w-0 flex-col justify-between rounded-md p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
+          className="block min-h-36 min-w-0 rounded-md p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-100"
         >
           {content}
         </a>
       ) : (
-        <div className="flex min-h-40 min-w-0 flex-col justify-between p-4">
+        <div className="block min-h-36 min-w-0 p-3">
           {content}
         </div>
       )}
@@ -85,6 +88,37 @@ export function FmdQuickLinkCard({
         </div>
       )}
     </article>
+  );
+}
+
+function FmdQuickLinkPreviewImage({ tool }: { tool: FmdTool }) {
+  const [failedSrc, setFailedSrc] = useState("");
+  const src = (tool.previewImageUrl || "").trim();
+  const failed = Boolean(src && failedSrc === src);
+
+  if (!src || failed) {
+    return (
+      <span className={classNames(
+        "grid h-24 w-[88px] shrink-0 place-items-center rounded-md border sm:h-28 sm:w-[104px]",
+        tool.url ? "border-slate-200 bg-white/80 text-slate-300" : "border-amber-200 bg-white/70 text-amber-300",
+      )}>
+        <ImageIcon size={22} />
+      </span>
+    );
+  }
+
+  return (
+    <span className="block h-24 w-[88px] shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white sm:h-28 sm:w-[104px]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedSrc(src)}
+        className="h-full w-full object-cover"
+      />
+    </span>
   );
 }
 

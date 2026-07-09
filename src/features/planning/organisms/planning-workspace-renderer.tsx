@@ -72,7 +72,9 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     sprintLockMessage,
     sprintPlanningOptions,
     createFmdTool,
+    loadFmdToolMetadata,
     updateFmdTool,
+    uploadFmdToolPreviewImage,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateFounderEvent,
@@ -174,7 +176,9 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           pending={fmdToolPending}
           message={fmdToolMessage}
           onCreateTool={createFmdTool}
+          onLoadMetadata={loadFmdToolMetadata}
           onUpdateTool={updateFmdTool}
+          onUploadPreviewImage={uploadFmdToolPreviewImage}
         />
       )}
       {workspace === "team" && (

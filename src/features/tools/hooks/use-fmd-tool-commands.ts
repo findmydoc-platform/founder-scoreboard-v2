@@ -15,7 +15,30 @@ type PreparedFmdToolDraft = {
   owner: string;
   status: FmdTool["status"];
   isCurated: boolean;
+  previewImageUrl: string;
+  previewImageSource: FmdTool["previewImageSource"];
 };
+
+const maxPreviewImageBytes = 5 * 1024 * 1024;
+const allowedPreviewImageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function isValidHttpUrl(value: string) {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Bild konnte nicht gelesen werden."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export function useFmdToolCommands({
   apiClient,
@@ -39,6 +62,8 @@ export function useFmdToolCommands({
     const kind = fmdToolCategoryLabel(draft.category);
     const status = fmdToolStatusFromUrl(url);
     const isCurated = Boolean(draft.isCurated && url);
+    const previewImageUrl = draft.previewImageUrl.trim();
+    const previewImageSource = previewImageUrl ? draft.previewImageSource : "none";
 
     if (name.length < 2) {
       setSaveError("Name ist erforderlich.");
@@ -49,16 +74,14 @@ export function useFmdToolCommands({
       return null;
     }
     if (url) {
-      try {
-        const parsedUrl = new URL(url);
-        if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-          setSaveError("Link muss mit http:// oder https:// beginnen.");
-          return null;
-        }
-      } catch {
+      if (!isValidHttpUrl(url)) {
         setSaveError("Link muss mit http:// oder https:// beginnen.");
         return null;
       }
+    }
+    if (previewImageUrl && !isValidHttpUrl(previewImageUrl) && !(source !== "supabase" && previewImageUrl.startsWith("data:image/"))) {
+      setSaveError("Vorschaubild muss mit http:// oder https:// beginnen.");
+      return null;
     }
     if (isCurated) {
       const curatedLinkCount = data.fmdTools.filter((tool) => tool.id !== currentToolId && tool.isCurated && tool.url).length;
@@ -77,6 +100,8 @@ export function useFmdToolCommands({
       owner,
       status,
       isCurated,
+      previewImageUrl,
+      previewImageSource,
     };
   };
 
@@ -163,10 +188,76 @@ export function useFmdToolCommands({
     }
   };
 
+  const loadFmdToolMetadata = async (url: string) => {
+    setSaveError("");
+    setFmdToolMessage("");
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) {
+      setSaveError("URL ist erforderlich.");
+      return null;
+    }
+    if (!isValidHttpUrl(normalizedUrl)) {
+      setSaveError("Link muss mit http:// oder https:// beginnen.");
+      return null;
+    }
+
+    try {
+      const { response, body } = await planningApi.requestFmdToolMetadata(apiClient, normalizedUrl);
+      if (!response.ok || !body?.metadata) throw new Error(body?.error || "Metadaten konnten nicht geladen werden.");
+      setFmdToolMessage("Metadaten geladen.");
+      return body.metadata;
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Metadaten konnten nicht geladen werden.");
+      return null;
+    }
+  };
+
+  const uploadFmdToolPreviewImage = async (file: File) => {
+    setSaveError("");
+    setFmdToolMessage("");
+
+    if (file.size <= 0) {
+      setSaveError("Bild ist leer.");
+      return null;
+    }
+    if (!allowedPreviewImageTypes.has(file.type)) {
+      setSaveError("Bildtyp wird nicht unterstützt.");
+      return null;
+    }
+    if (file.size > maxPreviewImageBytes) {
+      setSaveError("Bild ist zu groß. Maximal erlaubt sind 5 MB.");
+      return null;
+    }
+
+    if (source !== "supabase") {
+      try {
+        return {
+          imageUrl: await readFileAsDataUrl(file),
+          source: "manual" as const,
+        };
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Bild konnte nicht gelesen werden.");
+        return null;
+      }
+    }
+
+    try {
+      const { response, body } = await planningApi.uploadFmdToolPreviewImageRequest(apiClient, file);
+      if (!response.ok || !body?.imageUrl || body.source !== "manual") throw new Error(body?.error || "Bild konnte nicht gespeichert werden.");
+      setFmdToolMessage("Vorschaubild gespeichert.");
+      return { imageUrl: body.imageUrl, source: body.source };
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Bild konnte nicht gespeichert werden.");
+      return null;
+    }
+  };
+
   return {
     createFmdTool,
     fmdToolMessage,
     fmdToolPending,
+    loadFmdToolMetadata,
+    uploadFmdToolPreviewImage,
     updateFmdTool,
   };
 }

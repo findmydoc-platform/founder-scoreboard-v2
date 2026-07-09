@@ -326,6 +326,8 @@ export type FmdTool = {
   owner: string;
   status: "active" | "planned" | "missing_link" | "archived";
   isCurated: boolean;
+  previewImageUrl: string;
+  previewImageSource: "none" | "og" | "manual";
   sortOrder: number;
 };
 
