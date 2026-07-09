@@ -50,8 +50,22 @@ export function DataSurfaceHeader({ title, description, actions, className, chil
   );
 }
 
-export function DataOverflow({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={classNames("overflow-x-auto", className)} {...props} />;
+export function DataOverflow({
+  className,
+  tabIndex = 0,
+  role = "region",
+  "aria-label": ariaLabel = "Inhalt horizontal und vertikal scrollen",
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={classNames("overflow-auto pb-2 [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset", className)}
+      tabIndex={tabIndex}
+      role={role}
+      aria-label={ariaLabel}
+      {...props}
+    />
+  );
 }
 
 type DataTableProps = TableHTMLAttributes<HTMLTableElement> & {

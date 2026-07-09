@@ -54,7 +54,12 @@ export function TaskBoardView({
   void profiles;
 
   return (
-    <div className="flex min-w-0 gap-4 overflow-x-auto pb-3">
+    <div
+      className="flex min-w-0 gap-4 overflow-auto pb-3 [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+      tabIndex={0}
+      role="region"
+      aria-label="Board horizontal und vertikal scrollen"
+    >
       {statuses.map((status) => {
         const tasks = visibleTasks.filter((task) => normalizeStatus(task.status) === status);
         return (
