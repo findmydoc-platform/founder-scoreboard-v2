@@ -28,14 +28,14 @@ test("founders can only move or change status for their own tasks", async () => 
 
 test("header overlays close on outside click and escape", async () => {
   const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
-  const feedback = await readFile("src/features/settings/molecules/feedback-dialog.tsx", "utf8");
+  const calendar = await readFile("src/features/events/molecules/header-event-calendar.tsx", "utf8");
 
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
-  assert.match(feedback, /onPointerDown/);
-  assert.match(feedback, /event\.target === event\.currentTarget/);
-  assert.match(feedback, /Escape/);
+  assert.match(calendar, /rootRef/);
+  assert.match(calendar, /pointerdown/);
+  assert.match(calendar, /Escape/);
 });
 
 test("repo readiness includes the GitHub Actions deployment pipeline gates", async () => {

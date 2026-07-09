@@ -81,7 +81,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
-        /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/,
+        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
       ],
@@ -117,7 +117,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
-        /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/,
+        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
       ],
@@ -188,7 +188,6 @@ test("planning app controller delegates command domains and stays a thin compose
     { label: "event commands", path: "src/features/events/hooks/use-founder-event-commands.ts", matches: [/createFounderEventRequest/] },
     { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/] },
     { label: "notification commands", path: "src/features/planning/hooks/use-notification-commands.ts", matches: [/runNotificationDeliveryRequest/] },
-    { label: "feedback commands", path: "src/features/settings/hooks/use-feedback-commands.ts", matches: [/createFeedbackRequest/] },
   ]);
 });
 

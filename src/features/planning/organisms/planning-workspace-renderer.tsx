@@ -41,7 +41,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     dispatchNotifications,
     eventMessage,
     expandedPackages,
-    feedbackMessage,
     filters,
     focusedReviewTaskId,
     googleChatStatus,
@@ -60,7 +59,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     reviewTask,
     saveProfileSettings,
     saveOwnProfileSettings,
-    selectedFeedbackId,
     sendGoogleChatTest,
     setData,
     setFocusedReviewTaskId,
@@ -68,7 +66,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setInitiativeDialogDefaults,
     setReviewOwnerFilter,
     setReviewStatusFilter,
-    setSelectedFeedbackId,
     setSprintPlanningOptions,
     sprintLockMessage,
     sprintPlanningOptions,
@@ -218,8 +215,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           authUserEmail={controller.authUser?.email || ""}
           githubAppConnected={controller.githubAppConnected}
           pending={isPending}
-          feedbackMessage={feedbackMessage}
-          selectedFeedbackId={selectedFeedbackId}
           notificationDispatchMessage={notificationDispatchMessage}
           googleChatStatus={googleChatStatus}
           sprintPlanningOptions={sprintPlanningOptions}
@@ -229,7 +224,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onDispatchNotifications={dispatchNotifications}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
-          onSelectFeedback={setSelectedFeedbackId}
         />
       )}
       <TaskGitHubSyncQueue

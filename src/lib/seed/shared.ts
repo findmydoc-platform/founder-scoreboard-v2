@@ -78,7 +78,6 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningData {
     notificationPreferences: emptySeedCollections.notificationPreferences,
     profileUiPreferences: emptySeedCollections.profileUiPreferences,
     profileFeatureTourAcknowledgements: emptySeedCollections.profileFeatureTourAcknowledgements,
-    feedbackItems: emptySeedCollections.feedbackItems,
     fmdTools: seedFmdTools,
     events: emptySeedCollections.events,
     meetings: seedMeetings,

@@ -7,8 +7,6 @@ import type { NotificationEvent, Profile } from "@/lib/types";
 import { UiBadge, UiEmptyState, type UiTone } from "@/shared/atoms/ui-primitives";
 
 function notificationTypeLabel(type: string) {
-  if (type === "feedback.bug_reported") return "Bug";
-  if (type === "feedback.feature_requested") return "Feature";
   if (type === "task.review_requested") return "Review";
   if (type === "task.review_rework") return "Nacharbeit";
   if (type === "task.review_completed") return "Review erledigt";
@@ -21,8 +19,6 @@ function notificationTypeLabel(type: string) {
 }
 
 function notificationBadgeTone(type: string): UiTone {
-  if (type === "feedback.bug_reported") return "red";
-  if (type === "feedback.feature_requested") return "violet";
   if (type === "task.blocker_reported") return "red";
   if (type === "task.review_rework") return "amber";
   if (type === "task.review_requested") return "blue";

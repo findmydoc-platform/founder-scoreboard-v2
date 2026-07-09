@@ -33,22 +33,16 @@ function deliveryModeLabel(mode?: NotificationDelivery["deliveryMode"]) {
 export function SettingsNotificationsSection({
   data,
   pending,
-  feedbackMessage,
-  selectedFeedbackId,
   notificationDispatchMessage,
   googleChatStatus,
-  onSelectFeedback,
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
 }: {
   data: PlanningData;
   pending: boolean;
-  feedbackMessage: string;
-  selectedFeedbackId: number | null;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;
-  onSelectFeedback: (id: number) => void;
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
@@ -74,87 +68,9 @@ export function SettingsNotificationsSection({
   const googleChatApiConfigured = Boolean(googleChatStatus?.apiConfigured);
   const googleChatDeliveryEnabled = Boolean(googleChatStatus?.deliveryEnabled);
   const googleChatModeLabel = googleChatStatus?.mode === "direct-dm" ? "persönliche Hinweise" : googleChatStatus?.mode === "space-webhook" ? "Sammelmeldung" : "nicht verbunden";
-  const selectedFeedback = data.feedbackItems.find((item) => item.id === selectedFeedbackId) || data.feedbackItems[0];
-  const openFeedbackCount = data.feedbackItems.filter((item) => item.status === "open").length;
 
   return (
     <>
-      <UiPanel className="xl:col-span-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">Benachrichtigungscenter</h2>
-            <p className="mt-1 text-sm text-slate-500">Feedback-Eingang für Bugs und Feature-Wünsche mit Absender, Kontextseite und Detailtext.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <UiBadge>{openFeedbackCount} Feedback offen</UiBadge>
-            <UiBadge tone="amber">{googleChatDigestNotifications.length} im Chat-Ausgang</UiBadge>
-          </div>
-        </div>
-        {feedbackMessage && (
-          <UiNotice className="mt-3 leading-normal">{feedbackMessage}</UiNotice>
-        )}
-        <div className="mt-4 grid grid-cols-1 min-w-0 gap-4 xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-          <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-950">Feedback-Eingang</h3>
-                <p className="mt-0.5 text-xs text-slate-500">Neue Bugs und Verbesserungen aus dem Team.</p>
-              </div>
-              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600">{data.feedbackItems.length}</span>
-            </div>
-            <div className="grid max-h-96 min-w-0 gap-2 overflow-y-auto pr-1">
-              {data.feedbackItems.map((item) => {
-                const reporter = data.profiles.find((profile) => profile.id === item.profileId)?.name || item.profileId || "Unbekannt";
-                const active = selectedFeedback?.id === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelectFeedback(item.id)}
-                    className={`min-w-0 rounded-md border px-3 py-2 text-left text-sm transition ${active ? "border-blue-200 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-100 hover:bg-blue-50/40"}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <UiBadge tone={item.type === "bug" ? "red" : "violet"} size="xs">
-                        {item.type === "bug" ? "Bug" : "Feature"}
-                      </UiBadge>
-                      <span className="shrink-0 text-xs font-semibold text-slate-500">{item.severity}</span>
-                    </div>
-                    <div className="mt-2 line-clamp-2 break-words font-semibold text-slate-900">{item.title}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500">{reporter} · {formatDate(item.createdAt)}</div>
-                  </button>
-                );
-              })}
-              {!data.feedbackItems.length && <UiEmptyState minHeight="md" className="px-3 py-8">Noch kein Feedback erfasst.</UiEmptyState>}
-            </div>
-          </div>
-          <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
-            {selectedFeedback ? (
-              <div className="grid min-w-0 gap-3 text-sm">
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detail</div>
-                  <h3 className="mt-1 break-words text-base font-semibold text-slate-950">{selectedFeedback.title}</h3>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <UiBadge tone="white" className="text-slate-700">{selectedFeedback.status}</UiBadge>
-                  <UiBadge tone="white" className="text-slate-700">{selectedFeedback.severity}</UiBadge>
-                  <UiBadge tone="white" className="text-slate-700">{selectedFeedback.type === "bug" ? "Bug" : "Feature-Wunsch"}</UiBadge>
-                </div>
-                <div className="rounded-md border border-slate-200 bg-white p-3">
-                  <p className="whitespace-pre-wrap break-words leading-6 text-slate-700">{selectedFeedback.description}</p>
-                </div>
-                {selectedFeedback.pageUrl && (
-                  <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    <span className="font-semibold text-blue-900">Kontextseite: </span>
-                    <span className="break-all">{selectedFeedback.pageUrl}</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <UiEmptyState minHeight="md" className="px-4">Feedback auswählen, um Details zu sehen.</UiEmptyState>
-            )}
-          </div>
-        </div>
-      </UiPanel>
       <UiPanel className="xl:col-span-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

@@ -1,6 +1,5 @@
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { StatusGuardDialog } from "@/features/planning/organisms/status-guard-dialog";
-import { FeedbackDialog } from "@/features/settings/molecules/feedback-dialog";
 import { InitiativeDialog } from "@/features/projects/organisms/initiative-dialog";
 import { NewTaskDialog } from "@/features/tasks/organisms/new-task-dialog";
 import { TaskDetailPanel } from "@/features/tasks/organisms/task-detail-panel";
@@ -12,11 +11,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     closeTaskPanel,
     commentImportNotice,
     commentImportPendingTaskIds,
-    createFeedback,
     createTask,
     data,
     deleteTask,
-    feedbackDialogOpen,
     importGitHubComments,
     initiativeDialogDefaults,
     isPending,
@@ -33,7 +30,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskDetailLoading,
     selectedTaskExternalComments,
     selectedTaskSubIssues,
-    setFeedbackDialogOpen,
     setInitiativeDialogDefaults,
     setStatusGuardNotice,
     setStatusGuardTaskId,
@@ -117,13 +113,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           pending={isPending}
           onClose={() => setInitiativeDialogDefaults(null)}
           onSave={saveInitiative}
-        />
-      )}
-      {feedbackDialogOpen && (
-        <FeedbackDialog
-          pending={isPending}
-          onClose={() => setFeedbackDialogOpen(false)}
-          onSubmit={createFeedback}
         />
       )}
     </>

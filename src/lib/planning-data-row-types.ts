@@ -1,4 +1,4 @@
-import type { FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -357,18 +357,6 @@ export type DbProfileFeatureTourAcknowledgement = {
   profile_id: string;
   tour_id: ProfileFeatureTourAcknowledgement["tourId"];
   seen_at: string;
-};
-
-export type DbFeedbackItem = {
-  id: number;
-  type: FeedbackItem["type"];
-  status: FeedbackItem["status"];
-  severity: FeedbackItem["severity"];
-  profile_id: string | null;
-  title: string;
-  description: string;
-  page_url: string | null;
-  created_at: string;
 };
 
 export type DbFmdTool = {

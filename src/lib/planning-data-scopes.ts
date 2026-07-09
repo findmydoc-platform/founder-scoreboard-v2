@@ -14,7 +14,6 @@ const baseWorkspaceDataScope = {
   taskFocusItems: false,
   notificationDeliveries: false,
   notificationPreferences: false,
-  feedbackItems: false,
   fmdTools: false,
   events: false,
   meetings: false,
@@ -51,7 +50,6 @@ export const workspaceDataScopes = {
   settings: {
     ...baseWorkspaceDataScope,
     notificationDeliveries: true,
-    feedbackItems: true,
   },
   "ceo-intake": baseWorkspaceDataScope,
   profile: {
