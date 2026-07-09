@@ -64,18 +64,18 @@ export const workspaceLabels: Record<Workspace, string> = {
   profile: "Mein Profil",
 };
 
-export const workspaceSubtitles: Record<Workspace, string> = {
-  planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
-  backlog: "Sprint-Backlog priorisieren und in Sprints ziehen.",
-  reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
-  events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
-  sprint: "Weekly Updates, Punkte und Sprintabschluss.",
-  projects: "Epic-, Meilenstein- und Initiative-Überblick.",
-  tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
-  team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
-  settings: "Teamzugriff und Benachrichtigungen.",
-  "ceo-intake": "CEO-only Import für freigegebene Aufgabenpakete.",
-  profile: "Deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
+export const workspaceDescriptions: Record<Workspace, string> = {
+  planning: "Zeigt die Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
+  backlog: "Zeigt priorisierte Aufgaben, vorbereitete Vorschläge und Sprint-Zuordnung.",
+  reviews: "Zeigt offene, abgeschlossene und wieder geöffnete Reviews.",
+  events: "Zeigt wichtige Termine, Zielgruppen und Erinnerungen.",
+  sprint: "Zeigt Weekly Updates, Punkte, Review-Reife und Sprintabschluss.",
+  projects: "Zeigt Epics, Meilensteine, Initiativen und deren Fortschritt.",
+  tools: "Zeigt interne Tools, Repos, Notion und Drive als zentralen Hub.",
+  team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
+  settings: "Zeigt Teamzugriff, Integrationen und Benachrichtigungen.",
+  "ceo-intake": "Zeigt den CEO-only Import für freigegebene Aufgabenpakete.",
+  profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
 };
 
 export const planningWorkspaces: Workspace[] = ["planning"];

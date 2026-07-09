@@ -1,5 +1,5 @@
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import { workspaceLabels, workspaceSubtitles } from "@/features/planning/model/planning-app-model";
+import { workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { BacklogContentSkeleton } from "@/features/backlog/organisms/backlog-content-skeleton";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
@@ -33,7 +33,7 @@ function HeaderLoading({ workspace }: { workspace: AppWorkspace }) {
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{workspaceLabels[workspace]}</div>
           <h1 className="mt-1 text-xl font-semibold text-slate-950">{loadingTitles[workspace]}</h1>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{workspaceSubtitles[workspace]}</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{workspaceDescriptions[workspace]}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Pulse className="h-9 w-9" />

@@ -4,22 +4,22 @@ import { Menu } from "lucide-react";
 type AppHeaderProps = {
   actions?: ReactNode;
   children?: ReactNode;
+  description: string;
   eyebrow?: string;
   mobileNavOpen: boolean;
   notices?: ReactNode;
   onOpenMobileNav: () => void;
-  subtitle: string;
   title: string;
 };
 
 export function AppHeader({
   actions,
   children,
+  description,
   eyebrow,
   mobileNavOpen,
   notices,
   onOpenMobileNav,
-  subtitle,
   title,
 }: AppHeaderProps) {
   return (
@@ -39,7 +39,7 @@ export function AppHeader({
           <div className="min-w-0">
             {eyebrow && <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</div>}
             <h1 className="truncate text-xl font-semibold text-slate-950">{title}</h1>
-            <div className="mt-1 text-sm text-slate-500">{subtitle}</div>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{description}</p>
           </div>
         </div>
         {actions && (
