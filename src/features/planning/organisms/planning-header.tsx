@@ -1,4 +1,4 @@
-import { Filter, GitBranch, Import, Plus, X } from "lucide-react";
+import { Filter, GitBranch, HelpCircle, Import, Plus, X } from "lucide-react";
 import { HeaderEventCalendar } from "@/features/events/molecules/header-event-calendar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
@@ -61,6 +61,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
   const githubSyncQueueCount = linkedGitHubQueue.length + missingGitHubIssues.length;
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
   const subtitle = workspace === "planning" ? data.project.range : workspaceSubtitles[workspace];
+  const startFeatureTour = () => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour"));
 
   return (
     <AppHeader
@@ -120,6 +121,15 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onOpen={openNotification}
             onDismiss={dismissNotification}
           />
+          <button
+            type="button"
+            onClick={startFeatureTour}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            aria-label="Hilfe anzeigen"
+            title="Hilfe anzeigen"
+          >
+            <HelpCircle size={16} />
+          </button>
           <GitHubConnectionStatus
             authenticated={Boolean(authUser)}
             available={githubAppConnected}
