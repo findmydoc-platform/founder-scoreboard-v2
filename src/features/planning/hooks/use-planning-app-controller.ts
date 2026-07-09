@@ -204,7 +204,7 @@ export function usePlanningAppController({
     closeTaskPanel,
     currentProfile,
     data,
-    demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable,
+    demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable && data.tasks.length === 0,
     demoSeedImportPending,
     devProfileId,
     devRoleSwitchAvailable,
