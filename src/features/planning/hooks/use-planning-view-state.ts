@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
-import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
+import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
 import type { PlanningData, ViewMode } from "@/lib/types";
