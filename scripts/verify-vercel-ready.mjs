@@ -12,6 +12,8 @@ const requiredFiles = [
   "src/lib/supabase.ts",
   ".env.example",
   ".github/dependabot.yml",
+  ".github/scripts/check-pr-branch-current.sh",
+  ".github/workflows/branch-update-required.yml",
   ".github/workflows/deploy-preview.yml",
   ".github/workflows/deploy-production.yml",
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
@@ -166,8 +168,29 @@ for (const marker of ["GitHub App installation tokens", "GitHub App user tokens"
 }
 
 const previewWorkflow = await read(".github/workflows/deploy-preview.yml");
+const branchUpdateWorkflow = await read(".github/workflows/branch-update-required.yml");
+const branchUpdateScript = await read(".github/scripts/check-pr-branch-current.sh");
+for (const marker of [
+  "name: Branch Update Required",
+  "pull_request:",
+  "push:",
+  "statuses: write",
+  "check-pr-branch-current.sh",
+]) {
+  if (!branchUpdateWorkflow.includes(marker)) failures.push(`branch-update-required.yml missing: ${marker}`);
+}
+for (const marker of [
+  "Branch Update Required",
+  "merge-base --is-ancestor",
+  "Update branch with latest",
+  "gh pr list --base",
+  "statuses/${head_sha}",
+]) {
+  if (!branchUpdateScript.includes(marker)) failures.push(`check-pr-branch-current.sh missing: ${marker}`);
+}
 for (const marker of [
   "branches: [main]",
+  "types: [opened, synchronize, reopened, ready_for_review, edited]",
   "github.event_name == 'push'",
   "github.event.pull_request.head.repo.full_name == github.repository",
   "Validate preview secrets",
@@ -278,7 +301,7 @@ console.log(JSON.stringify({
   checks: {
     files: requiredFiles.length,
     scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
-    workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
+    workflows: ["branch-update-required", "deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,
     skill: "fmd-vercel-readiness",

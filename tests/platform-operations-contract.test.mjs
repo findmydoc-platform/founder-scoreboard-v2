@@ -179,6 +179,8 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
+  assert.match(verify, /branch-update-required\.yml/);
+  assert.match(verify, /check-pr-branch-current\.sh/);
   assert.match(verify, /node --test tests\/\*\.test\.mjs/);
   assert.match(verify, /pnpm run verify:release/);
   assert.match(verify, /ready-for-github-actions-deployment/);

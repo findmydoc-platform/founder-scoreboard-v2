@@ -41,6 +41,8 @@ test("header overlays close on outside click and escape", async () => {
 test("repo readiness includes the GitHub Actions deployment pipeline gates", async () => {
   const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
   const vercelJson = await readFile("vercel.json", "utf8");
+  const branchUpdateWorkflow = await readFile(".github/workflows/branch-update-required.yml", "utf8");
+  const branchUpdateScript = await readFile(".github/scripts/check-pr-branch-current.sh", "utf8");
   const previewWorkflow = await readFile(".github/workflows/deploy-preview.yml", "utf8");
   const productionWorkflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const deployScript = await readFile(".github/scripts/deploy/vercel-deploy-prebuilt.sh", "utf8");
@@ -54,6 +56,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   const ui = await readPlanningSurface();
 
   assert.match(verify, /ready-for-github-actions-deployment/);
+  assert.match(verify, /branch-update-required\.yml/);
+  assert.match(verify, /check-pr-branch-current\.sh/);
   assert.match(verify, /deploy-preview\.yml/);
   assert.match(verify, /deploy-production\.yml/);
   assert.match(verify, /vercel\.json/);
@@ -66,7 +70,17 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.doesNotMatch(verify, /manualNextSteps/);
   assert.match(vercelJson, /"installCommand": "pnpm install --frozen-lockfile"/);
   assert.match(vercelJson, /"buildCommand": "pnpm run vercel:build"/);
+  assert.match(branchUpdateWorkflow, /name: Branch Update Required/);
+  assert.match(branchUpdateWorkflow, /pull_request:[\s\S]*types: \[opened, synchronize, reopened, ready_for_review, edited\]/);
+  assert.match(branchUpdateWorkflow, /push:[\s\S]*branches: \[main\]/);
+  assert.match(branchUpdateWorkflow, /statuses: write/);
+  assert.match(branchUpdateWorkflow, /check-pr-branch-current\.sh/);
+  assert.match(branchUpdateScript, /merge-base --is-ancestor/);
+  assert.match(branchUpdateScript, /Update branch with latest/);
+  assert.match(branchUpdateScript, /gh pr list --base/);
+  assert.match(branchUpdateScript, /statuses\/\$\{head_sha\}/);
   assert.match(previewWorkflow, /environment:[\s\S]*name: preview/);
+  assert.match(previewWorkflow, /types: \[opened, synchronize, reopened, ready_for_review, edited\]/);
   assert.match(previewWorkflow, /url: \$\{\{ steps\.vercel_preview\.outputs\.deploymentUrl \}\}/);
   assert.match(previewWorkflow, /github\.event_name == 'push'/);
   assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
