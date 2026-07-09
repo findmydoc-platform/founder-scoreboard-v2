@@ -394,7 +394,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
   const projectsLoading = await readFile("src/app/(workspaces)/projects/loading.tsx", "utf8");
   const toolsLoading = await readFile("src/app/(workspaces)/tools/loading.tsx", "utf8");
   const teamLoading = await readFile("src/app/(workspaces)/team/loading.tsx", "utf8");
-  const settingsLoading = await readFile("src/app/(workspaces)/settings/loading.tsx", "utf8");
+  const notificationsLoading = await readFile("src/app/(workspaces)/notifications/loading.tsx", "utf8");
   const ceoIntakeLoading = await readFile("src/app/(workspaces)/ceo-intake/loading.tsx", "utf8");
   const profileLoading = await readFile("src/app/(workspaces)/profile/loading.tsx", "utf8");
   const reviewDetailLoading = await readFile("src/app/reviews/[id]/loading.tsx", "utf8");
@@ -422,7 +422,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(projectsLoading, /WorkspaceLoadingShell workspace="projects" variant="projects"/);
   assert.match(toolsLoading, /WorkspaceLoadingShell workspace="tools" variant="tools"/);
   assert.match(teamLoading, /WorkspaceLoadingShell workspace="team" variant="team"/);
-  assert.match(settingsLoading, /WorkspaceLoadingShell workspace="settings" variant="settings"/);
+  assert.match(notificationsLoading, /WorkspaceLoadingShell workspace="notifications" variant="notifications"/);
   assert.match(ceoIntakeLoading, /WorkspaceLoadingShell workspace="ceo-intake" variant="ceo-intake"/);
   assert.match(profileLoading, /WorkspaceLoadingShell workspace="profile" variant="profile"/);
   assert.match(reviewDetailLoading, /WorkspaceLoadingShell workspace="reviews" variant="review-detail"/);
@@ -641,7 +641,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
   const planRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
   const ui = await readPlanningSurface();
   const sprintUi = await readFeatureSurface("src/features/sprint");
-  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const sprintPlanningUi = await readFile("src/features/sprint/molecules/sprint-planning-section.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
@@ -656,8 +656,8 @@ test("sprint configuration is operational-lead only and audited", async () => {
   assert.match(sprintUi, /Zeitraum geschützt/);
   assert.match(sprintUi, /current: currentSprint\?\.id === item\.id/);
   assert.match(sprintUi, /locked: data\.tasks\.some/);
-  assert.match(ui, /SettingsOverview/);
-  assert.doesNotMatch(settingsOverviewUi, /SprintPlanningSection|Sprint-Planung/);
+  assert.match(ui, /NotificationsOverview/);
+  assert.doesNotMatch(notificationsOverviewUi, /SprintPlanningSection|Sprint-Planung/);
   assert.match(sprintUi, /SprintPlanningSection/);
   assert.match(sprintPlanningUi, /Sprint-Planung/);
   assert.match(sprintPlanningUi, /CustomDatePicker/);

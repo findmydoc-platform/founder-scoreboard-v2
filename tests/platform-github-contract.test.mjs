@@ -88,7 +88,7 @@ test("github issue export includes only the task brief and FounderOps source", a
   const github = await readFile("src/lib/github.ts", "utf8");
   const ui = await readPlanningSurface();
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
 
   assert.match(github, /taskIssueTitle/);
@@ -122,9 +122,9 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(ui, /syncTaskToGitHub/);
   assert.match(panelSidebar, /GitHub Issue/);
   assert.match(panelSidebar, /Sync/);
-  assert.match(ui, /SettingsOverview/);
-  assert.doesNotMatch(settingsOverviewUi, /GitHubSyncQueueSection/);
-  assert.doesNotMatch(settingsOverviewUi, /SystemStatusSection|settings-readiness/);
+  assert.match(ui, /NotificationsOverview/);
+  assert.doesNotMatch(notificationsOverviewUi, /GitHubSyncQueueSection/);
+  assert.doesNotMatch(notificationsOverviewUi, /SystemStatusSection|settings-readiness/);
   assert.match(ui, /createIfMissing: false/);
 });
 
@@ -279,7 +279,7 @@ test("app-only tasks are visibly marked without creating github issues", async (
   const ui = await readPlanningSurface();
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
-  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
@@ -291,8 +291,8 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(taskCard, /GitHub offen/);
   assert.match(taskCard, /Sync läuft/);
   assert.match(taskCard, /Sync fehlgeschlagen/);
-  assert.doesNotMatch(settingsOverviewUi, /task\.taskType === "deliverable"/);
-  assert.doesNotMatch(settingsOverviewUi, /Extern anlegen|Keine Aufgaben ohne externe Ablage/);
+  assert.doesNotMatch(notificationsOverviewUi, /task\.taskType === "deliverable"/);
+  assert.doesNotMatch(notificationsOverviewUi, /Extern anlegen|Keine Aufgaben ohne externe Ablage/);
   assert.match(queue, /GitHub Issue anlegen/);
   assert.match(queue, /Offene Issues syncen/);
   assert.match(queue, /onlyFailed: true/);
@@ -300,7 +300,7 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(panel, /TaskDetailPanelSidebar/);
   assert.match(panelSidebar, /GitHub Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
-  assert.doesNotMatch(settingsOverviewUi, /onCreateGitHubIssue/);
+  assert.doesNotMatch(notificationsOverviewUi, /onCreateGitHubIssue/);
   assert.match(detailGitHubSyncCard, /Noch kein GitHub Issue/);
   assert.match(detailGitHubSyncCard, /GitHub Issue anlegen/);
   assert.match(detail, /createIfMissing: true/);
@@ -342,7 +342,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   const browserApiClient = await readFile("src/lib/browser-api-client.ts", "utf8");
   const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
   const connectionModel = await readFile("src/features/planning/model/github-app-connection.ts", "utf8");
-  const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
+  const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
@@ -417,8 +417,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubStatus, /needsAction &&/);
   assert.match(githubStatus, /GitHub-App verbinden/);
   assert.match(githubStatus, /GitHub-Sync, Kommentare und Anhänge/);
-  assert.doesNotMatch(settingsOverviewUi, /GitHub-Verbindung .*erneuern/);
-  assert.doesNotMatch(settingsOverviewUi, /zentrale Verbindung im Header/);
+  assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
+  assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
   assert.doesNotMatch(detailGitHubSyncCard, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(detailGitHubSyncCard, /frische Autorisierung/);
   assert.match(commentBody, /GitHubCommentImage/);
@@ -432,9 +432,9 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.doesNotMatch(taskApiClient, /includeGitHubToken|x-github-provider-token/);
   assert.equal(existsSync("src/lib/github-provider-token.ts"), false);
   assert.equal(existsSync("src/lib/github-provider-auth.ts"), false);
-  assert.doesNotMatch(settingsOverviewUi, /onReconnectGitHub/);
+  assert.doesNotMatch(notificationsOverviewUi, /onReconnectGitHub/);
   assert.doesNotMatch(detailGitHubSyncCard, /onReconnectGitHub/);
-  assert.doesNotMatch(settingsOverviewUi, /GitHub-App/);
+  assert.doesNotMatch(notificationsOverviewUi, /GitHub-App/);
   assert.match(syncRoute, /getGitHubAppInstallationToken/);
   assert.doesNotMatch(syncRoute, /requireMatchingGitHubProviderToken|x-github-provider-token|provider_token/);
   assert.match(connectRoute, /getServerPlanningAuth\(\["ceo", "founder", "deputy", "viewer"\]\)/);

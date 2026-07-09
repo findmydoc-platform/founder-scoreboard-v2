@@ -19,7 +19,7 @@ const EventsOverview = dynamic(() => import("@/features/events/organisms/events-
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
 const ReviewWorkspaceOverview = dynamic(() => import("@/features/reviews/organisms/review-workspace-overview").then((mod) => mod.ReviewWorkspaceOverview), { loading: ReviewsWorkspacePanelLoading });
-const SettingsOverview = dynamic(() => import("@/features/settings/organisms/settings-overview").then((mod) => mod.SettingsOverview), { loading: GenericWorkspacePanelLoading });
+const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
@@ -38,6 +38,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     createSprintPlan,
     currentProfile,
     data,
+    dismissNotification,
     dispatchNotifications,
     eventMessage,
     expandedPackages,
@@ -51,6 +52,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     isPending,
     lockSprint,
     notificationDispatchMessage,
+    openNotification,
     openTaskPanel,
     reopenReviewTask,
     apiClient,
@@ -86,6 +88,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
+  const canManageNotificationsOutbox = source === "seed" || !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
@@ -230,13 +233,17 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
         />
       )}
-      {workspace === "settings" && (
-        <SettingsOverview
+      {workspace === "notifications" && (
+        <NotificationsOverview
+          canManageOutbox={canManageNotificationsOutbox}
+          currentProfile={currentProfile}
           data={data}
           pending={isPending}
           notificationDispatchMessage={notificationDispatchMessage}
           googleChatStatus={googleChatStatus}
           onDispatchNotifications={dispatchNotifications}
+          onOpenNotification={openNotification}
+          onDismissNotification={dismissNotification}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
         />

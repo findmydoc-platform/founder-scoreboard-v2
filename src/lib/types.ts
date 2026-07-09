@@ -265,7 +265,7 @@ export type NotificationEvent = {
   entityId: string;
   title: string;
   body: string;
-  status: "pending" | "sent" | "failed" | "dismissed";
+  status: "pending" | "sent" | "failed" | "dismissed" | "resolved";
   createdAt: string;
 };
 

@@ -47,7 +47,7 @@ export const workspaceDataScopes = {
   projects: baseWorkspaceDataScope,
   tools: { ...baseWorkspaceDataScope, fmdTools: true },
   team: baseWorkspaceDataScope,
-  settings: {
+  notifications: {
     ...baseWorkspaceDataScope,
     notificationDeliveries: true,
   },
@@ -64,5 +64,6 @@ export function getPlanningDataScopeForWorkspace(workspace: AppWorkspace): Plann
 
 export function planningDataWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
   if (!value) return null;
+  if (value === "settings") return "notifications";
   return Object.prototype.hasOwnProperty.call(workspaceDataScopes, value) ? value as AppWorkspace : null;
 }

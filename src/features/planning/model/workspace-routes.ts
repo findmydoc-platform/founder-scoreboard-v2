@@ -1,19 +1,19 @@
 import {
   Archive,
+  Bell,
   CalendarClock,
   ClipboardCheck,
   GanttChart,
   LayoutDashboard,
   Link2,
   ListOrdered,
-  Settings,
   UserCircle,
   Users,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
 
-export type AppWorkspace = "planning" | "backlog" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "settings" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "backlog" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 type WorkspaceRoute = {
@@ -39,7 +39,7 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "projects", label: "Meilensteine", icon: Archive, href: "/projects" },
   { id: "tools", label: "Quicklinks", icon: Link2, href: "/tools" },
   { id: "team", label: "Team", icon: Users, href: "/team" },
-  { id: "settings", label: "Einstellungen", icon: Settings, href: "/settings" },
+  { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
   { id: "profile", label: "Mein Profil", icon: UserCircle, href: "/profile", hidden: true },
 ];
 
@@ -54,6 +54,7 @@ export function workspacePath(workspace: AppWorkspace) {
 
 export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
   if (value === "mine" || value === "execution") return "planning";
+  if (value === "settings") return "notifications";
   return appWorkspaceIds.find((id) => id === value) || null;
 }
 

@@ -21,7 +21,7 @@ const loadingTitles: Record<AppWorkspace, string> = {
   projects: "Meilensteine werden geladen",
   tools: "Quicklinks werden geladen",
   team: "Team wird geladen",
-  settings: "Einstellungen werden geladen",
+  notifications: "Notifications werden geladen",
   "ceo-intake": "CEO Intake wird geladen",
   profile: "Profil wird geladen",
 };

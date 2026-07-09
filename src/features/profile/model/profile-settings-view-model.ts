@@ -1,5 +1,5 @@
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { appWorkspaceFromValue, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 
 export type ProfileSettingsSectionId = "profile" | "notifications" | "board";
@@ -49,7 +49,7 @@ export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilt
 }
 
 function normalizedDefaultWorkspace(value: string) {
-  return value === "mine" || value === "execution" ? "planning" : value as AppWorkspace;
+  return appWorkspaceFromValue(value) || "planning";
 }
 
 export function buildInitialDraft({

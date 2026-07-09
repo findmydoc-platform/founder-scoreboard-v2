@@ -33,6 +33,7 @@ test("header overlays close on outside click and escape", async () => {
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
+  assert.match(notifications, /href="\/notifications"/);
   assert.match(calendar, /rootRef/);
   assert.match(calendar, /pointerdown/);
   assert.match(calendar, /Escape/);
@@ -168,7 +169,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.doesNotMatch(skill, /vercel logs/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
-  assert.match(ui, /SettingsOverview/);
+  assert.match(ui, /NotificationsOverview/);
   assert.doesNotMatch(ui, /Betriebsdetails|manuell offen|Deployment-Automation/);
   assert.doesNotMatch(ui, /vercel login/);
   assert.doesNotMatch(ui, /Release-Prüfung|GitHub-Zugriff|Anmelde-Weiterleitungen/);
