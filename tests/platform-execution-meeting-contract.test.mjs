@@ -19,6 +19,7 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   const toolSeedExamplesMigration = await readFile("supabase/0040_quicklinks_seed_examples.sql", "utf8");
   const toolCuratedLinksMigration = await readFile("supabase/0041_fmd_tools_curated_links.sql", "utf8");
   const toolPreviewMigration = await readFile("supabase/0042_fmd_tools_preview_images.sql", "utf8");
+  const toolLegacyBackfillMigration = await readFile("supabase/0043_backfill_legacy_quicklink_links.sql", "utf8");
   const toolMetadataRoute = await readFile("src/app/api/tools/metadata/route.ts", "utf8");
   const toolPreviewRoute = await readFile("src/app/api/tools/preview-image/route.ts", "utf8");
   const toolMetadataHelper = await readFile("src/lib/fmd-tool-metadata.ts", "utf8");
@@ -124,6 +125,20 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolPreviewMigration, /preview_image_source/);
   assert.match(toolPreviewMigration, /fmd-tool-previews/);
   assert.match(toolPreviewMigration, /image\/webp/);
+  assert.match(toolLegacyBackfillMigration, /email-signature-tool/);
+  assert.match(toolLegacyBackfillMigration, /https:\/\/mailsig\.findmydoc\.eu\//);
+  assert.match(toolLegacyBackfillMigration, /tool-repos/);
+  assert.match(toolLegacyBackfillMigration, /https:\/\/github\.com\/findmydoc-platform\/management/);
+  assert.match(toolLegacyBackfillMigration, /notion-docs-source/);
+  assert.match(toolLegacyBackfillMigration, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
+  assert.match(toolLegacyBackfillMigration, /pitchdeck-site/);
+  assert.match(toolLegacyBackfillMigration, /https:\/\/pitchdeck\.findmydoc\.eu\//);
+  assert.match(toolLegacyBackfillMigration, /google-drive-assets/);
+  assert.match(toolLegacyBackfillMigration, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
+  assert.match(toolLegacyBackfillMigration, /on conflict \(id\) do nothing/);
+  assert.match(toolLegacyBackfillMigration, /nullif\(btrim\(tool\.url\), ''\)/);
+  assert.match(toolLegacyBackfillMigration, /where tool\.id = legacy_links\.id/);
+  assert.doesNotMatch(toolLegacyBackfillMigration, /on conflict \(id\) do update/);
   assert.match(toolMetadataRoute, /requireTeamMember/);
   assert.match(toolMetadataRoute, /loadFmdToolMetadata/);
   assert.match(toolMetadataHelper, /assertPublicHttpUrl/);
