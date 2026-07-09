@@ -18,7 +18,6 @@ type GoogleChatStatus = {
 type UseNotificationCommandsOptions = PlanningCommandContext & {
   openTaskPanel: (taskId: string) => void;
   refreshPlanningData: () => Promise<void>;
-  setSelectedFeedbackId: (feedbackId: number | null) => void;
   setShowNotifications: (show: boolean) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   workspace: AppWorkspace;
@@ -31,7 +30,6 @@ export function useNotificationCommands({
   refreshPlanningData,
   setData,
   setSaveError,
-  setSelectedFeedbackId,
   setShowNotifications,
   setWorkspace,
   source,
@@ -117,13 +115,8 @@ export function useNotificationCommands({
         return;
       }
       openTaskPanel(task.id);
-    } else if (event.entityType === "feedback") {
-      setSelectedFeedbackId(Number(event.entityId) || null);
-      setWorkspace("settings");
-    } else if (event.entityType === "decision") {
-      setWorkspace("decisions");
     } else if (event.entityType === "meeting") {
-      setWorkspace("meetings");
+      setWorkspace("sprint");
     }
     setShowNotifications(false);
   };

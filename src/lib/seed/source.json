@@ -1,7 +1,7 @@
 {
   "project": {
     "id": "findmydoc-founder-execution",
-    "name": "findmydoc Founder Execution",
+    "name": "findmydoc Planning",
     "range": "Sprint 1 / operative Planungsphase"
   },
   "profiles": [
@@ -271,10 +271,10 @@
     {
       "id": 1,
       "sprintId": "sprint-1",
-      "title": "Sprint 1 Biweekly",
+      "title": "Sprint 1 Weekly 1",
       "meetingAt": "2026-06-07T18:00:00.000Z",
       "status": "planned",
-      "agenda": "Sprint-Update, Blocker, Review-Stand, Entscheidungen und nächste Sprintplanung."
+      "agenda": "Weekly Update, Blocker, Review-Stand und nächste Sprintplanung."
     }
   ],
   "emptyCollections": {
@@ -284,25 +284,20 @@
     "strikeEvents": [],
     "scoreObjections": [],
     "milestones": [],
-    "decisions": [],
-    "decisionComments": [],
     "taskComments": [],
     "taskExternalComments": [],
     "taskBlockers": [],
     "taskRelations": [],
     "taskActivity": [],
     "taskFocusItems": [],
-    "decisionTaskLinks": [],
     "notificationEvents": [],
     "notificationDeliveries": [],
     "notificationPreferences": [],
     "profileUiPreferences": [],
     "profileFeatureTourAcknowledgements": [],
-    "feedbackItems": [],
     "events": [],
     "meetingAttendance": [],
-    "audit": [],
-    "availability": []
+    "audit": []
   },
   "taskDefaults": {
     "status": "Offen",

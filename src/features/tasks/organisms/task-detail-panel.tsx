@@ -3,21 +3,22 @@
 import { useState } from "react";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelBriefSection } from "@/features/tasks/molecules/task-detail-panel-brief-section";
-import { TaskDetailPanelContextSection } from "@/features/tasks/molecules/task-detail-panel-context-section";
 import { TaskDetailPanelDependenciesSection } from "@/features/tasks/molecules/task-detail-panel-dependencies-section";
 import { TaskDetailPanelHeader } from "@/features/tasks/molecules/task-detail-panel-header";
 import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-detail-panel-notes-section";
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
-import { buildTaskRelationshipRows, linkedDecisionsForTask, linkedFocusItemsForTask, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
-import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskRelationType } from "@/lib/types";
+import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
+import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
 export function TaskDetailPanel({
   task,
   pack,
   comments,
   externalComments,
   activities,
+  detailDataError,
+  detailDataLoading,
   commentImportNotice,
   commentImportPending,
   blockers,
@@ -26,9 +27,7 @@ export function TaskDetailPanel({
   packages,
   sprints,
   milestones,
-  decisions,
-  decisionTaskLinks,
-  focusItems,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
@@ -54,6 +53,8 @@ export function TaskDetailPanel({
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
+  detailDataError: string;
+  detailDataLoading: boolean;
   commentImportNotice: string;
   commentImportPending: boolean;
   blockers: TaskBlocker[];
@@ -62,9 +63,7 @@ export function TaskDetailPanel({
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
-  decisions: PlanningData["decisions"];
-  decisionTaskLinks: DecisionTaskLink[];
-  focusItems: TaskFocusItem[];
+  canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
@@ -92,8 +91,6 @@ export function TaskDetailPanel({
     note: "",
   });
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const linkedDecisions = linkedDecisionsForTask(task.id, decisions, decisionTaskLinks);
-  const linkedFocusItems = linkedFocusItemsForTask(task.id, focusItems);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
 
@@ -101,7 +98,7 @@ export function TaskDetailPanel({
     <>
     <button
       type="button"
-      className="fixed inset-0 z-30 cursor-default bg-slate-950/[0.03]"
+      className="fixed inset-0 z-30 cursor-default bg-slate-950/20 backdrop-blur-[1px]"
       aria-label="Detailpanel schließen"
       onClick={onClose}
     />
@@ -111,7 +108,6 @@ export function TaskDetailPanel({
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
           <main className="grid min-w-0 gap-4">
             <TaskDetailPanelBriefSection task={task} onUpdate={onUpdate} />
-            <TaskDetailPanelContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
             <TaskDetailPanelDependenciesSection
               task={task}
               relationshipGroups={relationshipGroups}
@@ -127,6 +123,11 @@ export function TaskDetailPanel({
               onRemoveRelation={onRemoveRelation}
             />
             <TaskDetailPanelSubIssuesSection subIssues={subIssues} onCreateSubIssue={onCreateSubIssue} />
+            {(detailDataLoading || detailDataError) && (
+              <div className={detailDataError ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700" : "rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600"}>
+                {detailDataError || "Kommentare, Blocker und Verlauf werden geladen..."}
+              </div>
+            )}
             <TaskDetailPanelBlockerSection
               blockers={blockers}
               blockerDraft={blockerDraft}
@@ -149,6 +150,7 @@ export function TaskDetailPanel({
             packages={packages}
             sprints={sprints}
             milestones={milestones}
+            canManageFinalTaskStatus={canManageFinalTaskStatus}
             canManageTaskMeta={canManageTaskMeta}
             canManageReviewOwner={canManageReviewOwner}
             canChangeTaskStatus={canChangeTaskStatus}

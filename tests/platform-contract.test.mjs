@@ -11,27 +11,31 @@ test("founders can only move or change status for their own tasks", async () => 
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const statusControl = await readFile("src/features/tasks/atoms/task-status-control.tsx", "utf8");
 
-  assert.match(routePolicy, /taskOwnedByProfile/);
+  assert.match(routePolicy, /taskAssignedToProfile/);
   assert.match(routePolicy, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
+  assert.match(routePolicy, /Nur CEO kann sie wieder öffnen/);
   assert.match(app, /canChangeTaskStatus/);
+  assert.match(app, /canManageFinalTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(app, /onDragStart=\{canUpdateStatus && onDragStart \? onDragStart : undefined\}/);
   assert.match(taskCard, /statusDisabled/);
   assert.match(detailPanel, /canChangeTaskStatus/);
-  assert.match(detailSidebar, /disabled=\{!canChangeTaskStatus\}/);
+  assert.match(detailSidebar, /TaskStatusControl/);
+  assert.match(statusControl, /Nur CEO kann wieder öffnen/);
 });
 
 test("header overlays close on outside click and escape", async () => {
   const notifications = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
-  const feedback = await readFile("src/features/settings/molecules/feedback-dialog.tsx", "utf8");
+  const calendar = await readFile("src/features/events/molecules/header-event-calendar.tsx", "utf8");
 
   assert.match(notifications, /rootRef/);
   assert.match(notifications, /pointerdown/);
   assert.match(notifications, /keydown/);
-  assert.match(feedback, /onPointerDown/);
-  assert.match(feedback, /event\.target === event\.currentTarget/);
-  assert.match(feedback, /Escape/);
+  assert.match(calendar, /rootRef/);
+  assert.match(calendar, /pointerdown/);
+  assert.match(calendar, /Escape/);
 });
 
 test("repo readiness includes the GitHub Actions deployment pipeline gates", async () => {

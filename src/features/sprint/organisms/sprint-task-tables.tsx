@@ -1,7 +1,7 @@
-import { AlertTriangle } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
-import { dateRange, taskOwnerLabel } from "@/lib/display";
+import { taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
@@ -14,6 +14,7 @@ export function SprintTaskTables({
   sprintTasks,
   otherTasks,
   pending,
+  canManageFinalTaskStatus,
   canReviewTask,
   reviewOwnerName,
   isSelfReview,
@@ -28,6 +29,7 @@ export function SprintTaskTables({
   sprintTasks: Task[];
   otherTasks: Task[];
   pending: boolean;
+  canManageFinalTaskStatus: boolean;
   canReviewTask: (task: Task) => boolean;
   reviewOwnerName: (task: Task) => string;
   isSelfReview: (task: Task) => boolean;
@@ -41,16 +43,14 @@ export function SprintTaskTables({
     <>
       <DataSurface title="Sprint-Aufgaben">
         <DataOverflow>
-          <DataTable minWidth={1180}>
+          <DataTable minWidth={940}>
             <DataTableHead>
               <tr>
                 <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                <DataHeaderCell>Assignee</DataHeaderCell>
-                <DataHeaderCell>Status</DataHeaderCell>
-                <DataHeaderCell>Review-Status</DataHeaderCell>
-                <DataHeaderCell>CEO-Score</DataHeaderCell>
-                <DataHeaderCell>Sprint</DataHeaderCell>
-                <DataHeaderCell>Zeitraum</DataHeaderCell>
+                <DataHeaderCell>Zuständig</DataHeaderCell>
+                <DataHeaderCell>Status / Review</DataHeaderCell>
+                <DataHeaderCell>Score</DataHeaderCell>
+                <DataHeaderCell>Risiko</DataHeaderCell>
                 <DataHeaderCell>Nächster Schritt</DataHeaderCell>
               </tr>
             </DataTableHead>
@@ -58,34 +58,34 @@ export function SprintTaskTables({
               {sprintTasks.map((task) => (
                 <DataRow key={task.id}>
                   <DataCell className="max-w-[360px] px-4">
-                    <button type="button" onClick={() => onOpen(task)} className="flex max-w-full items-start gap-1.5 truncate text-left font-semibold text-slate-950 hover:text-blue-700">
-                      {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
+                    <button type="button" onClick={() => onOpen(task)} className="block max-w-full truncate text-left font-semibold text-slate-950 hover:text-blue-700">
                       <span className="truncate">{task.title}</span>
                     </button>
-                    <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
-                    {(!hasGitHubIssue(task) || task.carriedFromSprintId || task.sprintOutcome) && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {!hasGitHubIssue(task) && <GitHubMissingBadge />}
-                        {task.carriedFromSprintId && <UiBadge tone="blue" size="xs" className="text-[11px]">Carry-over</UiBadge>}
-                        {task.sprintOutcome && <UiBadge tone="slate" size="xs" className="text-[11px]">{task.sprintOutcome}</UiBadge>}
-                      </div>
-                    )}
                   </DataCell>
-                  <DataCell className="text-slate-700">{taskOwnerLabel(task)}</DataCell>
+                  <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                   <DataCell>
-                    <CustomSelect value={normalizeStatus(task.status)} disabled={pending} onChange={(value) => onChangeStatus(task, value as TaskStatus)} className="h-8 w-32 text-xs font-semibold" options={taskStatuses.map((status) => ({ value: status, label: status }))} />
-                  </DataCell>
-                  <DataCell className="text-slate-700">
-                    <div>{reviewLabel(task.reviewStatus)}</div>
+                    <TaskStatusControl
+                      status={task.status}
+                      canChange={!pending && (canManageFinalTaskStatus || normalizeStatus(task.status) !== "Erledigt")}
+                      onChange={(status) => onChangeStatus(task, status)}
+                      options={canManageFinalTaskStatus ? taskStatuses : taskStatuses.filter((status) => status !== "Erledigt")}
+                      selectClassName="h-8 w-32 text-xs font-semibold"
+                      compact
+                    />
+                    <div className="mt-2 text-xs text-slate-600">{reviewLabel(task.reviewStatus)}</div>
                     <div className="mt-1 text-xs text-slate-500">{reviewOwnerName(task)}{isSelfReview(task) ? " · Self-Review" : ""}</div>
                   </DataCell>
                   <DataCell className="text-slate-700">
                     {task.scorePoints} {task.scoreFinal ? "final" : "offen"}
                   </DataCell>
                   <DataCell>
-                    <CustomSelect value={task.sprintId} disabled={pending || sprint.scoreLocked} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-44 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
+                    <div className="flex flex-wrap gap-1">
+                      {!hasGitHubIssue(task) && <GitHubMissingBadge />}
+                      {task.carriedFromSprintId && <UiBadge tone="blue" size="xs" className="text-[11px]">Carry-over</UiBadge>}
+                      {task.sprintOutcome && <UiBadge tone="slate" size="xs" className="text-[11px]">{task.sprintOutcome}</UiBadge>}
+                      {hasGitHubIssue(task) && !task.carriedFromSprintId && !task.sprintOutcome && <span className="text-xs text-slate-400">-</span>}
+                    </div>
                   </DataCell>
-                  <DataCell className="text-slate-700">{dateRange(task)}</DataCell>
                   <DataCell>
                     <div className="flex flex-wrap gap-1.5">
                       {task.reviewStatus === "not_requested" || normalizeStatus(task.status) === "Nacharbeit" ? (
@@ -107,7 +107,7 @@ export function SprintTaskTables({
                 </DataRow>
               ))}
               {!sprintTasks.length && (
-                <DataEmptyRow colSpan={8}>
+                <DataEmptyRow colSpan={6}>
                   Noch keine Aufgaben in diesem Sprint.
                 </DataEmptyRow>
               )}
@@ -123,7 +123,7 @@ export function SprintTaskTables({
               <DataTableHead>
                 <tr>
                   <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                  <DataHeaderCell>Assignee</DataHeaderCell>
+                  <DataHeaderCell>Zuständig</DataHeaderCell>
                   <DataHeaderCell>Aktueller Sprint</DataHeaderCell>
                   <DataHeaderCell>Zuweisung</DataHeaderCell>
                 </tr>
@@ -139,7 +139,7 @@ export function SprintTaskTables({
                         </button>
                         <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
                       </DataCell>
-                      <DataCell className="text-slate-700">{taskOwnerLabel(task)}</DataCell>
+                      <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                       <DataCell className="text-slate-700">{currentSprint?.name || "ohne Sprint"}</DataCell>
                       <DataCell>
                         <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />

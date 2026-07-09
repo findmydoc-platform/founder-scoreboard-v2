@@ -119,7 +119,7 @@ function founderOpsTaskUrl(taskId: string) {
 function sourceLine(task: Task) {
   const taskUrl = founderOpsTaskUrl(task.id);
   const source = taskUrl ? `[Open in FounderOps](${taskUrl})` : "FounderOps";
-  return `Source: ${source}. One-way sync; edit task state in FounderOps.`;
+  return `Planning context: ${source}. GitHub issue sync keeps the working issue aligned.`;
 }
 
 export function taskIssueBody(task: Task) {

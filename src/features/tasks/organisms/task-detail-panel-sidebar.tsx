@@ -2,12 +2,14 @@
 
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { dateRange, formatDate, taskOwnerLabel } from "@/lib/display";
+import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { normalizeStatus } from "@/lib/status";
 import {
   assigneeOptions,
   initiativeOptions,
@@ -15,7 +17,7 @@ import {
   priorityOptions,
   sprintOptions,
 } from "@/features/tasks/model/task-form-options";
-import type { Milestone, Package, Profile, Sprint, Task, TaskStatus } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -24,6 +26,7 @@ type Props = {
   packages: Package[];
   sprints: Sprint[];
   milestones: Milestone[];
+  canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
   canChangeTaskStatus?: boolean;
@@ -42,6 +45,7 @@ export function TaskDetailPanelSidebar({
   packages,
   sprints,
   milestones,
+  canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
   canChangeTaskStatus = canManageTaskMeta,
@@ -52,12 +56,12 @@ export function TaskDetailPanelSidebar({
   onOpenReview,
   onDelete,
 }: Props) {
-  const ownerProfile = teamProfiles.find((profile) => profile.name === task.owner || profile.id === task.owner);
+  const assigneeProfile = teamProfiles.find((profile) => profile.name === task.assignee || profile.id === task.assignee);
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
-  const selfReview = Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+  const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
   const creatorProfile = teamProfiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
     || teamProfiles.find((profile) => profile.platformRole === "ceo")
-    || ownerProfile;
+    || assigneeProfile;
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
@@ -65,11 +69,7 @@ export function TaskDetailPanelSidebar({
   const externalSyncPending = task.githubSyncStatus === "pending";
   const externalSyncProblem = task.githubSyncStatus === "failed" || Boolean(task.githubSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-  const statusOptions = canManageTaskMeta
-    ? taskStatuses
-    : normalizeStatus(task.status) === "Nacharbeit"
-      ? (["In Arbeit", "Review", "Blockiert"] as TaskStatus[])
-      : taskStatuses.filter((status) => status !== "Erledigt");
+  const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
 
   const updatePackage = (packageId: string) => {
     const nextPackage = packages.find((item) => item.id === packageId);
@@ -86,19 +86,22 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-950">Steuerung</h3>
         <div className="mt-3 grid gap-3">
-          <UiSelectField
-            label="Status"
-            value={normalizeStatus(task.status)}
-            disabled={!canChangeTaskStatus}
-            onChange={(value) => onUpdate({ status: value })}
-            options={(canChangeTaskStatus ? statusOptions : [normalizeStatus(task.status)]).map((status) => ({ value: status, label: status }))}
-          />
+          <div>
+            <div className="text-xs font-semibold text-slate-500">Status</div>
+            <TaskStatusControl
+              status={task.status}
+              canChange={canChangeTaskStatus}
+              onChange={(status) => onUpdate({ status })}
+              options={statusOptions}
+              className="mt-1"
+            />
+          </div>
           {canManageTaskMeta ? (
             <>
               <UiSelectField
-                label="Assignee"
-                value={task.owner}
-                onChange={(value) => onUpdate({ owner: value })}
+                label="Zuständig"
+                value={task.assigneeId || task.assignee}
+                onChange={(value) => onUpdate({ assignee: value, assigneeId: value })}
                 options={assigneeOptions(task.taskType, teamProfiles)}
               />
               <UiSelectField label="Priorität" value={task.priority} onChange={(value) => onUpdate({ priority: value })} options={priorityOptions} />
@@ -106,8 +109,8 @@ export function TaskDetailPanelSidebar({
           ) : (
             <>
               <div>
-                <div className="text-xs font-semibold text-slate-500">Assignee</div>
-                <div className="mt-1 flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800">{taskOwnerLabel(task)}</div>
+                <div className="text-xs font-semibold text-slate-500">Zuständig</div>
+                <div className="mt-1 flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-semibold text-slate-800">{taskAssigneeLabel(task)}</div>
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-500">Priorität</div>
@@ -228,8 +231,8 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">Externe Ablage</h3>
-            <p className="mt-1 text-xs text-slate-500">Optional in GitHub spiegeln.</p>
+            <h3 className="text-sm font-semibold text-slate-950">GitHub Issue</h3>
+            <p className="mt-1 text-xs text-slate-500">Mit der GitHub-Arbeitsfläche abgleichen.</p>
           </div>
           {canSyncExistingGitHubIssue ? (
             <button
@@ -238,7 +241,7 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub()}
               className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Sync..." : "Jetzt spiegeln"}
+              {task.githubSyncStatus === "pending" ? "Sync..." : "Sync"}
             </button>
           ) : task.taskType === "deliverable" ? (
             <button
@@ -247,7 +250,7 @@ export function TaskDetailPanelSidebar({
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubSyncStatus === "pending" ? "Anlegen..." : "Extern anlegen"}
+              {task.githubSyncStatus === "pending" ? "Anlegen..." : "GitHub Issue anlegen"}
             </button>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
@@ -256,24 +259,24 @@ export function TaskDetailPanelSidebar({
         <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600">
           <p className="break-words font-medium text-slate-800">
             {externalSyncPending
-              ? "Externe Ablage wird aktualisiert."
+              ? "GitHub-Sync läuft."
               : externalSyncProblem
-                ? "Externe Ablage braucht Aufmerksamkeit."
+                ? "GitHub-Sync braucht Aufmerksamkeit."
                 : hasGitHubIssue(task)
-                  ? "Diese Aufgabe ist extern abgelegt."
-                  : "Diese Aufgabe ist aktuell nur in der App."}
+                  ? "Diese Aufgabe ist mit GitHub verknüpft."
+                  : "Diese Aufgabe hat noch kein GitHub Issue."}
           </p>
           {task.githubIssueUrl ? (
             <a href={task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1.5 text-blue-700 hover:underline">
               <Link2 size={15} className="shrink-0" />
-              <span className="truncate">Externe Ablage öffnen</span>
+              <span className="truncate">GitHub Issue öffnen</span>
             </a>
           ) : (
-            <p className="text-slate-500">Noch nicht extern abgelegt.</p>
+            <p className="text-slate-500">Noch kein GitHub Issue.</p>
           )}
           {!hasGitHubIssue(task) && (
             <p className="text-xs text-slate-500">
-              Extern anlegen nur, wenn diese Aufgabe auch außerhalb der App geführt werden soll.
+              GitHub Issue nur bewusst anlegen.
             </p>
           )}
           {externalSyncProblem && <p className="text-xs font-semibold text-amber-700">Verbindung prüfen und erneut versuchen.</p>}
@@ -284,7 +287,7 @@ export function TaskDetailPanelSidebar({
         <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
           <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
           <p className="mt-1 text-xs leading-5 text-red-800">
-            Löscht die Aufgabe aus der App. Eine bestehende externe Ablage wird vorher geschlossen.
+            Löscht die Aufgabe aus der App. Ein bestehendes GitHub Issue wird vorher geschlossen.
           </p>
           <button
             type="button"

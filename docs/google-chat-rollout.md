@@ -4,9 +4,9 @@ Stand: 2026-05-29
 
 ## Ziel
 
-Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Decisions, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
+Google Chat ist ein Benachrichtigungskanal, nicht das führende System. Aufgaben, Reviews, Kommentare und Benachrichtigungseinstellungen bleiben in Supabase. Google Chat bekommt nur bewusst gefilterte Hinweise, damit das Team nicht mit Einzelmeldungen überflutet wird.
 
-Operative Event Messages bleiben in der Applikation. Ein möglicher Google-Chat-Pfad über eine Pipeline ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
+Operative Event Messages bleiben in der Applikation. Der GitHub-Actions-Google-Chat-Pfad ist nur für Release-Details oder Deployment-Zusammenfassungen gedacht, nicht für den laufenden Event-Stream.
 
 ## Phase 1: FounderOps-Gruppendigest
 
@@ -22,9 +22,9 @@ GOOGLE_CHAT_DELIVERY_ENABLED=true
 
 Die Chat-API-Service-Account-Werte bleiben in Phase 1 leer. Private DMs und Chat-Kommandos sind spätere Phasen.
 
-## Phase 2: Externe Pipeline
+## Phase 2: Operative Delivery-API
 
-Phase 2 automatisiert den Gruppenbereich-Digest ohne LLM-Antworten. Sebastian betreibt eine externe Pipeline, die werktags um `09:00 Europe/Berlin` den bestehenden Delivery-Endpunkt auslöst.
+Phase 2 hält den Gruppenbereich-Digest als kontrollierten App-Endpunkt bereit. Er darf manuell oder durch eine bewusst betriebene externe Pipeline ausgelöst werden, ist aber nicht mehr die GitHub-Actions-Chat-Pipeline des Repositories.
 
 Pipeline-Request:
 
@@ -42,9 +42,25 @@ Zusätzlicher Production-/Pipeline-Wert:
 FOUNDEROPS_DELIVERY_SECRET=<random secret>
 ```
 
-Der Header-Secret ist nur für die externe Pipeline gedacht. Der manuelle Button in den Einstellungen nutzt weiter die normale Operational-Lead-Session. Wenn der Header fehlt, ungültig ist oder `GOOGLE_CHAT_DELIVERY_ENABLED=false` bleibt, wird kein Google-Chat-Versand ausgeführt.
+Der Header-Secret ist nur für operative Delivery-API-Aufrufe gedacht. Der manuelle Button in den Einstellungen nutzt weiter die normale Operational-Lead-Session. Wenn der Header fehlt, ungültig ist oder `GOOGLE_CHAT_DELIVERY_ENABLED=false` bleibt, wird kein Google-Chat-Versand ausgeführt.
 
-Im Repository ist dafür `.github/workflows/google-chat-digest.yml` vorgesehen. Der Workflow läuft werktags per GitHub Actions Schedule und kann manuell mit `workflow_dispatch` gestartet werden.
+GitHub Actions nutzt diesen operativen Delivery-Endpunkt nicht. Das Repository verwendet für Google Chat stattdessen den separaten Release-Workflow `.github/workflows/send-release-google-chat.yml`.
+
+## Phase 2b: Release-Kanal über GitHub Actions
+
+Release-Details und Deployment-Zusammenfassungen laufen über den GitHub-Actions-Workflow `.github/workflows/send-release-google-chat.yml`.
+
+Workflow:
+
+```text
+.github/workflows/send-release-google-chat.yml
+Trigger: workflow_dispatch
+Input: message_payload_json
+Secret: GOOGLE_CHAT_WEBHOOK_URL
+Zweck: Release-Details oder Deployment-Zusammenfassungen an den FounderOps-Google-Chat senden
+```
+
+Der Release-Workflow darf keine operativen Events erzeugen oder zustellen. Er ruft weder `/api/notifications/generate-digest` noch `/api/notifications/deliver` auf.
 
 ## Phase 3: Automatische Fokus-Reminder
 
@@ -78,7 +94,6 @@ Erzeugte Reminder:
 - Nacharbeit
 - offene Blocker
 - offene Aufgabenvorschläge
-- offene Decision-Bestätigungen
 - fällige oder überfällige Sprint-Reviews
 - überfällige Deliverables
 
@@ -87,21 +102,20 @@ Jeder Reminder wird pro Event-Typ, Entität, Empfänger und Berlin-Kalendertag �
 Sebastian-/Rresta-Übergabepaket:
 
 ```text
-GitHub Environment: production
-Secret: FOUNDEROPS_DELIVERY_SECRET=<random secret>
+GitHub Release Workflow:
+Secret: GOOGLE_CHAT_WEBHOOK_URL=<Webhook des FounderOps-Gruppenbereichs>
 
 Vercel Production Runtime:
 APP_URL=https://founder-ops.findmydoc.eu
 GOOGLE_CHAT_WEBHOOK_URL=<neuer oder sicher übergebener FounderOps-Bot Webhook>
 GOOGLE_CHAT_DELIVERY_ENABLED=true
-FOUNDEROPS_DELIVERY_SECRET=<gleiches random secret>
+FOUNDEROPS_DELIVERY_SECRET=<random secret für operative Delivery-API, nicht für Release-Chat>
 
 Workflow:
-.github/workflows/google-chat-digest.yml
-Schedule: werktags 09:00 Europe/Berlin Sommerzeit via 07:00 UTC
-Manual run: workflow_dispatch mit optionalem limit, Standard 20
-Step 1: /api/notifications/generate-digest
-Step 2: /api/notifications/deliver
+.github/workflows/send-release-google-chat.yml
+Manual run: workflow_dispatch mit `message_payload_json` und optionalem `release_tag`
+Step 1: JSON-Payload und `GOOGLE_CHAT_WEBHOOK_URL` prüfen
+Step 2: Payload an Google Chat senden
 ```
 
 ## Sicherheitsmodell
@@ -136,7 +150,6 @@ Persönliche DMs sind erlaubt für:
 - `task.mention`
 - `task.blocker_reported`
 - `task.deadline_overdue`
-- `decision.confirmation_requested`
 
 Normale `task.comment`-Events, allgemeine Gruppenhinweise und unklare Events ohne eindeutigen Empfänger bleiben In-App oder im Gruppen-Digest. Gezielte Kommentar-Erwähnungen erzeugen `task.mention` und dürfen persönlich per DM zugestellt werden. Wenn ein persönliches Action-Item keinen gültigen `profiles.google_chat_dm_space` hat, wird der Zustellversuch als `failed` mit `deliveryMode=direct_dm` protokolliert; es gibt keinen Gruppenchat-Fallback.
 
@@ -201,7 +214,7 @@ Die Profile enthalten Felder für persönliche Zustellung:
 - `profiles.google_chat_dm_space`
 - `profiles.notifications_enabled`
 
-Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Meeting-Rückmeldungen und Feedback.
+Die Tabelle `notification_preferences` steuert pro Person und Event-Typ, ob ein Event in Google Chat gesendet werden darf. Beispiele sind Review-Anfragen, Review-Ergebnisse, Blocker, Weekly-Rückmeldungen und Feedback.
 
 ## Zustelllogik
 

@@ -75,19 +75,21 @@ export function calculateTaskScore(task: Task) {
   return task.scoreFinal ? task.scorePoints : 0;
 }
 
-export function taskBelongsToProfile(task: Pick<Task, "owner" | "ownerId">, profile?: Pick<Profile, "id" | "name"> | null) {
+export function taskBelongsToProfile(task: Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId">, profile?: Pick<Profile, "id" | "name"> | null) {
   if (!profile) return false;
+  if (task.assigneeId) return task.assigneeId === profile.id;
+  if (task.assignee) return task.assignee === profile.name || task.assignee === profile.id;
   if (task.ownerId) return task.ownerId === profile.id;
-  return task.owner === profile.name;
+  return task.owner === profile.name || task.owner === profile.id;
 }
 
 export function founderScore(tasks: Task[], profile: Profile) {
-  const owned = tasks.filter((task) => taskBelongsToProfile(task, profile));
+  const assigned = tasks.filter((task) => taskBelongsToProfile(task, profile));
   return {
     profile,
-    committed: owned.length,
-    reviewReady: owned.filter((task) => task.reviewStatus === "requested").length,
-    finalPoints: owned.reduce((sum, task) => sum + calculateTaskScore(task), 0),
-    openScore: owned.filter((task) => !task.scoreFinal).length,
+    committed: assigned.length,
+    reviewReady: assigned.filter((task) => task.reviewStatus === "requested").length,
+    finalPoints: assigned.reduce((sum, task) => sum + calculateTaskScore(task), 0),
+    openScore: assigned.filter((task) => !task.scoreFinal).length,
   };
 }

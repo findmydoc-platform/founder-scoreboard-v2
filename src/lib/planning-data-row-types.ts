@@ -1,4 +1,4 @@
-import type { AvailabilityEntry, Decision, DecisionComment, DecisionTaskLink, FeedbackItem, FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -16,9 +16,6 @@ export type DbProfile = {
   google_chat_user_id: string | null;
   google_chat_dm_space: string | null;
   notifications_enabled: boolean | null;
-  google_calendar_email: string | null;
-  google_calendar_sync_enabled: boolean | null;
-  google_calendar_last_synced_at: string | null;
 };
 
 export type DbPackage = {
@@ -175,18 +172,6 @@ export type DbSprint = {
   score_locked: boolean;
 };
 
-export type DbDecision = {
-  id: number;
-  title: string;
-  context: string | null;
-  decision: string | null;
-  status: Decision["status"];
-  required_profile_ids: string[] | null;
-  created_by: string | null;
-  locked_at: string | null;
-  decision_confirmations?: { profile_id: string }[];
-};
-
 export type DbSprintCommitment = {
   id: number;
   sprint_id: string;
@@ -248,24 +233,6 @@ export type DbScoreObjection = {
   created_at: string;
 };
 
-export type DbAvailability = {
-  id: number;
-  profile_id: string;
-  type: AvailabilityEntry["type"];
-  title: string | null;
-  blocker_kind: AvailabilityEntry["blockerKind"] | null;
-  weekday: number | null;
-  start_date: string | null;
-  end_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  note: string | null;
-  source: AvailabilityEntry["source"] | null;
-  external_id: string | null;
-  external_calendar_id: string | null;
-  synced_at: string | null;
-};
-
 export type DbAuditEntry = {
   id: number;
   entity_type: string;
@@ -275,15 +242,6 @@ export type DbAuditEntry = {
   created_at: string;
   before_data: Record<string, unknown> | null;
   after_data: Record<string, unknown> | null;
-};
-
-export type DbDecisionComment = {
-  id: number;
-  decision_id: number;
-  profile_id: string | null;
-  type: DecisionComment["type"];
-  comment: string;
-  created_at: string;
 };
 
 export type DbTaskComment = {
@@ -348,16 +306,6 @@ export type DbTaskFocusItem = {
   updated_at: string;
 };
 
-export type DbDecisionTaskLink = {
-  id: number;
-  decision_id: number;
-  task_id: string;
-  link_type: DecisionTaskLink["linkType"];
-  note: string | null;
-  created_by: string | null;
-  created_at: string;
-};
-
 export type DbNotificationEvent = {
   id: number;
   type: string;
@@ -411,18 +359,6 @@ export type DbProfileFeatureTourAcknowledgement = {
   seen_at: string;
 };
 
-export type DbFeedbackItem = {
-  id: number;
-  type: FeedbackItem["type"];
-  status: FeedbackItem["status"];
-  severity: FeedbackItem["severity"];
-  profile_id: string | null;
-  title: string;
-  description: string;
-  page_url: string | null;
-  created_at: string;
-};
-
 export type DbFmdTool = {
   id: string;
   name: string;
@@ -461,12 +397,6 @@ export type DbMeeting = {
   duration_minutes: number | null;
   status: Meeting["status"];
   agenda: string | null;
-  google_calendar_id: string | null;
-  google_calendar_event_id: string | null;
-  google_calendar_html_link: string | null;
-  google_calendar_sync_status: Meeting["googleCalendarSyncStatus"] | null;
-  google_calendar_sync_error: string | null;
-  google_calendar_synced_at: string | null;
 };
 
 export type DbMeetingAttendance = {

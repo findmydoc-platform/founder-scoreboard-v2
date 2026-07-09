@@ -84,13 +84,15 @@ export function isUsefulActivity(message: string) {
     "Status geändert",
     "Review geändert",
     "Kommentar hinzugefügt",
-    "GitHub-Spiegelung",
+    "GitHub-Sync",
     "GitHub-Kommentare importiert",
     "Blocker",
     "Relationship",
     "Sprint",
     "Priorität",
     "Evidence",
+    "Zuständigkeit",
+    "Assignee",
     "Owner",
     "Nacharbeit",
     "Priorität",
@@ -110,12 +112,12 @@ function describeActivity(message: string) {
   if (normalized.startsWith("Status geändert")) return { title: "Status geändert", detail, tone: "blue" as const, icon: Clock3 };
   if (normalized.startsWith("Review geändert") || normalized.startsWith("Review finalisiert")) return { title, detail, tone: "emerald" as const, icon: CheckCircle2 };
   if (normalized.startsWith("Nacharbeit")) return { title, detail, tone: "amber" as const, icon: AlertCircle };
-  if (normalized.startsWith("GitHub")) return { title: "Externe Ablage", detail, tone: "violet" as const, icon: GitBranch };
+  if (normalized.startsWith("GitHub")) return { title: "GitHub-Sync", detail, tone: "violet" as const, icon: GitBranch };
   if (normalized.startsWith("Relationship")) return { title: "Abhängigkeit", detail, tone: "slate" as const, icon: GitPullRequestArrow };
   if (normalized.startsWith("Blocker")) return { title, detail, tone: "red" as const, icon: AlertCircle };
   if (normalized.startsWith("Kommentar")) return { title, detail, tone: "slate" as const, icon: MessageSquare };
   if (normalized.startsWith("Anhang")) return { title, detail, tone: "slate" as const, icon: Paperclip };
-  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
+  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Zuständigkeit") || normalized.startsWith("Assignee") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
 
   return { title, detail, tone: "slate" as const, icon: Clock3 };
 }

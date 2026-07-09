@@ -3,18 +3,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("profile workspace is hidden from sidebar but reachable from account menu", async () => {
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
+  const profileSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
+  const profileModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
+  const profileRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
-  const navItems = sidebar.match(/export const appNavItems = \[([\s\S]*?)\] satisfies/)?.[1] || "";
-
-  assert.match(sidebar, /AppWorkspace = .*"profile"/);
-  assert.match(sidebar, /hiddenWorkspaceIds = \["profile"\]/);
-  assert.doesNotMatch(navItems, /profile/);
-  assert.match(workspaceHook, /appWorkspaceIds/);
+  assert.match(routes, /AppWorkspace = .*"profile"/);
+  assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
+  assert.match(routes, /href: "\/profile"/);
+  assert.match(routes, /id: "profile".*hidden: true/s);
+  assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
+  assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
+  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(profileSync, /value === "mine" \|\| value === "execution"/);
+  assert.match(profileModel, /value === "mine" \|\| value === "execution"/);
+  assert.doesNotMatch(profileRoute, /"execution",/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
   assert.match(authControl, /data-tour-id="profile-menu-link"/);
@@ -34,9 +41,10 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   for (const blocked of ["profileId", "platformRole", "weeklyCapacity", "githubLogin", "deputyFor", "googleChatUserId"]) {
     assert.match(route, new RegExp(`"${blocked}"`));
   }
-  for (const allowed of ["focus", "color", "notificationsEnabled", "googleCalendarEmail", "googleCalendarSyncEnabled"]) {
+  for (const allowed of ["focus", "color", "notificationsEnabled"]) {
     assert.match(route, new RegExp(`payload\\.${allowed}`));
   }
+  assert.doesNotMatch(route, /googleCalendarEmail|googleCalendarSyncEnabled|googleCalendarLastSyncedAt/);
   assert.match(route, /\.eq\("id", profileId\)/);
   assert.match(route, /profile_ui_preferences/);
   assert.match(route, /notification_preferences/);
@@ -70,39 +78,60 @@ test("profile preferences and feature tour acknowledgements are additive data sl
 
 test("driver tour waits for rendered targets and acknowledges only after popover render", async () => {
   const registry = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
+  const selection = await readFile("src/features/product-tours/model/feature-tour-selection.ts", "utf8");
   const provider = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
+  const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const client = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
+  assert.match(registry, /workspace-cleanup-v2/);
+  assert.match(registry, /backlog-prioritization-v1/);
+  assert.match(registry, /workspaceScope: "backlog"/);
+  assert.match(registry, /backlog-overview/);
+  assert.match(registry, /backlog-scope-tabs/);
+  assert.match(registry, /backlog-rank-table/);
+  assert.match(registry, /backlog-sprint-pane/);
+  assert.match(registry, /Vorschläge sind aus dem Planning-Board raus/);
+  assert.match(registry, /workspace-nav-planning/);
+  assert.match(registry, /workspace-nav-sprint/);
   assert.match(registry, /profile-settings-v1/);
+  assert.match(registry, /planning-my-tasks-scope-v1/);
   assert.match(registry, /account-menu-trigger/);
   assert.match(registry, /profile-menu-link/);
+  assert.match(registry, /Navigation bereinigt/);
+  assert.match(registry, /Meeting Finder und Decision Log/);
+  assert.match(registry, /neu gedachte Aggregation/);
+  assert.match(registry, /Kalender und Verfügbarkeit sind aus dem Profil raus/);
+  assert.match(selection, /tourAppliesToWorkspace/);
+  assert.match(selection, /tour\.workspaceScope === workspace/);
+  assert.match(selection, /profileHasSeenTour/);
+  assert.match(selection, /selectNextFeatureTour/);
+  assert.match(selection, /tours\.find/);
+  assert.match(header, /HelpCircle/);
+  assert.match(header, /fmd:start-feature-tour/);
+  assert.match(header, /Hilfe anzeigen/);
+  assert.match(provider, /window\.addEventListener\("fmd:start-feature-tour"/);
+  assert.match(provider, /tourRequested/);
+  assert.match(provider, /if \(!tourRequested \|\| !tour/);
   assert.match(provider, /MutationObserver/);
+  assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
+  assert.doesNotMatch(provider, /targetWorkspace/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[0\]\)/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[1\]\)/);
   assert.match(provider, /fmd:open-account-menu/);
   assert.match(provider, /onPopoverRender/);
   assert.match(provider, /if \(index === 0\) markSeen\(\)/);
-  assert.match(provider, /setWorkspace\("profile"\)/);
+  assert.match(provider, /setWorkspace\(activeTour\.doneWorkspace\)/);
   assert.match(client, /markProfileFeatureTourSeenRequest/);
 });
 
-test("profile availability forms hide profile selectors because the profile context is fixed", async () => {
+test("profile settings no longer expose calendar or availability sections", async () => {
   const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
-  const profileAvailability = await readFile("src/features/profile/molecules/profile-availability-section.tsx", "utf8");
-  const availabilityForms = await readFile("src/features/meetings/molecules/meeting-availability-forms.tsx", "utf8");
-  const blockerFields = await readFile("src/features/meetings/molecules/meeting-blocker-form-fields.tsx", "utf8");
-  const availabilityDialog = await readFile("src/features/meetings/organisms/meeting-availability-dialog.tsx", "utf8");
+  const profileModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
+  const profileLayout = await readFile("src/features/profile/molecules/profile-settings-layout.tsx", "utf8");
 
-  assert.doesNotMatch(profileUi, /MeetingAvailabilityForms/);
-  assert.match(profileUi, /showProfileSelect=\{false\}/);
-  assert.match(profileAvailability, /ProfileAvailabilityWeek/);
-  assert.match(availabilityForms, /showProfileSelects = true/);
-  assert.match(availabilityForms, /showProfileSelects && \(/);
-  assert.match(availabilityForms, /Regelmäßige findmydoc-Zeit für dein Profil/);
-  assert.match(availabilityDialog, /showProfileSelect = true/);
-  assert.match(availabilityDialog, /showProfileSelect=\{showProfileSelect\}/);
-  assert.match(blockerFields, /showProfileSelect = true/);
-  assert.match(blockerFields, /showProfileSelect && \(/);
+  assert.doesNotMatch(profileUi, /MeetingAvailability|ProfileAvailability|Calendar|googleCalendar/);
+  assert.doesNotMatch(profileModel, /calendar|availability|googleCalendar/i);
+  assert.doesNotMatch(profileLayout, /Kalender|Verfügbarkeit|Calendar|Clock/);
 });
 
 test("profile settings use slim section navigation and dirty-only save UX", async () => {
@@ -111,7 +140,7 @@ test("profile settings use slim section navigation and dirty-only save UX", asyn
   const profileLayout = await readFile("src/features/profile/molecules/profile-settings-layout.tsx", "utf8");
   const profileBoard = await readFile("src/features/profile/molecules/profile-board-section.tsx", "utf8");
 
-  assert.match(profileModel, /type ProfileSettingsSectionId = "profile" \| "notifications" \| "calendar" \| "availability" \| "board"/);
+  assert.match(profileModel, /type ProfileSettingsSectionId = "profile" \| "notifications" \| "board"/);
   assert.match(profileModel, /type ProfileSettingsDraft =/);
   assert.match(profileLayout, /profileSettingsSections/);
   assert.match(profileUi, /data-profile-settings-section=\{activeSection\}/);

@@ -28,7 +28,7 @@ Erwartung:
 - Datenquelle ist Supabase.
 - Ein Reload mit gültiger Session zeigt höchstens einen Ladezustand, aber keinen falschen Login-Screen.
 - `pnpm run verify:supabase` und `pnpm run verify:auth` bestätigen Schema, Profile und Rollen.
-- Navigation zeigt Planung, Sprint & Score, Decision Log, Meeting Finder, Team, Einstellungen.
+- Navigation zeigt Planung, Sprint & Score, Team, Einstellungen und Mein Profil über das Account-Menü.
 
 ## Planung und Task-Erstellung
 
@@ -64,12 +64,12 @@ Erwartung:
 2. Sprint-Daten prüfen: Start, Ende, Review bis, Status.
 3. Commitment pro Founder setzen: Lite, Standard, Heavy oder Away.
 4. Wochenstunden erfassen.
-5. Meeting-Anwesenheit und schriftliches Update testen.
+5. Weekly Updates testen: Anwesenheit, schriftliches Update, akzeptierter Grund und Punkte.
 
 Erwartung:
 - Scoreboard ist tabellarisch.
 - Commitments bleiben nach Reload erhalten.
-- Meeting-Punkte sind separat von Task-Punkten sichtbar.
+- Weekly-Punkte sind separat von Task-Punkten sichtbar.
 
 ## Sprintabschluss und Carry-over
 
@@ -85,20 +85,6 @@ Erwartung:
 - Carry-over-Aufgabe zeigt Ursprung und Grund im Detailpanel.
 - Notification-Event `sprint.task_carried_over` entsteht.
 
-## Decision Log
-
-1. Decision als CEO erstellen.
-2. Decision editieren.
-3. Audit Trail ausklappen.
-4. Einwand erfassen.
-5. Bestätigung testen.
-
-Erwartung:
-- Edit ist CEO-only.
-- Audit zeigt Vorher/Nachher.
-- Einwände sind sichtbar.
-- Nach allen erforderlichen Bestätigungen wird gelockt.
-
 ## GitHub Sync
 
 Voraussetzung:
@@ -108,9 +94,9 @@ Voraussetzung:
 
 Check:
 1. `pnpm run verify:github-sync` ausführen.
-2. Task öffnen.
+2. Planning öffnen und die GitHub-Sync-Queue im Header öffnen.
 3. Falls die GitHub-App-Verbindung fehlt oder abgelaufen ist, die Verbindung zentral im Header erneuern.
-4. `Jetzt spiegeln` klicken.
+4. `Offene Issues syncen` oder an einem Task `Sync` klicken.
 5. Link zum GitHub Issue prüfen.
 
 Erwartung:
@@ -118,8 +104,9 @@ Erwartung:
 - GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
 - Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
 - Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
-- Body enthält Epic / Meilenstein, Initiative, Sprint, Review, Score, Blocker und Kommentare.
-- GitHub bleibt one-way Backup, nicht führendes System.
+- Body enthält den Aufgabenbrief mit Problem, Zielbild, Scope, Abnahmekriterien, Nachweis und Definition of Done.
+- Parallele Syncs derselben Aufgabe oder desselben GitHub Issues werden als laufender Sync angezeigt, nicht als Fehler.
+- GitHub Issues sind die native Arbeitsfläche für Issue-Inhalte; FounderOps ergänzt Planung, Review und Score-Kontext.
 
 ## Google Chat
 
@@ -129,12 +116,14 @@ Voraussetzung:
 Check:
 1. Event erzeugen, z. B. Kommentar oder Review-Anfrage.
 2. Einstellungen öffnen.
-3. In `Google Chat Digest` `Digest senden` klicken.
+3. Eine kontrollierte Test-Sammelmeldung oder persönliche Test-DM senden.
+4. Für Release-Kommunikation den Dry Run `node .agents/skills/fmd-release-publish/scripts/publish-release.mjs --dry-run` prüfen und danach `.github/workflows/send-release-google-chat.yml` verwenden.
 
 Erwartung:
 - Wichtige Events werden als Digest gesendet und je Event als `sent` Delivery gespeichert.
 - Persönliche Einzelhinweise bleiben in der In-App-Notification-Inbox, bis sie geschlossen werden.
 - Ohne Webhook bleibt der Digest sichtbar, aber Versand scheitert kontrolliert.
+- GitHub Actions sendet keine operativen Event-Digests mehr, sondern nur Release-Details oder Deployment-Zusammenfassungen.
 
 ## Offene V1-Grenzen
 

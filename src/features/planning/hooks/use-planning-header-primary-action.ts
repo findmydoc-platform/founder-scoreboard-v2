@@ -1,6 +1,5 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
@@ -13,15 +12,13 @@ export type HeaderPrimaryAction = {
 
 type UsePlanningHeaderPrimaryActionOptions = {
   activeSprint?: Sprint;
-  setFeedbackDialogOpen: Dispatch<SetStateAction<boolean>>;
-  setInitiativeDialogDefaults: Dispatch<SetStateAction<Partial<InitiativeDraft> | null>>;
-  setTaskDialogDefaults: Dispatch<SetStateAction<Partial<NewTaskDraft> | null>>;
+  setInitiativeDialogDefaults: (defaults: Partial<InitiativeDraft> | null) => void;
+  setTaskDialogDefaults: (defaults: Partial<NewTaskDraft> | null) => void;
   workspace: AppWorkspace;
 };
 
 export function usePlanningHeaderPrimaryAction({
   activeSprint,
-  setFeedbackDialogOpen,
   setInitiativeDialogDefaults,
   setTaskDialogDefaults,
   workspace,
@@ -33,9 +30,9 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
-  if (workspace === "mine") {
+  if (workspace === "backlog") {
     return {
-      label: "Vorschlag erstellen",
+      label: "Neuer Vorschlag",
       onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
     };
   }
@@ -53,24 +50,10 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
-  if (workspace === "decisions") {
-    return {
-      label: "Neue Decision",
-      onClick: () => document.getElementById("decision-create")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    };
-  }
-
   if (workspace === "projects") {
     return {
       label: "Neue Initiative",
       onClick: () => setInitiativeDialogDefaults({}),
-    };
-  }
-
-  if (workspace === "settings") {
-    return {
-      label: "Feedback erfassen",
-      onClick: () => setFeedbackDialogOpen(true),
     };
   }
 

@@ -26,9 +26,6 @@ export type Profile = {
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
-  googleCalendarEmail?: string;
-  googleCalendarSyncEnabled?: boolean;
-  googleCalendarLastSyncedAt?: string;
 };
 
 export type Project = {
@@ -71,10 +68,10 @@ export type Task = {
   description: string;
   status: string;
   priority: string;
-  ownerId?: string;
-  owner: string;
   assigneeId?: string;
   assignee: string;
+  ownerId?: string;
+  owner: string;
   createdById?: string;
   createdBy?: string;
   workstream: string;
@@ -197,27 +194,6 @@ export type ScoreObjection = {
   createdAt: string;
 };
 
-export type Decision = {
-  id: number;
-  title: string;
-  context: string;
-  decision: string;
-  status: "draft" | "open_for_confirmation" | "locked";
-  requiredProfileIds: string[];
-  confirmedProfileIds: string[];
-  createdBy: string;
-  lockedAt: string;
-};
-
-export type DecisionComment = {
-  id: number;
-  decisionId: number;
-  profileId: string;
-  type: "comment" | "objection";
-  comment: string;
-  createdAt: string;
-};
-
 export type TaskComment = {
   id: number;
   taskId: string;
@@ -280,16 +256,6 @@ export type TaskFocusItem = {
   updatedAt: string;
 };
 
-export type DecisionTaskLink = {
-  id: number;
-  decisionId: number;
-  taskId: string;
-  linkType: "follows_from" | "supports" | "blocks_decision";
-  note: string;
-  createdBy: string;
-  createdAt: string;
-};
-
 export type NotificationEvent = {
   id: number;
   type: string;
@@ -327,7 +293,7 @@ export type NotificationPreference = {
 
 export type PlanningFilterPreferences = {
   query: string;
-  owner: string;
+  assignee: string;
   status: string;
   priority: string;
   packageId: string;
@@ -348,18 +314,6 @@ export type ProfileFeatureTourAcknowledgement = {
   profileId: string;
   tourId: string;
   seenAt: string;
-};
-
-export type FeedbackItem = {
-  id: number;
-  type: "bug" | "feature";
-  status: "open" | "triaged" | "planned" | "done" | "dismissed";
-  severity: "P0" | "P1" | "P2" | "P3";
-  profileId: string;
-  title: string;
-  description: string;
-  pageUrl: string;
-  createdAt: string;
 };
 
 export type FmdTool = {
@@ -400,12 +354,6 @@ export type Meeting = {
   durationMinutes?: number;
   status: "planned" | "done" | "cancelled";
   agenda: string;
-  googleCalendarId?: string;
-  googleCalendarEventId?: string;
-  googleCalendarHtmlLink?: string;
-  googleCalendarSyncStatus?: "not_synced" | "synced" | "skipped" | "failed";
-  googleCalendarSyncError?: string;
-  googleCalendarSyncedAt?: string;
 };
 
 export type MeetingAttendanceStatus = "pending" | "present" | "excused" | "late_excused" | "unexcused" | "no_show";
@@ -434,37 +382,6 @@ export type AuditEntry = {
   afterData?: Record<string, unknown> | null;
 };
 
-export type AvailabilityEntry = {
-  id: number;
-  profileId: string;
-  type: "working_hours" | "busy" | "vacation" | "sick";
-  title: string;
-  blockerKind:
-    | "working_hours"
-    | "on_business"
-    | "customer_appointment"
-    | "internal_meeting"
-    | "focus_time"
-    | "admin"
-    | "travel"
-    | "private_appointment"
-    | "vacation"
-    | "sick"
-    | "care"
-    | "calendar_event"
-    | "other";
-  weekday: number | null;
-  startDate: string;
-  endDate: string;
-  startTime: string;
-  endTime: string;
-  note: string;
-  source?: "manual" | "google_calendar";
-  externalId?: string;
-  externalCalendarId?: string;
-  syncedAt?: string;
-};
-
 export type PlanningData = {
   project: Project;
   profiles: Profile[];
@@ -477,27 +394,22 @@ export type PlanningData = {
   founderStrikeStates: FounderStrikeState[];
   strikeEvents: StrikeEvent[];
   scoreObjections: ScoreObjection[];
-  decisions: Decision[];
-  decisionComments: DecisionComment[];
   taskComments: TaskComment[];
   taskExternalComments: TaskExternalComment[];
   taskBlockers: TaskBlocker[];
   taskRelations: TaskRelation[];
   taskActivity: TaskActivity[];
   taskFocusItems: TaskFocusItem[];
-  decisionTaskLinks: DecisionTaskLink[];
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];
   notificationPreferences: NotificationPreference[];
   profileUiPreferences: ProfileUiPreference[];
   profileFeatureTourAcknowledgements: ProfileFeatureTourAcknowledgement[];
-  feedbackItems: FeedbackItem[];
   fmdTools: FmdTool[];
   events: FounderEvent[];
   meetings: Meeting[];
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];
-  availability: AvailabilityEntry[];
 };
 
 export type PlanningDataResponse = {

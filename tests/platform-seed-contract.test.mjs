@@ -94,7 +94,7 @@ test("seedData is assembled from source.json defaults and stable core ids", asyn
   assert.match(shared, /export function createPlanningSeed/);
   assert.match(shared, /export function defineTask/);
   assert.match(shared, /profileNameById/);
-  assert.match(shared, /owner: profileNameById\.get\(ownerId\)/);
+  assert.match(shared, /const ownerId = input\.ownerId \|\| assigneeId/);
   assert.match(shared, /assignee: profileNameById\.get\(assigneeId\)/);
 
   assert.equal(source.project.id, "findmydoc-founder-execution");
@@ -110,7 +110,6 @@ test("seedData is assembled from source.json defaults and stable core ids", asyn
   }
 
   for (const task of source.tasks) {
-    assert.ok(task.ownerId, `${task.id} should store ownerId`);
     assert.ok(task.assigneeId, `${task.id} should store assigneeId`);
     assert.equal(Object.hasOwn(task, "owner"), false, `${task.id} should not store display owner`);
     assert.equal(Object.hasOwn(task, "assignee"), false, `${task.id} should not store display assignee`);
@@ -158,12 +157,13 @@ test("demo import route is local only and non destructive", async () => {
 test("header exposes gated sample data import before notifications", async () => {
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const app = await readFile("src/features/planning/PlanningApp.tsx", "utf8");
-  const page = await readFile("src/app/page.tsx", "utf8");
+  const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
+  const commandRegistry = await readFile("src/features/planning/hooks/use-planning-command-registry.ts", "utf8");
   const hook = await readFile("src/features/planning/hooks/use-demo-seed-import.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
 
-  assert.match(header, /import \{ Filter, Import, Menu/);
+  assert.match(header, /Import/);
   assert.match(header, /demoSeedImportAvailable/);
   assert.match(header, /importDemoSeed/);
   assert.match(header, /Beispieldaten laden/);
@@ -173,9 +173,9 @@ test("header exposes gated sample data import before notifications", async () =>
   assert.match(page, /isDemoSeedImportButtonAvailable/);
   assert.doesNotMatch(page, new RegExp("isDemoSeed" + "ImportAvailable"));
   assert.match(app, /demoSeedImportAvailable\?: boolean/);
-  assert.match(controller, /demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable/);
+  assert.match(controller, /demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable && data\.tasks\.length === 0/);
   assert.match(controller, /demoSeedImportPending/);
-  assert.match(controller, /useDemoSeedImport/);
+  assert.match(commandRegistry, /useDemoSeedImport/);
   assert.match(hook, /window\.location\.reload\(\)/);
   assert.match(hook, /importDemoSeedRequest/);
   assert.match(hook, /source === "seed"/);

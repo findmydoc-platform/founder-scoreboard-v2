@@ -34,7 +34,7 @@ export function PlanningAuthGate({ controller, state }: PlanningAuthGateProps) {
                 ? authError
                   ? "Planungsdaten konnten nicht geladen werden"
                   : "Planungsdaten werden geladen"
-                : "findmydoc Founder Execution"}
+                : "findmydoc Planning"}
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {isLoadingState

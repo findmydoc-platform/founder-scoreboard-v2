@@ -1,19 +1,28 @@
-import { CeoTaskIntake } from "@/features/intake/organisms/ceo-task-intake";
-import { EventsOverview } from "@/features/events/organisms/events-overview";
+"use client";
+
+import dynamic from "next/dynamic";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { futureSprintDrafts, sortTasks } from "@/features/planning/model/planning-app-model";
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
-import { DecisionLogOverview } from "@/features/decisions/organisms/decision-log-overview";
-import { ExecutionLayerOverview } from "@/features/execution/organisms/execution-layer-overview";
-import { MeetingFinderOverview } from "@/features/meetings/organisms/meeting-finder-overview";
-import { ProjectsOverview } from "@/features/projects/organisms/projects-overview";
-import { ProfileSettingsOverview } from "@/features/profile/organisms/profile-settings-overview";
-import { ReviewWorkspaceOverview } from "@/features/reviews/organisms/review-workspace-overview";
-import { SettingsOverview } from "@/features/settings/organisms/settings-overview";
-import { SprintScoreTableOverview } from "@/features/sprint/organisms/sprint-score-overview";
-import { FmdToolsOverview } from "@/features/tools/organisms/fmd-tools-overview";
-import { TeamOverview } from "@/features/team/organisms/team-overview";
+import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
+import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
+
+const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
+const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
+const EventsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="events" />;
+const ReviewsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="reviews" />;
+
+const CeoTaskIntake = dynamic(() => import("@/features/intake/organisms/ceo-task-intake").then((mod) => mod.CeoTaskIntake), { loading: GenericWorkspacePanelLoading });
+const BacklogOverview = dynamic(() => import("@/features/backlog/organisms/backlog-overview").then((mod) => mod.BacklogOverview), { loading: BacklogWorkspacePanelLoading });
+const EventsOverview = dynamic(() => import("@/features/events/organisms/events-overview").then((mod) => mod.EventsOverview), { loading: EventsWorkspacePanelLoading });
+const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
+const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
+const ReviewWorkspaceOverview = dynamic(() => import("@/features/reviews/organisms/review-workspace-overview").then((mod) => mod.ReviewWorkspaceOverview), { loading: ReviewsWorkspacePanelLoading });
+const SettingsOverview = dynamic(() => import("@/features/settings/organisms/settings-overview").then((mod) => mod.SettingsOverview), { loading: GenericWorkspacePanelLoading });
+const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
+const FmdToolsOverview = dynamic(() => import("@/features/tools/organisms/fmd-tools-overview").then((mod) => mod.FmdToolsOverview), { loading: GenericWorkspacePanelLoading });
+const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
 
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
@@ -22,38 +31,25 @@ type PlanningWorkspaceRendererProps = {
 
 export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorkspaceRendererProps) {
   const {
-    calendarSyncMessage,
     canManageTaskMeta,
     canUseCeoIntake,
-    confirmDecision,
-    createAvailability,
-    createDecision,
     createFounderEvent,
-    createMeetingFromSlot,
     createScoreObjection,
     createSprintPlan,
     currentProfile,
-    currentProfileFocusItems,
     data,
-    deleteAvailability,
     dispatchNotifications,
-    editDecision,
     eventMessage,
     expandedPackages,
-    feedbackMessage,
     filters,
     focusedReviewTaskId,
     googleChatStatus,
-    hygieneAlerts,
+    githubAppConnected,
+    githubSyncQueueOpen,
     isPending,
-    linkDecisionTask,
     lockSprint,
-    meetingCreateMessage,
     notificationDispatchMessage,
-    objectDecision,
     openTaskPanel,
-    removeDecisionTaskLink,
-    removeFocusItem,
     reopenReviewTask,
     apiClient,
     retryNotificationDelivery,
@@ -63,29 +59,23 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     reviewTask,
     saveProfileSettings,
     saveOwnProfileSettings,
-    selectedFeedbackId,
     sendGoogleChatTest,
     setData,
     setFocusedReviewTaskId,
+    setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setReviewOwnerFilter,
     setReviewStatusFilter,
-    setSelectedFeedbackId,
     setSprintPlanningOptions,
-    setTaskDialogDefaults,
     sprintLockMessage,
     sprintPlanningOptions,
-    syncGoogleCalendar,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
-    updateAvailability,
     updateFounderEvent,
-    updateMeeting,
     updateMeetingAttendance,
     updateSprint,
     updateSprintCommitment,
     updateTask,
-    upsertFocusItem,
     view,
     workspace,
   } = controller;
@@ -111,7 +101,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         <UiPanel padding="xl">
           <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Assignee haben hier keinen Zugriff.
+            Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Zuständige haben hier keinen Zugriff.
           </p>
         </UiPanel>
       )}
@@ -139,19 +129,15 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           })}
         />
       )}
-      {workspace === "execution" && (
-        <ExecutionLayerOverview
+      {workspace === "backlog" && (
+        <BacklogOverview
+          apiClient={apiClient}
+          canManageBacklog={canManageTaskMeta}
           data={data}
-          currentProfile={currentProfile}
-          focusItems={currentProfileFocusItems}
-          hygieneAlerts={hygieneAlerts}
-          pending={isPending}
           onOpenTask={(task) => openTaskPanel(task.id)}
-          onSetFocus={upsertFocusItem}
-          onRemoveFocus={removeFocusItem}
-          onLinkDecisionTask={linkDecisionTask}
-          onRemoveDecisionTaskLink={removeDecisionTaskLink}
-          onCreateTask={(draft) => setTaskDialogDefaults(draft)}
+          onUpdateTask={updateTask}
+          setData={setData}
+          source={source}
         />
       )}
       {workspace === "reviews" && (
@@ -195,9 +181,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           source={source}
           view={view}
           workspace={workspace}
-          onCreateAvailability={createAvailability}
-          onUpdateAvailability={updateAvailability}
-          onDeleteAvailability={deleteAvailability}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
         />
       )}
@@ -224,46 +207,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
         />
       )}
-      {workspace === "decisions" && (
-        <DecisionLogOverview
-          data={data}
-          currentProfileId={currentProfile?.id || ""}
-          pending={isPending}
-          onCreate={createDecision}
-          onConfirm={confirmDecision}
-          onEdit={editDecision}
-          onObject={objectDecision}
-          onRemoveDecisionTaskLink={removeDecisionTaskLink}
-          onCreateFollowUp={(decision) => setTaskDialogDefaults({
-            taskType: "deliverable",
-            title: `${decision.title} umsetzen`,
-            description: decision.context,
-            problemStatement: decision.context,
-            intendedOutcome: decision.decision,
-            acceptanceCriteria: decision.decision,
-            definitionOfDone: decision.decision,
-            decisionId: decision.id,
-            decisionLinkNote: "Folgeaufgabe aus Decision Log",
-          })}
-        />
-      )}
-      {workspace === "meetings" && (
-        <MeetingFinderOverview
-          data={data}
-          pending={isPending}
-          currentProfile={currentProfile}
-          canManageAvailability={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
-          canCreateMeeting={source === "seed" || currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy" || currentProfile?.platformRole === "founder"}
-          calendarSyncMessage={calendarSyncMessage}
-          meetingCreateMessage={meetingCreateMessage}
-          onCreateAvailability={createAvailability}
-          onUpdateAvailability={updateAvailability}
-          onDeleteAvailability={deleteAvailability}
-          onSyncGoogleCalendar={syncGoogleCalendar}
-          onCreateMeeting={createMeetingFromSlot}
-          onUpdateMeeting={updateMeeting}
-        />
-      )}
       {workspace === "settings" && (
         <SettingsOverview
           data={data}
@@ -272,8 +215,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           authUserEmail={controller.authUser?.email || ""}
           githubAppConnected={controller.githubAppConnected}
           pending={isPending}
-          feedbackMessage={feedbackMessage}
-          selectedFeedbackId={selectedFeedbackId}
           notificationDispatchMessage={notificationDispatchMessage}
           googleChatStatus={googleChatStatus}
           sprintPlanningOptions={sprintPlanningOptions}
@@ -283,11 +224,18 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onDispatchNotifications={dispatchNotifications}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
-          onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
-          onCreateGitHubIssue={(task) => syncTaskToGitHub(task, { createIfMissing: true })}
-          onSelectFeedback={setSelectedFeedbackId}
         />
       )}
+      <TaskGitHubSyncQueue
+        open={githubSyncQueueOpen}
+        tasks={data.tasks}
+        pending={isPending}
+        githubAppConnected={githubAppConnected}
+        onClose={() => setGithubSyncQueueOpen(false)}
+        onOpenTask={(task) => openTaskPanel(task.id)}
+        onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
+        onSyncTaskToGitHub={syncTaskToGitHub}
+      />
       <PlanningTaskViewRenderer controller={controller} />
     </section>
   );

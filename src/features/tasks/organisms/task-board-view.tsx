@@ -1,9 +1,10 @@
-import { Circle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { DragEvent } from "react";
+import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { EmptyColumn, TaskCard } from "@/features/tasks/molecules/task-card";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
-import type { Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Profile, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
   statuses: TaskStatus[];
@@ -12,7 +13,9 @@ type TaskBoardViewProps = {
   profiles: Profile[];
   relations: TaskRelation[];
   allTasks: Task[];
+  blockers: TaskBlocker[];
   draggedTaskId: string | null;
+  selectedTaskId?: string | null;
   dragOverStatus: TaskStatus | null;
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
@@ -34,7 +37,9 @@ export function TaskBoardView({
   profiles,
   relations,
   allTasks,
+  blockers,
   draggedTaskId,
+  selectedTaskId = null,
   dragOverStatus,
   canChangeTaskStatus,
   statusOptionsForTask,
@@ -52,7 +57,12 @@ export function TaskBoardView({
   void profiles;
 
   return (
-    <div className="flex min-w-0 gap-4 overflow-x-auto pb-3">
+    <div
+      className="flex min-w-0 gap-4 overflow-auto pb-3 [scrollbar-gutter:stable] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+      tabIndex={0}
+      role="region"
+      aria-label="Board horizontal und vertikal scrollen"
+    >
       {statuses.map((status) => {
         const tasks = visibleTasks.filter((task) => normalizeStatus(task.status) === status);
         return (
@@ -71,11 +81,10 @@ export function TaskBoardView({
           >
             <div className="flex min-w-0 items-center justify-between border-b border-blue-100 px-4 py-3">
               <div className="flex items-center gap-2">
-                <Circle size={15} className="text-blue-600" />
-                <h2 className="text-sm font-semibold text-slate-800">{status}</h2>
+                <TaskStatusBadge status={status} size="sm" />
                 <span className="text-xs text-slate-500">({tasks.length})</span>
               </div>
-              <button type="button" onClick={() => onCreateTask({ status, taskType: status === "Vorschlag" ? "proposal" : "deliverable" })} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white" aria-label="Aufgabe hinzufügen">
+              <button type="button" onClick={() => onCreateTask({ status, taskType: "deliverable" })} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-white" aria-label="Aufgabe hinzufügen">
                 <Plus size={15} />
               </button>
             </div>
@@ -90,14 +99,19 @@ export function TaskBoardView({
                     ownerColor={ownerColorForTask(task)}
                     relations={relations}
                     allTasks={allTasks}
+                    blockers={blockers}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
                     statusDisabled={!canUpdateStatus}
+                    showEffort={false}
+                    showDescription={false}
+                    showOpenButton={false}
                     showStatus={false}
                     showStatusControl={false}
                     onOpen={onOpenTask}
                     onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}
+                    isSelected={selectedTaskId === task.id}
                     isDragging={draggedTaskId === task.id}
                   />
                 );

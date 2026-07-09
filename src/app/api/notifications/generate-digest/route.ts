@@ -10,6 +10,7 @@ type TaskRow = {
   description: string | null;
   status: string | null;
   priority: string | null;
+  assignee: string | null;
   owner: string | null;
   end_date: string | null;
   review_status: string | null;
@@ -26,18 +27,6 @@ type BlockerRow = {
   reason: string;
   impact: string | null;
   status: string;
-};
-
-type DecisionRow = {
-  id: number;
-  title: string;
-  context: string | null;
-  required_profile_ids: string[] | null;
-};
-
-type ConfirmationRow = {
-  decision_id: number;
-  profile_id: string;
 };
 
 type SprintRow = {
@@ -143,9 +132,10 @@ function dedupeKey(type: string, entityType: string, entityId: string, dateKey: 
 }
 
 function taskBody(task: TaskRow, fallback: string) {
-  const owner = task.owner ? `Owner: ${task.owner}. ` : "";
+  const assignee = task.assignee || task.owner;
+  const assigneeText = assignee ? `Zuständig: ${assignee}. ` : "";
   const priority = task.priority ? `Priorität: ${task.priority}. ` : "";
-  return `${owner}${priority}${task.description || fallback}`.slice(0, 700);
+  return `${assigneeText}${priority}${task.description || fallback}`.slice(0, 700);
 }
 
 function eventBody(event: FounderEventRow) {
@@ -175,15 +165,13 @@ export async function POST(request: NextRequest) {
   const [
     taskResult,
     blockerResult,
-    decisionResult,
-    confirmationResult,
     sprintResult,
     eventResult,
     profileResult,
   ] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id,title,description,status,priority,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
+      .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
     supabase
@@ -192,16 +180,6 @@ export async function POST(request: NextRequest) {
       .eq("status", "open")
       .order("created_at", { ascending: false })
       .limit(100),
-    supabase
-      .from("decision_log")
-      .select("id,title,context,required_profile_ids")
-      .eq("status", "open_for_confirmation")
-      .order("updated_at", { ascending: false })
-      .limit(50),
-    supabase
-      .from("decision_confirmations")
-      .select("decision_id,profile_id")
-      .limit(500),
     supabase
       .from("sprints")
       .select("id,name,status,review_due_at")
@@ -222,26 +200,22 @@ export async function POST(request: NextRequest) {
       .limit(100),
   ]);
 
-  const firstError = [taskResult, blockerResult, decisionResult, confirmationResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
+  const firstError = [taskResult, blockerResult, sprintResult, eventResult, profileResult].find((result) => result.error)?.error;
   if (firstError) return apiError(firstError.message, 500);
 
   const tasks = (taskResult.data || []) as TaskRow[];
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
-  const confirmations = (confirmationResult.data || []) as ConfirmationRow[];
-  const confirmedByDecision = new Map<number, Set<string>>();
-  for (const confirmation of confirmations) {
-    confirmedByDecision.set(confirmation.decision_id, new Set([...(confirmedByDecision.get(confirmation.decision_id) || []), confirmation.profile_id]));
-  }
 
   const candidates: ReminderCandidate[] = [];
   for (const task of tasks) {
     if (isDoneTask(task)) continue;
+    const assignee = task.assignee || task.owner;
 
     if (task.review_status === "requested") {
       const reviewOwnerProfileId = task.review_owner_profile_id || null;
       candidates.push({
         type: "task.review_requested",
-        actorProfileId: task.owner,
+        actorProfileId: assignee,
         recipientProfileId: reviewOwnerProfileId,
         entityType: "task",
         entityId: task.id,
@@ -254,20 +228,20 @@ export async function POST(request: NextRequest) {
     if (task.review_status === "changes_requested" || task.status === "Nacharbeit") {
       candidates.push({
         type: "task.review_rework",
-        actorProfileId: task.owner,
-        recipientProfileId: task.owner,
+        actorProfileId: assignee,
+        recipientProfileId: assignee,
         entityType: "task",
         entityId: task.id,
         title: `Nacharbeit offen: ${task.title}`,
         body: taskBody(task, "Für dieses Deliverable ist Nacharbeit offen."),
-        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today, task.owner || groupRecipient),
+        dedupeKey: dedupeKey("task.review_rework", "task", task.id, today, assignee || groupRecipient),
       });
     }
 
     if (task.task_type === "proposal" || task.status === "Vorschlag") {
       candidates.push({
         type: "task.proposed",
-        actorProfileId: task.owner,
+        actorProfileId: assignee,
         recipientProfileId: null,
         entityType: "task",
         entityId: task.id,
@@ -280,13 +254,13 @@ export async function POST(request: NextRequest) {
     if (task.task_type === "deliverable" && isDueTodayOrOverdue(task.end_date, today)) {
       candidates.push({
         type: "task.deadline_overdue",
-        actorProfileId: task.owner,
-        recipientProfileId: task.owner,
+        actorProfileId: assignee,
+        recipientProfileId: assignee,
         entityType: "task",
         entityId: task.id,
         title: `Überfällig: ${task.title}`,
         body: taskBody(task, `Zieltermin war ${task.end_date}. Bitte Status, Review oder Blocker klären.`),
-        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, task.owner || groupRecipient),
+        dedupeKey: dedupeKey("task.deadline_overdue", "task", task.id, today, assignee || groupRecipient),
       });
     }
   }
@@ -303,36 +277,6 @@ export async function POST(request: NextRequest) {
       body: `${blocker.reason}${blocker.impact ? ` Impact: ${blocker.impact}` : ""}`.slice(0, 700),
       dedupeKey: dedupeKey("task.blocker_reported", "task", blocker.task_id, today),
     });
-  }
-
-  for (const decision of (decisionResult.data || []) as DecisionRow[]) {
-    const required = decision.required_profile_ids || [];
-    const confirmed = confirmedByDecision.get(decision.id) || new Set<string>();
-    const missing = required.filter((profileId) => !confirmed.has(profileId));
-    if (!required.length) {
-      candidates.push({
-        type: "decision.confirmation_requested",
-        actorProfileId: null,
-        recipientProfileId: null,
-        entityType: "decision",
-        entityId: String(decision.id),
-        title: `Decision wartet auf Bestätigung: ${decision.title}`,
-        body: decision.context || "Diese Decision ist offen für Bestätigung.",
-        dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today),
-      });
-    }
-    for (const profileId of missing) {
-      candidates.push({
-        type: "decision.confirmation_requested",
-        actorProfileId: null,
-        recipientProfileId: profileId,
-        entityType: "decision",
-        entityId: String(decision.id),
-        title: `Decision wartet auf Bestätigung: ${decision.title}`,
-        body: decision.context || "Diese Decision ist offen für Bestätigung.",
-        dedupeKey: dedupeKey("decision.confirmation_requested", "decision", String(decision.id), today, profileId),
-      });
-    }
   }
 
   for (const sprint of (sprintResult.data || []) as SprintRow[]) {

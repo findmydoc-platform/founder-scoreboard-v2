@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, PlanningFilterPreferences, ProfileUiPreference, ViewMode } from "@/lib/types";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { workspaceFromPathname, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 
@@ -24,15 +24,19 @@ type ProfileUiPreferenceSyncOptions = {
   workspace: AppWorkspace;
 };
 
-function urlHasWorkspace() {
+function pathHasWorkspace() {
   if (typeof window === "undefined") return true;
-  return new URLSearchParams(window.location.search).has("workspace");
+  return Boolean(workspaceFromPathname(window.location.pathname));
 }
 
 function expandedPackageIds(expandedPackages: Record<string, boolean>) {
   return Object.entries(expandedPackages)
     .filter(([, expanded]) => expanded)
     .map(([packageId]) => packageId);
+}
+
+function normalizedDefaultWorkspace(value: string) {
+  return value === "mine" || value === "execution" ? "planning" : value as AppWorkspace;
 }
 
 function upsertUiPreference(
@@ -77,10 +81,14 @@ export function useProfileUiPreferenceSync({
     if (!preference) return;
 
     setView(preference.defaultTaskView);
-    setFilters(preference.planningFilters);
+    setFilters({
+      ...preference.planningFilters,
+      assignee: preference.defaultWorkspace === "mine" ? "Alle" : preference.planningFilters.assignee,
+      quick: preference.defaultWorkspace === "mine" ? "mine" : preference.planningFilters.quick,
+    });
     setExpandedPackageIds(preference.expandedPackageIds);
-    if (!urlHasWorkspace() && preference.defaultWorkspace !== "profile") {
-      setWorkspace(preference.defaultWorkspace as AppWorkspace);
+    if (!pathHasWorkspace() && preference.defaultWorkspace !== "profile") {
+      setWorkspace(normalizedDefaultWorkspace(preference.defaultWorkspace));
     }
   }, [currentProfileId, preference, setExpandedPackageIds, setFilters, setView, setWorkspace]);
 

@@ -34,7 +34,7 @@ function clamp(value: number, min: number, max: number) {
 
 export function scoreRelevantDeliverables(tasks: Task[], profile: Profile) {
   return tasks.filter((task) =>
-    task.owner === profile.name &&
+    (task.assigneeId === profile.id || task.assignee === profile.name || task.assignee === profile.id) &&
     task.taskType === "deliverable" &&
     task.scoreRelevant !== false
   );

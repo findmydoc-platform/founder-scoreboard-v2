@@ -122,7 +122,7 @@ export function SprintScoreTableOverview({
   const reviewOwnerName = (task: Task) => task.reviewOwnerProfileId
     ? data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId)?.name || task.reviewOwnerProfileId
     : "Ohne Review Owner";
-  const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.ownerId === task.reviewOwnerProfileId || task.owner === task.reviewOwnerProfileId));
+  const isSelfReview = (task: Task) => Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
 
   if (!sprint) {
     return (
@@ -188,6 +188,7 @@ export function SprintScoreTableOverview({
         sprintTasks={sprintTasks}
         otherTasks={otherTasks}
         pending={pending}
+        canManageFinalTaskStatus={currentProfile?.platformRole === "ceo"}
         canReviewTask={canReviewTask}
         reviewOwnerName={reviewOwnerName}
         isSelfReview={isSelfReview}

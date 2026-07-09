@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
@@ -43,11 +44,12 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(generatorRoute, /Europe\/Berlin/);
   assert.match(generatorRoute, /task\.deadline_overdue/);
   assert.match(generatorRoute, /sprint\.review_due/);
-  assert.match(generatorRoute, /decision\.confirmation_requested/);
+  assert.doesNotMatch(generatorRoute, /decision\.confirmation_requested/);
   assert.match(generatorRoute, /review_owner_profile_id/);
   assert.match(generatorRoute, /recipientProfileId: reviewOwnerProfileId/);
   assert.match(generatorRoute, /deine Accountable-Review/);
-  assert.match(generatorRoute, /recipientProfileId: task\.owner/);
+  assert.match(generatorRoute, /const assignee = task\.assignee \|\| task\.owner/);
+  assert.match(generatorRoute, /recipientProfileId: assignee/);
   assert.match(generatorRoute, /recipientProfileId: profileId/);
   assert.doesNotMatch(generatorRoute, /task\.comment/);
   assert.match(chat, /GOOGLE_CHAT_WEBHOOK_URL/);
@@ -79,8 +81,8 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(policy, /shouldSendToGoogleChatDm/);
   assert.match(policy, /sprint\.review_due/);
   assert.match(policy, /meeting\.attendance_updated/);
-  assert.match(policy, /feedback\.bug_reported/);
-  assert.match(policy, /feedback\.feature_requested/);
+  assert.doesNotMatch(policy, /feedback\.bug_reported/);
+  assert.doesNotMatch(policy, /feedback\.feature_requested/);
   assert.match(ui, /NotificationInbox/);
   assert.match(inboxUi, /notificationTypeLabel/);
   assert.match(inboxUi, /notifications\.slice\(0, 12\)/);
@@ -109,7 +111,7 @@ test("google chat rollout is documented and verified before delivery activation"
   const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
   const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
-  const digestWorkflow = await readFile(".github/workflows/google-chat-digest.yml", "utf8");
+  const releaseWorkflow = await readFile(".github/workflows/send-release-google-chat.yml", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
@@ -121,9 +123,10 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(envExample, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(rollout, /GOOGLE_CHAT_DELIVERY_ENABLED=true/);
-  assert.match(rollout, /09:00 Europe\/Berlin/);
+  assert.match(rollout, /\.github\/workflows\/send-release-google-chat\.yml/);
   assert.match(rollout, /x-founderops-delivery-secret/);
   assert.match(rollout, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(rollout, /message_payload_json/);
   assert.match(rollout, /APP_URL=https:\/\/founder-ops\.findmydoc\.eu/);
   assert.match(rollout, /Rollback/);
   assert.match(rollout, /\/api\/google-chat\/events/);
@@ -133,21 +136,20 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(script, /FOUNDEROPS_DELIVERY_SECRET/);
   assert.match(script, /x-founderops-delivery-secret/);
+  assert.match(script, /send-release-google-chat\.yml/);
   assert.doesNotMatch(script, /settings-notifications\.tsx/);
   assert.doesNotMatch(script, /Test-Sammelmeldung|Direktnachricht|Zustelldetails anzeigen/);
-  assert.match(digestWorkflow, /name: Google Chat Digest/);
-  assert.match(digestWorkflow, /cron: "0 7 \* \* 1-5"/);
-  assert.match(digestWorkflow, /workflow_dispatch/);
-  assert.match(digestWorkflow, /name: production/);
-  assert.match(digestWorkflow, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(digestWorkflow, /x-founderops-delivery-secret/);
-  assert.match(digestWorkflow, /Generate focus reminders/);
-  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/generate-digest/);
-  assert.match(digestWorkflow, /founder-ops\.findmydoc\.eu\/api\/notifications\/deliver/);
-  assert.ok(
-    digestWorkflow.indexOf("/api/notifications/generate-digest") < digestWorkflow.indexOf("/api/notifications/deliver"),
-    "workflow must generate reminders before delivery",
-  );
+  assert.match(releaseWorkflow, /name: Send Release Google Chat/);
+  assert.match(releaseWorkflow, /workflow_dispatch/);
+  assert.match(releaseWorkflow, /message_payload_json/);
+  assert.match(releaseWorkflow, /release_tag/);
+  assert.match(releaseWorkflow, /permissions: \{\}/);
+  assert.match(releaseWorkflow, /GOOGLE_CHAT_WEBHOOK_URL/);
+  assert.match(releaseWorkflow, /messageReplyOption/);
+  assert.doesNotMatch(releaseWorkflow, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.doesNotMatch(releaseWorkflow, /x-founderops-delivery-secret/);
+  assert.doesNotMatch(releaseWorkflow, /api\/notifications\/generate-digest/);
+  assert.doesNotMatch(releaseWorkflow, /api\/notifications\/deliver/);
   assert.match(script, /chat event route exists/);
   assert.match(deliverRoute, /googleChatDeliveryStatus/);
   assert.match(deliverRoute, /x-founderops-delivery-secret/);
@@ -197,6 +199,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(verify, /FOUNDEROPS_DELIVERY_SECRET/);
   assert.match(verify, /verify:google-chat/);
+  assert.match(verify, /send-release-google-chat\.yml/);
   assert.match(verify, /GITHUB_SYNC_TOKEN/);
   assert.match(verify, /founder-ops\.findmydoc\.eu/);
   assert.match(pkg, /verify:release/);
@@ -218,8 +221,8 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(deployment, /Run `pnpm run build` as its own command/);
   assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
   assert.match(deployment, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(deployment, /09:00 Europe\/Berlin/);
-  assert.match(deployment, /x-founderops-delivery-secret/);
+  assert.match(deployment, /send-release-google-chat\.yml/);
+  assert.match(deployment, /message_payload_json/);
   assert.match(deployment, /founder-ops\.findmydoc\.eu/);
   assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
   assert.match(deployment, /pnpm run verify:deploy/);
@@ -255,7 +258,7 @@ test("repo readiness includes optional ci and deployment gates", async () => {
 });
 
 test("founder events are modeled as team-visible operational reminders", async () => {
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const app = await readPlanningSurface();
   const ui = await readFeatureSurface("src/features/events");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -264,12 +267,23 @@ test("founder events are modeled as team-visible operational reminders", async (
   const migration = await readFile("supabase/0035_founder_events.sql", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
-  assert.match(sidebar, /"events"/);
-  assert.match(sidebar, /label: "Events"/);
+  assert.match(routes, /id: "events"/);
+  assert.match(routes, /label: "Events"/);
+  assert.match(routes, /href: "\/events"/);
   assert.match(app, /workspace === "events"/);
   assert.match(app, /EventsOverview/);
   assert.match(app, /canManageEvents=\{canManageTaskMeta\}/);
+  assert.match(app, /HeaderEventCalendar/);
   assert.match(ui, /Event-Zentrale/);
+  assert.match(ui, /Kalender öffnen/);
+  assert.match(ui, /buildEventsByDay/);
+  assert.match(ui, /eventDayKeys/);
+  assert.match(ui, /Nächste Events/);
+  assert.match(ui, /dayEvents\.slice\(0, 3\)/);
+  assert.match(ui, /!events\.length/);
+  assert.match(ui, /Noch keine Events/);
+  assert.match(ui, /Event eintragen/);
+  assert.match(ui, /eventForm/);
   assert.match(ui, /Alle aktiven Profile/);
   assert.match(ui, /Ausgewählte Profile/);
   assert.match(types, /export type FounderEvent/);
@@ -357,48 +371,110 @@ test("health is slim while verification scripts detect operational migrations", 
   assert.match(pkg, /verify:operational/);
 });
 
-test("founder feedback creates bug and feature notifications with details", async () => {
+test("active founder feedback is removed while historical migration stays intact", async () => {
   const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
-  const route = await readFile("src/app/api/feedback/route.ts", "utf8");
   const ui = await readPlanningSurface();
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
   const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
   assert.match(migration, /type text not null check \(type in \('bug', 'feature'\)\)/);
-  assert.match(route, /requireFounder/);
-  assert.match(route, /feedback\.bug_reported/);
-  assert.match(route, /feedback\.feature_requested/);
-  assert.match(route, /notification_events/);
+  assert.equal(existsSync("src/app/api/feedback/route.ts"), false);
+  assert.equal(existsSync("src/features/settings/molecules/feedback-dialog.tsx"), false);
+  assert.equal(existsSync("src/features/settings/hooks/use-feedback-commands.ts"), false);
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /SettingsNotificationsSection/);
-  assert.match(settingsNotificationsUi, /Benachrichtigungscenter/);
-  assert.match(settingsNotificationsUi, /Feedback-Eingang/);
   assert.match(settingsNotificationsUi, /Benachrichtigungsausgang/);
   assert.match(settingsNotificationsUi, /xl:col-span-2/);
-  assert.match(ui, /FeedbackDialog/);
-  assert.match(ui, /\/api\/feedback/);
-  assert.match(data, /feedbackItems/);
+  assert.doesNotMatch(settingsNotificationsUi, /Feedback-Eingang/);
+  assert.doesNotMatch(ui, /FeedbackDialog/);
+  assert.doesNotMatch(ui, /\/api\/feedback/);
+  assert.doesNotMatch(data, /feedbackItems|feedback_items/);
+  assert.doesNotMatch(dataScopes, /feedbackItems/);
+  assert.doesNotMatch(apiClient, /createFeedbackRequest|\/api\/feedback/);
+  assert.doesNotMatch(notificationPolicy, /feedback\.bug_reported|feedback\.feature_requested/);
 });
 
-test("workspace selection survives page refreshes", async () => {
+test("workspace selection uses path routes and preserves legacy mine filter", async () => {
   const ui = await readPlanningSurface();
+  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const rootPage = await readFile("src/app/page.tsx", "utf8");
+  const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
+  const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
+  const planningData = await readFile("src/lib/planning-data.ts", "utf8");
+  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
+  const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const workspacePages = await Promise.all([
+    "planning",
+    "reviews",
+    "events",
+    "ceo-intake",
+    "sprint",
+    "projects",
+    "tools",
+    "team",
+    "settings",
+    "profile",
+  ].map((workspace) => readFile(`src/app/(workspaces)/${workspace}/page.tsx`, "utf8")));
 
   assert.match(ui, /usePlanningWorkspace/);
+  assert.doesNotMatch(`${sidebar}\n${routes}`, /\/\?workspace=/);
+  assert.match(routes, /href: "\/planning"/);
+  assert.doesNotMatch(routes, /href: "\/execution"|id: "execution"/);
+  assert.match(routes, /href: "\/reviews"/);
+  assert.match(routes, /href: "\/events"/);
+  assert.match(routes, /href: "\/ceo-intake"/);
+  assert.match(routes, /href: "\/sprint"/);
+  assert.match(routes, /href: "\/projects"/);
+  assert.match(routes, /href: "\/tools"/);
+  assert.match(routes, /href: "\/team"/);
+  assert.match(routes, /href: "\/settings"/);
+  assert.match(routes, /href: "\/profile"/);
+  for (const page of workspacePages) {
+    assert.match(page, /renderWorkspacePage/);
+    assert.match(page, /dynamic = "force-dynamic"/);
+  }
+  assert.match(executionPage, /redirect\("\/planning"\)/);
+  assert.match(rootPage, /redirect\(`\$\{workspacePath\(workspace\)\}/);
+  assert.match(rootPage, /rawWorkspace === "mine"/);
+  assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\)\)/);
+  assert.match(dataScopes, /export const workspaceDataScopes/);
+  assert.match(dataScopes, /export const taskDetailPageDataScope/);
+  assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
+  assert.match(dataScopes, /planningDataWorkspaceFromValue/);
+  assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
+  assert.match(dataScopes, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
+  assert.match(dataScopes, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*\}/);
+  assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
+  assert.match(dataScopes, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
+  assert.match(dataLoader, /export type PlanningDataQueryScope/);
+  assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
+  assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
+  assert.match(planningData, /getPlanningData\(scope\?: PlanningDataQueryScope\)/);
+  assert.match(planningDataApi, /planningDataWorkspaceFromValue\(rawWorkspace\)/);
+  assert.match(planningDataApi, /apiError\("Unknown planning workspace\.", 400\)/);
+  assert.match(planningDataApi, /getPlanningData\(workspace \? getPlanningDataScopeForWorkspace\(workspace\) : undefined\)/);
   assert.match(workspaceHook, /workspaceStateKey/);
-  assert.match(workspaceHook, /URLSearchParams\(window\.location\.search\)/);
-  assert.match(workspaceHook, /const \[restored, setRestored\] = useState\(false\)/);
-  assert.match(workspaceHook, /if \(!restored\) return/);
-  assert.match(workspaceHook, /setRestored\(true\)/);
+  assert.match(workspaceHook, /workspacePath\(initialWorkspace\)/);
+  assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
+  assert.match(workspaceHook, /router\.replace/);
+  assert.match(workspaceHook, /router\.push/);
   assert.match(workspaceHook, /window\.queueMicrotask/);
-  assert.match(workspaceHook, /window\.localStorage\.setItem\(workspaceStateKey, workspace\)/);
-  assert.match(workspaceHook, /url\.searchParams\.set\("workspace", workspace\)/);
+  assert.match(workspaceHook, /window\.localStorage\.setItem\(workspaceStateKey, legacyMine \? "mine" : initialWorkspace\)/);
+  assert.match(workspaceHook, /url\.searchParams\.delete\("workspace"\)/);
+  assert.doesNotMatch(workspaceHook, /url\.searchParams\.set\("workspace", workspace\)/);
 });
 
 test("ceo task intake is ceo-only and separated from team ai work access", async () => {
   const agents = await readFile("AGENTS.md", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const ui = await readPlanningSurface();
   const intakeUi = await readFile("src/features/intake/organisms/ceo-task-intake.tsx", "utf8");
@@ -412,13 +488,14 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(agents, /Task Intake, KI-gestützte Aufgabenerstellung und Bulk-Planung sind CEO-only/);
   assert.match(agents, /Deputy, Accountable, Responsible, Founder, Assignee, or Viewer/);
   assert.match(agents, /focused contract tests/);
-  assert.match(sidebar, /ceo-intake/);
-  assert.match(sidebar, /ceoOnly: true/);
+  assert.match(routes, /ceo-intake/);
+  assert.match(routes, /ceoOnly: true/);
+  assert.match(routes, /href: "\/ceo-intake"/);
   assert.match(sidebar, /currentPlatformRole === "ceo"/);
-  assert.match(ui, /canUseCeoIntake = currentProfile\?\.platformRole === "ceo"/);
+  assert.match(ui, /canUseCeoIntake = requestContext\.currentProfile\?\.platformRole === "ceo"/);
   assert.match(ui, /workspace === "ceo-intake" && authChecked && !canUseCeoIntake/);
   assert.match(ui, /CeoTaskIntake/);
-  assert.match(ui, /Deputy, Founder, Accountable, Responsible und Assignee/);
+  assert.match(ui, /Deputy, Founder, Accountable, Responsible und Zuständige/);
   assert.match(previewRoute, /requireCEO/);
   assert.match(commitRoute, /requireCEO/);
   assert.doesNotMatch(previewRoute, /requireOperationalLead/);
@@ -553,15 +630,13 @@ test("local seed state persists task overrides in browser storage", async () => 
 
 test("header actions are workspace aware", async () => {
   const ui = await readPlanningSurface();
-  const decisionUi = await readFeatureSurface("src/features/decisions");
 
   assert.match(ui, /type HeaderPrimaryAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
   assert.match(ui, /label: "Neue Aufgabe"/);
-  assert.match(ui, /label: "Vorschlag erstellen"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
-  assert.match(ui, /label: "Neue Decision"/);
-  assert.match(decisionUi, /id="decision-create"/);
+  assert.match(ui, /data-tour-id="planning-task-scope"/);
+  assert.doesNotMatch(ui, /label: "Neue Decision"|decision-create/);
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 
@@ -580,17 +655,29 @@ test("planning filters stay in session while task panel opens without routing", 
   assert.doesNotMatch(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
 });
 
-test("mine workspace follows the effective current profile", async () => {
+test("planning personal scope follows the effective current profile", async () => {
   const ui = await readPlanningSurface();
+  const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
+  const filters = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
+  const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
+  const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
 
   assert.match(ui, /serverCurrentProfile/);
-  assert.match(ui, /currentProfileId: serverCurrentProfile\?\.id/);
+  assert.match(ui, /currentProfileId: auth\.serverCurrentProfile\?\.id/);
   assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
-  assert.match(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => taskBelongsToProfile\(task, currentProfile\)\)/);
-  assert.match(ui, /Fokus auf die Aufgaben von \$\{mineOwnerName\}/);
+  assert.match(header, /data-tour-id="planning-task-scope"/);
+  assert.match(header, /Aufgaben/);
+  assert.match(header, /label: "Meine"/);
+  assert.match(header, /assignee: "Alle"/);
+  assert.match(header, /Ansicht/);
+  assert.doesNotMatch(filters, /Meine Aufgaben/);
+  assert.match(workspaceHook, /rawUrlWorkspace === "mine"/);
+  assert.match(controller, /legacyMineWorkspace/);
   assert.doesNotMatch(ui, /currentProfile\?\.name \|\| "Volkan"/);
   assert.doesNotMatch(ui, /currentProfile\?\.id \|\| "volkan"/);
-  assert.doesNotMatch(ui, /workspace === "mine"\) return filteredTasks\.filter\(\(task\) => task\.owner === "Volkan"\)/);
+  assert.doesNotMatch(workspaceHook, /nextWorkspace === "mine"/);
+  assert.doesNotMatch(ui, /workspace === "mine"\)/);
+  assert.doesNotMatch(ui, /task\.owner === "Volkan"/);
 });
 
 test("gantt uses sprint dates for scheduled tasks", async () => {

@@ -18,6 +18,7 @@ export default async function ReviewPage({ params }: Props) {
         <PlanningApp
           key={`review-${id}`}
           initialData={emptyPlanningData}
+          initialWorkspace="reviews"
           source="supabase"
           authRequired
           initialReviewTaskId={id}
@@ -32,6 +33,7 @@ export default async function ReviewPage({ params }: Props) {
       <PlanningApp
         key={`review-${id}`}
         initialData={data}
+        initialWorkspace="reviews"
         source={source}
         authRequired
         demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
@@ -44,5 +46,5 @@ export default async function ReviewPage({ params }: Props) {
   }
 
   const { data, source } = await getPlanningData();
-  return <PlanningApp key={`review-${id}`} initialData={data} source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
+  return <PlanningApp key={`review-${id}`} initialData={data} initialWorkspace="reviews" source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
 }

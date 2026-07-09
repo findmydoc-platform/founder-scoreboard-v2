@@ -1,99 +1,56 @@
-# Execution Layer Plan
+# Execution Layer Retirement Plan
 
-Stand: 27. Mai 2026
+Status: retired visible workspace, legacy-compatible data surface.
 
-## Ziel
+## Goal
 
-Der Founder Scoreboard soll nicht nur Planung, Reviews und Dokumentation abbilden, sondern die tägliche Ausführung aktiv steuern. Diese geplante Feature-Schicht bündelt drei zusammenhängende Workflows:
+Execution is no longer a top-level workspace. Reviews, sprint work, and task editing stay in their existing areas. The former hygiene alert wall is replaced by a small computed task signal model that appears only where tasks are already read and acted on.
 
-- Focus Board / Heute-Modus
-- Aging & Hygiene Alerts
-- Decision-to-Task Links
+## Current Contract
 
-Andere Agents und Chats sollen diese Planung berücksichtigen, bevor sie weitere Task-, Decision-, Sprint- oder Review-Flows erweitern.
+- `Execution` must not appear in the sidebar, workspace picker, header metadata, or profile default workspace options.
+- Stale workspace inputs from `?workspace=execution`, local storage, or saved profile defaults normalize to `planning`.
+- Visible Execution surfaces stay removed: metrics strip, review queue, today focus, focus history, day close, suggestions, and hygiene alert wall.
+- Task detail pages and panels do not show Focus context.
+- `/api/focus`, `task_focus_items`, existing data loading, and schema checks remain for legacy compatibility only. They are not a visible product surface.
+- No Supabase migration is required for this cut. The replacement model is computed from existing Planning data.
 
-## 1. Focus Board / Heute-Modus
+## TaskAttentionSignal Model
 
-Zweck: Jede Person sieht sofort, was heute konkret relevant ist.
+`TaskAttentionSignal` is a view-model signal, not stored state.
 
-Geplanter Umfang:
+Critical signals:
 
-- Maximal drei Fokus-Aufgaben pro Person.
-- Je Aufgabe ein klarer nächster Schritt.
-- Prominente Anzeige von Blockern, Review-Warteschlangen und nahen Sprint-Terminen.
-- End-of-Day Check-in mit Status: erledigt, blockiert, verschoben oder Entscheidung nötig.
-- Vorschläge aus vorhandenen Signalen: Priorität, Sprint-Ende, offene Blocker, wartende Aufgaben und fehlende Updates.
+- `Owner fehlt`: P0 task without an accountable assignee, except proposal tasks.
+- `Blocker fehlt`: task with status `Blockiert` but no open blocker.
+- `Wartet`: task waiting on an open blocking dependency.
+- `Sync fehlgeschlagen`: failed GitHub sync.
 
-Nutzen:
+Review signals:
 
-- Weniger Kontextwechsel.
-- Klarere Tagesprioritäten.
-- Früheres Melden von Blockern.
-- Bessere Sprint-Ausführung.
+- `Review >2d`: review-relevant task waiting longer than two days.
+- `Ohne Review Owner`: review-relevant task without a review owner.
 
-## 2. Aging & Hygiene Alerts
+Quality signals:
 
-Zweck: Die App soll Qualitätsprobleme aktiv melden, statt dass Volkan oder andere sie manuell suchen müssen.
+- `AC fehlt`: task without acceptance criteria.
+- `DoD fehlt`: task without definition of done.
+- `Evidence fehlt`: sprint task without evidence, issue, or GitHub link.
 
-Geplanter Umfang:
+Removed signal:
 
-- P0 ohne Owner oder ohne klaren nächsten Schritt.
-- Aufgabe ohne Acceptance Criteria oder Definition of Done.
-- Blocker ohne Kommentar oder ohne Verantwortlichen.
-- Review länger als definierte Frist offen.
-- Sprint-Aufgabe ohne Evidence Link.
-- Aufgabe ohne Update seit definierter Frist, z. B. 48 Stunden.
-- GitHub-Sync nicht aktuell oder fehlender GitHub-Link bei Aufgaben, die synchronisiert werden sollen.
+- No `Kein Update seit 48 Stunden` replacement. It should not re-enter Planning as a badge, alert, or filter.
 
-Nutzen:
+## Placement Rules
 
-- Bessere Datenqualität.
-- Weniger vergessene Aufgaben.
-- Frühere Eskalation.
-- Weniger manuelle Kontrolle.
+- Planning shows compact task badges and quick filters only.
+- Planning quick filters include `Kritisch`; `Blockiert` and `Ohne Evidence` stay connected to the same task-signal semantics.
+- Review aging and missing review owner appear only in the Review workspace.
+- Quality signals are subtle badges in task cards, task tables, or task detail; they are not red alert surfaces.
+- Task cards and rows show at most two attention badges. Additional signals collapse into `+N`.
+- Badges do not include long descriptions, next-action copy, or focus actions.
+- Settings show only global system states such as a missing GitHub App connection. Task-specific hygiene signals do not belong in Settings.
 
-## 3. Decision-to-Task Links
+## Future Work
 
-Zweck: Entscheidungen sollen operativ nachvollziehbar werden. Aus einer Decision muss erkennbar sein, welche Aufgaben daraus entstanden sind oder welche Aufgaben dadurch begründet werden.
-
-Geplanter Umfang:
-
-- Aufgaben mit Decisions verknüpfen.
-- Aus einer Decision direkte Folgeaufgaben erzeugen.
-- In der Aufgaben-Detailseite anzeigen, welche Decision die Aufgabe begründet.
-- In der Decision-Detailansicht anzeigen, welche Aufgaben daraus folgen.
-- Optionaler Hinweis, wenn eine Decision gelockt ist, aber noch keine Folgeaufgabe existiert.
-
-Nutzen:
-
-- Bessere Nachvollziehbarkeit.
-- Weniger vergessene Folgearbeit.
-- Klareres Warum hinter Aufgaben.
-- Entscheidungen bleiben nicht nur Dokumentation, sondern werden in Arbeit übersetzt.
-
-## Umsetzungsstand
-
-- Datenmodell, Supabase-Migration, RLS/Grants, Schema-Verify und Health Check sind für Focus Items und Decision-Task Links angelegt.
-- Execution ist als eigener Workspace in der gemeinsamen App-Shell verfügbar.
-- Heute-Fokus unterstützt maximal drei Aufgaben pro Person, nächsten Schritt, Statuswechsel, Entfernen, Verschieben offener Fokusaufgaben und Vorschläge aus Task-Signalen.
-- Tagesabschluss zeigt Abschlussquote, offene Fokusaufgaben und direkte Abschlussaktionen für erledigt, blockiert, verschoben oder Entscheidung nötig.
-- Team-Fokus heute und Fokus-Verlauf zeigen, ob der Tagesfokus nicht nur individuell, sondern über das Team hinweg gesetzt und abgeschlossen wird.
-- Hygiene Alerts prüfen Qualität, Blocker, Review-Aging, Evidence, Abhängigkeiten, fehlende Updates, GitHub-Sync und gelockte Decisions ohne Folgeaufgabe. Jeder Alert zeigt eine nächste Aktion und kann als Fokusaktion übernommen werden.
-- Decision-Folgearbeit kann bestehende Aufgaben verknüpfen, Links entfernen und neue Folgeaufgaben aus Decisions erzeugen. Pro Decision wird sichtbar, wie viele Folgeaufgaben offen, erledigt oder blockiert sind.
-- Aufgaben-Detailseite und Detailpanel zeigen Fokus-Kontext und begründende Decisions.
-
-## Umsetzungshinweise
-
-- Keine parallele Navigation oder zweite Shell bauen; vorhandene App-Shell und gemeinsame Sidebar nutzen.
-- Supabase-Änderungen nur additiv: neue Tabellen, Spalten, Views, Policies, Grants und Indizes sind erlaubt; keine destruktiven Änderungen ohne explizite Bestätigung.
-- UI-Controls müssen die bestehenden Custom-Komponenten nutzen; keine nativen Selects oder Browser-Datepicker.
-- Deutsche sichtbare Texte müssen echte UTF-8-Umlaute verwenden.
-- Nach Frontend-, API- oder Datenmodelländerungen `pnpm test`, `pnpm run lint` und `pnpm run build` ausführen.
-
-## Vorgeschlagene Reihenfolge
-
-1. Gemeinsames Datenmodell für Focus, Hygiene und Decision-Links ergänzen.
-2. Hygiene-Signale zuerst als berechnete, nachvollziehbare Checks implementieren.
-3. Focus Board als neue operative Ansicht in der bestehenden App-Shell ergänzen.
-4. Decision-to-Task Links in Decision Log und Aufgaben-Detailseite integrieren.
-5. Contract Tests für alle drei Workflows ergänzen.
+A later data-model cleanup can remove Focus API, types, schema checks, and Supabase structure in a separate PR. That follow-up must be explicit because it changes stored legacy data rather than only removing visible UI.

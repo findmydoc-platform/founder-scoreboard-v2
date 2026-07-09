@@ -1,10 +1,12 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { DecisionTaskLink, FeedbackItem, FounderEvent, Meeting, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
-export function requestPlanningData(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>("/api/planning-data");
+export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
+  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+  return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
 }
 
 export function importDemoSeedRequest(apiClient: BrowserApiClient) {
@@ -30,20 +32,6 @@ export function saveFocusItemRequest(apiClient: BrowserApiClient, payload: unkno
 
 export function deleteFocusItemRequest(apiClient: BrowserApiClient, focusItemId: number) {
   return apiClient.requestJson<{ error?: string }>(`/api/focus?id=${encodeURIComponent(String(focusItemId))}`, {
-    method: "DELETE",
-    jsonContentType: false,
-  });
-}
-
-export function linkDecisionTaskRequest(apiClient: BrowserApiClient, decisionId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; link?: DecisionTaskLink }>(`/api/decisions/${decisionId}/tasks`, {
-    method: "POST",
-    json: payload,
-  });
-}
-
-export function deleteDecisionTaskLinkRequest(apiClient: BrowserApiClient, decisionId: number, linkId: number) {
-  return apiClient.requestJson<{ error?: string }>(`/api/decisions/${decisionId}/tasks?linkId=${encodeURIComponent(String(linkId))}`, {
     method: "DELETE",
     jsonContentType: false,
   });
@@ -110,20 +98,6 @@ export function updateMeetingAttendanceRequest(apiClient: BrowserApiClient, meet
   });
 }
 
-export function createMeetingRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; meeting?: Meeting; attendance?: MeetingAttendance[]; calendarSync?: { status: "synced" | "skipped" | "failed"; htmlLink?: string; error?: string } }>("/api/meetings", {
-    method: "POST",
-    json: payload,
-  });
-}
-
-export function updateMeetingRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; meeting?: Meeting }>("/api/meetings", {
-    method: "PATCH",
-    json: payload,
-  });
-}
-
 export function createFounderEventRequest(apiClient: BrowserApiClient, payload: unknown) {
   return apiClient.requestJson<{ error?: string; event?: FounderEvent }>("/api/events", {
     method: "POST",
@@ -138,52 +112,6 @@ export function updateFounderEventRequest(apiClient: BrowserApiClient, eventId: 
   });
 }
 
-export function availabilityRequest<T>(apiClient: BrowserApiClient, method: "POST" | "PATCH" | "DELETE", payload: unknown) {
-  return apiClient.requestJson<T>("/api/availability", { method, json: payload });
-}
-
-export function syncGoogleCalendarRequest(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{
-    error?: string;
-    ready?: boolean;
-    skipped?: boolean;
-    reason?: string;
-    imported?: number;
-    removed?: number;
-    syncedAt?: string;
-    availability?: import("@/lib/types").AvailabilityEntry[];
-    results?: Array<{ profileId: string; email: string; imported: number; removed?: number; error?: string }>;
-  }>("/api/calendar-sync", { method: "POST" });
-}
-
-export function createDecisionRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; decision?: import("@/lib/types").PlanningData["decisions"][number] }>("/api/decisions", {
-    method: "POST",
-    json: payload,
-  });
-}
-
-export function confirmDecisionRequest(apiClient: BrowserApiClient, decisionId: number) {
-  return apiClient.requestJson<{ error?: string; locked?: boolean; confirmedProfileIds?: string[] }>(`/api/decisions/${decisionId}/confirm`, {
-    method: "POST",
-    jsonContentType: false,
-  });
-}
-
-export function updateDecisionRequest(apiClient: BrowserApiClient, decisionId: number, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; decision?: import("@/lib/types").PlanningData["decisions"][number] }>(`/api/decisions/${decisionId}`, {
-    method: "PATCH",
-    json: payload,
-  });
-}
-
-export function objectDecisionRequest(apiClient: BrowserApiClient, decisionId: number, comment: string) {
-  return apiClient.requestJson<{ error?: string; comment?: import("@/lib/types").PlanningData["decisionComments"][number] }>(`/api/decisions/${decisionId}/objections`, {
-    method: "POST",
-    json: { comment },
-  });
-}
-
 export function notificationDeliveryStatusRequest(apiClient: BrowserApiClient) {
   return apiClient.requestJson<{
     googleChat?: { webhookConfigured?: boolean; apiConfigured?: boolean; deliveryEnabled?: boolean; ready?: boolean; mode?: "direct-dm" | "space-webhook" | "not-configured" };
@@ -194,13 +122,6 @@ export function notificationDeliveryStatusRequest(apiClient: BrowserApiClient) {
 
 export function runNotificationDeliveryRequest(apiClient: BrowserApiClient, payload: Record<string, unknown>) {
   return apiClient.requestJson<{ error?: string; sent?: number; failed?: number; skipped?: number }>("/api/notifications/deliver", {
-    method: "POST",
-    json: payload,
-  });
-}
-
-export function createFeedbackRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; feedback?: FeedbackItem }>("/api/feedback", {
     method: "POST",
     json: payload,
   });

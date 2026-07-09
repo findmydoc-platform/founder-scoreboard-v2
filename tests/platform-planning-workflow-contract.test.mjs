@@ -40,28 +40,6 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
       matches: [/createBrowserApiClient/, /updateTaskRequest/, /syncTaskToGitHubRequest/, /useTaskComments/, /useTaskRelationships/, /detailsEditSnapshot/],
     },
     {
-      label: "meeting finder overview shell",
-      path: "src/features/meetings/organisms/meeting-finder-overview.tsx",
-      matches: [/useMeetingFinderControls/, /useMeetingAvailabilityEditor/],
-      excludes: [/buildMeetingFinderViewModel|useState|useRef|useCallback|useEffect/],
-    },
-    {
-      label: "meeting finder controls hook",
-      path: "src/features/meetings/hooks/use-meeting-finder-controls.ts",
-      matches: [/buildMeetingFinderViewModel/, /useMeetingCalendarDrag/, /calendarDrag/, /reserveSlot/, /openAvailabilityBlock/],
-      excludes: [/suppressBlockClickRef|setCalendarDrag|availabilityCalendarLabel/],
-    },
-    {
-      label: "meeting calendar drag hook",
-      path: "src/features/meetings/hooks/use-meeting-calendar-drag.ts",
-      matches: [/suppressBlockClickRef/, /beginCalendarBlockDrag/, /finishCalendarBlockDrag/, /availabilityCalendarLabel/],
-    },
-    {
-      label: "meeting availability editor hook",
-      path: "src/features/meetings/hooks/use-meeting-availability-editor.ts",
-      matches: [/saveAvailabilityDialog/],
-    },
-    {
       label: "team overview shell",
       path: "src/features/team/organisms/team-overview.tsx",
       matches: [/useTeamProfileDrafts/, /useTeamProfileDialog/, /TeamMemberCard/, /TeamProfileEditDialog/],
@@ -78,22 +56,14 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
       path: "src/features/team/model/team-profile-view-model.ts",
       matches: [/profileHasDraftChanges/, /activeDeputyProfiles/],
     },
-    {
-      label: "decision log shell",
-      path: "src/features/decisions/organisms/decision-log-overview.tsx",
-      matches: [/useDecisionLogWorkflow/],
-      excludes: [/useState|setObjectionDrafts|setOpenDecisions|setOpenAudits/],
-    },
-    {
-      label: "decision log workflow hook",
-      path: "src/features/decisions/hooks/use-decision-log-workflow.ts",
-      matches: [/requiredProfileIds/, /submitCreate/, /toggleEdit/],
-    },
   ]);
 });
 
 test("planning app controller delegates command domains and stays a thin composer", async () => {
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
+  const bootstrapState = await readFile("src/features/planning/hooks/use-planning-bootstrap-state.ts", "utf8");
+  const derivedState = await readFile("src/features/planning/hooks/use-planning-derived-state.ts", "utf8");
+  const commandRegistry = await readFile("src/features/planning/hooks/use-planning-command-registry.ts", "utf8");
 
   assert.ok(controller.split(/\r?\n/).length < 500);
   await assertFileContracts([
@@ -101,14 +71,44 @@ test("planning app controller delegates command domains and stays a thin compose
       label: "planning app controller",
       source: controller,
       matches: [
+        /usePlanningBootstrapState/,
+        /usePlanningCommandRegistry/,
+        /usePlanningDerivedState/,
+        /usePlanningTaskSelection/,
+        /useTaskDetailDataLoader/,
+      ],
+      excludes: [
+        /planningApi\.|taskApi\./,
+        /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
+        /updateMeetingAttendanceRequest|lockSprintRequest/,
+        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
+        /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
+        /window\.history\.length|addEventListener\("keydown"/,
+      ],
+    },
+    {
+      label: "planning bootstrap state",
+      source: bootstrapState,
+      matches: [
+        /usePlanningAuth/,
+        /usePlanningDataRefresh/,
+        /usePlanningRequestContext/,
+        /usePlanningViewState/,
+        /usePlanningWorkspace/,
+      ],
+    },
+    {
+      label: "planning derived state",
+      source: derivedState,
+      matches: [/usePlanningHeaderPrimaryAction/, /usePlanningTaskViewModel/],
+    },
+    {
+      label: "planning command registry",
+      source: commandRegistry,
+      matches: [
         /useTaskMutationCommands/,
         /useTaskCollaborationCommands/,
-        /usePlanningDataRefresh/,
-        /usePlanningHeaderPrimaryAction/,
-        /usePlanningTaskSelection/,
-        /usePlanningTaskViewModel/,
-        /useMeetingCommands/,
-        /useDecisionCommands/,
+        /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,
         /useDemoSeedImport/,
@@ -116,8 +116,8 @@ test("planning app controller delegates command domains and stays a thin compose
       excludes: [
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
-        /createMeetingRequest|availabilityRequest|createDecisionRequest|lockSprintRequest/,
-        /runNotificationDeliveryRequest|createFeedbackRequest|setProtectedPlanningDataCache/,
+        /updateMeetingAttendanceRequest|lockSprintRequest/,
+        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
       ],
@@ -141,7 +141,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task create command",
       path: "src/features/tasks/hooks/use-task-create-command.ts",
-      matches: [/createTaskRequest/, /linkDecisionTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
+      matches: [/createTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
     },
     {
       label: "task delete command",
@@ -163,7 +163,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning board state hook",
       path: "src/features/planning/hooks/use-planning-board-state.ts",
-      matches: [/event\.dataTransfer\.setData/, /founderTaskOwnershipGuardMessage/],
+      matches: [/event\.dataTransfer\.setData/, /founderTaskAssignmentGuardMessage/],
     },
     {
       label: "planning task selection hook",
@@ -174,27 +174,20 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning data refresh hook",
       path: "src/features/planning/hooks/use-planning-data-refresh.ts",
-      matches: [/setProtectedPlanningDataCache/],
+      matches: [/setProtectedPlanningDataCache/, /requestPlanningData\(apiClient, workspace\)/],
     },
     {
       label: "planning task view model hook",
       path: "src/features/planning/hooks/use-planning-task-view-model.ts",
       matches: [/hasOpenWaitingRelation/],
     },
-    {
-      label: "execution commands",
-      path: "src/features/execution/hooks/use-execution-commands.ts",
-      matches: [/saveFocusItemRequest/, /linkDecisionTaskRequest/],
-    },
     { label: "initiative commands", path: "src/features/projects/hooks/use-initiative-commands.ts", matches: [/saveInitiativeRequest/] },
     { label: "sprint commands", path: "src/features/sprint/hooks/use-sprint-commands.ts", matches: [/lockSprintRequest/, /createScoreObjectionRequest/] },
     { label: "profile commands", path: "src/features/team/hooks/use-profile-settings-commands.ts", matches: [/updateProfileRequest/] },
-    { label: "meeting commands", path: "src/features/meetings/hooks/use-meeting-commands.ts", matches: [/createMeetingRequest/, /availabilityRequest/] },
+    { label: "weekly attendance commands", path: "src/features/sprint/hooks/use-weekly-attendance-commands.ts", matches: [/updateMeetingAttendanceRequest/] },
     { label: "event commands", path: "src/features/events/hooks/use-founder-event-commands.ts", matches: [/createFounderEventRequest/] },
-    { label: "decision commands", path: "src/features/decisions/hooks/use-decision-commands.ts", matches: [/createDecisionRequest/] },
     { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/] },
     { label: "notification commands", path: "src/features/planning/hooks/use-notification-commands.ts", matches: [/runNotificationDeliveryRequest/] },
-    { label: "feedback commands", path: "src/features/settings/hooks/use-feedback-commands.ts", matches: [/createFeedbackRequest/] },
   ]);
 });
 
@@ -209,18 +202,18 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(contract, /export function taskUpdateRequestPayload/);
   assert.match(contract, /export function buildTaskUpdateResponsePatch/);
   assert.match(contract, /export function activityMessages/);
-  assert.match(contract, /export function taskOwnedByProfile/);
+  assert.match(contract, /export function taskAssignedToProfile/);
   assert.match(contract, /Final bewertete Aufgaben können nicht erneut in Review gegeben werden/);
 
   assert.match(taskUpdateCommand, /buildClientTaskUpdatePatch/);
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
-  assert.doesNotMatch(taskUpdateCommand, /taskOwnerPatch/);
+  assert.doesNotMatch(taskUpdateCommand, /taskAssigneePatch/);
 
   assert.match(updateRoute, /buildTaskUpdateResponsePatch/);
   assert.match(updateRoute, /activityMessages/);
-  assert.match(updateRoutePolicy, /taskOwnedByProfile/);
+  assert.match(updateRoutePolicy, /taskAssignedToProfile/);
   assert.doesNotMatch(updateRoute, /function activityMessages/);
-  assert.doesNotMatch(updateRoute, /function taskOwnedByProfile/);
+  assert.doesNotMatch(updateRoute, /function taskAssignedToProfile/);
   assert.doesNotMatch(updateRoute, /function profileId/);
 });
 
@@ -353,7 +346,7 @@ test("story writing skill protects approved stories and enforces template guardr
 });
 
 test("strict auth gates planning data until a valid session is present", async () => {
-  const page = await readFile("src/app/page.tsx", "utf8");
+  const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const serverAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
@@ -385,7 +378,62 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.doesNotMatch(authControl, /GitHub-Rechte fehlen/);
   assert.doesNotMatch(authControl, /Login öffnen/);
   assert.match(authHook, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
-  assert.match(authHook, /\/api\/planning-data/);
+  assert.match(authHook, /\/api\/planning-data\?workspace=\$\{encodeURIComponent\(workspace\)\}/);
+});
+
+test("workspace loading shells are route-specific and data-free", async () => {
+  const shell = await readFile("src/features/planning/templates/workspace-loading-shell.tsx", "utf8");
+  const backlogSkeleton = await readFile("src/features/backlog/organisms/backlog-content-skeleton.tsx", "utf8");
+  const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
+  const groupLoading = await readFile("src/app/(workspaces)/loading.tsx", "utf8");
+  const backlogLoading = await readFile("src/app/(workspaces)/backlog/loading.tsx", "utf8");
+  const planningLoading = await readFile("src/app/(workspaces)/planning/loading.tsx", "utf8");
+  const reviewsLoading = await readFile("src/app/(workspaces)/reviews/loading.tsx", "utf8");
+  const eventsLoading = await readFile("src/app/(workspaces)/events/loading.tsx", "utf8");
+  const sprintLoading = await readFile("src/app/(workspaces)/sprint/loading.tsx", "utf8");
+  const projectsLoading = await readFile("src/app/(workspaces)/projects/loading.tsx", "utf8");
+  const toolsLoading = await readFile("src/app/(workspaces)/tools/loading.tsx", "utf8");
+  const teamLoading = await readFile("src/app/(workspaces)/team/loading.tsx", "utf8");
+  const settingsLoading = await readFile("src/app/(workspaces)/settings/loading.tsx", "utf8");
+  const ceoIntakeLoading = await readFile("src/app/(workspaces)/ceo-intake/loading.tsx", "utf8");
+  const profileLoading = await readFile("src/app/(workspaces)/profile/loading.tsx", "utf8");
+  const reviewDetailLoading = await readFile("src/app/reviews/[id]/loading.tsx", "utf8");
+  const taskDetailLoading = await readFile("src/app/tasks/[id]/loading.tsx", "utf8");
+
+  assert.match(shell, /export function WorkspaceLoadingShell/);
+  assert.match(shell, /export function WorkspaceContentSkeleton/);
+  assert.match(shell, /function PlanningContentSkeleton/);
+  assert.match(shell, /BacklogContentSkeleton/);
+  assert.match(backlogSkeleton, /export function BacklogContentSkeleton/);
+  assert.match(backlogSkeleton, /overflow-x-scroll/);
+  assert.match(shell, /function ReviewContentSkeleton/);
+  assert.match(shell, /function EventsContentSkeleton/);
+  assert.match(shell, /function GenericWorkspaceSkeleton/);
+  assert.match(shell, /function DetailContentSkeleton/);
+  assert.match(shell, /variant === "review-detail" \|\| variant === "task-detail"/);
+  assert.doesNotMatch(shell, /PlanningData|getPlanningData|emptyPlanningData|data\.tasks|authUser|provider_token/);
+
+  assert.match(groupLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
+  assert.match(backlogLoading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
+  assert.match(planningLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
+  assert.match(reviewsLoading, /WorkspaceLoadingShell workspace="reviews" variant="reviews"/);
+  assert.match(eventsLoading, /WorkspaceLoadingShell workspace="events" variant="events"/);
+  assert.match(sprintLoading, /WorkspaceLoadingShell workspace="sprint" variant="sprint"/);
+  assert.match(projectsLoading, /WorkspaceLoadingShell workspace="projects" variant="projects"/);
+  assert.match(toolsLoading, /WorkspaceLoadingShell workspace="tools" variant="tools"/);
+  assert.match(teamLoading, /WorkspaceLoadingShell workspace="team" variant="team"/);
+  assert.match(settingsLoading, /WorkspaceLoadingShell workspace="settings" variant="settings"/);
+  assert.match(ceoIntakeLoading, /WorkspaceLoadingShell workspace="ceo-intake" variant="ceo-intake"/);
+  assert.match(profileLoading, /WorkspaceLoadingShell workspace="profile" variant="profile"/);
+  assert.match(reviewDetailLoading, /WorkspaceLoadingShell workspace="reviews" variant="review-detail"/);
+  assert.match(taskDetailLoading, /WorkspaceLoadingShell workspace="planning" variant="task-detail"/);
+
+  assert.match(renderer, /WorkspaceContentSkeleton/);
+  assert.match(renderer, /BacklogWorkspacePanelLoading/);
+  assert.match(renderer, /EventsWorkspacePanelLoading/);
+  assert.match(renderer, /ReviewsWorkspacePanelLoading/);
+  assert.match(renderer, /GenericWorkspacePanelLoading/);
+  assert.doesNotMatch(renderer, /function WorkspacePanelLoading|const WorkspacePanelLoading/);
 });
 
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
@@ -443,7 +491,9 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Abnahmekriterien erfüllt/);
-  assert.match(sprintUi, /CEO-Score/);
+  assert.match(sprintUi, /Status \/ Review/);
+  assert.match(sprintUi, /Score/);
+  assert.match(sprintUi, /Risiko/);
   assert.match(appUi, /Nächster Schritt/);
   assert.match(reviewSheet, /Nachweis \/ Abhängigkeiten/);
   assert.match(reviewSheet, /Qualitätsstandard/);
@@ -451,7 +501,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 });
 
 test("review workspace has direct review detail routes filters and reopen guard", async () => {
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const app = await readPlanningSurface();
   const workspace = await readFile("src/features/reviews/organisms/review-workspace-overview.tsx", "utf8");
   const detail = await readFile("src/features/reviews/templates/review-detail-page.tsx", "utf8");
@@ -461,8 +511,9 @@ test("review workspace has direct review detail routes filters and reopen guard"
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
 
-  assert.match(sidebar, /reviews/);
-  assert.match(sidebar, /Reviews/);
+  assert.match(routes, /id: "reviews"/);
+  assert.match(routes, /label: "Reviews"/);
+  assert.match(routes, /href: "\/reviews"/);
   assert.match(app, /workspace === "reviews"/);
   assert.match(app, /ReviewWorkspaceOverview/);
   assert.match(app, /reviewStatusFilter/);
@@ -477,9 +528,14 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(model, /label: "Abgeschlossen"/);
   assert.match(model, /label: "Nacharbeit"/);
   assert.match(model, /label: "Geblockt"/);
+  assert.match(workspace, /metrics\.total === 0/);
+  assert.match(workspace, /Noch keine Reviews/);
+  assert.match(workspace, /href="\/sprint"/);
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(detail, /TaskReviewSheet/);
   assert.match(detail, /Review nicht gefunden/);
+  assert.match(detail, /href="\/reviews"/);
+  assert.doesNotMatch(detail, /\/\?workspace=reviews/);
   assert.match(sheet, /Review wieder öffnen/);
   assert.match(model, /isOpenReviewTask/);
   assert.match(model, /isCompletedReviewTask/);
@@ -617,44 +673,19 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
 });
 
-test("decision confirmation can lock decisions after required confirmations", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/confirm/route.ts", "utf8");
+test("decision log routes and data slices are removed by cleanup contract", async () => {
+  const cleanupMigration = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const types = await readFile("src/lib/types.ts", "utf8");
 
-  assert.match(route, /requireFounder/);
-  assert.match(route, /open_for_confirmation/);
-  assert.match(route, /status: "locked"/);
-  assert.match(route, /confirm_and_lock/);
-});
-
-test("decision creation opens CEO decisions for confirmation", async () => {
-  const route = await readFile("src/app/api/decisions/route.ts", "utf8");
-
-  assert.match(route, /requireCEO/);
-  assert.match(route, /open_for_confirmation/);
-  assert.match(route, /requiredProfileIds/);
-  assert.match(route, /Entscheidungstext ist erforderlich/);
-});
-
-test("decision edit is CEO-only, audited, and resets confirmations", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/route.ts", "utf8");
-
-  assert.match(route, /requireCEO/);
-  assert.match(route, /Gelockte Decisions sind unveränderlich/);
-  assert.match(route, /decision_confirmations"\)\.delete/);
-  assert.match(route, /decision.update/);
-  assert.match(route, /before_data/);
-  assert.match(route, /after_data/);
-});
-
-test("decision objections are founder comments with audit trail", async () => {
-  const route = await readFile("src/app/api/decisions/[id]/objections/route.ts", "utf8");
-  const sql = await readFile("supabase/0003_decision_comments.sql", "utf8");
-
-  assert.match(sql, /create table if not exists decision_comments/);
-  assert.match(route, /requireFounder/);
-  assert.match(route, /decision_comments/);
-  assert.match(route, /decision.objection/);
-  assert.match(route, /Gelockte Decisions können nicht mehr beanstandet werden/);
+  assert.match(cleanupMigration, /drop table if exists decision_task_links cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_comments cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_confirmations cascade/);
+  assert.match(cleanupMigration, /drop table if exists decision_log cascade/);
+  assert.doesNotMatch(apiClient, /createDecisionRequest|confirmDecisionRequest|objectDecisionRequest|linkDecisionTaskRequest/);
+  assert.doesNotMatch(dataLoader, /decision_log|decision_comments|decision_task_links/);
+  assert.doesNotMatch(types, /export type Decision|DecisionTaskLink|decisionTaskLinks/);
 });
 
 test("profile role management is CEO-only and keeps one CEO", async () => {
@@ -676,12 +707,10 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   assert.match(route, /google_chat_user_id/);
   assert.match(route, /google_chat_dm_space/);
   assert.match(route, /notifications_enabled/);
-  assert.match(route, /google_calendar_email/);
-  assert.match(route, /google_calendar_sync_enabled/);
   assert.match(migration, /profile_color/);
   assert.match(migration, /profiles_profile_color_hex/);
   assert.match(data, /profile_color/);
-  assert.match(data, /google_calendar_last_synced_at/);
+  assert.doesNotMatch(data, /google_calendar_last_synced_at/);
   assert.match(ui, /TeamOverview/);
   assert.match(teamUi, /useTeamProfileDrafts/);
   assert.match(teamUi, /TeamProfileEditDialog/);
@@ -759,19 +788,6 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(policy, /Review angefragt/);
 });
 
-test("decision audit loads before and after data for collapsible diffs", async () => {
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataMappers = await readFile("src/lib/planning-activity-mappers.ts", "utf8");
-  const decisionUi = await readFeatureSurface("src/features/decisions");
-
-  assert.match(data, /before_data,after_data/);
-  assert.match(dataMappers, /beforeData: row.before_data/);
-  assert.match(decisionUi, /auditChanges/);
-  assert.match(decisionUi, /Audit Trail/);
-  assert.match(decisionUi, /Vorher/);
-  assert.match(decisionUi, /Nachher/);
-});
-
 test("board tasks can be dragged between status columns", async () => {
   const ui = await readPlanningSurface();
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
@@ -782,10 +798,13 @@ test("board tasks can be dragged between status columns", async () => {
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);
   assert.match(ui, /updateTask\(task, \{ status \}\)/);
   assert.match(ui, /founderStatusGuardMessage/);
+  assert.match(ui, /founderCompletedTaskGuardMessage/);
   assert.match(ui, /Founder können Aufgaben nicht direkt auf Erledigt setzen/);
+  assert.match(ui, /Diese Aufgabe ist final erledigt/);
   assert.match(ui, /In Review verschieben/);
   assert.match(ui, /Als blockiert markieren/);
   assert.match(ui, /statusOptionsForRole/);
+  assert.match(ui, /canManageFinalTaskStatus/);
 });
 
 test("review workflow supports rework, suggestions, and sprint commitments", async () => {

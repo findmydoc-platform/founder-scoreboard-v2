@@ -14,14 +14,15 @@ test("platform role helpers keep operational lead boundary explicit", async () =
   assert.equal(isOperationalLeadRole(undefined), false);
 });
 
-test("task ownership uses profile id before display name fallback", async () => {
+test("task assignment uses profile id before display name and legacy owner fallback", async () => {
   const { taskBelongsToProfile } = await loadTranspiledModule("src/lib/platform.ts");
   const sebastian = { id: "sebastian", name: "Sebastian" };
   const volkan = { id: "volkan", name: "Volkan" };
 
-  assert.equal(taskBelongsToProfile({ ownerId: "sebastian", owner: "Volkan" }, sebastian), true);
-  assert.equal(taskBelongsToProfile({ ownerId: "volkan", owner: "Sebastian" }, sebastian), false);
-  assert.equal(taskBelongsToProfile({ owner: "Sebastian" }, sebastian), true);
-  assert.equal(taskBelongsToProfile({ owner: "Volkan" }, sebastian), false);
-  assert.equal(taskBelongsToProfile({ ownerId: "volkan", owner: "Volkan" }, volkan), true);
+  assert.equal(taskBelongsToProfile({ assigneeId: "sebastian", assignee: "Volkan" }, sebastian), true);
+  assert.equal(taskBelongsToProfile({ assigneeId: "volkan", assignee: "Sebastian" }, sebastian), false);
+  assert.equal(taskBelongsToProfile({ assignee: "Sebastian" }, sebastian), true);
+  assert.equal(taskBelongsToProfile({ assignee: "Volkan" }, sebastian), false);
+  assert.equal(taskBelongsToProfile({ assigneeId: "volkan", assignee: "Volkan" }, volkan), true);
+  assert.equal(taskBelongsToProfile({ ownerId: "sebastian", owner: "Sebastian" }, sebastian), true);
 });

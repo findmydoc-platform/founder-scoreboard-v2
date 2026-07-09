@@ -1,9 +1,9 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import { GitHubSyncQueueSection, SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
+import { SystemStatusSection } from "@/features/settings/organisms/settings-readiness";
 import { SprintPlanningSection, type SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
-import type { NotificationDelivery, PlanningData, Task } from "@/lib/types";
+import type { NotificationDelivery, PlanningData } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -20,8 +20,6 @@ export function SettingsOverview({
   authUserEmail,
   githubAppConnected,
   pending,
-  feedbackMessage,
-  selectedFeedbackId,
   notificationDispatchMessage,
   googleChatStatus,
   sprintPlanningOptions,
@@ -31,9 +29,6 @@ export function SettingsOverview({
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
-  onSyncLinkedGitHubTasks,
-  onCreateGitHubIssue,
-  onSelectFeedback,
 }: {
   data: PlanningData;
   source: "seed" | "supabase";
@@ -41,8 +36,6 @@ export function SettingsOverview({
   authUserEmail: string;
   githubAppConnected: boolean;
   pending: boolean;
-  feedbackMessage: string;
-  selectedFeedbackId: number | null;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;
   sprintPlanningOptions: SprintPlanningOptions;
@@ -52,9 +45,6 @@ export function SettingsOverview({
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
-  onSyncLinkedGitHubTasks: () => void;
-  onCreateGitHubIssue: (task: Task) => void;
-  onSelectFeedback: (id: number) => void;
 }) {
   const googleChatReady = Boolean(googleChatStatus?.ready);
 
@@ -67,21 +57,11 @@ export function SettingsOverview({
         githubAppConnected={githubAppConnected}
         googleChatReady={googleChatReady}
       />
-      <GitHubSyncQueueSection
-        tasks={data.tasks}
-        pending={pending}
-        githubAppConnected={githubAppConnected}
-        onSyncLinkedGitHubTasks={onSyncLinkedGitHubTasks}
-        onCreateGitHubIssue={onCreateGitHubIssue}
-      />
       <SettingsNotificationsSection
         data={data}
         pending={pending}
-        feedbackMessage={feedbackMessage}
-        selectedFeedbackId={selectedFeedbackId}
         notificationDispatchMessage={notificationDispatchMessage}
         googleChatStatus={googleChatStatus}
-        onSelectFeedback={onSelectFeedback}
         onDispatchNotifications={onDispatchNotifications}
         onRetryNotificationDelivery={onRetryNotificationDelivery}
         onSendGoogleChatTest={onSendGoogleChatTest}

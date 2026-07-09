@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { driver } from "driver.js";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { featureTours, profileSettingsTourId } from "@/features/product-tours/model/feature-tour-registry";
+import { featureTours } from "@/features/product-tours/model/feature-tour-registry";
+import { selectNextFeatureTour } from "@/features/product-tours/model/feature-tour-selection";
 
 type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
@@ -15,6 +16,7 @@ type FeatureTourProviderProps = {
   setData: Dispatch<SetStateAction<PlanningData>>;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "seed" | "supabase";
+  workspace: AppWorkspace;
 };
 
 function waitForElement(selector: string, timeoutMs = 8000) {
@@ -60,16 +62,23 @@ export function FeatureTourProvider({
   setData,
   setWorkspace,
   source,
+  workspace,
 }: FeatureTourProviderProps) {
-  const tour = featureTours.find((item) => item.id === profileSettingsTourId);
-  const hasSeenTour = useMemo(() => {
-    if (!currentProfile || !tour) return true;
-    return data.profileFeatureTourAcknowledgements.some((item) => item.profileId === currentProfile.id && item.tourId === tour.id);
-  }, [currentProfile, data.profileFeatureTourAcknowledgements, tour]);
+  const tour = useMemo(() => {
+    if (!currentProfile) return undefined;
+    return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
+  }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
+  const [tourRequested, setTourRequested] = useState(false);
   const startedTourRef = useRef("");
 
   useEffect(() => {
-    if (!tour || !currentProfile || hasSeenTour || startedTourRef.current === tour.id) return;
+    const startFeatureTour = () => setTourRequested(true);
+    window.addEventListener("fmd:start-feature-tour", startFeatureTour);
+    return () => window.removeEventListener("fmd:start-feature-tour", startFeatureTour);
+  }, []);
+
+  useEffect(() => {
+    if (!tourRequested || !tour || !currentProfile || startedTourRef.current === tour.id) return;
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
@@ -93,17 +102,25 @@ export function FeatureTourProvider({
     };
 
     async function startTour() {
+      if (activeTour.startWorkspace) {
+        setWorkspace(activeTour.startWorkspace);
+      }
+
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
       if (!active || !trigger) {
         startedTourRef.current = "";
+        setTourRequested(false);
         return;
       }
 
-      window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
-      const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
-      if (!active || !menuItem) {
-        startedTourRef.current = "";
-        return;
+      if (activeTour.openAccountMenu) {
+        window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
+        const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!active || !menuItem) {
+          startedTourRef.current = "";
+          setTourRequested(false);
+          return;
+        }
       }
 
       const driverObject = driver({
@@ -125,23 +142,27 @@ export function FeatureTourProvider({
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
-              setWorkspace("profile");
+              if (activeTour.doneWorkspace) {
+                setWorkspace(activeTour.doneWorkspace);
+              }
             },
           },
         })),
       });
 
       driverObject.drive();
+      setTourRequested(false);
     }
 
     startTour().catch(() => {
       startedTourRef.current = "";
+      setTourRequested(false);
     });
 
     return () => {
       active = false;
     };
-  }, [apiClient, currentProfile, hasSeenTour, setData, setWorkspace, source, tour]);
+  }, [apiClient, currentProfile, setData, setWorkspace, source, tour, tourRequested]);
 
   return null;
 }

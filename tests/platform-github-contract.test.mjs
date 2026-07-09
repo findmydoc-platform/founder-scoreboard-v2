@@ -4,41 +4,64 @@ import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surf
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("platform migration contains the role, decision, score and sync contracts", async () => {
+test("platform migration contains the role, score and sync contracts", async () => {
   const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
+  const cleanup = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
 
   assert.match(sql, /platform_role text/);
   assert.match(sql, /github_login text unique/);
-  assert.match(sql, /decision_log/);
-  assert.match(sql, /decision_confirmations/);
   assert.match(sql, /audit_log/);
   assert.match(sql, /review_status/);
   assert.match(sql, /github_sync_status/);
   assert.match(sql, /current_platform_role/);
+  assert.match(cleanup, /drop table if exists decision_log cascade/);
+  assert.match(cleanup, /drop table if exists availability cascade/);
 });
 
-test("github sync route keeps the app as source of truth", async () => {
+test("github sync route is team-scoped and locked per github resource", async () => {
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
+  const migration = await readFile("supabase/0038_github_sync_locks.sql", "utf8");
+  const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
+  const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
+  const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
-  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /requireTeamMember/);
+  assert.match(route, /getGitHubAppConnectionStatus/);
   assert.match(route, /getGitHubAppInstallationToken/);
   assert.match(route, /githubInstallationToken/);
   assert.match(route, /syncGitHubIssueDependencies/);
   assert.match(route, /githubDependencyContext/);
+  assert.match(route, /githubSyncResourceKey/);
+  assert.match(route, /acquireGitHubSyncLock/);
+  assert.match(route, /releaseGitHubSyncLock/);
+  assert.match(route, /finally/);
+  assert.match(route, /github_sync_locked/);
+  assert.match(route, /GitHub-Sync läuft bereits/);
   assert.match(githubApp, /GITHUB_APP_INSTALLATION_ID/);
   assert.match(githubApp, /cachedInstallationToken/);
+  assert.match(migration, /create table if not exists github_issue_sync_locks/);
+  assert.match(migration, /try_acquire_github_issue_sync_lock/);
+  assert.match(migration, /release_github_issue_sync_lock/);
+  assert.match(migration, /on conflict \(resource_key\) do update/);
+  assert.match(migration, /expires_at <= now\(\)/);
+  assert.match(schemaChecks, /github_issue_sync_locks/);
+  assert.match(verifySupabase, /verifyGitHubSyncLockRpc/);
+  assert.match(verifySupabase, /active lock was acquired twice/);
+  assert.match(syncHook, /onlyFailed/);
+  assert.match(syncHook, /continue;/);
   assert.doesNotMatch(route, /buildSyncContext/);
   assert.doesNotMatch(route, /x-github-provider-token|provider_token|requireMatchingGitHubProviderToken/);
+  assert.doesNotMatch(route, /requireOperationalLead/);
   assert.doesNotMatch(route, /task_comments/);
   assert.doesNotMatch(route, /task_blockers/);
   assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
   assert.doesNotMatch(route, /parent_task_id/);
   assert.match(route, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.match(route, /createIfMissing/);
-  assert.match(route, /Diese Aufgabe liegt nur in der App/);
-  assert.match(route, /Nur Deliverables können extern angelegt werden/);
+  assert.match(route, /Diese Aufgabe hat noch kein GitHub Issue/);
+  assert.match(route, /Nur Deliverables können als GitHub Issue angelegt werden/);
   assert.match(route, /github_sync_status: "pending"/);
   assert.match(route, /github_sync_status: "synced"/);
   assert.match(route, /github_sync_status: "failed"/);
@@ -82,7 +105,8 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(github, /Open in FounderOps/);
   assert.match(github, /APP_URL/);
   assert.match(github, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
-  assert.match(github, /One-way sync; edit task state in FounderOps/);
+  assert.match(github, /Planning context:/);
+  assert.match(github, /GitHub issue sync keeps the working issue aligned/);
   assert.match(github, /syncGitHubIssueDependencies/);
   assert.match(github, /dependencies\/blocked_by/);
   assert.doesNotMatch(github, /Score-relevant/);
@@ -97,11 +121,11 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(github, /task\.issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
   assert.match(ui, /syncTaskToGitHub/);
-  assert.match(panelSidebar, /Jetzt spiegeln/);
+  assert.match(panelSidebar, /GitHub Issue/);
+  assert.match(panelSidebar, /Sync/);
   assert.match(ui, /SettingsOverview/);
-  assert.match(settingsOverviewUi, /GitHubSyncQueueSection/);
-  assert.match(readinessUi, /Externe Ablage/);
-  assert.match(readinessUi, /Externe Ablagen aktualisieren/);
+  assert.doesNotMatch(settingsOverviewUi, /GitHubSyncQueueSection/);
+  assert.doesNotMatch(readinessUi, /Externe Ablage|Externe Ablagen aktualisieren/);
   assert.match(ui, /createIfMissing: false/);
 });
 
@@ -214,7 +238,7 @@ test("github sync maps the visible task assignee to native github assignees", as
 
   assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
   assert.match(syncRoute, /profileGitHubLoginById/);
-  assert.match(syncRoute, /const assigneeProfileId = data\.owner \|\| data\.assignee \|\| ""/);
+  assert.match(syncRoute, /const assigneeProfileId = data\.assignee \|\| ""/);
   assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
   assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
   assert.match(syncRoute, /Warnung:/);
@@ -260,27 +284,30 @@ test("app-only tasks are visibly marked without creating github issues", async (
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const queue = await readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
-  assert.match(taskCard, /Nur in der App/);
-  assert.match(readinessUi, /Ausgewählte Deliverables können zusätzlich extern abgelegt werden/);
-  assert.match(readinessUi, /bewusst extern angelegt/);
-  assert.match(readinessUi, /task\.taskType === "deliverable"/);
-  assert.doesNotMatch(readinessUi, /task\.taskType === "deliverable" \|\| task\.taskType === "proposal"/);
-  assert.match(readinessUi, /Diese Liste bleibt dauerhaft erhalten/);
-  assert.match(readinessUi, /Extern anlegen/);
-  assert.match(readinessUi, /Keine Aufgaben ohne externe Ablage/);
-  assert.match(taskCard, /Nur in der App: noch nicht extern abgelegt/);
+  assert.match(ui, /TaskGitHubSyncQueue/);
+  assert.match(taskCard, /Kein Issue/);
+  assert.match(taskCard, /GitHub offen/);
+  assert.match(taskCard, /Sync läuft/);
+  assert.match(taskCard, /Sync fehlgeschlagen/);
+  assert.doesNotMatch(readinessUi, /task\.taskType === "deliverable"/);
+  assert.doesNotMatch(readinessUi, /Extern anlegen|Keine Aufgaben ohne externe Ablage/);
+  assert.match(queue, /GitHub Issue anlegen/);
+  assert.match(queue, /Offene Issues syncen/);
+  assert.match(queue, /onlyFailed: true/);
+  assert.match(queue, /Sync läuft bereits/);
   assert.match(panel, /TaskDetailPanelSidebar/);
-  assert.match(panelSidebar, /Extern anlegen/);
+  assert.match(panelSidebar, /GitHub Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
-  assert.match(ui, /onCreateGitHubIssue/);
-  assert.match(detailGitHubSyncCard, /Noch nicht extern abgelegt/);
-  assert.match(detailGitHubSyncCard, /Extern anlegen/);
+  assert.doesNotMatch(readinessUi, /onCreateGitHubIssue/);
+  assert.match(detailGitHubSyncCard, /Noch kein GitHub Issue/);
+  assert.match(detailGitHubSyncCard, /GitHub Issue anlegen/);
   assert.match(detail, /createIfMissing: true/);
   assert.match(detail, /githubState/);
-  assert.match(panelSidebar, /außerhalb der App geführt/);
-  assert.match(detailGitHubSyncCard, /außerhalb der App geführt/);
+  assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
+  assert.match(detailGitHubSyncCard, /GitHub Issue nur bewusst anlegen/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -315,11 +342,11 @@ test("github app connect persists reload-stable user tokens without browser toke
   const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
   const browserApiClient = await readFile("src/lib/browser-api-client.ts", "utf8");
   const authHook = await readFile("src/features/planning/hooks/use-planning-auth.ts", "utf8");
+  const connectionModel = await readFile("src/features/planning/model/github-app-connection.ts", "utf8");
   const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
-  const githubReconnectBanner = await readFile("src/features/planning/molecules/github-app-reconnect-banner.tsx", "utf8");
   const planningShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
   const githubStatus = await readFile("src/features/planning/molecules/github-connection-status.tsx", "utf8");
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -352,6 +379,11 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(authHook, /\/api\/github-app\/status/);
   assert.match(authHook, /\/api\/github-app\/connect\?next=/);
   assert.match(authHook, /githubAppConnected/);
+  assert.match(authHook, /githubConnectionState/);
+  assert.match(connectionModel, /"checking" \| "connected" \| "missing" \| "reconnect_required" \| "unknown"/);
+  assert.match(connectionModel, /githubAppConnectionStateFromStatus/);
+  assert.match(authHook, /setGithubConnectionState\("checking"\)/);
+  assert.match(authHook, /githubAppConnectionStateFromStatus\(status\)/);
   assert.doesNotMatch(authHook, /provider_token|markGitHubReauthAttempt|clearRememberedGitHubProviderToken|sessionStorage/);
   assert.match(requestContext, /createBrowserApiClient/);
   assert.match(browserApiClient, /\/api\/github-app\/status/);
@@ -375,22 +407,15 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(taskDetailWorkflow, /createBrowserApiClient/);
   assert.match(taskDetailWorkflow, /startGitHubAppConnect/);
   assert.match(ui, /GitHubConnectionStatus/);
-  assert.match(ui, /GitHubAppReconnectBanner/);
+  assert.doesNotMatch(ui, /GitHubAppReconnectBanner/);
   assert.match(detail, /GitHubConnectionStatus/);
-  assert.match(planningShell, /<PlanningHeader controller=\{controller\} \/>[\s\S]*<GitHubAppReconnectBanner/);
-  assert.match(planningShell, /authenticated=\{Boolean\(authUser\)\}/);
-  assert.match(planningShell, /profileId=\{currentProfile\?\.id \|\| ""\}/);
-  assert.match(planningShell, /githubAppConnected=\{githubAppConnected\}/);
-  assert.match(planningShell, /signIn\(\{ githubReconnect: true, clearReconnectGuard: true \}\)/);
-  assert.match(githubReconnectBanner, /authenticated && Boolean\(profileId\) && githubAppConnected === false/);
-  assert.match(githubReconnectBanner, /fmd-github-app-reconnect-dismissed-at/);
-  assert.match(githubReconnectBanner, /24 \* 60 \* 60 \* 1000/);
-  assert.match(githubReconnectBanner, /window\.localStorage\.setItem\(key, String\(Date\.now\(\)\)\)/);
-  assert.match(githubReconnectBanner, /GitHub-App verbinden/);
-  assert.match(githubReconnectBanner, /Verbinde GitHub einmal neu, damit Kommentare, Anhänge und GitHub-Aktionen auch nach Reloads direkt funktionieren\./);
-  assert.match(githubReconnectBanner, /Später/);
-  assert.doesNotMatch(githubReconnectBanner, /token|provider_token|x-github-provider-token|includeGitHubToken/i);
+  assert.match(planningShell, /<PlanningHeader controller=\{controller\} \/>/);
+  assert.doesNotMatch(planningShell, /GitHubAppReconnectBanner|githubAppConnected=\{githubAppConnected\}/);
+  assert.equal(existsSync("src/features/planning/molecules/github-app-reconnect-banner.tsx"), false);
   assert.match(githubStatus, /GitHub-App-Verbindung/);
+  assert.match(githubStatus, /state\?: GitHubAppConnectionState/);
+  assert.match(githubStatus, /effectiveState === "checking" \|\| effectiveState === "unknown"/);
+  assert.match(githubStatus, /needsAction &&/);
   assert.match(githubStatus, /GitHub-App verbinden/);
   assert.match(githubStatus, /GitHub-Sync, Kommentare und Anhänge/);
   assert.doesNotMatch(readinessUi, /GitHub-Verbindung .*erneuern/);
@@ -537,7 +562,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(blockersRoute, /task.blocker_reported/);
   assert.match(taskMutationContract, /Status geändert/);
   assert.match(taskRoute, /activityMessages/);
-  assert.match(syncRoute, /GitHub-Spiegelung ausgeführt/);
+  assert.match(syncRoute, /GitHub-Sync ausgeführt/);
   assert.match(panel, /TaskDetailPanelBlockerSection/);
   assert.match(panelBlockerSection, /Blocker melden/);
   assert.match(panel, /TaskCommentThread/);

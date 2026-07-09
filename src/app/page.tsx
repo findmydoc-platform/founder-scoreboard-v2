@@ -1,32 +1,33 @@
-import { PlanningApp } from "@/features/planning/PlanningApp";
-import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
-import { getServerPlanningAuth } from "@/lib/planning-auth-server";
-import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
-import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { appWorkspaceFromValue, workspacePath } from "@/features/planning/model/workspace-routes";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  if (hasSupabaseEnv() && requiresSupabaseAuth()) {
-    const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
-    if (!auth.ok) {
-      return <PlanningApp initialData={emptyPlanningData} source="supabase" authRequired initialAuthUser={auth.user} initialAuthError={auth.error} />;
-    }
+type Props = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-    const { data, source } = await getPlanningData();
-    return (
-      <PlanningApp
-        initialData={data}
-        source={source}
-        authRequired
-        demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
-        initialAuthUser={auth.user}
-        initialCurrentProfile={auth.profile}
-        initialProtectedDataLoaded
-      />
-    );
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function Home({ searchParams }: Props) {
+  const params = await searchParams;
+  const rawWorkspace = firstValue(params.workspace);
+  const workspace = appWorkspaceFromValue(rawWorkspace) || "planning";
+  const nextParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (key === "workspace") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) nextParams.append(key, item);
+    } else if (value !== undefined) {
+      nextParams.set(key, value);
+    }
   }
 
-  const { data, source } = await getPlanningData();
-  return <PlanningApp initialData={data} source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} />;
+  if (rawWorkspace === "mine") nextParams.set("workspace", "mine");
+
+  const query = nextParams.toString();
+  redirect(`${workspacePath(workspace)}${query ? `?${query}` : ""}`);
 }

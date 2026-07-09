@@ -6,6 +6,7 @@ import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpd
 import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
 import {
   applyReviewStatusUpdate,
+  applyFinalStatusReopen,
   applyTaskBriefUpdateFields,
   applyTaskPriorityUpdate,
   applyTaskScoreUpdateFields,
@@ -36,15 +37,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: TaskRouteDbUpdate = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
     .eq("id", id)
     .single();
   if (!currentTask) {
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  const isCeo = permission.profile?.platformRole === "ceo";
   const startsReviewRequest = startsTaskReviewRequest(payload);
-  const canSetReviewOwner = permission.profile?.platformRole === "ceo";
+  const canSetReviewOwner = isCeo;
   const restrictedFields = restrictedTaskUpdateFields(payload);
 
   if (!isOperationalLead && restrictedFields.length) {
@@ -55,7 +57,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
   }
 
-  const statusGuard = validateTaskStatusUpdate({ currentTask, isOperationalLead, payload, profile: permission.profile });
+  const statusGuard = validateTaskStatusUpdate({ currentTask, isOperationalLead, isCeo, payload, profile: permission.profile });
   if (!statusGuard.ok) return apiError(statusGuard.error, statusGuard.status);
   applyTaskStatusUpdate(update, payload);
 
@@ -94,13 +96,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  if (payload.owner !== undefined) {
-    const nextOwner = profileId(payload.owner);
-    if (!nextOwner && currentTask?.task_type !== "proposal") {
-      return apiError("Nur Vorschläge können ohne Assignee bleiben.", 400);
+  if (payload.assignee !== undefined || payload.owner !== undefined) {
+    const nextAssignee = profileId(payload.assignee || payload.owner);
+    if (!nextAssignee && currentTask?.task_type !== "proposal") {
+      return apiError("Nur Vorschläge können ohne Zuständigkeit bleiben.", 400);
     }
-    update.owner = nextOwner || null;
-    update.assignee = nextOwner || null;
+    update.assignee = nextAssignee || null;
+    update.owner = nextAssignee || null;
   }
 
   applyTaskBriefUpdateFields(update, payload);
@@ -147,7 +149,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (startsReviewRequest) {
-    if (currentTask.score_final) {
+    if (currentTask.score_final && !isCeo) {
       return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
     }
 
@@ -170,6 +172,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_owner_profile_id = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
     update.review_requested_at = new Date().toISOString();
   }
+  applyFinalStatusReopen(update, currentTask, payload, isCeo);
 
   const syncStatusGuard = applyTaskSyncStatusUpdate(update, payload);
   if (!syncStatusGuard.ok) return apiError(syncStatusGuard.error, syncStatusGuard.status);

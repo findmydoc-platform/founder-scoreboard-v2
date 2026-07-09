@@ -2,6 +2,8 @@ import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, PlanningDataResponse } from "@/lib/types";
+import { githubAppConnectionStateFromStatus, type GitHubAppConnectionState } from "@/features/planning/model/github-app-connection";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -24,6 +26,7 @@ type UsePlanningAuthOptions = {
   source: "seed" | "supabase";
   safeInitialData: PlanningData;
   taskCount: number;
+  workspace: AppWorkspace;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
@@ -48,6 +51,7 @@ export function usePlanningAuth({
   source,
   safeInitialData,
   taskCount,
+  workspace,
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
@@ -61,6 +65,7 @@ export function usePlanningAuth({
   const [authChecked, setAuthChecked] = useState(!authRequired || Boolean(initialAuthUser));
   const [protectedDataLoaded, setProtectedDataLoaded] = useState(!authRequired || initialProtectedDataLoaded);
   const [serverCurrentProfile, setServerCurrentProfile] = useState<AuthenticatedProfile | null>(initialCurrentProfile);
+  const [githubConnectionState, setGithubConnectionState] = useState<GitHubAppConnectionState>(authRequired && initialAuthUser ? "checking" : "unknown");
   const [githubAppConnected, setGithubAppConnected] = useState(false);
   const [githubReauthFailed, setGithubReauthFailed] = useState(false);
   const [authError, setAuthError] = useState(initialAuthError);
@@ -70,7 +75,10 @@ export function usePlanningAuth({
   useEffect(() => {
     const supabase = getBrowserSupabase();
     if (!supabase) {
-      queueMicrotask(() => setAuthChecked(true));
+      queueMicrotask(() => {
+        setGithubConnectionState("unknown");
+        setAuthChecked(true);
+      });
       return;
     }
 
@@ -81,14 +89,18 @@ export function usePlanningAuth({
       if (!session?.access_token) {
         setGithubAppConnected(false);
         setGithubReauthFailed(false);
+        setGithubConnectionState("unknown");
         return;
       }
+      setGithubConnectionState("checking");
       const status = await fetch("/api/github-app/status", {
         headers: { authorization: `Bearer ${session.access_token}` },
       }).then((response) => response.ok ? response.json() : null).catch(() => null) as { connected?: boolean; needsReconnect?: boolean } | null;
       if (!active) return;
-      setGithubAppConnected(Boolean(status?.connected));
-      setGithubReauthFailed(Boolean(status?.needsReconnect && !status?.connected));
+      const connectionState = githubAppConnectionStateFromStatus(status);
+      setGithubConnectionState(connectionState);
+      setGithubAppConnected(connectionState === "connected");
+      setGithubReauthFailed(connectionState === "reconnect_required");
     };
 
     const applySessionState = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
@@ -96,6 +108,7 @@ export function usePlanningAuth({
       if (!session?.user) {
         setGithubAppConnected(false);
         setGithubReauthFailed(false);
+        setGithubConnectionState("unknown");
       }
       setAuthUser(session?.user || null);
       setAuthChecked(true);
@@ -117,6 +130,7 @@ export function usePlanningAuth({
 
     refreshSessionState().catch(() => {
       if (!active) return;
+      setGithubConnectionState("unknown");
       setAuthChecked(true);
     });
 
@@ -129,6 +143,7 @@ export function usePlanningAuth({
       if (event === "SIGNED_OUT") {
         setGithubReauthFailed(false);
         setGithubAppConnected(false);
+        setGithubConnectionState("unknown");
         protectedDataUserIdRef.current = "";
         protectedPlanningDataCache = null;
         setServerCurrentProfile(null);
@@ -191,7 +206,7 @@ export function usePlanningAuth({
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
       try {
-        const response = await fetch("/api/planning-data", {
+        const response = await fetch(`/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -230,7 +245,7 @@ export function usePlanningAuth({
     return () => {
       active = false;
     };
-  }, [authRequired, authUser, normalizePlanningData, protectedDataLoaded, safeInitialData, setData, source, taskCount]);
+  }, [authRequired, authUser, normalizePlanningData, protectedDataLoaded, safeInitialData, setData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     const supabase = getBrowserSupabase();
@@ -242,6 +257,7 @@ export function usePlanningAuth({
     const next = currentRelativeUrl();
     if (options.githubReconnect) {
       setGithubReauthFailed(false);
+      setGithubConnectionState("checking");
       window.location.assign(`/api/github-app/connect?next=${encodeURIComponent(next)}`);
       setAuthBusy(false);
       return;
@@ -274,6 +290,7 @@ export function usePlanningAuth({
     setAuthNotice("");
     setGithubReauthFailed(false);
     setGithubAppConnected(false);
+    setGithubConnectionState("unknown");
 
     const { error } = await supabase.auth.signOut({ scope: "global" });
     if (error) {
@@ -287,6 +304,7 @@ export function usePlanningAuth({
     setServerCurrentProfile(null);
     setAuthUser(null);
     setGithubAppConnected(false);
+    setGithubConnectionState("unknown");
     setData(safeInitialData);
     setProtectedDataLoaded(false);
     onSignedOut();
@@ -300,6 +318,7 @@ export function usePlanningAuth({
     authChecked,
     protectedDataLoaded,
     setProtectedDataLoaded,
+    githubConnectionState,
     githubAppConnected,
     githubReauthFailed,
     authError,

@@ -27,6 +27,50 @@ async function checkSchema(check) {
   };
 }
 
+async function verifyGitHubSyncLockRpc() {
+  const resourceKey = `verify:github-sync-lock:${Date.now()}`;
+  const acquire = await supabase.rpc("try_acquire_github_issue_sync_lock", {
+    p_resource_key: resourceKey,
+    p_task_id: null,
+    p_locked_by_profile_id: null,
+    p_ttl_seconds: 60,
+  });
+  if (acquire.error || !acquire.data) {
+    return {
+      ok: false,
+      error: acquire.error?.message || "try_acquire_github_issue_sync_lock returned no lock token",
+    };
+  }
+
+  const secondAcquire = await supabase.rpc("try_acquire_github_issue_sync_lock", {
+    p_resource_key: resourceKey,
+    p_task_id: null,
+    p_locked_by_profile_id: null,
+    p_ttl_seconds: 60,
+  });
+  if (secondAcquire.error) return { ok: false, error: secondAcquire.error.message };
+  if (secondAcquire.data) {
+    await supabase.rpc("release_github_issue_sync_lock", {
+      p_resource_key: resourceKey,
+      p_lock_token: secondAcquire.data,
+    });
+    return { ok: false, error: "active lock was acquired twice" };
+  }
+
+  const release = await supabase.rpc("release_github_issue_sync_lock", {
+    p_resource_key: resourceKey,
+    p_lock_token: acquire.data,
+  });
+  if (release.error || release.data !== true) {
+    return {
+      ok: false,
+      error: release.error?.message || "release_github_issue_sync_lock did not release the lock",
+    };
+  }
+
+  return { ok: true, error: "" };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -53,15 +97,12 @@ const result = {
   strikeEvents: await count("strike_events"),
   scoreObjections: await count("score_objections"),
   reviews: await count("task_reviews"),
-  decisions: await count("decision_log"),
   audit: await count("audit_log"),
-  availability: await count("availability"),
   comments: await count("task_comments"),
   externalComments: await count("task_external_comments"),
   blockers: await count("task_blockers"),
   relationships: await count("task_relationship_edges"),
   focusItems: await count("task_focus_items"),
-  decisionTaskLinks: await count("decision_task_links"),
   notifications: await count("notification_events"),
   notificationDeliveries: await count("notification_deliveries"),
   profileUiPreferences: await count("profile_ui_preferences"),
@@ -71,6 +112,7 @@ const result = {
   events: await count("founder_events"),
   milestones: await count("milestones"),
   schema: await Promise.all(schemaChecks.map(checkSchema)),
+  githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -78,5 +120,10 @@ console.log(JSON.stringify(result, null, 2));
 const missingSchema = result.schema.filter((check) => !check.ok);
 if (missingSchema.length) {
   console.error("Supabase schema is incomplete. Run the missing migrations in order, especially 0008_google_chat_delivery.sql, 0009_sprint_carryover.sql and 0010_task_self_checklist.sql.");
+  process.exit(1);
+}
+
+if (!result.githubSyncLockRpc.ok) {
+  console.error(`GitHub sync lock RPC check failed: ${result.githubSyncLockRpc.error}`);
   process.exit(1);
 }

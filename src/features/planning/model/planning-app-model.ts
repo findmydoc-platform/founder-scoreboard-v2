@@ -1,12 +1,11 @@
 import { Columns3, GanttChart, ListTree, Table2 } from "lucide-react";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
-import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
-import type { Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskComment, TaskFocusItem, TaskStatus, ViewMode } from "@/lib/types";
+import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
 
@@ -23,27 +22,22 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     founderStrikeStates: data.founderStrikeStates || [],
     strikeEvents: data.strikeEvents || [],
     scoreObjections: data.scoreObjections || [],
-    decisions: data.decisions || [],
-    decisionComments: data.decisionComments || [],
     taskComments: data.taskComments || [],
     taskExternalComments: data.taskExternalComments || [],
     taskBlockers: data.taskBlockers || [],
     taskRelations: data.taskRelations || [],
     taskActivity: data.taskActivity || [],
     taskFocusItems: data.taskFocusItems || [],
-    decisionTaskLinks: data.decisionTaskLinks || [],
     notificationEvents: data.notificationEvents || [],
     notificationDeliveries: data.notificationDeliveries || [],
     notificationPreferences: data.notificationPreferences || [],
     profileUiPreferences: data.profileUiPreferences || [],
     profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements || [],
-    feedbackItems: data.feedbackItems || [],
     fmdTools: data.fmdTools || [],
     events: data.events || [],
     meetings: data.meetings || [],
     meetingAttendance: data.meetingAttendance || [],
     audit: data.audit || [],
-    availability: data.availability || [],
   };
 }
 
@@ -58,13 +52,10 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
-  execution: "Execution",
-  mine: "Meine Aufgaben",
+  backlog: "Backlog",
   reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
-  decisions: "Decision Log",
-  meetings: "Meeting Finder",
   projects: "Meilensteine & Initiativen",
   tools: "FMD-Tools",
   team: "Team",
@@ -75,13 +66,10 @@ export const workspaceLabels: Record<Workspace, string> = {
 
 export const workspaceSubtitles: Record<Workspace, string> = {
   planning: "Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
-  execution: "Heute-Modus, Hygiene-Alerts und Decision-Folgearbeit.",
-  mine: "Fokus auf deine Aufgaben für die operative Steuerung.",
+  backlog: "Sprint-Backlog priorisieren und in Sprints ziehen.",
   reviews: "Offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Wichtige Termine, Zielgruppen und Erinnerungen.",
-  sprint: "Review Queue, Punkte und Sprintabschluss.",
-  decisions: "CEO-Entscheidungen mit Bestätigung und Locking.",
-  meetings: "Freie Slots aus Arbeitszeiten und Abwesenheiten finden.",
+  sprint: "Weekly Updates, Punkte und Sprintabschluss.",
   projects: "Epic-, Meilenstein- und Initiative-Überblick.",
   tools: "Interne Tools, Repos, Notion und Drive als zentraler Hub.",
   team: "Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
@@ -90,30 +78,30 @@ export const workspaceSubtitles: Record<Workspace, string> = {
   profile: "Deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
 };
 
-export const planningWorkspaces: Workspace[] = ["planning", "mine"];
+export const planningWorkspaces: Workspace[] = ["planning"];
 
 export const quickFilters = [
-  { id: "mine", label: "Meine Aufgaben" },
   { id: "open", label: "Offen" },
+  { id: "critical", label: "Kritisch" },
   { id: "blocked", label: "Blockiert" },
   { id: "week", label: "Diese Woche" },
   { id: "high", label: "Hohe Priorität" },
   { id: "evidence", label: "Ohne Evidence" },
 ];
 
-export function profileForOwnerValue(profiles: Profile[], value?: string) {
+export function profileForAssigneeValue(profiles: Profile[], value?: string) {
   return profiles.find((profile) => profile.id === value || profile.name === value) || null;
 }
 
-export function taskOwnerPatch(ownerValue: string, profiles: Profile[]): Partial<Task> {
-  const profile = profileForOwnerValue(profiles, ownerValue);
-  const ownerId = profile?.id || "";
-  const owner = profile?.name || ownerValue || "";
+export function taskAssigneePatch(assigneeValue: string, profiles: Profile[]): Partial<Task> {
+  const profile = profileForAssigneeValue(profiles, assigneeValue);
+  const assigneeId = profile?.id || "";
+  const assignee = profile?.name || assigneeValue || "";
   return {
-    ownerId,
-    owner,
-    assigneeId: ownerId,
-    assignee: owner,
+    assigneeId,
+    assignee,
+    ownerId: assigneeId,
+    owner: assignee,
   };
 }
 
@@ -199,7 +187,7 @@ export function taskText(task: Task) {
   return [
     task.title,
     task.description,
-    task.owner,
+    task.assignee,
     task.workstream,
     task.priority,
     task.definitionOfDone,
@@ -234,100 +222,31 @@ export function sortTasks(tasks: Task[]) {
   });
 }
 
-export function statusOptionsForRole(status: string, canManageTaskMeta: boolean) {
-  if (canManageTaskMeta) return taskStatuses;
-  if (normalizeStatus(status) === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
+export function statusOptionsForRole(status: string, canManageTaskMeta: boolean, canManageFinalTaskStatus = canManageTaskMeta) {
+  if (canManageFinalTaskStatus) return taskStatuses;
+  const normalized = normalizeStatus(status);
+  if (normalized === "Erledigt") return ["Erledigt"] as TaskStatus[];
+  if (normalized === "Nacharbeit") return ["In Arbeit", "Review", "Blockiert"] as TaskStatus[];
   return taskStatuses.filter((item) => item !== "Erledigt");
 }
 
-export function founderStatusGuardMessage(status: TaskStatus) {
+export function founderStatusGuardMessage(status: TaskStatus, currentStatus?: string) {
+  if (currentStatus && normalizeStatus(currentStatus) === "Erledigt" && status !== "Erledigt") {
+    return founderCompletedTaskGuardMessage();
+  }
   if (status !== "Erledigt") return "";
   return "Founder können Aufgaben nicht direkt auf Erledigt setzen. Wenn die Arbeit fertig ist, verschiebe sie in Review. Wenn du gerade nicht weiterkommst, nutze Blockiert und melde den konkreten Blocker.";
 }
 
-export function founderTaskOwnershipGuardMessage() {
+export function founderCompletedTaskGuardMessage() {
+  return "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.";
+}
+
+export function founderTaskAssignmentGuardMessage() {
   return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
 }
 
 export function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Package[]) {
   const initiative = packages.find((item) => item.id === task.packageId);
   return initiative?.accountableProfileId || initiative?.ownerId || "";
-}
-
-export type HygieneAlert = {
-  id: string;
-  severity: "critical" | "warning" | "info";
-  area: "focus" | "quality" | "blocker" | "review" | "evidence" | "dependency" | "decision" | "sync";
-  title: string;
-  description: string;
-  recommendedAction: string;
-  focusStatus?: TaskFocusItem["status"];
-  taskId?: string;
-  decisionId?: number;
-};
-
-export function daysSinceIso(value: string, today = new Date()) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return Math.floor((today.getTime() - date.getTime()) / 86400000);
-}
-
-export function latestTaskSignal(taskId: string, comments: TaskComment[], activities: TaskActivity[]) {
-  const dates = [
-    ...comments.filter((comment) => comment.taskId === taskId).map((comment) => comment.createdAt),
-    ...activities.filter((activity) => activity.taskId === taskId).map((activity) => activity.createdAt),
-  ];
-  return dates.sort().at(-1) || "";
-}
-
-export function buildHygieneAlerts(data: PlanningData) {
-  const alerts: HygieneAlert[] = [];
-  const openStatuses = new Set(["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert"]);
-
-  for (const task of data.tasks) {
-    const status = normalizeStatus(task.status);
-    if (!openStatuses.has(status)) continue;
-    const relationGroups = taskRelationsFor(task.id, data.taskRelations);
-    const openBlockers = data.taskBlockers.filter((blocker) => blocker.taskId === task.id && blocker.status === "open");
-    const latestSignal = latestTaskSignal(task.id, data.taskComments, data.taskActivity);
-    const staleDays = daysSinceIso(latestSignal || task.startDate || task.endDate);
-
-    if (task.priority === "P0" && !task.owner && task.taskType !== "proposal") {
-      alerts.push({ id: `p0-owner-${task.id}`, severity: "critical", area: "focus", title: "P0 ohne Assignee", description: "Diese Aufgabe braucht sofort eine klare Verantwortung.", recommendedAction: "Assignee festlegen und nächsten Schritt notieren.", taskId: task.id });
-    }
-    if (!task.acceptanceCriteria?.trim()) {
-      alerts.push({ id: `criteria-${task.id}`, severity: "warning", area: "quality", title: "Abnahmekriterien fehlen", description: "Ohne Abnahmekriterien ist Review und Score schwammig.", recommendedAction: "Abnahmekriterien ergänzen, bevor weiter umgesetzt wird.", taskId: task.id });
-    }
-    if (!task.definitionOfDone?.trim()) {
-      alerts.push({ id: `dod-${task.id}`, severity: "warning", area: "quality", title: "Qualitätsstandard fehlt", description: "Die Aufgabe hat kein klares Fertig-Kriterium.", recommendedAction: "Qualitätsstandard ergänzen und Review-Erwartung klären.", taskId: task.id });
-    }
-    if (status === "Blockiert" && !openBlockers.length) {
-      alerts.push({ id: `blocker-comment-${task.id}`, severity: "critical", area: "blocker", title: "Blockiert ohne Blocker-Meldung", description: "Der Status ist blockiert, aber es fehlt eine konkrete Blocker-Meldung.", recommendedAction: "Blocker mit Ursache, Auswirkung und benötigter Hilfe erfassen.", focusStatus: "blocked", taskId: task.id });
-    }
-    if (status === "Review" && (daysSinceIso(task.endDate) || 0) >= 2) {
-      alerts.push({ id: `review-aging-${task.id}`, severity: "warning", area: "review", title: "Review wartet zu lange", description: "Diese Aufgabe liegt mindestens zwei Tage in Review.", recommendedAction: "Review aktiv anstoßen oder Nacharbeit klar markieren.", taskId: task.id });
-    }
-    if (task.sprintId && status !== "Erledigt" && !task.evidenceLink && !task.githubIssueUrl && !task.issueUrl) {
-      alerts.push({ id: `evidence-${task.id}`, severity: "info", area: "evidence", title: "Nachweis fehlt", description: "Sprint-Arbeit sollte einen Nachweis-Link haben.", recommendedAction: "Nachweis-Link oder externe Ablage ergänzen.", taskId: task.id });
-    }
-    if (relationGroups.waitsOn.length && hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
-      alerts.push({ id: `waits-on-${task.id}`, severity: "warning", area: "dependency", title: "Wartet auf offene Aufgabe", description: "Eine Abhängigkeit ist noch offen und kann den Abschluss verschieben.", recommendedAction: "Abhängigkeit prüfen und Blocker oder Folgeaktion klären.", focusStatus: "blocked", taskId: task.id });
-    }
-    if (staleDays !== null && staleDays >= 2 && status !== "Erledigt") {
-      alerts.push({ id: `stale-${task.id}`, severity: "info", area: "focus", title: "Kein Update seit 48 Stunden", description: "Es gibt seit mindestens zwei Tagen keinen Kommentar oder Aktivitätseintrag.", recommendedAction: "Kurzstatus oder nächsten Schritt ergänzen.", taskId: task.id });
-    }
-    if (task.githubSyncStatus === "failed") {
-      alerts.push({ id: `sync-${task.id}`, severity: "warning", area: "sync", title: "GitHub-Sync fehlgeschlagen", description: task.githubSyncError || "Die Aufgabe konnte nicht sauber nach GitHub gespiegelt werden.", recommendedAction: "GitHub-Sync prüfen und Aufgabe erneut spiegeln.", taskId: task.id });
-    }
-  }
-
-  for (const decision of data.decisions) {
-    const links = data.decisionTaskLinks.filter((link) => link.decisionId === decision.id);
-    if (decision.status === "locked" && !links.length) {
-      alerts.push({ id: `decision-followup-${decision.id}`, severity: "warning", area: "decision", title: "Decision ohne Folgeaufgabe", description: "Die Decision ist gelockt, aber noch mit keiner Aufgabe verknüpft.", recommendedAction: "Folgeaufgabe erstellen oder bestehende Aufgabe verknüpfen.", focusStatus: "needs_decision", decisionId: decision.id });
-    }
-  }
-
-  return alerts;
 }

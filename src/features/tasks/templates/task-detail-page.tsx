@@ -1,11 +1,10 @@
 ﻿"use client";
 
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import type { DecisionTaskLink, Milestone, Package, PlanningData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "@/lib/types";
+import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
-import { TaskContextSection } from "@/features/tasks/molecules/task-context-section";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header";
 import { TaskDetailsCard } from "@/features/tasks/organisms/task-details-card";
@@ -30,9 +29,6 @@ type Props = {
   profiles: Profile[];
   sprints: Sprint[];
   milestones: Milestone[];
-  decisions?: PlanningData["decisions"];
-  decisionTaskLinks?: DecisionTaskLink[];
-  focusItems?: TaskFocusItem[];
   source: "seed" | "supabase";
   commentImportNotice?: string;
 };
@@ -52,9 +48,6 @@ export function TaskDetailPage({
   profiles,
   sprints,
   milestones,
-  decisions = [],
-  decisionTaskLinks = [],
-  focusItems = [],
   source,
   commentImportNotice = "",
 }: Props) {
@@ -112,15 +105,12 @@ export function TaskDetailPage({
     profiles,
     sprints,
     milestones,
-    decisions,
-    decisionTaskLinks,
-    focusItems,
     source,
     commentImportNotice,
   });
 
   const {
-    ownerProfile,
+    assigneeProfile,
     creatorProfile,
     currentSprint,
     currentMilestone,
@@ -130,8 +120,6 @@ export function TaskDetailPage({
     waitsOn,
     blocks,
     related,
-    linkedDecisions,
-    linkedFocusItems,
     relationTargetOptions,
     canManageTaskMeta,
     canSyncExistingGitHubIssue,
@@ -173,7 +161,6 @@ export function TaskDetailPage({
                   onEvidenceLinkChange={setEvidenceLink}
                   onEvidenceLinkSave={() => updateTask({ evidenceLink: meta.evidenceLink })}
                 />
-                <TaskContextSection linkedFocusItems={linkedFocusItems} linkedDecisions={linkedDecisions} profileName={profileName} />
                 <TaskRelationshipsSection
                   task={task}
                   waitsOn={waitsOn}
@@ -203,10 +190,11 @@ export function TaskDetailPage({
               meta={meta}
               detailsDraft={detailsDraft}
               creatorProfile={creatorProfile}
-              ownerProfile={ownerProfile}
+              assigneeProfile={assigneeProfile}
               currentPackage={currentPackage}
               currentSprint={currentSprint}
               currentMilestone={currentMilestone}
+              canManageFinalTaskStatus={source === "seed" || currentRole === "ceo"}
               canManageTaskMeta={canManageTaskMeta}
               canManageReviewOwner={currentRole === "ceo"}
               detailsEditing={detailsEditing}

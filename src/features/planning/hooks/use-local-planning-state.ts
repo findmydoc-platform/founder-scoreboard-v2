@@ -8,7 +8,6 @@ const localStateKey = "fmd-planning-local-state-v1";
 function localTaskState(task: Task) {
   return {
     status: task.status,
-    owner: task.owner,
     assignee: task.assignee,
     priority: task.priority,
     packageId: task.packageId,

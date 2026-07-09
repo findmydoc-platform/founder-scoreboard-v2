@@ -4,7 +4,7 @@ create table if not exists profile_ui_preferences (
     check (default_workspace in ('planning', 'execution', 'mine', 'reviews', 'events', 'sprint', 'decisions', 'meetings', 'projects', 'tools', 'team', 'settings', 'ceo-intake', 'profile')),
   default_task_view text not null default 'board'
     check (default_task_view in ('board', 'structure', 'table', 'gantt')),
-  planning_filters jsonb not null default '{"query":"","owner":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
+  planning_filters jsonb not null default '{"query":"","assignee":"Alle","status":"Alle","priority":"Alle","packageId":"Alle","quick":""}'::jsonb,
   expanded_package_ids text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

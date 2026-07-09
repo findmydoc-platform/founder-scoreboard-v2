@@ -4,7 +4,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const planningAppModelMock = {
   reviewOwnerForTask: () => "accountable",
-  taskOwnerPatch: () => ({}),
+  taskAssigneePatch: () => ({}),
 };
 
 const slugMock = {
@@ -58,7 +58,7 @@ test("score and review owner payload fields remain available outside review requ
 
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
-    "@/features/tasks/model/task-mutation-contract": { taskOwnedByProfile: () => true },
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": { taskStatuses: ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
   });
 
@@ -66,4 +66,53 @@ test("task route guard allows only the implicit score reset for review requests"
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", scoreFinal: true }), ["Score"]);
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", scorePoints: 8 }), ["Score"]);
   assert.deepEqual(restrictedTaskUpdateFields({ scoreFinal: false }), ["Score"]);
+});
+
+test("task route guard keeps final status CEO-only", async () => {
+  const { applyFinalStatusReopen, validateTaskStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
+    "@/lib/status": {
+      normalizeStatus: (status) => status,
+      taskStatuses: ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
+    },
+  });
+
+  assert.deepEqual(
+    validateTaskStatusUpdate({
+      currentTask: { status: "Offen", assignee: "founder-1" },
+      isOperationalLead: true,
+      isCeo: false,
+      payload: { status: "Erledigt" },
+      profile: { id: "founder-1" },
+    }),
+    { ok: false, error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", status: 403 },
+  );
+
+  assert.deepEqual(
+    validateTaskStatusUpdate({
+      currentTask: { status: "Erledigt", assignee: "founder-1" },
+      isOperationalLead: true,
+      isCeo: false,
+      payload: { status: "In Arbeit" },
+      profile: { id: "founder-1" },
+    }),
+    { ok: false, error: "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.", status: 403 },
+  );
+
+  assert.deepEqual(
+    validateTaskStatusUpdate({
+      currentTask: { status: "Erledigt", assignee: "founder-1" },
+      isOperationalLead: true,
+      isCeo: true,
+      payload: { status: "Review" },
+      profile: { id: "ceo" },
+    }),
+    { ok: true },
+  );
+
+  const update = {};
+  applyFinalStatusReopen(update, { status: "Erledigt" }, { status: "Review" }, true);
+  assert.equal(update.score_final, false);
+  assert.equal(update.review_status, "requested");
+  assert.equal(typeof update.review_requested_at, "string");
 });

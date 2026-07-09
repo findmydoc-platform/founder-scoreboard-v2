@@ -1,5 +1,5 @@
 import { CircleHelp, X } from "lucide-react";
-import { relationshipHelpText, taskOwnerLabel } from "@/lib/display";
+import { relationshipHelpText, taskAssigneeLabel } from "@/lib/display";
 import { relationshipBadgeFor, relationshipBadgeToneClass } from "@/lib/relationship-view-model";
 import { normalizeStatus } from "@/lib/status";
 import type { Task, TaskRelation } from "@/lib/types";
@@ -60,7 +60,7 @@ export function RelationshipList({
                     {badge.label}
                   </span>
                 </div>
-                <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskOwnerLabel(task)}` : "Aufgabe nicht gefunden"}</div>
+                <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskAssigneeLabel(task)}` : "Aufgabe nicht gefunden"}</div>
                 {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
               </div>
               {canManage && onRemove && (

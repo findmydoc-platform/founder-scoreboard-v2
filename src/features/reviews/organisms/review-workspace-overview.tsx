@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge, UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
-import { dateRange, taskOwnerLabel } from "@/lib/display";
+import { ReviewTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
+import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { buildReviewWorkspaceViewModel, isBlockedReviewTask, reviewStatusFilterOptions, type ReviewOwnerFilter, type ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
 import { normalizeStatus } from "@/lib/status";
@@ -40,6 +41,24 @@ export function ReviewWorkspaceOverview({
     all: metrics.total,
   };
   const showStatusColumn = statusFilter === "all";
+
+  if (metrics.total === 0) {
+    return (
+      <UiPanel>
+        <div className="grid gap-3 py-6 text-center">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Noch keine Reviews</h2>
+            <p className="mt-1 text-sm text-slate-600">Sobald Sprint-Aufgaben zur Accountable-Review gehen, erscheint hier die Review-Zentrale.</p>
+          </div>
+          <div>
+            <UiLinkButton href="/sprint" variant="blue" size="md">
+              Reviews im Sprint vorbereiten
+            </UiLinkButton>
+          </div>
+        </div>
+      </UiPanel>
+    );
+  }
 
   return (
     <div className="grid gap-4">
@@ -91,7 +110,7 @@ export function ReviewWorkspaceOverview({
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="border-b border-slate-200 px-4 py-3 font-semibold">Aufgabe</th>
-                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Assignee</th>
+                <th className="border-b border-slate-200 px-3 py-3 font-semibold">Zuständig</th>
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Review Owner</th>
                 {showStatusColumn && <th className="border-b border-slate-200 px-3 py-3 font-semibold">Status</th>}
                 <th className="border-b border-slate-200 px-3 py-3 font-semibold">Zeitraum</th>
@@ -105,9 +124,12 @@ export function ReviewWorkspaceOverview({
                     <Link href={`/reviews/${encodeURIComponent(task.id)}`} className="block truncate font-semibold text-slate-950 hover:text-blue-700">
                       {task.title}
                     </Link>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <ReviewTaskAttentionBadges task={task} />
+                    </div>
                     <div className="mt-1 truncate text-xs text-slate-500">{task.priority} · {task.hours}h · {task.workstream || "ohne Bereich"}</div>
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{taskOwnerLabel(task)}</td>
+                  <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{taskAssigneeLabel(task)}</td>
                   <td className="border-b border-slate-100 px-3 py-3 text-slate-700">{profileName(task.reviewOwnerProfileId)}</td>
                   {showStatusColumn && (
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">

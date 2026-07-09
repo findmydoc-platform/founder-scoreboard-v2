@@ -1,11 +1,11 @@
-import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows } from "./planning-data-loader";
+import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, type PlanningDataQueryScope } from "./planning-data-loader";
 import { getServerSupabase } from "./supabase";
 import type { PlanningData } from "./types";
 
 export const emptyPlanningData: PlanningData = {
   project: {
     id: "findmydoc-founder-execution",
-    name: "findmydoc Founder Execution",
+    name: "findmydoc Planning",
     range: "Geschützter Teamzugriff",
   },
   profiles: [],
@@ -18,34 +18,29 @@ export const emptyPlanningData: PlanningData = {
   founderStrikeStates: [],
   strikeEvents: [],
   scoreObjections: [],
-  decisions: [],
-  decisionComments: [],
   taskComments: [],
   taskExternalComments: [],
   taskBlockers: [],
   taskRelations: [],
   taskActivity: [],
   taskFocusItems: [],
-  decisionTaskLinks: [],
   notificationEvents: [],
   notificationDeliveries: [],
   notificationPreferences: [],
   profileUiPreferences: [],
   profileFeatureTourAcknowledgements: [],
-  feedbackItems: [],
   fmdTools: [],
   events: [],
   meetings: [],
   meetingAttendance: [],
   audit: [],
-  availability: [],
 };
 
-export async function getPlanningData(): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
+export async function getPlanningData(scope?: PlanningDataQueryScope): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
   if (!supabase) return { data: emptyPlanningData, source: "seed" };
 
-  const rows = await loadPlanningDataRows(supabase);
+  const rows = await loadPlanningDataRows(supabase, scope);
   if (hasCorePlanningDataError(rows)) {
     return { data: emptyPlanningData, source: "seed" };
   }

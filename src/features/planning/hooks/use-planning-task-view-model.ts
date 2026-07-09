@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
 import { isThisWeek, sortTasks, taskText } from "@/features/planning/model/planning-app-model";
+import { taskHasCriticalAttention, taskHasMissingEvidenceAttention } from "@/features/tasks/model/task-attention-signals";
 import { hasOpenWaitingRelation, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile } from "@/lib/types";
@@ -12,14 +12,12 @@ type UsePlanningTaskViewModelOptions = {
   currentProfile: Profile | null;
   data: PlanningData;
   filters: PlanningFilters;
-  workspace: AppWorkspace;
 };
 
 export function usePlanningTaskViewModel({
   currentProfile,
   data,
   filters,
-  workspace,
 }: UsePlanningTaskViewModelOptions) {
   const filteredTasks = useMemo(() => {
     return sortTasks(
@@ -27,7 +25,7 @@ export function usePlanningTaskViewModel({
         if (task.taskType === "sub_issue") return false;
         const normalized = normalizeStatus(task.status);
         const matchesQuery = !filters.query || taskText(task).includes(filters.query.toLowerCase());
-        const matchesOwner = filters.owner === "Alle" || task.owner === filters.owner;
+        const matchesAssignee = filters.assignee === "Alle" || task.assignee === filters.assignee || task.assigneeId === filters.assignee;
         const matchesStatus = filters.status === "Alle" || normalized === filters.status;
         const matchesPriority = filters.priority === "Alle" || task.priority === filters.priority;
         const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
@@ -35,20 +33,18 @@ export function usePlanningTaskViewModel({
           !filters.quick ||
           (filters.quick === "mine" && taskBelongsToProfile(task, currentProfile)) ||
           (filters.quick === "open" && normalized === "Offen") ||
+          (filters.quick === "critical" && taskHasCriticalAttention(task, data)) ||
           (filters.quick === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn))) ||
           (filters.quick === "week" && isThisWeek(task)) ||
           (filters.quick === "high" && ["P0", "P1"].includes(task.priority)) ||
-          (filters.quick === "evidence" && !task.evidenceLink && !task.issueUrl);
+          (filters.quick === "evidence" && taskHasMissingEvidenceAttention(task));
 
-        return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
+        return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesPackage && matchesQuick;
       }),
     );
-  }, [currentProfile, data.tasks, filters]);
+  }, [currentProfile, data, filters]);
 
-  const visibleTasks = useMemo(() => {
-    if (workspace === "mine") return filteredTasks.filter((task) => taskBelongsToProfile(task, currentProfile));
-    return filteredTasks;
-  }, [currentProfile, filteredTasks, workspace]);
+  const visibleTasks = filteredTasks;
 
   const metrics = {
     total: visibleTasks.length,
