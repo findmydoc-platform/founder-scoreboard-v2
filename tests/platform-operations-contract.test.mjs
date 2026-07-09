@@ -13,7 +13,6 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
   const ui = await readPlanningSurface();
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
-  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
   const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
   const inboxUi = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
 
@@ -94,9 +93,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(settingsNotificationsUi, /googleChatDigestNotifications/);
   assert.match(settingsNotificationsUi, /googleChatReady/);
   assert.match(settingsNotificationsUi, /googleChatDeliveryEnabled/);
-  assert.match(readinessUi, /googleChatReady/);
-  assert.match(readinessUi, /text-emerald-700/);
-  assert.match(readinessUi, /text-amber-700/);
+  assert.doesNotMatch(settingsOverviewUi, /SystemStatusSection|settings-readiness|Arbeitsbereitschaft/);
   assert.doesNotMatch(settingsNotificationsUi, /GOOGLE_CHAT_DELIVERY_ENABLED/);
   assert.match(settingsNotificationsUi, /notificationChannelLabel/);
   assert.match(settingsNotificationsUi, /onSendGoogleChatTest/);
@@ -176,7 +173,6 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const css = await readFile("src/app/globals.css", "utf8");
   const ui = await readPlanningSurface();
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
-  const readinessUi = await readFile("src/features/settings/organisms/settings-readiness.tsx", "utf8");
 
   assert.match(verify, /ciWorkflowPresent/);
   assert.match(verify, /node --test tests\/\*\.test\.mjs/);
@@ -252,9 +248,9 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /SettingsOverview/);
   assert.doesNotMatch(settingsOverviewUi, /ProductionReadinessSection|SetupChecklistSection/);
-  assert.doesNotMatch(readinessUi, /Betriebsdetails|manuell offen/);
-  assert.doesNotMatch(readinessUi, /vercel login/);
-  assert.doesNotMatch(readinessUi, /GitHub-Zugriff|Anmelde-Weiterleitungen|Deployment-Automation/);
+  assert.doesNotMatch(settingsOverviewUi, /Betriebsdetails|manuell offen/);
+  assert.doesNotMatch(settingsOverviewUi, /vercel login/);
+  assert.doesNotMatch(settingsOverviewUi, /GitHub-Zugriff|Anmelde-Weiterleitungen|Deployment-Automation|Arbeitsbereitschaft/);
 });
 
 test("founder events are modeled as team-visible operational reminders", async () => {
