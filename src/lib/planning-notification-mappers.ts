@@ -1,5 +1,5 @@
-import type { FeedbackItem, FmdTool, FounderEvent, NotificationDelivery, NotificationEvent, NotificationPreference } from "./types";
-import type { DbFeedbackItem, DbFmdTool, DbFounderEvent, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference } from "./planning-data-row-types";
+import type { FmdTool, FounderEvent, NotificationDelivery, NotificationEvent, NotificationPreference } from "./types";
+import type { DbFmdTool, DbFounderEvent, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference } from "./planning-data-row-types";
 
 export function mapNotificationEvent(row: DbNotificationEvent): NotificationEvent {
   return {
@@ -40,20 +40,6 @@ export function mapNotificationPreference(row: DbNotificationPreference): Notifi
     channel: row.channel,
     eventType: row.event_type,
     enabled: row.enabled,
-  };
-}
-
-export function mapFeedbackItem(row: DbFeedbackItem): FeedbackItem {
-  return {
-    id: row.id,
-    type: row.type,
-    status: row.status,
-    severity: row.severity,
-    profileId: row.profile_id || "",
-    title: row.title,
-    description: row.description,
-    pageUrl: row.page_url || "",
-    createdAt: row.created_at,
   };
 }
 

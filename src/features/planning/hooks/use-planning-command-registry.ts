@@ -11,7 +11,6 @@ import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
-import { useFeedbackCommands } from "@/features/settings/hooks/use-feedback-commands";
 import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
 import { useProfileSettingsCommands } from "@/features/team/hooks/use-profile-settings-commands";
@@ -34,10 +33,8 @@ type UsePlanningCommandRegistryOptions = {
   protectedDataLoaded: boolean;
   refreshPlanningData: () => Promise<void>;
   selectedTask: Task | null;
-  setFeedbackDialogOpen: PlanningViewState["setFeedbackDialogOpen"];
   setFilters: PlanningViewState["setFilters"];
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setSelectedFeedbackId: PlanningViewState["setSelectedFeedbackId"];
   setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
@@ -61,10 +58,8 @@ export function usePlanningCommandRegistry({
   protectedDataLoaded,
   refreshPlanningData,
   selectedTask,
-  setFeedbackDialogOpen,
   setFilters,
   setInitiativeDialogDefaults,
-  setSelectedFeedbackId,
   setShowNotifications,
   setStatusGuardNotice,
   setStatusGuardTaskId,
@@ -128,16 +123,10 @@ export function usePlanningCommandRegistry({
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
   const ownProfileSettingsCommands = useOwnProfileSettingsCommands(commandContext);
-  const feedbackCommands = useFeedbackCommands({
-    ...commandContext,
-    setFeedbackDialogOpen,
-    setSelectedFeedbackId,
-  });
   const notificationCommands = useNotificationCommands({
     ...commandContext,
     openTaskPanel,
     refreshPlanningData,
-    setSelectedFeedbackId,
     setShowNotifications,
     setWorkspace,
     workspace,
@@ -153,7 +142,6 @@ export function usePlanningCommandRegistry({
     boardState,
     demoSeedImport,
     eventCommands,
-    feedbackCommands,
     initiativeCommands,
     notificationCommands,
     ownProfileSettingsCommands,

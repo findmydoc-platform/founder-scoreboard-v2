@@ -18,7 +18,6 @@ type UsePlanningDerivedStateOptions = {
   data: PlanningData;
   filters: PlanningFilters;
   legacyMineWorkspace: boolean;
-  setFeedbackDialogOpen: PlanningViewState["setFeedbackDialogOpen"];
   setFilters: PlanningViewState["setFilters"];
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
@@ -34,7 +33,6 @@ export function usePlanningDerivedState({
   data,
   filters,
   legacyMineWorkspace,
-  setFeedbackDialogOpen,
   setFilters,
   setInitiativeDialogDefaults,
   setTaskDialogDefaults,
@@ -64,7 +62,6 @@ export function usePlanningDerivedState({
   const filtersAvailable = planningWorkspaces.includes(workspace);
   const headerPrimaryAction = usePlanningHeaderPrimaryAction({
     activeSprint,
-    setFeedbackDialogOpen,
     setInitiativeDialogDefaults,
     setTaskDialogDefaults,
     workspace,

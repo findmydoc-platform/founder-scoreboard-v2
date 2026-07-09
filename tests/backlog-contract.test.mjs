@@ -103,7 +103,6 @@ function basePlanningData() {
     notificationPreferences: [],
     profileUiPreferences: [],
     profileFeatureTourAcknowledgements: [],
-    feedbackItems: [],
     fmdTools: [],
     events: [],
     meetings: [],

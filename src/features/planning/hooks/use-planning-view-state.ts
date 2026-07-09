@@ -76,8 +76,6 @@ export function usePlanningViewState({
   const [reviewOwnerFilter, setReviewOwnerFilter] = useState<ReviewOwnerFilter>("all");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
-  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
-  const [selectedFeedbackId, setSelectedFeedbackId] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -95,24 +93,20 @@ export function usePlanningViewState({
   }, [filters]);
 
   return {
-    feedbackDialogOpen,
     filters,
     focusedReviewTaskId,
     initiativeDialogDefaults,
     mobileNavOpen,
     reviewOwnerFilter,
     reviewStatusFilter,
-    selectedFeedbackId,
     selectedReviewDetailTaskId,
     selectedTaskId,
-    setFeedbackDialogOpen,
     setFilters,
     setFocusedReviewTaskId,
     setInitiativeDialogDefaults,
     setMobileNavOpen,
     setReviewOwnerFilter,
     setReviewStatusFilter,
-    setSelectedFeedbackId,
     setSelectedTaskId,
     setShowFilters,
     setShowNotifications,

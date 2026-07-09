@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
@@ -80,8 +81,8 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(policy, /shouldSendToGoogleChatDm/);
   assert.match(policy, /sprint\.review_due/);
   assert.match(policy, /meeting\.attendance_updated/);
-  assert.match(policy, /feedback\.bug_reported/);
-  assert.match(policy, /feedback\.feature_requested/);
+  assert.doesNotMatch(policy, /feedback\.bug_reported/);
+  assert.doesNotMatch(policy, /feedback\.feature_requested/);
   assert.match(ui, /NotificationInbox/);
   assert.match(inboxUi, /notificationTypeLabel/);
   assert.match(inboxUi, /notifications\.slice\(0, 12\)/);
@@ -366,29 +367,32 @@ test("health is slim while verification scripts detect operational migrations", 
   assert.match(pkg, /verify:operational/);
 });
 
-test("founder feedback creates bug and feature notifications with details", async () => {
+test("active founder feedback is removed while historical migration stays intact", async () => {
   const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
-  const route = await readFile("src/app/api/feedback/route.ts", "utf8");
   const ui = await readPlanningSurface();
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
   const settingsNotificationsUi = await readFile("src/features/settings/organisms/settings-notifications.tsx", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
   assert.match(migration, /type text not null check \(type in \('bug', 'feature'\)\)/);
-  assert.match(route, /requireFounder/);
-  assert.match(route, /feedback\.bug_reported/);
-  assert.match(route, /feedback\.feature_requested/);
-  assert.match(route, /notification_events/);
+  assert.equal(existsSync("src/app/api/feedback/route.ts"), false);
+  assert.equal(existsSync("src/features/settings/molecules/feedback-dialog.tsx"), false);
+  assert.equal(existsSync("src/features/settings/hooks/use-feedback-commands.ts"), false);
   assert.match(ui, /SettingsOverview/);
   assert.match(settingsOverviewUi, /SettingsNotificationsSection/);
-  assert.match(settingsNotificationsUi, /Benachrichtigungscenter/);
-  assert.match(settingsNotificationsUi, /Feedback-Eingang/);
   assert.match(settingsNotificationsUi, /Benachrichtigungsausgang/);
   assert.match(settingsNotificationsUi, /xl:col-span-2/);
-  assert.match(ui, /FeedbackDialog/);
-  assert.match(ui, /\/api\/feedback/);
-  assert.match(data, /feedbackItems/);
+  assert.doesNotMatch(settingsNotificationsUi, /Feedback-Eingang/);
+  assert.doesNotMatch(ui, /FeedbackDialog/);
+  assert.doesNotMatch(ui, /\/api\/feedback/);
+  assert.doesNotMatch(data, /feedbackItems|feedback_items/);
+  assert.doesNotMatch(dataScopes, /feedbackItems/);
+  assert.doesNotMatch(apiClient, /createFeedbackRequest|\/api\/feedback/);
+  assert.doesNotMatch(notificationPolicy, /feedback\.bug_reported|feedback\.feature_requested/);
 });
 
 test("workspace selection uses path routes and preserves legacy mine filter", async () => {
@@ -443,7 +447,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(dataScopes, /planningDataWorkspaceFromValue/);
   assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
   assert.match(dataScopes, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
-  assert.match(dataScopes, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*feedbackItems: true,[\s\S]*\}/);
+  assert.match(dataScopes, /settings: \{[\s\S]*notificationDeliveries: true,[\s\S]*\}/);
   assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
   assert.match(dataScopes, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
   assert.match(dataLoader, /export type PlanningDataQueryScope/);

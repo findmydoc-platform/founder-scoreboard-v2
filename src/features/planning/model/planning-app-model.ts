@@ -33,7 +33,6 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     notificationPreferences: data.notificationPreferences || [],
     profileUiPreferences: data.profileUiPreferences || [],
     profileFeatureTourAcknowledgements: data.profileFeatureTourAcknowledgements || [],
-    feedbackItems: data.feedbackItems || [],
     fmdTools: data.fmdTools || [],
     events: data.events || [],
     meetings: data.meetings || [],

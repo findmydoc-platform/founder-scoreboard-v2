@@ -10,8 +10,6 @@ export const googleChatDigestEventTypes = [
   "sprint.review_due",
   "event.upcoming",
   "meeting.attendance_updated",
-  "feedback.bug_reported",
-  "feedback.feature_requested",
 ] as const;
 
 export const googleChatDirectDmEventTypes = [
@@ -38,8 +36,6 @@ export function notificationEventLabel(eventType: string) {
   if (eventType === "sprint.review_due") return "Sprint-Review fällig";
   if (eventType === "event.upcoming") return "Event-Erinnerung";
   if (eventType === "meeting.attendance_updated") return "Weekly-Rückmeldung";
-  if (eventType === "feedback.bug_reported") return "Bug gemeldet";
-  if (eventType === "feedback.feature_requested") return "Feature-Wunsch";
   return eventType;
 }
 

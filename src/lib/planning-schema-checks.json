@@ -130,12 +130,6 @@
     "health": true
   },
   {
-    "name": "feedback_items",
-    "table": "feedback_items",
-    "select": "id,type,status,severity,profile_id,title,description,page_url",
-    "health": true
-  },
-  {
     "name": "fmd_tools",
     "table": "fmd_tools",
     "select": "id,name,category,kind,url,owner,status,sort_order",

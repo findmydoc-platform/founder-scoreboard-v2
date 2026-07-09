@@ -316,18 +316,6 @@ export type ProfileFeatureTourAcknowledgement = {
   seenAt: string;
 };
 
-export type FeedbackItem = {
-  id: number;
-  type: "bug" | "feature";
-  status: "open" | "triaged" | "planned" | "done" | "dismissed";
-  severity: "P0" | "P1" | "P2" | "P3";
-  profileId: string;
-  title: string;
-  description: string;
-  pageUrl: string;
-  createdAt: string;
-};
-
 export type FmdTool = {
   id: string;
   name: string;
@@ -417,7 +405,6 @@ export type PlanningData = {
   notificationPreferences: NotificationPreference[];
   profileUiPreferences: ProfileUiPreference[];
   profileFeatureTourAcknowledgements: ProfileFeatureTourAcknowledgement[];
-  feedbackItems: FeedbackItem[];
   fmdTools: FmdTool[];
   events: FounderEvent[];
   meetings: Meeting[];

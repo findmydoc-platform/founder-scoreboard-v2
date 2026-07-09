@@ -20,8 +20,6 @@ export function SettingsOverview({
   authUserEmail,
   githubAppConnected,
   pending,
-  feedbackMessage,
-  selectedFeedbackId,
   notificationDispatchMessage,
   googleChatStatus,
   sprintPlanningOptions,
@@ -31,7 +29,6 @@ export function SettingsOverview({
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
-  onSelectFeedback,
 }: {
   data: PlanningData;
   source: "seed" | "supabase";
@@ -39,8 +36,6 @@ export function SettingsOverview({
   authUserEmail: string;
   githubAppConnected: boolean;
   pending: boolean;
-  feedbackMessage: string;
-  selectedFeedbackId: number | null;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;
   sprintPlanningOptions: SprintPlanningOptions;
@@ -50,7 +45,6 @@ export function SettingsOverview({
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
-  onSelectFeedback: (id: number) => void;
 }) {
   const googleChatReady = Boolean(googleChatStatus?.ready);
 
@@ -66,11 +60,8 @@ export function SettingsOverview({
       <SettingsNotificationsSection
         data={data}
         pending={pending}
-        feedbackMessage={feedbackMessage}
-        selectedFeedbackId={selectedFeedbackId}
         notificationDispatchMessage={notificationDispatchMessage}
         googleChatStatus={googleChatStatus}
-        onSelectFeedback={onSelectFeedback}
         onDispatchNotifications={onDispatchNotifications}
         onRetryNotificationDelivery={onRetryNotificationDelivery}
         onSendGoogleChatTest={onSendGoogleChatTest}

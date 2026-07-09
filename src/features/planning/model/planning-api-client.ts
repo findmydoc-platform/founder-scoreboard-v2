@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { FeedbackItem, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
@@ -122,13 +122,6 @@ export function notificationDeliveryStatusRequest(apiClient: BrowserApiClient) {
 
 export function runNotificationDeliveryRequest(apiClient: BrowserApiClient, payload: Record<string, unknown>) {
   return apiClient.requestJson<{ error?: string; sent?: number; failed?: number; skipped?: number }>("/api/notifications/deliver", {
-    method: "POST",
-    json: payload,
-  });
-}
-
-export function createFeedbackRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; feedback?: FeedbackItem }>("/api/feedback", {
     method: "POST",
     json: payload,
   });
