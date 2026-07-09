@@ -64,7 +64,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
 
   return (
     <AppHeader
-      eyebrow={workspaceLabels[workspace]}
       mobileNavOpen={mobileNavOpen}
       onOpenMobileNav={() => setMobileNavOpen(true)}
       subtitle={subtitle}

@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 type AppHeaderProps = {
   actions?: ReactNode;
   children?: ReactNode;
-  eyebrow: string;
+  eyebrow?: string;
   mobileNavOpen: boolean;
   notices?: ReactNode;
   onOpenMobileNav: () => void;
@@ -37,7 +37,7 @@ export function AppHeader({
             <Menu size={19} />
           </button>
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</div>
+            {eyebrow && <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</div>}
             <h1 className="truncate text-xl font-semibold text-slate-950">{title}</h1>
             <div className="mt-1 text-sm text-slate-500">{subtitle}</div>
           </div>
