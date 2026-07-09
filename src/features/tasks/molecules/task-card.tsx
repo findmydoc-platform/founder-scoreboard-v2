@@ -3,7 +3,7 @@
 import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
-import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
+import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
@@ -68,6 +68,71 @@ export function RelationBadge({ label, count, tone = "slate" }: { label: string;
   );
 }
 
+type CardRiskSignal = {
+  id: string;
+  label: string;
+  tone: Extract<UiTone, "amber" | "blue" | "red" | "slate" | "white">;
+};
+
+function attentionTone(signal: TaskAttentionSignal): CardRiskSignal["tone"] {
+  if (signal.kind === "critical") return "red";
+  if (signal.kind === "review") return "blue";
+  return "amber";
+}
+
+function githubRiskSignal(task: Task): CardRiskSignal | null {
+  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
+  if (task.githubSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
+  if (task.githubSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
+  if (task.githubSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
+  return null;
+}
+
+function TaskCardRiskBadges({
+  task,
+  relations,
+  allTasks,
+  blockers,
+  maxVisible = 3,
+}: {
+  task: Task;
+  relations: TaskRelation[];
+  allTasks: Task[];
+  blockers: TaskBlocker[];
+  maxVisible?: number;
+}) {
+  const relationGroups = taskRelationsFor(task.id, relations);
+  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
+  const signals = [
+    githubRiskSignal(task),
+    ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
+      .filter((signal) => signal.id !== "sync-failed")
+      .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
+    relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
+    relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
+  ].filter((signal): signal is CardRiskSignal => Boolean(signal));
+
+  if (!signals.length) return null;
+
+  const visibleSignals = signals.slice(0, maxVisible);
+  const hiddenCount = signals.length - visibleSignals.length;
+
+  return (
+    <>
+      {visibleSignals.map((signal) => (
+        <UiBadge key={signal.id} tone={signal.tone} size="xs" className="text-[11px]">
+          {signal.label}
+        </UiBadge>
+      ))}
+      {hiddenCount > 0 && (
+        <UiBadge tone="white" size="xs" className="text-[11px]">
+          +{hiddenCount}
+        </UiBadge>
+      )}
+    </>
+  );
+}
+
 export function TaskCard({
   task,
   pack,
@@ -102,8 +167,6 @@ export function TaskCard({
   isDragging?: boolean;
 }) {
   const normalized = normalizeStatus(task.status);
-  const relationGroups = taskRelationsFor(task.id, relations);
-  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
 
   return (
     <article
@@ -150,10 +213,7 @@ export function TaskCard({
         <UiBadge size="xs" className="text-[11px]">
           {task.hours}h
         </UiBadge>
-        <GitHubSyncStatusBadge task={task} />
-        <PlanningTaskAttentionBadges task={task} data={{ taskBlockers: blockers, taskRelations: relations, tasks: allTasks }} excludeIds={["sync-failed", "waiting"]} />
-        <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
-        <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
+        <TaskCardRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
       </div>
       <p className="mt-2 min-w-0 line-clamp-2 break-words text-xs leading-5 text-slate-600 [overflow-wrap:anywhere]">{task.description}</p>
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-500">
