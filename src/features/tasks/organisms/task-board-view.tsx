@@ -100,6 +100,8 @@ export function TaskBoardView({
                     blockers={blockers}
                     statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
                     statusDisabled={!canUpdateStatus}
+                    showEffort={false}
+                    showDescription={false}
                     showStatus={false}
                     showStatusControl={false}
                     onOpen={onOpenTask}

@@ -142,6 +142,8 @@ export function TaskCard({
   blockers,
   statusOptions,
   statusDisabled = false,
+  showEffort = true,
+  showDescription = true,
   showStatus = false,
   showStatusControl = false,
   onOpen,
@@ -158,6 +160,8 @@ export function TaskCard({
   blockers: TaskBlocker[];
   statusOptions: TaskStatus[];
   statusDisabled?: boolean;
+  showEffort?: boolean;
+  showDescription?: boolean;
   showStatus?: boolean;
   showStatusControl?: boolean;
   onOpen: (task: Task) => void;
@@ -210,12 +214,16 @@ export function TaskCard({
         <UiBadge tone={priorityBadgeTone(task.priority)} size="xs" className="text-[11px]">
           {task.priority}
         </UiBadge>
-        <UiBadge size="xs" className="text-[11px]">
-          {task.hours}h
-        </UiBadge>
+        {showEffort && (
+          <UiBadge size="xs" className="text-[11px]">
+            {task.hours}h
+          </UiBadge>
+        )}
         <TaskCardRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
       </div>
-      <p className="mt-2 min-w-0 line-clamp-2 break-words text-xs leading-5 text-slate-600 [overflow-wrap:anywhere]">{task.description}</p>
+      {showDescription && (
+        <p className="mt-2 min-w-0 line-clamp-2 break-words text-xs leading-5 text-slate-600 [overflow-wrap:anywhere]">{task.description}</p>
+      )}
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-500">
         <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ownerColor }} />
