@@ -129,6 +129,147 @@ export function EventsOverview({
     onCreateEvent(draft);
   };
 
+  const eventForm = formOpen && canManageEvents ? (
+    <UiPanel>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-950">{editingEvent ? "Event bearbeiten" : "Event eintragen"}</h2>
+          <p className="mt-1 text-sm text-slate-600">Reminder laufen über die FounderOps-Glocke und Google Chat.</p>
+        </div>
+        <button type="button" onClick={closeForm} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-50" aria-label="Event-Formular schließen">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Titel
+          <UiTextInput
+            value={draft.title}
+            onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+            className="h-10 px-3"
+            placeholder="z. B. Gesundheitsmesse Düsseldorf"
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Kategorie
+          <CustomSelect value={draft.category} onChange={(value) => setDraft({ ...draft, category: value as FounderEvent["category"] })} className="h-10 text-sm" options={founderEventCategories} />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Start
+          <CustomDatePicker value={draft.startsAt} onChange={(value) => setDraft({ ...draft, startsAt: value })} mode="datetime" className="h-10 text-sm" />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Ende
+          <CustomDatePicker value={draft.endsAt} onChange={(value) => setDraft({ ...draft, endsAt: value })} mode="datetime" className="h-10 text-sm" />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Ort
+          <UiTextInput
+            value={draft.location}
+            onChange={(event) => setDraft({ ...draft, location: event.target.value })}
+            className="h-10 px-3"
+            placeholder="z. B. Düsseldorf"
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500">
+          Erinnerung
+          <UiTextInput
+            value={String(draft.reminderDaysBefore)}
+            onChange={(event) => setDraft({ ...draft, reminderDaysBefore: Number(event.target.value) || 0 })}
+            className="h-10 px-3"
+            inputMode="numeric"
+            placeholder="7"
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-slate-500 lg:col-span-2">
+          Beschreibung
+          <UiTextArea
+            value={draft.description}
+            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            className="min-h-24 px-3"
+            placeholder="Kontext, Vorbereitung oder wichtige Hinweise"
+          />
+        </label>
+        <div className="grid gap-2 lg:col-span-2">
+          <div className="text-xs font-semibold text-slate-500">Zielgruppe</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setDraft({ ...draft, audienceMode: "all", participantProfileIds: [] })}
+              className={`h-8 rounded-md border px-3 text-xs font-semibold ${draft.audienceMode === "all" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
+            >
+              Alle aktiven Profile
+            </button>
+            <button
+              type="button"
+              onClick={() => setDraft({ ...draft, audienceMode: "selected" })}
+              className={`h-8 rounded-md border px-3 text-xs font-semibold ${draft.audienceMode === "selected" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
+            >
+              Ausgewählte Profile
+            </button>
+          </div>
+          {draft.audienceMode === "selected" && (
+            <div className="flex flex-wrap gap-2">
+              {profiles.map((profile) => {
+                const selected = draft.participantProfileIds.includes(profile.id);
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    onClick={() => toggleParticipant(profile.id)}
+                    className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-semibold ${selected ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600"}`}
+                  >
+                    {selected && <Check size={13} />}
+                    {profile.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {editingEvent && (
+          <label className="grid gap-1 text-xs font-semibold text-slate-500">
+            Status
+            <CustomSelect value={draft.status} onChange={(value) => setDraft({ ...draft, status: value as FounderEvent["status"] })} className="h-10 text-sm" options={founderEventStatuses} />
+          </label>
+        )}
+      </div>
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <UiButton onClick={closeForm} className="text-slate-600">
+          Abbrechen
+        </UiButton>
+        <UiButton onClick={submit} disabled={pending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
+          {editingEvent ? "Event speichern" : "Event erstellen"}
+        </UiButton>
+      </div>
+    </UiPanel>
+  ) : null;
+
+  if (!events.length) {
+    return (
+      <div className="grid gap-4">
+        <UiPanel>
+          <div className="grid gap-3 py-6 text-center">
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">Noch keine Events</h2>
+              <p className="mt-1 text-sm text-slate-600">Trage den ersten Gründertermin ein, sobald ein relevanter Termin feststeht.</p>
+            </div>
+            {canManageEvents && (
+              <div>
+                <UiButton onClick={openCreate} variant="primary">
+                  <Plus size={16} />
+                  Event eintragen
+                </UiButton>
+              </div>
+            )}
+            {message && <UiNotice className="mx-auto max-w-2xl font-medium leading-normal">{message}</UiNotice>}
+          </div>
+        </UiPanel>
+        {eventForm}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <UiPanel>
@@ -174,121 +315,7 @@ export function EventsOverview({
         {message && <UiNotice className="mt-3 font-medium leading-normal">{message}</UiNotice>}
       </UiPanel>
 
-      {formOpen && canManageEvents && (
-        <UiPanel>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-950">{editingEvent ? "Event bearbeiten" : "Event eintragen"}</h2>
-              <p className="mt-1 text-sm text-slate-600">Reminder laufen über die FounderOps-Glocke und Google Chat.</p>
-            </div>
-            <button type="button" onClick={closeForm} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-50" aria-label="Event-Formular schließen">
-              <X size={16} />
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Titel
-              <UiTextInput
-                value={draft.title}
-                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                className="h-10 px-3"
-                placeholder="z. B. Gesundheitsmesse Düsseldorf"
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Kategorie
-              <CustomSelect value={draft.category} onChange={(value) => setDraft({ ...draft, category: value as FounderEvent["category"] })} className="h-10 text-sm" options={founderEventCategories} />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Start
-              <CustomDatePicker value={draft.startsAt} onChange={(value) => setDraft({ ...draft, startsAt: value })} mode="datetime" className="h-10 text-sm" />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Ende
-              <CustomDatePicker value={draft.endsAt} onChange={(value) => setDraft({ ...draft, endsAt: value })} mode="datetime" className="h-10 text-sm" />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Ort
-              <UiTextInput
-                value={draft.location}
-                onChange={(event) => setDraft({ ...draft, location: event.target.value })}
-                className="h-10 px-3"
-                placeholder="z. B. Düsseldorf"
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500">
-              Erinnerung
-              <UiTextInput
-                value={String(draft.reminderDaysBefore)}
-                onChange={(event) => setDraft({ ...draft, reminderDaysBefore: Number(event.target.value) || 0 })}
-                className="h-10 px-3"
-                inputMode="numeric"
-                placeholder="7"
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-semibold text-slate-500 lg:col-span-2">
-              Beschreibung
-              <UiTextArea
-                value={draft.description}
-                onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                className="min-h-24 px-3"
-                placeholder="Kontext, Vorbereitung oder wichtige Hinweise"
-              />
-            </label>
-            <div className="grid gap-2 lg:col-span-2">
-              <div className="text-xs font-semibold text-slate-500">Zielgruppe</div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, audienceMode: "all", participantProfileIds: [] })}
-                  className={`h-8 rounded-md border px-3 text-xs font-semibold ${draft.audienceMode === "all" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
-                >
-                  Alle aktiven Profile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, audienceMode: "selected" })}
-                  className={`h-8 rounded-md border px-3 text-xs font-semibold ${draft.audienceMode === "selected" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
-                >
-                  Ausgewählte Profile
-                </button>
-              </div>
-              {draft.audienceMode === "selected" && (
-                <div className="flex flex-wrap gap-2">
-                  {profiles.map((profile) => {
-                    const selected = draft.participantProfileIds.includes(profile.id);
-                    return (
-                      <button
-                        key={profile.id}
-                        type="button"
-                        onClick={() => toggleParticipant(profile.id)}
-                        className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-semibold ${selected ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600"}`}
-                      >
-                        {selected && <Check size={13} />}
-                        {profile.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            {editingEvent && (
-              <label className="grid gap-1 text-xs font-semibold text-slate-500">
-                Status
-                <CustomSelect value={draft.status} onChange={(value) => setDraft({ ...draft, status: value as FounderEvent["status"] })} className="h-10 text-sm" options={founderEventStatuses} />
-              </label>
-            )}
-          </div>
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <UiButton onClick={closeForm} className="text-slate-600">
-              Abbrechen
-            </UiButton>
-            <UiButton onClick={submit} disabled={pending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
-              {editingEvent ? "Event speichern" : "Event erstellen"}
-            </UiButton>
-          </div>
-        </UiPanel>
-      )}
+      {eventForm}
 
       <section className="grid gap-3">
         {visibleEvents.map((event) => (
