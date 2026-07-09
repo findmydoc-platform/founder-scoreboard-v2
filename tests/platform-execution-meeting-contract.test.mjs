@@ -61,8 +61,9 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(quickLinks, /Kuratierte Links/);
   assert.match(quickLinks, /closeOnOutside/);
   assert.match(quickLinks, /event\.key === "Escape"/);
-  assert.match(header, /workspace === "tools"/);
   assert.match(header, /FmdToolQuickLinks/);
+  assert.match(header, /tools=\{data\.fmdTools\}/);
+  assert.doesNotMatch(header, /workspace === "tools"/);
   assert.doesNotMatch(toolsUi, /MetricBlock/);
   assert.doesNotMatch(toolsUi, /<div>Status<\/div>|<div>Link<\/div>|<div>Art<\/div>|<div>Aktion<\/div>/);
   assert.doesNotMatch(toolsUi, /Werkzeugraum<\/UiBadge>/);
@@ -92,8 +93,8 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolCuratedLinksMigration, /email-signature-tool/);
   assert.match(toolCuratedLinksMigration, /google-drive-assets/);
   assert.match(planningApiClient, /createFmdToolRequest/);
-  assert.match(header, /setWorkspace\("tools"\)/);
-  assert.match(header, /Werkzeugraum/);
+  assert.doesNotMatch(header, /setWorkspace\("tools"\)/);
+  assert.doesNotMatch(header, /Werkzeugraum/);
   assert.match(data, /fmdTools/);
   assert.match(seed, /https:\/\/mailsig\.findmydoc\.eu\//);
   assert.match(seed, /offer-calculator/);
