@@ -1,6 +1,6 @@
 import { Columns3, GanttChart, ListTree, Table2 } from "lucide-react";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
+import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { normalizeStatus, taskStatuses } from "@/lib/status";

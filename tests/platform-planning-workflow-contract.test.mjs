@@ -642,7 +642,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
   const ui = await readPlanningSurface();
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const settingsOverviewUi = await readFile("src/features/settings/organisms/settings-overview.tsx", "utf8");
-  const sprintPlanningUi = await readFile("src/features/settings/molecules/settings-sprint-planning.tsx", "utf8");
+  const sprintPlanningUi = await readFile("src/features/sprint/molecules/sprint-planning-section.tsx", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -657,7 +657,8 @@ test("sprint configuration is operational-lead only and audited", async () => {
   assert.match(sprintUi, /current: currentSprint\?\.id === item\.id/);
   assert.match(sprintUi, /locked: data\.tasks\.some/);
   assert.match(ui, /SettingsOverview/);
-  assert.match(settingsOverviewUi, /SprintPlanningSection/);
+  assert.doesNotMatch(settingsOverviewUi, /SprintPlanningSection|Sprint-Planung/);
+  assert.match(sprintUi, /SprintPlanningSection/);
   assert.match(sprintPlanningUi, /Sprint-Planung/);
   assert.match(sprintPlanningUi, /CustomDatePicker/);
   assert.match(sprintPlanningUi, /onCreateSprintPlan\(sprintPlanningOptions\)/);

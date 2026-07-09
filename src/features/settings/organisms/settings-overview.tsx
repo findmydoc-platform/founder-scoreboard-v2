@@ -1,7 +1,6 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import { SprintPlanningSection, type SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
 import type { NotificationDelivery, PlanningData } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
@@ -17,10 +16,6 @@ export function SettingsOverview({
   pending,
   notificationDispatchMessage,
   googleChatStatus,
-  sprintPlanningOptions,
-  plannedSprintCount,
-  onUpdateSprintPlanning,
-  onCreateSprintPlan,
   onDispatchNotifications,
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
@@ -29,10 +24,6 @@ export function SettingsOverview({
   pending: boolean;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;
-  sprintPlanningOptions: SprintPlanningOptions;
-  plannedSprintCount: number;
-  onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
-  onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   onDispatchNotifications: () => void;
   onRetryNotificationDelivery: (delivery: NotificationDelivery) => void;
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
@@ -47,13 +38,6 @@ export function SettingsOverview({
         onDispatchNotifications={onDispatchNotifications}
         onRetryNotificationDelivery={onRetryNotificationDelivery}
         onSendGoogleChatTest={onSendGoogleChatTest}
-      />
-      <SprintPlanningSection
-        pending={pending}
-        sprintPlanningOptions={sprintPlanningOptions}
-        plannedSprintCount={plannedSprintCount}
-        onUpdateSprintPlanning={onUpdateSprintPlanning}
-        onCreateSprintPlan={onCreateSprintPlan}
       />
     </div>
   );

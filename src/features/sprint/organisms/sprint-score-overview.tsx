@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { SprintControlsSummary } from "@/features/sprint/molecules/sprint-controls-summary";
 import { SprintMeetingAttendanceSection } from "@/features/sprint/molecules/sprint-meeting-attendance-section";
+import { SprintPlanningSection } from "@/features/sprint/molecules/sprint-planning-section";
 import { SprintFounderScoreTable } from "@/features/sprint/organisms/sprint-founder-score-table";
 import { SprintReviewSheetSection } from "@/features/sprint/organisms/sprint-review-sheet-section";
 import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-objections";
 import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
 import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
+import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { findCurrentSprint } from "@/lib/planning-schedule";
 import type { Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
@@ -35,6 +37,10 @@ export function SprintScoreTableOverview({
   onCreateScoreObjection,
   onReviewScoreObjection,
   onAssignSprint,
+  sprintPlanningOptions,
+  plannedSprintCount,
+  onUpdateSprintPlanning,
+  onCreateSprintPlan,
   currentProfile,
   canManageSprint,
   sprintLockMessage,
@@ -61,6 +67,10 @@ export function SprintScoreTableOverview({
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
   onReviewScoreObjection: (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
+  sprintPlanningOptions: SprintPlanningOptions;
+  plannedSprintCount: number;
+  onUpdateSprintPlanning: (options: SprintPlanningOptions) => void;
+  onCreateSprintPlan: (options: SprintPlanningOptions) => void;
   currentProfile: Profile | null;
   canManageSprint: boolean;
   sprintLockMessage: string;
@@ -151,6 +161,15 @@ export function SprintScoreTableOverview({
         onSelectedSprintChange={setSelectedSprintId}
         onUpdateSprint={onUpdateSprint}
         onLockSprint={onLockSprint}
+      />
+
+      <SprintPlanningSection
+        disabled={!canManageSprint}
+        pending={pending}
+        sprintPlanningOptions={sprintPlanningOptions}
+        plannedSprintCount={plannedSprintCount}
+        onUpdateSprintPlanning={onUpdateSprintPlanning}
+        onCreateSprintPlan={onCreateSprintPlan}
       />
 
       <SprintFounderScoreTable

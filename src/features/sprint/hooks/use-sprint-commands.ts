@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { SprintPlanningOptions } from "@/features/settings/molecules/settings-sprint-planning";
+import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { futureSprintDrafts, mapScoreObjectionResponse } from "@/features/planning/model/planning-app-model";

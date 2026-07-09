@@ -79,6 +79,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     view,
     workspace,
   } = controller;
+  const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
@@ -200,8 +201,12 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onCreateScoreObjection={createScoreObjection}
           onReviewScoreObjection={reviewScoreObjection}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
+          sprintPlanningOptions={sprintPlanningOptions}
+          plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions, new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId))).length}
+          onUpdateSprintPlanning={setSprintPlanningOptions}
+          onCreateSprintPlan={createSprintPlan}
           currentProfile={currentProfile}
-          canManageSprint={currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy"}
+          canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
           focusedReviewTaskId={focusedReviewTaskId}
           onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
@@ -213,10 +218,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           pending={isPending}
           notificationDispatchMessage={notificationDispatchMessage}
           googleChatStatus={googleChatStatus}
-          sprintPlanningOptions={sprintPlanningOptions}
-          plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions, new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId))).length}
-          onUpdateSprintPlanning={setSprintPlanningOptions}
-          onCreateSprintPlan={createSprintPlan}
           onDispatchNotifications={dispatchNotifications}
           onRetryNotificationDelivery={retryNotificationDelivery}
           onSendGoogleChatTest={sendGoogleChatTest}
