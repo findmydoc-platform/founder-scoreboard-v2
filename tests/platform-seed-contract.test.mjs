@@ -173,7 +173,7 @@ test("header exposes gated sample data import before notifications", async () =>
   assert.match(page, /isDemoSeedImportButtonAvailable/);
   assert.doesNotMatch(page, new RegExp("isDemoSeed" + "ImportAvailable"));
   assert.match(app, /demoSeedImportAvailable\?: boolean/);
-  assert.match(controller, /demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable/);
+  assert.match(controller, /demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable && data\.tasks\.length === 0/);
   assert.match(controller, /demoSeedImportPending/);
   assert.match(commandRegistry, /useDemoSeedImport/);
   assert.match(hook, /window\.location\.reload\(\)/);
