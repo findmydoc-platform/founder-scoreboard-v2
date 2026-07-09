@@ -58,7 +58,8 @@ test("task route renders full page while planning shell opens task panel locally
   assert.match(ui, /useTaskDetailDataLoader/);
   assert.match(ui, /requestTaskDetailData/);
   assert.match(ui, /mergeTaskDetailData/);
-  assert.match(panel, /bg-slate-950\/\[0\.03\]/);
+  assert.match(panel, /bg-slate-950\/20/);
+  assert.match(panel, /backdrop-blur-\[1px\]/);
   assert.match(panel, /TaskDetailPanelHeader/);
   assert.match(panelHeader, /aria-label="Detailpanel schließen"/);
   assert.match(panelHeader, /Große Ansicht/);

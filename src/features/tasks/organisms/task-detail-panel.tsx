@@ -98,7 +98,7 @@ export function TaskDetailPanel({
     <>
     <button
       type="button"
-      className="fixed inset-0 z-30 cursor-default bg-slate-950/[0.03]"
+      className="fixed inset-0 z-30 cursor-default bg-slate-950/20 backdrop-blur-[1px]"
       aria-label="Detailpanel schließen"
       onClick={onClose}
     />
