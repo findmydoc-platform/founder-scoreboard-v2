@@ -153,9 +153,9 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
   assert.equal(all.sprintBuckets[0].sprint.id, "sprint-4");
   assert.equal(all.sprintBuckets[0].plannedHours, 13);
   assert.equal(all.sprintBuckets[0].capacityHours, 42);
-  assert.equal(backlogTableColumns.length, 10);
-  assert.equal(backlogTableColumnCount, 10);
-  assert.equal(backlogTableMinWidth, 980);
+  assert.equal(backlogTableColumns.length, 9);
+  assert.equal(backlogTableColumnCount, 9);
+  assert.equal(backlogTableMinWidth, 900);
 });
 
 test("backlog ordering API is operational-lead guarded and does not dirty github sync", async () => {
@@ -192,7 +192,7 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   assert.match(rankTable, /data-tour-id="backlog-rank-table"/);
   assert.match(sprintPane, /data-tour-id="backlog-sprint-pane"/);
   assert.match(uiSurface, /onDrop/);
-  assert.match(rankTable, /Alt\+Pfeiltasten/);
+  assert.match(rankTable, /title="Backlog-Rang per Drag oder Alt\+Pfeiltasten ändern"/);
   assert.match(ordering, /updateBacklogOrderRequest/);
   assert.match(sprintAssignment, /status: "Offen"/);
   assert.match(sprintAssignment, /Für die Sprint-Zuordnung fehlen Zuständigkeit oder Initiative/);
