@@ -1,13 +1,11 @@
-import { AlertTriangle, Link2 } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
-import { GitHubSyncStatusBadge, RelationBadge } from "@/features/tasks/molecules/task-card";
-import { PlanningTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
+import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Profile, Sprint, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
-import { UiBadge } from "@/shared/atoms/ui-primitives";
+import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 import { DataCell, DataEmptyRow, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead } from "@/shared/molecules/data-surface";
 
 type TaskTableViewProps = {
@@ -22,6 +20,71 @@ type TaskTableViewProps = {
   onOpenTask: (task: Task) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
 };
+
+type TableRiskSignal = {
+  id: string;
+  label: string;
+  tone: Extract<UiTone, "amber" | "blue" | "red" | "slate" | "white">;
+};
+
+function attentionTone(signal: TaskAttentionSignal): TableRiskSignal["tone"] {
+  if (signal.kind === "critical") return "red";
+  if (signal.kind === "review") return "blue";
+  return "amber";
+}
+
+function githubRiskSignal(task: Task): TableRiskSignal | null {
+  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
+  if (task.githubSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
+  if (task.githubSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
+  if (task.githubSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
+  return null;
+}
+
+function TaskTableRiskBadges({
+  task,
+  relations,
+  allTasks,
+  blockers,
+  maxVisible = 3,
+}: {
+  task: Task;
+  relations: TaskRelation[];
+  allTasks: Task[];
+  blockers: TaskBlocker[];
+  maxVisible?: number;
+}) {
+  const relationGroups = taskRelationsFor(task.id, relations);
+  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
+  const signals = [
+    githubRiskSignal(task),
+    ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
+      .filter((signal) => signal.id !== "sync-failed")
+      .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
+    relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
+    relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
+  ].filter((signal): signal is TableRiskSignal => Boolean(signal));
+
+  if (!signals.length) return <span className="text-xs text-slate-400">-</span>;
+
+  const visibleSignals = signals.slice(0, maxVisible);
+  const hiddenCount = signals.length - visibleSignals.length;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visibleSignals.map((signal) => (
+        <UiBadge key={signal.id} tone={signal.tone} size="xs" className="px-1.5 text-[10px]">
+          {signal.label}
+        </UiBadge>
+      ))}
+      {hiddenCount > 0 && (
+        <UiBadge tone="white" size="xs" className="px-1.5 text-[10px]">
+          +{hiddenCount}
+        </UiBadge>
+      )}
+    </div>
+  );
+}
 
 export function TaskTableView({
   visibleTasks,
@@ -41,21 +104,18 @@ export function TaskTableView({
         <DataTable minWidth={1040}>
         <DataTableHead>
           <tr>
-            {["Aufgabe", "Status", "Zuständig", "Priorität", "Sprint", "Zeitraum", "Zieltermin", "Hinweise"].map((head) => (
+            {["Aufgabe", "Status", "Zuständig", "Priorität", "Sprint", "Zeitraum", "Zieltermin", "Risiko"].map((head) => (
               <DataHeaderCell key={head}>{head}</DataHeaderCell>
             ))}
           </tr>
         </DataTableHead>
         <tbody>
           {visibleTasks.map((task) => {
-            const relationGroups = taskRelationsFor(task.id, relations);
-            const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
             const canUpdateStatus = canChangeTaskStatus(task);
             return (
               <DataRow key={task.id}>
                 <DataCell className="max-w-sm">
                   <button type="button" onClick={() => onOpenTask(task)} className="inline-flex items-start gap-1.5 text-left font-semibold text-slate-900 hover:text-blue-700">
-                    {!hasGitHubIssue(task) && <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />}
                     <span>{task.title}</span>
                   </button>
                   <div className="mt-1 truncate text-xs text-slate-500">{task.workstream || "ohne Bereich"}</div>
@@ -80,19 +140,7 @@ export function TaskTableView({
                 <DataCell>{dateRange(task)}</DataCell>
                 <DataCell>{task.deadline}</DataCell>
                 <DataCell className="max-w-52">
-                  <div className="flex flex-wrap gap-1.5">
-                    {hasGitHubIssue(task) && task.githubSyncStatus === "synced" ? (
-                      <UiBadge tone="blue" className="gap-1">
-                        <Link2 size={13} />
-                        verknüpft
-                      </UiBadge>
-                    ) : (
-                      <GitHubSyncStatusBadge task={task} compact />
-                    )}
-                    <PlanningTaskAttentionBadges task={task} data={{ taskBlockers: blockers, taskRelations: relations, tasks: allTasks }} excludeIds={["sync-failed", "waiting"]} compact />
-                    <RelationBadge label="Wartet auf" count={relationGroups.waitsOn.length} tone={hasOpenWait ? "amber" : "slate"} />
-                    <RelationBadge label="Blockiert" count={relationGroups.blocks.length} tone="blue" />
-                  </div>
+                  <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
                 </DataCell>
               </DataRow>
             );
