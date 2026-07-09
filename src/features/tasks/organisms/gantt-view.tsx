@@ -63,8 +63,9 @@ export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tas
                   className="absolute top-3 h-6 rounded bg-blue-500 px-2 text-left text-[11px] font-semibold text-white shadow-sm"
                   style={{ left: `${(left / days.length) * 100}%`, width: `${Math.min(100 - (left / days.length) * 100, (length / days.length) * 100)}%` }}
                   title={`${task.title} · ${pack?.title || "ohne Initiative"}`}
+                  aria-label={`${task.title} · ${length} Tage`}
                 >
-                  <span className="block truncate">{task.title}</span>
+                  <span className="block truncate">{length}d</span>
                 </button>
                 {taskRelationsFor(task.id, relations).waitsOn.length > 0 && <span className="absolute right-2 top-4 h-2 w-2 rounded-full bg-amber-400" title="Wartet auf andere Aufgabe" />}
                 {taskRelationsFor(task.id, relations).blocks.length > 0 && <span className="absolute right-5 top-4 h-2 w-2 rounded-full bg-blue-400" title="Blockiert andere Aufgabe" />}
