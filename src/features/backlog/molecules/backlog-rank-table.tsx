@@ -1,4 +1,4 @@
-import { GripVertical, Info } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { BacklogReadiness } from "@/features/backlog/molecules/backlog-readiness";
 import { backlogTableColumnCount, backlogTableColumns, backlogTableMinWidth } from "@/features/backlog/model/backlog-table-layout";
@@ -97,6 +97,7 @@ export function BacklogRankTable({
                     onKeyDown={(event) => onHandleKeyDown(event, item.task.id, onMoveTask)}
                     className="grid h-8 w-8 place-items-center rounded-md text-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Backlog-Rang ändern"
+                    title="Backlog-Rang per Drag oder Alt+Pfeiltasten ändern"
                   >
                     <GripVertical size={16} />
                   </button>
@@ -132,15 +133,7 @@ export function BacklogRankTable({
           </tbody>
         </DataTable>
       </DataOverflow>
-      <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-        <Info size={14} />
-        <span>Drag = Rang ändern</span>
-        <span>·</span>
-        <span>Drop auf Sprint = Sprint-Zuordnung</span>
-        <span>·</span>
-        <span>Alt+↑/↓ = Reihenfolge</span>
-        {isReordering && <span className="font-semibold text-blue-700">· Speichert...</span>}
-      </div>
+      {isReordering && <div className="border-t border-slate-100 px-4 py-3 text-xs font-semibold text-blue-700">Speichert...</div>}
     </DataSurface>
   );
 }

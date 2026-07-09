@@ -192,7 +192,7 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   assert.match(rankTable, /data-tour-id="backlog-rank-table"/);
   assert.match(sprintPane, /data-tour-id="backlog-sprint-pane"/);
   assert.match(uiSurface, /onDrop/);
-  assert.match(rankTable, /Alt\+↑\/↓/);
+  assert.match(rankTable, /Alt\+Pfeiltasten/);
   assert.match(ordering, /updateBacklogOrderRequest/);
   assert.match(sprintAssignment, /status: "Offen"/);
   assert.match(sprintAssignment, /Für die Sprint-Zuordnung fehlen Zuständigkeit oder Initiative/);
