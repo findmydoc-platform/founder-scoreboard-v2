@@ -62,10 +62,18 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
 test("planning app controller delegates command domains and stays a thin composer", async () => {
   const controller = await readFile("src/features/planning/hooks/use-planning-app-controller.ts", "utf8");
   const bootstrapState = await readFile("src/features/planning/hooks/use-planning-bootstrap-state.ts", "utf8");
+  const headerDataHook = await readFile("src/features/planning/hooks/use-planning-header-data.ts", "utf8");
   const derivedState = await readFile("src/features/planning/hooks/use-planning-derived-state.ts", "utf8");
   const commandRegistry = await readFile("src/features/planning/hooks/use-planning-command-registry.ts", "utf8");
 
   assert.ok(controller.split(/\r?\n/).length < 500);
+  assert.match(bootstrapState, /usePlanningHeaderData/);
+  assert.match(headerDataHook, /projectPlanningHeaderData\(data, baseHeaderData/);
+  assert.match(headerDataHook, /fmdToolsLoaded: source === "seed" \|\| workspace === "tools"/);
+  assert.match(headerDataHook, /eventsLoaded: source === "seed" \|\| workspace === "events"/);
+  assert.match(headerDataHook, /notificationEventsLoaded: source === "seed" \|\| workspace === "notifications"/);
+  assert.match(headerDataHook, /idlePlanningHeaderSlots/);
+  assert.match(headerDataHook, /requestPlanningHeaderData/);
   await assertFileContracts([
     {
       label: "planning app controller",
@@ -219,10 +227,13 @@ test("task mutation contract centralizes update normalization and route patches"
 
 test("planning data loader separates query loading from public orchestration", async () => {
   const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const headerData = await readFile("src/lib/planning-header-data.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const headerRoute = await readFile("src/app/api/planning-header-data/route.ts", "utf8");
   const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
 
   assert.match(data, /loadPlanningDataRows/);
+  assert.match(data, /loadPlanningHeaderData/);
   assert.match(data, /hasCorePlanningDataError/);
   assert.match(data, /mapPlanningDataRows/);
   assert.doesNotMatch(data, /Promise\.all/);
@@ -238,6 +249,16 @@ test("planning data loader separates query loading from public orchestration", a
   assert.match(loader, /export function mapPlanningDataRows/);
   assert.match(loader, /scoreObjections/);
   assert.match(loader, /notificationPreferenceResult/);
+  assert.match(headerData, /HeaderDataSlot/);
+  assert.match(headerData, /HeaderNotification/);
+  assert.match(headerData, /headerQuickLinkSelect = "id,name,category,url,preview_image_url"/);
+  assert.match(headerData, /headerCalendarEventSelect = "id,title,category,starts_at,ends_at,location,status"/);
+  assert.match(headerData, /headerNotificationSelect = "id,type,actor_profile_id,recipient_profile_id,entity_type,entity_id,title,body,created_at"/);
+  assert.match(headerData, /loadPlanningHeaderData/);
+  assert.match(headerRoute, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(headerRoute, /parsePlanningHeaderSlots/);
+  assert.match(headerRoute, /return NextResponse\.json\(\{ headerData \}\)/);
+  assert.doesNotMatch(headerData, /description|owner|audience_mode|participant_profile_ids|reminder_days_before/);
 });
 
 test("task row descriptor covers planning UI mapping fields", async () => {
@@ -357,6 +378,8 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /getServerPlanningAuth/);
   assert.match(page, /emptyPlanningData/);
+  assert.match(page, /emptyPlanningHeaderData/);
+  assert.match(page, /initialHeaderData/);
   assert.match(page, /initialProtectedDataLoaded/);
   assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
   assert.match(api, /currentProfile: auth\.profile/);
@@ -369,6 +392,8 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(authHook, /serverCurrentProfile/);
   assert.match(authHook, /initialAuthUser/);
   assert.match(authHook, /authUserId/);
+  assert.match(authHook, /setHeaderData/);
+  assert.match(authHook, /safeInitialHeaderData/);
   assert.match(ui, /<AppBrand \/>/);
   assert.match(ui, /PlanningBootShell/);
   assert.doesNotMatch(ui, /ShieldCheck/);
@@ -533,6 +558,7 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(workspace, /href="\/sprint"/);
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
   assert.match(detail, /TaskReviewSheet/);
+  assert.match(detail, /PlanningHeaderDataActions/);
   assert.match(detail, /Review nicht gefunden/);
   assert.match(detail, /href="\/reviews"/);
   assert.doesNotMatch(detail, /\/\?workspace=reviews/);

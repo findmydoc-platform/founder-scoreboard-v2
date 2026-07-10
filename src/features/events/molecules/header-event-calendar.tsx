@@ -3,7 +3,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { eventDateRangeLabel, founderEventCategoryLabel } from "@/lib/founder-events";
-import type { FounderEvent } from "@/lib/types";
+import type { HeaderCalendarEvent, HeaderDataSlot } from "@/lib/types";
 import { classNames, UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 const weekdayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -52,12 +52,12 @@ function getMonthDays(viewMonth: Date) {
   return Array.from({ length: 42 }, (_, index) => addDays(start, index));
 }
 
-function eventStartMs(event: FounderEvent) {
+function eventStartMs(event: HeaderCalendarEvent) {
   const time = new Date(event.startsAt).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
-function eventDayKeys(event: FounderEvent) {
+function eventDayKeys(event: HeaderCalendarEvent) {
   const start = new Date(event.startsAt);
   if (Number.isNaN(start.getTime())) return [];
   const end = new Date(event.endsAt || event.startsAt);
@@ -72,26 +72,26 @@ function eventDayKeys(event: FounderEvent) {
   return keys;
 }
 
-function markerTone(event: FounderEvent, dayKey: string, todayKey: string) {
+function markerTone(event: HeaderCalendarEvent, dayKey: string, todayKey: string) {
   if (event.status === "cancelled") return "bg-slate-300";
   if (event.status === "done" || dayKey < todayKey) return "bg-slate-400";
   return "bg-blue-500";
 }
 
-function eventStatusTone(event: FounderEvent) {
+function eventStatusTone(event: HeaderCalendarEvent) {
   if (event.status === "cancelled") return "slate";
   if (event.status === "done") return "emerald";
   return "blue";
 }
 
-function eventStatusLabel(event: FounderEvent) {
+function eventStatusLabel(event: HeaderCalendarEvent) {
   if (event.status === "cancelled") return "Abgesagt";
   if (event.status === "done") return "Erledigt";
   return "Geplant";
 }
 
-function buildEventsByDay(events: FounderEvent[]) {
-  const map = new Map<string, FounderEvent[]>();
+function buildEventsByDay(events: HeaderCalendarEvent[]) {
+  const map = new Map<string, HeaderCalendarEvent[]>();
   for (const event of events) {
     for (const key of eventDayKeys(event)) {
       const eventsForDay = map.get(key) || [];
@@ -105,7 +105,7 @@ function buildEventsByDay(events: FounderEvent[]) {
   return map;
 }
 
-function upcomingEvents(events: FounderEvent[]) {
+function upcomingEvents(events: HeaderCalendarEvent[]) {
   const now = Date.now();
   return [...events]
     .filter((event) => event.status !== "cancelled" && eventStartMs(event) >= now)
@@ -113,7 +113,7 @@ function upcomingEvents(events: FounderEvent[]) {
     .slice(0, 3);
 }
 
-function EventRow({ event }: { event: FounderEvent }) {
+function EventRow({ event }: { event: HeaderCalendarEvent }) {
   return (
     <article className="rounded-md border border-slate-100 bg-white px-3 py-2">
       <div className="flex min-w-0 items-start justify-between gap-2">
@@ -136,13 +136,14 @@ function EventRow({ event }: { event: FounderEvent }) {
   );
 }
 
-export function HeaderEventCalendar({ events }: { events: FounderEvent[] }) {
+export function HeaderEventCalendar({ events: eventSlot }: { events: HeaderDataSlot<HeaderCalendarEvent[]> }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
   const [open, setOpen] = useState(false);
   const [selectedKey, setSelectedKey] = useState(todayKey);
   const [viewMonth, setViewMonth] = useState(() => firstOfMonth(today));
+  const events = eventSlot.data;
   const days = useMemo(() => getMonthDays(viewMonth), [viewMonth]);
   const eventsByDay = useMemo(() => buildEventsByDay(events), [events]);
   const selectedEvents = eventsByDay.get(selectedKey) || [];
@@ -214,6 +215,20 @@ export function HeaderEventCalendar({ events }: { events: FounderEvent[] }) {
           </div>
 
           <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto">
+            {eventSlot.state === "loading" ? (
+              <div className="p-4">
+                <UiEmptyState tone="muted" className="px-3 py-8">
+                  Kalenderdaten werden geladen.
+                </UiEmptyState>
+              </div>
+            ) : eventSlot.state === "error" ? (
+              <div className="p-4">
+                <UiEmptyState tone="muted" className="px-3 py-8">
+                  {eventSlot.error || "Kalenderdaten konnten nicht geladen werden."}
+                </UiEmptyState>
+              </div>
+            ) : (
+              <>
             <div className="px-4 py-3">
               <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-500">
                 {weekdayLabels.map((label) => <div key={label}>{label}</div>)}
@@ -278,6 +293,8 @@ export function HeaderEventCalendar({ events }: { events: FounderEvent[] }) {
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
         </section>
       )}

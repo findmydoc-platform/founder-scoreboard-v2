@@ -1,5 +1,6 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
@@ -18,6 +19,7 @@ export default async function ReviewPage({ params }: Props) {
         <PlanningApp
           key={`review-${id}`}
           initialData={emptyPlanningData}
+          initialHeaderData={emptyPlanningHeaderData}
           initialWorkspace="reviews"
           source="supabase"
           authRequired
@@ -28,11 +30,16 @@ export default async function ReviewPage({ params }: Props) {
       );
     }
 
-    const { data, source } = await getPlanningData();
+    const { data, headerData, source } = await getPlanningData(undefined, {
+      workspace: "reviews",
+      currentProfileId: auth.profile?.id || null,
+      platformRole: auth.profile?.platformRole || null,
+    });
     return (
       <PlanningApp
         key={`review-${id}`}
         initialData={data}
+        initialHeaderData={headerData}
         initialWorkspace="reviews"
         source={source}
         authRequired
@@ -45,6 +52,6 @@ export default async function ReviewPage({ params }: Props) {
     );
   }
 
-  const { data, source } = await getPlanningData();
-  return <PlanningApp key={`review-${id}`} initialData={data} initialWorkspace="reviews" source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
+  const { data, headerData, source } = await getPlanningData();
+  return <PlanningApp key={`review-${id}`} initialData={data} initialHeaderData={headerData} initialWorkspace="reviews" source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
 }

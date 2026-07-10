@@ -12,6 +12,7 @@ type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialData,
+  initialHeaderData,
   initialWorkspace,
   source,
   authRequired,
@@ -26,6 +27,7 @@ export function usePlanningAppController({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialData,
+    initialHeaderData,
     initialWorkspace,
     source,
     authRequired,
@@ -61,6 +63,7 @@ export function usePlanningAppController({
     githubAppConnected,
     githubReauthFailed,
     githubSyncQueueOpen,
+    headerData,
     isPending,
     initiativeDialogDefaults,
     localStateLoaded,
@@ -77,6 +80,7 @@ export function usePlanningAppController({
     setFilters,
     setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
+    setHeaderData,
     setInitiativeDialogDefaults,
     setMobileNavOpen,
     setReviewOwnerFilter,
@@ -167,6 +171,7 @@ export function usePlanningAppController({
     refreshPlanningData,
     selectedTask,
     setFilters,
+    setHeaderData,
     setInitiativeDialogDefaults,
     setShowNotifications,
     setStatusGuardNotice,
@@ -215,6 +220,7 @@ export function usePlanningAppController({
     githubAppConnected,
     githubReauthFailed,
     githubSyncQueueOpen,
+    headerData,
     headerPrimaryAction: derivedState.headerPrimaryAction,
     initiativeDialogDefaults,
     importDemoSeed,
@@ -268,7 +274,6 @@ export function usePlanningAppController({
     statusGuardNotice,
     statusGuardTask: derivedState.statusGuardTask,
     taskDialogDefaults,
-    unreadNotifications: derivedState.unreadNotifications,
     view,
     visibleTasks: derivedState.visibleTasks,
     workspace,

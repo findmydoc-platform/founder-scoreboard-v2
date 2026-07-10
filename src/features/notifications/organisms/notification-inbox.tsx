@@ -5,26 +5,25 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { formatDate } from "@/lib/display";
-import type { NotificationEvent, Profile } from "@/lib/types";
+import type { HeaderDataSlot, HeaderNotification, HeaderNotificationsData } from "@/lib/types";
 import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export function NotificationInbox({
   notifications,
-  profiles,
   open,
   onToggle,
   onOpen,
   onDismiss,
 }: {
-  notifications: NotificationEvent[];
-  profiles: Profile[];
+  notifications: HeaderDataSlot<HeaderNotificationsData>;
   open: boolean;
   onToggle: () => void;
-  onOpen: (event: NotificationEvent) => void;
-  onDismiss: (eventId: number) => void;
+  onOpen?: (event: HeaderNotification) => void;
+  onDismiss?: (eventId: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const unreadCount = notifications.length;
+  const unreadCount = notifications.data.unreadCount;
+  const items = notifications.data.items;
 
   useEffect(() => {
     if (!open) return;
@@ -82,31 +81,38 @@ export function NotificationInbox({
             </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
-            {notifications.length ? notifications.slice(0, 12).map((event) => {
-              const actorName = profiles.find((profile) => profile.id === event.actorProfileId)?.name || "";
-              return (
+            {notifications.state === "loading" ? (
+              <UiEmptyState className="px-4 py-8">
+                Benachrichtigungen werden geladen.
+              </UiEmptyState>
+            ) : notifications.state === "error" ? (
+              <UiEmptyState className="px-4 py-8">
+                {notifications.error || "Benachrichtigungen konnten nicht geladen werden."}
+              </UiEmptyState>
+            ) : items.length ? items.map((event) => (
                 <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
-                    <button type="button" onClick={() => onOpen(event)} className="min-w-0 flex-1 text-left">
+                    <button type="button" onClick={() => (onOpen || openHeaderNotificationTarget)(event)} className="min-w-0 flex-1 text-left">
                       <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
                         {notificationTypeLabel(event.type)}
                       </UiBadge>
                       <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
                       {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
-                      <span className="mt-1 block text-xs text-slate-400">{actorName ? `${actorName} · ` : ""}{formatDate(event.createdAt)}</span>
+                      <span className="mt-1 block text-xs text-slate-400">{formatDate(event.createdAt)}</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDismiss(event.id)}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-100 hover:bg-white hover:text-slate-700 sm:opacity-0 sm:group-hover:opacity-100"
-                      aria-label="Notification schließen"
-                    >
-                      <X size={14} />
-                    </button>
+                    {onDismiss && (
+                      <button
+                        type="button"
+                        onClick={() => onDismiss(event.id)}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-100 hover:bg-white hover:text-slate-700 sm:opacity-0 sm:group-hover:opacity-100"
+                        aria-label="Notification schließen"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
                 </article>
-              );
-            }) : (
+            )) : (
               <UiEmptyState className="px-4 py-8">
                 Keine offenen Hinweise.
               </UiEmptyState>
@@ -116,4 +122,17 @@ export function NotificationInbox({
       )}
     </div>
   );
+}
+
+function openHeaderNotificationTarget(event: HeaderNotification) {
+  if (typeof window === "undefined") return;
+  if (event.entityType === "task" && event.entityId) {
+    window.location.assign(`/tasks/${encodeURIComponent(event.entityId)}`);
+    return;
+  }
+  if (event.entityType === "meeting") {
+    window.location.assign("/sprint");
+    return;
+  }
+  window.location.assign("/notifications");
 }

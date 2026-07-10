@@ -8,7 +8,7 @@ test("task updates keep the protected planning cache aligned across detail-route
   assert.match(ui, /const applyPlanningDataUpdate = useCallback/);
   assert.match(
     ui,
-    /setProtectedPlanningDataCache\(\{\s*authUserId: authUser\.id,\s*data: nextData,\s*currentProfile: serverCurrentProfile,\s*\}\)/s,
+    /setProtectedPlanningDataCache\(\{\s*authUserId: authUser\.id,\s*data: nextData,\s*headerData,\s*currentProfile: serverCurrentProfile,\s*\}\)/s,
   );
   assert.match(
     ui,

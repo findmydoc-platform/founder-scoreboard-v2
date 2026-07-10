@@ -2,6 +2,7 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { getPlanningDataScopeForWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
@@ -22,6 +23,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       return (
         <PlanningApp
           initialData={emptyPlanningData}
+          initialHeaderData={emptyPlanningHeaderData}
           initialWorkspace={initialWorkspace}
           source="supabase"
           authRequired
@@ -31,10 +33,11 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
-    const { data, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
+    const { data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
     return (
       <PlanningApp
         initialData={data}
+        initialHeaderData={headerData}
         initialWorkspace={initialWorkspace}
         source={source}
         authRequired
@@ -46,10 +49,11 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     );
   }
 
-  const { data, source } = await loadWorkspacePlanningData(initialWorkspace);
+  const { data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace);
   return (
     <PlanningApp
       initialData={data}
+      initialHeaderData={headerData}
       initialWorkspace={initialWorkspace}
       source={source}
       authRequired={false}

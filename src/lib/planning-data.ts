@@ -1,8 +1,9 @@
-import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, type PlanningDataQueryScope } from "./planning-data-loader";
+import { emptyPlanningHeaderData, loadPlanningHeaderData } from "./planning-header-data";
+import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, shouldLoad, type PlanningDataQueryScope } from "./planning-data-loader";
 import { isOperationalLeadRole } from "./platform";
 import { persistResolvedNotificationEvents } from "./notification-resolution";
 import { getServerSupabase } from "./supabase";
-import type { PlanningData, PlatformRole } from "./types";
+import type { PlanningData, PlanningHeaderData, PlatformRole } from "./types";
 
 export const emptyPlanningData: PlanningData = {
   project: {
@@ -58,19 +59,30 @@ export function filterPlanningDataForWorkspaceAccess(data: PlanningData, access?
   };
 }
 
-export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<{ data: PlanningData; source: "seed" | "supabase" }> {
+export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<{ data: PlanningData; headerData: PlanningHeaderData; source: "seed" | "supabase" }> {
   const supabase = getServerSupabase();
-  if (!supabase) return { data: emptyPlanningData, source: "seed" };
+  if (!supabase) return { data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" };
 
   const rows = await loadPlanningDataRows(supabase, scope);
   if (hasCorePlanningDataError(rows)) {
-    return { data: emptyPlanningData, source: "seed" };
+    return { data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" };
   }
 
-  const data = await persistResolvedNotificationEvents(supabase, mapPlanningDataRows(rows));
+  const data = filterPlanningDataForWorkspaceAccess(
+    await persistResolvedNotificationEvents(supabase, mapPlanningDataRows(rows)),
+    access,
+  );
+  const headerData = await loadPlanningHeaderData(supabase, {
+    currentProfileId: access?.currentProfileId || null,
+    data,
+    fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
+    eventsLoaded: shouldLoad(scope, "events"),
+    notificationEventsLoaded: shouldLoad(scope, "notificationEvents"),
+  });
 
   return {
     source: "supabase",
-    data: filterPlanningDataForWorkspaceAccess(data, access),
+    data,
+    headerData,
   };
 }

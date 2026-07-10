@@ -107,7 +107,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(resolutionPolicy, /\.eq\("status", "pending"\)/);
   assert.match(ui, /NotificationInbox/);
   assert.match(inboxUi, /notificationTypeLabel/);
-  assert.match(inboxUi, /notifications\.slice\(0, 12\)/);
+  assert.match(inboxUi, /HeaderNotification/);
+  assert.match(inboxUi, /items\.map\(\(event\)/);
+  assert.match(inboxUi, /unreadCount/);
   assert.match(inboxUi, /onDismiss\(event\.id\)/);
   assert.match(ui, /openTaskPanel\(task\.id\)/);
   assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
@@ -435,6 +437,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
+  const headerData = await readFile("src/lib/planning-header-data.ts", "utf8");
   const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
@@ -478,15 +481,22 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(dataScopes, /export const taskDetailPageDataScope/);
   assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
   assert.match(dataScopes, /planningDataWorkspaceFromValue/);
+  assert.match(dataScopes, /notificationEvents: false/);
   assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
   assert.match(dataScopes, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
-  assert.match(dataScopes, /notifications: \{[\s\S]*notificationDeliveries: true,[\s\S]*\}/);
+  assert.match(dataScopes, /notifications: \{[\s\S]*notificationEvents: true,[\s\S]*notificationDeliveries: true,[\s\S]*\}/);
   assert.match(dataScopes, /value === "settings"\) return "notifications"/);
   assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
   assert.match(dataScopes, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
   assert.match(dataLoader, /export type PlanningDataQueryScope/);
   assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
   assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
+  assert.match(headerData, /HeaderQuickLink/);
+  assert.match(headerData, /HeaderCalendarEvent/);
+  assert.match(headerData, /headerQuickLinkSelect/);
+  assert.match(headerData, /headerCalendarEventSelect/);
+  assert.match(headerData, /loadPlanningHeaderData/);
+  assert.match(planningData, /headerData/);
   assert.match(planningData, /filterPlanningDataForWorkspaceAccess/);
   assert.match(planningData, /isOperationalLeadRole\(access\.platformRole\)/);
   assert.match(planningData, /event\.recipientProfileId === currentProfileId/);

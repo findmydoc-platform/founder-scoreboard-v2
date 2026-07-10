@@ -349,6 +349,30 @@ export type FounderEvent = {
   updatedAt: string;
 };
 
+export type HeaderQuickLink = Pick<FmdTool, "id" | "name" | "category" | "url" | "previewImageUrl">;
+
+export type HeaderCalendarEvent = Pick<FounderEvent, "id" | "title" | "category" | "startsAt" | "endsAt" | "location" | "status">;
+
+export type HeaderNotification = Pick<NotificationEvent, "id" | "type" | "actorProfileId" | "recipientProfileId" | "entityType" | "entityId" | "title" | "body" | "createdAt">;
+
+export type HeaderDataSlot<T> = {
+  state: "idle" | "loading" | "ready" | "error";
+  data: T;
+  loadedAt?: string;
+  error?: string;
+};
+
+export type HeaderNotificationsData = {
+  unreadCount: number;
+  items: HeaderNotification[];
+};
+
+export type PlanningHeaderData = {
+  quickLinks: HeaderDataSlot<HeaderQuickLink[]>;
+  calendarEvents: HeaderDataSlot<HeaderCalendarEvent[]>;
+  notifications: HeaderDataSlot<HeaderNotificationsData>;
+};
+
 export type Meeting = {
   id: number;
   sprintId: string;
@@ -417,6 +441,7 @@ export type PlanningData = {
 
 export type PlanningDataResponse = {
   data: PlanningData;
+  headerData: PlanningHeaderData;
   source: "seed" | "supabase";
   currentProfile: AuthenticatedProfile | null;
 };

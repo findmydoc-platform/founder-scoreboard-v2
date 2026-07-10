@@ -6,18 +6,21 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
+import { usePlanningHeaderData } from "@/features/planning/hooks/use-planning-header-data";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
 import { normalizePlanningData } from "@/features/planning/model/planning-app-model";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import { hasSupabaseEnv } from "@/lib/supabase";
-import type { AuthenticatedProfile, PlanningData, Task } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningData, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
   initialData: PlanningData;
+  initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
   source: "seed" | "supabase";
   authRequired: boolean;
@@ -31,6 +34,7 @@ export type PlanningBootstrapStateOptions = {
 
 export function usePlanningBootstrapState({
   initialData,
+  initialHeaderData,
   initialWorkspace,
   source,
   authRequired,
@@ -42,8 +46,10 @@ export function usePlanningBootstrapState({
 }: PlanningBootstrapStateOptions) {
   const searchParams = useSearchParams();
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
+  const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
+  const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
   const { localStateLoaded } = useLocalPlanningState({ source, setData });
   const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
@@ -63,6 +69,7 @@ export function usePlanningBootstrapState({
     authRequired,
     source,
     safeInitialData,
+    safeInitialHeaderData,
     taskCount: data.tasks.length,
     workspace,
     initialAuthUser,
@@ -70,7 +77,9 @@ export function usePlanningBootstrapState({
     initialProtectedDataLoaded,
     initialAuthError,
     setData,
+    setHeaderData: setBaseHeaderData,
     normalizePlanningData,
+    normalizePlanningHeaderData,
     onSignedOut: clearSelectedTask,
   });
 
@@ -83,6 +92,19 @@ export function usePlanningBootstrapState({
     currentProfileId: auth.serverCurrentProfile?.id || "",
   });
   const currentProfileId = requestContext.currentProfile?.id || "";
+  const headerData = usePlanningHeaderData({
+    apiClient: requestContext.apiClient,
+    authRequired,
+    authUser: auth.authUser,
+    baseHeaderData,
+    currentProfileId,
+    data,
+    protectedDataLoaded: auth.protectedDataLoaded,
+    serverCurrentProfile: auth.serverCurrentProfile,
+    setHeaderData: setBaseHeaderData,
+    source,
+    workspace,
+  });
   const canUseCeoIntake = requestContext.currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = source === "seed" || requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canManageFinalTaskStatus = source === "seed" || requestContext.currentProfile?.platformRole === "ceo";
@@ -93,8 +115,10 @@ export function usePlanningBootstrapState({
   const dataRefresh = usePlanningDataRefresh({
     apiClient: requestContext.apiClient,
     authUser: auth.authUser,
+    headerData,
     serverCurrentProfile: auth.serverCurrentProfile,
     setData,
+    setHeaderData: setBaseHeaderData,
     setProtectedDataLoaded: auth.setProtectedDataLoaded,
     source,
     workspace,
@@ -112,6 +136,7 @@ export function usePlanningBootstrapState({
     canUseCeoIntake,
     currentProfileId,
     data,
+    headerData,
     githubSyncQueueOpen,
     isPending,
     legacyMineWorkspace,
@@ -119,6 +144,7 @@ export function usePlanningBootstrapState({
     saveError,
     setData,
     setGithubSyncQueueOpen,
+    setHeaderData: setBaseHeaderData,
     setSaveError,
     setStatusGuardNotice,
     setStatusGuardTaskId,

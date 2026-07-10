@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import type { NotificationDelivery, NotificationEvent } from "@/lib/types";
+import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
 
 type GoogleChatStatus = {
   webhookConfigured: boolean;
@@ -18,6 +19,7 @@ type GoogleChatStatus = {
 type UseNotificationCommandsOptions = PlanningCommandContext & {
   openTaskPanel: (taskId: string) => void;
   refreshPlanningData: () => Promise<void>;
+  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setShowNotifications: (show: boolean) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   workspace: AppWorkspace;
@@ -29,6 +31,7 @@ export function useNotificationCommands({
   openTaskPanel,
   refreshPlanningData,
   setData,
+  setHeaderData,
   setSaveError,
   setShowNotifications,
   setWorkspace,
@@ -106,7 +109,7 @@ export function useNotificationCommands({
     );
   };
 
-  const openNotification = (event: NotificationEvent) => {
+  const openNotification = (event: HeaderNotification) => {
     if (event.entityType === "task") {
       const task = data.tasks.find((item) => item.id === event.entityId);
       if (!task) {
@@ -122,6 +125,19 @@ export function useNotificationCommands({
   };
 
   const dismissNotification = (eventId: number) => {
+    setHeaderData((current) => {
+      const removed = current.notifications.data.items.some((event) => event.id === eventId);
+      return {
+        ...current,
+        notifications: {
+          ...current.notifications,
+          data: {
+            unreadCount: Math.max(0, current.notifications.data.unreadCount - (removed ? 1 : 0)),
+            items: current.notifications.data.items.filter((event) => event.id !== eventId),
+          },
+        },
+      };
+    });
     setData((current) => ({
       ...current,
       notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "dismissed" } : event)),
@@ -138,6 +154,7 @@ export function useNotificationCommands({
           ...current,
           notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "pending" } : event)),
         }));
+        await refreshPlanningData();
         setSaveError(error instanceof Error ? error.message : "Notification konnte nicht geschlossen werden.");
       }
     });

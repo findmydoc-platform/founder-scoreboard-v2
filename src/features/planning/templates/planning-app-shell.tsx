@@ -87,6 +87,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     return (
       <ReviewDetailPage
         data={data}
+        headerData={controller.headerData}
         task={selectedReviewDetailTask}
         currentProfile={currentProfile}
         pending={isPending}

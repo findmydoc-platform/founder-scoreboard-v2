@@ -27,6 +27,7 @@ test("task route renders full page while planning shell opens task panel locally
 
   assert.match(route, /getPlanningData/);
   assert.match(route, /taskDetailPageDataScope/);
+  assert.match(route, /headerData/);
   assert.match(route, /loadTaskDetailData\(supabase, id\)/);
   assert.match(detailDataRoute, /requirePlatformRole\(currentRequest, \["ceo", "founder", "deputy", "viewer"\]\)/);
   assert.match(detailDataRoute, /loadTaskDetailData\(apiContext\.supabase, id\)/);
@@ -203,6 +204,8 @@ test("task detail page supports github-like sidebar metadata and milestones", as
   assert.match(page, /TaskBriefSection/);
   assert.doesNotMatch(page, /TaskContextSection|Fokus-Kontext/);
   assert.match(page, /TaskDetailHeader/);
+  assert.match(page, /headerData/);
+  assert.match(header, /PlanningHeaderDataActions/);
   assert.match(page, /TaskDetailsCard/);
   assert.match(page, /TaskEvidenceLinkSection/);
   assert.match(page, /TaskRelationshipsSection/);
