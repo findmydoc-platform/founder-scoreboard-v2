@@ -22,6 +22,14 @@ VERCEL_ORG_ID=
 VERCEL_PROJECT_ID=
 ```
 
+Production also requires this GitHub Environment secret for the schema deploy step:
+
+```text
+SUPABASE_DB_PASSWORD=
+```
+
+`SUPABASE_DB_PASSWORD` is not a Vercel runtime environment variable. Keep it only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
+
 The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
 
 ## Runtime Environment
@@ -90,11 +98,21 @@ GitHub Actions executes the production flow in this order:
 
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
+- Deploy the current Supabase baseline schema with `pnpm run deploy:supabase-schema`, guarded by `SCHEMA_DEPLOY_TARGET=production`.
+- Verify the production Supabase schema with `pnpm run verify:supabase`.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
 `pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
+
+The production schema deploy applies `supabase/schema.sql` only. It intentionally does not run `supabase/*.sql` as a glob because historical migration files include duplicate numbering and legacy cleanup scripts that are not safe as a repeated automatic deploy set.
+
+To configure the production database password from local `.env.local` without printing the secret, run from the repository root:
+
+```bash
+node --input-type=module -e 'import { readFile } from "node:fs/promises"; import { parseEnvLine } from "./scripts/lib/env.mjs"; const rows = (await readFile(".env.local", "utf8")).split(/\r?\n/).map(parseEnvLine).filter(Boolean); const pair = rows.find(([key]) => key === "SUPABASE_DB_PASSWORD"); if (!pair?.[1]) process.exit(1); process.stdout.write(pair[1]);' | gh secret set SUPABASE_DB_PASSWORD --env production --repo findmydoc-platform/founder-scoreboard-v2
+```
 
 ## Vercel Hobby Private Repository Author Block
 

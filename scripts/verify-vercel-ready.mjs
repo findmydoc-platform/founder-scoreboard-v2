@@ -16,6 +16,7 @@ const requiredFiles = [
   ".github/workflows/deploy-production.yml",
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
   ".github/workflows/send-release-google-chat.yml",
+  "scripts/deploy-production-schema.mjs",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -59,7 +60,7 @@ for (const file of requiredFiles) {
 
 const packageJson = JSON.parse(await read("package.json"));
 const pnpmWorkspace = await read("pnpm-workspace.yaml");
-for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"]) {
+for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-schema"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 if (packageJson.packageManager !== "pnpm@10.13.1") failures.push("package.json must pin packageManager to pnpm@10.13.1.");
@@ -118,6 +119,8 @@ for (const marker of [
   "VERCEL_TOKEN",
   "VERCEL_ORG_ID",
   "VERCEL_PROJECT_ID",
+  "SUPABASE_DB_PASSWORD",
+  "deploy:supabase-schema",
   "Supabase Auth",
   "GOOGLE_CHAT_DELIVERY_ENABLED=false",
   productionDomain,
@@ -184,6 +187,7 @@ for (const marker of [
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
+const productionSchemaDeployScript = await read("scripts/deploy-production-schema.mjs");
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
 }
@@ -197,6 +201,12 @@ for (const marker of [
   "url: ${{ steps.vercel_production.outputs.deploymentUrl }}",
   "pull --yes --environment=production",
   "build --prod",
+  "Deploy Supabase Schema to Production",
+  "SCHEMA_DEPLOY_TARGET: production",
+  "SUPABASE_DB_PASSWORD",
+  "pnpm run deploy:supabase-schema",
+  "Verify Production Supabase Schema",
+  "pnpm run verify:supabase",
   "vercel-deploy-prebuilt.sh production",
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -204,6 +214,9 @@ for (const marker of [
   "GITHUB_SYNC_OWNER: findmydoc-platform",
 ]) {
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
+}
+if (!/pnpm run deploy:supabase-schema[\s\S]*pnpm run verify:supabase[\s\S]*vercel-deploy-prebuilt\.sh production/.test(productionWorkflow)) {
+  failures.push("deploy-production.yml must deploy and verify Supabase schema before Vercel production deploy.");
 }
 
 const deployScript = await read(".github/scripts/deploy/vercel-deploy-prebuilt.sh");
@@ -229,6 +242,20 @@ for (const marker of [
   "deploymentUrl=",
 ]) {
   if (!deployScript.includes(marker)) failures.push(`vercel-deploy-prebuilt.sh missing: ${marker}`);
+}
+
+for (const marker of [
+  "SCHEMA_DEPLOY_TARGET",
+  "production",
+  "refs/heads/main",
+  "SUPABASE_DB_PASSWORD",
+  "supabase/schema.sql",
+  "notify pgrst, 'reload schema'",
+]) {
+  if (!productionSchemaDeployScript.includes(marker)) failures.push(`deploy-production-schema.mjs missing: ${marker}`);
+}
+for (const marker of ["drop\\s+table", "drop\\s+schema", "truncate", "drop\\s+column"]) {
+  if (!productionSchemaDeployScript.includes(marker)) failures.push(`deploy-production-schema.mjs missing destructive DDL guard: ${marker}`);
 }
 
 for (const marker of [
@@ -277,7 +304,7 @@ console.log(JSON.stringify({
   requiredEnvKeys,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build"],
+    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-schema"],
     workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,
