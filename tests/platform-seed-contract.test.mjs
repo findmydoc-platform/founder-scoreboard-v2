@@ -53,8 +53,8 @@ test("runtime fallback stays empty until the sample data button writes seed data
   const importHook = await readFile("src/features/planning/hooks/use-demo-seed-import.ts", "utf8");
   const localStateHook = await readFile("src/features/planning/hooks/use-local-planning-state.ts", "utf8");
 
-  assert.match(planningData, /if \(!supabase\) return \{ data: emptyPlanningData, source: "seed" \}/);
-  assert.match(planningData, /hasCorePlanningDataError\(rows\)[\s\S]*return \{ data: emptyPlanningData, source: "seed" \}/);
+  assert.match(planningData, /if \(!supabase\) return \{ data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" \}/);
+  assert.match(planningData, /hasCorePlanningDataError\(rows\)[\s\S]*return \{ data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" \}/);
   assert.doesNotMatch(planningData, /seedData/);
   assert.doesNotMatch(loader, /seedData/);
   assert.match(route, /importDemoSeed\(supabase\)/);
@@ -181,7 +181,7 @@ test("header exposes gated sample data import before notifications", async () =>
   assert.match(header, /importDemoSeed/);
   assert.match(header, /Beispieldaten laden/);
   assert.match(header, /<Import size=\{16\}/);
-  assert.ok(header.indexOf("Beispieldaten laden") < header.indexOf("<NotificationInbox"), "sample data import should render before NotificationInbox");
+  assert.ok(header.indexOf("Beispieldaten laden") < header.indexOf("<PlanningHeaderDataActions"), "sample data import should render before header data actions");
 
   assert.match(page, /isDemoSeedImportButtonAvailable/);
   assert.doesNotMatch(page, new RegExp("isDemoSeed" + "ImportAvailable"));

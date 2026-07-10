@@ -1,25 +1,23 @@
 "use client";
 
 import { ExternalLink, ImageIcon, Link2, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import { curatedFmdToolLinks, fmdToolCategoryLabel, maxCuratedFmdToolLinks } from "@/features/tools/model/fmd-tools";
-import type { FmdTool } from "@/lib/types";
+import { useEffect, useRef } from "react";
+import { fmdToolCategoryLabel } from "@/features/tools/model/fmd-tools";
+import { maxHeaderQuickLinks } from "@/lib/planning-header-data";
+import type { HeaderDataSlot, HeaderQuickLink } from "@/lib/types";
 import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export function FmdToolQuickLinks({
-  tools,
+  quickLinks,
   open,
   onToggle,
 }: {
-  tools: FmdTool[];
+  quickLinks: HeaderDataSlot<HeaderQuickLink[]>;
   open: boolean;
   onToggle: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const quickLinks = useMemo(
-    () => curatedFmdToolLinks(tools),
-    [tools],
-  );
+  const links = quickLinks.data;
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +59,7 @@ export function FmdToolQuickLinks({
               <h2 className="truncate text-sm font-semibold text-slate-950">Kuratierte Links</h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <UiBadge tone="slate" bordered={false}>{quickLinks.length}/{maxCuratedFmdToolLinks}</UiBadge>
+              <UiBadge tone="slate" bordered={false}>{quickLinks.state === "loading" ? "..." : `${links.length}/${maxHeaderQuickLinks}`}</UiBadge>
               <button
                 type="button"
                 onClick={onToggle}
@@ -73,7 +71,15 @@ export function FmdToolQuickLinks({
             </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[360px]">
-            {quickLinks.length ? quickLinks.map((tool) => (
+            {quickLinks.state === "loading" ? (
+              <UiEmptyState className="px-4 py-8">
+                Kuratierte Links werden geladen.
+              </UiEmptyState>
+            ) : quickLinks.state === "error" ? (
+              <UiEmptyState className="px-4 py-8">
+                {quickLinks.error || "Kuratierte Links konnten nicht geladen werden."}
+              </UiEmptyState>
+            ) : links.length ? links.map((tool) => (
               <a
                 key={tool.id}
                 href={tool.url}

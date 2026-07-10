@@ -1,18 +1,14 @@
 import { Filter, GitBranch, HelpCircle, Import, Plus, X } from "lucide-react";
-import { useState } from "react";
-import { HeaderEventCalendar } from "@/features/events/molecules/header-event-calendar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
+import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
 import { viewTabs, workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
-import { FmdToolQuickLinks } from "@/features/tools/molecules/fmd-tool-quick-links";
-import { NotificationInbox } from "@/features/notifications/organisms/notification-inbox";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
 import { hasGitHubIssue } from "@/lib/platform";
 
 export function PlanningHeader({ controller }: { controller: PlanningAppController }) {
-  const [quickLinksOpen, setQuickLinksOpen] = useState(false);
   const {
     actualProfile,
     authAvailable,
@@ -32,6 +28,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     githubAppConnected,
     githubReauthFailed,
     githubSyncQueueOpen,
+    headerData,
     headerPrimaryAction,
     importDemoSeed,
     mobileNavOpen,
@@ -52,7 +49,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     signOut,
     source,
     statusGuardNotice,
-    unreadNotifications,
     view,
     workspace,
   } = controller;
@@ -117,19 +113,12 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               {demoSeedImportPending ? "Lädt..." : "Beispieldaten laden"}
             </button>
           )}
-          <FmdToolQuickLinks
-            tools={data.fmdTools}
-            open={quickLinksOpen}
-            onToggle={() => setQuickLinksOpen((value) => !value)}
-          />
-          <HeaderEventCalendar events={data.events} />
-          <NotificationInbox
-            notifications={unreadNotifications}
-            profiles={data.profiles}
-            open={showNotifications}
-            onToggle={() => setShowNotifications((value) => !value)}
-            onOpen={openNotification}
-            onDismiss={dismissNotification}
+          <PlanningHeaderDataActions
+            headerData={headerData}
+            notificationsOpen={showNotifications}
+            onToggleNotifications={() => setShowNotifications((value) => !value)}
+            onOpenNotification={openNotification}
+            onDismissNotification={dismissNotification}
           />
           <button
             type="button"

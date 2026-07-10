@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { Milestone, Package, PlanningHeaderData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
@@ -29,6 +29,7 @@ type Props = {
   profiles: Profile[];
   sprints: Sprint[];
   milestones: Milestone[];
+  headerData: PlanningHeaderData;
   source: "seed" | "supabase";
   commentImportNotice?: string;
 };
@@ -48,6 +49,7 @@ export function TaskDetailPage({
   profiles,
   sprints,
   milestones,
+  headerData,
   source,
   commentImportNotice = "",
 }: Props) {
@@ -131,6 +133,7 @@ export function TaskDetailPage({
 
       <TaskDetailHeader
         title={task.title}
+        headerData={headerData}
         actions={(
           <GitHubConnectionStatus
             authenticated={source === "supabase"}

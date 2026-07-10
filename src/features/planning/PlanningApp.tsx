@@ -4,10 +4,11 @@ import type { User } from "@supabase/supabase-js";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningAppShell } from "@/features/planning/templates/planning-app-shell";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { AuthenticatedProfile, PlanningData } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 
 type Props = {
   initialData: PlanningData;
+  initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
   source: "seed" | "supabase";
   authRequired: boolean;
@@ -21,6 +22,7 @@ type Props = {
 
 export function PlanningApp({
   initialData,
+  initialHeaderData,
   initialWorkspace,
   source,
   authRequired,
@@ -33,6 +35,7 @@ export function PlanningApp({
 }: Props) {
   const controller = usePlanningAppController({
     initialData,
+    initialHeaderData,
     initialWorkspace,
     source,
     authRequired,

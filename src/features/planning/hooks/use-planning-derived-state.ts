@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { usePlanningHeaderPrimaryAction } from "@/features/planning/hooks/use-planning-header-primary-action";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import type { PlanningFilters, usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
@@ -40,12 +40,6 @@ export function usePlanningDerivedState({
   statusGuardTaskId,
   workspace,
 }: UsePlanningDerivedStateOptions) {
-  const unreadNotifications = useMemo(() => {
-    const pending = data.notificationEvents.filter((event) => event.status === "pending");
-    if (!currentProfile) return pending;
-    return pending.filter((event) => event.recipientProfileId === currentProfile.id);
-  }, [currentProfile, data.notificationEvents]);
-
   useEffect(() => {
     if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
       setWorkspace("planning");
@@ -73,7 +67,6 @@ export function usePlanningDerivedState({
     headerPrimaryAction,
     metrics,
     statusGuardTask,
-    unreadNotifications,
     visibleTasks,
   };
 }

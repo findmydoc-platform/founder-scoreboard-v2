@@ -1,6 +1,7 @@
 import type { FmdTool } from "@/lib/types";
+import { maxHeaderQuickLinks } from "@/lib/planning-header-data";
 
-export const maxCuratedFmdToolLinks = 5;
+export const maxCuratedFmdToolLinks = maxHeaderQuickLinks;
 
 export type FmdToolDraft = {
   name: string;

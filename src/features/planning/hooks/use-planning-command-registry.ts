@@ -19,7 +19,7 @@ import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutatio
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, Task, ViewMode } from "@/lib/types";
+import type { PlanningData, PlanningHeaderData, Task, ViewMode } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
@@ -35,6 +35,7 @@ type UsePlanningCommandRegistryOptions = {
   refreshPlanningData: () => Promise<void>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
+  setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
@@ -60,6 +61,7 @@ export function usePlanningCommandRegistry({
   refreshPlanningData,
   selectedTask,
   setFilters,
+  setHeaderData,
   setInitiativeDialogDefaults,
   setShowNotifications,
   setStatusGuardNotice,
@@ -129,6 +131,7 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     openTaskPanel,
     refreshPlanningData,
+    setHeaderData,
     setShowNotifications,
     setWorkspace,
     workspace,

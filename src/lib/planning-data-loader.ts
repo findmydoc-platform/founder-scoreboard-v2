@@ -38,8 +38,8 @@ export const fullPlanningDataQueryScope = Object.fromEntries(
   planningDataQueryKeys.map((key) => [key, true]),
 ) as Record<PlanningDataQueryKey, true>;
 
-function shouldLoad(scope: PlanningDataQueryScope, key: PlanningDataQueryKey) {
-  return scope[key] !== false;
+export function shouldLoad(scope: PlanningDataQueryScope | undefined, key: PlanningDataQueryKey) {
+  return scope?.[key] !== false;
 }
 
 function skippedListResult<Row>() {

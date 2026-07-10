@@ -3,13 +3,16 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
+import type { PlanningHeaderData } from "@/lib/types";
 
 type Props = {
   title: string;
+  headerData: PlanningHeaderData;
   actions?: ReactNode;
 };
 
-export function TaskDetailHeader({ title, actions }: Props) {
+export function TaskDetailHeader({ title, headerData, actions }: Props) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
@@ -22,6 +25,7 @@ export function TaskDetailHeader({ title, actions }: Props) {
           <h1 className="mt-1 max-w-4xl text-2xl font-semibold tracking-tight text-slate-950">{title}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <PlanningHeaderDataActions headerData={headerData} />
           {actions}
         </div>
       </div>

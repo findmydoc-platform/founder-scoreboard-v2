@@ -1,15 +1,21 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
+import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
 export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
   return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
+}
+
+export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {
+  const query = slots?.length ? `?slots=${encodeURIComponent(slots.join(","))}` : "";
+  return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
 }
 
 export function importDemoSeedRequest(apiClient: BrowserApiClient) {

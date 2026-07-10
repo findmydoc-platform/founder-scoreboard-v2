@@ -1,13 +1,15 @@
 "use client";
 
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
+import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
 import { TaskReviewSheet } from "@/features/reviews/organisms/task-review-sheet";
 import { canActOnReview, isReviewRelevantTask } from "@/features/reviews/model/review-workspace-view-model";
-import type { PlanningData, Profile, Task } from "@/lib/types";
+import type { PlanningData, PlanningHeaderData, Profile, Task } from "@/lib/types";
 import { UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   data: PlanningData;
+  headerData: PlanningHeaderData;
   task: Task | null;
   currentProfile: Profile | null;
   pending: boolean;
@@ -22,12 +24,15 @@ type Props = {
   onReopen: (task: Task) => void;
 };
 
-export function ReviewDetailPage({ data, task, currentProfile, pending, source, onReview, onReopen }: Props) {
+export function ReviewDetailPage({ data, headerData, task, currentProfile, pending, source, onReview, onReopen }: Props) {
   if (!task || !isReviewRelevantTask(task, data)) {
     return (
       <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
         <AppSidebar activeWorkspace="reviews" source={source} currentPlatformRole={currentProfile?.platformRole || ""} />
         <div className="mx-auto max-w-4xl px-6 py-10">
+          <div className="mb-4 flex justify-end">
+            <PlanningHeaderDataActions headerData={headerData} />
+          </div>
           <UiPanel padding="xl">
             <h1 className="text-lg font-semibold text-slate-950">Review nicht gefunden</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">Diese Aufgabe existiert nicht oder ist aktuell keine Review.</p>
@@ -54,9 +59,12 @@ export function ReviewDetailPage({ data, task, currentProfile, pending, source, 
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Review</div>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">{task.title}</h1>
           </div>
-          <UiLinkButton href="/reviews">
-            Zur Review-Zentrale
-          </UiLinkButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <PlanningHeaderDataActions headerData={headerData} />
+            <UiLinkButton href="/reviews">
+              Zur Review-Zentrale
+            </UiLinkButton>
+          </div>
         </div>
         <TaskReviewSheet
           task={task}
