@@ -29,6 +29,22 @@ type TaskUpdateTransactionResult = {
   activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
 };
 
+type TaskDeletionTransactionResult = {
+  operationId?: string;
+  status?: "prepared" | "completed";
+  task?: TaskDeletionSnapshotRow;
+  tasks?: TaskDeletionSnapshotRow[];
+  deletedTaskIds?: string[];
+  githubClosed?: boolean;
+};
+
+type TaskDeletionSnapshotRow = Record<string, unknown> & {
+    github_issue_number?: number | null;
+    issue_number?: string | null;
+    github_issue_url?: string | null;
+    issue_url?: string | null;
+};
+
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder, {
     supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
@@ -269,38 +285,93 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   if (!isOperationalLead) return apiError("Nur CEO oder Deputy können Aufgaben löschen.", 403);
 
   const { id } = await context.params;
-  const { data: task, error: taskError } = await supabase
-    .from("tasks")
-    .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url")
-    .eq("id", id)
-    .single();
-  if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  const payload = (await request.json().catch(() => ({}))) as { expectedUpdatedAt?: string };
+  if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
+    return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
+  }
 
-  const issueNumber = linkedIssueNumber(task);
+  const requestMetadata = auditRequestMetadata(request);
+  const { data: prepareData, error: prepareError } = await supabase.rpc("prepare_task_deletion_transaction", {
+    p_task_id: id,
+    p_expected_updated_at: payload.expectedUpdatedAt,
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: requestMetadata.request_ip,
+    p_user_agent: requestMetadata.user_agent || null,
+  });
+
+  if (prepareError) {
+    if (prepareError.code === "P0001") {
+      return apiError("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+    }
+    if (prepareError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
+    if (prepareError.code === "22023") return apiError("Aufgabenlöschung ist ungültig.", 400);
+    return apiError(prepareError.message, 500);
+  }
+
+  const prepared = prepareData as TaskDeletionTransactionResult | null;
+  if (!prepared?.operationId || !prepared.task) {
+    return apiError("Aufgabenlöschung konnte nicht vorbereitet werden.", 500);
+  }
+
+  if (prepared.status === "completed") {
+    return NextResponse.json({
+      ok: true,
+      deletedTaskId: id,
+      deletedTaskIds: prepared.deletedTaskIds || [id],
+      githubClosed: prepared.githubClosed || false,
+    });
+  }
+
+  const issueNumbers = [...new Set((prepared.tasks || [prepared.task])
+    .map((task) => linkedIssueNumber(task))
+    .filter((issueNumber): issueNumber is number => Boolean(issueNumber)))];
   let githubClosed = false;
-  if (issueNumber) {
+  if (issueNumbers.length) {
     try {
       const token = await getGitHubAppInstallationToken();
-      await archiveGitHubIssue(issueNumber, token);
+      for (const issueNumber of issueNumbers) {
+        await archiveGitHubIssue(issueNumber, token);
+      }
       githubClosed = true;
     } catch (error) {
+      const { error: cancelError } = await supabase.rpc("cancel_task_deletion_transaction", {
+        p_operation_id: prepared.operationId,
+      });
       const message = error instanceof Error ? error.message : "GitHub Issue konnte nicht geschlossen werden.";
-      return apiError(message, 502);
+      return apiError(
+        cancelError
+          ? `${message} Der sichere Löschvorgang bleibt für einen erneuten Versuch vorgemerkt.`
+          : message,
+        502,
+      );
     }
   }
 
-  const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
-  if (deleteError) return apiError(deleteError.message, 500);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.delete",
-    entity_type: "task",
-    entity_id: id,
-    before_data: task,
-    after_data: { deleted: true, githubClosed },
-    ...auditRequestMetadata(request),
+  const { data: finalizeData, error: finalizeError } = await supabase.rpc("finalize_task_deletion_transaction", {
+    p_operation_id: prepared.operationId,
+    p_github_closed: githubClosed,
   });
 
-  return NextResponse.json({ ok: true, deletedTaskId: id, githubClosed });
+  if (finalizeError) {
+    if (finalizeError.code === "P0001") {
+      await supabase.rpc("cancel_task_deletion_transaction", { p_operation_id: prepared.operationId });
+      return apiError(
+        githubClosed
+          ? "Aufgabe wurde parallel geändert. Die externe Ablage ist bereits geschlossen; bitte neu laden und die Löschung erneut bestätigen."
+          : "Aufgabe wurde parallel geändert. Bitte neu laden.",
+        409,
+      );
+    }
+    if (finalizeError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
+    return apiError(`Aufgabenlöschung konnte nicht abgeschlossen werden: ${finalizeError.message}`, 500);
+  }
+
+  const finalized = finalizeData as TaskDeletionTransactionResult | null;
+
+  return NextResponse.json({
+    ok: true,
+    deletedTaskId: id,
+    deletedTaskIds: finalized?.deletedTaskIds || prepared.deletedTaskIds || [id],
+    githubClosed: finalized?.githubClosed || githubClosed,
+  });
 }

@@ -18,10 +18,10 @@ export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: 
   });
 }
 
-export function deleteTaskRequest(apiClient: BrowserApiClient, taskId: string) {
+export function deleteTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedUpdatedAt: string) {
   return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}`, {
     method: "DELETE",
-    jsonContentType: false,
+    json: { expectedUpdatedAt },
   });
 }
 

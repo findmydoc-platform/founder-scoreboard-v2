@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
 
 const supabase = await createSupabaseScriptClient();
@@ -129,6 +130,42 @@ async function verifyTaskUpdateRpc() {
   };
 }
 
+async function verifyTaskDeletionRpcs() {
+  const missingTaskId = `verify-missing-task-deletion-${Date.now()}`;
+  const prepare = await supabase.rpc("prepare_task_deletion_transaction", {
+    p_task_id: missingTaskId,
+    p_expected_updated_at: new Date().toISOString(),
+    p_actor_profile_id: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  });
+  const finalize = await supabase.rpc("finalize_task_deletion_transaction", {
+    p_operation_id: randomUUID(),
+    p_github_closed: false,
+  });
+  const cancel = await supabase.rpc("cancel_task_deletion_transaction", {
+    p_operation_id: randomUUID(),
+  });
+
+  return [
+    {
+      name: "prepare_task_deletion_transaction",
+      ok: prepare.error?.code === "P0002",
+      error: prepare.error?.code === "P0002" ? "" : prepare.error?.message || "RPC unexpectedly accepted a missing task",
+    },
+    {
+      name: "finalize_task_deletion_transaction",
+      ok: finalize.error?.code === "P0002",
+      error: finalize.error?.code === "P0002" ? "" : finalize.error?.message || "RPC unexpectedly accepted a missing operation",
+    },
+    {
+      name: "cancel_task_deletion_transaction",
+      ok: !cancel.error && cancel.data?.cancelled === true,
+      error: cancel.error?.message || (cancel.data?.cancelled === true ? "" : "RPC did not idempotently cancel a missing operation"),
+    },
+  ];
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -144,6 +181,7 @@ const result = {
   githubAppConnections: await count("github_app_user_tokens"),
   packages: await count("packages"),
   tasks: await count("tasks"),
+  taskDeletionOperations: await count("task_deletion_operations"),
   dependencies: await count("task_dependencies"),
   links: await count("task_links"),
   notes: await count("task_notes"),
@@ -173,6 +211,7 @@ const result = {
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
   profileWriteRpcs: await verifyProfileWriteRpcs(),
   taskUpdateRpc: await verifyTaskUpdateRpc(),
+  taskDeletionRpcs: await verifyTaskDeletionRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -196,5 +235,11 @@ if (missingProfileWriteRpc) {
 
 if (!result.taskUpdateRpc.ok) {
   console.error(`Task update RPC check failed: ${result.taskUpdateRpc.error}`);
+  process.exit(1);
+}
+
+const missingTaskDeletionRpc = result.taskDeletionRpcs.find((check) => !check.ok);
+if (missingTaskDeletionRpc) {
+  console.error(`Task deletion RPC check failed for ${missingTaskDeletionRpc.name}: ${missingTaskDeletionRpc.error}`);
   process.exit(1);
 }
