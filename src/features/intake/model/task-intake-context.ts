@@ -1,4 +1,4 @@
-import type { TaskIntakeContext, TaskIntakeInitiative, TaskIntakeProfile } from "@/lib/task-intake";
+import type { TaskIntakeContext, TaskIntakeInitiative, TaskIntakeProfile } from "@/features/intake/model/task-intake";
 
 type SupabaseReader = ReturnType<typeof import("@/lib/supabase").getServerSupabase>;
 

@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { commitTaskIntake } from "@/features/intake/model/task-intake-commit";
+import { buildValidTaskIntakeForRoute, invalidTaskIntakeResponse } from "@/features/intake/model/task-intake-route";
 import { requireCEO } from "@/lib/authz";
-import { commitTaskIntake } from "@/lib/task-intake-commit";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { buildValidTaskIntakeForRoute, invalidTaskIntakeResponse } from "@/lib/task-intake-route";
 
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext(request, requireCEO, null);

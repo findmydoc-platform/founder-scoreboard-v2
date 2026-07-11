@@ -3,8 +3,7 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
-import type { TaskIntakeContext } from "@/lib/task-intake";
-import type { TaskIntakePreviewTask } from "@/lib/task-intake";
+import type { TaskIntakeContext, TaskIntakePreviewTask } from "@/features/intake/model/task-intake";
 import type { Task } from "@/lib/types";
 
 type SupabaseReader = ReturnType<typeof import("@/lib/supabase").getServerSupabase>;

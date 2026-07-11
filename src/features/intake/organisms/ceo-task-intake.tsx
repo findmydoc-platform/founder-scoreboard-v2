@@ -3,8 +3,8 @@
 import { AlertTriangle, CheckCircle2, ClipboardList, WandSparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { commitTaskIntake, previewTaskIntake, type TaskIntakeCommitResponse, type TaskIntakeResponse } from "@/features/intake/model/task-intake-api-client";
+import type { TaskIntakePreviewTask } from "@/features/intake/model/task-intake";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { TaskIntakePreviewTask } from "@/lib/task-intake";
 import type { Package, Profile, Sprint, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 

@@ -569,18 +569,21 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   const envExample = await readFile(".env.example", "utf8");
   const docs = await readFile("docs/founderops-agent-api.md", "utf8");
   const openapi = await readFile("public/founderops-agent-openapi.json", "utf8");
-  const agentAuth = await readFile("src/lib/agent-auth.ts", "utf8");
-  const agentData = await readFile("src/lib/agent-data.ts", "utf8");
+  const agentAuth = await readFile("src/features/agent/model/agent-auth.ts", "utf8");
+  const agentContract = await readFile("src/features/agent/model/agent-contract.ts", "utf8");
+  const agentData = await readFile("src/features/agent/model/agent-data-service.ts", "utf8");
+  const agentProjection = await readFile("src/features/agent/model/agent-planning-projection.ts", "utf8");
+  const agentRouteHandler = await readFile("src/features/agent/model/agent-route-handler.ts", "utf8");
   const contextRoute = await readFile("src/app/api/agent/context/route.ts", "utf8");
   const tasksRoute = await readFile("src/app/api/agent/tasks/route.ts", "utf8");
   const previewRoute = await readFile("src/app/api/agent/task-intake/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/agent/task-intake/commit/route.ts", "utf8");
   const ceoPreviewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
   const ceoCommitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
-  const commitHelper = await readFile("src/lib/task-intake-commit.ts", "utf8");
-  const routeHelper = await readFile("src/lib/task-intake-route.ts", "utf8");
+  const commitHelper = await readFile("src/features/intake/model/task-intake-commit.ts", "utf8");
+  const routeHelper = await readFile("src/features/intake/model/task-intake-route.ts", "utf8");
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
-  const intakeContext = await readFile("src/lib/task-intake-context.ts", "utf8");
+  const intakeContext = await readFile("src/features/intake/model/task-intake-context.ts", "utf8");
 
   assert.match(envExample, /FOUNDEROPS_AGENT_TOKEN_SHA256=/);
   assert.match(agents, /Agent API access must stay token-guarded and CEO-scoped/);
@@ -608,8 +611,8 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   assert.match(agentAuth, /Agent token is required/);
   assert.match(agentAuth, /Agent token is invalid/);
   assert.match(agentAuth, /missing the required scope/);
-  assert.match(agentAuth, /read:planning/);
-  assert.match(agentAuth, /write:intake/);
+  assert.match(agentContract, /read:planning/);
+  assert.match(agentContract, /write:intake/);
   assert.doesNotMatch(agentAuth, /requireCEO/);
   assert.doesNotMatch(agentAuth, /requireOperationalLead/);
   assert.doesNotMatch(agentAuth, /getServerSupabase/);
@@ -617,16 +620,21 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   assert.doesNotMatch(agentAuth, /provider_token/);
 
   assert.match(agentData, /getPlanningData/);
-  assert.match(agentData, /agentConstraints/);
-  assert.match(agentData, /noDirectDatabaseCredentials: true/);
-  assert.match(agentData, /noAiModelInsideFounderOps: true/);
-  assert.match(agentData, /forbiddenWrites/);
-  assert.match(agentData, /reviewOwnerProfileId/);
-  assert.match(agentData, /taskBlockers/);
-  assert.match(agentData, /taskComments/);
+  assert.match(agentProjection, /agentConstraints/);
+  assert.match(agentContract, /noDirectDatabaseCredentials: true/);
+  assert.match(agentContract, /noAiModelInsideFounderOps: true/);
+  assert.match(agentContract, /forbiddenWrites/);
+  assert.match(agentProjection, /reviewOwnerProfileId/);
+  assert.match(agentProjection, /taskBlockers/);
+  assert.match(agentProjection, /taskComments/);
+  assert.match(agentProjection, /buildAgentPlanningIndex/);
+  assert.match(agentProjection, /commentsByTaskId/);
+  assert.match(agentProjection, /relationCountsByTaskId/);
+  assert.match(agentRouteHandler, /requireAgentScope/);
+  assert.match(agentRouteHandler, /isPlanningDataUnavailableError/);
 
   for (const route of [contextRoute, tasksRoute]) {
-    assert.match(route, /requireAgentScope/);
+    assert.match(route, /handleAgentRequest/);
     assert.match(route, /read:planning/);
     assert.doesNotMatch(route, /requireCEO/);
     assert.doesNotMatch(route, /requireOperationalLead/);
@@ -636,7 +644,7 @@ test("founderops agent api is token guarded and limited to planning intake", asy
 
   for (const route of [previewRoute, commitRoute]) {
     const routeContract = `${route}\n${routeHelper}`;
-    assert.match(route, /requireAgentScope/);
+    assert.match(route, /handleAgentRequest/);
     assert.match(route, /write:intake/);
     assert.match(routeContract, /buildTaskIntakePreview/);
     assert.match(routeContract, /loadTaskIntakeContext/);
