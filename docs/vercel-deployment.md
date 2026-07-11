@@ -25,10 +25,12 @@ VERCEL_PROJECT_ID=
 Production also requires this GitHub Environment secret for the schema deploy step:
 
 ```text
+SUPABASE_DB_HOST=
+SUPABASE_DB_USER=
 SUPABASE_DB_PASSWORD=
 ```
 
-`SUPABASE_DB_PASSWORD` is not a Vercel runtime environment variable. Keep it only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
+Use the Supabase shared session pooler on port `5432`: `SUPABASE_DB_HOST` is the pooler host and `SUPABASE_DB_USER` is the pooler user shown under **Connect > Session pooler** in Supabase. GitHub Actions cannot reach the IPv6-only direct database host. These database values are not Vercel runtime environment variables. Keep them only in the GitHub `production` Environment and in local `.env.local` for operator repair work.
 
 The workflows intentionally do not pre-validate these secrets. If a required secret is missing, the workflow step fails naturally.
 
@@ -108,7 +110,7 @@ GitHub Actions executes the production flow in this order:
 
 The production schema deploy applies `supabase/schema.sql` only. It intentionally does not run `supabase/*.sql` as a glob because historical migration files include duplicate numbering and legacy cleanup scripts that are not safe as a repeated automatic deploy set.
 
-To configure the production database password from local `.env.local` without printing the secret, run from the repository root:
+Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 
 ```bash
 node --input-type=module -e 'import { readFile } from "node:fs/promises"; import { parseEnvLine } from "./scripts/lib/env.mjs"; const rows = (await readFile(".env.local", "utf8")).split(/\r?\n/).map(parseEnvLine).filter(Boolean); const pair = rows.find(([key]) => key === "SUPABASE_DB_PASSWORD"); if (!pair?.[1]) process.exit(1); process.stdout.write(pair[1]);' | gh secret set SUPABASE_DB_PASSWORD --env production --repo findmydoc-platform/founder-scoreboard-v2

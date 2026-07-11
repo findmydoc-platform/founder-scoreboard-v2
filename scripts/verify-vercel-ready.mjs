@@ -188,6 +188,8 @@ for (const marker of [
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
 const productionSchemaDeployScript = await read("scripts/deploy-production-schema.mjs");
+const productionSchemaConnection = await read("scripts/lib/production-schema-connection.mjs");
+const productionSchemaDeployContract = `${productionSchemaDeployScript}\n${productionSchemaConnection}`;
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
 }
@@ -203,6 +205,8 @@ for (const marker of [
   "build --prod",
   "Deploy Supabase Schema to Production",
   "SCHEMA_DEPLOY_TARGET: production",
+  "SUPABASE_DB_HOST",
+  "SUPABASE_DB_USER",
   "SUPABASE_DB_PASSWORD",
   "pnpm run deploy:supabase-schema",
   "Verify Production Supabase Schema",
@@ -248,11 +252,13 @@ for (const marker of [
   "SCHEMA_DEPLOY_TARGET",
   "production",
   "refs/heads/main",
+  "SUPABASE_DB_HOST",
+  "SUPABASE_DB_USER",
   "SUPABASE_DB_PASSWORD",
   "supabase/schema.sql",
   "notify pgrst, 'reload schema'",
 ]) {
-  if (!productionSchemaDeployScript.includes(marker)) failures.push(`deploy-production-schema.mjs missing: ${marker}`);
+  if (!productionSchemaDeployContract.includes(marker)) failures.push(`production schema deploy contract missing: ${marker}`);
 }
 for (const marker of ["drop\\s+table", "drop\\s+schema", "truncate", "drop\\s+column"]) {
   if (!productionSchemaDeployScript.includes(marker)) failures.push(`deploy-production-schema.mjs missing destructive DDL guard: ${marker}`);
