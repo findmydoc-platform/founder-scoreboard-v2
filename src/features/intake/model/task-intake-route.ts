@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { buildTaskIntakePreview, parseTaskIntakePayload, type TaskIntakeInput } from "@/lib/task-intake";
-import { loadTaskIntakeContext } from "@/lib/task-intake-context";
+import { buildTaskIntakePreview, parseTaskIntakePayload, type TaskIntakeInput } from "@/features/intake/model/task-intake";
+import { loadTaskIntakeContext } from "@/features/intake/model/task-intake-context";
 import { getServerSupabase } from "@/lib/supabase";
-import type { TaskIntakePreviewTask } from "@/lib/task-intake";
+import type { TaskIntakePreviewTask } from "@/features/intake/model/task-intake";
 
 type SupabaseClient = NonNullable<ReturnType<typeof getServerSupabase>>;
 

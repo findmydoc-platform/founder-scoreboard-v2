@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-
-import { requireAgentScope } from "@/lib/agent-auth";
-import { getAgentTasks } from "@/lib/agent-data";
-import { isPlanningDataUnavailableError } from "@/lib/planning-data-availability";
+import { getAgentTasks } from "@/features/agent/model/agent-data-service";
+import { handleAgentRequest } from "@/features/agent/model/agent-route-handler";
 
 function booleanFilter(value: string | null) {
   return value === "true" ? true : undefined;
 }
 
 export async function GET(request: NextRequest) {
-  const permission = requireAgentScope(request, "read:planning");
-  if (!permission.ok) {
-    return NextResponse.json({ ok: false, error: permission.error }, { status: permission.status });
-  }
-
   const searchParams = request.nextUrl.searchParams;
-  try {
+  return handleAgentRequest(request, "read:planning", async () => {
     const result = await getAgentTasks({
       assignee: searchParams.get("assignee") || searchParams.get("owner") || undefined,
       sprint: searchParams.get("sprint") || undefined,
@@ -28,10 +21,5 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    if (isPlanningDataUnavailableError(error)) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 503 });
-    }
-    throw error;
-  }
+  });
 }

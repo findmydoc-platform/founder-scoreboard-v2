@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { TaskIntakePreviewTask } from "@/lib/task-intake";
+import type { TaskIntakePreviewTask } from "@/features/intake/model/task-intake";
 import type { Task } from "@/lib/types";
 
 export type TaskIntakeResponse = {

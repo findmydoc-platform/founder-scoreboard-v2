@@ -1,13 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
-
-export type AgentScope = "read:planning" | "write:intake";
+import { agentScopes, type AgentScope } from "@/features/agent/model/agent-contract";
 
 export type AgentAuthResult =
   | { ok: true; scopes: AgentScope[]; actor: "ceo-agent" }
   | { ok: false; status: 401 | 403; error: string };
-
-const agentScopes: AgentScope[] = ["read:planning", "write:intake"];
 
 function bearerToken(request: NextRequest) {
   const header = request.headers.get("authorization") || "";
