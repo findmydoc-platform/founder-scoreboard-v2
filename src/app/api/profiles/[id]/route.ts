@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalDate, cleanOptionalText } from "@/lib/api-input";
 import { requireCEO } from "@/lib/authz";
-import type { PlatformRole } from "@/lib/types";
+import { mapNotificationPreference, mapProfile } from "@/lib/planning-data-mappers";
+import type { DbNotificationPreference, DbProfile } from "@/lib/planning-data-row-types";
+import { googleChatDigestEventTypes } from "@/lib/notification-policy";
+import type { NotificationPreference, PlatformRole } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
 type UpdatePayload = {
@@ -17,9 +20,16 @@ type UpdatePayload = {
   googleChatUserId?: string;
   googleChatDmSpace?: string;
   notificationsEnabled?: boolean;
+  notificationEvents?: Record<string, boolean>;
+};
+
+type ProfileAdminTransactionResult = {
+  profile?: DbProfile;
+  notification_preferences?: DbNotificationPreference[];
 };
 
 const platformRoles = new Set<PlatformRole>(["ceo", "founder", "deputy", "viewer"]);
+const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
 
 function cleanColor(value: unknown) {
   if (typeof value !== "string") return undefined;
@@ -87,7 +97,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (payload.notificationsEnabled !== undefined) {
-    update.notifications_enabled = Boolean(payload.notificationsEnabled);
+    if (typeof payload.notificationsEnabled !== "boolean") {
+      return apiError("Benachrichtigungsstatus ist ungültig.", 400);
+    }
+    update.notifications_enabled = payload.notificationsEnabled;
   }
 
   if (update.platform_role && update.platform_role !== "deputy") {
@@ -96,68 +109,43 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.deputy_active_until = null;
   }
 
-  const { data: currentProfiles, error: readError } = await supabase
-    .from("profiles")
-    .select("id,platform_role")
-    .order("id");
-
-  if (readError) return apiError(readError.message, 500);
-
-  const current = currentProfiles.find((profile) => profile.id === id);
-  if (!current) return apiError("Profil wurde nicht gefunden.", 404);
-
-  if (update.platform_role && update.platform_role !== "ceo") {
-    const otherCeoExists = currentProfiles.some((profile) => profile.id !== id && profile.platform_role === "ceo");
-    if (current.platform_role === "ceo" && !otherCeoExists) {
-      return apiError("Mindestens ein CEO muss gesetzt bleiben.", 400);
+  const notificationEvents: Record<string, boolean> = {};
+  if (payload.notificationEvents !== undefined) {
+    if (!payload.notificationEvents || typeof payload.notificationEvents !== "object") {
+      return apiError("Benachrichtigungseinstellungen sind ungültig.", 400);
+    }
+    for (const [eventType, enabled] of Object.entries(payload.notificationEvents)) {
+      if (!allowedEventTypes.has(eventType)) return apiError("Unbekannter Benachrichtigungstyp.", 400);
+      if (typeof enabled !== "boolean") return apiError("Benachrichtigungsstatus ist erforderlich.", 400);
+      notificationEvents[eventType] = enabled;
     }
   }
 
-  if (update.platform_role === "ceo") {
-    const { error: demoteError } = await supabase
-      .from("profiles")
-      .update({ platform_role: "founder", org_role: "Founder", deputy_for: null, deputy_active_from: null, deputy_active_until: null })
-      .neq("id", id)
-      .eq("platform_role", "ceo");
-
-    if (demoteError) return apiError(demoteError.message, 500);
-  }
-
-  const { data: updated, error: updateError } = await supabase
-    .from("profiles")
-    .update(update)
-    .eq("id", id)
-    .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled")
-    .single();
-
-  if (updateError) return apiError(updateError.message, 500);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id,
-    action: "profile.update",
-    entity_type: "profile",
-    entity_id: id,
-    after_data: update,
-    ...auditRequestMetadata(request),
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("update_profile_admin_transaction", {
+    p_profile_id: id,
+    p_actor_profile_id: permission.profile?.id || "",
+    p_profile_patch: update,
+    p_notification_events: notificationEvents,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent,
   });
 
+  if (transactionError) {
+    if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
+    if (transactionError.code === "23514") return apiError("Genau ein CEO muss gesetzt bleiben.", 409);
+    if (transactionError.code === "22023") return apiError("Profiländerung ist ungültig.", 400);
+    return apiError(transactionError.message, 500);
+  }
+
+  const result = transactionData as ProfileAdminTransactionResult | null;
+  if (!result?.profile) return apiError("Profil konnte nicht gespeichert werden.", 500);
+
+  const profile = mapProfile(result.profile);
+  const notificationPreferences: NotificationPreference[] = (result.notification_preferences || []).map(mapNotificationPreference);
+
   return NextResponse.json({
-    profile: {
-      id: updated.id,
-      name: updated.name,
-      role: updated.role,
-      platformRole: updated.platform_role,
-      orgRole: updated.org_role || "",
-      githubLogin: updated.github_login || "",
-      deputyFor: updated.deputy_for || "",
-      deputyActiveFrom: updated.deputy_active_from || "",
-      deputyActiveUntil: updated.deputy_active_until || "",
-      focus: updated.focus || "",
-      weeklyCapacity: updated.weekly_capacity,
-      color: updated.profile_color || "#64748b",
-      googleChatUserId: updated.google_chat_user_id || "",
-      googleChatDmSpace: updated.google_chat_dm_space || "",
-      notificationsEnabled: updated.notifications_enabled !== false,
-    },
+    profile,
+    notificationPreferences,
   });
 }

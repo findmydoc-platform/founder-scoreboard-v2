@@ -37,6 +37,8 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const ownCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
+  const migration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
+  const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(route, /requireTeamMember/);
   assert.match(route, /blockedSelfServiceFields/);
@@ -47,12 +49,39 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
     assert.match(route, new RegExp(`payload\\.${allowed}`));
   }
   assert.doesNotMatch(route, /googleCalendarEmail|googleCalendarSyncEnabled|googleCalendarLastSyncedAt/);
-  assert.match(route, /\.eq\("id", profileId\)/);
-  assert.match(route, /profile_ui_preferences/);
-  assert.match(route, /notification_preferences/);
+  assert.match(route, /update_profile_settings_transaction/);
+  assert.doesNotMatch(route, /\.from\("profiles"\)[\s\S]*\.update/);
+  assert.doesNotMatch(route, /\.from\("profile_ui_preferences"\)/);
+  assert.doesNotMatch(route, /\.from\("notification_preferences"\)/);
   assert.doesNotMatch(route, /context\.params/);
   assert.match(apiClient, /updateOwnProfileSettingsRequest/);
   assert.match(ownCommands, /updateOwnProfileSettingsRequest/);
+  assert.match(migration, /update_profile_settings_transaction/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /grant execute on function public\.update_profile_settings_transaction[\s\S]*to service_role/);
+  assert.match(verifySupabase, /verifyProfileWriteRpcs/);
+});
+
+test("CEO transfer and managed notification preferences use one transaction", async () => {
+  const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
+  const commands = await readFile("src/features/team/hooks/use-profile-settings-commands.ts", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const migration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
+
+  assert.match(route, /requireCEO/);
+  assert.match(route, /update_profile_admin_transaction/);
+  assert.match(route, /p_notification_events: notificationEvents/);
+  assert.doesNotMatch(route, /demoteError|\.neq\("id", id\)/);
+  assert.doesNotMatch(route, /await supabase\.from\("audit_log"\)\.insert/);
+  assert.match(commands, /notificationEvents: Object\.fromEntries\(changedNotificationEvents\)/);
+  assert.doesNotMatch(commands, /updateNotificationPreferenceRequest/);
+  assert.doesNotMatch(apiClient, /updateNotificationPreferenceRequest/);
+  assert.match(migration, /lock table public\.profiles in share row exclusive mode/);
+  assert.match(migration, /exactly one CEO is required/);
+  assert.match(migration, /update_profile_admin_transaction/);
+  assert.match(migration, /upsert_profile_notification_preferences/);
+  assert.match(migration, /insert into public\.audit_log/);
+  assert.doesNotMatch(migration, /drop table|truncate|delete from|drop column/i);
 });
 
 test("profile preferences and feature tour acknowledgements are additive data slices", async () => {

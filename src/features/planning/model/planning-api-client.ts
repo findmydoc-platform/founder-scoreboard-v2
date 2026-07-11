@@ -68,14 +68,7 @@ export function updateSprintCommitmentRequest(apiClient: BrowserApiClient, commi
 }
 
 export function updateProfileRequest(apiClient: BrowserApiClient, profileId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; profile?: Profile }>(`/api/profiles/${profileId}`, {
-    method: "PATCH",
-    json: payload,
-  });
-}
-
-export function updateNotificationPreferenceRequest(apiClient: BrowserApiClient, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; preference?: NotificationPreference }>("/api/notification-preferences", {
+  return apiClient.requestJson<{ error?: string; profile?: Profile; notificationPreferences?: NotificationPreference[] }>(`/api/profiles/${profileId}`, {
     method: "PATCH",
     json: payload,
   });
