@@ -5,7 +5,7 @@ import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@
 import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-data-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import type { PlanningFilterPreferences, ProfileUiPreference, ViewMode } from "@/lib/types";
+import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
 
 type UiPreferencesPayload = Partial<{
   defaultWorkspace: string;
@@ -32,6 +32,12 @@ type ProfileSettingsPayload = Partial<{
   notificationEvents: Record<string, boolean>;
   uiPreferences: UiPreferencesPayload;
 }>;
+
+type ProfileSettingsTransactionResult = {
+  profile?: DbProfile;
+  ui_preference?: DbProfileUiPreference | null;
+  notification_preferences?: DbNotificationPreference[];
+};
 
 const blockedSelfServiceFields = new Set([
   "profileId",
@@ -106,10 +112,6 @@ function cleanDefaultWorkspace(value: unknown) {
   return typeof value === "string" && allowedWorkspaces.has(value) ? value : "planning";
 }
 
-function databaseStatus(error: { code?: string; message?: string } | null) {
-  return error?.code === "42P01" ? 503 : 500;
-}
-
 export async function PATCH(request: NextRequest) {
   const context = await requireJsonApiContext<ProfileSettingsPayload>(request, requireTeamMember, {});
   if (!context.ok) return context.response;
@@ -133,74 +135,60 @@ export async function PATCH(request: NextRequest) {
     if (value === undefined) return apiError("Benachrichtigungsstatus ist ungültig.", 400);
     profileUpdate.notifications_enabled = value;
   }
-  let profile: ReturnType<typeof mapProfile> | undefined;
-  if (Object.keys(profileUpdate).length) {
-    const { data: profileRow, error } = await supabase
-      .from("profiles")
-      .update(profileUpdate)
-      .eq("id", profileId)
-      .select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled")
-      .single<DbProfile>();
-    if (error) return apiError(error.message, 500);
-    profile = mapProfile(profileRow);
-  }
-
-  let uiPreference: ProfileUiPreference | undefined;
-  if (payload.uiPreferences && typeof payload.uiPreferences === "object") {
+  let uiPreferenceUpdate: Record<string, unknown> | null = null;
+  if (payload.uiPreferences !== undefined) {
+    if (!payload.uiPreferences || typeof payload.uiPreferences !== "object") {
+      return apiError("UI-Einstellungen sind ungültig.", 400);
+    }
     const uiPayload = payload.uiPreferences;
     const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
       : "board";
-    const { data: uiPreferenceRow, error } = await supabase
-      .from("profile_ui_preferences")
-      .upsert({
-        profile_id: profileId,
-        default_workspace: defaultWorkspace,
-        default_task_view: defaultTaskView,
-        planning_filters: cleanFilters(uiPayload.planningFilters),
-        expanded_package_ids: cleanPackageIds(uiPayload.expandedPackageIds),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "profile_id" })
-      .select("profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,created_at,updated_at")
-      .single<DbProfileUiPreference>();
-    if (error) return apiError(error.message, databaseStatus(error));
-    uiPreference = mapProfileUiPreference(uiPreferenceRow);
+    uiPreferenceUpdate = {
+      default_workspace: defaultWorkspace,
+      default_task_view: defaultTaskView,
+      planning_filters: cleanFilters(uiPayload.planningFilters),
+      expanded_package_ids: cleanPackageIds(uiPayload.expandedPackageIds),
+    };
   }
 
-  const savedPreferences = [];
-  if (payload.notificationEvents && typeof payload.notificationEvents === "object") {
+  const notificationEvents: Record<string, boolean> = {};
+  if (payload.notificationEvents !== undefined) {
+    if (!payload.notificationEvents || typeof payload.notificationEvents !== "object") {
+      return apiError("Benachrichtigungseinstellungen sind ungültig.", 400);
+    }
     for (const [eventType, enabled] of Object.entries(payload.notificationEvents)) {
       if (!allowedEventTypes.has(eventType)) return apiError("Unbekannter Benachrichtigungstyp.", 400);
       if (typeof enabled !== "boolean") return apiError("Benachrichtigungsstatus ist erforderlich.", 400);
-      const { data: preferenceRow, error } = await supabase
-        .from("notification_preferences")
-        .upsert({
-          profile_id: profileId,
-          channel: "google_chat",
-          event_type: eventType,
-          enabled,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "profile_id,channel,event_type" })
-        .select("id,profile_id,channel,event_type,enabled")
-        .single<DbNotificationPreference>();
-      if (error) return apiError(error.message, databaseStatus(error));
-      savedPreferences.push(mapNotificationPreference(preferenceRow));
+      notificationEvents[eventType] = enabled;
     }
   }
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: profileId,
-    action: "profile.self_service.update",
-    entity_type: "profile",
-    entity_id: profileId,
-    after_data: {
-      profile: profileUpdate,
-      uiPreference: uiPreference || null,
-      notificationEvents: payload.notificationEvents || null,
-    },
-    ...auditRequestMetadata(request),
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("update_profile_settings_transaction", {
+    p_profile_id: profileId,
+    p_profile_patch: profileUpdate,
+    p_ui_preferences: uiPreferenceUpdate,
+    p_notification_events: notificationEvents,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent,
   });
+
+  if (transactionError) {
+    if (transactionError.code === "P0002") return apiError("Profil wurde nicht gefunden.", 404);
+    if (transactionError.code === "22023" || transactionError.code === "23514") {
+      return apiError("Profileinstellungen sind ungültig.", 400);
+    }
+    return apiError(transactionError.message, transactionError.code === "42P01" ? 503 : 500);
+  }
+
+  const result = transactionData as ProfileSettingsTransactionResult | null;
+  if (!result?.profile) return apiError("Profil konnte nicht gespeichert werden.", 500);
+
+  const profile = mapProfile(result.profile);
+  const uiPreference = result.ui_preference ? mapProfileUiPreference(result.ui_preference) : undefined;
+  const savedPreferences = (result.notification_preferences || []).map(mapNotificationPreference);
 
   return NextResponse.json({
     profile,

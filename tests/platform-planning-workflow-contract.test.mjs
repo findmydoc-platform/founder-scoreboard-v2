@@ -721,6 +721,7 @@ test("decision log routes and data slices are removed by cleanup contract", asyn
 test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
+  const transactionMigration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const ui = await readPlanningSurface();
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
@@ -731,8 +732,10 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
 
   assert.match(route, /requireCEO/);
   assert.match(route, /platformRoles/);
-  assert.match(route, /Mindestens ein CEO muss gesetzt bleiben/);
-  assert.match(route, /profile.update/);
+  assert.match(route, /Genau ein CEO muss gesetzt bleiben/);
+  assert.match(route, /update_profile_admin_transaction/);
+  assert.match(transactionMigration, /'profile\.update'/);
+  assert.match(transactionMigration, /exactly one CEO is required/);
   assert.match(route, /profile_color/);
   assert.match(route, /google_chat_user_id/);
   assert.match(route, /google_chat_dm_space/);

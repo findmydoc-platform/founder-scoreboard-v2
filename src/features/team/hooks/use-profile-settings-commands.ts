@@ -68,15 +68,11 @@ export function useProfileSettingsCommands({
         googleChatUserId: patch.googleChatUserId,
         googleChatDmSpace: patch.googleChatDmSpace,
         notificationsEnabled: patch.notificationsEnabled,
+        notificationEvents: Object.fromEntries(changedNotificationEvents),
       });
       if (!profileResponse.ok) throw new Error(profileBody?.error || "Profil konnte nicht gespeichert werden.");
 
-      const savedPreferences: NotificationPreference[] = [];
-      for (const [eventType, enabled] of changedNotificationEvents) {
-        const { response: preferenceResponse, body: preferenceBody } = await planningApi.updateNotificationPreferenceRequest(apiClient, { profileId: profile.id, eventType, enabled });
-        if (!preferenceResponse.ok || !preferenceBody?.preference) throw new Error(preferenceBody?.error || "Benachrichtigungseinstellung konnte nicht gespeichert werden.");
-        savedPreferences.push(preferenceBody.preference);
-      }
+      const savedPreferences = profileBody?.notificationPreferences || [];
 
       setData((current) => ({
         ...current,

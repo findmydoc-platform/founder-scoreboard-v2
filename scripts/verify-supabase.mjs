@@ -71,6 +71,45 @@ async function verifyGitHubSyncLockRpc() {
   return { ok: true, error: "" };
 }
 
+async function verifyProfileWriteRpcs() {
+  const missingProfileId = `verify-missing-profile-${Date.now()}`;
+  const checks = [
+    {
+      name: "update_profile_admin_transaction",
+      params: {
+        p_profile_id: missingProfileId,
+        p_actor_profile_id: missingProfileId,
+        p_profile_patch: {},
+        p_notification_events: {},
+        p_request_ip: null,
+        p_user_agent: null,
+      },
+    },
+    {
+      name: "update_profile_settings_transaction",
+      params: {
+        p_profile_id: missingProfileId,
+        p_profile_patch: {},
+        p_ui_preferences: null,
+        p_notification_events: {},
+        p_request_ip: null,
+        p_user_agent: null,
+      },
+    },
+  ];
+
+  const results = await Promise.all(checks.map(async (check) => {
+    const { error } = await supabase.rpc(check.name, check.params);
+    return {
+      name: check.name,
+      ok: error?.code === "P0002",
+      error: error?.code === "P0002" ? "" : error?.message || "RPC unexpectedly accepted a missing profile",
+    };
+  }));
+
+  return results;
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -113,6 +152,7 @@ const result = {
   milestones: await count("milestones"),
   schema: await Promise.all(schemaChecks.map(checkSchema)),
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
+  profileWriteRpcs: await verifyProfileWriteRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -125,5 +165,11 @@ if (missingSchema.length) {
 
 if (!result.githubSyncLockRpc.ok) {
   console.error(`GitHub sync lock RPC check failed: ${result.githubSyncLockRpc.error}`);
+  process.exit(1);
+}
+
+const missingProfileWriteRpc = result.profileWriteRpcs.find((check) => !check.ok);
+if (missingProfileWriteRpc) {
+  console.error(`Profile write RPC check failed for ${missingProfileWriteRpc.name}: ${missingProfileWriteRpc.error}`);
   process.exit(1);
 }
