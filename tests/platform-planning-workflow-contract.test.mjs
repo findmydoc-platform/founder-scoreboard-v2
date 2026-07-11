@@ -688,6 +688,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const sprintPlanningUi = await readFile("src/features/sprint/molecules/sprint-planning-section.tsx", "utf8");
+  const batchMigration = await readFile("supabase/0048_transactional_planning_batches.sql", "utf8");
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -696,6 +697,12 @@ test("sprint configuration is operational-lead only and audited", async () => {
   assert.match(route, /Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden/);
   assert.match(route, /sprint.update/);
   assert.match(planRoute, /protectedSprintIds/);
+  assert.match(planRoute, /create_sprint_plan_transaction/);
+  assert.match(planRoute, /expected_updated_at/);
+  assert.doesNotMatch(planRoute, /from\("sprints"\)\.upsert/);
+  assert.match(batchMigration, /create or replace function public\.create_sprint_plan_transaction/);
+  assert.match(batchMigration, /insert into public\.meetings/);
+  assert.match(batchMigration, /sprint\.plan_create/);
   assert.match(sprintUi, /findCurrentSprint/);
   assert.match(sprintUi, /Aktueller Sprint/);
   assert.match(sprintUi, /Zeitraum geschützt/);

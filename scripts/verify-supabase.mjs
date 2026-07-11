@@ -209,6 +209,32 @@ async function verifyTaskCreationAndGitHubSyncRpcs() {
   }));
 }
 
+async function verifyPlanningBatchRpcs() {
+  const backlog = await supabase.rpc("update_backlog_order_transaction", {
+    p_updates: [],
+    p_actor_profile_id: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  });
+  const sprintPlan = await supabase.rpc("create_sprint_plan_transaction", {
+    p_sprints: [],
+    p_meetings: [],
+    p_audit_data: {},
+    p_actor_profile_id: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  });
+
+  return [
+    { name: "update_backlog_order_transaction", result: backlog },
+    { name: "create_sprint_plan_transaction", result: sprintPlan },
+  ].map(({ name, result: rpcResult }) => ({
+    name,
+    ok: rpcResult.error?.code === "22023",
+    error: rpcResult.error?.code === "22023" ? "" : rpcResult.error?.message || "RPC did not reject an empty batch",
+  }));
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -256,6 +282,7 @@ const result = {
   taskUpdateRpc: await verifyTaskUpdateRpc(),
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
+  planningBatchRpcs: await verifyPlanningBatchRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -291,5 +318,11 @@ if (missingTaskDeletionRpc) {
 const missingTaskCreationOrSyncRpc = result.taskCreationAndGitHubSyncRpcs.find((check) => !check.ok);
 if (missingTaskCreationOrSyncRpc) {
   console.error(`Task creation or GitHub sync RPC check failed for ${missingTaskCreationOrSyncRpc.name}: ${missingTaskCreationOrSyncRpc.error}`);
+  process.exit(1);
+}
+
+const missingPlanningBatchRpc = result.planningBatchRpcs.find((check) => !check.ok);
+if (missingPlanningBatchRpc) {
+  console.error(`Planning batch RPC check failed for ${missingPlanningBatchRpc.name}: ${missingPlanningBatchRpc.error}`);
   process.exit(1);
 }

@@ -12,11 +12,7 @@ type SprintRow = {
   end_date: string | null;
   review_due_at: string | null;
   score_locked: boolean;
-};
-
-type ExistingMeetingRow = {
-  sprint_id: string;
-  title: string;
+  updated_at: string;
 };
 
 type CreateSprintPlanPayload = {
@@ -58,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   const { data: existing, error: existingError } = await supabase
     .from("sprints")
-    .select("id,name,status,start_date,end_date,review_due_at,score_locked")
+    .select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at")
     .eq("project_id", projectId)
     .order("start_date", { ascending: true });
 
@@ -99,6 +95,7 @@ export async function POST(request: NextRequest) {
       end_date: endDate,
       review_due_at: `${addDaysIso(endDate, -2)}T12:00:00.000Z`,
       score_locked: existingSprint?.score_locked || false,
+      expected_updated_at: existingSprint?.updated_at || null,
     };
     const changed = existingSprint && (
       existingSprint.name !== row.name
@@ -115,65 +112,54 @@ export async function POST(request: NextRequest) {
 
   if (!upserts.length) return NextResponse.json({ ok: true, sprints: [] });
 
-  const { data: created, error: insertError } = await supabase
-    .from("sprints")
-    .upsert(upserts, { onConflict: "id" })
-    .select("id,name,status,start_date,end_date,review_due_at,score_locked");
+  const weeklyRows = upserts.flatMap((sprint) => {
+    const firstTitle = `${sprint.name} Weekly 1`;
+    const secondTitle = `${sprint.name} Weekly 2`;
+    return [
+      {
+        sprint_id: sprint.id,
+        title: firstTitle,
+        meeting_at: `${addDaysIso(sprint.start_date || new Date().toISOString().slice(0, 10), 6)}T18:00:00.000Z`,
+        duration_minutes: 60,
+        status: "planned",
+        agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
+      },
+      {
+        sprint_id: sprint.id,
+        title: secondTitle,
+        meeting_at: `${sprint.end_date || sprint.start_date || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`,
+        duration_minutes: 60,
+        status: "planned",
+        agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
+      },
+    ];
+  });
 
-  if (insertError) return apiError(insertError.message, 500);
-
-  const createdRows = ((created || []) as SprintRow[]);
-  const sprintIds = createdRows.map((sprint) => sprint.id);
-  if (sprintIds.length) {
-    const { data: existingMeetings, error: existingMeetingError } = await supabase
-      .from("meetings")
-      .select("sprint_id,title")
-      .in("sprint_id", sprintIds);
-
-    if (existingMeetingError) return apiError(existingMeetingError.message, 500);
-
-    const existingMeetingKeys = new Set(
-      ((existingMeetings || []) as ExistingMeetingRow[]).map((meeting) =>
-        `${meeting.sprint_id}:${meeting.title.toLowerCase()}`
-      ),
-    );
-    const weeklyRows = createdRows.flatMap((sprint) => {
-      const firstTitle = `${sprint.name} Weekly 1`;
-      const secondTitle = `${sprint.name} Weekly 2`;
-      return [
-        {
-          sprint_id: sprint.id,
-          title: firstTitle,
-          meeting_at: `${addDaysIso(sprint.start_date || new Date().toISOString().slice(0, 10), 6)}T18:00:00.000Z`,
-          duration_minutes: 60,
-          status: "planned",
-          agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
-        },
-        {
-          sprint_id: sprint.id,
-          title: secondTitle,
-          meeting_at: `${sprint.end_date || sprint.start_date || new Date().toISOString().slice(0, 10)}T18:00:00.000Z`,
-          duration_minutes: 60,
-          status: "planned",
-          agenda: "Weekly Update, Blocker, Review-Stand und nächste Schritte.",
-        },
-      ].filter((meeting) => !existingMeetingKeys.has(`${meeting.sprint_id}:${meeting.title.toLowerCase()}`));
-    });
-
-    if (weeklyRows.length) {
-      const { error: meetingError } = await supabase.from("meetings").insert(weeklyRows);
-      if (meetingError) return apiError(meetingError.message, 500);
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("create_sprint_plan_transaction", {
+    p_sprints: upserts,
+    p_meetings: weeklyRows,
+    p_audit_data: {
+      firstSprintNumber,
+      anchorStartDate,
+      rhythmWeeks,
+      horizonWeeks,
+      targetSprintNumber,
+      protectedSprintIds: Array.from(protectedSprintIds),
+    },
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
+  });
+  if (transactionError) {
+    if (transactionError.code === "P0001") {
+      return apiError("Sprint-Plan wurde parallel geändert oder enthält inzwischen geschützte Sprints. Bitte neu laden.", 409);
     }
+    if (transactionError.code === "22023") return apiError("Sprint-Plan ist ungültig.", 400);
+    return apiError(transactionError.message, 500);
   }
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "sprint.plan_create",
-    entity_type: "sprint",
-    entity_id: "bulk",
-    after_data: { firstSprintNumber, anchorStartDate, rhythmWeeks, horizonWeeks, targetSprintNumber, upserted: upserts.length, protectedSprintIds: Array.from(protectedSprintIds) },
-    ...auditRequestMetadata(request),
-  });
+  const createdRows = (transactionData || []) as SprintRow[];
 
   return NextResponse.json({ ok: true, sprints: createdRows.map(mapSprint) });
 }

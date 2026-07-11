@@ -231,6 +231,7 @@ export function usePlanningAppController({
     openReviewSheet,
     openTaskPanel,
     protectedDataLoaded,
+    refreshPlanningData,
     releaseSidebarFocus,
     apiClient,
     reviewOwnerFilter,

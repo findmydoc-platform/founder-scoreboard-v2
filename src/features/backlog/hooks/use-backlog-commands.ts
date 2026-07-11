@@ -11,6 +11,7 @@ type UseBacklogCommandsOptions = {
   canManageBacklog: boolean;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   orderedTasks: Task[];
+  refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
   source: "seed" | "supabase";
 };
@@ -20,6 +21,7 @@ export function useBacklogCommands({
   canManageBacklog,
   onUpdateTask,
   orderedTasks,
+  refreshPlanningData,
   setData,
   source,
 }: UseBacklogCommandsOptions) {
@@ -28,6 +30,7 @@ export function useBacklogCommands({
     apiClient,
     canManageBacklog,
     orderedTasks,
+    refreshPlanningData,
     setData,
     setMessage,
     source,
