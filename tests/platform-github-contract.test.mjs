@@ -70,6 +70,9 @@ test("github sync route is team-scoped and locked per github resource", async ()
 
 test("operational leads can delete test tasks and close linked github issues", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
+  const taskDeleteCommand = await readFile("src/features/tasks/hooks/use-task-delete-command.ts", "utf8");
+  const deletionMigration = await readFile("supabase/0046_transactional_task_deletion.sql", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
@@ -77,6 +80,20 @@ test("operational leads can delete test tasks and close linked github issues", a
   assert.match(taskRoute, /Nur CEO oder Deputy können Aufgaben löschen/);
   assert.match(taskRoute, /archiveGitHubIssue/);
   assert.match(taskRoute, /githubClosed/);
+  assert.match(taskRoute, /prepare_task_deletion_transaction/);
+  assert.match(taskRoute, /finalize_task_deletion_transaction/);
+  assert.match(taskRoute, /cancel_task_deletion_transaction/);
+  assert.match(taskRoute, /prepared\.tasks \|\| \[prepared\.task\]/);
+  assert.match(taskRoute, /for \(const issueNumber of issueNumbers\)/);
+  assert.doesNotMatch(taskRoute, /from\("tasks"\)\.delete\(\)/);
+  assert.match(taskApiClient, /json: \{ expectedUpdatedAt \}/);
+  assert.match(taskDeleteCommand, /removeTaskTreeFromPlanningData/);
+  assert.match(taskDeleteCommand, /restoreTaskTreeToPlanningData/);
+  assert.match(deletionMigration, /create table if not exists public\.task_deletion_operations/);
+  assert.match(deletionMigration, /delete from public\.tasks where id = v_operation\.task_id/);
+  assert.match(deletionMigration, /insert into public\.audit_log/);
+  assert.match(deletionMigration, /status = 'completed'/);
+  assert.match(deletionMigration, /revoke all on function public\.prepare_task_deletion_transaction/);
   assert.match(github, /export async function archiveGitHubIssue/);
   assert.match(github, /state_reason: "not_planned"/);
   assert.match(github, /test\/deleted/);
