@@ -329,6 +329,52 @@ async function verifyScoreObjectionRpc() {
   };
 }
 
+async function verifyTeamTaskIntakeRpcs() {
+  const tokenParams = {
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_label: "Verification",
+    p_token_hash: "a".repeat(64),
+    p_token_hint: "…verify",
+    p_expires_at: new Date(Date.now() + 60_000).toISOString(),
+  };
+  const batchParams = {
+    p_token_id: randomUUID(),
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_idempotency_key: randomUUID(),
+    p_request_hash: "b".repeat(64),
+    p_items: [{ taskInsert: {} }],
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [token, anonToken, batch, anonBatch] = await Promise.all([
+    supabase.rpc("create_team_task_intake_token", tokenParams),
+    anonSupabase.rpc("create_team_task_intake_token", tokenParams),
+    supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
+    anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
+  ]);
+
+  return [
+    {
+      name: "create_team_task_intake_token",
+      ok: token.error?.code === "P0002" && Boolean(anonToken.error),
+      error: token.error?.code !== "P0002"
+        ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
+        : !anonToken.error
+          ? "token RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+    {
+      name: "create_team_task_intake_batch_transaction",
+      ok: batch.error?.code === "P0004" && Boolean(anonBatch.error),
+      error: batch.error?.code !== "P0004"
+        ? batch.error?.message || "batch RPC unexpectedly accepted an inactive token"
+        : !anonBatch.error
+          ? "batch RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+  ];
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -380,6 +426,7 @@ const result = {
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
   scoreObjectionRpc: await verifyScoreObjectionRpc(),
+  teamTaskIntakeRpcs: await verifyTeamTaskIntakeRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -436,5 +483,11 @@ if (!result.taskReviewRpc.ok) {
 
 if (!result.scoreObjectionRpc.ok) {
   console.error(`Score objection RPC check failed: ${result.scoreObjectionRpc.error}`);
+  process.exit(1);
+}
+
+const missingTeamTaskIntakeRpc = result.teamTaskIntakeRpcs.find((check) => !check.ok);
+if (missingTeamTaskIntakeRpc) {
+  console.error(`Team Task Intake RPC check failed for ${missingTeamTaskIntakeRpc.name}: ${missingTeamTaskIntakeRpc.error}`);
   process.exit(1);
 }

@@ -170,5 +170,17 @@
     "table": "founder_events",
     "select": "id,title,category,starts_at,ends_at,audience_mode,participant_profile_ids,reminder_days_before,reminder_generated_at,status",
     "health": false
+  },
+  {
+    "name": "team_task_intake_tokens",
+    "table": "team_task_intake_tokens",
+    "select": "id,profile_id,label,token_hint,scopes,expires_at,created_at,last_used_at,revoked_at",
+    "health": false
+  },
+  {
+    "name": "team_task_intake_batches",
+    "table": "team_task_intake_batches",
+    "select": "id,token_id,profile_id,idempotency_key,request_hash,task_ids,created_at",
+    "health": false
   }
 ]

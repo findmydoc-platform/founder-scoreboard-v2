@@ -1,0 +1,140 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FounderOps Team Task Intake API",
+    "version": "1.0.0",
+    "description": "Personal-token API for task-centered context and guarded proposal or sub-issue intake."
+  },
+  "servers": [
+    { "url": "https://founder-ops.findmydoc.eu" }
+  ],
+  "security": [
+    { "bearerAuth": [] }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque"
+      }
+    },
+    "schemas": {
+      "TeamTaskIntakeInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string", "minLength": 3, "maxLength": 240 },
+          "description": { "type": "string", "maxLength": 4000 },
+          "problemStatement": { "type": "string", "maxLength": 4000 },
+          "intendedOutcome": { "type": "string", "maxLength": 4000 },
+          "scopeConstraints": { "type": "string", "maxLength": 4000 },
+          "acceptanceCriteria": {
+            "oneOf": [
+              { "type": "string", "maxLength": 6000 },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
+          "evidenceRequired": { "type": "string", "maxLength": 4000 },
+          "definitionOfDone": { "type": "string", "maxLength": 4000 },
+          "taskType": { "type": "string", "enum": ["proposal", "sub_issue"], "default": "proposal" },
+          "parentTaskId": { "type": "string", "maxLength": 120 },
+          "packageId": { "type": "string", "maxLength": 120 },
+          "milestoneId": { "type": "string", "maxLength": 120 },
+          "assignee": { "type": "string", "maxLength": 120 },
+          "owner": { "type": "string", "maxLength": 120 },
+          "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
+          "status": { "type": "string" },
+          "workstream": { "type": "string", "maxLength": 120 },
+          "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" },
+          "deadline": { "type": "string", "format": "date" },
+          "hours": { "type": "number", "minimum": 0, "maximum": 200 }
+        }
+      },
+      "TeamTaskIntakePayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tasks"],
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 30,
+            "items": { "$ref": "#/components/schemas/TeamTaskIntakeInput" }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean", "const": false },
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/team/task-context": {
+      "get": {
+        "operationId": "getTeamTaskContext",
+        "summary": "Read non-sensitive task-centered team context",
+        "responses": {
+          "200": { "description": "Task-centered team context" },
+          "401": { "description": "Missing, invalid, revoked, or expired token" },
+          "403": { "description": "Token lacks the required scope or profile role" }
+        }
+      }
+    },
+    "/api/team/task-intake/preview": {
+      "post": {
+        "operationId": "previewTeamTaskIntake",
+        "summary": "Validate and normalize a Team Task Intake batch without writes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TeamTaskIntakePayload" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Normalized preview with per-task errors and warnings" },
+          "400": { "description": "Invalid or empty batch" },
+          "401": { "description": "Missing, invalid, revoked, or expired token" },
+          "403": { "description": "Token lacks write scope" }
+        }
+      }
+    },
+    "/api/team/task-intake/commit": {
+      "post": {
+        "operationId": "commitTeamTaskIntake",
+        "summary": "Atomically and idempotently create a validated Team Task Intake batch",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TeamTaskIntakePayload" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created or replayed batch" },
+          "400": { "description": "Invalid batch or idempotency key" },
+          "401": { "description": "Missing, invalid, revoked, or expired token" },
+          "403": { "description": "Token lacks write scope" },
+          "409": { "description": "Idempotency key was reused with different data" }
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@ import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { appWorkspaceFromValue, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 
-export type ProfileSettingsSectionId = "profile" | "notifications" | "board";
+export type ProfileSettingsSectionId = "profile" | "notifications" | "board" | "api";
 
 export type ProfileSettingsDraft = {
   focus: string;

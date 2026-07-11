@@ -197,6 +197,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
       )}
       {workspace === "profile" && (
         <ProfileSettingsOverview
+          apiClient={apiClient}
           data={data}
           currentProfile={currentProfile}
           expandedPackages={expandedPackages}

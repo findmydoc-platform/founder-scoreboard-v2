@@ -6,6 +6,7 @@ import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-m
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
+import { ProfileTeamIntakeTokens } from "@/features/profile/organisms/profile-team-intake-tokens";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
 import {
   buildInitialDraft,
@@ -16,11 +17,13 @@ import {
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { taskStatuses } from "@/lib/status";
 import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type ProfileSettingsOverviewProps = {
+  apiClient: BrowserApiClient;
   data: PlanningData;
   currentProfile: Profile | null;
   expandedPackages: Record<string, boolean>;
@@ -55,6 +58,7 @@ export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
 }
 
 function ProfileSettingsForm({
+  apiClient,
   data,
   currentProfile,
   expandedPackages,
@@ -72,6 +76,8 @@ function ProfileSettingsForm({
   const [activeSection, setActiveSection] = useState<ProfileSettingsSectionId>("profile");
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const operationalProfile = currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy" || currentProfile.platformRole === "founder";
+  const visibleSections = profileSettingsSections.filter((section) => section.id !== "api" || operationalProfile);
   const draftSnapshot = serializeDraft(draft);
   const isDirty = draftSnapshot !== savedSnapshot;
 
@@ -154,7 +160,7 @@ function ProfileSettingsForm({
   return (
     <div className="min-w-0 pb-24">
       <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden" aria-label="Profilbereiche">
-        {profileSettingsSections.map((section) => (
+        {visibleSections.map((section) => (
           <ProfileSettingsNavButton
             key={section.id}
             active={activeSection === section.id}
@@ -168,7 +174,7 @@ function ProfileSettingsForm({
       <div className="grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="hidden min-w-0 lg:block">
           <nav className="sticky top-4 rounded-lg border border-slate-200 bg-white p-2 shadow-sm" aria-label="Profileinstellungen">
-            {profileSettingsSections.map((section) => (
+            {visibleSections.map((section) => (
               <ProfileSettingsNavButton
                 key={section.id}
                 active={activeSection === section.id}
@@ -215,6 +221,9 @@ function ProfileSettingsForm({
               onPackageToggle={toggleExpandedPackage}
               onPlanningFiltersChange={updatePlanningFilters}
             />
+          )}
+          {activeSection === "api" && operationalProfile && (
+            <ProfileTeamIntakeTokens apiClient={apiClient} source={source} />
           )}
         </div>
       </div>
