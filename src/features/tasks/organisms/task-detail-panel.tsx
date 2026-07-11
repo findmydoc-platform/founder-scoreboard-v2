@@ -31,6 +31,8 @@ export function TaskDetailPanel({
   canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
+  allowedRelationTypes,
+  canRemoveRelation,
   canChangeTaskStatus = canManageTaskMeta,
   allTasks,
   relations,
@@ -67,6 +69,8 @@ export function TaskDetailPanel({
   canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
+  allowedRelationTypes: TaskRelationType[];
+  canRemoveRelation: (relation: TaskRelation) => boolean;
   canChangeTaskStatus?: boolean;
   allTasks: Task[];
   relations: TaskRelation[];
@@ -115,7 +119,7 @@ export function TaskDetailPanel({
               relationshipGroups={relationshipGroups}
               relationDraft={relationDraft}
               relationTargetOptions={relationTargetOptions}
-              canManageTaskMeta={canManageTaskMeta}
+              allowedRelationTypes={allowedRelationTypes}
               pending={pending}
               onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
               onAddRelation={(draft) => {
@@ -123,6 +127,7 @@ export function TaskDetailPanel({
                 setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
               }}
               onRemoveRelation={onRemoveRelation}
+              canRemoveRelation={canRemoveRelation}
             />
             <TaskDetailPanelSubIssuesSection subIssues={subIssues} onCreateSubIssue={onCreateSubIssue} />
             {(detailDataLoading || detailDataError) && (

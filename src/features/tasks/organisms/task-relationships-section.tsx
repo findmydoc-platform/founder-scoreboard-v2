@@ -3,7 +3,7 @@
 import { RelationshipList } from "@/features/tasks/molecules/relationship-list";
 import { TaskRelationshipForm, type TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import { relationMatchesDraft } from "@/lib/relationship-view-model";
-import type { Task, TaskRelation } from "@/lib/types";
+import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -13,9 +13,10 @@ type Props = {
   dependsOn: string;
   relationDraft: TaskRelationshipDraft;
   relationTargetOptions: Array<{ value: string; label: string }>;
-  canManageTaskMeta: boolean;
+  allowedRelationTypes: TaskRelationType[];
   pending: boolean;
   onRemoveRelation: (relation: TaskRelation) => void;
+  canRemoveRelation: (relation: TaskRelation) => boolean;
   onDependsOnChange: (dependsOn: string) => void;
   onDependsOnSave: () => void;
   onRelationDraftChange: (patch: Partial<TaskRelationshipDraft>) => void;
@@ -30,9 +31,10 @@ export function TaskRelationshipsSection({
   dependsOn,
   relationDraft,
   relationTargetOptions,
-  canManageTaskMeta,
+  allowedRelationTypes,
   pending,
   onRemoveRelation,
+  canRemoveRelation,
   onDependsOnChange,
   onDependsOnSave,
   onRelationDraftChange,
@@ -45,9 +47,9 @@ export function TaskRelationshipsSection({
     <div>
       <h3 className="text-sm font-semibold text-slate-950">Abhängigkeiten</h3>
       <div className="mt-2 grid gap-2">
-        <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
-        <RelationshipList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
-        <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="Keine losen Verknüpfungen." canManage={canManageTaskMeta} onRemove={onRemoveRelation} />
+        <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
+        <RelationshipList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
+        <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="Keine losen Verknüpfungen." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
       </div>
       {dependsOn && (
         <textarea
@@ -58,10 +60,11 @@ export function TaskRelationshipsSection({
           placeholder="Legacy-Notiz"
         />
       )}
-      {canManageTaskMeta && (
+      {allowedRelationTypes.length > 0 && (
         <TaskRelationshipForm
           relationDraft={relationDraft}
           relationTargetOptions={relationTargetOptions}
+          allowedRelationTypes={allowedRelationTypes}
           duplicateRelation={duplicateRelation}
           pending={pending}
           className="mt-3 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3"

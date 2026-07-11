@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
-import type { TaskRelationType } from "@/lib/types";
+import { requireFounder } from "@/lib/authz";
+import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
+import type { AuthenticatedProfile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type RelationPayload = {
@@ -19,8 +21,63 @@ function relationActionLabel(type: TaskRelationType) {
   return "Verknüpft mit";
 }
 
+type RelationshipTaskRow = {
+  id: string;
+  title: string;
+  task_type: Task["taskType"];
+  assignee: string | null;
+  owner: string | null;
+  package_id: string | null;
+};
+
+type RelationshipInitiativeRow = {
+  owner_id: string | null;
+  accountable_profile_id: string | null;
+};
+
+async function loadRelationshipAccess(
+  supabase: SupabaseClient,
+  taskId: string,
+  profile: AuthenticatedProfile | null,
+) {
+  const { data: task, error: taskError } = await supabase
+    .from("tasks")
+    .select("id,title,task_type,assignee,owner,package_id")
+    .eq("id", taskId)
+    .single<RelationshipTaskRow>();
+  if (taskError || !task) return { ok: false as const, response: apiError("Aufgabe wurde nicht gefunden.", 404) };
+
+  let initiative: RelationshipInitiativeRow | null = null;
+  if (task.package_id) {
+    const initiativeResult = await supabase
+      .from("packages")
+      .select("owner_id,accountable_profile_id")
+      .eq("id", task.package_id)
+      .maybeSingle<RelationshipInitiativeRow>();
+    if (initiativeResult.error) return { ok: false as const, response: apiError(initiativeResult.error.message, 500) };
+    initiative = initiativeResult.data;
+  }
+
+  const access = taskRelationshipAccess({
+    task: {
+      id: task.id,
+      taskType: task.task_type,
+      assignee: task.assignee || "",
+      owner: task.owner || "",
+    },
+    initiative: initiative ? {
+      ownerId: initiative.owner_id || "",
+      accountableProfileId: initiative.accountable_profile_id || "",
+    } : undefined,
+    profile,
+    unrestricted: !profile,
+  });
+
+  return { ok: true as const, access, task };
+}
+
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireOperationalLead, {});
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireFounder, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -34,6 +91,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
   if (!relatedTaskId || relatedTaskId === id) {
     return apiError("Bitte eine andere Aufgabe auswählen.", 400);
+  }
+
+  const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
+  if (!accessResult.ok) return accessResult.response;
+  if (!accessResult.access.allowedRelationTypes.includes(relationType)) {
+    return apiError("Nur Owner, Accountable, CEO oder Deputy können diese Blocker-Abhängigkeit verwalten.", 403);
   }
 
   const { data: tasks, error: taskError } = await supabase
@@ -94,7 +157,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireOperationalLead, {});
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireFounder, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -112,6 +175,21 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   if (readError || !relation) return apiError("Abhängigkeit wurde nicht gefunden.", 404);
   if (relation.task_id !== id && relation.related_task_id !== id) {
     return apiError("Abhängigkeit gehört nicht zu dieser Aufgabe.", 403);
+  }
+
+  const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
+  if (!accessResult.ok) return accessResult.response;
+  const mappedRelation: TaskRelation = {
+    id: relation.id,
+    taskId: relation.task_id,
+    relatedTaskId: relation.related_task_id,
+    relationType: relation.relation_type,
+    note: relation.note || "",
+    createdBy: "",
+    createdAt: "",
+  };
+  if (!accessResult.access.canRemoveRelation(mappedRelation)) {
+    return apiError("Nur Owner, Accountable, CEO oder Deputy können diese Blocker-Abhängigkeit verwalten.", 403);
   }
 
   const { error } = await supabase.from("task_relationship_edges").delete().eq("id", relationId);

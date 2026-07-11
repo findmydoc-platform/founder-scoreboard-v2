@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import type { Milestone, Package, PlanningHeaderData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { AuthenticatedProfile, Milestone, Package, PlanningHeaderData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
@@ -32,6 +32,7 @@ type Props = {
   headerData: PlanningHeaderData;
   source: "seed" | "supabase";
   commentImportNotice?: string;
+  currentProfile?: AuthenticatedProfile | null;
 };
 
 export function TaskDetailPage({
@@ -52,6 +53,7 @@ export function TaskDetailPage({
   headerData,
   source,
   commentImportNotice = "",
+  currentProfile = null,
 }: Props) {
   const {
     addComment,
@@ -109,6 +111,7 @@ export function TaskDetailPage({
     milestones,
     source,
     commentImportNotice,
+    initialCurrentProfile: currentProfile,
   });
 
   const {
@@ -124,6 +127,7 @@ export function TaskDetailPage({
     related,
     relationTargetOptions,
     canManageTaskMeta,
+    relationshipAccess,
     canSyncExistingGitHubIssue,
   } = viewModel;
 
@@ -172,9 +176,10 @@ export function TaskDetailPage({
                   dependsOn={meta.dependsOn}
                   relationDraft={relationDraft}
                   relationTargetOptions={relationTargetOptions}
-                  canManageTaskMeta={canManageTaskMeta}
+                  allowedRelationTypes={relationshipAccess.allowedRelationTypes}
                   pending={isPending}
                   onRemoveRelation={removeRelation}
+                  canRemoveRelation={relationshipAccess.canRemoveRelation}
                   onDependsOnChange={(dependsOn) => updateBriefDraft({ dependsOn })}
                   onDependsOnSave={() => updateTask({ dependsOn: meta.dependsOn })}
                   onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
