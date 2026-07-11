@@ -202,6 +202,9 @@ test("planning app controller delegates command domains and stays a thin compose
 test("task mutation contract centralizes update normalization and route patches", async () => {
   const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const taskUpdateCommand = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
+  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const migration = await readFile("supabase/0045_transactional_task_updates.sql", "utf8");
+  const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
@@ -215,6 +218,19 @@ test("task mutation contract centralizes update normalization and route patches"
 
   assert.match(taskUpdateCommand, /buildClientTaskUpdatePatch/);
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
+  assert.match(taskUpdateCommand, /latestMutationByTask/);
+  assert.match(taskUpdateCommand, /refreshPlanningData/);
+  assert.match(route, /update_task_transaction/);
+  assert.match(route, /p_expected_updated_at: payload\.expectedUpdatedAt/);
+  assert.doesNotMatch(route, /\.from\("task_notes"\)[\s\S]*\.upsert/);
+  assert.doesNotMatch(route, /\.from\("task_dependencies"\)\.delete/);
+  assert.match(migration, /task\.updated_at = \$3/);
+  assert.match(migration, /task_notes/);
+  assert.match(migration, /task_dependencies/);
+  assert.match(migration, /task_activity/);
+  assert.match(migration, /notification_events/);
+  assert.match(migration, /grant execute on function public\.update_task_transaction[\s\S]*to service_role/);
+  assert.match(verifySupabase, /verifyTaskUpdateRpc/);
   assert.doesNotMatch(taskUpdateCommand, /taskAssigneePatch/);
 
   assert.match(updateRoute, /buildTaskUpdateResponsePatch/);

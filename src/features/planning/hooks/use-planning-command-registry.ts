@@ -77,6 +77,7 @@ export function usePlanningCommandRegistry({
   const taskMutationCommands = useTaskMutationCommands({
     ...commandContext,
     closeTaskPanel,
+    refreshPlanningData,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,

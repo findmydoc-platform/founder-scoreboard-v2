@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import {
@@ -29,6 +29,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "source"
   | "startTransition"
 > & {
+  refreshPlanningData: () => Promise<void>;
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   syncTaskToGitHub: TaskSyncCommand;
@@ -42,6 +43,7 @@ export function useTaskUpdateCommand({
   canManageTaskMeta,
   data,
   githubAppConnected,
+  refreshPlanningData,
   setData,
   setSaveError,
   setStatusGuardNotice,
@@ -50,6 +52,11 @@ export function useTaskUpdateCommand({
   startTransition,
   syncTaskToGitHub,
 }: UseTaskUpdateCommandOptions) {
+  const latestMutationByTask = useRef(new Map<string, symbol>());
+  const mutationEpochByTask = useRef(new Map<string, number>());
+  const mutationQueueByTask = useRef(new Map<string, Promise<void>>());
+  const serverUpdatedAtByTask = useRef(new Map<string, string>());
+
   const updateTask = (task: Task, patch: Partial<Task>) => {
     setSaveError("");
     setStatusGuardNotice("");
@@ -107,11 +114,34 @@ export function useTaskUpdateCommand({
 
     if (source !== "supabase") return;
 
-    startTransition(async () => {
+    const mutationId = Symbol(task.id);
+    const mutationEpoch = mutationEpochByTask.current.get(task.id) || 0;
+    latestMutationByTask.current.set(task.id, mutationId);
+    const previousMutation = mutationQueueByTask.current.get(task.id) || Promise.resolve();
+    const queuedMutation = previousMutation.then(async () => {
+      if ((mutationEpochByTask.current.get(task.id) || 0) !== mutationEpoch) return;
+
       try {
-        const { response, body } = await taskApi.updateTaskRequest(apiClient, task.id, taskUpdateRequestPayload(normalizedPatch));
+        const { response, body } = await taskApi.updateTaskRequest(
+          apiClient,
+          task.id,
+          taskUpdateRequestPayload(
+            normalizedPatch,
+            serverUpdatedAtByTask.current.get(task.id) || task.updatedAt || "",
+          ),
+        );
+        if (response.status === 409) {
+          mutationEpochByTask.current.set(task.id, mutationEpoch + 1);
+          serverUpdatedAtByTask.current.delete(task.id);
+          await refreshPlanningData();
+          setSaveError(body?.error || "Aufgabe wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen.");
+          return;
+        }
         if (!response.ok) {
           throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
+        }
+        if (body?.task?.updatedAt) {
+          serverUpdatedAtByTask.current.set(task.id, body.task.updatedAt);
         }
         if (body?.activities?.length) {
           applyPlanningDataUpdate((current) => ({
@@ -119,7 +149,7 @@ export function useTaskUpdateCommand({
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
         }
-        if (body?.task) {
+        if (body?.task && latestMutationByTask.current.get(task.id) === mutationId) {
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
@@ -129,11 +159,18 @@ export function useTaskUpdateCommand({
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {
-        applyPlanningDataUpdate((current) => ({
-          ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? task : item)),
-        }));
+        mutationEpochByTask.current.set(task.id, mutationEpoch + 1);
+        serverUpdatedAtByTask.current.delete(task.id);
+        await refreshPlanningData();
         setSaveError(error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden.");
+      }
+    });
+    mutationQueueByTask.current.set(task.id, queuedMutation);
+    startTransition(async () => {
+      await queuedMutation;
+      if (mutationQueueByTask.current.get(task.id) === queuedMutation) {
+        mutationQueueByTask.current.delete(task.id);
+        latestMutationByTask.current.delete(task.id);
       }
     });
   };

@@ -9,6 +9,7 @@ export type TaskSyncCommand = (task: Task, options?: { createIfMissing?: boolean
 
 export type TaskMutationCommandContext = PlanningCommandContext & {
   closeTaskPanel: () => void;
+  refreshPlanningData: () => Promise<void>;
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   setTaskDialogDefaults: Dispatch<SetStateAction<Partial<NewTaskDraft> | null>>;

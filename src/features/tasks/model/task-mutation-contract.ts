@@ -3,6 +3,7 @@ import { slugify } from "@/lib/slug";
 import type { Package, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
+  expectedUpdatedAt?: string;
   status?: string;
   assignee?: string;
   owner?: string;
@@ -97,10 +98,11 @@ export function buildClientTaskUpdatePatch(
   return { ok: true, patch: normalizedPatch };
 }
 
-export function taskUpdateRequestPayload(patch: Partial<Task>): TaskUpdatePayload {
+export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt: string): TaskUpdatePayload {
   const isReviewRequest = patch.status === "Review" || patch.reviewStatus === "requested";
 
   return {
+    expectedUpdatedAt,
     status: patch.status,
     assignee: patch.assigneeId || patch.assignee || patch.ownerId || patch.owner,
     priority: patch.priority,

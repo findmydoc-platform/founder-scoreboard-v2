@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
@@ -53,6 +53,10 @@ export function useTaskDetailWorkflow({
   source,
   commentImportNotice,
 }: UseTaskDetailWorkflowOptions) {
+  const latestMutationId = useRef(0);
+  const mutationEpoch = useRef(0);
+  const mutationQueue = useRef(Promise.resolve());
+  const updatedAtRef = useRef(task.updatedAt || "");
   const [meta, setMeta] = useState<EditableTaskState>(() => buildEditableTaskState(task));
   const [error, setError] = useState("");
   const [saveState, setSaveState] = useState("");
@@ -159,24 +163,46 @@ export function useTaskDetailWorkflow({
       return;
     }
 
-    startTransition(async () => {
+    const mutationId = latestMutationId.current + 1;
+    const queuedMutationEpoch = mutationEpoch.current;
+    latestMutationId.current = mutationId;
+    const queuedMutation = mutationQueue.current.then(async () => {
+      if (mutationEpoch.current !== queuedMutationEpoch) return;
+
       try {
-        const { response, body } = await updateTaskRequest(apiClient, task.id, patch);
+        const { response, body } = await updateTaskRequest(apiClient, task.id, {
+          ...patch,
+          expectedUpdatedAt: updatedAtRef.current,
+        });
+        if (response.status === 409) {
+          mutationEpoch.current += 1;
+          setError(body?.error || "Aufgabe wurde parallel geändert. Bitte lade die Seite neu.");
+          setSaveState("");
+          return;
+        }
         if (!response.ok) throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
         if (body?.activities?.length) appendTaskActivities(body.activities);
         if (body?.task) {
-          setMeta((current) => ({
-            ...current,
-            ...(body.task?.status ? { status: body.task.status } : {}),
-            ...(body.task?.reviewStatus ? { reviewStatus: body.task.reviewStatus } : {}),
-            ...(body.task?.reviewOwnerProfileId !== undefined ? { reviewOwnerProfileId: body.task.reviewOwnerProfileId || "" } : {}),
-          }));
+          if (body.task.updatedAt) updatedAtRef.current = body.task.updatedAt;
+          if (latestMutationId.current === mutationId) {
+            setMeta((current) => ({
+              ...current,
+              ...(body.task?.status ? { status: body.task.status } : {}),
+              ...(body.task?.reviewStatus ? { reviewStatus: body.task.reviewStatus } : {}),
+              ...(body.task?.reviewOwnerProfileId !== undefined ? { reviewOwnerProfileId: body.task.reviewOwnerProfileId || "" } : {}),
+            }));
+          }
         }
-        setSaveState("Gespeichert");
+        if (latestMutationId.current === mutationId) setSaveState("Gespeichert");
       } catch (caught) {
+        mutationEpoch.current += 1;
         setError(caught instanceof Error ? caught.message : "Änderung konnte nicht gespeichert werden.");
         setSaveState("");
       }
+    });
+    mutationQueue.current = queuedMutation;
+    startTransition(async () => {
+      await queuedMutation;
     });
   };
 

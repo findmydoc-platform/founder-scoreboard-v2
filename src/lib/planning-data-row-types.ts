@@ -98,6 +98,7 @@ export type DbTask = {
   self_evidence_checked: boolean | null;
   self_documented_checked: boolean | null;
   self_blockers_checked: boolean | null;
+  updated_at: string;
   task_dependencies?: { note: string }[];
   task_notes?: { note: string } | null;
 };
@@ -157,6 +158,7 @@ export const taskRowColumns = [
   "self_evidence_checked",
   "self_documented_checked",
   "self_blockers_checked",
+  "updated_at",
 ] as const satisfies readonly DbTaskScalarColumn[];
 
 export const taskRelationSelect = "task_dependencies(note), task_notes(note)";

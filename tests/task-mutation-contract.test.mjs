@@ -31,8 +31,9 @@ test("review request payload omits protected score and review owner fields", asy
   assert.equal(normalized.patch.scoreFinal, false);
   assert.equal(normalized.patch.reviewOwnerProfileId, "accountable");
 
-  const payload = taskUpdateRequestPayload(normalized.patch);
+  const payload = taskUpdateRequestPayload(normalized.patch, "2026-07-06T11:00:00.000Z");
 
+  assert.equal(payload.expectedUpdatedAt, "2026-07-06T11:00:00.000Z");
   assert.equal(payload.status, "Review");
   assert.equal(payload.reviewStatus, "requested");
   assert.equal(payload.scoreFinal, undefined);
@@ -49,7 +50,7 @@ test("score and review owner payload fields remain available outside review requ
     reviewOwnerProfileId: "ceo",
     scoreFinal: true,
     scorePoints: 8,
-  });
+  }, "2026-07-06T11:00:00.000Z");
 
   assert.equal(payload.reviewOwnerProfileId, "ceo");
   assert.equal(payload.scoreFinal, true);

@@ -110,6 +110,25 @@ async function verifyProfileWriteRpcs() {
   return results;
 }
 
+async function verifyTaskUpdateRpc() {
+  const { error } = await supabase.rpc("update_task_transaction", {
+    p_task_id: `verify-missing-task-${Date.now()}`,
+    p_expected_updated_at: new Date().toISOString(),
+    p_task_patch: {},
+    p_note_present: false,
+    p_note: null,
+    p_dependency_present: false,
+    p_dependency_note: null,
+    p_activity_messages: [],
+    p_notifications: [],
+  });
+
+  return {
+    ok: error?.code === "P0002",
+    error: error?.code === "P0002" ? "" : error?.message || "update_task_transaction unexpectedly accepted a missing task",
+  };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -153,6 +172,7 @@ const result = {
   schema: await Promise.all(schemaChecks.map(checkSchema)),
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
   profileWriteRpcs: await verifyProfileWriteRpcs(),
+  taskUpdateRpc: await verifyTaskUpdateRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -171,5 +191,10 @@ if (!result.githubSyncLockRpc.ok) {
 const missingProfileWriteRpc = result.profileWriteRpcs.find((check) => !check.ok);
 if (missingProfileWriteRpc) {
   console.error(`Profile write RPC check failed for ${missingProfileWriteRpc.name}: ${missingProfileWriteRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.taskUpdateRpc.ok) {
+  console.error(`Task update RPC check failed: ${result.taskUpdateRpc.error}`);
   process.exit(1);
 }
