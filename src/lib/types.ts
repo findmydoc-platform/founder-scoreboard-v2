@@ -119,6 +119,7 @@ export type Task = {
   selfEvidenceChecked?: boolean;
   selfDocumentedChecked?: boolean;
   selfBlockersChecked?: boolean;
+  updatedAt?: string;
 };
 
 export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;

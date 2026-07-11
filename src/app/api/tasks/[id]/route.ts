@@ -24,6 +24,11 @@ import { archiveGitHubIssue } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
 
+type TaskUpdateTransactionResult = {
+  task?: { updated_at?: string };
+  activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
+};
+
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder, {
     supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
@@ -34,10 +39,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const payload = (await request.json()) as TaskUpdatePayload;
+  if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
+    return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
+  }
   const update: TaskRouteDbUpdate = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link")
+    .select("id,title,task_type,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -179,57 +187,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   applyTaskSelfChecklistUpdateFields(update, payload);
   markTaskGitHubSyncDirty(update, payload);
 
-  if (Object.keys(update).length) {
-    const { error } = await supabase.from("tasks").update(update).eq("id", id);
-    if (error) return apiError(error.message, 500);
+  const messages = activityMessages(payload, currentTask);
+  if (update.task_type === "deliverable" && currentTask.task_type === "proposal") {
+    messages.push("Aufgabenvorschlag zu Deliverable konvertiert");
   }
 
-  if (payload.note !== undefined) {
-    const { error } = await supabase
-      .from("task_notes")
-      .upsert({ task_id: id, note: payload.note, updated_at: new Date().toISOString() });
-    if (error) return apiError(error.message, 500);
-  }
-
-  if (payload.dependsOn !== undefined) {
-    const note = payload.dependsOn.trim().slice(0, 2000);
-    const { error: deleteError } = await supabase.from("task_dependencies").delete().eq("task_id", id);
-    if (deleteError) return apiError(deleteError.message, 500);
-    if (note) {
-      const { error: dependencyError } = await supabase.from("task_dependencies").insert({ task_id: id, note });
-      if (dependencyError) return apiError(dependencyError.message, 500);
-    }
-  }
-
-  let activities: Array<{ id: number; taskId: string; message: string; createdAt: string }> = [];
-  if (Object.keys(update).length || payload.note !== undefined || payload.dependsOn !== undefined) {
-    const messages = activityMessages(payload, currentTask);
-    if (update.task_type === "deliverable" && currentTask.task_type === "proposal") {
-      messages.push("Aufgabenvorschlag zu Deliverable konvertiert");
-    }
-    if (messages.length) {
-      const { data: activityRows } = await supabase.from("task_activity").insert(
-        messages.map((message) => ({
-          task_id: id,
-          message,
-        })),
-      ).select("id,task_id,message,created_at");
-      activities = (activityRows || []).map((activity) => ({
-        id: activity.id,
-        taskId: activity.task_id,
-        message: activity.message,
-        createdAt: activity.created_at,
-      }));
-    }
-  }
-
+  const notifications: Array<Record<string, string | null>> = [];
   if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {
     const reviewOwnerProfileId = typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "";
-    const recipients = reviewOwnerProfileId
-      ? [{ id: reviewOwnerProfileId }]
-      : (await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"])).data || [];
-    const notifications = recipients
-      .map((recipient) => ({
+    let recipients = [{ id: reviewOwnerProfileId }].filter((recipient) => recipient.id);
+    if (!recipients.length) {
+      const { data: fallbackRecipients, error: recipientError } = await supabase
+        .from("profiles")
+        .select("id")
+        .in("platform_role", ["ceo", "deputy"]);
+      if (recipientError) return apiError(recipientError.message, 500);
+      recipients = fallbackRecipients || [];
+    }
+    notifications.push(...recipients.map((recipient) => ({
         type: "task.review_requested",
         actor_profile_id: permission.profile?.id || null,
         recipient_profile_id: recipient.id,
@@ -239,13 +214,44 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         body: reviewOwnerProfileId
           ? "Diese Aufgabe wartet auf deine Accountable-Review."
           : "Diese Aufgabe wartet auf Review, hat aber keinen Review Owner.",
-      }));
-    if (notifications.length) {
-      await supabase.from("notification_events").insert(notifications);
-    }
+      })));
   }
 
-  const taskPatch = buildTaskUpdateResponsePatch(id, update, startsReviewRequest);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("update_task_transaction", {
+    p_task_id: id,
+    p_expected_updated_at: payload.expectedUpdatedAt,
+    p_task_patch: update,
+    p_note_present: payload.note !== undefined,
+    p_note: payload.note ?? null,
+    p_dependency_present: payload.dependsOn !== undefined,
+    p_dependency_note: payload.dependsOn?.trim().slice(0, 2000) ?? null,
+    p_activity_messages: [...new Set(messages)],
+    p_notifications: notifications,
+  });
+
+  if (transactionError) {
+    if (transactionError.code === "P0001") {
+      return apiError("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+    }
+    if (transactionError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
+    if (transactionError.code === "22023") return apiError("Aufgabenänderung ist ungültig.", 400);
+    return apiError(transactionError.message, 500);
+  }
+
+  const result = transactionData as TaskUpdateTransactionResult | null;
+  if (!result?.task?.updated_at) return apiError("Aufgabe konnte nicht gespeichert werden.", 500);
+
+  const activities = (result.activities || []).map((activity) => ({
+    id: activity.id,
+    taskId: activity.task_id,
+    message: activity.message,
+    createdAt: activity.created_at,
+  }));
+  const taskPatch = {
+    ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest),
+    id,
+    updatedAt: result.task.updated_at,
+  };
 
   return NextResponse.json({
     ok: true,

@@ -11,6 +11,7 @@
     "lint": "eslint",
     "audit:stewardship": "node scripts/code-stewardship-audit.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
+    "verify:task-mutations": "node scripts/verify-task-update-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
     "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",

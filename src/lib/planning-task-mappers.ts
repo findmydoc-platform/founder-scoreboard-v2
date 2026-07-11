@@ -80,6 +80,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     selfEvidenceChecked: Boolean(row.self_evidence_checked),
     selfDocumentedChecked: Boolean(row.self_documented_checked),
     selfBlockersChecked: Boolean(row.self_blockers_checked),
+    updatedAt: row.updated_at || "",
   };
 }
 
