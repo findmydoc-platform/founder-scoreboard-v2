@@ -1,22 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
-import { syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
+import { createTaskRequest, deleteTaskRequest, reportTaskBlockerRequest, syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
+import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
+import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import {
-  buildDetailsMilestonePatch,
-  buildDetailsPackagePatch,
   buildEditableTaskState,
-  buildTaskBriefDraft,
   buildTaskDetailGitHubState,
-  buildTaskDetailsDraft,
-  buildTaskDetailViewModel,
   type EditableTaskState,
 } from "@/features/tasks/model/task-detail-state";
-import type { TaskDetailsDraft } from "@/features/tasks/organisms/task-details-card";
 import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
+import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 
 type UseTaskDetailWorkflowOptions = {
   task: Task;
@@ -27,6 +25,7 @@ type UseTaskDetailWorkflowOptions = {
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
   blockers: TaskBlocker[];
+  subIssues: Task[];
   taskRelations: TaskRelation[];
   allTasks: Task[];
   profiles: Profile[];
@@ -39,42 +38,38 @@ type UseTaskDetailWorkflowOptions = {
 
 export function useTaskDetailWorkflow({
   task,
-  pack,
   packages,
-  sprint,
   comments,
   externalComments,
   activities,
   blockers,
+  subIssues,
   taskRelations,
   allTasks,
   profiles,
-  sprints,
-  milestones,
   source,
   commentImportNotice,
   initialCurrentProfile = null,
 }: UseTaskDetailWorkflowOptions) {
+  const router = useRouter();
   const latestMutationId = useRef(0);
   const mutationEpoch = useRef(0);
   const mutationQueue = useRef(Promise.resolve());
   const updatedAtRef = useRef(task.updatedAt || "");
   const [meta, setMeta] = useState<EditableTaskState>(() => buildEditableTaskState(task));
   const [error, setError] = useState("");
-  const [saveState, setSaveState] = useState("");
-  const [briefEditing, setBriefEditing] = useState(false);
-  const [detailsEditing, setDetailsEditing] = useState(false);
-  const [detailsEditSnapshot, setDetailsEditSnapshot] = useState<TaskDetailsDraft | null>(null);
   const [githubState, setGithubState] = useState(() => buildTaskDetailGitHubState(task));
+  const [taskBlockers, setTaskBlockers] = useState(blockers);
+  const [taskSubIssues, setTaskSubIssues] = useState(subIssues);
+  const [subIssueDialogOpen, setSubIssueDialogOpen] = useState(false);
   const seedProfile = source === "seed" ? profiles.find((profile) => profile.platformRole === "ceo") || null : null;
   const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile || seedProfile);
-  const currentRole = currentProfile?.platformRole || "";
   const [githubAppConnected, setGithubAppConnected] = useState(false);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [apiClient] = useState(() => createBrowserApiClient());
   const [isPending, startTransition] = useTransition();
 
-  const { relations, relationDraft, setRelationDraft, addRelation, removeRelation } = useTaskRelationships({
+  const { relations, addRelation, removeRelation } = useTaskRelationships({
     task,
     initialRelations: taskRelations,
     apiClient,
@@ -107,24 +102,6 @@ export function useTaskDetailWorkflow({
     setMeta,
   });
 
-  const viewModel = buildTaskDetailViewModel({
-    task,
-    meta,
-    githubState,
-    pack,
-    packages,
-    sprint,
-    sprints,
-    milestones,
-    profiles,
-    blockers,
-    relations,
-    allTasks,
-    currentProfile,
-    unrestrictedRelationshipAccess: source === "seed",
-  });
-  const detailsDraft: TaskDetailsDraft = buildTaskDetailsDraft(meta);
-
   useEffect(() => {
     if (source !== "supabase") return;
 
@@ -154,14 +131,22 @@ export function useTaskDetailWorkflow({
     }
   };
 
-  const updateTask = (patch: Partial<EditableTaskState>) => {
-    const next = { ...meta, ...patch };
+  const updateTask = (patch: Partial<Task>) => {
+    const currentTaskSnapshot = { ...task, ...meta, ...githubState } as Task;
+    const normalized = buildClientTaskUpdatePatch(currentTaskSnapshot, patch, profiles, packages);
+    if (!normalized.ok) {
+      setError(normalized.error);
+      return;
+    }
+    const normalizedPatch = normalized.patch;
+    const editablePatch = normalizedPatch as Partial<EditableTaskState>;
+    const previousMeta = meta;
+    const next = { ...meta, ...editablePatch };
     setMeta(next);
     setError("");
-    setSaveState("Speichert...");
 
     if (source !== "supabase") {
-      setSaveState("Lokal geändert");
+      persistLocalPlanningTasks(allTasks.map((item) => item.id === task.id ? { ...item, ...normalizedPatch } : item));
       return;
     }
 
@@ -173,13 +158,13 @@ export function useTaskDetailWorkflow({
 
       try {
         const { response, body } = await updateTaskRequest(apiClient, task.id, {
-          ...patch,
-          expectedUpdatedAt: updatedAtRef.current,
+          ...taskUpdateRequestPayload(normalizedPatch, updatedAtRef.current),
         });
         if (response.status === 409) {
           mutationEpoch.current += 1;
-          setError(body?.error || "Aufgabe wurde parallel geändert. Bitte lade die Seite neu.");
-          setSaveState("");
+          setMeta(previousMeta);
+          window.location.reload();
+          setError(body?.error || "Aufgabe wurde parallel geändert. Der aktuelle Stand wird neu geladen.");
           return;
         }
         if (!response.ok) throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
@@ -195,77 +180,16 @@ export function useTaskDetailWorkflow({
             }));
           }
         }
-        if (latestMutationId.current === mutationId) setSaveState("Gespeichert");
       } catch (caught) {
         mutationEpoch.current += 1;
+        setMeta(previousMeta);
         setError(caught instanceof Error ? caught.message : "Änderung konnte nicht gespeichert werden.");
-        setSaveState("");
       }
     });
     mutationQueue.current = queuedMutation;
     startTransition(async () => {
       await queuedMutation;
     });
-  };
-
-  const setDetailsDraft = (patch: Partial<TaskDetailsDraft>) => {
-    setMeta((current) => ({ ...current, ...patch }));
-  };
-
-  const setDetailsPackage = (packageId: string) => {
-    setDetailsDraft(buildDetailsPackagePatch(packageId, packages, meta.milestoneId));
-  };
-
-  const setDetailsMilestone = (milestoneId: string) => {
-    setDetailsDraft(buildDetailsMilestonePatch(milestoneId, packages, meta.packageId));
-  };
-
-  const startDetailsEditing = () => {
-    setDetailsEditSnapshot(detailsDraft);
-    setDetailsEditing(true);
-  };
-
-  const resetDetailsDraft = () => {
-    if (detailsEditSnapshot) setMeta((current) => ({ ...current, ...detailsEditSnapshot }));
-    setDetailsEditSnapshot(null);
-    setDetailsEditing(false);
-  };
-
-  const saveDetailsDraft = () => {
-    const { reviewOwnerProfileId, ...detailsWithoutReviewOwner } = detailsDraft;
-    updateTask(currentRole === "ceo" ? { ...detailsWithoutReviewOwner, reviewOwnerProfileId } : detailsWithoutReviewOwner);
-    setDetailsEditSnapshot(null);
-    setDetailsEditing(false);
-  };
-
-  const resetBriefDraft = () => {
-    setBriefEditing(false);
-    setMeta((current) => ({ ...current, ...buildTaskBriefDraft(task) }));
-  };
-
-  const saveBriefDraft = () => {
-    updateTask({
-      problemStatement: meta.problemStatement,
-      intendedOutcome: meta.intendedOutcome,
-      scopeConstraints: meta.scopeConstraints,
-      acceptanceCriteria: meta.acceptanceCriteria,
-      evidenceRequired: meta.evidenceRequired,
-      definitionOfDone: meta.definitionOfDone,
-    });
-    setBriefEditing(false);
-  };
-
-  const updateBriefDraft = (patch: Partial<EditableTaskState>) => {
-    setMeta((current) => ({ ...current, ...patch }));
-  };
-
-  const updateChecklist = (patch: Partial<EditableTaskState>) => {
-    setMeta((current) => ({ ...current, ...patch }));
-    updateTask(patch);
-  };
-
-  const setEvidenceLink = (evidenceLink: string) => {
-    setMeta((current) => ({ ...current, evidenceLink }));
   };
 
   const syncGitHub = (options: { createIfMissing?: boolean } = {}) => {
@@ -307,13 +231,97 @@ export function useTaskDetailWorkflow({
     });
   };
 
+  const reportBlocker = (payload: { reason: string; impact: string; needsHelpFrom: string }) => {
+    if (!currentProfile) {
+      setError("GitHub-User ist keinem Teamprofil zugeordnet.");
+      return;
+    }
+    const previousStatus = meta.status;
+    const localBlocker: TaskBlocker = {
+      id: Date.now(),
+      taskId: task.id,
+      profileId: currentProfile.id,
+      reason: payload.reason,
+      impact: payload.impact,
+      needsHelpFrom: payload.needsHelpFrom,
+      status: "open",
+      createdAt: new Date().toISOString(),
+      resolvedAt: "",
+    };
+    setError("");
+    setTaskBlockers((current) => [localBlocker, ...current]);
+    setMeta((current) => ({ ...current, status: "Blockiert" }));
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      const { response, body } = await reportTaskBlockerRequest(apiClient, task.id, payload);
+      if (!response.ok || !body?.blocker) {
+        setTaskBlockers((current) => current.filter((blocker) => blocker.id !== localBlocker.id));
+        setMeta((current) => ({ ...current, status: previousStatus }));
+        setError(body?.error || "Blocker konnte nicht gespeichert werden.");
+        return;
+      }
+      setTaskBlockers((current) => current.map((blocker) => blocker.id === localBlocker.id ? body.blocker! : blocker));
+    });
+  };
+
+  const createSubIssue = (draft: NewTaskDraft) => {
+    setError("");
+    if (source !== "supabase") {
+      const localSubIssue: Task = {
+        ...task,
+        id: `local-${Date.now()}`,
+        title: draft.title,
+        description: draft.description,
+        taskType: "sub_issue",
+        parentTaskId: task.id,
+        scoreRelevant: false,
+        scorePoints: 0,
+        scoreFinal: false,
+      };
+      setTaskSubIssues((current) => [...current, localSubIssue]);
+      persistLocalPlanningTasks([...allTasks, localSubIssue]);
+      setSubIssueDialogOpen(false);
+      return;
+    }
+
+    startTransition(async () => {
+      const { response, body } = await createTaskRequest(apiClient, draft);
+      if (!response.ok || !body?.task) {
+        setError(body?.error || "Sub-Issue konnte nicht erstellt werden.");
+        return;
+      }
+      setTaskSubIssues((current) => [...current, body.task!]);
+      setSubIssueDialogOpen(false);
+    });
+  };
+
+  const deleteTask = () => {
+    if (!window.confirm("Aufgabe und vorhandene Unteraufgaben aus der App löschen?")) return;
+    if (source !== "supabase") {
+      persistLocalPlanningTasks(allTasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id));
+      router.replace("/?workspace=planning");
+      return;
+    }
+    startTransition(async () => {
+      const { response, body } = await deleteTaskRequest(apiClient, task.id, updatedAtRef.current);
+      if (!response.ok) {
+        setError(body?.error || "Aufgabe konnte nicht gelöscht werden.");
+        return;
+      }
+      router.replace("/?workspace=planning");
+      router.refresh();
+    });
+  };
+
+  const taskSnapshot = { ...task, ...meta, ...githubState } as Task;
+
   return {
     addComment,
     addRelation,
-    briefEditing,
-    currentRole,
-    detailsDraft,
-    detailsEditing,
+    createSubIssue,
+    currentProfile,
+    deleteTask,
     error,
     githubCommentImportPending,
     githubAppConnected,
@@ -322,30 +330,21 @@ export function useTaskDetailWorkflow({
     importGitHubComments,
     isPending,
     localCommentImportNotice,
-    meta,
+    openReview: () => router.push(`/reviews/${encodeURIComponent(task.id)}`),
     reconnectGitHub,
-    relationDraft,
+    relations,
     removeRelation,
-    resetBriefDraft,
-    resetDetailsDraft,
-    saveBriefDraft,
-    saveDetailsDraft,
-    saveState,
-    setBriefEditing,
-    setDetailsDraft,
-    setDetailsMilestone,
-    setDetailsPackage,
-    setEvidenceLink,
-    setRelationDraft,
-    startDetailsEditing,
     syncGitHub,
+    subIssueDialogOpen,
     taskActivities,
+    taskBlockers,
     taskComments,
     taskExternalComments,
-    updateBriefDraft,
-    updateChecklist,
+    taskSnapshot,
+    taskSubIssues,
     updateTask,
     uploadAttachment,
-    viewModel,
+    reportBlocker,
+    setSubIssueDialogOpen,
   };
 }

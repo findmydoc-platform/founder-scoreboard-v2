@@ -6,11 +6,12 @@ import type { Task } from "@/lib/types";
 import { UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 type Props = {
+  canCreate?: boolean;
   subIssues: Task[];
   onCreateSubIssue: () => void;
 };
 
-export function TaskDetailPanelSubIssuesSection({ subIssues, onCreateSubIssue }: Props) {
+export function TaskDetailPanelSubIssuesSection({ canCreate = true, subIssues, onCreateSubIssue }: Props) {
   return (
     <section className="rounded-lg border border-slate-200 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -18,9 +19,11 @@ export function TaskDetailPanelSubIssuesSection({ subIssues, onCreateSubIssue }:
           <h3 className="text-sm font-semibold text-slate-950">Sub-Issues</h3>
           <p className="mt-1 text-xs text-slate-500">Persönliche Arbeitsstruktur, nicht score-relevant.</p>
         </div>
-        <UiButton onClick={onCreateSubIssue} size="xs">
-          Sub-Issue
-        </UiButton>
+        {canCreate && (
+          <UiButton onClick={onCreateSubIssue} size="xs">
+            Sub-Issue
+          </UiButton>
+        )}
       </div>
       <div className="mt-3 grid gap-2">
         {subIssues.map((item) => (

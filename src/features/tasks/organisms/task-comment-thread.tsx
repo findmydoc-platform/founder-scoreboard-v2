@@ -15,6 +15,7 @@ type Props = {
   pending?: boolean;
   importPending?: boolean;
   notice?: string;
+  readOnly?: boolean;
   title?: string;
   description?: string;
   onAddComment: (comment: string) => Promise<void> | void;
@@ -69,6 +70,7 @@ export function TaskCommentThread({
   pending = false,
   importPending = false,
   notice = "",
+  readOnly = false,
   title = "Kommunikation",
   description = "Fragen, Updates und Abstimmungen zur Aufgabe bleiben hier nachvollziehbar.",
   onAddComment,
@@ -91,7 +93,7 @@ export function TaskCommentThread({
           <p className="mt-1 text-xs text-slate-500">{description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {onImportGitHubComments && (
+          {!readOnly && onImportGitHubComments && (
             <button
               type="button"
               onClick={onImportGitHubComments}
@@ -125,13 +127,15 @@ export function TaskCommentThread({
       )}
 
       <TaskCommentTimeline items={timeline} profiles={profiles} />
-      <TaskCommentComposer
-        pending={pending}
-        profiles={profiles}
-        onAddComment={onAddComment}
-        onUploadAttachment={onUploadAttachment}
-        renderPreview={(value) => <CommentBody value={value} />}
-      />
+      {!readOnly && (
+        <TaskCommentComposer
+          pending={pending}
+          profiles={profiles}
+          onAddComment={onAddComment}
+          onUploadAttachment={onUploadAttachment}
+          renderPreview={(value) => <CommentBody value={value} />}
+        />
+      )}
     </section>
   );
 }

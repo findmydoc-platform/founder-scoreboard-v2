@@ -7,6 +7,7 @@ import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
 import {
   applyReviewStatusUpdate,
   applyFinalStatusReopen,
+  founderOwnedTaskUpdateFields,
   applyTaskBriefUpdateFields,
   applyTaskPriorityUpdate,
   applyTaskScoreUpdateFields,
@@ -20,6 +21,7 @@ import {
   validateTaskStatusUpdate,
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { archiveGitHubIssue } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
@@ -73,9 +75,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const startsReviewRequest = startsTaskReviewRequest(payload);
   const canSetReviewOwner = isCeo;
   const restrictedFields = restrictedTaskUpdateFields(payload);
+  const ownerFields = founderOwnedTaskUpdateFields(payload);
+  const detailPermissions = taskDetailPermissions({
+    task: {
+      assignee: currentTask.assignee || "",
+      assigneeId: currentTask.assignee || "",
+      owner: currentTask.owner || "",
+      ownerId: currentTask.owner || "",
+      reviewOwnerProfileId: currentTask.review_owner_profile_id || "",
+    },
+    profile: permission.profile,
+    unrestricted: !permission.profile,
+  });
 
   if (!isOperationalLead && restrictedFields.length) {
     return apiError(`Diese Felder sind geschützt: ${restrictedFields.join(", ")}.`, 403);
+  }
+
+  if (!isOperationalLead && ownerFields.length && !detailPermissions.canEditBrief) {
+    return apiError(`Founder können diese Felder nur bei eigenen Aufgaben ändern: ${ownerFields.join(", ")}.`, 403);
   }
 
   if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest) {

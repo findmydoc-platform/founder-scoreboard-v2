@@ -10,6 +10,7 @@ type BlockerDraft = {
 };
 
 type Props = {
+  canReport?: boolean;
   blockers: TaskBlocker[];
   blockerDraft: BlockerDraft;
   pending: boolean;
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export function TaskDetailPanelBlockerSection({
+  canReport = true,
   blockers,
   blockerDraft,
   pending,
@@ -35,7 +37,7 @@ export function TaskDetailPanelBlockerSection({
         </div>
         <UiBadge tone="white">{blockers.filter((blocker) => blocker.status === "open").length} offen</UiBadge>
       </div>
-      <div className="mt-3 grid gap-2">
+      {canReport && <div className="mt-3 grid gap-2">
         {blockers.map((blocker) => (
           <article key={blocker.id} className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-950">
             <div className="flex items-center justify-between gap-2">
@@ -48,7 +50,7 @@ export function TaskDetailPanelBlockerSection({
           </article>
         ))}
         {!blockers.length && <UiEmptyState>Noch kein Blocker gemeldet.</UiEmptyState>}
-      </div>
+      </div>}
       <div className="mt-3 grid gap-2">
         <UiTextArea
           value={blockerDraft.reason}

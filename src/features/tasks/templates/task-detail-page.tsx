@@ -1,18 +1,12 @@
 ﻿"use client";
 
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
-import type { AuthenticatedProfile, Milestone, Package, PlanningHeaderData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
-import { TaskBlockerCard } from "@/features/tasks/molecules/task-blocker-card";
-import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
-import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header";
-import { TaskDetailsCard } from "@/features/tasks/organisms/task-details-card";
-import { TaskEvidenceLinkSection } from "@/features/tasks/molecules/task-evidence-link-section";
-import { TaskGitHubSyncCard } from "@/features/tasks/molecules/task-github-sync-card";
-import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
-import { TaskSubIssuesSection } from "@/features/tasks/molecules/task-sub-issues-section";
+import { NewTaskDialog } from "@/features/tasks/organisms/new-task-dialog";
+import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { useTaskDetailWorkflow } from "@/features/tasks/hooks/use-task-detail-workflow";
+import type { AuthenticatedProfile, Milestone, Package, PlanningHeaderData, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -55,51 +49,12 @@ export function TaskDetailPage({
   commentImportNotice = "",
   currentProfile = null,
 }: Props) {
-  const {
-    addComment,
-    addRelation,
-    briefEditing,
-    currentRole,
-    detailsDraft,
-    detailsEditing,
-    error,
-    githubCommentImportPending,
-    githubAppConnected,
-    githubReconnectFailed,
-    githubState,
-    importGitHubComments,
-    isPending,
-    localCommentImportNotice,
-    meta,
-    reconnectGitHub,
-    relationDraft,
-    removeRelation,
-    resetBriefDraft,
-    resetDetailsDraft,
-    saveBriefDraft,
-    saveDetailsDraft,
-    saveState,
-    setBriefEditing,
-    setDetailsDraft,
-    setDetailsMilestone,
-    setDetailsPackage,
-    setEvidenceLink,
-    setRelationDraft,
-    startDetailsEditing,
-    syncGitHub,
-    taskActivities,
-    taskComments,
-    taskExternalComments,
-    updateBriefDraft,
-    updateChecklist,
-    updateTask,
-    uploadAttachment,
-    viewModel,
-  } = useTaskDetailWorkflow({
+  const workflow = useTaskDetailWorkflow({
     task,
     pack,
     packages,
     sprint,
+    subIssues,
     comments,
     externalComments,
     activities,
@@ -114,145 +69,75 @@ export function TaskDetailPage({
     initialCurrentProfile: currentProfile,
   });
 
-  const {
-    assigneeProfile,
-    creatorProfile,
-    currentSprint,
-    currentMilestone,
-    currentPackage,
-    profileName,
-    openBlockers,
-    waitsOn,
-    blocks,
-    related,
-    relationTargetOptions,
-    canManageTaskMeta,
-    relationshipAccess,
-    canSyncExistingGitHubIssue,
-  } = viewModel;
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
-      <AppSidebar activeWorkspace="planning" source={source} />
-
+      <AppSidebar activeWorkspace="planning" source={source} currentPlatformRole={workflow.currentProfile?.platformRole || ""} />
       <TaskDetailHeader
-        title={task.title}
+        title={workflow.taskSnapshot.title}
         headerData={headerData}
         actions={(
           <GitHubConnectionStatus
             authenticated={source === "supabase"}
-            available={githubAppConnected}
-            failed={githubReconnectFailed}
-            busy={isPending}
-            onReconnect={reconnectGitHub}
+            available={workflow.githubAppConnected}
+            failed={workflow.githubReconnectFailed}
+            busy={workflow.isPending}
+            onReconnect={workflow.reconnectGitHub}
           />
         )}
       />
 
       <div className="mx-auto max-w-7xl px-6 py-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid min-w-0 gap-5">
-            <TaskBriefSection
-              brief={meta}
-              editing={briefEditing}
-              onEdit={() => setBriefEditing(true)}
-              onCancel={resetBriefDraft}
-              onSave={saveBriefDraft}
-              onBriefChange={updateBriefDraft}
-              onChecklistChange={updateChecklist}
-            >
-
-              <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
-                <TaskEvidenceLinkSection
-                  evidenceLink={meta.evidenceLink}
-                  onEvidenceLinkChange={setEvidenceLink}
-                  onEvidenceLinkSave={() => updateTask({ evidenceLink: meta.evidenceLink })}
-                />
-                <TaskRelationshipsSection
-                  task={task}
-                  waitsOn={waitsOn}
-                  blocks={blocks}
-                  related={related}
-                  dependsOn={meta.dependsOn}
-                  relationDraft={relationDraft}
-                  relationTargetOptions={relationTargetOptions}
-                  allowedRelationTypes={relationshipAccess.allowedRelationTypes}
-                  pending={isPending}
-                  onRemoveRelation={removeRelation}
-                  canRemoveRelation={relationshipAccess.canRemoveRelation}
-                  onDependsOnChange={(dependsOn) => updateBriefDraft({ dependsOn })}
-                  onDependsOnSave={() => updateTask({ dependsOn: meta.dependsOn })}
-                  onRelationDraftChange={(patch) => setRelationDraft((current) => ({ ...current, ...patch }))}
-                  onAddRelation={addRelation}
-                />
-              </div>
-            </TaskBriefSection>
-
-            <TaskSubIssuesSection subIssues={subIssues} />
-
-          </div>
-
-          <aside className="grid content-start gap-5">
-            <TaskDetailsCard
-              task={task}
-              meta={meta}
-              detailsDraft={detailsDraft}
-              creatorProfile={creatorProfile}
-              assigneeProfile={assigneeProfile}
-              currentPackage={currentPackage}
-              currentSprint={currentSprint}
-              currentMilestone={currentMilestone}
-              canManageFinalTaskStatus={source === "seed" || currentRole === "ceo"}
-              canManageTaskMeta={canManageTaskMeta}
-              canManageReviewOwner={currentRole === "ceo"}
-              detailsEditing={detailsEditing}
-              pending={isPending}
-              saveState={saveState}
-              packages={packages}
-              profiles={profiles}
-              sprints={sprints}
-              milestones={milestones}
-              onStatusChange={(status) => updateTask({ status })}
-              onDetailsDraftChange={setDetailsDraft}
-              onDetailsPackageChange={setDetailsPackage}
-              onDetailsMilestoneChange={setDetailsMilestone}
-              onStartEditing={startDetailsEditing}
-              onCancelEditing={resetDetailsDraft}
-              onSaveDetails={saveDetailsDraft}
-            />
-
-            <TaskBlockerCard blockers={blockers} openBlockerCount={openBlockers.length} profileName={profileName} />
-
-            <TaskGitHubSyncCard
-              taskType={task.taskType}
-              githubState={githubState}
-              canSyncExistingGitHubIssue={canSyncExistingGitHubIssue}
-              pending={isPending}
-              githubAppConnected={githubAppConnected}
-              onSyncGitHub={() => syncGitHub()}
-              onCreateGitHubIssue={() => syncGitHub({ createIfMissing: true })}
-            />
-          </aside>
-        </div>
-
-        <div className="mt-5 min-w-0">
-          <TaskCommentThread
-            comments={taskComments}
-            externalComments={taskExternalComments}
-            activities={taskActivities}
-            notice={localCommentImportNotice}
-            profiles={profiles}
-            pending={isPending}
-            importPending={githubCommentImportPending}
-            onImportGitHubComments={importGitHubComments}
-            onUploadAttachment={uploadAttachment}
-            title="Kommentare"
-            description="Laufende Abstimmungen, Nachfragen und Updates zur Aufgabe."
-            onAddComment={addComment}
-          />
-        </div>
-        {error && <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
+        <TaskDetailSurface
+          task={workflow.taskSnapshot}
+          pack={pack}
+          comments={workflow.taskComments}
+          externalComments={workflow.taskExternalComments}
+          activities={workflow.taskActivities}
+          blockers={workflow.taskBlockers}
+          subIssues={workflow.taskSubIssues}
+          teamProfiles={profiles}
+          packages={packages}
+          sprints={sprints}
+          milestones={milestones}
+          allTasks={[...allTasks.filter((item) => item.id !== task.id), workflow.taskSnapshot]}
+          relations={workflow.relations}
+          currentProfile={workflow.currentProfile}
+          source={source}
+          pending={workflow.isPending}
+          error={workflow.error}
+          commentImportNotice={workflow.localCommentImportNotice}
+          commentImportPending={workflow.githubCommentImportPending}
+          githubAppConnected={workflow.githubAppConnected}
+          onUpdate={workflow.updateTask}
+          onAddComment={workflow.addComment}
+          onUploadAttachment={workflow.uploadAttachment}
+          onImportGitHubComments={() => workflow.importGitHubComments()}
+          onReportBlocker={workflow.reportBlocker}
+          onCreateSubIssue={() => workflow.setSubIssueDialogOpen(true)}
+          onSyncGitHub={workflow.syncGitHub}
+          onOpenReview={workflow.openReview}
+          onDelete={workflow.deleteTask}
+          onAddRelation={workflow.addRelation}
+          onRemoveRelation={workflow.removeRelation}
+        />
       </div>
+
+      {workflow.subIssueDialogOpen && (
+        <NewTaskDialog
+          defaults={{
+            taskType: "sub_issue",
+            parentTaskId: task.id,
+            milestoneId: workflow.taskSnapshot.milestoneId,
+            packageId: workflow.taskSnapshot.packageId,
+            assignee: workflow.taskSnapshot.assigneeId || workflow.taskSnapshot.assignee,
+            status: "Offen",
+          }}
+          data={{ milestones, packages, profiles, sprints, tasks: allTasks }}
+          pending={workflow.isPending}
+          onClose={() => workflow.setSubIssueDialogOpen(false)}
+          onCreate={workflow.createSubIssue}
+        />
+      )}
     </main>
   );
 }

@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 
 type BlockerPayload = {
   reason?: string;
@@ -31,6 +32,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  const detailPermissions = taskDetailPermissions({
+    task: {
+      assignee: task.assignee || "",
+      assigneeId: task.assignee || "",
+      owner: task.owner || "",
+      ownerId: task.owner || "",
+      reviewOwnerProfileId: "",
+    },
+    profile: permission.profile,
+    unrestricted: !permission.profile,
+  });
+  if (!detailPermissions.canReportBlocker) {
+    return apiError("Founder können Blocker nur für eigene Aufgaben melden.", 403);
+  }
 
   const { data: blocker, error: insertError } = await supabase
     .from("task_blockers")

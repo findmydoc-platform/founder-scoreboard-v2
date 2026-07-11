@@ -31,6 +31,24 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   ].filter(Boolean);
 }
 
+export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
+  return [
+    payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined
+      || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined
+      ? "Aufgabenbrief"
+      : "",
+    payload.evidenceLink !== undefined ? "Evidence-Link" : "",
+    payload.note !== undefined ? "Notiz" : "",
+    payload.dependsOn !== undefined ? "Abhängigkeit" : "",
+    payload.selfDodChecked !== undefined || payload.selfEvidenceChecked !== undefined
+      || payload.selfDocumentedChecked !== undefined || payload.selfBlockersChecked !== undefined
+      ? "Founder-Checkliste"
+      : "",
+    payload.reviewStatus !== undefined ? "Review" : "",
+    payload.githubSyncStatus !== undefined ? "GitHub-Sync" : "",
+  ].filter(Boolean);
+}
+
 export function validateTaskStatusUpdate({
   currentTask,
   isOperationalLead,

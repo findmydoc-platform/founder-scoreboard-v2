@@ -57,6 +57,29 @@ test("score and review owner payload fields remain available outside review requ
   assert.equal(payload.scorePoints, 8);
 });
 
+test("task brief fields stay together in the shared update payload", async () => {
+  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+
+  const payload = taskUpdateRequestPayload({
+    problemStatement: "Problem",
+    intendedOutcome: "Zielbild",
+    scopeConstraints: "Umfang",
+    acceptanceCriteria: "Kriterium",
+    evidenceRequired: "Nachweis",
+    definitionOfDone: "Qualitätsstandard",
+  }, "2026-07-12T10:00:00.000Z");
+
+  assert.equal(payload.problemStatement, "Problem");
+  assert.equal(payload.intendedOutcome, "Zielbild");
+  assert.equal(payload.scopeConstraints, "Umfang");
+  assert.equal(payload.acceptanceCriteria, "Kriterium");
+  assert.equal(payload.evidenceRequired, "Nachweis");
+  assert.equal(payload.definitionOfDone, "Qualitätsstandard");
+});
+
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },

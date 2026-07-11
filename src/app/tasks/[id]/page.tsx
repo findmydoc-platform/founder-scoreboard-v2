@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
+import { SeedTaskDetailPage } from "@/features/tasks/templates/seed-task-detail-page";
 import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
@@ -35,6 +36,7 @@ export default async function TaskPage({ params }: Props) {
   }
   const task = data.tasks.find((item) => item.id === id);
 
+  if (!task && source === "seed") return <SeedTaskDetailPage taskId={id} />;
   if (!task) notFound();
 
   const supabase = getServerSupabase();

@@ -29,6 +29,9 @@ type Props = {
   canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canManageReviewOwner: boolean;
+  canOpenReview: boolean;
+  canSyncGitHub: boolean;
+  canDeleteTask: boolean;
   canChangeTaskStatus?: boolean;
   pending: boolean;
   githubAppConnected: boolean;
@@ -48,6 +51,9 @@ export function TaskDetailPanelSidebar({
   canManageFinalTaskStatus,
   canManageTaskMeta,
   canManageReviewOwner,
+  canOpenReview,
+  canSyncGitHub,
+  canDeleteTask,
   canChangeTaskStatus = canManageTaskMeta,
   pending,
   githubAppConnected,
@@ -182,7 +188,7 @@ export function TaskDetailPanelSidebar({
           <div>
             <div className="text-xs font-semibold text-slate-500">Review</div>
             <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
-            {reviewOpen ? (
+            {reviewOpen && canOpenReview ? (
               <button
                 type="button"
                 disabled={pending}
@@ -234,7 +240,7 @@ export function TaskDetailPanelSidebar({
             <h3 className="text-sm font-semibold text-slate-950">GitHub Issue</h3>
             <p className="mt-1 text-xs text-slate-500">Mit der GitHub-Arbeitsfläche abgleichen.</p>
           </div>
-          {canSyncExistingGitHubIssue ? (
+          {canSyncExistingGitHubIssue && canSyncGitHub ? (
             <button
               type="button"
               disabled={pending || task.githubSyncStatus === "pending" || !githubAppConnected}
@@ -243,7 +249,7 @@ export function TaskDetailPanelSidebar({
             >
               {task.githubSyncStatus === "pending" ? "Sync..." : "Sync"}
             </button>
-          ) : task.taskType === "deliverable" ? (
+          ) : task.taskType === "deliverable" && canSyncGitHub ? (
             <button
               type="button"
               disabled={pending || task.githubSyncStatus === "pending" || !githubAppConnected}
@@ -252,6 +258,8 @@ export function TaskDetailPanelSidebar({
             >
               {task.githubSyncStatus === "pending" ? "Anlegen..." : "GitHub Issue anlegen"}
             </button>
+          ) : !canSyncGitHub ? (
+            <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nur lesbar</span>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>
           )}
@@ -283,7 +291,7 @@ export function TaskDetailPanelSidebar({
         </div>
       </section>
 
-      {canManageTaskMeta && (
+      {canDeleteTask && (
         <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
           <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
           <p className="mt-1 text-xs leading-5 text-red-800">
