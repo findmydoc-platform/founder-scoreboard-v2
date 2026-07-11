@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import pg from "pg";
 import { loadLocalEnv } from "./lib/env.mjs";
 
-const [, , sqlFile] = process.argv;
+const [, , firstArg, secondArg] = process.argv;
+const sqlFile = firstArg === "--" ? secondArg : firstArg;
 await loadLocalEnv();
 
 if (!sqlFile) {

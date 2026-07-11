@@ -21,6 +21,7 @@
     "verify:release": "node --test tests/*.test.mjs && node scripts/verify-task-utf8.mjs && eslint && node scripts/verify-vercel-ready.mjs && node scripts/verify-google-chat-rollout.mjs && pnpm audit --audit-level=moderate",
     "verify:deploy": "pnpm test && pnpm run verify:vercel-ready && pnpm run verify:google-chat && pnpm run lint",
     "vercel:build": "pnpm run verify:deploy && pnpm run build",
+    "deploy:supabase-schema": "node scripts/deploy-production-schema.mjs",
     "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
     "migrate:relationships": "node scripts/migrate-task-relationships.mjs",
     "apply:sql": "node scripts/apply-sql.mjs"
