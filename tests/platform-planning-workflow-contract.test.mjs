@@ -602,6 +602,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const scoring = await readFile("src/lib/founderops-scoring.ts", "utf8");
   const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+  const finalizationMigration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
   const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
@@ -625,9 +626,10 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(route, /computeStrikeTransition/);
   assert.match(route, /Offene Score-Einwände/);
   assert.match(route, /Reviewfrist läuft noch/);
-  assert.match(route, /founder_sprint_scores/);
-  assert.match(route, /founder_strike_state/);
-  assert.match(route, /strike_events/);
+  assert.match(route, /lock_sprint_transaction/);
+  assert.match(finalizationMigration, /founder_sprint_scores/);
+  assert.match(finalizationMigration, /founder_strike_state/);
+  assert.match(finalizationMigration, /strike_events/);
   assert.match(objectionRoute, /score_objections/);
   assert.match(objectionRoute, /second_reviewer_profile_id/);
   assert.match(ui, /FounderOps Score v2\.1/);
@@ -649,15 +651,28 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
 
 test("sprint lock freezes open scores and closes the sprint", async () => {
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
+  const migration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
+  const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
+  const commands = await readFile("src/features/sprint/hooks/use-sprint-commands.ts", "utf8");
 
   assert.match(route, /requireOperationalLead/);
-  assert.match(route, /score_points: 0/);
+  assert.match(route, /score_points: preserveScore \? Number\(task\.score_points \|\| 0\) : 0/);
   assert.match(route, /score_final: true/);
-  assert.match(route, /sprint.lock_score/);
+  assert.match(route, /lock_sprint_transaction/);
+  assert.match(migration, /sprint\.lock_score/);
+  assert.match(migration, /lock_result/);
+  assert.match(migration, /'replayed', true/);
+  assert.match(migration, /revoke all on function public\.lock_sprint_transaction[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.lock_sprint_transaction[\s\S]*to service_role/);
+  assert.match(apiClient, /json: \{ finalizeNow \}/);
+  assert.doesNotMatch(apiClient, /json: \{ finalizeNow: true \}/);
+  assert.match(commands, /Reviewfrist läuft noch\. Sprint trotzdem jetzt finalisieren/);
+  assert.match(commands, /lockSprintRequest\(apiClient, sprintId, finalizeNow\)/);
 });
 
 test("sprint lock creates carryover for unfinished deliverables", async () => {
   const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
+  const finalizationMigration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const routeContract = `${route}\n${taskInsertRow}`;
@@ -674,7 +689,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
   assert.match(routeContract, /github_issue_number: input\.githubIssueNumber \|\| null/);
   assert.match(route, /missed_uncommunicated/);
-  assert.match(route, /accepted_carryover/);
+  assert.match(finalizationMigration, /accepted_carryover/);
+  assert.match(finalizationMigration, /insert into public\.tasks/);
   assert.match(route, /sprint\.task_carried_over/);
   assert.match(panelSidebar, /Sprint-Verlauf/);
   assert.match(ui, /Carry-over/);
