@@ -66,10 +66,12 @@ test("runtime fallback stays empty until the sample data button writes seed data
   assert.match(route, /importDemoSeed\(supabase\)/);
   assert.match(helper, /seedData/);
   assert.match(helper, /export function isDemoSeedImportButtonAvailable/);
-  assert.match(importHook, /persistLocalPlanningData\(seedData\)/);
-  assert.match(importHook, /setData\(seedData\)/);
+  assert.match(importHook, /resolveNotificationEvents\(seedData\)\.data/);
+  assert.match(importHook, /persistLocalPlanningData\(reconciledSeedData\)/);
+  assert.match(importHook, /setData\(reconciledSeedData\)/);
   assert.match(localStateHook, /localDataKey = "fmd-planning-local-data-v1"/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localDataKey\)/);
+  assert.match(localStateHook, /resolveNotificationEvents\(normalizePlanningData/);
 });
 
 test("seedData is assembled from source.json defaults and stable core ids", async () => {

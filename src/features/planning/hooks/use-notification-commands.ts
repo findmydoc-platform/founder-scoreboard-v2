@@ -8,6 +8,9 @@ import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-pl
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
+import { applyLocalNotificationAction, type NotificationUserAction } from "@/lib/notification-lifecycle";
+import { resolveNotificationEvents } from "@/lib/notification-resolution";
+import { markPlanningHeaderDataError, markPlanningHeaderDataLoading, mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/planning-header-data";
 
 type GoogleChatStatus = {
   webhookConfigured: boolean;
@@ -111,7 +114,7 @@ export function useNotificationCommands({
     );
   };
 
-  const updateNotificationStatus = (eventId: number, status: "dismissed" | "resolved") => {
+  const updateNotificationStatus = (eventId: number, action: NotificationUserAction) => {
     setHeaderData((current) => {
       const removedHeaderEvent = current.notifications.data.items.some((event) => event.id === eventId);
       return {
@@ -128,7 +131,9 @@ export function useNotificationCommands({
     setData((current) => {
       const nextData = {
         ...current,
-        notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status } : event)),
+        notificationEvents: current.notificationEvents.map((event) => (
+          event.id === eventId ? applyLocalNotificationAction(event, action) : event
+        )),
       };
       if (source === "seed") {
         try {
@@ -144,12 +149,12 @@ export function useNotificationCommands({
 
     startTransition(async () => {
       try {
-        const { response, body } = await planningApi.updateNotificationStatusRequest(apiClient, eventId, status);
+        const { response, body } = await planningApi.updateNotificationStatusRequest(apiClient, eventId, action);
         if (!response.ok) throw new Error(body?.error || "Notification konnte nicht aktualisiert werden.");
       } catch (error) {
         setData((current) => ({
           ...current,
-          notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "pending" } : event)),
+          notificationEvents: current.notificationEvents,
         }));
         await refreshPlanningData();
         setSaveError(error instanceof Error ? error.message : "Notification konnte nicht aktualisiert werden.");
@@ -158,7 +163,7 @@ export function useNotificationCommands({
   };
 
   const openNotification = (event: HeaderNotification) => {
-    updateNotificationStatus(event.id, "resolved");
+    updateNotificationStatus(event.id, "seen");
     const target = notificationTarget(event);
     if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
@@ -175,7 +180,38 @@ export function useNotificationCommands({
   };
 
   const dismissNotification = (eventId: number) => {
-    updateNotificationStatus(eventId, "dismissed");
+    updateNotificationStatus(eventId, "dismiss");
+  };
+
+  const openNotificationInbox = () => {
+    setShowNotifications(true);
+    if (source === "seed") {
+      setData((current) => {
+        const nextData = resolveNotificationEvents(current).data;
+        try {
+          persistLocalPlanningData(nextData);
+        } catch {
+          // Keep the local inbox usable when browser storage is unavailable.
+        }
+        return nextData;
+      });
+      return;
+    }
+
+    setHeaderData((current) => markPlanningHeaderDataLoading(current, ["notifications"]));
+    startTransition(async () => {
+      try {
+        const { response, body } = await planningApi.requestPlanningHeaderData(apiClient, ["notifications"]);
+        if (!response.ok || !body?.headerData) {
+          throw new Error(body?.error || "Benachrichtigungen konnten nicht geladen werden.");
+        }
+        const next = normalizePlanningHeaderData(body.headerData);
+        setHeaderData((current) => mergePlanningHeaderData(current, next));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Benachrichtigungen konnten nicht geladen werden.";
+        setHeaderData((current) => markPlanningHeaderDataError(current, ["notifications"], message));
+      }
+    });
   };
 
   return {
@@ -183,6 +219,7 @@ export function useNotificationCommands({
     dispatchNotifications,
     googleChatStatus,
     notificationDispatchMessage,
+    openNotificationInbox,
     openNotification,
     retryNotificationDelivery,
     sendGoogleChatTest,

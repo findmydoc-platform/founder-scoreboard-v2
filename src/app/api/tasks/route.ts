@@ -8,6 +8,7 @@ import { taskStatuses } from "@/lib/status";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type CreateTaskPayload = {
   title?: string;
@@ -193,12 +194,11 @@ export async function POST(request: NextRequest) {
     if (leadError) return apiError(leadError.message, 500);
     notifications.push(...(leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
-      .map((lead) => ({
-        type: "task.proposed",
-        actor_profile_id: permission.profile?.id || null,
-        recipient_profile_id: lead.id,
-        entity_type: "task",
-        entity_id: id,
+      .map((lead) => createNotificationPayload("task.proposed", {
+        actorProfileId: permission.profile?.id,
+        recipientProfileId: lead.id,
+        entityType: "task",
+        entityId: id,
         title: `Aufgabenvorschlag: ${title}`,
         body: insert.description || "Founder hat eine neue Aufgabe vorgeschlagen.",
       })));

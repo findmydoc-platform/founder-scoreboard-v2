@@ -514,7 +514,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /payload\.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest/);
   assert.match(taskRoute, /requestedReviewOwnerProfileId = canSetReviewOwner/);
   assert.match(taskRoute, /task\.review_requested/);
-  assert.match(taskRoute, /recipient_profile_id: recipient\.id/);
+  assert.match(taskRoute, /recipientProfileId: recipient\.id/);
   assert.match(taskRoute, /deine Accountable-Review/);
   assert.match(appUi, /openReviewSheet/);
   assert.match(sprintUi, /focusedReviewTaskId/);
@@ -854,7 +854,7 @@ test("notification preferences are editable per profile and event type", async (
   const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
   const profileNotifications = await readFile("src/features/profile/molecules/profile-notification-section.tsx", "utf8");
   const ownProfileCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
-  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const policy = await readFile("src/lib/notification-catalog.ts", "utf8");
 
   assert.match(route, /requireFounder/);
   assert.match(selfRoute, /requireTeamMember/);
@@ -874,7 +874,7 @@ test("notification preferences are editable per profile and event type", async (
   assert.match(profileNotifications, /notificationEventLabel/);
   assert.match(ownProfileCommands, /notificationEvents/);
   assert.match(ownProfileCommands, /Profil konnte nicht gespeichert werden/);
-  assert.match(policy, /GoogleChatDigestEventType/);
+  assert.match(policy, /googleChatDigestEventTypes/);
   assert.match(policy, /Review angefragt/);
 });
 

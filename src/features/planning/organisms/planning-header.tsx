@@ -33,6 +33,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     importDemoSeed,
     mobileNavOpen,
     openNotification,
+    openNotificationInbox,
     saveError,
     setDevProfileId,
     setFilters,
@@ -116,7 +117,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           <PlanningHeaderDataActions
             headerData={headerData}
             notificationsOpen={showNotifications}
-            onToggleNotifications={() => setShowNotifications((value) => !value)}
+            onToggleNotifications={() => showNotifications ? setShowNotifications(false) : openNotificationInbox()}
             onOpenNotification={openNotification}
             onDismissNotification={dismissNotification}
           />

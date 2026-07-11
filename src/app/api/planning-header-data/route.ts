@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
 
   const headerData = await loadPlanningHeaderData(supabase, {
     currentProfileId: auth.profile?.id || null,
+    platformRole: auth.profile?.platformRole || null,
     slots,
   });
 

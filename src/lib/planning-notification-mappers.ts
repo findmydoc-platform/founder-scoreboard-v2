@@ -12,6 +12,10 @@ export function mapNotificationEvent(row: DbNotificationEvent): NotificationEven
     title: row.title,
     body: row.body || "",
     status: row.status,
+    seenAt: row.seen_at || "",
+    dismissedAt: row.dismissed_at || "",
+    resolvedAt: row.resolved_at || "",
+    resolutionReason: row.resolution_reason || "",
     createdAt: row.created_at,
   };
 }

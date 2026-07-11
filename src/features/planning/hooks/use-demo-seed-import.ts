@@ -6,6 +6,7 @@ import { importDemoSeedRequest } from "@/features/planning/model/planning-api-cl
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { seedData } from "@/lib/seed";
 import type { PlanningData } from "@/lib/types";
+import { resolveNotificationEvents } from "@/lib/notification-resolution";
 
 export function useDemoSeedImport({
   apiClient,
@@ -21,8 +22,9 @@ export function useDemoSeedImport({
   const [demoSeedImportPending, setDemoSeedImportPending] = useState(false);
 
   const importIntoBrowser = useCallback(() => {
-    persistLocalPlanningData(seedData);
-    setData(seedData);
+    const reconciledSeedData = resolveNotificationEvents(seedData).data;
+    persistLocalPlanningData(reconciledSeedData);
+    setData(reconciledSeedData);
   }, [setData]);
 
   const importDemoSeed = useCallback(async () => {

@@ -5,6 +5,7 @@ import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founde
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type TaskRow = {
   id: string;
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const openBlockerTaskIds = new Set((blockerResult.data || []).map((blocker: { task_id: string }) => blocker.task_id));
 
   const carryoverInserts = [];
-  const notifications = [];
+  const notifications: ReturnType<typeof createNotificationPayload>[] = [];
   const taskUpdates = [];
   const acceptedBlockerTaskIds = [];
 
@@ -228,15 +229,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
       const assignee = task.assignee || task.owner;
       if (assignee) {
-        notifications.push({
-          type: "sprint.task_carried_over",
-          actor_profile_id: permission.profile?.id || null,
-          recipient_profile_id: assignee,
-          entity_type: "task",
-          entity_id: task.id,
+        notifications.push(createNotificationPayload("sprint.task_carried_over", {
+          actorProfileId: permission.profile?.id,
+          recipientProfileId: assignee,
+          entityType: "task",
+          entityId: task.id,
           title: `Carry-over: ${task.title}`,
           body: `${reason}\nNeuer Sprint: ${nextSprint.name || nextSprint.id}`,
-        });
+        }));
       }
     }
   }

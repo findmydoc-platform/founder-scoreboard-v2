@@ -551,7 +551,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
   const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const mentions = await readFile("src/lib/mentions.ts", "utf8");
-  const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const notificationPolicy = await readFile("src/lib/notification-catalog.ts", "utf8");
   const googleChat = await readFile("src/lib/google-chat.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 

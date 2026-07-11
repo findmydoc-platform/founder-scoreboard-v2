@@ -280,6 +280,10 @@ export type NotificationEvent = {
   title: string;
   body: string;
   status: "pending" | "sent" | "failed" | "dismissed" | "resolved";
+  seenAt: string;
+  dismissedAt: string;
+  resolvedAt: string;
+  resolutionReason: string;
   createdAt: string;
 };
 

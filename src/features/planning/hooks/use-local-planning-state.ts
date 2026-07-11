@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { normalizePlanningData } from "@/features/planning/model/planning-app-model";
 import type { PlanningData, Task } from "@/lib/types";
+import { resolveNotificationEvents } from "@/lib/notification-resolution";
 
 const localDataKey = "fmd-planning-local-data-v1";
 const localStateKey = "fmd-planning-local-state-v1";
@@ -57,7 +58,7 @@ export function useLocalPlanningState({ source, setData }: UseLocalPlanningState
         const parsedData = storedData ? JSON.parse(storedData) as PlanningData : null;
         const parsedTasks = stored ? JSON.parse(stored) as Partial<Record<string, Partial<Task>>> : {};
         setData((current) => {
-          const base = normalizePlanningData(parsedData || current);
+          const base = resolveNotificationEvents(normalizePlanningData(parsedData || current)).data;
           return {
             ...base,
             tasks: base.tasks.map((task) => ({ ...task, ...(parsedTasks[task.id] || {}) })),

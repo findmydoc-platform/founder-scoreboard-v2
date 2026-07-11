@@ -10,7 +10,10 @@ import type {
   NotificationEvent,
   PlanningData,
   PlanningHeaderData,
+  PlatformRole,
 } from "@/lib/types";
+import { reconcileNotificationEvents } from "@/lib/notification-resolution";
+import { isOperationalLeadRole } from "@/lib/platform";
 
 export const maxHeaderQuickLinks = 5;
 export const maxHeaderCalendarEvents = 200;
@@ -69,6 +72,7 @@ type PlanningHeaderProjectionOptions = {
   eventsLoaded?: boolean;
   notificationEventsLoaded?: boolean;
   currentProfileId?: string | null;
+  platformRole?: PlatformRole | null;
 };
 
 type PlanningHeaderLoadOptions = PlanningHeaderProjectionOptions & {
@@ -231,10 +235,16 @@ export function projectHeaderCalendarEvents(events: FounderEvent[]): HeaderCalen
     }));
 }
 
-export function projectHeaderNotifications(events: NotificationEvent[], currentProfileId?: string | null): HeaderNotificationsData {
+export function projectHeaderNotifications(
+  events: NotificationEvent[],
+  currentProfileId?: string | null,
+  platformRole?: PlatformRole | null,
+): HeaderNotificationsData {
   const pending = events
-    .filter((event) => event.status === "pending")
-    .filter((event) => !currentProfileId || event.recipientProfileId === currentProfileId)
+    .filter((event) => event.status === "pending" && !event.seenAt)
+    .filter((event) => !currentProfileId
+      || event.recipientProfileId === currentProfileId
+      || !event.recipientProfileId && Boolean(platformRole && isOperationalLeadRole(platformRole)))
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
   return {
     unreadCount: pending.length,
@@ -261,7 +271,7 @@ export function projectPlanningHeaderData(
     quickLinks: options.fmdToolsLoaded ? readyHeaderSlot(projectHeaderQuickLinks(data.fmdTools)) : fallback.quickLinks,
     calendarEvents: options.eventsLoaded ? readyHeaderSlot(projectHeaderCalendarEvents(data.events)) : fallback.calendarEvents,
     notifications: options.notificationEventsLoaded
-      ? readyHeaderSlot(projectHeaderNotifications(data.notificationEvents, options.currentProfileId))
+      ? readyHeaderSlot(projectHeaderNotifications(data.notificationEvents, options.currentProfileId, options.platformRole))
       : fallback.notifications,
   };
 }
@@ -326,15 +336,24 @@ async function loadHeaderCalendarEvents(supabase: SupabaseClient): Promise<Heade
   return readyHeaderSlot(((result.data || []) as HeaderCalendarEventRow[]).map(mapHeaderCalendarEvent), new Date().toISOString());
 }
 
-async function loadHeaderNotifications(supabase: SupabaseClient, currentProfileId?: string | null): Promise<HeaderDataSlot<HeaderNotificationsData>> {
+async function loadHeaderNotifications(
+  supabase: SupabaseClient,
+  currentProfileId?: string | null,
+  platformRole?: PlatformRole | null,
+): Promise<HeaderDataSlot<HeaderNotificationsData>> {
   if (!currentProfileId) return readyHeaderSlot(emptyHeaderNotifications, new Date().toISOString());
-  const result = await supabase
+  await reconcileNotificationEvents(supabase, { currentProfileId, platformRole });
+  let query = supabase
     .from("notification_events")
     .select(headerNotificationSelect, { count: "exact" })
-    .eq("recipient_profile_id", currentProfileId)
     .eq("status", "pending")
+    .is("seen_at", null)
     .order("created_at", { ascending: false })
     .limit(maxHeaderNotifications);
+  query = platformRole && isOperationalLeadRole(platformRole)
+    ? query.or(`recipient_profile_id.eq.${currentProfileId},recipient_profile_id.is.null`)
+    : query.eq("recipient_profile_id", currentProfileId);
+  const result = await query;
   if (result.error) return errorHeaderSlot(emptyPlanningHeaderData.notifications, "Benachrichtigungen konnten nicht geladen werden.");
   return readyHeaderSlot({
     unreadCount: Number(result.count ?? result.data?.length ?? 0),
@@ -360,8 +379,8 @@ export async function loadPlanningHeaderData(
       : Promise.resolve(emptyPlanningHeaderData.calendarEvents),
     requestedSlots.has("notifications")
       ? options.notificationEventsLoaded && options.data
-        ? Promise.resolve(readyHeaderSlot(projectHeaderNotifications(options.data.notificationEvents, options.currentProfileId)))
-        : loadHeaderNotifications(supabase, options.currentProfileId)
+        ? Promise.resolve(readyHeaderSlot(projectHeaderNotifications(options.data.notificationEvents, options.currentProfileId, options.platformRole)))
+        : loadHeaderNotifications(supabase, options.currentProfileId, options.platformRole)
       : Promise.resolve(emptyPlanningHeaderData.notifications),
   ]);
 

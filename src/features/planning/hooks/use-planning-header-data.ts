@@ -49,11 +49,12 @@ export function usePlanningHeaderData({
   const projectedHeaderData = useMemo(
     () => projectPlanningHeaderData(data, baseHeaderData, {
       currentProfileId,
+      platformRole: serverCurrentProfile?.platformRole || null,
       fmdToolsLoaded: source === "seed" || workspace === "tools",
       eventsLoaded: source === "seed" || workspace === "events",
       notificationEventsLoaded: source === "seed" || workspace === "notifications",
     }),
-    [baseHeaderData, currentProfileId, data, source, workspace],
+    [baseHeaderData, currentProfileId, data, serverCurrentProfile?.platformRole, source, workspace],
   );
 
   const headerData = useMemo(

@@ -68,7 +68,7 @@ export function NotificationInbox({
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Notifications</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Persönliche Hinweise bleiben hier, Google Chat bekommt nur Digests.</p>
+              <p className="mt-0.5 text-xs text-slate-500">Neue Hinweise. Gesehene bleiben im Notification Center offen.</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Link
@@ -115,7 +115,7 @@ export function NotificationInbox({
                 </article>
             )) : (
               <UiEmptyState className="px-4 py-8">
-                Keine offenen Hinweise.
+                Keine neuen Hinweise.
               </UiEmptyState>
             )}
           </div>
