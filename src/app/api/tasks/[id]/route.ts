@@ -23,6 +23,7 @@ import {
 import { archiveGitHubIssue } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type TaskUpdateTransactionResult = {
   task?: { updated_at?: string };
@@ -220,12 +221,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (recipientError) return apiError(recipientError.message, 500);
       recipients = fallbackRecipients || [];
     }
-    notifications.push(...recipients.map((recipient) => ({
-        type: "task.review_requested",
-        actor_profile_id: permission.profile?.id || null,
-        recipient_profile_id: recipient.id,
-        entity_type: "task",
-        entity_id: id,
+    notifications.push(...recipients.map((recipient) => createNotificationPayload("task.review_requested", {
+        actorProfileId: permission.profile?.id,
+        recipientProfileId: recipient.id,
+        entityType: "task",
+        entityId: id,
         title: `Review angefragt: ${currentTask.title}`,
         body: reviewOwnerProfileId
           ? "Diese Aufgabe wartet auf deine Accountable-Review."

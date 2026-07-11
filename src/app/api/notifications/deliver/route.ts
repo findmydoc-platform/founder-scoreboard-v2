@@ -10,6 +10,7 @@ import {
   type GoogleChatDigestEvent,
 } from "@/lib/google-chat";
 import { shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
+import { reconcileNotificationEvents } from "@/lib/notification-resolution";
 import { getServerSupabase } from "@/lib/supabase";
 
 type NotificationRow = {
@@ -172,6 +173,8 @@ export async function GET(request: NextRequest) {
   const permission = await requireOperationalLead(request);
   if (!permission.ok) return authzError(permission);
 
+  await reconcileNotificationEvents(supabase);
+
   const { count, error } = await supabase
     .from("notification_events")
     .select("id", { count: "exact", head: true })
@@ -194,6 +197,8 @@ export async function POST(request: NextRequest) {
 
   const permission = await authorizeDeliveryTrigger(request);
   if (!permission.ok) return authzError(permission);
+
+  await reconcileNotificationEvents(supabase);
 
   const payload = (await request.json().catch(() => ({}))) as DeliveryRequestPayload;
   const limit = safeLimit(payload.limit);

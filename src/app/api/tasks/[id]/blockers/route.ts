@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type BlockerPayload = {
   reason?: string;
@@ -55,12 +56,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
   const notifications = (leads || [])
     .filter((lead) => lead.id !== permission.profile?.id)
-    .map((lead) => ({
-      type: "task.blocker_reported",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: lead.id,
-      entity_type: "task",
-      entity_id: id,
+    .map((lead) => createNotificationPayload("task.blocker_reported", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: lead.id,
+      entityType: "task",
+      entityId: id,
       title: `Blocker gemeldet: ${task.title}`,
       body: [reason, impact ? `Impact: ${impact}` : "", needsHelpFrom ? `Braucht Hilfe von: ${needsHelpFrom}` : ""].filter(Boolean).join("\n"),
     }));

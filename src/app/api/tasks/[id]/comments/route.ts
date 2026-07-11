@@ -5,6 +5,7 @@ import { createGitHubIssueComment } from "@/lib/github";
 import { getGitHubAppUserToken } from "@/lib/github-app";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type CommentPayload = {
   comment?: string;
@@ -76,21 +77,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   });
 
   const notificationEvents = [
-    ...[...mentionedRecipients].map((recipientId) => ({
-      type: "task.mention",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: recipientId,
-      entity_type: "task",
-      entity_id: id,
+    ...[...mentionedRecipients].map((recipientId) => createNotificationPayload("task.mention", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: recipientId,
+      entityType: "task",
+      entityId: id,
       title: `Du wurdest erwähnt: ${task.title}`,
       body: comment,
     })),
-    ...[...recipients].map((recipientId) => ({
-      type: "task.comment",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: recipientId,
-      entity_type: "task",
-      entity_id: id,
+    ...[...recipients].map((recipientId) => createNotificationPayload("task.comment", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: recipientId,
+      entityType: "task",
+      entityId: id,
       title: `Neuer Kommentar: ${task.title}`,
       body: comment,
     })),

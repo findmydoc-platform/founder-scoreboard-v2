@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { createNotificationPayload, type NotificationType } from "@/lib/notification-catalog";
 
 type TaskRow = {
   id: string;
@@ -57,7 +58,7 @@ type ProfileRow = {
 };
 
 type ReminderCandidate = {
-  type: string;
+  type: NotificationType;
   actorProfileId: string | null;
   recipientProfileId: string | null;
   entityType: string;
@@ -334,15 +335,14 @@ export async function POST(request: NextRequest) {
   );
 
   if (!dryRun && toCreate.length) {
-    const insertResult = await supabase.from("notification_events").insert(toCreate.map((candidate) => ({
-      type: candidate.type,
-      actor_profile_id: candidate.actorProfileId,
-      recipient_profile_id: candidate.recipientProfileId,
-      entity_type: candidate.entityType,
-      entity_id: candidate.entityId,
+    const insertResult = await supabase.from("notification_events").insert(toCreate.map((candidate) => createNotificationPayload(candidate.type, {
+      actorProfileId: candidate.actorProfileId,
+      recipientProfileId: candidate.recipientProfileId,
+      entityType: candidate.entityType,
+      entityId: candidate.entityId,
       title: candidate.title,
       body: candidate.body,
-      dedupe_key: candidate.dedupeKey,
+      dedupeKey: candidate.dedupeKey,
     })));
     if (insertResult.error) return apiError(insertResult.error.message, 500);
   }

@@ -321,6 +321,10 @@ export type DbNotificationEvent = {
   title: string;
   body: string | null;
   status: NotificationEvent["status"];
+  seen_at: string | null;
+  dismissed_at: string | null;
+  resolved_at: string | null;
+  resolution_reason: string | null;
   created_at: string;
 };
 

@@ -42,6 +42,12 @@
     "health": true
   },
   {
+    "name": "notification_events.lifecycle",
+    "table": "notification_events",
+    "select": "id,status,seen_at,dismissed_at,resolved_at,resolution_reason",
+    "health": true
+  },
+  {
     "name": "notification_deliveries.payload",
     "table": "notification_deliveries",
     "select": "id,target,payload",

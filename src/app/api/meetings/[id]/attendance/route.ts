@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requireFounder } from "@/lib/authz";
 import type { MeetingAttendanceStatus } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type AttendancePayload = {
   profileId?: string;
@@ -85,12 +86,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
     const notifications = (leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
-      .map((lead) => ({
-        type: "meeting.attendance_updated",
-        actor_profile_id: permission.profile?.id || null,
-        recipient_profile_id: lead.id,
-        entity_type: "meeting",
-        entity_id: String(meetingId),
+      .map((lead) => createNotificationPayload("meeting.attendance_updated", {
+        actorProfileId: permission.profile?.id,
+        recipientProfileId: lead.id,
+        entityType: "meeting",
+        entityId: String(meetingId),
         title: `Weekly-Rückmeldung: ${meeting.title}`,
         body: `${profileId}: ${status}${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
       }));
@@ -98,15 +98,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   if (isLead && profileId !== permission.profile?.id) {
-    await supabase.from("notification_events").insert({
-      type: "meeting.attendance_updated",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: profileId,
-      entity_type: "meeting",
-      entity_id: String(meetingId),
+    await supabase.from("notification_events").insert(createNotificationPayload("meeting.attendance_updated", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: profileId,
+      entityType: "meeting",
+      entityId: String(meetingId),
       title: `Weekly bewertet: ${meeting.title}`,
       body: `${status} · ${points} Punkte${absenceReason ? `\nGrund: ${absenceReason}` : ""}`,
-    });
+    }));
   }
 
   await supabase.from("audit_log").insert({

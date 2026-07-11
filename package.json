@@ -17,6 +17,7 @@
     "verify:planning-batches": "node scripts/verify-planning-batch-transactions.mjs",
     "verify:sprint-finalization": "node scripts/verify-sprint-finalization-transaction.mjs",
     "verify:score-objection": "node scripts/verify-score-objection-transaction.mjs",
+    "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",

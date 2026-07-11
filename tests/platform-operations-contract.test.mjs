@@ -12,6 +12,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const generatorRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const catalog = await readFile("src/lib/notification-catalog.ts", "utf8");
   const resolutionPolicy = await readFile("src/lib/notification-resolution.ts", "utf8");
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -83,16 +84,16 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(route, /notification_preferences/);
   assert.match(route, /Google-Chat-Präferenz/);
   assert.match(route, /notification_deliveries/);
-  assert.match(policy, /task\.review_rework/);
-  assert.match(policy, /task\.review_completed/);
-  assert.match(policy, /task\.deadline_overdue/);
+  assert.match(catalog, /task\.review_rework/);
+  assert.match(catalog, /task\.review_completed/);
+  assert.match(catalog, /task\.deadline_overdue/);
   assert.match(policy, /googleChatDirectDmEventTypes/);
   assert.match(policy, /shouldSendToGoogleChatDm/);
-  assert.match(policy, /sprint\.review_due/);
-  assert.match(policy, /meeting\.attendance_updated/);
-  assert.doesNotMatch(policy, /feedback\.bug_reported/);
-  assert.doesNotMatch(policy, /feedback\.feature_requested/);
-  assert.match(resolutionPolicy, /autoResolvableNotificationTypes/);
+  assert.match(catalog, /sprint\.review_due/);
+  assert.match(catalog, /meeting\.attendance_updated/);
+  assert.doesNotMatch(catalog, /feedback\.bug_reported/);
+  assert.doesNotMatch(catalog, /feedback\.feature_requested/);
+  assert.match(catalog, /lifecycle: "actionable"/);
   assert.match(resolutionPolicy, /"task\.review_requested"/);
   assert.match(resolutionPolicy, /"task\.review_rework"/);
   assert.match(resolutionPolicy, /"task\.blocker_reported"/);
@@ -100,13 +101,13 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(resolutionPolicy, /"task\.proposed"/);
   assert.match(resolutionPolicy, /"sprint\.review_due"/);
   assert.match(resolutionPolicy, /"event\.upcoming"/);
-  assert.match(resolutionPolicy, /informationalNotificationTypes/);
+  assert.match(catalog, /lifecycle: "informational"/);
   assert.match(resolutionPolicy, /"task\.comment"/);
   assert.match(resolutionPolicy, /"task\.mention"/);
   assert.match(resolutionPolicy, /"task\.review_completed"/);
   assert.match(resolutionPolicy, /"meeting\.attendance_updated"/);
-  assert.match(planningData, /persistResolvedNotificationEvents/);
-  assert.match(resolutionPolicy, /update\(\{ status: "resolved" \}\)/);
+  assert.match(planningData, /reconcileNotificationEvents/);
+  assert.match(resolutionPolicy, /status: "resolved", resolved_at:/);
   assert.match(resolutionPolicy, /\.eq\("status", "pending"\)/);
   assert.match(ui, /NotificationInbox/);
   assert.match(inboxUi, /notificationTypeLabel/);
@@ -116,10 +117,10 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(inboxUi, /onDismiss\(event\.id\)/);
   assert.match(ui, /openTaskPanel\(task\.id\)/);
   assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
-  assert.match(notificationCommands, /updateNotificationStatus\(event\.id, "resolved"\)/);
+  assert.match(notificationCommands, /updateNotificationStatus\(event\.id, "seen"\)/);
   assert.match(notificationCommands, /notificationTarget\(event\)/);
-  assert.match(notificationRoute, /"dismissed" \| "resolved"/);
-  assert.match(notificationRoute, /\.update\(\{ status \}\)/);
+  assert.match(notificationRoute, /"seen", "dismiss"/);
+  assert.match(notificationRoute, /requireTeamMember/);
   assert.match(notificationTarget, /entityType === "founder_event"/);
   assert.match(notificationTarget, /entityType === "fmd_tool"/);
   assert.match(notificationTarget, /"meeting", "sprint", "sprint_commitment", "score_objection"/);
@@ -353,7 +354,7 @@ test("founder event writes are operational-lead guarded and audited", async () =
 });
 
 test("event reminders use the existing notification pipeline", async () => {
-  const policy = await readFile("src/lib/notification-policy.ts", "utf8");
+  const policy = await readFile("src/lib/notification-catalog.ts", "utf8");
   const digestRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
   const deliveryRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
 
@@ -509,7 +510,7 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(headerData, /loadPlanningHeaderData/);
   assert.match(planningData, /headerData/);
   assert.match(planningData, /filterPlanningDataForWorkspaceAccess/);
-  assert.match(planningData, /isOperationalLeadRole\(access\.platformRole\)/);
+  assert.match(planningData, /isOperationalLeadRole\(access\.platformRole!/);
   assert.match(planningData, /event\.recipientProfileId === currentProfileId/);
   assert.match(planningData, /notificationDeliveries: \[\]/);
   assert.match(planningDataApi, /planningDataWorkspaceFromValue\(rawWorkspace\)/);

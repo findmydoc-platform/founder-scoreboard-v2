@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { NotificationOutboxPanel } from "@/features/notifications/organisms/notification-outbox-panel";
 import { formatDate } from "@/lib/display";
+import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
+import { isOperationalLeadRole } from "@/lib/platform";
 import type { NotificationDelivery, NotificationEvent, PlanningData, Profile } from "@/lib/types";
 import { classNames, UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
@@ -36,13 +38,6 @@ function eventStatusTone(status: NotificationEvent["status"]) {
   if (status === "dismissed" || status === "resolved") return "slate";
   if (status === "sent") return "emerald";
   return "red";
-}
-
-function eventStatusLabel(status: NotificationEvent["status"]) {
-  if (status === "pending") return "offen";
-  if (status === "dismissed" || status === "resolved") return "erledigt";
-  if (status === "sent") return "sent";
-  return "failed";
 }
 
 function profileName(profiles: Profile[], profileId: string) {
@@ -91,7 +86,10 @@ export function NotificationsOverview({
   const [personalFilter, setPersonalFilter] = useState<PersonalNotificationFilter>("pending");
   const personalNotifications = useMemo(
     () => currentProfile
-      ? data.notificationEvents.filter((event) => event.recipientProfileId === currentProfile.id)
+      ? data.notificationEvents.filter((event) => (
+        event.recipientProfileId === currentProfile.id
+        || !event.recipientProfileId && isOperationalLeadRole(currentProfile.platformRole)
+      ))
       : data.notificationEvents,
     [currentProfile, data.notificationEvents],
   );
@@ -101,6 +99,7 @@ export function NotificationsOverview({
     return event.status === personalFilter;
   });
   const personalOpenCount = personalNotifications.filter((event) => event.status === "pending").length;
+  const personalNewCount = personalNotifications.filter((event) => event.status === "pending" && !event.seenAt).length;
   const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
   const outboxPendingCount = googleChatStatus?.pending ?? data.notificationEvents.filter((event) => event.status === "pending").length;
@@ -110,6 +109,7 @@ export function NotificationsOverview({
   return (
     <div className="grid min-w-0 gap-4">
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
+        <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
         {canManageOutbox && <span><strong className="text-slate-900">{outboxPendingCount}</strong> im Ausgang</span>}
         {deliveryErrorCount > 0 && <span className="text-red-700"><strong>{deliveryErrorCount}</strong> Fehler</span>}
@@ -119,9 +119,9 @@ export function NotificationsOverview({
         <UiPanel padding="none" className="min-w-0 overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-950">Für mich</h2>
+              <h2 className="text-base font-semibold text-slate-950">Für mich{currentProfile && isOperationalLeadRole(currentProfile.platformRole) ? " & Team" : ""}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
+                {personalNewCount} neu · {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
               </p>
             </div>
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
@@ -158,7 +158,9 @@ export function NotificationsOverview({
                       {event.body && <span className="mt-1 block line-clamp-2 text-sm leading-5 text-slate-600">{event.body}</span>}
                       <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                         {showTypeBadge && <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>}
-                        {personalFilter === "all" && <UiBadge tone={eventStatusTone(event.status)} size="xs">{eventStatusLabel(event.status)}</UiBadge>}
+                        {(personalFilter === "all" || event.status === "pending" && event.seenAt) && (
+                          <UiBadge tone={eventStatusTone(event.status)} size="xs">{notificationLifecycleLabel(event)}</UiBadge>
+                        )}
                         <span>{actorName || "System"}</span>
                         <span>·</span>
                         <span>{formatDate(event.createdAt)}</span>
@@ -169,7 +171,7 @@ export function NotificationsOverview({
                         type="button"
                         onClick={() => onDismissNotification(event.id)}
                         className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-md text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-700 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-200 group-hover:opacity-100"
-                        aria-label="Notification schließen"
+                        aria-label="Notification als erledigt schließen"
                       >
                         <X size={14} />
                       </button>

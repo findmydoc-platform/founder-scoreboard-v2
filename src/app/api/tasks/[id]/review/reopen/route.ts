@@ -3,6 +3,7 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import { requireFounder, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = getServerSupabase();
@@ -54,37 +55,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     message: "Review wieder geöffnet",
   });
 
-  const notifications: Array<{
-    type: string;
-    actor_profile_id: string | null;
-    recipient_profile_id: string;
-    entity_type: string;
-    entity_id: string;
-    title: string;
-    body: string;
-  }> = [];
+  const notifications: ReturnType<typeof createNotificationPayload>[] = [];
   if (task.review_owner_profile_id) {
-    notifications.push({
-      type: "task.review_requested",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: task.review_owner_profile_id,
-      entity_type: "task",
-      entity_id: id,
+    notifications.push(createNotificationPayload("task.review_requested", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: task.review_owner_profile_id,
+      entityType: "task",
+      entityId: id,
       title: `Review wieder geöffnet: ${task.title}`,
       body: "Diese Aufgabe wartet erneut auf Review.",
-    });
+    }));
   }
   const assignee = task.assignee || task.owner;
   if (assignee && assignee !== task.review_owner_profile_id) {
-    notifications.push({
-      type: "task.review_requested",
-      actor_profile_id: permission.profile?.id || null,
-      recipient_profile_id: assignee,
-      entity_type: "task",
-      entity_id: id,
+    notifications.push(createNotificationPayload("task.review_reopened", {
+      actorProfileId: permission.profile?.id,
+      recipientProfileId: assignee,
+      entityType: "task",
+      entityId: id,
       title: `Review wieder geöffnet: ${task.title}`,
       body: "Die Aufgabe wurde zur erneuten Review geöffnet.",
-    });
+    }));
   }
   if (notifications.length) await supabase.from("notification_events").insert(notifications);
 

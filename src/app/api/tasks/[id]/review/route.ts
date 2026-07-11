@@ -3,6 +3,7 @@ import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { requireFounder, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
+import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type ReviewPayload = {
   decision?: "accepted" | "partial" | "changes_requested";
@@ -89,15 +90,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   };
   const assignee = task.assignee || task.owner;
   const notifications = assignee && assignee !== reviewerProfileId
-    ? [{
-      type: decision === "changes_requested" ? "task.review_rework" : "task.review_completed",
-      actor_profile_id: reviewerProfileId,
-      recipient_profile_id: assignee,
-      entity_type: "task",
-      entity_id: id,
+    ? [createNotificationPayload(decision === "changes_requested" ? "task.review_rework" : "task.review_completed", {
+      actorProfileId: reviewerProfileId,
+      recipientProfileId: assignee,
+      entityType: "task",
+      entityId: id,
       title: decision === "changes_requested" ? `Nacharbeit: ${task.title}` : `Review abgeschlossen: ${task.title}`,
       body: comment || `${points} Punkte · ${decision}`,
-    }]
+    })]
     : [];
   const activityMessage = decision === "changes_requested"
     ? `Nacharbeit angefordert: ${comment || "ohne Kommentar"}`
