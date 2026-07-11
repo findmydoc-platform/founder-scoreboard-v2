@@ -8,12 +8,17 @@ type ObjectionPayload = {
 };
 
 type ReviewPayload = {
+  action?: "resolve" | "second_review";
   objectionId?: number;
   status?: "reviewed" | "dismissed" | "accepted";
   resolutionComment?: string;
-  secondReviewerProfileId?: string;
+  deliveryPoints?: number;
+  formPoints?: number;
+  weeklyPoints?: number;
   secondReviewDecision?: string;
 };
+
+const objectionSelect = "id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,reviewed_at,resolved_delivery_points,resolved_form_points,resolved_weekly_points,second_reviewer_profile_id,second_review_decision,second_reviewed_at,created_at";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requireFounder, {});
@@ -53,7 +58,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       status: "open",
       comment,
     })
-    .select("id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,reviewed_at,second_reviewer_profile_id,second_review_decision,second_reviewed_at,created_at")
+    .select(objectionSelect)
     .single();
 
   if (error || !objection) return apiError(error?.message || "Score-Einwand konnte nicht gespeichert werden.", 500);
@@ -81,41 +86,46 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const objectionId = Number(payload.objectionId);
-  const status = payload.status || "reviewed";
+  const action = payload.action || "resolve";
+  const status = payload.status;
   if (!Number.isFinite(objectionId)) return apiError("Einwand ist erforderlich.", 400);
-  if (!["reviewed", "dismissed", "accepted"].includes(status)) return apiError("Ungültiger Einwand-Status.", 400);
+  if (!["resolve", "second_review"].includes(action)) return apiError("Ungültige Einwand-Aktion.", 400);
+  if (action === "resolve" && (!status || !["reviewed", "dismissed", "accepted"].includes(status))) {
+    return apiError("Ungültiger Einwand-Status.", 400);
+  }
 
   const resolutionComment = cleanText(payload.resolutionComment, 2000);
-  const secondReviewerProfileId = cleanText(payload.secondReviewerProfileId, 100);
   const secondReviewDecision = cleanText(payload.secondReviewDecision, 2000);
-  const now = new Date().toISOString();
+  if (action === "resolve" && !resolutionComment) return apiError("Eine Begründung zur Entscheidung ist erforderlich.", 400);
+  if (action === "second_review" && !secondReviewDecision) return apiError("Eine Zweitreview-Entscheidung ist erforderlich.", 400);
 
-  const { data: objection, error } = await supabase
-    .from("score_objections")
-    .update({
-      status,
-      resolution_comment: resolutionComment,
-      reviewed_by: permission.profile.id,
-      reviewed_at: now,
-      second_reviewer_profile_id: secondReviewerProfileId || null,
-      second_review_decision: secondReviewDecision || null,
-      second_reviewed_at: secondReviewerProfileId || secondReviewDecision ? now : null,
-    })
-    .eq("id", objectionId)
-    .eq("sprint_id", id)
-    .select("id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,reviewed_at,second_reviewer_profile_id,second_review_decision,second_reviewed_at,created_at")
-    .single();
-
-  if (error || !objection) return apiError(error?.message || "Score-Einwand konnte nicht geprüft werden.", 500);
-
-  await supabase.from("audit_log").insert({
-    entity_type: "score_objection",
-    entity_id: String(objection.id),
-    action: "score_objection.review",
-    actor_profile_id: permission.profile.id,
-    after_data: objection,
-    ...auditRequestMetadata(request),
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error } = await supabase.rpc("resolve_score_objection_transaction", {
+    p_sprint_id: id,
+    p_objection_id: objectionId,
+    p_actor_profile_id: permission.profile.id,
+    p_action: action,
+    p_status: status || null,
+    p_resolution_comment: resolutionComment || null,
+    p_delivery_points: payload.deliveryPoints ?? null,
+    p_form_points: payload.formPoints ?? null,
+    p_weekly_points: payload.weeklyPoints ?? null,
+    p_second_review_decision: secondReviewDecision || null,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
 
-  return NextResponse.json({ ok: true, objection });
+  if (error) {
+    if (error.code === "P0002") return apiError("Sprint oder Score-Einwand wurde nicht gefunden.", 404);
+    if (error.code === "P0003") return apiError("Sprint-Score ist bereits gelockt.", 409);
+    if (error.code === "P0004") return apiError("Score-Einwand wurde bereits bearbeitet oder ist noch offen.", 409);
+    if (error.code === "P0005") return apiError("Der Zweitreview muss durch eine andere Person erfolgen.", 409);
+    if (error.code === "P0006") return apiError("Der Zweitreview wurde bereits abgeschlossen.", 409);
+    if (error.code === "22023") return apiError("Einwand-Entscheidung ist unvollständig oder ungültig.", 400);
+    return apiError(error.message || "Score-Einwand konnte nicht geprüft werden.", 500);
+  }
+
+  const result = transactionData as { objection?: unknown; score?: unknown } | null;
+  if (!result?.objection) return apiError("Score-Einwand konnte nicht geprüft werden.", 500);
+  return NextResponse.json({ ok: true, objection: result.objection, score: result.score || null });
 }

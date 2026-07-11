@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
@@ -170,10 +170,14 @@ export function createScoreObjectionRequest(apiClient: BrowserApiClient, sprintI
   });
 }
 
-export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, objectionId: number, status: ScoreObjection["status"]) {
-  return apiClient.requestJson<{ error?: string; objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0] }>(`/api/sprints/${sprintId}/score-objections`, {
+export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintId: string, objectionId: number, input: ScoreObjectionResolutionInput) {
+  return apiClient.requestJson<{
+    error?: string;
+    objection?: Parameters<typeof import("@/features/planning/model/planning-app-model").mapScoreObjectionResponse>[0];
+    score?: Parameters<typeof import("@/lib/planning-sprint-mappers").mapFounderSprintScore>[0] | null;
+  }>(`/api/sprints/${sprintId}/score-objections`, {
     method: "PATCH",
-    json: { objectionId, status, resolutionComment: status === "accepted" ? "Einwand angenommen." : "Einwand geprüft." },
+    json: { objectionId, ...input },
   });
 }
 

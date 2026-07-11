@@ -89,8 +89,8 @@
   {
     "name": "score_objections",
     "table": "score_objections",
-    "healthSelect": "id,sprint_id,profile_id,status,comment,second_reviewer_profile_id",
-    "verifySelect": "id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,second_reviewer_profile_id",
+    "healthSelect": "id,sprint_id,profile_id,status,comment,resolved_delivery_points,second_reviewer_profile_id",
+    "verifySelect": "id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,resolved_delivery_points,resolved_form_points,resolved_weekly_points,second_reviewer_profile_id",
     "health": true
   },
   {

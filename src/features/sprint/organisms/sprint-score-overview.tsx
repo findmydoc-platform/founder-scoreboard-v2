@@ -11,7 +11,7 @@ import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables
 import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, PlanningData, Profile, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, PlanningData, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
 type ReviewStatus = "accepted" | "partial" | "changes_requested";
 type ReviewChecklist = {
@@ -65,7 +65,7 @@ export function SprintScoreTableOverview({
   onUpdateCommitment: (commitment: SprintCommitment) => void;
   onUpdateMeetingAttendance: (meeting: Meeting, attendance: MeetingAttendance) => void;
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
-  onReviewScoreObjection: (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => void;
+  onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
   sprintPlanningOptions: SprintPlanningOptions;
   plannedSprintCount: number;
@@ -196,6 +196,7 @@ export function SprintScoreTableOverview({
         pending={pending}
         scoreObjectionDraft={scoreObjectionDraft}
         openObjectionsCount={openObjections.length}
+        scores={scoreRows.map((row) => row.v21Score)}
         onScoreObjectionDraftChange={setScoreObjectionDraft}
         onCreateScoreObjection={onCreateScoreObjection}
         onReviewScoreObjection={onReviewScoreObjection}

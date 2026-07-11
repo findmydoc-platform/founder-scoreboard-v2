@@ -1,4 +1,5 @@
-import type { PlanningData, Profile, Sprint } from "@/lib/types";
+import { ScoreObjectionReviewControls } from "@/features/sprint/molecules/score-objection-review-controls";
+import type { FounderSprintScore, PlanningData, Profile, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export function SprintScoreObjections({
@@ -9,6 +10,7 @@ export function SprintScoreObjections({
   pending,
   scoreObjectionDraft,
   openObjectionsCount,
+  scores,
   onScoreObjectionDraftChange,
   onCreateScoreObjection,
   onReviewScoreObjection,
@@ -20,9 +22,10 @@ export function SprintScoreObjections({
   pending: boolean;
   scoreObjectionDraft: string;
   openObjectionsCount: number;
+  scores: Array<Pick<FounderSprintScore, "profileId" | "deliveryPoints" | "formPoints" | "weeklyPoints">>;
   onScoreObjectionDraftChange: (value: string) => void;
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
-  onReviewScoreObjection: (sprint: Sprint, objectionId: number, status: "reviewed" | "dismissed" | "accepted") => void;
+  onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
 }) {
   return (
     <UiPanel className="min-w-0">
@@ -36,20 +39,40 @@ export function SprintScoreObjections({
       <div className="mt-3 grid gap-2">
         {data.scoreObjections.filter((item) => item.sprintId === sprint.id).map((objection) => {
           const profile = data.profiles.find((item) => item.id === objection.profileId);
+          const score = scores.find((item) => item.profileId === objection.profileId) || {
+            deliveryPoints: 0,
+            formPoints: 0,
+            weeklyPoints: 0,
+          };
+          const reviewer = data.profiles.find((item) => item.id === objection.reviewedBy);
+          const secondReviewer = data.profiles.find((item) => item.id === objection.secondReviewerProfileId);
           return (
             <div key={objection.id} className="grid gap-2 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold text-slate-900">{profile?.name || objection.profileId} · {objection.status}</span>
-                {canManageSprint && objection.status === "open" && (
-                  <div className="flex gap-2">
-                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "reviewed")} variant="blue" size="sm">Geprüft</UiButton>
-                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "dismissed")} variant="amber" size="sm">Ablehnen</UiButton>
-                    <UiButton disabled={pending} onClick={() => onReviewScoreObjection(sprint, objection.id, "accepted")} variant="emerald" size="sm">Annehmen</UiButton>
-                  </div>
-                )}
               </div>
               <p className="text-slate-700">{objection.comment}</p>
-              {objection.secondReviewerProfileId && <p className="text-xs text-slate-500">Zweitreview: {objection.secondReviewerProfileId}</p>}
+              {objection.resolutionComment && (
+                <p className="text-xs text-slate-600">Entscheidung {reviewer?.name || objection.reviewedBy}: {objection.resolutionComment}</p>
+              )}
+              {objection.status === "accepted" && objection.resolvedDeliveryPoints !== null && (
+                <p className="text-xs font-medium text-emerald-700">
+                  Korrigierter Score: {objection.resolvedDeliveryPoints + (objection.resolvedFormPoints || 0) + (objection.resolvedWeeklyPoints || 0)}/20
+                  {` · Delivery ${objection.resolvedDeliveryPoints}/12 · Form ${objection.resolvedFormPoints || 0}/4 · Weekly ${objection.resolvedWeeklyPoints || 0}/4`}
+                </p>
+              )}
+              {objection.secondReviewerProfileId && (
+                <p className="text-xs text-slate-500">Zweitreview {secondReviewer?.name || objection.secondReviewerProfileId}: {objection.secondReviewDecision}</p>
+              )}
+              {canManageSprint && (
+                <ScoreObjectionReviewControls
+                  objection={objection}
+                  currentProfile={currentProfile}
+                  currentScore={score}
+                  pending={pending}
+                  onSubmit={(input) => onReviewScoreObjection(sprint, objection.id, input)}
+                />
+              )}
             </div>
           );
         })}

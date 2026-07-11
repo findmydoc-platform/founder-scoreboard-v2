@@ -300,6 +300,35 @@ async function verifyTaskReviewRpc() {
   };
 }
 
+async function verifyScoreObjectionRpc() {
+  const params = {
+    p_sprint_id: `verify-missing-score-objection-${Date.now()}`,
+    p_objection_id: -1,
+    p_actor_profile_id: null,
+    p_action: "resolve",
+    p_status: "dismissed",
+    p_resolution_comment: "Verification",
+    p_delivery_points: null,
+    p_form_points: null,
+    p_weekly_points: null,
+    p_second_review_decision: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("resolve_score_objection_transaction", params),
+    anonSupabase.rpc("resolve_score_objection_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0002" && Boolean(anonError),
+    error: error?.code !== "P0002"
+      ? error?.message || "resolve_score_objection_transaction unexpectedly accepted a missing sprint"
+      : !anonError
+        ? "resolve_score_objection_transaction unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -350,6 +379,7 @@ const result = {
   planningBatchRpcs: await verifyPlanningBatchRpcs(),
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
+  scoreObjectionRpc: await verifyScoreObjectionRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -401,5 +431,10 @@ if (!result.sprintFinalizationRpc.ok) {
 
 if (!result.taskReviewRpc.ok) {
   console.error(`Task review RPC check failed: ${result.taskReviewRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.scoreObjectionRpc.ok) {
+  console.error(`Score objection RPC check failed: ${result.scoreObjectionRpc.error}`);
   process.exit(1);
 }

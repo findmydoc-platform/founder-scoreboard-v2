@@ -611,6 +611,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const finalizationMigration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
+  const objectionResolutionMigration = await readFile("supabase/0051_score_objection_resolution.sql", "utf8");
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
   const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
@@ -638,8 +639,14 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(finalizationMigration, /founder_sprint_scores/);
   assert.match(finalizationMigration, /founder_strike_state/);
   assert.match(finalizationMigration, /strike_events/);
-  assert.match(objectionRoute, /score_objections/);
-  assert.match(objectionRoute, /second_reviewer_profile_id/);
+  assert.match(objectionRoute, /resolve_score_objection_transaction/);
+  assert.match(objectionResolutionMigration, /insert into public\.founder_sprint_scores/);
+  assert.match(objectionResolutionMigration, /on conflict \(sprint_id, profile_id\) do update/);
+  assert.match(objectionResolutionMigration, /second reviewer must differ from first reviewer/);
+  assert.match(objectionResolutionMigration, /second review is already complete/);
+  assert.match(objectionResolutionMigration, /from public, anon, authenticated/);
+  assert.match(route, /acceptedAdjustmentByProfile/);
+  assert.match(route, /Korrigiert nach angenommenem Score-Einwand/);
   assert.match(ui, /FounderOps Score v2\.1/);
   assert.match(ui, /20 Punkte/);
   assert.match(ui, /Delivery/);
@@ -647,6 +654,9 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(ui, /Weekly/);
   assert.match(ui, /Strike/);
   assert.match(ui, /Score-Einwände/);
+  assert.match(ui, /Annehmen & Score aktualisieren/);
+  assert.match(ui, /Zweitreview speichern/);
+  assert.match(ui, /anderen CEO oder Deputy/);
   assert.match(meetingUi, /Weekly Updates/);
   assert.match(meetingUi, /max\. 2 je Weekly, 4 je Sprint/);
   assert.doesNotMatch(meetingUi, /Biweekly/);
