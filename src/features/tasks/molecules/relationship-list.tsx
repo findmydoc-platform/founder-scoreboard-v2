@@ -28,14 +28,14 @@ export function RelationshipList({
   currentTask,
   rows,
   empty,
-  canManage,
+  canRemove,
   onRemove,
 }: {
   title: string;
   currentTask: Task;
   rows: Array<{ relation: TaskRelation; task?: Task }>;
   empty: string;
-  canManage?: boolean;
+  canRemove?: (relation: TaskRelation) => boolean;
   onRemove?: (relation: TaskRelation) => void;
 }) {
   return (
@@ -63,7 +63,7 @@ export function RelationshipList({
                 <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskAssigneeLabel(task)}` : "Aufgabe nicht gefunden"}</div>
                 {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
               </div>
-              {canManage && onRemove && (
+              {canRemove?.(relation) && onRemove && (
                 <button
                   type="button"
                   onClick={() => onRemove(relation)}

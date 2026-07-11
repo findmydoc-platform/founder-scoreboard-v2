@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
-import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
 import {
   buildDetailsMilestonePatch,
@@ -34,6 +34,7 @@ type UseTaskDetailWorkflowOptions = {
   milestones: Milestone[];
   source: "seed" | "supabase";
   commentImportNotice: string;
+  initialCurrentProfile?: AuthenticatedProfile | null;
 };
 
 export function useTaskDetailWorkflow({
@@ -52,6 +53,7 @@ export function useTaskDetailWorkflow({
   milestones,
   source,
   commentImportNotice,
+  initialCurrentProfile = null,
 }: UseTaskDetailWorkflowOptions) {
   const latestMutationId = useRef(0);
   const mutationEpoch = useRef(0);
@@ -64,7 +66,9 @@ export function useTaskDetailWorkflow({
   const [detailsEditing, setDetailsEditing] = useState(false);
   const [detailsEditSnapshot, setDetailsEditSnapshot] = useState<TaskDetailsDraft | null>(null);
   const [githubState, setGithubState] = useState(() => buildTaskDetailGitHubState(task));
-  const [currentRole, setCurrentRole] = useState<Profile["platformRole"] | "">(source === "seed" ? "ceo" : "");
+  const seedProfile = source === "seed" ? profiles.find((profile) => profile.platformRole === "ceo") || null : null;
+  const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile || seedProfile);
+  const currentRole = currentProfile?.platformRole || "";
   const [githubAppConnected, setGithubAppConnected] = useState(false);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [apiClient] = useState(() => createBrowserApiClient());
@@ -116,15 +120,13 @@ export function useTaskDetailWorkflow({
     blockers,
     relations,
     allTasks,
-    currentRole,
+    currentProfile,
+    unrestrictedRelationshipAccess: source === "seed",
   });
   const detailsDraft: TaskDetailsDraft = buildTaskDetailsDraft(meta);
 
   useEffect(() => {
-    if (source !== "supabase") {
-      window.queueMicrotask(() => setCurrentRole("ceo"));
-      return;
-    }
+    if (source !== "supabase") return;
 
     let active = true;
     apiClient.getAuthSnapshot().then((snapshot) => {
@@ -133,13 +135,13 @@ export function useTaskDetailWorkflow({
       if (snapshot.githubAppConnected) setGithubReconnectFailed(false);
       const login = snapshot.githubLogin;
       const profile = profiles.find((item) => item.githubLogin === login);
-      setCurrentRole(profile?.platformRole || "");
+      setCurrentProfile(profile || initialCurrentProfile);
     });
 
     return () => {
       active = false;
     };
-  }, [apiClient, profiles, source]);
+  }, [apiClient, initialCurrentProfile, profiles, source]);
 
   const reconnectGitHub = async () => {
     setError("");

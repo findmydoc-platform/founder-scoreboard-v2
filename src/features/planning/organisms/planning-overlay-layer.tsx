@@ -3,6 +3,7 @@ import { StatusGuardDialog } from "@/features/planning/organisms/status-guard-di
 import { InitiativeDialog } from "@/features/projects/organisms/initiative-dialog";
 import { NewTaskDialog } from "@/features/tasks/organisms/new-task-dialog";
 import { TaskDetailPanel } from "@/features/tasks/organisms/task-detail-panel";
+import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 
 export function PlanningOverlayLayer({ controller }: { controller: PlanningAppController }) {
   const {
@@ -44,7 +45,14 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     canManageFinalTaskStatus,
     canManageTaskMeta,
     currentProfile,
+    source,
   } = controller;
+  const relationshipAccess = selectedTask ? taskRelationshipAccess({
+    task: selectedTask,
+    initiative: selectedPackage,
+    profile: currentProfile,
+    unrestricted: source === "seed",
+  }) : null;
 
   return (
     <>
@@ -77,6 +85,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           canManageFinalTaskStatus={canManageFinalTaskStatus}
           canManageTaskMeta={canManageTaskMeta}
           canManageReviewOwner={currentProfile?.platformRole === "ceo"}
+          allowedRelationTypes={relationshipAccess?.allowedRelationTypes || []}
+          canRemoveRelation={(relation) => relationshipAccess?.canRemoveRelation(relation) || false}
           canChangeTaskStatus={canChangeTaskStatus(selectedTask)}
           allTasks={data.tasks}
           relations={data.taskRelations}

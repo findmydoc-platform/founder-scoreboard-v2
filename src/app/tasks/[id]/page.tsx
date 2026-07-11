@@ -60,6 +60,7 @@ export default async function TaskPage({ params }: Props) {
       milestones={data.milestones}
       headerData={headerData}
       source={source}
+      currentProfile={authProfile}
     />
   );
 }

@@ -1,4 +1,5 @@
 import { taskAssigneeLabel } from "@/lib/display";
+import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskRelation } from "@/lib/types";
@@ -139,7 +140,8 @@ export function buildTaskDetailViewModel({
   blockers,
   relations,
   allTasks,
-  currentRole,
+  currentProfile,
+  unrestrictedRelationshipAccess = false,
 }: {
   task: Task;
   meta: EditableTaskState;
@@ -153,7 +155,8 @@ export function buildTaskDetailViewModel({
   blockers: TaskBlocker[];
   relations: TaskRelation[];
   allTasks: Task[];
-  currentRole: Profile["platformRole"] | "";
+  currentProfile?: Pick<Profile, "id" | "name" | "platformRole"> | null;
+  unrestrictedRelationshipAccess?: boolean;
 }) {
   const assigneeProfile = profiles.find((profile) => profile.name === meta.assignee || profile.id === meta.assignee);
   const creatorProfile = profiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
@@ -166,7 +169,13 @@ export function buildTaskDetailViewModel({
   const openBlockers = blockers.filter((blocker) => blocker.status === "open");
   const { waitsOn, blocks, related } = buildTaskRelationshipRows(task, allTasks, relations);
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
-  const canManageTaskMeta = currentRole === "ceo" || currentRole === "deputy";
+  const canManageTaskMeta = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
+  const relationshipAccess = taskRelationshipAccess({
+    task,
+    initiative: currentPackage,
+    profile: currentProfile,
+    unrestricted: unrestrictedRelationshipAccess,
+  });
   const canSyncExistingGitHubIssue = hasGitHubIssue({
     githubIssueNumber: githubState.githubIssueNumber,
     githubIssueUrl: githubState.githubIssueUrl,
@@ -187,6 +196,7 @@ export function buildTaskDetailViewModel({
     related,
     relationTargetOptions,
     canManageTaskMeta,
+    relationshipAccess,
     canSyncExistingGitHubIssue,
   };
 }

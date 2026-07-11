@@ -14,6 +14,7 @@ export type TaskRelationshipDraft = {
 type TaskRelationshipFormProps = {
   relationDraft: TaskRelationshipDraft;
   relationTargetOptions: Array<{ value: string; label: string }>;
+  allowedRelationTypes: TaskRelationType[];
   duplicateRelation: boolean;
   pending: boolean;
   className: string;
@@ -24,6 +25,7 @@ type TaskRelationshipFormProps = {
 export function TaskRelationshipForm({
   relationDraft,
   relationTargetOptions,
+  allowedRelationTypes,
   duplicateRelation,
   pending,
   className,
@@ -33,12 +35,18 @@ export function TaskRelationshipForm({
   return (
     <div className={className}>
       <div className="text-xs font-semibold text-slate-500">Abhängigkeit hinzufügen</div>
-      <CustomSelect
-        value={relationDraft.relationType}
-        onChange={(value) => onRelationDraftChange({ relationType: value as TaskRelationType })}
-        className="h-9 text-sm"
-        options={(["blocked_by", "blocks", "relates_to"] as TaskRelationType[]).map((type) => ({ value: type, label: relationTypeLabel(type) }))}
-      />
+      {allowedRelationTypes.length > 1 ? (
+        <CustomSelect
+          value={relationDraft.relationType}
+          onChange={(value) => onRelationDraftChange({ relationType: value as TaskRelationType })}
+          className="h-9 text-sm"
+          options={allowedRelationTypes.map((type) => ({ value: type, label: relationTypeLabel(type) }))}
+        />
+      ) : (
+        <div className="flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+          {relationTypeLabel(allowedRelationTypes[0] || "blocked_by")}
+        </div>
+      )}
       <CustomSelect
         value={relationDraft.relatedTaskId}
         onChange={(value) => onRelationDraftChange({ relatedTaskId: value })}

@@ -169,13 +169,25 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const relationshipSection = await readFile("src/features/tasks/organisms/task-relationships-section.tsx", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const relationshipViewModel = await readFile("src/lib/relationship-view-model.ts", "utf8");
+  const relationshipPermissions = await readFile("src/features/tasks/model/task-relationship-permissions.ts", "utf8");
+  const relationshipPermissionMigration = await readFile("supabase/0053_task_relationship_permissions.sql", "utf8");
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
   assert.match(migration, /blocked_by/);
   assert.match(migration, /blocks/);
   assert.match(migration, /relates_to/);
-  assert.match(route, /requireOperationalLead/);
+  assert.match(route, /requireFounder/);
+  assert.match(route, /taskRelationshipAccess/);
+  assert.match(route, /allowedRelationTypes\.includes\(relationType\)/);
+  assert.match(route, /canRemoveRelation\(mappedRelation\)/);
+  assert.match(relationshipPermissions, /profile\.platformRole === "founder"/);
+  assert.match(relationshipPermissions, /founderManageableTaskTypes/);
+  assert.match(relationshipPermissions, /relation\.taskId === task\.id/);
+  assert.match(relationshipPermissionMigration, /relation_type = 'blocked_by'/);
+  assert.match(relationshipPermissionMigration, /created_by = public\.current_profile_id\(\)/);
+  assert.match(relationshipPermissionMigration, /coalesce\(initiative\.accountable_profile_id, initiative\.owner_id\)/);
+  assert.match(relationshipPermissionMigration, /task_relationship_edges_update_operational/);
   assert.match(route, /task.relationship_created/);
   assert.match(route, /task.relationship_deleted/);
   assert.match(route, /github_sync_status: "not_synced"/);
@@ -218,6 +230,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(detail, /TaskRelationshipsSection/);
   assert.match(relationshipSection, /RelationshipList/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit hinzufügen/);
+  assert.match(`${relationshipSection}\n${relationshipForm}`, /allowedRelationTypes/);
+  assert.match(relationshipSection, /canRemoveRelation/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit existiert bereits/);
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(github, /blockedIssueNumber/);
