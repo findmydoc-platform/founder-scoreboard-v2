@@ -1,6 +1,6 @@
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
+import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { requireFounder, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,sprint_id,title,status,assignee,owner,review_owner_profile_id")
+    .select("id,sprint_id,title,status,assignee,owner,review_owner_profile_id,updated_at")
     .eq("id", id)
     .single();
 
@@ -77,68 +77,58 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const nextStatus = decision === "accepted" ? "Erledigt" : decision === "changes_requested" ? "Nacharbeit" : "Review";
   const scoreFinal = decision !== "changes_requested";
 
-  const { error: updateError } = await supabase
-    .from("tasks")
-    .update({
-      review_status: decision,
-      score_points: points,
-      score_final: scoreFinal,
-      status: nextStatus,
-      review_requested_at: null,
-      github_sync_status: "not_synced",
-      github_sync_error: null,
-    })
-    .eq("id", id);
-
-  if (updateError) return apiError(updateError.message, 500);
-
-  const reviewInsert = {
-    task_id: id,
-    sprint_id: task.sprint_id || null,
-    reviewer_profile_id: permission.profile?.id || null,
-    decision,
-    points,
-    comment,
-    checklist,
+  const reviewerProfileId = permission.profile?.id || null;
+  const taskPatch = {
+    review_status: decision,
+    score_points: points,
+    score_final: scoreFinal,
+    status: nextStatus,
+    review_requested_at: null,
+    github_sync_status: "not_synced",
+    github_sync_error: null,
   };
-  const { error: reviewInsertError } = await supabase.from("task_reviews").insert(reviewInsert);
-  if (reviewInsertError) {
-    await supabase.from("task_reviews").insert({
-      task_id: reviewInsert.task_id,
-      sprint_id: reviewInsert.sprint_id,
-      reviewer_profile_id: reviewInsert.reviewer_profile_id,
-      decision,
-      points,
-      comment,
-    });
-  }
-
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: decision === "changes_requested" ? `Nacharbeit angefordert: ${comment || "ohne Kommentar"}` : `Review finalisiert: ${decision}, ${points} Punkte`,
-  });
-
   const assignee = task.assignee || task.owner;
-  if (assignee && assignee !== permission.profile?.id) {
-    await supabase.from("notification_events").insert({
+  const notifications = assignee && assignee !== reviewerProfileId
+    ? [{
       type: decision === "changes_requested" ? "task.review_rework" : "task.review_completed",
-      actor_profile_id: permission.profile?.id || null,
+      actor_profile_id: reviewerProfileId,
       recipient_profile_id: assignee,
       entity_type: "task",
       entity_id: id,
       title: decision === "changes_requested" ? `Nacharbeit: ${task.title}` : `Review abgeschlossen: ${task.title}`,
       body: comment || `${points} Punkte · ${decision}`,
-    });
-  }
+    }]
+    : [];
+  const activityMessage = decision === "changes_requested"
+    ? `Nacharbeit angefordert: ${comment || "ohne Kommentar"}`
+    : `Review finalisiert: ${decision}, ${points} Punkte`;
+  const auditAfterData = { decision, points, status: nextStatus, scoreFinal, checklist };
+  const metadata = auditRequestMetadata(request);
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.review",
-    entity_type: "task",
-    entity_id: id,
-    after_data: { decision, points, status: nextStatus, scoreFinal, checklist },
-    ...auditRequestMetadata(request),
+  const { error: transactionError } = await supabase.rpc("review_task_transaction", {
+    p_task_id: id,
+    p_sprint_id: task.sprint_id || null,
+    p_expected_updated_at: task.updated_at,
+    p_task_patch: taskPatch,
+    p_reviewer_profile_id: reviewerProfileId,
+    p_decision: decision,
+    p_points: points,
+    p_comment: comment,
+    p_checklist: checklist,
+    p_activity_message: activityMessage,
+    p_notifications: notifications,
+    p_audit_after_data: auditAfterData,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
+
+  if (transactionError) {
+    if (transactionError.code === "P0001") return apiError("Aufgabe wurde parallel geändert. Bitte neu laden.", 409);
+    if (transactionError.code === "P0002") return apiError("Aufgabe oder Sprint wurde nicht gefunden.", 404);
+    if (transactionError.code === "P0003") return apiError("Sprint-Score ist bereits gelockt.", 409);
+    if (transactionError.code === "22023") return apiError("Review-Daten sind ungültig.", 400);
+    return apiError(transactionError.message, 500);
+  }
 
   return NextResponse.json({
     ok: true,

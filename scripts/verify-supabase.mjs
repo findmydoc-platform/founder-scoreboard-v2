@@ -269,6 +269,37 @@ async function verifySprintFinalizationRpc() {
   };
 }
 
+async function verifyTaskReviewRpc() {
+  const params = {
+    p_task_id: `verify-missing-task-review-${Date.now()}`,
+    p_sprint_id: null,
+    p_expected_updated_at: new Date().toISOString(),
+    p_task_patch: {},
+    p_reviewer_profile_id: null,
+    p_decision: "accepted",
+    p_points: 10,
+    p_comment: "Verification",
+    p_checklist: {},
+    p_activity_message: "Verification",
+    p_notifications: [],
+    p_audit_after_data: {},
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("review_task_transaction", params),
+    anonSupabase.rpc("review_task_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0002" && Boolean(anonError),
+    error: error?.code !== "P0002"
+      ? error?.message || "review_task_transaction unexpectedly accepted a missing task"
+      : !anonError
+        ? "review_task_transaction unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -318,6 +349,7 @@ const result = {
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
   planningBatchRpcs: await verifyPlanningBatchRpcs(),
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
+  taskReviewRpc: await verifyTaskReviewRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -364,5 +396,10 @@ if (missingPlanningBatchRpc) {
 
 if (!result.sprintFinalizationRpc.ok) {
   console.error(`Sprint finalization RPC check failed: ${result.sprintFinalizationRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.taskReviewRpc.ok) {
+  console.error(`Task review RPC check failed: ${result.taskReviewRpc.error}`);
   process.exit(1);
 }

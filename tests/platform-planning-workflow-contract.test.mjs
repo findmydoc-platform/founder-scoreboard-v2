@@ -490,6 +490,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
   const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
   const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
+  const reviewTransactionMigration = await readFile("supabase/0050_transactional_task_reviews.sql", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
   const appUi = await readPlanningSurface();
@@ -527,7 +528,14 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.doesNotMatch(route, /reviewOwnerProfileId: ""/);
   assert.match(route, /requireTaskReviewer/);
   assert.match(route, /requireFounder/);
-  assert.match(route, /task_reviews/);
+  assert.match(route, /review_task_transaction/);
+  assert.match(reviewTransactionMigration, /insert into public\.task_reviews/);
+  assert.match(reviewTransactionMigration, /public\.update_task_transaction/);
+  assert.match(reviewTransactionMigration, /insert into public\.audit_log/);
+  assert.match(reviewTransactionMigration, /for update/);
+  assert.match(reviewTransactionMigration, /from public, anon, authenticated/);
+  assert.match(reviewTransactionMigration, /to service_role/);
+  assert.doesNotMatch(route, /from\("task_reviews"\)\.insert/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.match(route, /github_sync_status: "not_synced"/);
