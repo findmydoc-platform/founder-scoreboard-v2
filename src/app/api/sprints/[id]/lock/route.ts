@@ -46,6 +46,13 @@ type TaskRow = {
   sprint_outcome: string | null;
 };
 
+type StoredSprintLockResult = {
+  sprint?: { id?: string; status?: string; scoreLocked?: boolean };
+  carryover?: { nextSprintId?: string; created?: number; evaluated?: number };
+  scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number };
+  replayed?: boolean;
+};
+
 function normalizeStatus(value: string) {
   return value.trim().toLowerCase();
 }
@@ -79,12 +86,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: sprint, error: sprintError } = await supabase
     .from("sprints")
-    .select("id,name,start_date,end_date,review_due_at,score_locked")
+    .select("id,name,start_date,end_date,review_due_at,score_locked,updated_at,lock_result")
     .eq("id", id)
     .single();
 
   if (sprintError || !sprint) return apiError("Sprint wurde nicht gefunden.", 404);
-  if (sprint.score_locked) return apiError("Sprint ist bereits gelockt.", 409);
+  if (sprint.score_locked) {
+    const storedResult = sprint.lock_result as StoredSprintLockResult | null;
+    if (storedResult?.sprint) return NextResponse.json({ ok: true, ...storedResult, replayed: true });
+    return apiError("Sprint ist bereits gelockt.", 409);
+  }
 
   const { count: openObjections, error: objectionError } = await supabase
     .from("score_objections")
@@ -100,7 +111,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen.", 409);
   }
 
-  const { data: nextSprint } = await supabase
+  const { data: nextSprint, error: nextSprintError } = await supabase
     .from("sprints")
     .select("id,name,start_date,end_date")
     .neq("id", id)
@@ -108,6 +119,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .order("start_date", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (nextSprintError) return apiError(nextSprintError.message, 500);
 
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
@@ -127,36 +139,36 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const blockerResult = taskIds.length
     ? await supabase.from("task_blockers").select("id,task_id,status").in("task_id", taskIds).eq("status", "open")
     : { data: [] };
+  if ("error" in blockerResult && blockerResult.error) return apiError(blockerResult.error.message, 500);
   const openBlockerTaskIds = new Set((blockerResult.data || []).map((blocker: { task_id: string }) => blocker.task_id));
 
   const carryoverInserts = [];
   const notifications = [];
-  const nowSuffix = Date.now().toString(36);
+  const taskUpdates = [];
+  const acceptedBlockerTaskIds = [];
 
   for (const task of carryoverTasks) {
     const outcome = sprintOutcome(task, openBlockerTaskIds.has(task.id));
     const reason = carryoverReason(outcome);
     const preserveScore = outcome === "partial";
 
-    await supabase
-      .from("tasks")
-      .update({
-        score_points: preserveScore ? Number(task.score_points || 0) : 0,
-        score_final: true,
-        sprint_outcome: outcome,
-        carryover_reason: reason,
-        github_sync_status: "not_synced",
-        github_sync_error: null,
-      })
-      .eq("id", task.id);
+    taskUpdates.push({
+      id: task.id,
+      score_points: preserveScore ? Number(task.score_points || 0) : 0,
+      score_final: true,
+      sprint_outcome: outcome,
+      carryover_reason: reason,
+      github_sync_status: "not_synced",
+      github_sync_error: null,
+    });
 
     if (outcome === "communicated_blocker") {
-      await supabase.from("task_blockers").update({ status: "accepted_carryover" }).eq("task_id", task.id).eq("status", "open");
+      acceptedBlockerTaskIds.push(task.id);
     }
 
     if (nextSprint?.id) {
       carryoverInserts.push(buildTaskInsertRow({
-        id: `${task.id}-carryover-${nowSuffix}`,
+        id: `${task.id}-carryover-${nextSprint.id}`,
         projectId: task.project_id,
         packageId: task.package_id,
         milestoneId: task.milestone_id,
@@ -204,23 +216,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       }
     }
   }
-
-  if (carryoverInserts.length) {
-    const { error: carryoverError } = await supabase.from("tasks").insert(carryoverInserts);
-    if (carryoverError) return apiError(carryoverError.message, 500);
-  }
-
-  if (notifications.length) {
-    await supabase.from("notification_events").insert(notifications);
-  }
-
-  const { error: freezeError } = await supabase
-    .from("tasks")
-    .update({ score_points: 0, score_final: true, sprint_outcome: "missed_uncommunicated" })
-    .eq("sprint_id", id)
-    .eq("score_final", false);
-
-  if (freezeError) return apiError(freezeError.message, 500);
 
   const [
     profileResult,
@@ -353,48 +348,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     });
   }
 
-  if (scoreRows.length) {
-    const { error: scoreError } = await supabase.from("founder_sprint_scores").upsert(scoreRows, { onConflict: "sprint_id,profile_id" });
-    if (scoreError) return apiError(scoreError.message, 500);
-  }
-
-  if (strikeStateRows.length) {
-    const { error: strikeStateError } = await supabase.from("founder_strike_state").upsert(strikeStateRows, { onConflict: "profile_id" });
-    if (strikeStateError) return apiError(strikeStateError.message, 500);
-  }
-
-  if (strikeEvents.length) {
-    const { error: strikeError } = await supabase.from("strike_events").insert(strikeEvents);
-    if (strikeError) return apiError(strikeError.message, 500);
-  }
-
-  const { error: updateError } = await supabase
-    .from("sprints")
-    .update({ score_locked: true, status: "closed", updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (updateError) return apiError(updateError.message, 500);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "sprint.lock_score",
-    entity_type: "sprint",
-    entity_id: id,
-    after_data: {
-      scoreLocked: true,
-      status: "closed",
-      evaluatedTasks: carryoverTasks.length,
-      carryoverCreated: carryoverInserts.length,
-      nextSprintId: nextSprint?.id || null,
-      founderScores: scoreRows.length,
-      strikeEvents: strikeEvents.length,
-    },
-    ...auditRequestMetadata(request),
-  });
-
-  return NextResponse.json({
-    ok: true,
-    sprint: { id, status: "closed", scoreLocked: true },
+  const resultData = {
     carryover: {
       nextSprintId: nextSprint?.id || "",
       created: carryoverInserts.length,
@@ -405,5 +359,32 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       strikeEvents: strikeEvents.length,
       governanceReviews: strikeEvents.filter((event) => event.event_type === "governance_review_required").length,
     },
+  };
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("lock_sprint_transaction", {
+    p_sprint_id: id,
+    p_expected_updated_at: sprint.updated_at,
+    p_task_updates: taskUpdates,
+    p_accepted_blocker_task_ids: acceptedBlockerTaskIds,
+    p_carryover_inserts: carryoverInserts,
+    p_notifications: notifications,
+    p_score_rows: scoreRows,
+    p_strike_state_rows: strikeStateRows,
+    p_strike_events: strikeEvents,
+    p_result_data: resultData,
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
+
+  if (transactionError) {
+    if (transactionError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);
+    if (transactionError.code === "P0002") return apiError("Sprint wurde nicht gefunden.", 404);
+    if (transactionError.code === "22023") return apiError("Sprint-Finalisierung ist ungültig.", 400);
+    if (transactionError.code === "23505") return apiError("Carry-over wurde bereits angelegt. Bitte neu laden.", 409);
+    return apiError(transactionError.message, 500);
+  }
+
+  const finalized = transactionData as StoredSprintLockResult | null;
+  return NextResponse.json({ ok: true, ...(finalized || resultData) });
 }

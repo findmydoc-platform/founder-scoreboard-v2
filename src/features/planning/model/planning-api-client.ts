@@ -177,9 +177,9 @@ export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintI
   });
 }
 
-export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string) {
+export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string, finalizeNow = false) {
   return apiClient.requestJson<{ error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } }>(`/api/sprints/${sprintId}/lock`, {
     method: "POST",
-    json: { finalizeNow: true },
+    json: { finalizeNow },
   });
 }

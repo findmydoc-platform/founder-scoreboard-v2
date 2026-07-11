@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
 
 const supabase = await createSupabaseScriptClient();
+const anonSupabase = await createSupabaseScriptClient({
+  keyEnv: ["NEXT_PUBLIC_SUPABASE_ANON_KEY"],
+  missingMessage: "Missing Supabase anon env. Set NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.",
+});
 
 async function count(table) {
   const { count: rowCount, error } = await supabase.from(table).select("*", { count: "exact", head: true });
@@ -235,6 +239,36 @@ async function verifyPlanningBatchRpcs() {
   }));
 }
 
+async function verifySprintFinalizationRpc() {
+  const params = {
+    p_sprint_id: `verify-missing-sprint-lock-${Date.now()}`,
+    p_expected_updated_at: new Date().toISOString(),
+    p_task_updates: [],
+    p_accepted_blocker_task_ids: [],
+    p_carryover_inserts: [],
+    p_notifications: [],
+    p_score_rows: [],
+    p_strike_state_rows: [],
+    p_strike_events: [],
+    p_result_data: {},
+    p_actor_profile_id: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("lock_sprint_transaction", params),
+    anonSupabase.rpc("lock_sprint_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0002" && Boolean(anonError),
+    error: error?.code !== "P0002"
+      ? error?.message || "lock_sprint_transaction unexpectedly accepted a missing sprint"
+      : !anonError
+        ? "lock_sprint_transaction unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -283,6 +317,7 @@ const result = {
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
   planningBatchRpcs: await verifyPlanningBatchRpcs(),
+  sprintFinalizationRpc: await verifySprintFinalizationRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -324,5 +359,10 @@ if (missingTaskCreationOrSyncRpc) {
 const missingPlanningBatchRpc = result.planningBatchRpcs.find((check) => !check.ok);
 if (missingPlanningBatchRpc) {
   console.error(`Planning batch RPC check failed for ${missingPlanningBatchRpc.name}: ${missingPlanningBatchRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.sprintFinalizationRpc.ok) {
+  console.error(`Sprint finalization RPC check failed: ${result.sprintFinalizationRpc.error}`);
   process.exit(1);
 }

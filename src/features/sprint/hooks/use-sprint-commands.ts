@@ -227,6 +227,15 @@ export function useSprintCommands({
     setSaveError("");
     setSprintLockMessage("");
 
+    const sprint = data.sprints.find((item) => item.id === sprintId);
+    const reviewDeadlineActive = Boolean(
+      sprint?.reviewDueAt && new Date(sprint.reviewDueAt).getTime() > Date.now(),
+    );
+    const finalizeNow = reviewDeadlineActive
+      ? window.confirm("Die Reviewfrist läuft noch. Sprint trotzdem jetzt finalisieren?")
+      : false;
+    if (reviewDeadlineActive && !finalizeNow) return;
+
     const previousData = data;
     setData((current) => ({
       ...current,
@@ -238,7 +247,7 @@ export function useSprintCommands({
 
     startTransition(async () => {
       try {
-        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId);
+        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId, finalizeNow);
         if (!response.ok) throw new Error(body?.error || "Sprint konnte nicht gelockt werden.");
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
