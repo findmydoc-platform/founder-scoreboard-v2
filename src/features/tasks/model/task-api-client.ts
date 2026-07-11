@@ -56,7 +56,12 @@ export function mergeTaskDetailData(current: PlanningData, taskId: string, detai
 }
 
 export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
-  return apiClient.requestJson<{ error?: string; task?: Task }>("/api/tasks", {
+  return apiClient.requestJson<{
+    error?: string;
+    task?: Task;
+    relation?: TaskRelation | null;
+    relatedTask?: (Partial<Task> & { id: string }) | null;
+  }>("/api/tasks", {
     method: "POST",
     json: draft,
   });

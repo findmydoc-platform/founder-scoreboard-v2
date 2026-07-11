@@ -274,6 +274,8 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
   const promotionMigration = await readFile("supabase/0034_promote_assigned_proposals.sql", "utf8");
+  const transactionalCreationMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
+  const createCommand = await readFile("src/features/tasks/hooks/use-task-create-command.ts", "utf8");
   const ui = await readPlanningSurface();
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
@@ -283,6 +285,18 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(migration, /parent_task_id/);
   assert.match(migration, /score_relevant/);
   assert.match(route, /task\.proposed/);
+  assert.match(route, /create_task_transaction/);
+  assert.doesNotMatch(route, /from\("tasks"\)\.insert/);
+  assert.match(transactionalCreationMigration, /create or replace function public\.create_task_transaction/);
+  assert.match(transactionalCreationMigration, /insert into public\.task_relationship_edges/);
+  assert.match(transactionalCreationMigration, /insert into public\.notification_events/);
+  assert.match(transactionalCreationMigration, /insert into public\.audit_log/);
+  assert.match(transactionalCreationMigration, /tasks_creation_request_id_unique_idx/);
+  assert.match(transactionalCreationMigration, /pg_advisory_xact_lock\(hashtextextended\('task-create:'/);
+  assert.match(transactionalCreationMigration, /'replayed', true/);
+  assert.match(route, /creationRequestId/);
+  assert.match(createCommand, /setTaskDialogDefaults\(null\)/);
+  assert.match(createCommand, /if \(!response\.ok \|\| !body\?\.task\)/);
   assert.match(route, /Founder können nur eigene Deliverables verfeinern/);
   assert.match(route, /taskType === "deliverable"/);
   assert.match(route, /taskType === "proposal" \? null/);
@@ -305,6 +319,8 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(newTaskUi, /werden nicht bewertet/);
   assert.match(newTaskUi, /Zusätzlich extern anlegen/);
   assert.match(newTaskUi, /createGitHubIssue/);
+  assert.match(newTaskUi, /Wird erstellt\.\.\./);
+  assert.match(newTaskUi, /globalThis\.crypto\.randomUUID\(\)/);
   assert.match(newTaskUi, /relationType/);
   assert.match(newTaskUi, /relatedTaskId/);
   assert.match(newTaskUi, /Zieltermin/);

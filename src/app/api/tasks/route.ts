@@ -6,7 +6,7 @@ import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers"
 import { slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
-import type { Task, TaskType } from "@/lib/types";
+import type { Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CreateTaskPayload = {
@@ -32,10 +32,35 @@ type CreateTaskPayload = {
   deadline?: string;
   hours?: number;
   definitionOfDone?: string;
+  creationRequestId?: string;
+  relationType?: TaskRelationType;
+  relatedTaskId?: string;
+  relationNote?: string;
 };
 
 const taskTypes = new Set(["deliverable", "proposal", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
+const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
+
+type CreateTaskTransactionResult = {
+  task?: TaskRowForMapping;
+  relatedTask?: Partial<Task> & { id: string };
+  relation?: {
+    id: number;
+    task_id: string;
+    related_task_id: string;
+    relation_type: TaskRelationType;
+    note?: string | null;
+    created_by?: string | null;
+    created_at: string;
+  } | null;
+};
+
+function relationActionLabel(type: TaskRelationType) {
+  if (type === "blocked_by") return "Wartet auf";
+  if (type === "blocks") return "Blockiert";
+  return "Verknüpft mit";
+}
 
 function profileId(value?: string) {
   return slugify(value || "");
@@ -48,6 +73,10 @@ export async function POST(request: NextRequest) {
   const { payload, permission, supabase } = context;
   const title = cleanText(payload.title, 240);
   if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
+  const creationRequestId = cleanText(payload.creationRequestId, 64);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(creationRequestId)) {
+    return apiError("Erstellungsanfrage ist ungültig. Bitte Dialog neu öffnen.", 400);
+  }
 
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
@@ -106,19 +135,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const { data: maxRow } = await supabase
-    .from("tasks")
-    .select("sort_order")
-    .order("sort_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const relatedTaskId = cleanText(payload.relatedTaskId, 240);
+  const relationType = payload.relationType;
+  const relationNote = cleanText(payload.relationNote, 500);
+  if (relatedTaskId) {
+    if (!relationType || !relationTypes.has(relationType)) {
+      return apiError("Ungültige Abhängigkeitsart.", 400);
+    }
+    const { data: relatedTask, error: relatedTaskError } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("id", relatedTaskId)
+      .maybeSingle();
+    if (relatedTaskError || !relatedTask) return apiError("Verknüpfte Aufgabe wurde nicht gefunden.", 404);
+  }
 
   const idBase = `${permission.profile?.id || "task"}-${slugify(title, { maxLength: 70 }) || "neue-aufgabe"}`;
-  const id = `${idBase}-${Date.now().toString(36)}`;
-  const sortOrder = Number(maxRow?.sort_order || 0) + 1;
+  const id = `${idBase}-${creationRequestId.replaceAll("-", "").slice(0, 12)}`;
 
   const insert = buildTaskInsertRow({
     id,
+    creationRequestId,
     packageId,
     milestoneId,
     title,
@@ -134,7 +171,7 @@ export async function POST(request: NextRequest) {
     assignee,
     createdBy: permission.profile?.id || null,
     workstream: cleanText(payload.workstream, 120),
-    sortOrder,
+    sortOrder: 0,
     startDate,
     endDate,
     deadline: payload.deadline || null,
@@ -147,23 +184,14 @@ export async function POST(request: NextRequest) {
     scoreRelevant,
   });
 
-  const { data: created, error: insertError } = await supabase.from("tasks").insert(insert).select("*").single();
-  if (insertError || !created) return apiError(insertError?.message || "Aufgabe konnte nicht erstellt werden.", 500);
-
-  const profileIds = [...new Set([created.assignee, created.owner, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
-  const { data: profileRows } = profileIds.length
-    ? await supabase.from("profiles").select("id,name").in("id", profileIds)
-    : { data: [] };
-  const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
-
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: taskType === "proposal" ? "Aufgabenvorschlag erstellt" : taskType === "sub_issue" ? "Sub-Issue erstellt" : "Deliverable erstellt",
-  });
-
+  const notifications: Array<Record<string, string | null>> = [];
   if (taskType === "proposal") {
-    const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);
-    const notifications = (leads || [])
+    const { data: leads, error: leadError } = await supabase
+      .from("profiles")
+      .select("id")
+      .in("platform_role", ["ceo", "deputy"]);
+    if (leadError) return apiError(leadError.message, 500);
+    notifications.push(...(leads || [])
       .filter((lead) => lead.id !== permission.profile?.id)
       .map((lead) => ({
         type: "task.proposed",
@@ -173,20 +201,61 @@ export async function POST(request: NextRequest) {
         entity_id: id,
         title: `Aufgabenvorschlag: ${title}`,
         body: insert.description || "Founder hat eine neue Aufgabe vorgeschlagen.",
-      }));
-    if (notifications.length) await supabase.from("notification_events").insert(notifications);
+      })));
   }
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.create",
-    entity_type: "task",
-    entity_id: id,
-    after_data: { ...insert },
-    ...auditRequestMetadata(request),
+  const activityMessage = taskType === "proposal"
+    ? "Aufgabenvorschlag erstellt"
+    : taskType === "sub_issue"
+      ? "Sub-Issue erstellt"
+      : "Deliverable erstellt";
+  const requestMetadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("create_task_transaction", {
+    p_task_insert: insert,
+    p_relation_type: relatedTaskId ? relationType : null,
+    p_related_task_id: relatedTaskId || null,
+    p_relation_note: relationNote || null,
+    p_activity_message: activityMessage,
+    p_relation_activity_message: relatedTaskId && relationType
+      ? `Abhängigkeit hinzugefügt: ${relationActionLabel(relationType)}`
+      : null,
+    p_notifications: notifications,
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: requestMetadata.request_ip,
+    p_user_agent: requestMetadata.user_agent || null,
   });
+  if (transactionError) {
+    if (transactionError.code === "P0002") return apiError("Verknüpfte Aufgabe wurde nicht gefunden.", 404);
+    if (transactionError.code === "P0003") {
+      return apiError("Erstellungsanfrage wurde mit geänderten Daten wiederholt. Bitte Dialog neu öffnen.", 409);
+    }
+    if (transactionError.code === "22023") return apiError("Aufgabe oder Abhängigkeit ist ungültig.", 400);
+    if (transactionError.code === "23505") return apiError("Aufgabe oder Abhängigkeit existiert bereits.", 409);
+    return apiError(transactionError.message || "Aufgabe konnte nicht erstellt werden.", 500);
+  }
+
+  const transaction = transactionData as CreateTaskTransactionResult | null;
+  const created = transaction?.task;
+  if (!created) return apiError("Aufgabe konnte nicht erstellt werden.", 500);
+
+  const profileIds = [...new Set([created.assignee, created.owner, created.created_by].filter((value): value is string => typeof value === "string" && Boolean(value)))];
+  const { data: profileRows } = profileIds.length
+    ? await supabase.from("profiles").select("id,name").in("id", profileIds)
+    : { data: [] };
+  const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 
   const task: Task = mapTaskRow(created as TaskRowForMapping, profileNameById);
+  const relation: TaskRelation | null = transaction?.relation
+    ? {
+        id: transaction.relation.id,
+        taskId: transaction.relation.task_id,
+        relatedTaskId: transaction.relation.related_task_id,
+        relationType: transaction.relation.relation_type,
+        note: transaction.relation.note || "",
+        createdBy: transaction.relation.created_by || "",
+        createdAt: transaction.relation.created_at,
+      }
+    : null;
 
-  return NextResponse.json({ ok: true, task });
+  return NextResponse.json({ ok: true, task, relation, relatedTask: transaction?.relatedTask || null });
 }

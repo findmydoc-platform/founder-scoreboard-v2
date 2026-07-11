@@ -23,6 +23,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const migration = await readFile("supabase/0038_github_sync_locks.sql", "utf8");
+  const transactionalSyncMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
@@ -62,10 +63,17 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe hat noch kein GitHub Issue/);
   assert.match(route, /Nur Deliverables können als GitHub Issue angelegt werden/);
-  assert.match(route, /github_sync_status: "pending"/);
-  assert.match(route, /github_sync_status: "synced"/);
-  assert.match(route, /github_sync_status: "failed"/);
+  assert.match(route, /begin_github_issue_sync_transaction/);
+  assert.match(route, /finalize_github_issue_sync_transaction/);
+  assert.match(route, /fail_github_issue_sync_transaction/);
+  assert.match(transactionalSyncMigration, /github_sync_status = 'pending'/);
+  assert.match(transactionalSyncMigration, /github_sync_status = 'synced'/);
+  assert.match(transactionalSyncMigration, /github_sync_status = 'failed'/);
   assert.match(github, /state: task\.status === "Erledigt" \? "closed" : "open"/);
+  assert.match(github, /taskIssueMarker/);
+  assert.match(github, /findGitHubIssueByTaskMarker/);
+  assert.match(github, /founderops-task-id:/);
+  assert.match(github, /recovered: true/);
 });
 
 test("operational leads can delete test tasks and close linked github issues", async () => {
@@ -251,6 +259,7 @@ test("github sync queue is reopened by task comments blockers and relationship c
 test("github sync maps the visible task assignee to native github assignees", async () => {
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
+  const migration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
 
   assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
   assert.match(syncRoute, /profileGitHubLoginById/);
@@ -258,8 +267,9 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
   assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
   assert.match(syncRoute, /Warnung:/);
-  assert.match(syncRoute, /github_sync_status: "synced"/);
-  assert.match(syncRoute, /github_sync_error: null/);
+  assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
+  assert.match(migration, /github_sync_status = 'synced'/);
+  assert.match(migration, /github_sync_error = null/);
   assert.match(syncRoute, /warnings/);
   assert.doesNotMatch(syncRoute, /review_owner_profile_id/);
   assert.doesNotMatch(syncRoute, /packages"\)/);

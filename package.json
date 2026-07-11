@@ -13,6 +13,7 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:task-mutations": "node scripts/verify-task-update-transaction.mjs",
     "verify:task-deletion": "node scripts/verify-task-deletion-transaction.mjs",
+    "verify:task-creation": "node scripts/verify-task-creation-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
     "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",

@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
+import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import {
   profileForAssigneeValue,
   reviewOwnerForTask,
@@ -12,16 +13,22 @@ import type { Task } from "@/lib/types";
 
 type UseTaskCreateCommandOptions = Pick<
   PlanningCommandContext,
-  "apiClient" | "currentProfile" | "data" | "setData" | "setSaveError" | "source" | "startTransition"
+  | "apiClient"
+  | "applyPlanningDataUpdate"
+  | "currentProfile"
+  | "data"
+  | "setSaveError"
+  | "source"
+  | "startTransition"
 > & {
   setTaskDialogDefaults: Dispatch<SetStateAction<Partial<NewTaskDraft> | null>>;
 };
 
 export function useTaskCreateCommand({
   apiClient,
+  applyPlanningDataUpdate,
   currentProfile,
   data,
-  setData,
   setSaveError,
   setTaskDialogDefaults,
   source,
@@ -85,60 +92,63 @@ export function useTaskCreateCommand({
       selfBlockersChecked: false,
     };
 
-    setData((current) => ({
-      ...current,
-      tasks: [...current.tasks, localTask],
-    }));
-    setTaskDialogDefaults(null);
-
-    if (source !== "supabase") return;
+    if (source !== "supabase") {
+      applyPlanningDataUpdate((current) => {
+        const nextData = {
+          ...current,
+          tasks: [...current.tasks, localTask],
+        };
+        try {
+          persistLocalPlanningTasks(nextData.tasks);
+        } catch {
+          // Local development remains usable when browser storage is unavailable.
+        }
+        return nextData;
+      });
+      setTaskDialogDefaults(null);
+      return;
+    }
 
     startTransition(async () => {
-      let createdTaskCommitted = false;
-
       try {
         const { response, body } = await taskApi.createTaskRequest(apiClient, { ...draft, assignee: assigneeId || draft.assignee });
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
-        setData((current) => ({
-          ...current,
-          tasks: current.tasks.map((task) => (task.id === localTask.id ? body.task! : task)),
-        }));
-        createdTaskCommitted = true;
-
-        if (draft.relatedTaskId && draft.relatedTaskId !== body.task.id) {
-          const { response: relationResponse, body: relationBody } = await taskApi.addTaskRelationshipRequest(apiClient, body.task.id, {
-            relationType: draft.relationType,
-            relatedTaskId: draft.relatedTaskId,
-            note: draft.relationNote,
-          });
-          if (!relationResponse.ok || !relationBody?.relation) throw new Error(relationBody?.error || "Abhängigkeit konnte nicht gespeichert werden.");
-          setData((current) => ({
+        applyPlanningDataUpdate((current) => {
+          const tasksWithCreated = current.tasks.some((task) => task.id === body.task!.id)
+            ? current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...body.task } : task))
+            : [...current.tasks, body.task!];
+          return {
             ...current,
-            taskRelations: [relationBody.relation!, ...current.taskRelations],
-            tasks: current.tasks.map((task) =>
-              task.id === body.task!.id || task.id === draft.relatedTaskId
-                ? { ...task, githubSyncStatus: "not_synced", githubSyncError: "" }
-                : task,
+            tasks: tasksWithCreated.map((task) =>
+              body.relatedTask && task.id === body.relatedTask.id ? { ...task, ...body.relatedTask } : task,
             ),
-          }));
-        }
+            taskRelations: body.relation && !current.taskRelations.some((relation) => relation.id === body.relation!.id)
+              ? [body.relation, ...current.taskRelations]
+              : current.taskRelations,
+          };
+        });
+        setTaskDialogDefaults(null);
 
         if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
           const { response: syncResponse, body: syncBody } = await taskApi.syncTaskToGitHubRequest(apiClient, body.task.id, { createIfMissing: true });
-          if (!syncResponse.ok || !syncBody?.task) throw new Error(syncBody?.error || "GitHub Issue konnte nicht angelegt werden.");
-          setData((current) => ({
+          if (!syncResponse.ok || !syncBody?.task) {
+            if (syncBody?.task) {
+              applyPlanningDataUpdate((current) => ({
+                ...current,
+                tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),
+              }));
+            }
+            throw new Error(
+              `${syncBody?.error || "GitHub Issue konnte nicht angelegt werden."} Die Aufgabe wurde gespeichert und kann erneut synchronisiert werden.`,
+            );
+          }
+          applyPlanningDataUpdate((current) => ({
             ...current,
             tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),
           }));
         }
       } catch (error) {
-        if (!createdTaskCommitted) {
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.filter((task) => task.id !== localTask.id),
-          }));
-        }
         setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.");
       }
     });
