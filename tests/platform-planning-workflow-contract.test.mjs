@@ -149,7 +149,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task create command",
       path: "src/features/tasks/hooks/use-task-create-command.ts",
-      matches: [/createTaskRequest/, /addTaskRelationshipRequest/, /syncTaskToGitHubRequest/],
+      matches: [/createTaskRequest/, /applyPlanningDataUpdate/, /setTaskDialogDefaults/, /syncTaskToGitHubRequest/],
     },
     {
       label: "task delete command",

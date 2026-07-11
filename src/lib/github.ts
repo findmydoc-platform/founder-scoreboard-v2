@@ -32,6 +32,13 @@ type GitHubIssuePayload = {
   assignees?: string[];
 };
 
+type GitHubIssueSearchResult = {
+  number: number;
+  html_url: string;
+  body?: string | null;
+  pull_request?: unknown;
+};
+
 export function hasGitHubSyncEnv() {
   return true;
 }
@@ -122,6 +129,10 @@ function sourceLine(task: Task) {
   return `Planning context: ${source}. GitHub issue sync keeps the working issue aligned.`;
 }
 
+export function taskIssueMarker(taskId: string) {
+  return `<!-- founderops-task-id:${taskId} -->`;
+}
+
 export function taskIssueBody(task: Task) {
   return [
     "## Problem Statement",
@@ -141,6 +152,7 @@ export function taskIssueBody(task: Task) {
     "",
     "---",
     sourceLine(task),
+    taskIssueMarker(task.id),
   ].join("\n");
 }
 
@@ -185,6 +197,44 @@ async function assignableGitHubLogin(login: string, token: string) {
   return null;
 }
 
+function matchingTaskIssue(items: GitHubIssueSearchResult[], marker: string) {
+  return items.find((issue) => !issue.pull_request && issue.body?.includes(marker)) || null;
+}
+
+async function findGitHubIssueByTaskMarker(taskId: string, token: string) {
+  const marker = taskIssueMarker(taskId);
+  const markerToken = marker.slice(5, -4).trim();
+  const query = encodeURIComponent(`repo:${owner}/${repo} is:issue in:body "${markerToken}"`);
+  const searchResponse = await fetch(`https://api.github.com/search/issues?q=${query}&per_page=10`, {
+    method: "GET",
+    headers: githubHeaders(token),
+    cache: "no-store",
+  });
+  if (searchResponse.ok) {
+    const search = await searchResponse.json() as { items?: GitHubIssueSearchResult[] };
+    const match = matchingTaskIssue(search.items || [], marker);
+    if (match) return match;
+  }
+
+  for (let page = 1; page <= 5; page += 1) {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`,
+      {
+        method: "GET",
+        headers: githubHeaders(token),
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) break;
+    const issues = await response.json() as GitHubIssueSearchResult[];
+    const match = matchingTaskIssue(issues, marker);
+    if (match) return match;
+    if (issues.length < 100) break;
+  }
+
+  return null;
+}
+
 export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHubIssueAssigneeInput = {}) {
   if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
@@ -220,7 +270,19 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
     });
     if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Update fehlgeschlagen"));
     const issue = await response.json() as { number: number; html_url: string };
-    return { ...issue, warnings };
+    return { ...issue, warnings, recovered: false };
+  }
+
+  const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token);
+  if (recoveredIssue) {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${recoveredIssue.number}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await githubErrorMessage(response, "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden"));
+    const issue = await response.json() as { number: number; html_url: string };
+    return { ...issue, warnings, recovered: true };
   }
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
@@ -230,7 +292,7 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
   });
   if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
   const issue = await response.json() as { number: number; html_url: string };
-  return { ...issue, warnings };
+  return { ...issue, warnings, recovered: false };
 }
 
 export async function listGitHubIssueBlockedBy(issueNumber: number, token: string) {

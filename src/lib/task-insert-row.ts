@@ -2,6 +2,7 @@ import type { Task } from "@/lib/types";
 
 type BuildTaskInsertRowInput = {
   id: string;
+  creationRequestId?: string | null;
   projectId?: string | null;
   packageId?: string | null;
   milestoneId?: string | null;
@@ -49,6 +50,7 @@ type BuildTaskInsertRowInput = {
 export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
   return {
     id: input.id,
+    creation_request_id: input.creationRequestId || null,
     project_id: input.projectId || "findmydoc-founder-execution",
     package_id: input.packageId || null,
     milestone_id: input.milestoneId || null,

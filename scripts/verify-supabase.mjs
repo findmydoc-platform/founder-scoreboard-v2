@@ -166,6 +166,49 @@ async function verifyTaskDeletionRpcs() {
   ];
 }
 
+async function verifyTaskCreationAndGitHubSyncRpcs() {
+  const missingTaskId = `verify-missing-task-create-sync-${Date.now()}`;
+  const create = await supabase.rpc("create_task_transaction", {
+    p_task_insert: {},
+    p_relation_type: null,
+    p_related_task_id: null,
+    p_relation_note: null,
+    p_activity_message: "verification",
+    p_relation_activity_message: null,
+    p_notifications: [],
+    p_actor_profile_id: null,
+    p_request_ip: null,
+    p_user_agent: null,
+  });
+  const begin = await supabase.rpc("begin_github_issue_sync_transaction", { p_task_id: missingTaskId });
+  const finalize = await supabase.rpc("finalize_github_issue_sync_transaction", {
+    p_task_id: missingTaskId,
+    p_github_repo: "findmydoc-platform/management",
+    p_github_issue_number: 1,
+    p_github_issue_url: "https://github.com/findmydoc-platform/management/issues/1",
+    p_synced_at: new Date().toISOString(),
+    p_activity_message: "verification",
+  });
+  const fail = await supabase.rpc("fail_github_issue_sync_transaction", {
+    p_task_id: missingTaskId,
+    p_error_message: "verification",
+    p_activity_message: "verification",
+  });
+
+  return [
+    { name: "create_task_transaction", result: create, expectedCode: "22023" },
+    { name: "begin_github_issue_sync_transaction", result: begin, expectedCode: "P0002" },
+    { name: "finalize_github_issue_sync_transaction", result: finalize, expectedCode: "P0002" },
+    { name: "fail_github_issue_sync_transaction", result: fail, expectedCode: "P0002" },
+  ].map(({ name, result: rpcResult, expectedCode }) => ({
+    name,
+    ok: rpcResult.error?.code === expectedCode,
+    error: rpcResult.error?.code === expectedCode
+      ? ""
+      : rpcResult.error?.message || `RPC did not return ${expectedCode}`,
+  }));
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -212,6 +255,7 @@ const result = {
   profileWriteRpcs: await verifyProfileWriteRpcs(),
   taskUpdateRpc: await verifyTaskUpdateRpc(),
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
+  taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -241,5 +285,11 @@ if (!result.taskUpdateRpc.ok) {
 const missingTaskDeletionRpc = result.taskDeletionRpcs.find((check) => !check.ok);
 if (missingTaskDeletionRpc) {
   console.error(`Task deletion RPC check failed for ${missingTaskDeletionRpc.name}: ${missingTaskDeletionRpc.error}`);
+  process.exit(1);
+}
+
+const missingTaskCreationOrSyncRpc = result.taskCreationAndGitHubSyncRpcs.find((check) => !check.ok);
+if (missingTaskCreationOrSyncRpc) {
+  console.error(`Task creation or GitHub sync RPC check failed for ${missingTaskCreationOrSyncRpc.name}: ${missingTaskCreationOrSyncRpc.error}`);
   process.exit(1);
 }

@@ -289,7 +289,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       }, { status: 409 });
     }
 
-    await supabase.from("tasks").update({ github_sync_status: "pending", github_sync_error: null }).eq("id", id);
+    const { error: pendingError } = await supabase.rpc("begin_github_issue_sync_transaction", {
+      p_task_id: id,
+    });
+    if (pendingError) throw new Error(`GitHub-Sync konnte nicht gestartet werden: ${pendingError.message}`);
 
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const dependencyContext = await githubDependencyContext(supabase, id, issue.number);
@@ -297,19 +300,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const syncedAt = new Date().toISOString();
     const githubRepo = githubRepoSlug();
     const warnings = issue.warnings || [];
+    const activityMessage = [
+      `GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`,
+      issue.recovered ? "Vorhandenes FounderOps-Issue wiederverwendet" : "",
+      ...warnings.map((warning) => `Warnung: ${warning}`),
+    ].filter(Boolean).join(" · ");
 
-    await supabase.from("tasks").update({
-      github_repo: githubRepo,
-      github_issue_number: issue.number,
-      github_issue_url: issue.html_url,
-      github_sync_status: "synced",
-      github_last_synced_at: syncedAt,
-      github_sync_error: null,
-    }).eq("id", id);
-    await supabase.from("task_activity").insert({
-      task_id: id,
-      message: [`GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`, ...warnings.map((warning) => `Warnung: ${warning}`)].join(" · "),
+    const { data: finalizedTask, error: finalizeError } = await supabase.rpc("finalize_github_issue_sync_transaction", {
+      p_task_id: id,
+      p_github_repo: githubRepo,
+      p_github_issue_number: issue.number,
+      p_github_issue_url: issue.html_url,
+      p_synced_at: syncedAt,
+      p_activity_message: activityMessage,
     });
+    if (finalizeError) throw new Error(`GitHub Issue wurde gespeichert, aber die Verknüpfung ist fehlgeschlagen: ${finalizeError.message}`);
 
     return NextResponse.json({
       ok: true,
@@ -322,20 +327,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         githubSyncStatus: "synced",
         githubLastSyncedAt: syncedAt,
         githubSyncError: "",
+        updatedAt: finalizedTask?.updated_at || "",
       },
     });
   } catch (syncError) {
     const message = syncError instanceof Error ? syncError.message : "GitHub-Sync fehlgeschlagen.";
-    await supabase.from("tasks").update({ github_sync_status: "failed", github_sync_error: message }).eq("id", id);
-    await supabase.from("task_activity").insert({
-      task_id: id,
-      message: `GitHub-Sync fehlgeschlagen: ${message}`,
+    const { data: failedTask } = await supabase.rpc("fail_github_issue_sync_transaction", {
+      p_task_id: id,
+      p_error_message: message,
+      p_activity_message: `GitHub-Sync fehlgeschlagen: ${message}`,
     });
     return NextResponse.json({
       error: message,
       task: {
         githubSyncStatus: "failed",
         githubSyncError: message,
+        updatedAt: failedTask?.updated_at || "",
       },
     }, { status: 502 });
   } finally {

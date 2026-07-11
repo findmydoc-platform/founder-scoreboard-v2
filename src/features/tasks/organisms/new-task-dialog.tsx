@@ -19,6 +19,7 @@ import {
 import type { PlanningData, TaskRelationType } from "@/lib/types";
 
 export type NewTaskDraft = {
+  creationRequestId: string;
   title: string;
   description: string;
   problemStatement: string;
@@ -66,6 +67,7 @@ export function NewTaskDialog({
   const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const initiativesForDefaultMilestone = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({
+    creationRequestId: defaults.creationRequestId || globalThis.crypto.randomUUID(),
     title: defaults.title || "",
     description: defaults.description || "",
     problemStatement: defaults.problemStatement || "",
@@ -103,6 +105,7 @@ export function NewTaskDialog({
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-8">
       <form
         className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl"
+        aria-busy={pending}
         onSubmit={(event) => {
           event.preventDefault();
           if (canCreate) onCreate(draft);
@@ -115,7 +118,7 @@ export function NewTaskDialog({
               {draft.taskType === "proposal" ? "Aufgabenvorschlag" : draft.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable"}
             </h2>
           </div>
-          <UiButton type="button" onClick={onClose} size="iconMd" className="text-slate-500" aria-label="Dialog schließen">
+          <UiButton type="button" onClick={onClose} disabled={pending} size="iconMd" className="text-slate-500" aria-label="Dialog schließen">
             ×
           </UiButton>
         </div>
@@ -314,9 +317,9 @@ export function NewTaskDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-          <UiButton type="button" onClick={onClose}>Abbrechen</UiButton>
+          <UiButton type="button" onClick={onClose} disabled={pending}>Abbrechen</UiButton>
           <UiButton type="submit" disabled={pending || !canCreate} variant="primary">
-            Erstellen
+            {pending ? "Wird erstellt..." : "Erstellen"}
           </UiButton>
         </div>
       </form>

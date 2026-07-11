@@ -108,7 +108,7 @@
   {
     "name": "tasks.created_by",
     "table": "tasks",
-    "select": "id,created_by,updated_at",
+    "select": "id,created_by,creation_request_id,creation_request_payload,updated_at",
     "health": true
   },
   {
