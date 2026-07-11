@@ -107,6 +107,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Offene Score-Einwände müssen vor dem Sprint-Lock geprüft werden.", 409);
   }
 
+  const { data: acceptedAdjustments, error: acceptedAdjustmentError } = await supabase
+    .from("score_objections")
+    .select("profile_id,resolved_delivery_points,resolved_form_points,resolved_weekly_points,reviewed_at")
+    .eq("sprint_id", id)
+    .eq("status", "accepted")
+    .not("resolved_delivery_points", "is", null)
+    .order("reviewed_at", { ascending: false });
+  if (acceptedAdjustmentError) return apiError(acceptedAdjustmentError.message, 500);
+
+  const acceptedAdjustmentByProfile = new Map<string, {
+    resolved_delivery_points: number;
+    resolved_form_points: number;
+    resolved_weekly_points: number;
+  }>();
+  for (const adjustment of acceptedAdjustments || []) {
+    if (!acceptedAdjustmentByProfile.has(adjustment.profile_id)) {
+      acceptedAdjustmentByProfile.set(adjustment.profile_id, adjustment as {
+        resolved_delivery_points: number;
+        resolved_form_points: number;
+        resolved_weekly_points: number;
+      });
+    }
+  }
+
   if (sprint.review_due_at && new Date(sprint.review_due_at).getTime() > Date.now() && !payload.finalizeNow) {
     return apiError("Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen.", 409);
   }
@@ -302,13 +326,28 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const now = new Date().toISOString();
 
   for (const profile of profiles) {
-    const score = computeFounderSprintScore({
+    const computedScore = computeFounderSprintScore({
       profile,
       tasks: scoringTasks,
       commitment: commitments.find((item) => item.profileId === profile.id),
       meetings,
       meetingAttendance,
     });
+    const acceptedAdjustment = acceptedAdjustmentByProfile.get(profile.id);
+    const adjustedTotal = acceptedAdjustment
+      ? acceptedAdjustment.resolved_delivery_points + acceptedAdjustment.resolved_form_points + acceptedAdjustment.resolved_weekly_points
+      : computedScore.totalPoints;
+    const score = acceptedAdjustment
+      ? {
+        ...computedScore,
+        deliveryPoints: acceptedAdjustment.resolved_delivery_points,
+        formPoints: acceptedAdjustment.resolved_form_points,
+        weeklyPoints: acceptedAdjustment.resolved_weekly_points,
+        totalPoints: adjustedTotal,
+        fulfilled: !computedScore.awayNeutral && adjustedTotal >= 12,
+        reasonSummary: `Korrigiert nach angenommenem Score-Einwand: Delivery ${acceptedAdjustment.resolved_delivery_points}/12, Form / Review-Reife ${acceptedAdjustment.resolved_form_points}/4, Weekly ${acceptedAdjustment.resolved_weekly_points}/4.`,
+      }
+      : computedScore;
     const state = strikeStateByProfile.get(profile.id);
     const transition = computeStrikeTransition(score, state ? {
       strikeLevel: state.strike_level,

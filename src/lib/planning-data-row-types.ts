@@ -229,6 +229,9 @@ export type DbScoreObjection = {
   resolution_comment: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  resolved_delivery_points: number | null;
+  resolved_form_points: number | null;
+  resolved_weekly_points: number | null;
   second_reviewer_profile_id: string | null;
   second_review_decision: string | null;
   second_reviewed_at: string | null;

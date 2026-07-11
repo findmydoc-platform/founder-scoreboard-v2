@@ -189,10 +189,23 @@ export type ScoreObjection = {
   resolutionComment: string;
   reviewedBy: string;
   reviewedAt: string;
+  resolvedDeliveryPoints: number | null;
+  resolvedFormPoints: number | null;
+  resolvedWeeklyPoints: number | null;
   secondReviewerProfileId: string;
   secondReviewDecision: string;
   secondReviewedAt: string;
   createdAt: string;
+};
+
+export type ScoreObjectionResolutionInput = {
+  action: "resolve" | "second_review";
+  status?: "reviewed" | "dismissed" | "accepted";
+  resolutionComment?: string;
+  deliveryPoints?: number;
+  formPoints?: number;
+  weeklyPoints?: number;
+  secondReviewDecision?: string;
 };
 
 export type TaskComment = {
