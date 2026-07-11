@@ -10,6 +10,7 @@ type UseBacklogOrderingOptions = {
   apiClient: BrowserApiClient;
   canManageBacklog: boolean;
   orderedTasks: Task[];
+  refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
   setMessage: (message: string) => void;
   source: "seed" | "supabase";
@@ -19,6 +20,7 @@ export function useBacklogOrdering({
   apiClient,
   canManageBacklog,
   orderedTasks,
+  refreshPlanningData,
   setData,
   setMessage,
   source,
@@ -26,7 +28,11 @@ export function useBacklogOrdering({
   const [isReordering, startReorderTransition] = useTransition();
 
   const commitOrder = (nextTasks: Task[]) => {
-    const updates = nextTasks.map((task, index) => ({ id: task.id, sortOrder: (index + 1) * 10 }));
+    const updates = nextTasks.map((task, index) => ({
+      id: task.id,
+      sortOrder: (index + 1) * 10,
+      expectedUpdatedAt: task.updatedAt || "",
+    }));
     const previousTasks = orderedTasks;
     const nextTaskById = new Map(updates.map((update) => [update.id, update.sortOrder]));
     setMessage("");
@@ -46,12 +52,23 @@ export function useBacklogOrdering({
 
     startReorderTransition(async () => {
       const { response, body } = await taskApi.updateBacklogOrderRequest(apiClient, updates);
-      if (response.ok) return;
+      if (response.ok) {
+        const persistedById = new Map((body?.updates || []).map((update) => [update.id, update]));
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((task) => {
+            const persisted = persistedById.get(task.id);
+            return persisted ? { ...task, order: persisted.sortOrder, updatedAt: persisted.updatedAt } : task;
+          }),
+        }));
+        return;
+      }
       const previousOrderById = new Map(previousTasks.map((task) => [task.id, task.order]));
       setData((current) => ({
         ...current,
         tasks: current.tasks.map((task) => previousOrderById.has(task.id) ? { ...task, order: previousOrderById.get(task.id)! } : task),
       }));
+      await refreshPlanningData();
       setMessage(body?.error || "Backlog-Reihenfolge konnte nicht gespeichert werden.");
     });
   };

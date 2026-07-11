@@ -17,6 +17,7 @@ type BacklogOverviewProps = {
   data: PlanningData;
   onOpenTask: (task: Task) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
+  refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
   source: "seed" | "supabase";
 };
@@ -27,6 +28,7 @@ export function BacklogOverview({
   data,
   onOpenTask,
   onUpdateTask,
+  refreshPlanningData,
   setData,
   source,
 }: BacklogOverviewProps) {
@@ -45,6 +47,7 @@ export function BacklogOverview({
     canManageBacklog,
     onUpdateTask,
     orderedTasks: viewModel.orderedTasks,
+    refreshPlanningData,
     setData,
     source,
   });

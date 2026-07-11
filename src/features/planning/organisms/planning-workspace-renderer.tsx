@@ -55,6 +55,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     openNotification,
     openTaskPanel,
     reopenReviewTask,
+    refreshPlanningData,
     apiClient,
     retryNotificationDelivery,
     reviewOwnerFilter,
@@ -146,6 +147,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           data={data}
           onOpenTask={(task) => openTaskPanel(task.id)}
           onUpdateTask={updateTask}
+          refreshPlanningData={refreshPlanningData}
           setData={setData}
           source={source}
         />

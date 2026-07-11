@@ -161,12 +161,18 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
 test("backlog ordering API is operational-lead guarded and does not dirty github sync", async () => {
   const route = await readFile("src/app/api/tasks/backlog-order/route.ts", "utf8");
   const apiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
+  const ordering = await readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8");
+  const migration = await readFile("supabase/0048_transactional_planning_batches.sql", "utf8");
 
   assert.match(route, /requireFounder/);
   assert.match(route, /isOperationalLeadRole/);
   assert.match(route, /Nur CEO oder Deputy können die Backlog-Reihenfolge ändern/);
-  assert.match(route, /sort_order/);
-  assert.match(route, /task\.backlog_reorder/);
+  assert.match(route, /update_backlog_order_transaction/);
+  assert.match(ordering, /expectedUpdatedAt/);
+  assert.match(ordering, /updatedAt: persisted\.updatedAt/);
+  assert.match(migration, /sort_order = requested\."sortOrder"/);
+  assert.match(migration, /task\.backlog_reorder/);
+  assert.match(migration, /task\.updated_at <> requested\."expectedUpdatedAt"/);
   assert.doesNotMatch(route, /github_sync_status|github_sync_error|task_activity/);
   assert.match(apiClient, /updateBacklogOrderRequest/);
   assert.match(apiClient, /\/api\/tasks\/backlog-order/);

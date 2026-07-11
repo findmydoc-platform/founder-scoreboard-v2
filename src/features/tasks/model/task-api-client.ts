@@ -11,8 +11,8 @@ export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, p
   });
 }
 
-export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: Array<{ id: string; sortOrder: number }>) {
-  return apiClient.requestJson<{ error?: string; updates?: Array<{ id: string; sortOrder: number }> }>("/api/tasks/backlog-order", {
+export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: Array<{ id: string; sortOrder: number; expectedUpdatedAt: string }>) {
+  return apiClient.requestJson<{ error?: string; updates?: Array<{ id: string; sortOrder: number; updatedAt: string }> }>("/api/tasks/backlog-order", {
     method: "PATCH",
     json: { updates },
   });

@@ -7,6 +7,7 @@ import { isOperationalLeadRole } from "@/lib/platform";
 type BacklogOrderUpdate = {
   id: string;
   sortOrder: number;
+  expectedUpdatedAt: string;
 };
 
 function parseBacklogOrderUpdates(payload: unknown): BacklogOrderUpdate[] | string {
@@ -20,10 +21,13 @@ function parseBacklogOrderUpdates(payload: unknown): BacklogOrderUpdate[] | stri
     const candidate = update as Partial<Record<keyof BacklogOrderUpdate, unknown>>;
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const sortOrder = typeof candidate.sortOrder === "number" ? candidate.sortOrder : Number.NaN;
-    if (!id || !Number.isInteger(sortOrder) || sortOrder < 0) return "Backlog-Änderung ist ungültig.";
+    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === "string" ? candidate.expectedUpdatedAt : "";
+    if (!id || !Number.isInteger(sortOrder) || sortOrder < 0 || !expectedUpdatedAt || Number.isNaN(Date.parse(expectedUpdatedAt))) {
+      return "Backlog-Änderung ist ungültig.";
+    }
     if (seen.has(id)) return "Backlog-Änderung enthält doppelte Aufgaben.";
     seen.add(id);
-    parsed.push({ id, sortOrder });
+    parsed.push({ id, sortOrder, expectedUpdatedAt });
   }
   return parsed;
 }
@@ -43,31 +47,19 @@ export async function PATCH(request: NextRequest) {
   const updates = parseBacklogOrderUpdates(payload);
   if (typeof updates === "string") return apiError(updates, 400);
 
-  const ids = updates.map((update) => update.id);
-  const { data: existingRows, error: existingError } = await supabase
-    .from("tasks")
-    .select("id,sort_order")
-    .in("id", ids);
-  if (existingError) return apiError(existingError.message, 500);
-  if ((existingRows || []).length !== ids.length) return apiError("Mindestens eine Aufgabe wurde nicht gefunden.", 404);
-
-  for (const update of updates) {
-    const { error } = await supabase
-      .from("tasks")
-      .update({ sort_order: update.sortOrder })
-      .eq("id", update.id);
-    if (error) return apiError(error.message, 500);
+  const metadata = auditRequestMetadata(request);
+  const { data: transactionData, error: transactionError } = await supabase.rpc("update_backlog_order_transaction", {
+    p_updates: updates,
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
+  });
+  if (transactionError) {
+    if (transactionError.code === "P0001") return apiError("Backlog wurde parallel geändert. Bitte neu laden.", 409);
+    if (transactionError.code === "P0002") return apiError("Mindestens eine Aufgabe wurde nicht gefunden.", 404);
+    if (transactionError.code === "22023") return apiError("Backlog-Änderung ist ungültig.", 400);
+    return apiError(transactionError.message, 500);
   }
 
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.backlog_reorder",
-    entity_type: "task",
-    entity_id: "backlog",
-    before_data: { tasks: existingRows || [] },
-    after_data: { updates },
-    ...auditRequestMetadata(request),
-  });
-
-  return NextResponse.json({ ok: true, updates });
+  return NextResponse.json({ ok: true, updates: transactionData || [] });
 }
