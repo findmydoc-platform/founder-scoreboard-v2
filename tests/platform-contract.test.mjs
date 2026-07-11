@@ -46,6 +46,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   const productionWorkflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const deployScript = await readFile(".github/scripts/deploy/vercel-deploy-prebuilt.sh", "utf8");
   const schemaDeployScript = await readFile("scripts/deploy-production-schema.mjs", "utf8");
+  const schemaConnection = await readFile("scripts/lib/production-schema-connection.mjs", "utf8");
   const applySqlScript = await readFile("scripts/apply-sql.mjs", "utf8");
   const dependabot = await readFile(".github/dependabot.yml", "utf8");
   const gitignore = await readFile(".gitignore", "utf8");
@@ -88,6 +89,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(productionWorkflow, /build --prod/);
   assert.match(productionWorkflow, /Deploy Supabase Schema to Production/);
   assert.match(productionWorkflow, /SCHEMA_DEPLOY_TARGET: production/);
+  assert.match(productionWorkflow, /SUPABASE_DB_HOST: \$\{\{ secrets\.SUPABASE_DB_HOST \}\}/);
+  assert.match(productionWorkflow, /SUPABASE_DB_USER: \$\{\{ secrets\.SUPABASE_DB_USER \}\}/);
   assert.match(productionWorkflow, /SUPABASE_DB_PASSWORD: \$\{\{ secrets\.SUPABASE_DB_PASSWORD \}\}/);
   assert.match(productionWorkflow, /pnpm run deploy:supabase-schema/);
   assert.match(productionWorkflow, /Verify Production Supabase Schema/);
@@ -119,12 +122,18 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployScript, /deploymentUrl=/);
   assert.match(schemaDeployScript, /SCHEMA_DEPLOY_TARGET/);
   assert.match(schemaDeployScript, /refs\/heads\/main/);
-  assert.match(schemaDeployScript, /SUPABASE_DB_PASSWORD/);
+  assert.match(schemaDeployScript, /resolveProductionSchemaConnection/);
+  assert.match(schemaConnection, /SUPABASE_DB_HOST/);
+  assert.match(schemaConnection, /SUPABASE_DB_USER/);
+  assert.match(schemaConnection, /SUPABASE_DB_PASSWORD/);
+  assert.match(schemaConnection, /pooler\.supabase\.com/);
   assert.match(schemaDeployScript, /supabase\/schema\.sql/);
   assert.match(schemaDeployScript, /notify pgrst, 'reload schema'/);
   assert.match(schemaDeployScript, /drop\\s\+table/);
   assert.match(applySqlScript, /firstArg === "--" \? secondArg : firstArg/);
   assert.doesNotMatch(previewWorkflow, /VERCEL_TOKEN is required/);
+  assert.doesNotMatch(previewWorkflow, /SUPABASE_DB_HOST/);
+  assert.doesNotMatch(previewWorkflow, /SUPABASE_DB_USER/);
   assert.doesNotMatch(previewWorkflow, /SUPABASE_DB_PASSWORD/);
   assert.doesNotMatch(productionWorkflow, /VERCEL_TOKEN is required/);
   assert.match(pkg, /verify:release/);
@@ -150,6 +159,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployment, /VERCEL_ORG_ID/);
   assert.match(deployment, /VERCEL_PROJECT_ID/);
   assert.match(deployment, /SUPABASE_DB_PASSWORD/);
+  assert.match(deployment, /SUPABASE_DB_HOST/);
+  assert.match(deployment, /SUPABASE_DB_USER/);
   assert.match(deployment, /pnpm run deploy:supabase-schema/);
   assert.match(deployment, /SCHEMA_DEPLOY_TARGET=production/);
   assert.match(deployment, /supabase\/schema\.sql/);

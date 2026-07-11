@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 import { loadLocalEnv } from "./lib/env.mjs";
+import { resolveProductionSchemaConnection } from "./lib/production-schema-connection.mjs";
 
 const schemaFile = "supabase/schema.sql";
 const target = process.env.SCHEMA_DEPLOY_TARGET;
@@ -19,13 +20,11 @@ if (githubRef && githubRef !== "refs/heads/main") {
   process.exit(1);
 }
 
-const password = process.env.SUPABASE_DB_PASSWORD;
-const host = process.env.SUPABASE_DB_HOST || deriveSupabaseDbHost(process.env.NEXT_PUBLIC_SUPABASE_URL) || "db.wmccchyodlljkkytebwg.supabase.co";
-const user = process.env.SUPABASE_DB_USER || "postgres";
-const database = process.env.SUPABASE_DB_NAME || "postgres";
-
-if (!password) {
-  console.error("Missing SUPABASE_DB_PASSWORD.");
+let connection;
+try {
+  connection = resolveProductionSchemaConnection(process.env);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Invalid production database connection configuration.");
   process.exit(1);
 }
 
@@ -42,14 +41,7 @@ if (blockedPatterns.some((pattern) => pattern.test(sql))) {
   process.exit(1);
 }
 
-const client = new pg.Client({
-  host,
-  port: 5432,
-  user,
-  password,
-  database,
-  ssl: { rejectUnauthorized: false },
-});
+const client = new pg.Client(connection);
 
 await client.connect();
 
@@ -66,19 +58,3 @@ try {
 }
 
 console.log(`Applied production schema from ${schemaFile}.`);
-
-function deriveSupabaseDbHost(url) {
-  if (!url) return "";
-
-  try {
-    const hostname = new URL(url).hostname;
-    if (!hostname.endsWith(".supabase.co")) return "";
-
-    const [projectRef] = hostname.split(".");
-    if (!projectRef || projectRef === "db") return "";
-
-    return `db.${projectRef}.supabase.co`;
-  } catch {
-    return "";
-  }
-}
