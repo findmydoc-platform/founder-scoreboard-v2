@@ -196,6 +196,9 @@ if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(production
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_ANON_KEY:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_ANON_KEY during the Vercel build step.");
 }
+if (!/name: Verify Production Supabase Schema[\s\S]*NEXT_PUBLIC_SUPABASE_ANON_KEY:[\s\S]*pnpm run verify:supabase/.test(productionWorkflow)) {
+  failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_ANON_KEY during schema verification.");
+}
 for (const marker of [
   "workflow_dispatch",
   "refs/heads/main",
