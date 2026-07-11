@@ -24,10 +24,10 @@ export function useTaskCollaborationCommands({
   const [commentImportNotice, setCommentImportNotice] = useState("");
   const [commentImportPendingTaskIds, setCommentImportPendingTaskIds] = useState<Set<string>>(new Set());
 
-  const addTaskComment = (task: Task, comment: string) => {
+  const addTaskComment = async (task: Task, comment: string) => {
     if (!currentProfile) {
       setSaveError("GitHub-User ist keinem Teamprofil zugeordnet.");
-      return;
+      throw new Error("GitHub-User ist keinem Teamprofil zugeordnet.");
     }
 
     setSaveError("");
@@ -49,28 +49,27 @@ export function useTaskCollaborationCommands({
       return;
     }
 
-    setCommentImportPendingTaskIds((current) => new Set(current).add(task.id));
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.createTaskCommentRequest(apiClient, task.id, comment);
-        if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
+    try {
+      const { response, body } = await taskApi.createTaskCommentRequest(apiClient, task.id, comment);
+      if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
 
-        setData((current) => ({
-          ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? {
-            ...item,
-            githubSyncStatus: body.githubSyncError ? "failed" : "not_synced",
-            githubSyncError: body.githubSyncError || "",
-          } : item)),
-          taskComments: [body.comment!, ...current.taskComments],
-        }));
-        if (body.githubSyncError) {
-          setSaveError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
-        }
-      } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.");
+      setData((current) => ({
+        ...current,
+        tasks: current.tasks.map((item) => (item.id === task.id ? {
+          ...item,
+          githubSyncStatus: body.githubSyncError ? "failed" : "not_synced",
+          githubSyncError: body.githubSyncError || "",
+        } : item)),
+        taskComments: [body.comment!, ...current.taskComments],
+      }));
+      if (body.githubSyncError) {
+        setSaveError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
       }
-    });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.";
+      setSaveError(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
   };
 
   const uploadTaskAttachment = async (task: Task, file: File) => {

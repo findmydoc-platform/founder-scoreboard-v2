@@ -43,7 +43,7 @@ export function useTaskComments({
     if (activities.length) setTaskActivities((current) => [...activities, ...current]);
   }, []);
 
-  const addComment = (comment: string) => {
+  const addComment = async (comment: string) => {
     setError("");
 
     if (source !== "supabase") {
@@ -60,20 +60,19 @@ export function useTaskComments({
       return;
     }
 
-    setGithubCommentImportPending(true);
-    startTransition(async () => {
-      try {
-        const { response, body } = await createTaskCommentRequest(apiClient, task.id, comment);
+    try {
+      const { response, body } = await createTaskCommentRequest(apiClient, task.id, comment);
 
-        if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
-        setTaskComments((current) => [body.comment!, ...current]);
-        if (body.githubSyncError) {
-          setError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
-        }
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Kommentar konnte nicht gespeichert werden.");
+      if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
+      setTaskComments((current) => [body.comment!, ...current]);
+      if (body.githubSyncError) {
+        setError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
       }
-    });
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Kommentar konnte nicht gespeichert werden.";
+      setError(message);
+      throw caught instanceof Error ? caught : new Error(message);
+    }
   };
 
   const uploadAttachment = async (file: File) => {

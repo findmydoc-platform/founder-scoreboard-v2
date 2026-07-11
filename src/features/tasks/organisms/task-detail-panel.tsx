@@ -73,7 +73,7 @@ export function TaskDetailPanel({
   githubAppConnected: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<Task>) => void;
-  onAddComment: (comment: string) => void;
+  onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
