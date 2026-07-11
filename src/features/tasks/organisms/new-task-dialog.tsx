@@ -5,6 +5,7 @@ import { InitiativeRaciList } from "@/features/projects/molecules/initiative-rac
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { taskAssigneeOptions } from "@/lib/display";
 import {
   initiativeOptions,
@@ -60,6 +61,7 @@ export function NewTaskDialog({
   onClose: () => void;
   onCreate: (draft: NewTaskDraft) => void;
 }) {
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
   const initialTaskType = defaults.taskType || "deliverable";
   const fallbackAssignee = data.profiles[0]?.id || "volkan";
@@ -102,7 +104,7 @@ export function NewTaskDialog({
   const canCreate = draft.title.trim().length >= 3 && !deliverableNeedsStructure && !invalidDateRange && (draft.taskType !== "sub_issue" || draft.parentTaskId);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-8">
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Neue Aufgabe" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-8">
       <form
         className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl"
         aria-busy={pending}

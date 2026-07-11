@@ -6,6 +6,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import type { Package, PlanningData } from "@/lib/types";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type InitiativeDraft = {
   id?: string;
@@ -37,6 +38,7 @@ export function InitiativeDialog({
   onClose: () => void;
   onSave: (draft: InitiativeDraft) => void;
 }) {
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const activeMilestoneId = data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const defaultOwnerId = defaults.ownerId || data.profiles.find((profile) => profile.platformRole === "founder")?.id || data.profiles[0]?.id || "";
   const [draft, setDraft] = useState<InitiativeDraft>({
@@ -58,7 +60,7 @@ export function InitiativeDialog({
   const canSave = draft.title.trim().length >= 3 && draft.milestoneId && draft.ownerId && draft.accountableProfileId && draft.responsibleProfileIds.length > 0 && draft.goal.trim().length >= 3;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={draft.id ? "Initiative bearbeiten" : "Neue Initiative"} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
       <form
         className="w-full max-w-3xl rounded-lg border border-slate-200 bg-white shadow-xl"
         onSubmit={(event) => {
