@@ -9,7 +9,7 @@ import { UiButton } from "@/shared/atoms/ui-primitives";
 type Props = {
   pending?: boolean;
   profiles?: Profile[];
-  onAddComment: (comment: string) => void;
+  onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment?: (file: File) => Promise<string>;
   renderPreview: (value: string) => ReactNode;
 };
@@ -17,6 +17,7 @@ type Props = {
 export function TaskCommentComposer({ pending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
   const [newComment, setNewComment] = useState("");
   const [uploadPending, setUploadPending] = useState(false);
+  const [submitPending, setSubmitPending] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const showCommentPreview = /!\[[^\]]*\]\(https?:\/\/|https?:\/\/|\[[^\]]+\]\(https?:\/\//.test(newComment);
@@ -43,9 +44,17 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
     }
   }
 
-  function submitComment() {
-    onAddComment(newComment);
-    setNewComment("");
+  async function submitComment() {
+    const comment = newComment;
+    setSubmitPending(true);
+    try {
+      await onAddComment(comment);
+      setNewComment((current) => current === comment ? "" : current);
+    } catch {
+      // The owning workflow surfaces the error; keep the draft unchanged for retry.
+    } finally {
+      setSubmitPending(false);
+    }
   }
 
   function insertMention(profile: Profile) {
@@ -110,10 +119,10 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
         </div>
         <UiButton
           type="button"
-          disabled={pending || uploadPending || newComment.trim().length < 2}
-          onClick={submitComment}
+          disabled={pending || submitPending || uploadPending || newComment.trim().length < 2}
+          onClick={() => void submitComment()}
         >
-          Kommentieren
+          {submitPending ? "Speichert..." : "Kommentieren"}
         </UiButton>
       </div>
     </>

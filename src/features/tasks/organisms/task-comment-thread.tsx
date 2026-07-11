@@ -17,7 +17,7 @@ type Props = {
   notice?: string;
   title?: string;
   description?: string;
-  onAddComment: (comment: string) => void;
+  onAddComment: (comment: string) => Promise<void> | void;
   onImportGitHubComments?: () => void;
   onUploadAttachment?: (file: File) => Promise<string>;
 };

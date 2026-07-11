@@ -378,6 +378,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
   const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
+  const collaborationHook = await readFile("src/features/tasks/hooks/use-task-collaboration-commands.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
   const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
@@ -452,8 +453,15 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(thread, /TaskCommentComposer/);
   assert.match(taskDetailWorkflow, /useTaskComments/);
   assert.match(commentHook, /createTaskCommentRequest/);
+  assert.match(commentHook, /const addComment = async/);
+  assert.doesNotMatch(commentHook.match(/const addComment = async[\s\S]*?const uploadAttachment/)?.[0] || "", /setGithubCommentImportPending/);
+  assert.match(collaborationHook, /const addTaskComment = async/);
+  assert.doesNotMatch(collaborationHook.match(/const addTaskComment = async[\s\S]*?const uploadTaskAttachment/)?.[0] || "", /setCommentImportPendingTaskIds|startTransition/);
   assert.doesNotMatch(commentHook, /x-github-provider-token|getRememberedGitHubProviderToken|getBrowserSupabase|auth\.getSession/);
   assert.match(commentComposer, /onUploadAttachment/);
+  assert.match(commentComposer, /await onAddComment\(comment\)/);
+  assert.match(commentComposer, /current === comment \? "" : current/);
+  assert.match(commentComposer, /submitPending/);
   assert.match(githubCommentImage, /loadGitHubAssetBlob/);
   assert.doesNotMatch(githubCommentImage, /getBrowserSupabase|getRememberedGitHubProviderToken|auth\.getSession/);
   assert.doesNotMatch(taskApiClient, /includeGitHubToken|x-github-provider-token/);
@@ -493,8 +501,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.doesNotMatch(githubAppMigration, /create policy/i);
   assert.match(commentsRoute, /createGitHubIssueComment/);
   assert.match(commentsRoute, /getGitHubAppUserToken/);
-  assert.match(commentsRoute, /GitHubAppUserTokenRequiredError/);
-  assert.match(commentsRoute, /401/);
+  assert.doesNotMatch(commentsRoute, /GitHubAppUserTokenRequiredError/);
+  assert.ok(commentsRoute.indexOf('.from("task_comments")') < commentsRoute.indexOf("await getGitHubAppUserToken"));
   assert.match(commentsRoute, /githubSyncError/);
   assert.match(attachmentRoute, /getGitHubAppUserToken/);
   assert.match(attachmentRoute, /GitHubAppUserTokenRequiredError/);
