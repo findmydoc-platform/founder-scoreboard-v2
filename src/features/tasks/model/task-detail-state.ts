@@ -25,6 +25,7 @@ export type EditableTaskState = Pick<
   | "reviewOwnerProfileId"
   | "dependsOn"
   | "evidenceLink"
+  | "note"
   | "problemStatement"
   | "intendedOutcome"
   | "scopeConstraints"
@@ -64,6 +65,7 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
     reviewOwnerProfileId: task.reviewOwnerProfileId || "",
     dependsOn: task.dependsOn,
     evidenceLink: task.evidenceLink || task.issueUrl,
+    note: task.note || "",
     problemStatement: task.problemStatement || task.description,
     intendedOutcome: task.intendedOutcome || "",
     scopeConstraints: task.scopeConstraints || "",

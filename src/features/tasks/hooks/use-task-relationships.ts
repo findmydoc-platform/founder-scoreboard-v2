@@ -28,15 +28,15 @@ export function useTaskRelationships({
     note: "",
   });
 
-  const addRelation = () => {
-    if (!relationDraft.relatedTaskId || relationDraft.relatedTaskId === task.id) return;
+  const addRelation = (draft: TaskRelationshipDraft = relationDraft) => {
+    if (!draft.relatedTaskId || draft.relatedTaskId === task.id) return;
 
     const localRelation: TaskRelation = {
       id: Date.now(),
       taskId: task.id,
-      relatedTaskId: relationDraft.relatedTaskId,
-      relationType: relationDraft.relationType,
-      note: relationDraft.note,
+      relatedTaskId: draft.relatedTaskId,
+      relationType: draft.relationType,
+      note: draft.note,
       createdBy: "",
       createdAt: new Date().toISOString(),
     };
@@ -49,7 +49,7 @@ export function useTaskRelationships({
 
     startTransition(async () => {
       try {
-        const { response, body } = await addTaskRelationshipRequest(apiClient, task.id, relationDraft);
+        const { response, body } = await addTaskRelationshipRequest(apiClient, task.id, draft);
         if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
         setRelations((current) => current.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)));
       } catch (caught) {

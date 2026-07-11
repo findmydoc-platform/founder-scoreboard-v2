@@ -56,7 +56,7 @@ export function NewTaskDialog({
   onCreate,
 }: {
   defaults: Partial<NewTaskDraft>;
-  data: PlanningData;
+  data: Pick<PlanningData, "milestones" | "packages" | "profiles" | "sprints" | "tasks">;
   pending: boolean;
   onClose: () => void;
   onCreate: (draft: NewTaskDraft) => void;

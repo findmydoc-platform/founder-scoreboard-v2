@@ -28,7 +28,8 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
-  assert.match(route, /requireTeamMember/);
+  assert.match(route, /requireFounder/);
+  assert.match(route, /taskDetailPermissions/);
   assert.match(route, /getGitHubAppConnectionStatus/);
   assert.match(route, /getGitHubAppInstallationToken/);
   assert.match(route, /githubInstallationToken/);
@@ -205,29 +206,28 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipViewModel, /Abhängigkeit erfüllt/);
   assert.match(relationshipViewModel, /Verknüpft/);
   assert.match(relationshipViewModel, /relationMatchesDraft/);
-  const panelDependencies = await readFile("src/features/tasks/molecules/task-detail-panel-dependencies-section.tsx", "utf8");
   const relationshipForm = await readFile("src/features/tasks/molecules/task-relationship-form.tsx", "utf8");
-  const panelRelationshipContract = `${panelDependencies}\n${relationshipForm}`;
+  const panelRelationshipContract = `${relationshipSection}\n${relationshipForm}`;
   assert.match(panelRelationshipContract, /Abhängigkeit hinzufügen/);
   assert.match(panelRelationshipContract, /Abhängigkeit existiert bereits/);
   assert.match(panelRelationshipContract, /Diese Abhängigkeit ist bereits gespeichert/);
-  assert.match(panelDependencies, /relationMatchesDraft/);
+  assert.match(relationshipSection, /relationMatchesDraft/);
   assert.match(detail, /useTaskDetailWorkflow/);
   assert.match(taskDetailWorkflow, /useTaskRelationships/);
-  assert.match(detail, /task=\{task\}/);
+  assert.match(detail, /task=\{workflow\.taskSnapshot\}/);
   assert.match(relationshipHook, /Abhängigkeit konnte nicht gespeichert werden/);
   assert.match(relationshipHook, /Abhängigkeit konnte nicht entfernt werden/);
   assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/relationships/);
   assert.match(taskApiClient, /method: "POST"/);
   assert.match(taskApiClient, /method: "DELETE"/);
   assert.match(relationshipHook, /setRelations\(\(current\) => \[localRelation, \.\.\.current\]\)/);
-  assert.match(panel, /TaskDetailPanelDependenciesSection/);
-  assert.match(panelDependencies, /RelationshipList/);
-  assert.match(panelDependencies, /Wartet auf/);
+  assert.match(panel, /TaskDetailSurface/);
+  assert.match(relationshipSection, /RelationshipList/);
+  assert.match(relationshipSection, /Wartet auf/);
   assert.match(relationshipUi, /relationshipHelpText/);
   assert.match(relationshipUi, /relationshipBadgeFor/);
   assert.match(relationshipUi, /relationshipBadgeToneClass/);
-  assert.match(detail, /TaskRelationshipsSection/);
+  assert.match(detail, /TaskDetailSurface/);
   assert.match(relationshipSection, /RelationshipList/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /Abhängigkeit hinzufügen/);
   assert.match(`${relationshipSection}\n${relationshipForm}`, /allowedRelationTypes/);
@@ -323,7 +323,7 @@ test("app-only tasks are visibly marked without creating github issues", async (
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
-  const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const queue = await readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8");
 
   assert.match(ui, /GitHubMissingBadge/);
@@ -338,16 +338,17 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(queue, /Offene Issues syncen/);
   assert.match(queue, /onlyFailed: true/);
   assert.match(queue, /Sync läuft bereits/);
-  assert.match(panel, /TaskDetailPanelSidebar/);
+  assert.match(panel, /TaskDetailSurface/);
   assert.match(panelSidebar, /GitHub Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
   assert.doesNotMatch(notificationsOverviewUi, /onCreateGitHubIssue/);
-  assert.match(detailGitHubSyncCard, /Noch kein GitHub Issue/);
-  assert.match(detailGitHubSyncCard, /GitHub Issue anlegen/);
-  assert.match(detail, /createIfMissing: true/);
-  assert.match(detail, /githubState/);
+  assert.match(detailSurface, /TaskDetailPanelSidebar/);
+  assert.match(panelSidebar, /Noch kein GitHub Issue/);
+  assert.match(panelSidebar, /GitHub Issue anlegen/);
+  assert.match(detail, /onSyncGitHub=\{workflow\.syncGitHub\}/);
+  assert.match(detail, /taskSnapshot/);
   assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
-  assert.match(detailGitHubSyncCard, /GitHub Issue nur bewusst anlegen/);
+  assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
 });
 
 test("existing management issues are linked before creating duplicates", async () => {
@@ -386,7 +387,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
-  const detailGitHubSyncCard = await readFile("src/features/tasks/molecules/task-github-sync-card.tsx", "utf8");
+  const detailGitHubSyncCard = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const planningShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
   const githubStatus = await readFile("src/features/planning/molecules/github-connection-status.tsx", "utf8");
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -556,6 +557,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const ui = await readPlanningSurface();
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const taskDetailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const panelBlockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
   const thread = await readFile("src/features/tasks/organisms/task-comment-thread.tsx", "utf8");
   const commentHook = await readFile("src/features/tasks/hooks/use-task-comments.ts", "utf8");
@@ -611,9 +613,10 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(taskMutationContract, /Status geändert/);
   assert.match(taskRoute, /activityMessages/);
   assert.match(syncRoute, /GitHub-Sync ausgeführt/);
-  assert.match(panel, /TaskDetailPanelBlockerSection/);
+  assert.match(panel, /TaskDetailSurface/);
+  assert.match(taskDetailSurface, /TaskDetailPanelBlockerSection/);
   assert.match(panelBlockerSection, /Blocker melden/);
-  assert.match(panel, /TaskCommentThread/);
+  assert.match(taskDetailSurface, /TaskCommentThread/);
   assert.match(ui, /selectedTaskActivity/);
   assert.match(commentHook, /useTaskComments/);
   assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/comments/);

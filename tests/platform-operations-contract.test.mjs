@@ -685,7 +685,9 @@ test("local seed state persists task overrides in browser storage", async () => 
   assert.match(localStateHook, /if \(source === "supabase"\) return/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localDataKey\)/);
   assert.match(localStateHook, /window\.localStorage\.getItem\(localStateKey\)/);
-  assert.match(localStateHook, /normalizePlanningData\(parsedData \|\| current\)/);
+  assert.match(localStateHook, /export function readLocalPlanningData/);
+  assert.match(localStateHook, /normalizePlanningData\(parsedData \|\| fallback\)/);
+  assert.match(localStateHook, /setData\(\(current\) => readLocalPlanningData\(current\)\)/);
   assert.match(localStateHook, /window\.localStorage\.setItem\(localDataKey, JSON\.stringify\(data\)\)/);
   assert.match(localStateHook, /window\.localStorage\.setItem\(localStateKey, JSON\.stringify\(changedTasks\)\)/);
   assert.match(localStateHook, /setLocalStateLoaded\(true\)/);

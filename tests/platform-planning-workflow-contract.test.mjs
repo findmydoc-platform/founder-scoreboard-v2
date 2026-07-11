@@ -37,7 +37,7 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
     {
       label: "task detail workflow hook",
       path: "src/features/tasks/hooks/use-task-detail-workflow.ts",
-      matches: [/createBrowserApiClient/, /updateTaskRequest/, /syncTaskToGitHubRequest/, /useTaskComments/, /useTaskRelationships/, /detailsEditSnapshot/],
+      matches: [/createBrowserApiClient/, /updateTaskRequest/, /syncTaskToGitHubRequest/, /useTaskComments/, /useTaskRelationships/, /taskUpdateRequestPayload/],
     },
     {
       label: "team overview shell",
@@ -332,6 +332,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
+  const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
@@ -345,7 +346,8 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(dataRowTypes, /task_dependencies\(note\), task_notes\(note\)/);
   assert.match(dataRowTypes, /problem_statement/);
   assert.match(newTaskUi, /Aufgabenbrief/);
-  assert.match(detail, /TaskBriefSection/);
+  assert.match(detail, /TaskDetailSurface/);
+  assert.match(detailSurface, /TaskBriefSection/);
   assert.match(briefSection, /Aufgabenbrief/);
   assert.match(briefSection, /Abnahmekriterien/);
   assert.match(briefSection, /Nachweis/);

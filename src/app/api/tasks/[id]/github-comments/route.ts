@@ -3,6 +3,7 @@ import { requireFounder } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 
 function isAppMirroredComment(body: string) {
   return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const apiContext = await requireApiContext(request, requireFounder);
   if (!apiContext.ok) return apiContext.response;
 
-  const { supabase } = apiContext;
+  const { permission, supabase } = apiContext;
 
   let githubInstallationToken = "";
   try {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,evidence_link,issue_url,github_issue_number,issue_number")
+    .select("id,title,assignee,owner,review_owner_profile_id,evidence_link,issue_url,github_issue_number,issue_number")
     .eq("id", id)
     .single();
 
@@ -64,7 +65,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const currentEvidence = String(task.evidence_link || "").trim();
-  if (importedEvidenceLink && (!currentEvidence || currentEvidence === String(task.issue_url || "").trim())) {
+  const evidencePermissions = taskDetailPermissions({
+    task: {
+      assignee: task.assignee || "",
+      assigneeId: task.assignee || "",
+      owner: task.owner || "",
+      ownerId: task.owner || "",
+      reviewOwnerProfileId: task.review_owner_profile_id || "",
+    },
+    profile: permission.profile,
+    unrestricted: !permission.profile,
+  });
+  if (importedEvidenceLink && evidencePermissions.canEditEvidence && (!currentEvidence || currentEvidence === String(task.issue_url || "").trim())) {
     const { error: evidenceError } = await supabase
       .from("tasks")
       .update({

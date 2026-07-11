@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireTeamMember } from "@/lib/authz";
+import { requireFounder } from "@/lib/authz";
 import { githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppConnectionStatus, getGitHubAppInstallationToken } from "@/lib/github-app";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 
 type SyncRequestBody = {
   createIfMissing?: boolean;
@@ -198,7 +199,7 @@ async function releaseGitHubSyncLock(supabase: SupabaseClient, resourceKey: stri
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireTeamMember, {});
+  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireFounder, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -221,6 +222,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const loaded = await loadTaskForSync(supabase, id);
   if (!loaded.ok) return loaded.response;
+
+  const syncPermissions = taskDetailPermissions({
+    task: loaded.task,
+    profile: permission.profile,
+    unrestricted: !permission.profile,
+  });
+  if (!syncPermissions.canSyncGitHub) {
+    return apiError("Founder können GitHub nur für eigene Aufgaben synchronisieren.", 403);
+  }
 
   let { assigneeLogin, hasExistingGitHubIssue, task } = loaded;
 

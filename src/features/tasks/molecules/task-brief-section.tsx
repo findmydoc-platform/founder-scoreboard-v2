@@ -19,6 +19,7 @@ const briefFields = [
 
 type Props = {
   brief: TaskBriefState;
+  canEdit?: boolean;
   editing: boolean;
   onEdit: () => void;
   onCancel: () => void;
@@ -30,6 +31,7 @@ type Props = {
 
 export function TaskBriefSection({
   brief,
+  canEdit = true,
   editing,
   onEdit,
   onCancel,
@@ -65,7 +67,7 @@ export function TaskBriefSection({
                 Speichern
               </UiButton>
             </>
-          ) : (
+          ) : canEdit ? (
             <UiButton
               onClick={onEdit}
               size="sm"
@@ -73,7 +75,7 @@ export function TaskBriefSection({
               <Pencil size={14} />
               Bearbeiten
             </UiButton>
-          )}
+          ) : null}
         </div>
       </div>
       {briefFields.map(([label, key, placeholder]) => (
@@ -86,7 +88,7 @@ export function TaskBriefSection({
               className="min-h-20 w-full resize-y rounded-md border border-slate-200 p-3 text-sm leading-6 text-slate-800 outline-none focus:border-blue-400"
               placeholder={placeholder}
             />
-          ) : key === "acceptanceCriteria" || key === "definitionOfDone" ? (
+          ) : (key === "acceptanceCriteria" || key === "definitionOfDone") && canEdit ? (
             <TaskChecklist
               value={String(brief[key] || "")}
               emptyText={placeholder}

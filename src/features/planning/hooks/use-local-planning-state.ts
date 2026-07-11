@@ -40,6 +40,18 @@ export function persistLocalPlanningData(data: PlanningData) {
   persistLocalPlanningTasks(data.tasks);
 }
 
+export function readLocalPlanningData(fallback: PlanningData) {
+  const storedData = window.localStorage.getItem(localDataKey);
+  const stored = window.localStorage.getItem(localStateKey);
+  const parsedData = storedData ? JSON.parse(storedData) as PlanningData : null;
+  const parsedTasks = stored ? JSON.parse(stored) as Partial<Record<string, Partial<Task>>> : {};
+  const base = resolveNotificationEvents(normalizePlanningData(parsedData || fallback)).data;
+  return {
+    ...base,
+    tasks: base.tasks.map((task) => ({ ...task, ...(parsedTasks[task.id] || {}) })),
+  };
+}
+
 type UseLocalPlanningStateOptions = {
   source: "seed" | "supabase";
   setData: (updater: (current: PlanningData) => PlanningData) => void;
@@ -53,17 +65,7 @@ export function useLocalPlanningState({ source, setData }: UseLocalPlanningState
 
     queueMicrotask(() => {
       try {
-        const storedData = window.localStorage.getItem(localDataKey);
-        const stored = window.localStorage.getItem(localStateKey);
-        const parsedData = storedData ? JSON.parse(storedData) as PlanningData : null;
-        const parsedTasks = stored ? JSON.parse(stored) as Partial<Record<string, Partial<Task>>> : {};
-        setData((current) => {
-          const base = resolveNotificationEvents(normalizePlanningData(parsedData || current)).data;
-          return {
-            ...base,
-            tasks: base.tasks.map((task) => ({ ...task, ...(parsedTasks[task.id] || {}) })),
-          };
-        });
+        setData((current) => readLocalPlanningData(current));
       } catch {
         // Keep the empty fallback if local recovery fails.
       } finally {
