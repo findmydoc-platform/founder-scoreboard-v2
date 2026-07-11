@@ -180,7 +180,7 @@
   {
     "name": "team_task_intake_batches",
     "table": "team_task_intake_batches",
-    "select": "id,token_id,profile_id,idempotency_key,request_hash,task_ids,created_at",
+    "select": "id,token_id,profile_id,idempotency_key,request_hash,task_ids,response_tasks,created_at",
     "health": false
   }
 ]

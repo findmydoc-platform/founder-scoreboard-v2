@@ -1,135 +1,152 @@
 import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { createNotificationPayload } from "@/lib/notification-catalog";
-import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
-import { slugify } from "@/lib/slug";
 import type { getServerSupabase } from "@/lib/supabase";
-import { buildTaskInsertRow } from "@/lib/task-insert-row";
-import type { AuthenticatedProfile, Task } from "@/lib/types";
-import type { TeamTaskIntakeContext, TeamTaskIntakePreviewTask } from "@/features/intake/model/team-task-intake";
+import type { AuthenticatedProfile } from "@/lib/types";
+import type { TaskIntakeInput } from "@/features/intake/model/task-intake";
+import { canonicalTeamTaskIntakeRequest, type TeamTaskIntakePreviewTask } from "@/features/intake/model/team-task-intake";
+import type { TeamTaskIntakeCreatedTask, TeamTaskIntakeTaskType } from "@/features/intake/model/team-task-intake-contract";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
+
+type TeamTaskIntakeTaskSnapshot = {
+  id?: string;
+  title?: string;
+  status?: string;
+  priority?: string;
+  owner?: string | null;
+  assignee?: string | null;
+  created_by?: string | null;
+  package_id?: string | null;
+  milestone_id?: string | null;
+  sprint_id?: string | null;
+  task_type?: TeamTaskIntakeTaskType | null;
+  parent_task_id?: string | null;
+  score_relevant?: boolean | null;
+};
 
 type TeamTaskIntakeBatchResult = {
   batchId?: string;
   replayed?: boolean;
-  tasks?: TaskRowForMapping[];
+  tasks?: TeamTaskIntakeTaskSnapshot[];
 };
 
-function requestHash(preview: TeamTaskIntakePreviewTask[]) {
-  return createHash("sha256").update(JSON.stringify(preview), "utf8").digest("hex");
+function rpcError(error: { message: string; code?: string }) {
+  const commitError = new Error(error.message) as Error & { code?: string };
+  commitError.code = error.code;
+  return commitError;
 }
 
-function deterministicTaskId(actorId: string, title: string, creationRequestId: string) {
-  const suffix = createHash("sha256").update(creationRequestId, "utf8").digest("hex").slice(0, 12);
-  return `${actorId}-${slugify(title, { maxLength: 70 }) || "neue-aufgabe"}-${suffix}`;
+export function teamTaskIntakeRequestHash(rawTasks: TaskIntakeInput[]) {
+  const canonicalRequest = canonicalTeamTaskIntakeRequest(rawTasks);
+  return createHash("sha256").update(JSON.stringify(canonicalRequest), "utf8").digest("hex");
+}
+
+export function mapTeamTaskIntakeCreatedTask(task: TeamTaskIntakeTaskSnapshot): TeamTaskIntakeCreatedTask {
+  return {
+    id: task.id || "",
+    title: task.title || "",
+    status: task.status || "Offen",
+    priority: task.priority || "P2",
+    ownerId: task.owner || "",
+    assigneeId: task.assignee || "",
+    createdById: task.created_by || "",
+    initiativeId: task.package_id || "",
+    milestoneId: task.milestone_id || "",
+    sprintId: task.sprint_id || "",
+    taskType: task.task_type === "sub_issue" ? "sub_issue" : "proposal",
+    parentTaskId: task.parent_task_id || "",
+    scoreRelevant: false,
+  };
+}
+
+export async function loadTeamTaskIntakeReplay({
+  idempotencyKey,
+  requestHash,
+  supabase,
+  tokenId,
+}: {
+  idempotencyKey: string;
+  requestHash: string;
+  supabase: SupabaseServer;
+  tokenId: string;
+}) {
+  const { data, error } = await supabase
+    .from("team_task_intake_batches")
+    .select("id,request_hash,response_tasks")
+    .eq("token_id", tokenId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+  if (error) throw rpcError(error);
+  if (!data) return null;
+  if (data.request_hash !== requestHash) throw rpcError({ code: "P0003", message: "idempotency key conflict" });
+
+  return {
+    batchId: data.id,
+    replayed: true,
+    tasks: ((data.response_tasks || []) as TeamTaskIntakeTaskSnapshot[]).map(mapTeamTaskIntakeCreatedTask),
+  };
 }
 
 export async function commitTeamTaskIntake({
   actor,
-  context,
   idempotencyKey,
   preview,
   request,
+  requestHash,
   supabase,
   tokenId,
 }: {
   actor: AuthenticatedProfile;
-  context: TeamTaskIntakeContext;
   idempotencyKey: string;
   preview: TeamTaskIntakePreviewTask[];
   request: NextRequest;
+  requestHash: string;
   supabase: SupabaseServer;
   tokenId: string;
 }) {
-  const { data: leadRows, error: leadsError } = preview.some((task) => task.taskType === "proposal")
-    ? await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"])
-    : { data: [], error: null };
-  if (leadsError) throw new Error(leadsError.message);
-
-  const items = preview.map((task, index) => {
-    const creationRequestId = `team:${tokenId}:${idempotencyKey}:${index + 1}`;
-    const notifications = task.taskType === "proposal"
-      ? (leadRows || [])
-        .filter((lead) => lead.id !== actor.id)
-        .map((lead) => createNotificationPayload("task.proposed", {
-          actorProfileId: actor.id,
-          recipientProfileId: lead.id,
-          entityType: "task",
-          entityId: deterministicTaskId(actor.id, task.title, creationRequestId),
-          title: `Aufgabenvorschlag: ${task.title}`,
-          body: task.description || "Ein neuer Aufgabenvorschlag wurde über Team Intake eingereicht.",
-        }))
-      : [];
-
-    return {
-      taskInsert: buildTaskInsertRow({
-        id: deterministicTaskId(actor.id, task.title, creationRequestId),
-        creationRequestId,
-        packageId: task.packageId || null,
-        milestoneId: task.milestoneId || null,
-        title: task.title,
-        description: task.description,
-        problemStatement: task.problemStatement,
-        intendedOutcome: task.intendedOutcome,
-        scopeConstraints: task.scopeConstraints,
-        acceptanceCriteria: task.acceptanceCriteria,
-        evidenceRequired: task.evidenceRequired,
-        status: task.status,
-        priority: task.priority,
-        owner: task.ownerId || null,
-        assignee: task.ownerId || null,
-        createdBy: actor.id,
-        workstream: task.workstream,
-        sortOrder: 0,
-        startDate: task.startDate || null,
-        endDate: task.endDate || null,
-        deadline: task.deadline || null,
-        hours: task.hours,
-        definitionOfDone: task.definitionOfDone,
-        sprintId: null,
-        reviewOwnerProfileId: null,
-        scorePoints: 0,
-        scoreFinal: false,
-        taskType: task.taskType,
-        parentTaskId: task.parentTaskId || null,
-        scoreRelevant: false,
-      }),
-      activityMessage: task.taskType === "proposal"
-        ? "Aufgabenvorschlag über Team Intake erstellt"
-        : "Sub-Issue über Team Intake erstellt",
-      notifications,
-    };
-  });
+  const items = preview.map((task) => ({
+    title: task.title,
+    description: task.description,
+    problemStatement: task.problemStatement,
+    intendedOutcome: task.intendedOutcome,
+    scopeConstraints: task.scopeConstraints,
+    acceptanceCriteria: task.acceptanceCriteria,
+    evidenceRequired: task.evidenceRequired,
+    definitionOfDone: task.definitionOfDone,
+    taskType: task.taskType,
+    parentTaskId: task.parentTaskId,
+    packageId: task.packageId,
+    milestoneId: task.milestoneId,
+    ownerId: task.ownerId,
+    priority: task.priority,
+    status: task.status,
+    workstream: task.workstream,
+    startDate: task.startDate,
+    endDate: task.endDate,
+    deadline: task.deadline,
+    hours: task.hours,
+  }));
 
   const metadata = auditRequestMetadata(request);
   const { data, error } = await supabase.rpc("create_team_task_intake_batch_transaction", {
     p_token_id: tokenId,
     p_profile_id: actor.id,
     p_idempotency_key: idempotencyKey,
-    p_request_hash: requestHash(preview),
+    p_request_hash: requestHash,
     p_items: items,
     p_request_ip: metadata.request_ip,
     p_user_agent: metadata.user_agent,
   });
 
-  if (error) {
-    const commitError = new Error(error.message) as Error & { code?: string };
-    commitError.code = error.code;
-    throw commitError;
-  }
+  if (error) throw rpcError(error);
 
   const result = data as TeamTaskIntakeBatchResult | null;
-  if (!result?.batchId || !Array.isArray(result.tasks)) throw new Error("Team Task Intake lieferte kein vollständiges Batch-Ergebnis.");
-
-  const profileNameById = new Map(context.profiles.map((profile) => [profile.id, profile.name]));
-  const tasks = (result.tasks as Array<TaskRowForMapping & { task_type?: Task["taskType"] | null }>)
-    .map((task) => mapTaskRow(task, profileNameById));
+  if (!result?.batchId || !Array.isArray(result.tasks)) throw new Error("Team Task Intake returned an incomplete batch result.");
 
   return {
     batchId: result.batchId,
     replayed: Boolean(result.replayed),
-    tasks,
+    tasks: result.tasks.map(mapTeamTaskIntakeCreatedTask),
   };
 }

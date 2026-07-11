@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { requireFounder } from "@/lib/authz";
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/features/intake/model/team-task-intake-contract";
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requireFounder, {
@@ -15,18 +14,14 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
 
   const { id } = await context.params;
-  if (!uuidPattern.test(id)) return apiError("Token-ID ist ungültig.", 400);
+  if (!isUuid(id)) return apiError("Token-ID ist ungültig.", 400);
 
-  const { data, error } = await supabase
-    .from("team_task_intake_tokens")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("profile_id", profileId)
-    .is("revoked_at", null)
-    .select("id")
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("revoke_team_task_intake_token", {
+    p_token_id: id,
+    p_profile_id: profileId,
+  });
 
-  if (error) return apiError(error.message, error.code === "42P01" ? 503 : 500);
+  if (error) return apiError(error.code === "PGRST202" || error.code === "42883" ? "Team-Intake-Schema ist noch nicht verfügbar." : "Team-Intake-Token konnte nicht widerrufen werden.", error.code === "PGRST202" || error.code === "42883" ? 503 : 500);
   if (!data) return apiError("Aktiver Token wurde nicht gefunden.", 404);
-  return NextResponse.json({ ok: true, tokenId: data.id });
+  return NextResponse.json({ ok: true, tokenId: data });
 }

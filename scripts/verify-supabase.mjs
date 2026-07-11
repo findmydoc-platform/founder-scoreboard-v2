@@ -335,20 +335,31 @@ async function verifyTeamTaskIntakeRpcs() {
     p_label: "Verification",
     p_token_hash: "a".repeat(64),
     p_token_hint: "…verify",
-    p_expires_at: new Date(Date.now() + 60_000).toISOString(),
+  };
+  const authParams = {
+    p_token_hash: "c".repeat(64),
+    p_scope: "read:task-context",
+  };
+  const revokeParams = {
+    p_token_id: randomUUID(),
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
   };
   const batchParams = {
     p_token_id: randomUUID(),
     p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
     p_idempotency_key: randomUUID(),
     p_request_hash: "b".repeat(64),
-    p_items: [{ taskInsert: {} }],
+    p_items: [{ taskType: "proposal", title: "Verification" }],
     p_request_ip: null,
     p_user_agent: null,
   };
-  const [token, anonToken, batch, anonBatch] = await Promise.all([
+  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch] = await Promise.all([
     supabase.rpc("create_team_task_intake_token", tokenParams),
     anonSupabase.rpc("create_team_task_intake_token", tokenParams),
+    supabase.rpc("authenticate_team_task_intake_token", authParams),
+    anonSupabase.rpc("authenticate_team_task_intake_token", authParams),
+    supabase.rpc("revoke_team_task_intake_token", revokeParams),
+    anonSupabase.rpc("revoke_team_task_intake_token", revokeParams),
     supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
     anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
   ]);
@@ -362,6 +373,26 @@ async function verifyTeamTaskIntakeRpcs() {
         : !anonToken.error
           ? "token RPC unexpectedly allowed anonymous execution"
           : "",
+    },
+    {
+      name: "authenticate_team_task_intake_token",
+      ok: auth.error?.code === "P0004" && Boolean(anonAuth.error),
+      error: auth.error?.code !== "P0004"
+        ? auth.error?.message || "token auth RPC unexpectedly accepted an inactive token"
+        : !anonAuth.error
+          ? "token auth RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+    {
+      name: "revoke_team_task_intake_token",
+      ok: revoke.data === null && !revoke.error && Boolean(anonRevoke.error),
+      error: revoke.error
+        ? revoke.error.message
+        : revoke.data !== null
+          ? "token revoke RPC unexpectedly found a missing token"
+          : !anonRevoke.error
+            ? "token revoke RPC unexpectedly allowed anonymous execution"
+            : "",
     },
     {
       name: "create_team_task_intake_batch_transaction",

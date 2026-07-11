@@ -1,36 +1,24 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import {
-  buildTeamTaskIntakePreview,
-  loadTeamTaskIntakeContext,
-  parseTeamTaskIntakePayload,
-  teamTaskIntakePreviewIsValid,
-  validateTeamTaskIntakeBatchSize,
-} from "@/features/intake/model/team-task-intake";
-import { requireTeamTaskIntakeScope } from "@/features/intake/model/team-task-intake-token";
+  buildTeamTaskIntakeForRoute,
+  handleTeamTaskIntakeRequest,
+  teamTaskIntakeError,
+  teamTaskIntakeJson,
+} from "@/features/intake/model/team-task-intake-route";
 
 export async function POST(request: NextRequest) {
-  const permission = await requireTeamTaskIntakeScope(request, "write:task-intake");
-  if (!permission.ok) {
-    return NextResponse.json({ ok: false, error: permission.error }, { status: permission.status });
-  }
-
-  const payload = await request.json().catch(() => null);
-  const rawTasks = parseTeamTaskIntakePayload(payload);
-  const batchError = validateTeamTaskIntakeBatchSize(rawTasks.length);
-  if (batchError) return NextResponse.json({ ok: false, error: batchError }, { status: 400 });
-
-  try {
-    const context = await loadTeamTaskIntakeContext(permission.supabase, rawTasks);
-    const preview = buildTeamTaskIntakePreview(rawTasks, context, permission.profile);
-    return NextResponse.json({
-      ok: true,
-      valid: teamTaskIntakePreviewIsValid(preview),
-      tasks: preview,
+  return handleTeamTaskIntakeRequest(request, "write:task-intake", "Team Task Intake konnte nicht geprüft werden.", async (permission) => {
+    const intake = await buildTeamTaskIntakeForRoute({
+      actor: permission.profile,
+      payload: await request.json().catch(() => null),
+      supabase: permission.supabase,
     });
-  } catch (error) {
-    return NextResponse.json({
-      ok: false,
-      error: error instanceof Error ? error.message : "Team Task Intake konnte nicht geprüft werden.",
-    }, { status: 500 });
-  }
+    if (!intake.ok) return teamTaskIntakeError(intake.error, intake.status);
+
+    return teamTaskIntakeJson({
+      ok: true,
+      valid: intake.valid,
+      tasks: intake.preview,
+    });
+  });
 }

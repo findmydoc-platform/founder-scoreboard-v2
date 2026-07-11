@@ -1,7 +1,12 @@
 import { normalizeStatus } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
-import { canCreateTeamSubIssueUnderDeliverable, TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES, TEAM_TASK_INTAKE_MAX_TASKS } from "@/features/intake/model/team-task-intake";
+import {
+  TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES,
+  TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
+  TEAM_TASK_INTAKE_MAX_TASKS,
+} from "@/features/intake/model/team-task-intake-contract";
+import { canCreateTeamSubIssueUnderDeliverable } from "@/features/intake/model/team-task-intake-policy";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -39,6 +44,32 @@ function countByTask(rows: Array<{ task_id: string }>) {
   const counts = new Map<string, number>();
   for (const row of rows) counts.set(row.task_id, (counts.get(row.task_id) || 0) + 1);
   return counts;
+}
+
+function groupByTask<T extends { task_id: string }>(rows: T[]) {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const bucket = grouped.get(row.task_id) || [];
+    bucket.push(row);
+    grouped.set(row.task_id, bucket);
+  }
+  return grouped;
+}
+
+function relationStatsByTask(rows: Array<{ task_id: string; related_task_id: string; relation_type: string }>) {
+  const stats = new Map<string, { count: number; blocks: number; blockedBy: number }>();
+  const ensure = (taskId: string) => {
+    const current = stats.get(taskId) || { count: 0, blocks: 0, blockedBy: 0 };
+    stats.set(taskId, current);
+    return current;
+  };
+  for (const relation of rows) {
+    ensure(relation.task_id).count += 1;
+    if (relation.related_task_id !== relation.task_id) ensure(relation.related_task_id).count += 1;
+    if (relation.relation_type === "blocks") ensure(relation.task_id).blocks += 1;
+    if (relation.relation_type === "blocked_by") ensure(relation.task_id).blockedBy += 1;
+  }
+  return stats;
 }
 
 export async function buildTeamTaskContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
@@ -82,6 +113,8 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
 
   const blockers = blockersResult.data || [];
   const relations = relationsResult.data || [];
+  const blockersByTaskId = groupByTask(blockers);
+  const relationStats = relationStatsByTask(relations);
   const internalCommentCounts = countByTask(commentsResult.data || []);
   const externalCommentCounts = countByTask(externalCommentsResult.data || []);
 
@@ -94,14 +127,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
     constraints: {
       allowedTaskTypes: TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES,
       maxBatchSize: TEAM_TASK_INTAKE_MAX_TASKS,
-      forbiddenWrites: [
-        "deliverable",
-        "score",
-        "final-review",
-        "review-owner",
-        "sprint-configuration",
-        "github-sync",
-      ],
+      forbiddenWrites: TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
       subIssuePolicy: actor.platformRole === "founder" ? "own-deliverables-only" : "any-deliverable",
     },
     profiles: (profilesResult.data || []).map((profile) => ({
@@ -133,9 +159,9 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       endDate: sprint.end_date || "",
     })),
     tasks: ((tasksResult.data || []) as TaskContextRow[]).map((task) => {
-      const taskBlockers = blockers.filter((blocker) => blocker.task_id === task.id);
+      const taskBlockers = blockersByTaskId.get(task.id) || [];
       const openBlockers = taskBlockers.filter((blocker) => blocker.status === "open");
-      const taskRelations = relations.filter((relation) => relation.task_id === task.id || relation.related_task_id === task.id);
+      const taskRelationStats = relationStats.get(task.id) || { count: 0, blocks: 0, blockedBy: 0 };
       const ownerId = task.assignee || task.owner || "";
       return {
         id: task.id,
@@ -176,11 +202,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
           internalCount: internalCommentCounts.get(task.id) || 0,
           externalCount: externalCommentCounts.get(task.id) || 0,
         },
-        relations: {
-          count: taskRelations.length,
-          blocks: taskRelations.filter((relation) => relation.task_id === task.id && relation.relation_type === "blocks").length,
-          blockedBy: taskRelations.filter((relation) => relation.task_id === task.id && relation.relation_type === "blocked_by").length,
-        },
+        relations: taskRelationStats,
       };
     }),
   };

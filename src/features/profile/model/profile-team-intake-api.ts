@@ -1,27 +1,17 @@
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-
-export type TeamIntakeTokenRecord = {
-  id: string;
-  label: string;
-  tokenHint: string;
-  scopes: string[];
-  expiresAt: string;
-  createdAt: string;
-  lastUsedAt: string;
-  revokedAt: string;
-};
+import type { TeamTaskIntakeTokenRecord } from "@/features/intake/model/team-task-intake-contract";
 
 type TokenListResponse = {
   ok?: boolean;
   error?: string;
-  tokens?: TeamIntakeTokenRecord[];
+  tokens?: TeamTaskIntakeTokenRecord[];
 };
 
 type TokenCreateResponse = {
   ok?: boolean;
   error?: string;
   token?: string;
-  tokenRecord?: TeamIntakeTokenRecord;
+  tokenRecord?: TeamTaskIntakeTokenRecord;
 };
 
 export function loadTeamIntakeTokens(apiClient: BrowserApiClient) {

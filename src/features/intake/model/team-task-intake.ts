@@ -1,17 +1,31 @@
-import { cleanText } from "@/lib/api-input";
-import { isOperationalLeadRole } from "@/lib/platform";
-import { normalizeLookup, slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, TaskStatus } from "@/lib/types";
-import { parseTaskIntakePayload, type TaskIntakeInput } from "@/features/intake/model/task-intake";
+import type { TaskIntakeInput } from "@/features/intake/model/task-intake";
+import {
+  TEAM_TASK_INTAKE_INPUT_KEYS,
+  TEAM_TASK_INTAKE_MAX_TASKS,
+  type TeamTaskIntakeTaskType,
+} from "@/features/intake/model/team-task-intake-contract";
+import {
+  intakeDate,
+  intakeHours,
+  intakePriority,
+  intakeProfileByValue,
+  intakeText,
+  normalizeTaskIntakeBrief,
+} from "@/features/intake/model/task-intake-normalization";
+import {
+  canCreateTeamSubIssueUnderDeliverable,
+  isAllowedTeamTaskIntakeTaskType,
+} from "@/features/intake/model/team-task-intake-policy";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
 type TeamIntakeProfileRow = {
   id: string;
   name: string;
-  github_login: string | null;
+  githubLogin: string;
 };
 
 type TeamIntakeInitiativeRow = {
@@ -47,7 +61,7 @@ export type TeamTaskIntakePreviewTask = {
   acceptanceCriteria: string;
   evidenceRequired: string;
   definitionOfDone: string;
-  taskType: "proposal" | "sub_issue";
+  taskType: TeamTaskIntakeTaskType;
   parentTaskId: string;
   parentTaskTitle: string;
   packageId: string;
@@ -67,58 +81,52 @@ export type TeamTaskIntakePreviewTask = {
   warnings: string[];
 };
 
-export const TEAM_TASK_INTAKE_MAX_TASKS = 30;
-export const TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES = ["proposal", "sub_issue"] as const;
-
-const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-const allowedTaskTypes = new Set<string>(TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES);
 const subIssueStatuses = new Set<TaskStatus>(taskStatuses.filter((status) => status !== "Vorschlag"));
+const allowedInputKeys = new Set<string>(TEAM_TASK_INTAKE_INPUT_KEYS);
 
-function valueAsText(value: unknown, maxLength: number) {
-  if (Array.isArray(value)) return cleanText(value.map((item) => `- ${String(item)}`).join("\n"), maxLength);
-  return cleanText(typeof value === "string" || typeof value === "number" ? String(value) : "", maxLength);
+export function parseTeamTaskIntakePayload(payload: unknown):
+  | { ok: true; tasks: TaskIntakeInput[] }
+  | { ok: false; error: string } {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, error: "Payload muss ein Objekt mit dem Feld tasks sein." };
+  }
+  const unsupportedPayloadKey = Object.keys(payload).find((key) => key !== "tasks");
+  if (unsupportedPayloadKey) return { ok: false, error: `Payload enthält das unbekannte Feld ${unsupportedPayloadKey}.` };
+  const tasks = (payload as { tasks?: unknown }).tasks;
+  if (!Array.isArray(tasks)) return { ok: false, error: "Payload muss ein tasks-Array enthalten." };
+
+  for (const [index, task] of tasks.entries()) {
+    if (!task || typeof task !== "object" || Array.isArray(task)) {
+      return { ok: false, error: `Aufgabe ${index + 1} muss ein Objekt sein.` };
+    }
+    const unsupportedKey = Object.keys(task).find((key) => !allowedInputKeys.has(key));
+    if (unsupportedKey) return { ok: false, error: `Aufgabe ${index + 1} enthält das unbekannte Feld ${unsupportedKey}.` };
+  }
+
+  return { ok: true, tasks: tasks as TaskIntakeInput[] };
 }
 
-function isoDate(value: unknown) {
-  const text = valueAsText(value, 20);
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
-}
-
-function profileByValue(profiles: TeamIntakeProfileRow[], value: string) {
-  const normalized = normalizeLookup(value);
-  const slug = slugify(value);
-  return profiles.find((profile) => (
-    normalizeLookup(profile.id) === normalized
-    || normalizeLookup(profile.name) === normalized
-    || normalizeLookup(profile.github_login || "") === normalized
-    || normalizeLookup(profile.id) === slug
-  )) || null;
-}
-
-export function validateTeamTaskIntakeBatchSize(taskCount: number) {
-  if (taskCount <= 0) return "Keine Aufgaben im Payload gefunden.";
-  if (taskCount > TEAM_TASK_INTAKE_MAX_TASKS) return `Maximal ${TEAM_TASK_INTAKE_MAX_TASKS} Aufgaben pro Intake.`;
-  return "";
-}
-
-export function isAllowedTeamTaskIntakeTaskType(value: string): value is "proposal" | "sub_issue" {
-  return allowedTaskTypes.has(value);
-}
-
-export function canCreateTeamSubIssueUnderDeliverable({
-  actorId,
-  actorRole,
-  parentOwnerId,
-}: {
-  actorId: string;
-  actorRole: string;
-  parentOwnerId: string | null | undefined;
-}) {
-  return actorRole === "ceo" || actorRole === "deputy" || parentOwnerId === actorId;
-}
-
-export function parseTeamTaskIntakePayload(payload: unknown) {
-  return parseTaskIntakePayload(payload);
+export function canonicalTeamTaskIntakeRequest(rawTasks: TaskIntakeInput[]) {
+  return rawTasks.map((rawTask) => {
+    const brief = normalizeTaskIntakeBrief(rawTask);
+    return {
+      ...brief,
+      taskType: intakeText(rawTask.taskType, 40) || "proposal",
+      parentTaskId: intakeText(rawTask.parentTaskId, 120),
+      packageId: intakeText(rawTask.packageId, 120),
+      milestoneId: intakeText(rawTask.milestoneId, 120),
+      sprintId: intakeText(rawTask.sprintId, 120),
+      assignee: intakeText(rawTask.assignee, 120),
+      owner: intakeText(rawTask.owner, 120),
+      priority: intakePriority(rawTask.priority),
+      status: intakeText(rawTask.status, 40),
+      workstream: intakeText(rawTask.workstream, 120),
+      startDate: intakeDate(rawTask.startDate),
+      endDate: intakeDate(rawTask.endDate),
+      deadline: intakeDate(rawTask.deadline),
+      hours: intakeHours(rawTask.hours),
+    };
+  });
 }
 
 export async function loadTeamTaskIntakeContext(
@@ -126,7 +134,7 @@ export async function loadTeamTaskIntakeContext(
   rawTasks: TaskIntakeInput[],
 ): Promise<TeamTaskIntakeContext> {
   const parentTaskIds = [...new Set(rawTasks
-    .map((task) => valueAsText(task.parentTaskId, 120))
+    .map((task) => intakeText(task.parentTaskId, 120))
     .filter(Boolean))];
 
   const [profilesResult, initiativesResult, milestonesResult, parentsResult] = await Promise.all([
@@ -142,7 +150,11 @@ export async function loadTeamTaskIntakeContext(
   if (firstError) throw new Error(firstError.message);
 
   return {
-    profiles: profilesResult.data || [],
+    profiles: (profilesResult.data || []).map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      githubLogin: profile.github_login || "",
+    })),
     initiatives: initiativesResult.data || [],
     milestoneIds: new Set((milestonesResult.data || []).map((milestone) => milestone.id)),
     parentTasks: parentsResult.data || [],
@@ -157,14 +169,15 @@ export function buildTeamTaskIntakePreview(
   return rawTasks.slice(0, TEAM_TASK_INTAKE_MAX_TASKS).map((rawTask, index): TeamTaskIntakePreviewTask => {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const requestedType = valueAsText(rawTask.taskType, 40) || "proposal";
+    const brief = normalizeTaskIntakeBrief(rawTask);
+    const requestedType = intakeText(rawTask.taskType, 40) || "proposal";
     const taskType = isAllowedTeamTaskIntakeTaskType(requestedType) ? requestedType : "proposal";
     if (!isAllowedTeamTaskIntakeTaskType(requestedType)) errors.push("Team Intake erlaubt nur Vorschläge und Sub-Issues.");
 
-    const title = valueAsText(rawTask.title, 240);
+    const title = brief.title;
     if (title.length < 3) errors.push("Titel ist erforderlich.");
 
-    const requestedParentTaskId = valueAsText(rawTask.parentTaskId, 120);
+    const requestedParentTaskId = intakeText(rawTask.parentTaskId, 120);
     const parentTask = requestedParentTaskId
       ? context.parentTasks.find((task) => task.id === requestedParentTaskId) || null
       : null;
@@ -180,7 +193,7 @@ export function buildTeamTaskIntakePreview(
       errors.push("Founder können nur eigene Deliverables verfeinern.");
     }
 
-    const requestedPackageId = valueAsText(rawTask.packageId, 120);
+    const requestedPackageId = intakeText(rawTask.packageId, 120);
     const inheritedPackageId = parentTask?.package_id || "";
     const packageId = taskType === "sub_issue" ? inheritedPackageId : requestedPackageId;
     const initiative = packageId ? context.initiatives.find((item) => item.id === packageId) || null : null;
@@ -191,7 +204,7 @@ export function buildTeamTaskIntakePreview(
       errors.push("Sub-Issues übernehmen die Initiative ihres Deliverables.");
     }
 
-    const requestedMilestoneId = valueAsText(rawTask.milestoneId, 120);
+    const requestedMilestoneId = intakeText(rawTask.milestoneId, 120);
     const inheritedMilestoneId = parentTask?.milestone_id || initiative?.milestone_id || "";
     const milestoneId = taskType === "sub_issue" ? inheritedMilestoneId : requestedMilestoneId || initiative?.milestone_id || "";
     if (requestedMilestoneId && !context.milestoneIds.has(requestedMilestoneId)) {
@@ -201,13 +214,13 @@ export function buildTeamTaskIntakePreview(
       errors.push("Sub-Issues übernehmen Epic / Meilenstein ihres Deliverables.");
     }
 
-    if (valueAsText(rawTask.sprintId, 120)) errors.push("Team Intake erlaubt keine Sprint-Zuordnung.");
+    if (intakeText(rawTask.sprintId, 120)) errors.push("Team Intake erlaubt keine Sprint-Zuordnung.");
 
-    const requestedOwner = valueAsText(rawTask.assignee, 120) || valueAsText(rawTask.owner, 120);
-    const ownerProfile = profileByValue(context.profiles, requestedOwner || (taskType === "sub_issue" ? actor.id : ""));
+    const requestedOwner = intakeText(rawTask.assignee, 120) || intakeText(rawTask.owner, 120);
+    const ownerProfile = intakeProfileByValue(context.profiles, requestedOwner || (taskType === "sub_issue" ? actor.id : ""));
     if (requestedOwner && !ownerProfile) errors.push(`Zuständige Person wurde nicht gefunden: ${requestedOwner}.`);
 
-    const requestedStatus = valueAsText(rawTask.status, 40);
+    const requestedStatus = intakeText(rawTask.status, 40);
     const status: TaskStatus = taskType === "proposal"
       ? "Vorschlag"
       : subIssueStatuses.has(requestedStatus as TaskStatus)
@@ -217,22 +230,21 @@ export function buildTeamTaskIntakePreview(
       warnings.push(`Status auf Offen gesetzt, weil ${requestedStatus} für Sub-Issues ungültig ist.`);
     }
 
-    const priorityText = valueAsText(rawTask.priority, 10);
-    const priority = priorities.has(priorityText) ? priorityText : "P2";
-    const startDate = isoDate(rawTask.startDate);
-    const endDate = isoDate(rawTask.endDate);
+    const priority = intakePriority(rawTask.priority);
+    const startDate = intakeDate(rawTask.startDate);
+    const endDate = intakeDate(rawTask.endDate);
     if (startDate && endDate && startDate > endDate) errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
 
     return {
       clientId: `team-intake-${index + 1}`,
       title,
-      description: valueAsText(rawTask.description, 4000),
-      problemStatement: valueAsText(rawTask.problemStatement, 4000),
-      intendedOutcome: valueAsText(rawTask.intendedOutcome, 4000),
-      scopeConstraints: valueAsText(rawTask.scopeConstraints, 4000),
-      acceptanceCriteria: valueAsText(rawTask.acceptanceCriteria, 6000),
-      evidenceRequired: valueAsText(rawTask.evidenceRequired, 4000),
-      definitionOfDone: valueAsText(rawTask.definitionOfDone, 4000),
+      description: brief.description,
+      problemStatement: brief.problemStatement,
+      intendedOutcome: brief.intendedOutcome,
+      scopeConstraints: brief.scopeConstraints,
+      acceptanceCriteria: brief.acceptanceCriteria,
+      evidenceRequired: brief.evidenceRequired,
+      definitionOfDone: brief.definitionOfDone,
       taskType,
       parentTaskId: taskType === "sub_issue" ? requestedParentTaskId : "",
       parentTaskTitle: parentTask?.title || "",
@@ -243,11 +255,11 @@ export function buildTeamTaskIntakePreview(
       ownerName: ownerProfile?.name || "",
       priority,
       status,
-      workstream: valueAsText(rawTask.workstream, 120),
+      workstream: intakeText(rawTask.workstream, 120),
       startDate,
       endDate,
-      deadline: isoDate(rawTask.deadline),
-      hours: Math.max(0, Math.min(200, Math.round(Number(rawTask.hours || 0)))),
+      deadline: intakeDate(rawTask.deadline),
+      hours: intakeHours(rawTask.hours),
       scoreRelevant: false,
       errors,
       warnings,
@@ -257,8 +269,4 @@ export function buildTeamTaskIntakePreview(
 
 export function teamTaskIntakePreviewIsValid(preview: TeamTaskIntakePreviewTask[]) {
   return preview.every((task) => task.errors.length === 0);
-}
-
-export function teamTaskIntakeActorCanReadContext(actor: AuthenticatedProfile) {
-  return isOperationalLeadRole(actor.platformRole) || actor.platformRole === "founder";
 }

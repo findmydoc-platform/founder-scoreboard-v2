@@ -1,55 +1,54 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const taskStatuses = ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"];
-const intake = await loadTranspiledModule(
-  "src/features/intake/model/team-task-intake.ts",
+const contract = await loadTranspiledModule("src/features/intake/model/team-task-intake-contract.ts");
+const normalization = await loadTranspiledModule(
+  "src/features/intake/model/task-intake-normalization.ts",
   {
     "@/lib/api-input": {
       cleanText: (value, maxLength) => typeof value === "string" ? value.trim().slice(0, maxLength) : "",
-    },
-    "@/lib/platform": {
-      isOperationalLeadRole: (role) => role === "ceo" || role === "deputy",
     },
     "@/lib/slug": {
       normalizeLookup: (value) => value.trim().toLowerCase(),
       slugify: (value) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
     },
-    "@/lib/status": { taskStatuses },
-    "@/features/intake/model/task-intake": {
-      parseTaskIntakePayload: (payload) => Array.isArray(payload) ? payload : payload?.tasks || [],
+  },
+);
+const policy = await loadTranspiledModule(
+  "src/features/intake/model/team-task-intake-policy.ts",
+  {
+    "@/lib/platform": {
+      isOperationalLeadRole: (role) => role === "ceo" || role === "deputy",
     },
+    "@/features/intake/model/team-task-intake-contract": contract,
+  },
+);
+const intake = await loadTranspiledModule(
+  "src/features/intake/model/team-task-intake.ts",
+  {
+    "@/lib/status": { taskStatuses },
+    "@/features/intake/model/team-task-intake-contract": contract,
+    "@/features/intake/model/task-intake-normalization": normalization,
+    "@/features/intake/model/team-task-intake-policy": policy,
+  },
+);
+const commit = await loadTranspiledModule(
+  "src/features/intake/model/team-task-intake-commit.ts",
+  {
+    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: null, user_agent: null }) },
+    "@/features/intake/model/team-task-intake": intake,
   },
 );
 
-let currentTokenRow = null;
-let currentTokenQueryError = null;
-let currentUsageError = null;
+let currentAuthData = null;
+let currentAuthError = null;
 const mockTokenSupabase = {
-  from() {
-    return {
-      select() {
-        return {
-          eq() {
-            return {
-              maybeSingle: async () => ({ data: currentTokenRow, error: currentTokenQueryError }),
-            };
-          },
-        };
-      },
-      update() {
-        return {
-          eq() {
-            return {
-              eq: async () => ({ error: currentUsageError }),
-            };
-          },
-        };
-      },
-    };
+  async rpc(name) {
+    assert.equal(name, "authenticate_team_task_intake_token");
+    return { data: currentAuthData, error: currentAuthError };
   },
 };
 const tokenAuth = await loadTranspiledModule(
@@ -68,8 +67,8 @@ const actor = {
 
 const context = {
   profiles: [
-    { id: "founder-1", name: "Founder One", github_login: "founder-one" },
-    { id: "founder-2", name: "Founder Two", github_login: "founder-two" },
+    { id: "founder-1", name: "Founder One", githubLogin: "founder-one" },
+    { id: "founder-2", name: "Founder Two", githubLogin: "founder-two" },
   ],
   initiatives: [{ id: "initiative-1", title: "Initiative One", milestone_id: "milestone-1" }],
   milestoneIds: new Set(["milestone-1"]),
@@ -95,77 +94,84 @@ const context = {
   ],
 };
 
-test("team intake batch and task-type policy fails closed", () => {
-  assert.equal(intake.validateTeamTaskIntakeBatchSize(0), "Keine Aufgaben im Payload gefunden.");
-  assert.equal(intake.validateTeamTaskIntakeBatchSize(30), "");
-  assert.equal(intake.validateTeamTaskIntakeBatchSize(31), "Maximal 30 Aufgaben pro Intake.");
-  assert.equal(intake.isAllowedTeamTaskIntakeTaskType("proposal"), true);
-  assert.equal(intake.isAllowedTeamTaskIntakeTaskType("sub_issue"), true);
-  assert.equal(intake.isAllowedTeamTaskIntakeTaskType("deliverable"), false);
+test("team intake contract centralizes limits, task types, scopes, and UUID validation", () => {
+  assert.equal(contract.TEAM_TASK_INTAKE_MAX_TASKS, 30);
+  assert.equal(contract.TEAM_TASK_INTAKE_MAX_ACTIVE_TOKENS, 3);
+  assert.equal(contract.TEAM_TASK_INTAKE_TOKEN_TTL_DAYS, 90);
+  assert.deepEqual(contract.TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES, ["proposal", "sub_issue"]);
+  assert.deepEqual(contract.TEAM_TASK_INTAKE_SCOPES, ["read:task-context", "write:task-intake"]);
+  assert.equal(contract.isUuid("5e627de3-8e91-47ba-8c3f-e06ed8e26059"), true);
+  assert.equal(contract.isUuid("not-a-uuid"), false);
 });
 
-test("personal token auth rejects missing, expired, revoked, viewer, and missing-scope tokens", async () => {
-  const token = "fmd_ti_valid-personal-token";
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const baseRow = {
-    id: "550e8400-e29b-41d4-a716-446655440000",
-    profile_id: "founder-1",
-    label: "Test",
-    token_hash: tokenHash,
-    token_hint: "…token",
-    scopes: ["read:task-context", "write:task-intake"],
-    expires_at: new Date(Date.now() + 60_000).toISOString(),
-    created_at: new Date().toISOString(),
-    last_used_at: null,
-    revoked_at: null,
-    profiles: { id: "founder-1", name: "Founder One", platform_role: "founder", github_login: "founder-one" },
-  };
-  const request = (value = token) => ({ headers: new Headers(value ? { authorization: `Bearer ${value}` } : {}) });
+test("team intake policy fails closed for batch size, task type, and foreign parents", () => {
+  assert.equal(policy.validateTeamTaskIntakeBatchSize(0), "Keine Aufgaben im Payload gefunden.");
+  assert.equal(policy.validateTeamTaskIntakeBatchSize(30), "");
+  assert.equal(policy.validateTeamTaskIntakeBatchSize(31), "Maximal 30 Aufgaben pro Intake.");
+  assert.equal(policy.isAllowedTeamTaskIntakeTaskType("proposal"), true);
+  assert.equal(policy.isAllowedTeamTaskIntakeTaskType("sub_issue"), true);
+  assert.equal(policy.isAllowedTeamTaskIntakeTaskType("deliverable"), false);
+  assert.equal(policy.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "founder", parentOwnerId: "founder-1" }), true);
+  assert.equal(policy.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "founder", parentOwnerId: "founder-2" }), false);
+  assert.equal(policy.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "ceo", parentOwnerId: "founder-2" }), true);
+});
 
-  currentTokenQueryError = null;
-  currentUsageError = null;
-  currentTokenRow = baseRow;
+test("team intake accepts only the documented object payload and rejects unknown fields", () => {
+  assert.equal(intake.parseTeamTaskIntakePayload([{ title: "Array payload" }]).ok, false);
+  assert.equal(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Known fields", taskType: "proposal" }] }).ok, true);
+  assert.equal(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Known fields" }], metadata: {} }).ok, false);
+  const unknown = intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Unknown field", unexpected: true }] });
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.error, /unbekannte Feld unexpected/);
+});
+
+test("idempotency hash uses only normalized request data", () => {
+  const first = commit.teamTaskIntakeRequestHash([{ title: "  Stable proposal  ", taskType: "proposal", owner: "Founder Two" }]);
+  const second = commit.teamTaskIntakeRequestHash([{ title: "Stable proposal", taskType: "proposal", owner: "Founder Two" }]);
+  const changed = commit.teamTaskIntakeRequestHash([{ title: "Changed proposal", taskType: "proposal", owner: "Founder Two" }]);
+  assert.equal(first, second);
+  assert.notEqual(first, changed);
+});
+
+test("personal token auth delegates atomic role, scope, expiry, and usage checks to the RPC", async () => {
+  const request = (value = "fmd_ti_valid-personal-token") => ({ headers: new Headers(value ? { authorization: `Bearer ${value}` } : {}) });
+  currentAuthError = null;
+  currentAuthData = {
+    tokenId: "550e8400-e29b-41d4-a716-446655440000",
+    scopes: ["read:task-context", "write:task-intake"],
+    profile: actor,
+  };
   assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context")).ok, true);
   assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(""), "read:task-context")).status, 401);
 
-  currentTokenRow = { ...baseRow, expires_at: new Date(Date.now() - 1_000).toISOString() };
-  assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context")).status, 401);
+  for (const [code, status] of [["P0004", 401], ["P0005", 403], ["P0006", 403]]) {
+    currentAuthData = null;
+    currentAuthError = { code, message: "internal database detail" };
+    const result = await tokenAuth.requireTeamTaskIntakeScope(request(), "write:task-intake");
+    assert.equal(result.status, status);
+    assert.doesNotMatch(result.error, /internal database detail/);
+  }
 
-  currentTokenRow = { ...baseRow, revoked_at: new Date().toISOString() };
-  assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context")).status, 401);
-
-  currentTokenRow = { ...baseRow, profiles: { ...baseRow.profiles, platform_role: "viewer" } };
-  assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context")).status, 403);
-
-  currentTokenRow = { ...baseRow, scopes: ["read:task-context"] };
-  assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "write:task-intake")).status, 403);
-
-  currentTokenRow = baseRow;
-  currentUsageError = { message: "write failed" };
-  assert.equal((await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context")).status, 500);
+  currentAuthError = { code: "XX000", message: "sensitive schema detail" };
+  const failed = await tokenAuth.requireTeamTaskIntakeScope(request(), "read:task-context");
+  assert.equal(failed.status, 500);
+  assert.doesNotMatch(failed.error, /sensitive schema detail/);
 });
 
-test("founders may refine only their own deliverables while operational leads may refine any", () => {
-  assert.equal(intake.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "founder", parentOwnerId: "founder-1" }), true);
-  assert.equal(intake.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "founder", parentOwnerId: "founder-2" }), false);
-  assert.equal(intake.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "ceo", parentOwnerId: "founder-2" }), true);
-  assert.equal(intake.canCreateTeamSubIssueUnderDeliverable({ actorId: "founder-1", actorRole: "deputy", parentOwnerId: "founder-2" }), true);
-});
-
-test("proposal preview stays sprintless and non-score-relevant", () => {
+test("proposal preview stays non-scoring and may name another team profile", () => {
   const [preview] = intake.buildTeamTaskIntakePreview([{
     taskType: "proposal",
     title: "Clarify onboarding risks",
     packageId: "initiative-1",
-    sprintId: "sprint-1",
+    owner: "founder-2",
     status: "Erledigt",
   }], context, actor);
 
+  assert.deepEqual(preview.errors, []);
   assert.equal(preview.taskType, "proposal");
   assert.equal(preview.status, "Vorschlag");
   assert.equal(preview.scoreRelevant, false);
-  assert.equal(preview.ownerId, "");
-  assert.match(preview.errors.join(" "), /keine Sprint-Zuordnung/);
+  assert.equal(preview.ownerId, "founder-2");
 });
 
 test("sub-issue preview inherits hierarchy and defaults ownership to the actor", () => {
@@ -194,57 +200,78 @@ test("founder sub-issue preview rejects another founder's deliverable", () => {
   assert.match(preview.errors.join(" "), /nur eigene Deliverables/);
 });
 
-test("team intake routes, profile UI and database boundary remain explicitly guarded", async () => {
+test("team intake routes, profile UI, OpenAPI, and database boundary share one guarded contract", async () => {
   const [
-    migration,
-    tokenAuth,
-    tokenRoute,
-    tokenDeleteRoute,
+    hardeningMigration,
+    tokenAuthSource,
+    tokenRoutes,
     contextRoute,
     previewRoute,
     commitRoute,
+    routeHandler,
     contextProjection,
     profileSettings,
     profileTokenUi,
-    openapi,
+    profileTokenHook,
+    openapiSource,
   ] = await Promise.all([
-    readFile("supabase/0054_team_task_intake_api.sql", "utf8"),
+    readFile("supabase/0055_team_task_intake_hardening.sql", "utf8"),
     readFile("src/features/intake/model/team-task-intake-token.ts", "utf8"),
-    readFile("src/app/api/team/task-intake-tokens/route.ts", "utf8"),
-    readFile("src/app/api/team/task-intake-tokens/[id]/route.ts", "utf8"),
+    Promise.all([
+      readFile("src/app/api/team/task-intake-tokens/route.ts", "utf8"),
+      readFile("src/app/api/team/task-intake-tokens/[id]/route.ts", "utf8"),
+    ]).then((sources) => sources.join("\n")),
     readFile("src/app/api/team/task-context/route.ts", "utf8"),
     readFile("src/app/api/team/task-intake/preview/route.ts", "utf8"),
     readFile("src/app/api/team/task-intake/commit/route.ts", "utf8"),
+    readFile("src/features/intake/model/team-task-intake-route.ts", "utf8"),
     readFile("src/features/intake/model/team-task-context.ts", "utf8"),
     readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8"),
     readFile("src/features/profile/organisms/profile-team-intake-tokens.tsx", "utf8"),
+    readFile("src/features/profile/hooks/use-profile-team-intake-tokens.ts", "utf8"),
     readFile("public/founderops-team-intake-openapi.json", "utf8"),
   ]);
 
-  assert.match(migration, /enable row level security/);
-  assert.match(migration, /revoke all on table public\.team_task_intake_tokens from public, anon, authenticated/);
-  assert.match(migration, /grant select, insert, update on table public\.team_task_intake_tokens to service_role/);
-  assert.match(migration, /pg_advisory_xact_lock/);
-  assert.match(migration, /create_team_task_intake_batch_transaction/);
-  assert.match(migration, /create_task_transaction/);
-  assert.match(migration, /team\.task_intake\.commit/);
-  assert.match(tokenAuth, /createHash\("sha256"\)/);
-  assert.match(tokenAuth, /timingSafeEqual/);
-  assert.match(tokenAuth, /expires_at/);
-  assert.match(tokenAuth, /last_used_at/);
-  assert.doesNotMatch(tokenAuth, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(tokenRoute, /requireFounder/);
-  assert.match(tokenDeleteRoute, /requireFounder/);
-  assert.match(contextRoute, /read:task-context/);
-  assert.match(previewRoute, /write:task-intake/);
-  assert.match(commitRoute, /idempotency-key/);
-  assert.match(commitRoute, /create_team_task_intake_batch_transaction|commitTeamTaskIntake/);
+  assert.match(hardeningMigration, /authenticate_team_task_intake_token/);
+  assert.match(hardeningMigration, /for update/);
+  assert.match(hardeningMigration, /for share/);
+  assert.match(hardeningMigration, /response_tasks/);
+  assert.match(hardeningMigration, /interval '90 days'/);
+  assert.doesNotMatch(hardeningMigration, /v_item->'taskInsert'/);
+  assert.match(tokenAuthSource, /authenticate_team_task_intake_token/);
+  assert.doesNotMatch(tokenAuthSource, /\.from\("team_task_intake_tokens"\)/);
+  assert.match(tokenRoutes, /TEAM_TASK_INTAKE_TOKEN_HISTORY_LIMIT/);
+  assert.match(tokenRoutes, /revoke_team_task_intake_token/);
+  assert.doesNotMatch(tokenRoutes, /error\.message/);
+  assert.match(contextRoute, /handleTeamTaskIntakeRequest/);
+  assert.match(previewRoute, /buildTeamTaskIntakeForRoute/);
+  assert.match(commitRoute, /loadTeamTaskIntakeReplay/);
+  assert.match(routeHandler, /Cache-Control/);
+  assert.doesNotMatch(`${contextRoute}\n${previewRoute}\n${commitRoute}`, /error\.message/);
   assert.doesNotMatch(contextProjection, /score_points|score_final|task_reviews|audit_log|notification_events|provider_token/);
   assert.match(profileSettings, /ProfileTeamIntakeTokens/);
-  assert.match(profileTokenUi, /Persönlicher API-Zugang/);
-  assert.match(profileTokenUi, /90 Tagen/);
-  assert.match(openapi, /"\/api\/team\/task-context"/);
-  assert.match(openapi, /"\/api\/team\/task-intake\/preview"/);
-  assert.match(openapi, /"\/api\/team\/task-intake\/commit"/);
-  assert.doesNotMatch(openapi, /SUPABASE_SERVICE_ROLE_KEY|token_hash|provider_token/);
+  assert.match(profileTokenUi, /vollständigen task-zentrierten Team-Kontext/);
+  assert.match(profileTokenHook, /TEAM_TASK_INTAKE_MAX_ACTIVE_TOKENS/);
+
+  const openapi = JSON.parse(openapiSource);
+  assert.equal(openapi.components.schemas.TeamTaskIntakePayload.additionalProperties, false);
+  assert.ok(openapi.components.schemas.TeamTaskContextResponse);
+  assert.ok(openapi.components.schemas.TeamTaskIntakePreviewResponse);
+  assert.ok(openapi.components.schemas.TeamTaskIntakeValidationErrorResponse);
+  assert.ok(openapi.components.schemas.TeamTaskIntakeCommitResponse);
+  for (const [path, method] of [["/api/team/task-context", "get"], ["/api/team/task-intake/preview", "post"], ["/api/team/task-intake/commit", "post"]]) {
+    const responses = openapi.paths[path][method].responses;
+    assert.match(responses["200"].content["application/json"].schema.$ref, /^#\/components\/schemas\//);
+    for (const [status, response] of Object.entries(responses).filter(([status]) => status !== "200")) {
+      const schema = response.content["application/json"].schema;
+      if (path === "/api/team/task-intake/commit" && status === "400") {
+        assert.deepEqual(schema.oneOf.map((item) => item.$ref), [
+          "#/components/schemas/ErrorResponse",
+          "#/components/schemas/TeamTaskIntakeValidationErrorResponse",
+        ]);
+      } else {
+        assert.equal(schema.$ref, "#/components/schemas/ErrorResponse");
+      }
+    }
+  }
 });

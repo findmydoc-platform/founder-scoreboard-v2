@@ -1,27 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
-import type { AuthenticatedProfile, PlatformRole } from "@/lib/types";
+import type { AuthenticatedProfile } from "@/lib/types";
 import { getServerSupabase } from "@/lib/supabase";
-
-export type TeamTaskIntakeScope = "read:task-context" | "write:task-intake";
-
-export type TeamTaskIntakeTokenRecord = {
-  id: string;
-  label: string;
-  tokenHint: string;
-  scopes: TeamTaskIntakeScope[];
-  expiresAt: string;
-  createdAt: string;
-  lastUsedAt: string;
-  revokedAt: string;
-};
-
-type TokenProfileRow = {
-  id: string;
-  name: string;
-  platform_role: PlatformRole;
-  github_login: string | null;
-};
+import type { TeamTaskIntakeScope, TeamTaskIntakeTokenRecord } from "@/features/intake/model/team-task-intake-contract";
 
 type TokenRow = {
   id: string;
@@ -34,7 +15,12 @@ type TokenRow = {
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
-  profiles: TokenProfileRow | TokenProfileRow[] | null;
+};
+
+type AuthenticatedTokenPayload = {
+  tokenId: string;
+  scopes: TeamTaskIntakeScope[];
+  profile: AuthenticatedProfile;
 };
 
 export type TeamTaskIntakeAuthResult =
@@ -45,10 +31,9 @@ export type TeamTaskIntakeAuthResult =
     tokenId: string;
     scopes: TeamTaskIntakeScope[];
   }
-  | { ok: false; status: 401 | 403 | 500 | 501; error: string };
+  | { ok: false; status: 401 | 403 | 500 | 501 | 503; error: string };
 
 const tokenPrefix = "fmd_ti_";
-const allowedRoles = new Set<PlatformRole>(["ceo", "deputy", "founder"]);
 
 function bearerToken(request: NextRequest) {
   const header = request.headers.get("authorization") || "";
@@ -60,30 +45,16 @@ export function hashTeamTaskIntakeToken(token: string) {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-function safeHashCompare(left: string, right: string) {
-  if (!/^[a-f0-9]{64}$/i.test(left) || !/^[a-f0-9]{64}$/i.test(right)) return false;
-  const leftBuffer = Buffer.from(left, "hex");
-  const rightBuffer = Buffer.from(right, "hex");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function profileFromTokenRow(row: TokenRow) {
-  if (Array.isArray(row.profiles)) return row.profiles[0] || null;
-  return row.profiles;
-}
-
-export function createTeamTaskIntakeToken(now = new Date()) {
+export function createTeamTaskIntakeToken() {
   const token = `${tokenPrefix}${randomBytes(32).toString("base64url")}`;
-  const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
   return {
     token,
     tokenHash: hashTeamTaskIntakeToken(token),
     tokenHint: `…${token.slice(-6)}`,
-    expiresAt,
   };
 }
 
-export function mapTeamTaskIntakeTokenRecord(row: Omit<TokenRow, "token_hash" | "profiles" | "profile_id">): TeamTaskIntakeTokenRecord {
+export function mapTeamTaskIntakeTokenRecord(row: Omit<TokenRow, "token_hash" | "profile_id">): TeamTaskIntakeTokenRecord {
   return {
     id: row.id,
     label: row.label,
@@ -107,42 +78,29 @@ export async function requireTeamTaskIntakeScope(
   if (!token.startsWith(tokenPrefix)) return { ok: false, status: 401, error: "Team-Intake-Token ist erforderlich." };
 
   const tokenHash = hashTeamTaskIntakeToken(token);
-  const { data, error } = await supabase
-    .from("team_task_intake_tokens")
-    .select("id,profile_id,label,token_hash,token_hint,scopes,expires_at,created_at,last_used_at,revoked_at,profiles(id,name,platform_role,github_login)")
-    .eq("token_hash", tokenHash)
-    .maybeSingle<TokenRow>();
+  const { data, error } = await supabase.rpc("authenticate_team_task_intake_token", {
+    p_token_hash: tokenHash,
+    p_scope: scope,
+  });
 
+  if (error?.code === "P0004") return { ok: false, status: 401, error: "Team-Intake-Token ist ungültig oder abgelaufen." };
+  if (error?.code === "P0005") return { ok: false, status: 403, error: "Team-Intake-Token hat nicht den erforderlichen Scope." };
+  if (error?.code === "P0006") return { ok: false, status: 403, error: "Team-Intake-Token ist keinem operativen FounderOps-Profil zugeordnet." };
+  if (error?.code === "PGRST202" || error?.code === "42883") {
+    return { ok: false, status: 503, error: "Team-Intake-Schema ist noch nicht verfügbar." };
+  }
   if (error) return { ok: false, status: 500, error: "Team-Intake-Token konnte nicht geprüft werden." };
-  if (!data || data.revoked_at || Date.parse(data.expires_at) <= Date.now() || !safeHashCompare(data.token_hash, tokenHash)) {
+
+  const authenticated = data as AuthenticatedTokenPayload | null;
+  if (!authenticated?.tokenId || !authenticated.profile) {
     return { ok: false, status: 401, error: "Team-Intake-Token ist ungültig oder abgelaufen." };
   }
-
-  const scopes = data.scopes || [];
-  if (!scopes.includes(scope)) return { ok: false, status: 403, error: "Team-Intake-Token hat nicht den erforderlichen Scope." };
-
-  const profile = profileFromTokenRow(data);
-  if (!profile || !allowedRoles.has(profile.platform_role)) {
-    return { ok: false, status: 403, error: "Team-Intake-Token ist keinem operativen FounderOps-Profil zugeordnet." };
-  }
-
-  const { error: usageError } = await supabase
-    .from("team_task_intake_tokens")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", data.id)
-    .eq("profile_id", profile.id);
-  if (usageError) return { ok: false, status: 500, error: "Token-Nutzung konnte nicht protokolliert werden." };
 
   return {
     ok: true,
     supabase,
-    tokenId: data.id,
-    scopes,
-    profile: {
-      id: profile.id,
-      name: profile.name,
-      platformRole: profile.platform_role,
-      githubLogin: profile.github_login || "",
-    },
+    tokenId: authenticated.tokenId,
+    scopes: authenticated.scopes,
+    profile: authenticated.profile,
   };
 }
