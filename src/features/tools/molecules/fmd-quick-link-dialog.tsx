@@ -20,6 +20,7 @@ import {
   UiTextArea,
   UiTextInput,
 } from "@/shared/atoms/ui-primitives";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 const metadataLoadDelayMs = 900;
 
@@ -64,6 +65,7 @@ export function FmdQuickLinkDialog({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUploadPreviewImage: (file: File) => Promise<FmdToolPreviewImageUpload | null>;
 }) {
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftRef = useRef(draft);
   const metadataDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -200,7 +202,7 @@ export function FmdQuickLinkDialog({
         : "";
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={title}>
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={title}>
       <form onSubmit={onSubmit} className="max-h-[calc(100vh-3rem)] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-2xl lg:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

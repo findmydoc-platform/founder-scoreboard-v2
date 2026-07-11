@@ -4,6 +4,7 @@ import { Bell, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
+import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { formatDate } from "@/lib/display";
 import type { HeaderDataSlot, HeaderNotification, HeaderNotificationsData } from "@/lib/types";
 import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
@@ -126,13 +127,5 @@ export function NotificationInbox({
 
 function openHeaderNotificationTarget(event: HeaderNotification) {
   if (typeof window === "undefined") return;
-  if (event.entityType === "task" && event.entityId) {
-    window.location.assign(`/tasks/${encodeURIComponent(event.entityId)}`);
-    return;
-  }
-  if (event.entityType === "meeting") {
-    window.location.assign("/sprint");
-    return;
-  }
-  window.location.assign("/notifications");
+  window.location.assign(notificationTarget(event).href);
 }

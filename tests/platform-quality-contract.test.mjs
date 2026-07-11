@@ -183,6 +183,37 @@ test("custom controls keep keyboard and aria contracts", async () => {
   assert.match(datePicker, /Heute/);
   assert.match(datePicker, /Löschen/);
   assert.match(datePicker, /dayRefs/);
+  assert.match(datePicker, /normalizeTimePart/);
+  assert.match(datePicker, /const \[timeDraft, setTimeDraft\]/);
+  assert.match(datePicker, /onBlur=\{commitTime\}/);
+  assert.match(datePicker, /aria-invalid=\{Boolean\(timeError\)\}/);
+  assert.doesNotMatch(datePicker, /onChange=\{\(event\) => changeTime/);
+});
+
+test("modal dialogs trap focus close on Escape and restore the trigger", async () => {
+  const modalHook = await readFile("src/shared/hooks/use-modal-dialog.ts", "utf8");
+  const dialogFiles = [
+    "src/features/tasks/organisms/new-task-dialog.tsx",
+    "src/features/projects/organisms/initiative-dialog.tsx",
+    "src/features/team/organisms/team-profile-edit-dialog.tsx",
+    "src/features/tools/molecules/fmd-quick-link-dialog.tsx",
+    "src/features/tasks/organisms/task-github-sync-queue.tsx",
+    "src/features/tasks/organisms/task-detail-panel.tsx",
+  ];
+
+  assert.match(modalHook, /focusableSelector/);
+  assert.match(modalHook, /event\.key === "Escape"/);
+  assert.match(modalHook, /event\.key !== "Tab"/);
+  assert.match(modalHook, /returnTarget\?\.isConnected/);
+  assert.match(modalHook, /returnTarget\.focus\(\)/);
+
+  for (const file of dialogFiles) {
+    const source = await readFile(file, "utf8");
+    assert.match(source, /useModalDialog/);
+    assert.match(source, /role="dialog"/);
+    assert.match(source, /aria-modal="true"/);
+    assert.match(source, /tabIndex=\{-1\}/);
+  }
 });
 
 test("badge tone policy stays semantic and primitive based", async () => {

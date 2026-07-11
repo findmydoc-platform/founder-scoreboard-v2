@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { notificationTarget } from "@/features/notifications/model/notification-target";
+import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
@@ -109,8 +111,56 @@ export function useNotificationCommands({
     );
   };
 
+  const updateNotificationStatus = (eventId: number, status: "dismissed" | "resolved") => {
+    setHeaderData((current) => {
+      const removedHeaderEvent = current.notifications.data.items.some((event) => event.id === eventId);
+      return {
+        ...current,
+        notifications: {
+          ...current.notifications,
+          data: {
+            unreadCount: Math.max(0, current.notifications.data.unreadCount - (removedHeaderEvent ? 1 : 0)),
+            items: current.notifications.data.items.filter((event) => event.id !== eventId),
+          },
+        },
+      };
+    });
+    setData((current) => {
+      const nextData = {
+        ...current,
+        notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status } : event)),
+      };
+      if (source === "seed") {
+        try {
+          persistLocalPlanningData(nextData);
+        } catch {
+          // Local navigation still works when browser storage is unavailable.
+        }
+      }
+      return nextData;
+    });
+
+    if (source !== "supabase") return;
+
+    startTransition(async () => {
+      try {
+        const { response, body } = await planningApi.updateNotificationStatusRequest(apiClient, eventId, status);
+        if (!response.ok) throw new Error(body?.error || "Notification konnte nicht aktualisiert werden.");
+      } catch (error) {
+        setData((current) => ({
+          ...current,
+          notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "pending" } : event)),
+        }));
+        await refreshPlanningData();
+        setSaveError(error instanceof Error ? error.message : "Notification konnte nicht aktualisiert werden.");
+      }
+    });
+  };
+
   const openNotification = (event: HeaderNotification) => {
-    if (event.entityType === "task") {
+    updateNotificationStatus(event.id, "resolved");
+    const target = notificationTarget(event);
+    if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
       if (!task) {
         setSaveError("Die verknüpfte Aufgabe wurde nicht gefunden. Der Hinweis kann geschlossen werden.");
@@ -118,46 +168,14 @@ export function useNotificationCommands({
         return;
       }
       openTaskPanel(task.id);
-    } else if (event.entityType === "meeting") {
-      setWorkspace("sprint");
+    } else {
+      setWorkspace(target.workspace);
     }
     setShowNotifications(false);
   };
 
   const dismissNotification = (eventId: number) => {
-    setHeaderData((current) => {
-      const removed = current.notifications.data.items.some((event) => event.id === eventId);
-      return {
-        ...current,
-        notifications: {
-          ...current.notifications,
-          data: {
-            unreadCount: Math.max(0, current.notifications.data.unreadCount - (removed ? 1 : 0)),
-            items: current.notifications.data.items.filter((event) => event.id !== eventId),
-          },
-        },
-      };
-    });
-    setData((current) => ({
-      ...current,
-      notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "dismissed" } : event)),
-    }));
-
-    if (source !== "supabase") return;
-
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.dismissNotificationRequest(apiClient, eventId);
-        if (!response.ok) throw new Error(body?.error || "Notification konnte nicht geschlossen werden.");
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          notificationEvents: current.notificationEvents.map((event) => (event.id === eventId ? { ...event, status: "pending" } : event)),
-        }));
-        await refreshPlanningData();
-        setSaveError(error instanceof Error ? error.message : "Notification konnte nicht geschlossen werden.");
-      }
-    });
+    updateNotificationStatus(eventId, "dismissed");
   };
 
   return {

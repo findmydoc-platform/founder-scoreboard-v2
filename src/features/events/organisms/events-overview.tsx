@@ -30,8 +30,8 @@ type Props = {
   canManageEvents: boolean;
   pending: boolean;
   message: string;
-  onCreateEvent: (draft: FounderEventDraft) => void;
-  onUpdateEvent: (event: FounderEvent, draft: FounderEventDraft) => void;
+  onCreateEvent: (draft: FounderEventDraft) => Promise<void> | void;
+  onUpdateEvent: (event: FounderEvent, draft: FounderEventDraft) => Promise<void> | void;
 };
 
 function defaultStart() {
@@ -85,6 +85,7 @@ export function EventsOverview({
   const [formOpen, setFormOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [draft, setDraft] = useState<FounderEventDraft>(() => draftFromEvent());
+  const [formPending, setFormPending] = useState(false);
   const [now] = useState(() => Date.now());
   const visibleEvents = useMemo(() => sortEvents(events.filter((event) => filterEvent(event, filter, now))), [events, filter, now]);
   const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) || null : null;
@@ -121,12 +122,20 @@ export function EventsOverview({
     }));
   };
 
-  const submit = () => {
-    if (editingEvent) {
-      onUpdateEvent(editingEvent, draft);
-      return;
+  const submit = async () => {
+    setFormPending(true);
+    try {
+      if (editingEvent) {
+        await onUpdateEvent(editingEvent, draft);
+      } else {
+        await onCreateEvent(draft);
+      }
+      closeForm();
+    } catch {
+      // The command hook surfaces the error; keep the form and draft open for correction.
+    } finally {
+      setFormPending(false);
     }
-    onCreateEvent(draft);
   };
 
   const eventForm = formOpen && canManageEvents ? (
@@ -136,7 +145,7 @@ export function EventsOverview({
           <h2 className="text-base font-semibold text-slate-950">{editingEvent ? "Event bearbeiten" : "Event eintragen"}</h2>
           <p className="mt-1 text-sm text-slate-600">Reminder laufen über die FounderOps-Glocke und Google Chat.</p>
         </div>
-        <button type="button" onClick={closeForm} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-50" aria-label="Event-Formular schließen">
+        <button type="button" onClick={closeForm} disabled={formPending} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-50 disabled:opacity-50" aria-label="Event-Formular schließen">
           <X size={16} />
         </button>
       </div>
@@ -235,11 +244,11 @@ export function EventsOverview({
         )}
       </div>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <UiButton onClick={closeForm} className="text-slate-600">
+        <UiButton onClick={closeForm} disabled={formPending} className="text-slate-600">
           Abbrechen
         </UiButton>
-        <UiButton onClick={submit} disabled={pending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
-          {editingEvent ? "Event speichern" : "Event erstellen"}
+        <UiButton onClick={() => void submit()} disabled={pending || formPending || !draft.title.trim() || !draft.startsAt || (draft.audienceMode === "selected" && !draft.participantProfileIds.length)} variant="primary">
+          {formPending ? "Speichert..." : editingEvent ? "Event speichern" : "Event erstellen"}
         </UiButton>
       </div>
     </UiPanel>

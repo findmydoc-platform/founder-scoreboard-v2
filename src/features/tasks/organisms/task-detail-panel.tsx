@@ -11,6 +11,7 @@ import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-threa
 import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 export function TaskDetailPanel({
   task,
   pack,
@@ -84,6 +85,7 @@ export function TaskDetailPanel({
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
 }) {
+  const dialogRef = useModalDialog({ open: true, onClose });
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
   const [relationDraft, setRelationDraft] = useState<{ relationType: TaskRelationType; relatedTaskId: string; note: string }>({
     relationType: "blocked_by",
@@ -102,7 +104,7 @@ export function TaskDetailPanel({
       aria-label="Detailpanel schließen"
       onClick={onClose}
     />
-    <aside className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
+    <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Aufgabendetails: ${task.title}`} className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
       <TaskDetailPanelHeader task={task} onClose={onClose} />
       <div className="p-5">
         <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">

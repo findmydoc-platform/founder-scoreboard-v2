@@ -156,10 +156,10 @@ export function uploadFmdToolPreviewImageRequest(apiClient: BrowserApiClient, fi
   return apiClient.requestForm<{ error?: string; imageUrl?: string; source?: FmdToolPreviewImageUpload["source"] }>("/api/tools/preview-image", formData);
 }
 
-export function dismissNotificationRequest(apiClient: BrowserApiClient, eventId: number) {
+export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eventId: number, status: "dismissed" | "resolved") {
   return apiClient.requestJson<{ error?: string }>(`/api/notifications/${eventId}`, {
     method: "PATCH",
-    json: { status: "dismissed" },
+    json: { status },
   });
 }
 

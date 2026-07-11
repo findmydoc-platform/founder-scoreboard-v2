@@ -4,6 +4,7 @@ import { GitBranch, Link2, RefreshCw, X } from "lucide-react";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 type LinkedSyncCommand = (options?: { onlyFailed?: boolean }) => void;
 type TaskSyncCommand = (task: Task, options?: { createIfMissing?: boolean; silent?: boolean }) => void;
@@ -56,6 +57,7 @@ export function TaskGitHubSyncQueue({
   onSyncLinkedGitHubTasks: LinkedSyncCommand;
   onSyncTaskToGitHub: TaskSyncCommand;
 }) {
+  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose });
   if (!open) return null;
 
   const deliverables = tasks.filter((task) => task.taskType === "deliverable");
@@ -79,7 +81,7 @@ export function TaskGitHubSyncQueue({
   const rowActionDisabled = (row: QueueRow) => pending || !githubAppConnected || row.state === "running" || row.state === "locked";
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="GitHub-Sync">
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="GitHub-Sync">
       <button type="button" className="absolute inset-0 bg-slate-950/20" aria-label="GitHub-Sync schließen" onClick={onClose} />
       <aside className="absolute inset-y-0 right-0 grid w-full max-w-[560px] grid-rows-[auto_auto_minmax(0,1fr)] border-l border-slate-200 bg-white shadow-2xl">
         <header className="border-b border-slate-200 px-5 py-4">

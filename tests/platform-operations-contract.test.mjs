@@ -19,6 +19,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const notificationOutboxUi = await readFile("src/features/notifications/organisms/notification-outbox-panel.tsx", "utf8");
   const inboxUi = await readFile("src/features/notifications/organisms/notification-inbox.tsx", "utf8");
+  const notificationCommands = await readFile("src/features/planning/hooks/use-notification-commands.ts", "utf8");
+  const notificationRoute = await readFile("src/app/api/notifications/[id]/route.ts", "utf8");
+  const notificationTarget = await readFile("src/features/notifications/model/notification-target.ts", "utf8");
 
   assert.match(migration, /google_chat_user_id/);
   assert.match(migration, /google_chat_dm_space/);
@@ -113,6 +116,14 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(inboxUi, /onDismiss\(event\.id\)/);
   assert.match(ui, /openTaskPanel\(task\.id\)/);
   assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
+  assert.match(notificationCommands, /updateNotificationStatus\(event\.id, "resolved"\)/);
+  assert.match(notificationCommands, /notificationTarget\(event\)/);
+  assert.match(notificationRoute, /"dismissed" \| "resolved"/);
+  assert.match(notificationRoute, /\.update\(\{ status \}\)/);
+  assert.match(notificationTarget, /entityType === "founder_event"/);
+  assert.match(notificationTarget, /entityType === "fmd_tool"/);
+  assert.match(notificationTarget, /"meeting", "sprint", "sprint_commitment", "score_objection"/);
+  assert.match(inboxUi, /notificationTarget\(event\)\.href/);
   assert.match(ui, /NotificationsOverview/);
   assert.match(notificationsOverviewUi, /NotificationOutboxPanel/);
   assert.match(notificationsOverviewUi, /Für mich/);

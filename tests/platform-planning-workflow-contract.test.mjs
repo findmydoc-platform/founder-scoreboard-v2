@@ -897,6 +897,22 @@ test("board tasks can be dragged between status columns", async () => {
   assert.match(ui, /canManageFinalTaskStatus/);
 });
 
+test("event form closes only after a successful validated save", async () => {
+  const overview = await readFile("src/features/events/organisms/events-overview.tsx", "utf8");
+  const commands = await readFile("src/features/events/hooks/use-founder-event-commands.ts", "utf8");
+
+  assert.match(overview, /const \[formPending, setFormPending\]/);
+  assert.match(overview, /await onUpdateEvent\(editingEvent, draft\)/);
+  assert.match(overview, /await onCreateEvent\(draft\)/);
+  assert.match(overview, /closeForm\(\);/);
+  assert.match(overview, /keep the form and draft open for correction/);
+  assert.match(commands, /const createFounderEvent = async/);
+  assert.match(commands, /const updateFounderEvent = async/);
+  assert.match(commands, /validIsoDateTime/);
+  assert.match(commands, /Number\.isNaN\(parsed\.getTime\(\)\)/);
+  assert.match(commands, /Die Endzeit darf nicht vor der Startzeit liegen/);
+});
+
 test("review workflow supports rework, suggestions, and sprint commitments", async () => {
   const status = await readFile("src/lib/status.ts", "utf8");
   const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");

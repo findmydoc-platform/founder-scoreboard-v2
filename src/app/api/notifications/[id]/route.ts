@@ -1,12 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireFounder } from "@/lib/authz";
-import { apiError, requireApiContext } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
+
+type NotificationStatusPayload = {
+  status?: "dismissed" | "resolved";
+};
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireJsonApiContext<NotificationStatusPayload>(request, requireFounder, {});
   if (!apiContext.ok) return apiContext.response;
 
-  const { permission, supabase } = apiContext;
+  const { payload, permission, supabase } = apiContext;
+  const status = payload.status;
+  if (!status || !["dismissed", "resolved"].includes(status)) {
+    return apiError("Ungültiger Notification-Status.", 400);
+  }
 
   const { id } = await context.params;
   const notificationId = Number(id);
@@ -33,10 +41,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { error: updateError } = await supabase
     .from("notification_events")
-    .update({ status: "dismissed" })
+    .update({ status })
     .eq("id", notificationId);
 
   if (updateError) return apiError(updateError.message, 500);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, status });
 }

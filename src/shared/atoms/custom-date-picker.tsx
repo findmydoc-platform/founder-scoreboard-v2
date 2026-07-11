@@ -34,6 +34,15 @@ function parseDateKey(value: string) {
   return new Date(year, month - 1, day);
 }
 
+function normalizeTimePart(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 function monthLabel(date: Date) {
   return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(date);
 }
@@ -44,7 +53,8 @@ function displayValue(value: string, mode: "date" | "datetime") {
   const date = parseDateKey(datePart);
   if (!date) return value;
   const formattedDate = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
-  return mode === "datetime" && timePart ? `${formattedDate} ${timePart}` : formattedDate;
+  const normalizedTime = normalizeTimePart(timePart || "");
+  return mode === "datetime" && normalizedTime ? `${formattedDate} ${normalizedTime}` : formattedDate;
 }
 
 function getMonthDays(viewMonth: Date) {
@@ -92,11 +102,14 @@ export function CustomDatePicker({
   const menuRef = useRef<HTMLDivElement>(null);
   const dayRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = useState(false);
-  const [datePart, timePart = "12:00"] = value.split("T");
+  const [datePart, rawTimePart = "12:00"] = value.split("T");
+  const timePart = normalizeTimePart(rawTimePart) || "12:00";
   const selectedDate = parseDateKey(datePart);
   const [viewMonth, setViewMonth] = useState(() => selectedDate || new Date());
   const [focusedDate, setFocusedDate] = useState(() => selectedDate || new Date());
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [timeDraft, setTimeDraft] = useState(timePart);
+  const [timeError, setTimeError] = useState("");
   const days = useMemo(() => getMonthDays(viewMonth), [viewMonth]);
 
   const openMenu = () => {
@@ -104,6 +117,8 @@ export function CustomDatePicker({
     const baseDate = selectedDate || new Date();
     setViewMonth(firstOfMonth(baseDate));
     setFocusedDate(baseDate);
+    setTimeDraft(timePart);
+    setTimeError("");
     setOpen(true);
   };
 
@@ -161,13 +176,21 @@ export function CustomDatePicker({
   const selectDate = (date: Date) => {
     setFocusedDate(date);
     const nextDate = toDateKey(date);
-    onChange(mode === "datetime" ? `${nextDate}T${timePart}` : nextDate);
+    const safeTime = normalizeTimePart(timeDraft) || timePart;
+    onChange(mode === "datetime" ? `${nextDate}T${safeTime}` : nextDate);
     if (mode === "date") closeMenu(true);
   };
 
-  const changeTime = (nextTime: string) => {
+  const commitTime = () => {
+    const normalizedTime = normalizeTimePart(timeDraft);
+    if (!normalizedTime) {
+      setTimeError("Bitte eine gültige Uhrzeit zwischen 00:00 und 23:59 eingeben.");
+      return;
+    }
     const safeDate = datePart || toDateKey(new Date());
-    onChange(`${safeDate}T${nextTime}`);
+    setTimeDraft(normalizedTime);
+    setTimeError("");
+    onChange(`${safeDate}T${normalizedTime}`);
   };
 
   const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -327,11 +350,24 @@ export function CustomDatePicker({
               <input
                 type="text"
                 inputMode="numeric"
-                value={timePart}
-                onChange={(event) => changeTime(event.target.value)}
+                value={timeDraft}
+                onChange={(event) => {
+                  setTimeDraft(event.target.value);
+                  setTimeError("");
+                }}
+                onBlur={commitTime}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitTime();
+                  }
+                }}
+                aria-invalid={Boolean(timeError)}
+                aria-describedby={timeError ? `${dialogId}-time-error` : undefined}
                 placeholder="12:00"
                 className="h-9 rounded-md border border-slate-200 px-2 text-sm font-normal text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
+              {timeError && <span id={`${dialogId}-time-error`} className="font-medium text-red-600">{timeError}</span>}
             </label>
           )}
 

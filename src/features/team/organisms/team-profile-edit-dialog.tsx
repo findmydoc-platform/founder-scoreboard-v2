@@ -4,6 +4,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { platformRoleOptions, roleOptionLabel } from "@/features/team/model/team-profile-view-model";
 import type { PlatformRole, Profile } from "@/lib/types";
 import { UiButton, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export function TeamProfileEditDialog({
   canManageTeam,
@@ -28,6 +29,7 @@ export function TeamProfileEditDialog({
   onReset: () => void;
   onSave: () => Promise<void>;
 }) {
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: canManageTeam, onClose, closeDisabled: pending || saving });
   if (!canManageTeam) return null;
 
   const isDeputy = draftProfile.platformRole === "deputy";
@@ -51,7 +53,7 @@ export function TeamProfileEditDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={`${draftProfile.name} bearbeiten`}>
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4 py-6" role="dialog" aria-modal="true" aria-label={`${draftProfile.name} bearbeiten`}>
       <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-4 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
