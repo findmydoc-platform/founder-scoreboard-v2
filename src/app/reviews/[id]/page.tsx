@@ -1,4 +1,5 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
@@ -30,11 +31,14 @@ export default async function ReviewPage({ params }: Props) {
       );
     }
 
-    const { data, headerData, source } = await getPlanningData(undefined, {
+    const { availability, data, headerData, source } = await getPlanningData(undefined, {
       workspace: "reviews",
       currentProfileId: auth.profile?.id || null,
       platformRole: auth.profile?.platformRole || null,
     });
+    if (availability === "unavailable") {
+      return <PlanningDataUnavailablePage workspace="reviews" authUserEmail={auth.user?.email || ""} />;
+    }
     return (
       <PlanningApp
         key={`review-${id}`}
@@ -52,6 +56,7 @@ export default async function ReviewPage({ params }: Props) {
     );
   }
 
-  const { data, headerData, source } = await getPlanningData();
+  const { availability, data, headerData, source } = await getPlanningData();
+  if (availability === "unavailable") return <PlanningDataUnavailablePage workspace="reviews" />;
   return <PlanningApp key={`review-${id}`} initialData={data} initialHeaderData={headerData} initialWorkspace="reviews" source={source} authRequired={false} demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()} initialReviewTaskId={id} />;
 }

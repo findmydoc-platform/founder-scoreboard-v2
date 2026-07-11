@@ -1,4 +1,5 @@
 import { getPlanningData } from "@/lib/planning-data";
+import { PlanningDataUnavailableError } from "@/lib/planning-data-availability";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
@@ -90,7 +91,8 @@ export function agentConstraints() {
 }
 
 export async function buildAgentContext() {
-  const { data, source } = await getPlanningData();
+  const { availability, data, source } = await getPlanningData();
+  if (availability === "unavailable") throw new PlanningDataUnavailableError();
   const openReviewTasks = data.tasks.filter((task) => !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested"));
   const tasksWithoutEvidence = data.tasks.filter((task) => task.scoreRelevant && !taskHasEvidence(task));
   const blockedTasks = data.tasks.filter((task) => isBlocked(task, data));
@@ -116,7 +118,8 @@ export async function buildAgentContext() {
 }
 
 export async function getAgentTasks(filters: AgentTaskFilters) {
-  const { data, source } = await getPlanningData();
+  const { availability, data, source } = await getPlanningData();
+  if (availability === "unavailable") throw new PlanningDataUnavailableError();
   const limit = Math.min(Math.max(Number(filters.limit || 50), 1), 200);
   const tasks = data.tasks
     .filter((task) => task.taskType !== "sub_issue")

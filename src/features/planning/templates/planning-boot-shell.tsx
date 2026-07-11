@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import { AppSidebar, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { workspaceLabels } from "@/features/planning/model/planning-app-model";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
@@ -17,6 +18,7 @@ type PlanningBootShellProps = {
   authBusy?: boolean;
   onSignIn?: () => void;
   onSignOut?: () => void;
+  retryHref?: string;
 };
 
 export function PlanningBootShell({
@@ -32,6 +34,7 @@ export function PlanningBootShell({
   authBusy = false,
   onSignIn,
   onSignOut,
+  retryHref,
 }: PlanningBootShellProps) {
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
@@ -85,7 +88,16 @@ export function PlanningBootShell({
               </div>
             ))}
           </UiPanel>
-          {error && <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
+          {error && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              <p className="min-w-0 flex-1">{error}</p>
+              {retryHref && (
+                <Link className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-red-800 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500" href={retryHref}>
+                  Erneut versuchen
+                </Link>
+              )}
+            </div>
+          )}
         </section>
       </main>
     </div>

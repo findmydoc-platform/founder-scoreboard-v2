@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
@@ -24,11 +25,14 @@ export default async function TaskPage({ params }: Props) {
     authProfile = auth.profile;
   }
 
-  const { data, headerData, source } = await getPlanningData(taskDetailPageDataScope, {
+  const { availability, data, headerData, source } = await getPlanningData(taskDetailPageDataScope, {
     workspace: "planning",
     currentProfileId: authProfile?.id || null,
     platformRole: authProfile?.platformRole || null,
   });
+  if (availability === "unavailable") {
+    return <PlanningDataUnavailablePage workspace="planning" />;
+  }
   const task = data.tasks.find((item) => item.id === id);
 
   if (!task) notFound();
