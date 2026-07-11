@@ -3,6 +3,7 @@ import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, sh
 import { isOperationalLeadRole } from "./platform";
 import { persistResolvedNotificationEvents } from "./notification-resolution";
 import { getServerSupabase } from "./supabase";
+import { allowsLocalPlanningFallback } from "./planning-data-availability";
 import type { PlanningData, PlanningHeaderData, PlatformRole } from "./types";
 
 export const emptyPlanningData: PlanningData = {
@@ -45,6 +46,31 @@ export type PlanningDataAccessScope = {
   platformRole?: PlatformRole | null;
 };
 
+export type PlanningDataResult = {
+  data: PlanningData;
+  headerData: PlanningHeaderData;
+  source: "seed" | "supabase";
+  availability: "ready" | "unavailable";
+};
+
+function planningDataFailureResult(): PlanningDataResult {
+  if (allowsLocalPlanningFallback()) {
+    return {
+      data: emptyPlanningData,
+      headerData: emptyPlanningHeaderData,
+      source: "seed",
+      availability: "ready",
+    };
+  }
+
+  return {
+    data: emptyPlanningData,
+    headerData: emptyPlanningHeaderData,
+    source: "supabase",
+    availability: "unavailable",
+  };
+}
+
 export function filterPlanningDataForWorkspaceAccess(data: PlanningData, access?: PlanningDataAccessScope): PlanningData {
   if (!access?.platformRole) return data;
   if (isOperationalLeadRole(access.platformRole)) return data;
@@ -59,13 +85,13 @@ export function filterPlanningDataForWorkspaceAccess(data: PlanningData, access?
   };
 }
 
-export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<{ data: PlanningData; headerData: PlanningHeaderData; source: "seed" | "supabase" }> {
+export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<PlanningDataResult> {
   const supabase = getServerSupabase();
-  if (!supabase) return { data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" };
+  if (!supabase) return planningDataFailureResult();
 
   const rows = await loadPlanningDataRows(supabase, scope);
   if (hasCorePlanningDataError(rows)) {
-    return { data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" };
+    return planningDataFailureResult();
   }
 
   const data = filterPlanningDataForWorkspaceAccess(
@@ -82,6 +108,7 @@ export async function getPlanningData(scope?: PlanningDataQueryScope, access?: P
 
   return {
     source: "supabase",
+    availability: "ready",
     data,
     headerData,
   };

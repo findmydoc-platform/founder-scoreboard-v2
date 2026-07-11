@@ -1,4 +1,5 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
+import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { getPlanningDataScopeForWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
@@ -33,7 +34,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
-    const { data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
+    const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
+    if (availability === "unavailable") {
+      return <PlanningDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
+    }
     return (
       <PlanningApp
         initialData={data}
@@ -49,7 +53,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
     );
   }
 
-  const { data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace);
+  const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace);
+  if (availability === "unavailable") {
+    return <PlanningDataUnavailablePage workspace={initialWorkspace} />;
+  }
   return (
     <PlanningApp
       initialData={data}

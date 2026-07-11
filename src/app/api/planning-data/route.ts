@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlatformRole } from "@/lib/authz";
 import { getPlanningData } from "@/lib/planning-data";
+import { planningDataUnavailableMessage } from "@/lib/planning-data-availability";
 import { apiError, authzError } from "@/lib/api-response";
 import { getPlanningDataScopeForWorkspace, planningDataWorkspaceFromValue } from "@/lib/planning-data-scopes";
 
@@ -17,5 +18,6 @@ export async function GET(request: NextRequest) {
     currentProfileId: auth.profile?.id || null,
     platformRole: auth.profile?.platformRole || null,
   });
+  if (result.availability === "unavailable") return apiError(planningDataUnavailableMessage, 503);
   return NextResponse.json({ ...result, currentProfile: auth.profile });
 }

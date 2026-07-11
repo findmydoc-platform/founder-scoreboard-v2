@@ -47,14 +47,20 @@ test("source.json is the single maintained seed data source", async () => {
 
 test("runtime fallback stays empty until the sample data button writes seed data", async () => {
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
+  const availability = await readFile("src/lib/planning-data-availability.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const route = await readFile("src/app/api/demo-seed/import/route.ts", "utf8");
   const helper = await readFile("src/lib/seed/demo-import.ts", "utf8");
   const importHook = await readFile("src/features/planning/hooks/use-demo-seed-import.ts", "utf8");
   const localStateHook = await readFile("src/features/planning/hooks/use-local-planning-state.ts", "utf8");
 
-  assert.match(planningData, /if \(!supabase\) return \{ data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" \}/);
-  assert.match(planningData, /hasCorePlanningDataError\(rows\)[\s\S]*return \{ data: emptyPlanningData, headerData: emptyPlanningHeaderData, source: "seed" \}/);
+  assert.match(planningData, /if \(!supabase\) return planningDataFailureResult\(\)/);
+  assert.match(planningData, /hasCorePlanningDataError\(rows\)[\s\S]*return planningDataFailureResult\(\)/);
+  assert.match(planningData, /allowsLocalPlanningFallback\(\)[\s\S]*source: "seed"[\s\S]*availability: "ready"/);
+  assert.match(planningData, /source: "supabase"[\s\S]*availability: "unavailable"/);
+  assert.match(availability, /NODE_ENV === "development"/);
+  assert.match(availability, /!environment\.VERCEL_ENV/);
+  assert.match(availability, /environment\.CI !== "true"/);
   assert.doesNotMatch(planningData, /seedData/);
   assert.doesNotMatch(loader, /seedData/);
   assert.match(route, /importDemoSeed\(supabase\)/);

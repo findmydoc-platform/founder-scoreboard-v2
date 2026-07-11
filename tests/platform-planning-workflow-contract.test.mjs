@@ -383,6 +383,9 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(page, /initialProtectedDataLoaded/);
   assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
   assert.match(api, /currentProfile: auth\.profile/);
+  assert.match(api, /result\.availability === "unavailable"/);
+  assert.match(api, /planningDataUnavailableMessage, 503/);
+  assert.match(page, /PlanningDataUnavailablePage/);
   assert.match(authz, /auth_user_id/);
   assert.match(authz, /ilike\("github_login", githubLogin\)/);
   assert.match(serverAuth, /requirePlatformRoleForUser/);

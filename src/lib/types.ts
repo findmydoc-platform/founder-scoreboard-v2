@@ -443,6 +443,7 @@ export type PlanningDataResponse = {
   data: PlanningData;
   headerData: PlanningHeaderData;
   source: "seed" | "supabase";
+  availability: "ready" | "unavailable";
   currentProfile: AuthenticatedProfile | null;
 };
 
