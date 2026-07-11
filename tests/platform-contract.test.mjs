@@ -46,6 +46,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   const productionWorkflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const deployScript = await readFile(".github/scripts/deploy/vercel-deploy-prebuilt.sh", "utf8");
   const schemaDeployScript = await readFile("scripts/deploy-production-schema.mjs", "utf8");
+  const applySqlScript = await readFile("scripts/apply-sql.mjs", "utf8");
   const dependabot = await readFile(".github/dependabot.yml", "utf8");
   const gitignore = await readFile(".gitignore", "utf8");
   const deployment = await readFile("docs/vercel-deployment.md", "utf8");
@@ -122,6 +123,7 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(schemaDeployScript, /supabase\/schema\.sql/);
   assert.match(schemaDeployScript, /notify pgrst, 'reload schema'/);
   assert.match(schemaDeployScript, /drop\\s\+table/);
+  assert.match(applySqlScript, /firstArg === "--" \? secondArg : firstArg/);
   assert.doesNotMatch(previewWorkflow, /VERCEL_TOKEN is required/);
   assert.doesNotMatch(previewWorkflow, /SUPABASE_DB_PASSWORD/);
   assert.doesNotMatch(productionWorkflow, /VERCEL_TOKEN is required/);
