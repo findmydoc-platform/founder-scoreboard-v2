@@ -333,8 +333,7 @@ export function EventsOverview({
         activeFilters={activeFilters}
         isDirty={filter !== "upcoming" || categoryFilter !== "all" || Boolean(query)}
         onReset={() => { setQuery(""); setFilter("upcoming"); setCategoryFilter("all"); }}
-        visibleCount={visibleEvents.length}
-        totalCount={events.length}
+        results={[{ id: "events", visibleCount: visibleEvents.length, totalCount: events.length }]}
         panelId="event-data-filters"
         primaryControls={(
           <FilterSegmentedControl

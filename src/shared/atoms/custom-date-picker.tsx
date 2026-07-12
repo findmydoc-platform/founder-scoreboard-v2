@@ -2,8 +2,9 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAnchoredPopover } from "@/shared/hooks/use-anchored-popover";
 
 type CustomDatePickerProps = {
   value: string;
@@ -12,11 +13,7 @@ type CustomDatePickerProps = {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
-};
-
-type MenuPosition = {
-  top: number;
-  left: number;
+  "aria-labelledby"?: string;
 };
 
 const weekdayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -94,20 +91,22 @@ export function CustomDatePicker({
   disabled = false,
   className = "",
   "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: CustomDatePickerProps) {
   const dialogId = useId();
   const monthLabelId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const dayRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = useState(false);
+  const closeOnOutside = useCallback(() => setOpen(false), []);
+  const { rootRef, triggerRef, popoverRef: menuRef, position: menuPosition } = useAnchoredPopover({
+    open,
+    onClose: closeOnOutside,
+  });
   const [datePart, rawTimePart = "12:00"] = value.split("T");
   const timePart = normalizeTimePart(rawTimePart) || "12:00";
   const selectedDate = parseDateKey(datePart);
   const [viewMonth, setViewMonth] = useState(() => selectedDate || new Date());
   const [focusedDate, setFocusedDate] = useState(() => selectedDate || new Date());
-  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [timeDraft, setTimeDraft] = useState(timePart);
   const [timeError, setTimeError] = useState("");
   const days = useMemo(() => getMonthDays(viewMonth), [viewMonth]);
@@ -134,44 +133,11 @@ export function CustomDatePicker({
 
   useEffect(() => {
     if (!open) return;
-
-    const updateMenuPosition = () => {
-      const rect = rootRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setMenuPosition({
-        top: rect.bottom + 6,
-        left: rect.left,
-      });
-    };
-
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     const focusedKey = toDateKey(focusedDate);
     const focusedIndex = days.findIndex((day) => toDateKey(day) === focusedKey);
     if (focusedIndex < 0) return;
     requestAnimationFrame(() => dayRefs.current[focusedIndex]?.focus());
   }, [days, focusedDate, open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOnOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
-    };
-
-    window.addEventListener("pointerdown", closeOnOutside);
-    return () => window.removeEventListener("pointerdown", closeOnOutside);
-  }, [open]);
 
   const selectDate = (date: Date) => {
     setFocusedDate(date);
@@ -256,6 +222,7 @@ export function CustomDatePicker({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={dialogId}
@@ -282,13 +249,14 @@ export function CustomDatePicker({
       {open && menuPosition && createPortal(
         <div
           ref={menuRef}
+          data-custom-control-popover
           id={dialogId}
           role="dialog"
           aria-modal="false"
           aria-label={ariaLabel || (mode === "datetime" ? "Datum und Uhrzeit wählen" : "Datum wählen")}
           onKeyDown={handleDialogKeyDown}
           style={{ top: menuPosition.top, left: menuPosition.left }}
-          className="fixed z-[100] w-72 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-xl shadow-slate-900/10"
+          className="fixed z-[120] w-72 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-xl shadow-slate-900/10"
         >
           <div className="flex items-center justify-between gap-2">
             <button
