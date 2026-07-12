@@ -241,12 +241,13 @@ test("badge tone policy stays semantic and primitive based", async () => {
 test("shared data surfaces centralize table shells without domain columns", async () => {
   const dataSurface = await readFile("src/shared/molecules/data-surface.tsx", "utf8");
   const migratedFiles = [
+    "src/features/reviews/organisms/review-workspace-overview.tsx",
+    "src/features/backlog/molecules/backlog-rank-table.tsx",
+    "src/features/projects/organisms/projects-overview.tsx",
     "src/features/sprint/organisms/sprint-task-tables.tsx",
     "src/features/sprint/organisms/sprint-founder-score-table.tsx",
     "src/features/sprint/molecules/sprint-meeting-attendance-section.tsx",
     "src/features/tasks/organisms/task-table-view.tsx",
-    "src/features/tasks/organisms/task-structure-view.tsx",
-    "src/features/tasks/organisms/gantt-view.tsx",
   ];
 
   assert.match(dataSurface, /export function DataSurface/);
@@ -255,33 +256,64 @@ test("shared data surfaces centralize table shells without domain columns", asyn
   assert.match(dataSurface, /export function DataHeaderCell/);
   assert.match(dataSurface, /export function DataCell/);
   assert.match(dataSurface, /export function DataEmptyRow/);
+  assert.match(dataSurface, /export function DataTableFrame/);
+  assert.match(dataSurface, /export function DataColumnHeader/);
   assert.doesNotMatch(dataSurface, /TaskStatus|SprintStatus|reviewStatus|packageId|ownerId/);
 
   for (const file of migratedFiles) {
     const source = await readFile(file, "utf8");
-    assert.match(source, /DataSurface/, `${file} should use shared data surface shell`);
+    assert.match(source, /DataTableFrame/, `${file} should use the shared operational table frame`);
+    assert.match(source, /filtering=\{\{ mode: "(?:embedded|external)"/, `${file} should declare its filter mode`);
   }
+
+  const appFiles = await listFiles("src", ".tsx");
+  const filesWithRawTables = [];
+  for (const file of appFiles) {
+    const source = await readFile(file, "utf8");
+    if (source.includes("<table")) filesWithRawTables.push(file);
+  }
+  assert.deepEqual(filesWithRawTables.sort(), [
+    "src/features/tasks/atoms/task-comment-body.tsx",
+    "src/shared/molecules/data-surface.tsx",
+  ]);
 });
 
 test("shared filter controls expose consistent accessible table filtering", async () => {
   const toolbar = await readFile("src/shared/molecules/filter-toolbar.tsx", "utf8");
   const dataSurface = await readFile("src/shared/molecules/data-surface.tsx", "utf8");
+  const columnFilter = await readFile("src/shared/molecules/column-filter-popover.tsx", "utf8");
+  const anchoredPopover = await readFile("src/shared/hooks/use-anchored-popover.ts", "utf8");
+  const customSelect = await readFile("src/shared/atoms/custom-select.tsx", "utf8");
+  const customDatePicker = await readFile("src/shared/atoms/custom-date-picker.tsx", "utf8");
   const planningFilters = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
   const taskViewModel = await readFile("src/features/planning/hooks/use-planning-task-view-model.ts", "utf8");
 
   assert.match(toolbar, /type="search"/);
   assert.match(toolbar, /aria-expanded=\{expanded\}/);
-  assert.match(toolbar, /aria-controls=\{panelId\}/);
+  assert.match(toolbar, /aria-controls=\{resolvedPanelId\}/);
   assert.match(toolbar, /hidden=\{!expanded\}/);
   assert.match(toolbar, /aria-live="polite"/);
   assert.match(toolbar, /aria-pressed=\{active\}/);
   assert.match(toolbar, /Filter zurücksetzen/);
   assert.match(toolbar, /isDirty/);
   assert.match(dataSurface, /export function SortableDataHeaderCell/);
+  assert.match(dataSurface, /export function DataColumnHeader/);
   assert.match(dataSurface, /aria-sort=/);
   assert.match(dataSurface, /scope="col"/);
+  assert.match(dataSurface, /<caption className="sr-only">/);
+  assert.match(dataSurface, /aria-labelledby=\{titleId\}/);
+  assert.match(columnFilter, /aria-haspopup="dialog"/);
+  assert.match(columnFilter, /aria-expanded=\{open\}/);
+  assert.match(columnFilter, /role="dialog"/);
+  assert.match(columnFilter, /event\.key !== "Escape"/);
+  assert.match(columnFilter, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(columnFilter, /querySelector<HTMLElement>/);
+  assert.match(columnFilter, /ignoreOutsideSelector: "\[data-custom-control-popover\]"/);
+  assert.match(anchoredPopover, /target\.closest\(ignoreOutsideSelector\)/);
+  assert.match(customSelect, /data-custom-control-popover/);
+  assert.match(customDatePicker, /data-custom-control-popover/);
   assert.match(planningFilters, /FilterToggleGroup/);
-  assert.match(taskViewModel, /filters\.quick\.every/);
+  assert.match(taskViewModel, /buildPlanningTaskTableViewModel/);
 });
 
 test("visible German app copy keeps real UTF-8 umlauts", async () => {

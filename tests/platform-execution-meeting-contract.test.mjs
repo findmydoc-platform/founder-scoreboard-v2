@@ -192,7 +192,7 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   const profileSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
   const profileSettingsModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
   const profileSettingsRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
-  const taskViewModel = await readFile("src/features/planning/hooks/use-planning-task-view-model.ts", "utf8");
+  const taskViewModel = await readFile("src/features/planning/model/planning-task-table-view-model.ts", "utf8");
   const taskSignals = await readFile("src/features/tasks/model/task-attention-signals.ts", "utf8");
   const taskSignalBadges = await readFile("src/features/tasks/molecules/task-attention-badges.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");

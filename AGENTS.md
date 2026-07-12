@@ -40,3 +40,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Do not create new `src/components` or `src/hooks` directories. Do not add imports from `@/components`, `@/hooks`, `src/components`, or `src/hooks`; move code into the owning feature or `src/shared` instead.
 - Templates and shell components orchestrate layout and pass typed props. Business logic, API calls, mutations, auth/role decisions, and derived data belong in hooks, model/view-model files, API routes, or service helpers.
 - The custom-control policy is part of the UI structure contract: do not add native `<select>`, `<option>`, `input type="date"`, or `input type="datetime-local"` to app UI.
+- New operational data tables must follow `docs/table-filtering.md`, use the shared `DataTableFrame`, and declare an explicit `embedded` or `external` filtering mode. Raw HTML tables are reserved for content-only rendering such as Markdown in task comments.

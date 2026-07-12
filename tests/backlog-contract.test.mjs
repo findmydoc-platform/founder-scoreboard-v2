@@ -135,7 +135,7 @@ test("backlog workspace is routed separately from planning and uses sprint commi
 });
 
 test("backlog view model sorts by rank not priority and keeps sprint as assignment", async () => {
-  const { buildBacklogViewModel, filterBacklogItemsByQuery } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
+  const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS, filterBacklogItemsByQuery } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
     "@/lib/planning-schedule": scheduleMock,
     "@/lib/status": statusMock,
   });
@@ -145,11 +145,17 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
   const ready = buildBacklogViewModel(basePlanningData(), "ready");
   const proposals = buildBacklogViewModel(basePlanningData(), "proposals");
   const queried = filterBacklogItemsByQuery(all.visibleItems, "später");
+  const combined = buildBacklogTableViewModel(basePlanningData(), {
+    ...DEFAULT_BACKLOG_FILTERS,
+    priority: "P0",
+    assignee: "CEO",
+  });
 
   assert.deepEqual(all.visibleItems.map((item) => item.task.id), ["first-p2", "planned", "late-p0"]);
   assert.deepEqual(proposals.visibleItems.map((item) => item.task.id), ["first-p2"]);
   assert.deepEqual(ready.visibleItems.map((item) => item.task.id), ["first-p2", "late-p0"]);
   assert.deepEqual(queried.map((item) => item.task.id), ["late-p0"]);
+  assert.deepEqual(combined.visibleItems.map((item) => item.task.id), ["late-p0"]);
   assert.equal(all.sprintBuckets[0].sprint.id, "sprint-4");
   assert.equal(all.sprintBuckets[0].plannedHours, 13);
   assert.equal(all.sprintBuckets[0].capacityHours, 42);
@@ -190,8 +196,10 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
 
   assert.match(overview, /BacklogRankTable/);
   assert.match(overview, /BacklogSprintPane/);
-  assert.match(rankTable, /DataSurface/);
-  assert.match(rankTable, /DataTable/);
+  assert.match(rankTable, /DataTableFrame/);
+  assert.match(rankTable, /filtering=\{\{ mode: "embedded", toolbar \}\}/);
+  assert.match(rankTable, /DataColumnHeader/);
+  assert.match(rankTable, /ColumnFilterPopover/);
   assert.match(uiSurface, /overflow-x-scroll/);
   assert.match(overview, /data-tour-id="backlog-overview"/);
   assert.match(scopeTabs, /data-tour-id="backlog-scope-tabs"/);

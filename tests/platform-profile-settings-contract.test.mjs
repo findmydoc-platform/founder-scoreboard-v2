@@ -107,6 +107,16 @@ test("profile preferences and feature tour acknowledgements are additive data sl
   assert.match(schemaChecks, /profile_feature_tour_acknowledgements/);
 });
 
+test("URL filters hydrate without silently changing saved profile defaults", async () => {
+  const profileSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
+  const profileBoard = await readFile("src/features/profile/molecules/profile-board-section.tsx", "utf8");
+
+  assert.match(profileSync, /if \(!hasPlanningFilterUrlState\)/);
+  assert.doesNotMatch(profileSync, /updateProfileUiPreferenceRequest|saveProfileUiPreference|planningFilters:/);
+  assert.match(profileBoard, /onCurrentBoardSave/);
+  assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
+});
+
 test("driver tour waits for rendered targets and acknowledges only after popover render", async () => {
   const registry = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
   const selection = await readFile("src/features/product-tours/model/feature-tour-selection.ts", "utf8");
