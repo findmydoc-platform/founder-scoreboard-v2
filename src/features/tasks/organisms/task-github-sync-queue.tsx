@@ -1,6 +1,7 @@
 "use client";
 
 import { GitBranch, Link2, RefreshCw, X } from "lucide-react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskComment } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
@@ -32,7 +33,7 @@ function queueState(task: Task, hasIssue: boolean, hasOpenComments: boolean): Qu
 }
 
 function stateBadge(row: QueueRow) {
-  if (row.state === "missing") return <UiBadge tone="amber" size="xs">Kein Issue</UiBadge>;
+  if (row.state === "missing") return <UiBadge tone="amber" size="xs">Kein GitHub Issue</UiBadge>;
   if (row.state === "locked") return <UiBadge tone="amber" size="xs">gesperrt</UiBadge>;
   if (row.state === "running") return <UiBadge tone="amber" size="xs">läuft</UiBadge>;
   if (row.state === "failed") return <UiBadge tone="red" size="xs">fehlgeschlagen</UiBadge>;
@@ -59,7 +60,7 @@ export function TaskGitHubSyncQueue({
   githubInstallationAvailable: boolean;
   notice?: string;
   onClose: () => void;
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onSyncLinkedGitHubTasks: LinkedSyncCommand;
   onSyncTaskToGitHub: TaskSyncCommand;
 }) {
@@ -102,7 +103,7 @@ export function TaskGitHubSyncQueue({
                 GitHub-Sync
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                {linkedRows.length} offen · {failedRows.length} Fehler · {missingRows.length} ohne Issue
+                {linkedRows.length} offen · {failedRows.length} Fehler · {missingRows.length} ohne GitHub Issue
               </p>
             </div>
             <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="GitHub-Sync schließen">
@@ -112,7 +113,7 @@ export function TaskGitHubSyncQueue({
           <div className="mt-4 flex flex-wrap gap-2">
             <UiButton disabled={!canRunLinkedSync} onClick={() => onSyncLinkedGitHubTasks()} variant="primary">
               <RefreshCw size={15} />
-              Offene Issues syncen
+              Offene GitHub Issues syncen
             </UiButton>
             <UiButton disabled={!githubInstallationAvailable || pending || !failedRows.length} onClick={() => onSyncLinkedGitHubTasks({ onlyFailed: true })}>
               Fehler erneut versuchen
@@ -139,11 +140,17 @@ export function TaskGitHubSyncQueue({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     {stateBadge(row)}
-                    <span className="text-xs font-semibold text-slate-500">{row.hasIssue ? row.issueLabel : "Noch kein GitHub Issue"}</span>
+                    {row.hasIssue ? (
+                      <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} showIcon={false} className="text-xs font-semibold text-slate-500">
+                        {row.issueLabel}
+                      </TaskReferenceLink>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-500">Noch kein GitHub Issue</span>
+                    )}
                   </div>
-                  <button type="button" onClick={() => onOpenTask(row.task)} className="mt-1 block min-w-0 max-w-full truncate text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+                  <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} className="mt-1 max-w-full text-left text-sm font-semibold text-slate-950">
                     {row.task.title}
-                  </button>
+                  </TaskReferenceLink>
                   <p className="mt-1 line-clamp-1 text-xs text-slate-500">
                     {row.state === "locked"
                       ? "Sync läuft bereits."

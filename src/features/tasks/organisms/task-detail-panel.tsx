@@ -28,7 +28,10 @@ type Props = {
   pending: boolean;
   error?: string;
   githubInstallationAvailable: boolean;
+  previousTask?: Task | null;
+  onBack?: () => void;
   onClose: () => void;
+  onOpenTask: (taskId: string) => void;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
@@ -44,6 +47,7 @@ type Props = {
 
 export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
   const dialogRef = useModalDialog({ open: true, onClose });
+  const { previousTask, onBack, ...taskSurfaceProps } = surfaceProps;
 
   return (
     <>
@@ -53,10 +57,10 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
         aria-label="Detailpanel schließen"
         onClick={onClose}
       />
-      <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Aufgabendetails: ${surfaceProps.task.title}`} className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
-        <TaskDetailPanelHeader task={surfaceProps.task} onClose={onClose} />
+      <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="task-detail-panel-title" className="fixed inset-y-0 right-0 z-40 w-full max-w-[920px] overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
+        <TaskDetailPanelHeader task={taskSurfaceProps.task} previousTask={previousTask} onBack={onBack} onClose={onClose} />
         <div className="p-5">
-          <TaskDetailSurface {...surfaceProps} />
+          <TaskDetailSurface key={taskSurfaceProps.task.id} {...taskSurfaceProps} />
         </div>
       </aside>
     </>

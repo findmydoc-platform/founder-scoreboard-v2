@@ -4,15 +4,19 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
-import type { PlanningHeaderData } from "@/lib/types";
+import type { HeaderNotification, PlanningHeaderData } from "@/lib/types";
 
 type Props = {
   title: string;
   headerData: PlanningHeaderData;
   actions?: ReactNode;
+  notificationsOpen?: boolean;
+  onToggleNotifications?: () => void;
+  onOpenNotification?: (event: HeaderNotification) => void;
+  onDismissNotification?: (eventId: number) => void;
 };
 
-export function TaskDetailHeader({ title, headerData, actions }: Props) {
+export function TaskDetailHeader({ title, headerData, actions, notificationsOpen, onToggleNotifications, onOpenNotification, onDismissNotification }: Props) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
@@ -25,7 +29,13 @@ export function TaskDetailHeader({ title, headerData, actions }: Props) {
           <h1 className="mt-1 max-w-4xl text-2xl font-semibold tracking-tight text-slate-950">{title}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <PlanningHeaderDataActions headerData={headerData} />
+          <PlanningHeaderDataActions
+            headerData={headerData}
+            notificationsOpen={notificationsOpen}
+            onToggleNotifications={onToggleNotifications}
+            onOpenNotification={onOpenNotification}
+            onDismissNotification={onDismissNotification}
+          />
           {actions}
         </div>
       </div>

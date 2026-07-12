@@ -761,7 +761,7 @@ test("gantt uses sprint dates for scheduled tasks", async () => {
   const ganttUi = await readFile("src/features/tasks/organisms/gantt-view.tsx", "utf8");
 
   assert.match(ui, /<GanttView tasks=\{visibleTasks\} packages=\{data\.packages\} sprints=\{data\.sprints\}/);
-  assert.match(ganttUi, /export function GanttView\(\{ tasks, packages, sprints, relations, onOpen \}/);
+  assert.match(ganttUi, /export function GanttView\(\{ tasks, packages, sprints, relations, onOpenTask \}/);
   assert.match(ganttUi, /parseIsoDate\(sprint\?\.startDate \|\| ""\) \|\| parseIsoDate\(task\.startDate\)/);
   assert.match(ganttUi, /parseIsoDate\(sprint\?\.endDate \|\| ""\) \|\| parseIsoDate\(task\.endDate\)/);
 });

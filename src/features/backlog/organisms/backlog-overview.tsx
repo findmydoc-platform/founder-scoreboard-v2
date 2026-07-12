@@ -15,7 +15,7 @@ type BacklogOverviewProps = {
   apiClient: BrowserApiClient;
   canManageBacklog: boolean;
   data: PlanningData;
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;

@@ -1,4 +1,5 @@
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
@@ -17,7 +18,7 @@ type TaskTableViewProps = {
   blockers: TaskBlocker[];
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
 };
 
@@ -34,7 +35,7 @@ function attentionTone(signal: TaskAttentionSignal): TableRiskSignal["tone"] {
 }
 
 function githubRiskSignal(task: Task): TableRiskSignal | null {
-  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
+  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein GitHub Issue", tone: "amber" };
   if (task.githubIssueSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
   if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
   if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
@@ -115,9 +116,9 @@ export function TaskTableView({
             return (
               <DataRow key={task.id}>
                 <DataCell className="max-w-sm">
-                  <button type="button" onClick={() => onOpenTask(task)} className="inline-flex items-start gap-1.5 text-left font-semibold text-slate-900 hover:text-blue-700">
+                  <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="items-start text-left font-semibold text-slate-900">
                     <span>{task.title}</span>
-                  </button>
+                  </TaskReferenceLink>
                   <div className="mt-1 truncate text-xs text-slate-500">{task.workstream || "ohne Bereich"}</div>
                 </DataCell>
                 <DataCell>

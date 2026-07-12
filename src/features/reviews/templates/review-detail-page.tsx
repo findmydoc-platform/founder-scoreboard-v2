@@ -4,7 +4,7 @@ import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
 import { TaskReviewSheet } from "@/features/reviews/organisms/task-review-sheet";
 import { canActOnReview, isReviewRelevantTask } from "@/features/reviews/model/review-workspace-view-model";
-import type { PlanningData, PlanningHeaderData, Profile, Task } from "@/lib/types";
+import type { HeaderNotification, PlanningData, PlanningHeaderData, Profile, Task } from "@/lib/types";
 import { UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type Props = {
@@ -22,16 +22,21 @@ type Props = {
     comment?: string,
   ) => void;
   onReopen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
+  notificationsOpen: boolean;
+  onToggleNotifications: () => void;
+  onOpenNotification: (event: HeaderNotification) => void;
+  onDismissNotification: (eventId: number) => void;
 };
 
-export function ReviewDetailPage({ data, headerData, task, currentProfile, pending, source, onReview, onReopen }: Props) {
+export function ReviewDetailPage({ data, headerData, task, currentProfile, pending, source, onReview, onReopen, onOpenTask, notificationsOpen, onToggleNotifications, onOpenNotification, onDismissNotification }: Props) {
   if (!task || !isReviewRelevantTask(task, data)) {
     return (
       <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
         <AppSidebar activeWorkspace="reviews" source={source} currentPlatformRole={currentProfile?.platformRole || ""} />
         <div className="mx-auto max-w-4xl px-6 py-10">
           <div className="mb-4 flex justify-end">
-            <PlanningHeaderDataActions headerData={headerData} />
+            <PlanningHeaderDataActions headerData={headerData} notificationsOpen={notificationsOpen} onToggleNotifications={onToggleNotifications} onOpenNotification={onOpenNotification} onDismissNotification={onDismissNotification} />
           </div>
           <UiPanel padding="xl">
             <h1 className="text-lg font-semibold text-slate-950">Review nicht gefunden</h1>
@@ -60,7 +65,7 @@ export function ReviewDetailPage({ data, headerData, task, currentProfile, pendi
             <h1 className="mt-1 text-xl font-semibold text-slate-950">{task.title}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <PlanningHeaderDataActions headerData={headerData} />
+            <PlanningHeaderDataActions headerData={headerData} notificationsOpen={notificationsOpen} onToggleNotifications={onToggleNotifications} onOpenNotification={onOpenNotification} onDismissNotification={onDismissNotification} />
             <UiLinkButton href="/reviews">
               Zur Review-Zentrale
             </UiLinkButton>
@@ -74,6 +79,7 @@ export function ReviewDetailPage({ data, headerData, task, currentProfile, pendi
           pending={pending}
           onReview={onReview}
           onReopen={onReopen}
+          onOpenTask={onOpenTask}
         />
       </div>
     </main>

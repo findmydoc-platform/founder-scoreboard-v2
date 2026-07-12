@@ -8,6 +8,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
   const {
     addTaskComment,
     addTaskRelation,
+    backTaskPanel,
     closeTaskPanel,
     commentImportNotice,
     commentImportPendingTaskIds,
@@ -17,6 +18,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     importGitHubComments,
     initiativeDialogDefaults,
     isPending,
+    openTaskPanel,
     openReviewSheet,
     removeTaskRelation,
     reportTaskBlocker,
@@ -42,6 +44,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     uploadTaskAttachment,
     currentProfile,
     source,
+    taskPanelPreviousTask,
   } = controller;
 
   return (
@@ -57,8 +60,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
 
       {selectedTask && (
         <TaskDetailPanel
-          key={selectedTask.id}
           task={selectedTask}
+          previousTask={taskPanelPreviousTask}
           pack={selectedPackage}
           comments={selectedTaskComments}
           externalComments={selectedTaskExternalComments}
@@ -80,7 +83,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           error={controller.saveError}
           githubInstallationAvailable={controller.githubInstallationAvailable}
           commentImportPending={commentImportPendingTaskIds.has(selectedTask.id)}
+          onBack={taskPanelPreviousTask ? backTaskPanel : undefined}
           onClose={closeTaskPanel}
+          onOpenTask={(taskId) => openTaskPanel(taskId, "push")}
           onUpdate={(patch) => updateTask(selectedTask, patch)}
           onAddComment={(comment) => addTaskComment(selectedTask, comment)}
           onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}

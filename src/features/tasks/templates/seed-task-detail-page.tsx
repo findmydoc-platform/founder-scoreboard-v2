@@ -27,20 +27,8 @@ export function SeedTaskDetailPage({ taskId }: { taskId: string }) {
 
   return (
     <TaskDetailPage
-      task={task}
-      pack={data.packages.find((pack) => pack.id === task.packageId)}
-      packages={data.packages}
-      sprint={data.sprints.find((sprint) => sprint.id === task.sprintId)}
-      subIssues={data.tasks.filter((item) => item.parentTaskId === task.id)}
-      comments={data.taskComments.filter((comment) => comment.taskId === task.id)}
-      externalComments={data.taskExternalComments.filter((comment) => comment.taskId === task.id)}
-      activities={data.taskActivity.filter((activity) => activity.taskId === task.id)}
-      blockers={data.taskBlockers.filter((blocker) => blocker.taskId === task.id)}
-      taskRelations={data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id)}
-      allTasks={data.tasks}
-      profiles={data.profiles}
-      sprints={data.sprints}
-      milestones={data.milestones}
+      taskId={task.id}
+      initialData={data}
       headerData={emptyPlanningHeaderData}
       source="seed"
     />

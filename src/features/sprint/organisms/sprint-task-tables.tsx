@@ -1,4 +1,5 @@
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
 import { taskAssigneeLabel } from "@/lib/display";
@@ -18,7 +19,7 @@ export function SprintTaskTables({
   canReviewTask,
   reviewOwnerName,
   isSelfReview,
-  onOpen,
+  onOpenTask,
   onRequestReview,
   onChangeStatus,
   onAssignSprint,
@@ -33,7 +34,7 @@ export function SprintTaskTables({
   canReviewTask: (task: Task) => boolean;
   reviewOwnerName: (task: Task) => string;
   isSelfReview: (task: Task) => boolean;
-  onOpen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task) => void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
@@ -58,9 +59,9 @@ export function SprintTaskTables({
               {sprintTasks.map((task) => (
                 <DataRow key={task.id}>
                   <DataCell className="max-w-[360px] px-4">
-                    <button type="button" onClick={() => onOpen(task)} className="block max-w-full truncate text-left font-semibold text-slate-950 hover:text-blue-700">
+                    <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full text-left font-semibold text-slate-950">
                       <span className="truncate">{task.title}</span>
-                    </button>
+                    </TaskReferenceLink>
                   </DataCell>
                   <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
                   <DataCell>
@@ -134,9 +135,9 @@ export function SprintTaskTables({
                   return (
                     <DataRow key={task.id}>
                       <DataCell className="max-w-[420px] px-4">
-                        <button type="button" onClick={() => onOpen(task)} className="block truncate text-left font-semibold text-slate-950 hover:text-blue-700">
+                        <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full text-left font-semibold text-slate-950">
                           {task.title}
-                        </button>
+                        </TaskReferenceLink>
                         <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
                       </DataCell>
                       <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>

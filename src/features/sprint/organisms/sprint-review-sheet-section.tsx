@@ -18,6 +18,7 @@ export function SprintReviewSheetSection({
   pending,
   onReview,
   onReopen,
+  onOpenTask,
 }: {
   selectedReviewTask?: Task;
   reviewOwnerName: (task: Task) => string;
@@ -26,6 +27,7 @@ export function SprintReviewSheetSection({
   pending: boolean;
   onReview: (task: Task, reviewStatus: ReviewStatus, scorePoints: number, checklist?: ReviewChecklist, comment?: string) => void;
   onReopen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   if (!selectedReviewTask) return null;
 
@@ -38,6 +40,7 @@ export function SprintReviewSheetSection({
       pending={pending}
       onReview={onReview}
       onReopen={onReopen}
+      onOpenTask={onOpenTask}
     />
   );
 }

@@ -18,6 +18,8 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(route, /source === "seed"/);
   assert.match(detailDataRoute, /\["ceo", "founder", "deputy", "viewer"\]/);
   assert.match(page, /TaskDetailSurface/);
+  assert.match(page, /usePlanningAppController/);
+  assert.match(page, /PlanningOverlayLayer/);
   assert.match(panel, /TaskDetailSurface/);
   assert.equal((page.match(/<TaskDetailSurface/g) || []).length, 1);
   assert.equal((panel.match(/<TaskDetailSurface/g) || []).length, 1);
@@ -111,7 +113,8 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(projectsOverview, /InitiativeTreeItem/);
   assert.match(projectsOverview, /DeliverableTable/);
   assert.match(projectsOverview, /taskAssigneeLabel/);
-  assert.match(projectsOverview, /\/tasks\/\$\{encodeURIComponent\(task\.id\)\}/);
+  assert.match(projectsOverview, /TaskReferenceLink/);
+  assert.match(projectsOverview, /onOpenTask/);
   assert.match(display, /initiativeMetaLabel/);
   assert.match(ui, /Initiative/);
   assert.match(ui, /InitiativeDialog/);

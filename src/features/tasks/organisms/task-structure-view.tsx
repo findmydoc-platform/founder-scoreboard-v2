@@ -16,7 +16,7 @@ type TaskStructureViewProps = {
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
   ownerColorForTask: (task: Task) => string;
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   onTogglePackage: (packageId: string) => void;
   onSetAllPackageCollapse: (collapsed: boolean) => void;
@@ -82,7 +82,7 @@ export function TaskStructureView({
                       statusDisabled={!canUpdateStatus}
                       showStatus={false}
                       showStatusControl={false}
-                      onOpen={onOpenTask}
+                      onOpenTask={onOpenTask}
                       onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
                     />
                   );
