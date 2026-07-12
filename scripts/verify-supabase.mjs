@@ -329,6 +329,90 @@ async function verifyScoreObjectionRpc() {
   };
 }
 
+async function verifyTeamTaskIntakeRpcs() {
+  const tokenParams = {
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_label: "Verification",
+    p_token_hash: "a".repeat(64),
+    p_token_hint: "…verify",
+  };
+  const authParams = {
+    p_token_hash: "c".repeat(64),
+    p_scope: "read:task-context",
+  };
+  const revokeParams = {
+    p_token_id: randomUUID(),
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+  };
+  const batchParams = {
+    p_token_id: randomUUID(),
+    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_idempotency_key: randomUUID(),
+    p_request_hash: "b".repeat(64),
+    p_items: [{ taskType: "proposal", title: "Verification" }],
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const legacyTokenParams = {
+    ...tokenParams,
+    p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  };
+  const [token, anonToken, legacyToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch] = await Promise.all([
+    supabase.rpc("create_team_task_intake_token", tokenParams),
+    anonSupabase.rpc("create_team_task_intake_token", tokenParams),
+    supabase.rpc("create_team_task_intake_token", legacyTokenParams),
+    supabase.rpc("authenticate_team_task_intake_token", authParams),
+    anonSupabase.rpc("authenticate_team_task_intake_token", authParams),
+    supabase.rpc("revoke_team_task_intake_token", revokeParams),
+    anonSupabase.rpc("revoke_team_task_intake_token", revokeParams),
+    supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
+    anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
+  ]);
+
+  return [
+    {
+      name: "create_team_task_intake_token",
+      ok: token.error?.code === "P0002" && Boolean(anonToken.error) && legacyToken.error?.code === "PGRST202",
+      error: token.error?.code !== "P0002"
+        ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
+        : !anonToken.error
+          ? "token RPC unexpectedly allowed anonymous execution"
+          : legacyToken.error?.code !== "PGRST202"
+            ? legacyToken.error?.message || "legacy token RPC overload is still available"
+          : "",
+    },
+    {
+      name: "authenticate_team_task_intake_token",
+      ok: auth.error?.code === "P0004" && Boolean(anonAuth.error),
+      error: auth.error?.code !== "P0004"
+        ? auth.error?.message || "token auth RPC unexpectedly accepted an inactive token"
+        : !anonAuth.error
+          ? "token auth RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+    {
+      name: "revoke_team_task_intake_token",
+      ok: revoke.data === null && !revoke.error && Boolean(anonRevoke.error),
+      error: revoke.error
+        ? revoke.error.message
+        : revoke.data !== null
+          ? "token revoke RPC unexpectedly found a missing token"
+          : !anonRevoke.error
+            ? "token revoke RPC unexpectedly allowed anonymous execution"
+            : "",
+    },
+    {
+      name: "create_team_task_intake_batch_transaction",
+      ok: batch.error?.code === "P0004" && Boolean(anonBatch.error),
+      error: batch.error?.code !== "P0004"
+        ? batch.error?.message || "batch RPC unexpectedly accepted an inactive token"
+        : !anonBatch.error
+          ? "batch RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+  ];
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -380,6 +464,7 @@ const result = {
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
   scoreObjectionRpc: await verifyScoreObjectionRpc(),
+  teamTaskIntakeRpcs: await verifyTeamTaskIntakeRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -436,5 +521,11 @@ if (!result.taskReviewRpc.ok) {
 
 if (!result.scoreObjectionRpc.ok) {
   console.error(`Score objection RPC check failed: ${result.scoreObjectionRpc.error}`);
+  process.exit(1);
+}
+
+const missingTeamTaskIntakeRpc = result.teamTaskIntakeRpcs.find((check) => !check.ok);
+if (missingTeamTaskIntakeRpc) {
+  console.error(`Team Task Intake RPC check failed for ${missingTeamTaskIntakeRpc.name}: ${missingTeamTaskIntakeRpc.error}`);
   process.exit(1);
 }

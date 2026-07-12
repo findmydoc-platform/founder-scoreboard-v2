@@ -1,4 +1,4 @@
-import { Bell, LayoutDashboard, UserRound } from "lucide-react";
+import { Bell, KeyRound, LayoutDashboard, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ProfileSettingsSectionId } from "@/features/profile/model/profile-settings-view-model";
 import { classNames } from "@/shared/atoms/ui-primitives";
@@ -7,6 +7,7 @@ export const profileSettingsSections: Array<{ id: ProfileSettingsSectionId; labe
   { id: "profile", label: "Profil", description: "Identität, Fokus und Farbe", icon: <UserRound size={16} /> },
   { id: "notifications", label: "Benachrichtigungen", description: "Google-Chat-Hinweise", icon: <Bell size={16} /> },
   { id: "board", label: "Board", description: "Start und Ansicht", icon: <LayoutDashboard size={16} /> },
+  { id: "api", label: "API-Zugänge", description: "Persönliche Intake-Tokens", icon: <KeyRound size={16} /> },
 ];
 
 export function ProfileSettingsNavButton({
