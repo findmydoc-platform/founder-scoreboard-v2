@@ -1,17 +1,37 @@
 import { hasOpenWaitingRelation, isOperationalLeadRole } from "@/lib/platform";
+import { taskHasCriticalAttention } from "@/features/tasks/model/task-attention-signals";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile, Task } from "@/lib/types";
 
 export type ReviewStatusFilter = "open" | "completed" | "rework" | "blocked" | "all";
 export type ReviewOwnerFilter = "mine" | "all" | string;
 export type ReviewSort = "priority" | "title" | "assignee" | "owner" | "status" | "date";
+export type ReviewRiskFilter = "all" | "blocked" | "critical";
 
 export type ReviewWorkspaceFilters = {
   status: ReviewStatusFilter;
   owner: ReviewOwnerFilter;
-  query?: string;
-  sort?: ReviewSort;
-  direction?: "asc" | "desc";
+  query: string;
+  priority: string;
+  assignee: string;
+  risk: ReviewRiskFilter;
+  from: string;
+  to: string;
+  sort: ReviewSort;
+  direction: "asc" | "desc";
+};
+
+export const DEFAULT_REVIEW_FILTERS: ReviewWorkspaceFilters = {
+  status: "open",
+  owner: "all",
+  query: "",
+  priority: "Alle",
+  assignee: "Alle",
+  risk: "all",
+  from: "",
+  to: "",
+  sort: "priority",
+  direction: "asc",
 };
 
 export const reviewStatusFilterOptions: Array<{ value: ReviewStatusFilter; label: string }> = [
@@ -75,19 +95,25 @@ function taskMatchesOwner(task: Task, owner: ReviewOwnerFilter, currentProfile: 
 export function buildReviewWorkspaceViewModel({
   data,
   currentProfile,
-  filters,
+  filters: rawFilters,
 }: {
   data: PlanningData;
   currentProfile: Profile | null;
-  filters: ReviewWorkspaceFilters;
+  filters: Partial<ReviewWorkspaceFilters> & Pick<ReviewWorkspaceFilters, "status" | "owner">;
 }) {
+  const filters = { ...DEFAULT_REVIEW_FILTERS, ...rawFilters };
   const reviewTasks = data.tasks.filter((task) => isReviewRelevantTask(task, data));
-  const query = filters.query?.trim().toLocaleLowerCase("de") || "";
+  const query = filters.query.trim().toLocaleLowerCase("de");
   const direction = filters.direction === "desc" ? -1 : 1;
   const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || profileId || "";
   const visibleTasks = reviewTasks
     .filter((task) => taskMatchesStatus(task, data, filters.status))
     .filter((task) => taskMatchesOwner(task, filters.owner, currentProfile))
+    .filter((task) => filters.priority === "Alle" || task.priority === filters.priority)
+    .filter((task) => filters.assignee === "Alle" || task.assigneeId === filters.assignee || task.assignee === filters.assignee)
+    .filter((task) => filters.risk === "all" || filters.risk === "blocked" && isBlockedReviewTask(task, data) || filters.risk === "critical" && taskHasCriticalAttention(task, data))
+    .filter((task) => !filters.from || (task.reviewRequestedAt || task.deadline || "") >= filters.from)
+    .filter((task) => !filters.to || (task.reviewRequestedAt || task.deadline || "") <= filters.to)
     .filter((task) => !query || [task.title, task.description, task.assignee, profileName(task.reviewOwnerProfileId), task.priority, task.workstream].join(" ").toLocaleLowerCase("de").includes(query))
     .sort((left, right) => {
       if (filters.sort === "title") return direction * left.title.localeCompare(right.title, "de");

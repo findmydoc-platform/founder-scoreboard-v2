@@ -19,11 +19,13 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     dropTaskOnStatus,
     endTaskDrag,
     expandedPackages,
+    filters,
     filtersAvailable,
     openTaskPanel,
     selectedTaskId,
     setAllPackageCollapse,
     setDragOverStatus,
+    setFilters,
     setTaskDialogDefaults,
     startTaskDrag,
     togglePackageCollapse,
@@ -92,10 +94,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           relations={data.taskRelations}
           allTasks={data.tasks}
           blockers={data.taskBlockers}
+          filters={filters}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           onOpenTask={openTaskPanel}
           onUpdateTask={updateTask}
+          onFiltersChange={setFilters}
         />
       )}
 

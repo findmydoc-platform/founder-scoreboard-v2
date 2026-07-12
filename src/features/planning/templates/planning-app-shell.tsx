@@ -144,6 +144,8 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
             filters={filters}
             profiles={data.profiles}
             packages={data.packages}
+            sprints={data.sprints}
+            workstreams={Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={controller.visibleTasks.length}

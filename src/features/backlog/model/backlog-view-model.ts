@@ -3,7 +3,35 @@ import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
 
 export type BacklogScope = "all" | "proposals" | "ready" | "unscheduled";
-export type BacklogSort = "rank" | "priority" | "title" | "initiative" | "assignee";
+export type BacklogSort = "rank" | "priority" | "title" | "type" | "initiative" | "assignee" | "readiness" | "status";
+export type BacklogTypeFilter = "all" | "proposal" | "deliverable";
+export type BacklogReadinessFilter = "all" | "ready" | "incomplete";
+
+export type BacklogTableFilters = {
+  query: string;
+  scope: BacklogScope;
+  type: BacklogTypeFilter;
+  status: string;
+  readiness: BacklogReadinessFilter;
+  priority: string;
+  initiative: string;
+  assignee: string;
+  sort: BacklogSort;
+  direction: "asc" | "desc";
+};
+
+export const DEFAULT_BACKLOG_FILTERS: BacklogTableFilters = {
+  query: "",
+  scope: "all",
+  type: "all",
+  status: "Alle",
+  readiness: "all",
+  priority: "Alle",
+  initiative: "Alle",
+  assignee: "Alle",
+  sort: "rank",
+  direction: "asc",
+};
 
 export type BacklogReadinessChip = {
   id: "owner" | "initiative" | "sprint";
@@ -92,15 +120,38 @@ export function filterBacklogItemsByQuery(items: BacklogItem[], query: string) {
   ].join(" ").toLowerCase().includes(queryValue));
 }
 
-export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort) {
+export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direction: "asc" | "desc" = "asc") {
   const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
   return [...items].sort((left, right) => {
-    if (sort === "priority") return (priorityRank[left.task.priority] ?? 9) - (priorityRank[right.task.priority] ?? 9) || left.rank - right.rank;
-    if (sort === "title") return left.task.title.localeCompare(right.task.title, "de") || left.rank - right.rank;
-    if (sort === "initiative") return (left.initiative?.title || "").localeCompare(right.initiative?.title || "", "de") || left.rank - right.rank;
-    if (sort === "assignee") return (left.task.assignee || "").localeCompare(right.task.assignee || "", "de") || left.rank - right.rank;
-    return left.rank - right.rank;
+    let comparison = 0;
+    if (sort === "priority") comparison = (priorityRank[left.task.priority] ?? 9) - (priorityRank[right.task.priority] ?? 9);
+    else if (sort === "title") comparison = left.task.title.localeCompare(right.task.title, "de");
+    else if (sort === "type") comparison = Number(taskIsProposal(left.task)) - Number(taskIsProposal(right.task));
+    else if (sort === "initiative") comparison = (left.initiative?.title || "").localeCompare(right.initiative?.title || "", "de");
+    else if (sort === "assignee") comparison = (left.task.assignee || "").localeCompare(right.task.assignee || "", "de");
+    else if (sort === "readiness") comparison = Number(left.isReadyForSprint) - Number(right.isReadyForSprint);
+    else if (sort === "status") comparison = normalizeStatus(left.task.status).localeCompare(normalizeStatus(right.task.status), "de");
+    else comparison = left.rank - right.rank;
+    return (direction === "desc" ? -comparison : comparison) || left.rank - right.rank;
   });
+}
+
+export function filterBacklogItems(items: BacklogItem[], filters: BacklogTableFilters) {
+  return filterBacklogItemsByQuery(items, filters.query).filter((item) => {
+    const typeMatches = filters.type === "all" || filters.type === "proposal" && taskIsProposal(item.task) || filters.type === "deliverable" && !taskIsProposal(item.task);
+    const statusMatches = filters.status === "Alle" || normalizeStatus(item.task.status) === filters.status;
+    const readinessMatches = filters.readiness === "all" || filters.readiness === "ready" && item.isReadyForSprint || filters.readiness === "incomplete" && !item.isReadyForSprint;
+    const priorityMatches = filters.priority === "Alle" || item.task.priority === filters.priority;
+    const initiativeMatches = filters.initiative === "Alle" || item.task.packageId === filters.initiative;
+    const assigneeMatches = filters.assignee === "Alle" || item.task.assigneeId === filters.assignee || item.task.assignee === filters.assignee;
+    return typeMatches && statusMatches && readinessMatches && priorityMatches && initiativeMatches && assigneeMatches;
+  });
+}
+
+export function buildBacklogTableViewModel(data: PlanningData, filters: BacklogTableFilters) {
+  const workspace = buildBacklogViewModel(data, filters.scope);
+  const visibleItems = sortBacklogItems(filterBacklogItems(workspace.visibleItems, filters), filters.sort, filters.direction);
+  return { ...workspace, visibleItems };
 }
 
 function planningSprints(data: PlanningData) {

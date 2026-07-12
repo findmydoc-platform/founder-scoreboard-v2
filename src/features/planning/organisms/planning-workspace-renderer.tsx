@@ -59,9 +59,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     refreshPlanningData,
     apiClient,
     retryNotificationDelivery,
-    reviewOwnerFilter,
     reviewScoreObjection,
-    reviewStatusFilter,
     reviewTask,
     saveProfileSettings,
     saveOwnProfileSettings,
@@ -70,8 +68,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
-    setReviewOwnerFilter,
-    setReviewStatusFilter,
     setSprintPlanningOptions,
     sprintLockMessage,
     sprintPlanningOptions,
@@ -158,10 +154,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         <ReviewWorkspaceOverview
           data={data}
           currentProfile={currentProfile}
-          statusFilter={reviewStatusFilter}
-          ownerFilter={reviewOwnerFilter}
-          onStatusFilterChange={setReviewStatusFilter}
-          onOwnerFilterChange={setReviewOwnerFilter}
           onOpenTask={openTaskPanel}
         />
       )}

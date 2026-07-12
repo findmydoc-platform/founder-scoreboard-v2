@@ -45,6 +45,13 @@ export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilt
     priority: filters.priority || "Alle",
     packageId: filters.packageId || "Alle",
     quick: filters.quick || [],
+    sprintId: filters.sprintId || "Alle",
+    workstream: filters.workstream || "Alle",
+    risk: filters.risk || "Alle",
+    targetFrom: filters.targetFrom || "",
+    targetTo: filters.targetTo || "",
+    sort: filters.sort || "priority",
+    direction: filters.direction === "desc" ? "desc" : "asc",
   };
 }
 

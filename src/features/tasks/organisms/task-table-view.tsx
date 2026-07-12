@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
@@ -10,7 +11,9 @@ import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Profile, Sprint, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
-import { DataCell, DataEmptyRow, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead, SortableDataHeaderCell, type SortDirection } from "@/shared/molecules/data-surface";
+import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
+import { DataCell, DataColumnHeader, DataEmptyRow, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
+import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/model/task-table-view-model";
 
 type TaskTableViewProps = {
   visibleTasks: Task[];
@@ -19,10 +22,12 @@ type TaskTableViewProps = {
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
+  filters: PlanningFilters;
   canChangeTaskStatus: (task: Task) => boolean;
   statusOptionsForTask: (task: Task) => TaskStatus[];
   onOpenTask: (taskId: string) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
+  onFiltersChange: (filters: PlanningFilters) => void;
 };
 
 type TableRiskSignal = {
@@ -97,55 +102,36 @@ export function TaskTableView({
   relations,
   allTasks,
   blockers,
+  filters,
   canChangeTaskStatus,
   statusOptionsForTask,
   onOpenTask,
   onUpdateTask,
+  onFiltersChange,
 }: TaskTableViewProps) {
-  type SortKey = "title" | "status" | "assignee" | "priority" | "sprint" | "start" | "deadline";
-  const [sortKey, setSortKey] = useState<SortKey>("priority");
-  const [sortDirection, setSortDirection] = useState<Exclude<SortDirection, null>>("asc");
-  const sprintName = (task: Task) => sprints.find((sprint) => sprint.id === task.sprintId)?.name || "";
-  const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
-  const sortedTasks = [...visibleTasks].sort((left, right) => {
-    const values: Record<SortKey, [string | number, string | number]> = {
-      title: [left.title, right.title],
-      status: [normalizeStatus(left.status), normalizeStatus(right.status)],
-      assignee: [taskAssigneeOptions(left.taskType, profiles).find((option) => option.value === (left.assigneeId || left.assignee))?.label || left.assignee, taskAssigneeOptions(right.taskType, profiles).find((option) => option.value === (right.assigneeId || right.assignee))?.label || right.assignee],
-      priority: [priorityRank[left.priority] ?? 9, priorityRank[right.priority] ?? 9],
-      sprint: [sprintName(left), sprintName(right)],
-      start: [left.startDate || "", right.startDate || ""],
-      deadline: [left.deadline || left.endDate || "", right.deadline || right.endDate || ""],
-    };
-    const [leftValue, rightValue] = values[sortKey];
-    const comparison = typeof leftValue === "number" && typeof rightValue === "number"
-      ? leftValue - rightValue
-      : String(leftValue).localeCompare(String(rightValue), "de");
-    return (sortDirection === "asc" ? comparison : -comparison) || left.order - right.order;
-  });
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDirection((current) => current === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
-  };
-  const directionFor = (key: SortKey): SortDirection => sortKey === key ? sortDirection : null;
+  const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "deadline"];
+  const sortKey: TaskTableSort = sortKeys.includes(filters.sort as TaskTableSort) ? filters.sort as TaskTableSort : "priority";
+  const { rows: sortedTasks } = buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } });
+  const toggleSort = (key: TaskTableSort) => onFiltersChange({ ...filters, sort: key, direction: sortKey === key && filters.direction === "asc" ? "desc" : "asc" });
+  const directionFor = (key: TaskTableSort): SortDirection => sortKey === key ? filters.direction : null;
+  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))];
+  const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
+  const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority }));
+  const sprintOptions = [{ value: "Alle", label: "Alle Sprints" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))];
+  const riskOptions = [{ value: "Alle", label: "Alle Risiken" }, { value: "critical", label: "Kritisch" }, { value: "blocked", label: "Blockiert" }, { value: "evidence", label: "Evidence fehlt" }, { value: "github", label: "GitHub fehlt" }];
 
   return (
-    <DataSurface title="Aufgaben" description={`${visibleTasks.length} Treffer · sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`}>
-      <DataOverflow>
-        <DataTable minWidth={1040}>
+    <DataTableFrame title="Aufgaben" description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`} caption="Gefilterte Planungsaufgaben" results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]} filtering={{ mode: "external", labelledBy: "planning-data-filters" }} minWidth={1040}>
         <DataTableHead>
           <tr>
-            <SortableDataHeaderCell label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} />
-            <SortableDataHeaderCell label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} />
-            <SortableDataHeaderCell label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} />
-            <SortableDataHeaderCell label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} />
-            <SortableDataHeaderCell label="Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} />
-            <SortableDataHeaderCell label="Zeitraum" direction={directionFor("start")} onSort={() => toggleSort("start")} />
-            <SortableDataHeaderCell label="Zieltermin" direction={directionFor("deadline")} onSort={() => toggleSort("deadline")} />
-            <DataHeaderCell>Risiko</DataHeaderCell>
+            <DataColumnHeader label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
+            <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Aufgaben nach Status filtern" activeCount={filters.status === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, status: "Alle" })}><CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} options={statusOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Aufgaben nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => onFiltersChange({ ...filters, assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} filter={<ColumnFilterPopover label="Aufgaben nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ ...filters, priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} filter={<ColumnFilterPopover label="Aufgaben nach Sprint filtern" activeCount={filters.sprintId === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, sprintId: "Alle" })}><CustomSelect aria-label="Sprint wählen" value={filters.sprintId} onChange={(sprintId) => onFiltersChange({ ...filters, sprintId })} options={sprintOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Zeitraum" direction={directionFor("start")} onSort={() => toggleSort("start")} />
+            <DataColumnHeader label="Zieltermin" direction={directionFor("deadline")} onSort={() => toggleSort("deadline")} filter={<ColumnFilterPopover label="Aufgaben nach Zieltermin filtern" activeCount={(filters.targetFrom ? 1 : 0) + (filters.targetTo ? 1 : 0)} onReset={() => onFiltersChange({ ...filters, targetFrom: "", targetTo: "" })}><div className="grid gap-3"><CustomDatePicker aria-label="Zieltermin von" value={filters.targetFrom} onChange={(targetFrom) => onFiltersChange({ ...filters, targetFrom })} className="h-10" /><CustomDatePicker aria-label="Zieltermin bis" value={filters.targetTo} onChange={(targetTo) => onFiltersChange({ ...filters, targetTo })} className="h-10" /></div></ColumnFilterPopover>} />
+            <DataColumnHeader label="Risiko" filter={<ColumnFilterPopover label="Aufgaben nach Risiko filtern" activeCount={filters.risk === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, risk: "Alle" })}><CustomSelect aria-label="Risiko wählen" value={filters.risk} onChange={(risk) => onFiltersChange({ ...filters, risk })} options={riskOptions} className="h-10" /></ColumnFilterPopover>} />
           </tr>
         </DataTableHead>
         <tbody>
@@ -153,7 +139,7 @@ export function TaskTableView({
             const canUpdateStatus = canChangeTaskStatus(task);
             return (
               <DataRow key={task.id}>
-                <DataCell className="max-w-sm">
+                <DataCell className="max-w-sm" sticky>
                   <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="items-start text-left font-semibold text-slate-900">
                     <span>{task.title}</span>
                   </TaskReferenceLink>
@@ -186,12 +172,10 @@ export function TaskTableView({
           })}
           {!visibleTasks.length && (
             <DataEmptyRow colSpan={8}>
-              Keine Aufgaben in dieser Ansicht.
+              {allTasks.some((task) => task.taskType !== "sub_issue") ? "Keine Aufgaben für diese Filter." : "Noch keine Aufgaben vorhanden."}
             </DataEmptyRow>
           )}
         </tbody>
-        </DataTable>
-      </DataOverflow>
-    </DataSurface>
+    </DataTableFrame>
   );
 }

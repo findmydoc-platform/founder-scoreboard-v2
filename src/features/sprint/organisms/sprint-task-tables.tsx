@@ -10,11 +10,22 @@ import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
-import { DataCell, DataEmptyRow, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead } from "@/shared/molecules/data-surface";
+import { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS, type SprintTaskReviewFilter, type SprintTaskRiskFilter, type SprintTaskScoreFilter, type SprintTaskSort, type SprintTaskTableFilters } from "@/features/sprint/model/sprint-task-table-view-model";
+import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
+import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
+import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
 
-type SprintTaskRiskFilter = "all" | "github" | "carryover" | "outcome";
-type SprintTaskSort = "priority" | "title" | "status" | "assignee";
+const sprintTaskFilterSchema: TableUrlSchema<SprintTaskTableFilters> = {
+  query: stringUrlField(),
+  status: stringUrlField("Alle"),
+  assignee: stringUrlField("Alle"),
+  risk: enumUrlField("all", ["all", "github", "carryover", "outcome"] as const),
+  review: enumUrlField("all", ["all", "not_requested", "requested", "changes_requested", "accepted", "partial"] as const),
+  score: enumUrlField("all", ["all", "open", "final"] as const),
+  sort: enumUrlField("priority", ["priority", "title", "status", "assignee", "sprint", "score"] as const),
+  direction: enumUrlField("asc", ["asc", "desc"] as const),
+};
 
 export function SprintTaskTables({
   data,
@@ -47,84 +58,68 @@ export function SprintTaskTables({
   onAssignSprint: (task: Task, sprintId: string) => void;
   onSelectReviewTask: (taskId: string) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Alle");
-  const [assigneeFilter, setAssigneeFilter] = useState("Alle");
-  const [riskFilter, setRiskFilter] = useState<SprintTaskRiskFilter>("all");
-  const [sort, setSort] = useState<SprintTaskSort>("priority");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const normalizedQuery = query.trim().toLocaleLowerCase("de");
-  const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
-  const filterTasks = (tasks: Task[]) => tasks.filter((task) => {
-    const queryMatches = !normalizedQuery || [task.title, task.description, task.assignee, task.workstream, task.priority].join(" ").toLocaleLowerCase("de").includes(normalizedQuery);
-    const statusMatches = statusFilter === "Alle" || normalizeStatus(task.status) === statusFilter;
-    const assigneeMatches = assigneeFilter === "Alle" || task.assigneeId === assigneeFilter || task.assignee === assigneeFilter;
-    const riskMatches = riskFilter === "all"
-      || riskFilter === "github" && !hasGitHubIssue(task)
-      || riskFilter === "carryover" && Boolean(task.carriedFromSprintId)
-      || riskFilter === "outcome" && Boolean(task.sprintOutcome);
-    return queryMatches && statusMatches && assigneeMatches && riskMatches;
-  }).sort((left, right) => {
-    if (sort === "title") return left.title.localeCompare(right.title, "de");
-    if (sort === "status") return normalizeStatus(left.status).localeCompare(normalizeStatus(right.status), "de") || left.order - right.order;
-    if (sort === "assignee") return (left.assignee || "").localeCompare(right.assignee || "", "de") || left.order - right.order;
-    return (priorityRank[left.priority] ?? 9) - (priorityRank[right.priority] ?? 9) || left.order - right.order;
-  });
-  const visibleSprintTasks = filterTasks(sprintTasks);
-  const visibleOtherTasks = filterTasks(otherTasks);
+  const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "sprintTasks", schema: sprintTaskFilterSchema });
+  const visibleSprintTasks = buildSprintTaskTableRows(sprintTasks, data, filters);
+  const visibleOtherTasks = buildSprintTaskTableRows(otherTasks, data, filters);
+  const reviewLabels: Record<SprintTaskReviewFilter, string> = { all: "Alle Reviews", not_requested: "Nicht angefragt", requested: "Angefragt", changes_requested: "Nacharbeit", accepted: "Akzeptiert", partial: "Teilweise" };
+  const scoreLabels: Record<SprintTaskScoreFilter, string> = { all: "Alle Scores", open: "Score offen", final: "Score final" };
   const activeFilters: ActiveFilter[] = [
-    ...(statusFilter !== "Alle" ? [{ id: "status", label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter("Alle") }] : []),
-    ...(assigneeFilter !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${data.profiles.find((profile) => profile.id === assigneeFilter)?.name || assigneeFilter}`, onRemove: () => setAssigneeFilter("Alle") }] : []),
-    ...(riskFilter !== "all" ? [{ id: "risk", label: `Risiko: ${riskFilter === "github" ? "GitHub fehlt" : riskFilter === "carryover" ? "Carry-over" : "Sprint-Ergebnis"}`, onRemove: () => setRiskFilter("all") }] : []),
-    ...(sort !== "priority" ? [{ id: "sort", label: `Sortierung: ${sort === "title" ? "Titel" : sort === "status" ? "Status" : "Zuständigkeit"}`, onRemove: () => setSort("priority") }] : []),
+    ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => updateFilters({ status: "Alle" }) }] : []),
+    ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${data.profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee}`, onRemove: () => updateFilters({ assignee: "Alle" }) }] : []),
+    ...(filters.risk !== "all" ? [{ id: "risk", label: `Risiko: ${filters.risk === "github" ? "GitHub fehlt" : filters.risk === "carryover" ? "Carry-over" : "Sprint-Ergebnis"}`, onRemove: () => updateFilters({ risk: "all" }) }] : []),
+    ...(filters.review !== "all" ? [{ id: "review", label: `Review: ${reviewLabels[filters.review]}`, onRemove: () => updateFilters({ review: "all" }) }] : []),
+    ...(filters.score !== "all" ? [{ id: "score", label: scoreLabels[filters.score], onRemove: () => updateFilters({ score: "all" }) }] : []),
   ];
-  const resetFilters = () => {
-    setQuery("");
-    setStatusFilter("Alle");
-    setAssigneeFilter("Alle");
-    setRiskFilter("all");
-    setSort("priority");
-  };
+  const toggleSort = (sort: SprintTaskSort) => updateFilters({ sort, direction: filters.sort === sort && filters.direction === "asc" ? "desc" : "asc" });
+  const directionFor = (sort: SprintTaskSort): SortDirection => filters.sort === sort ? filters.direction : null;
+  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
+  const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
+  const riskOptions = [{ value: "all", label: "Alle Risiken" }, { value: "github", label: "GitHub fehlt" }, { value: "carryover", label: "Carry-over" }, { value: "outcome", label: "Sprint-Ergebnis gesetzt" }];
+  const reviewOptions = (Object.keys(reviewLabels) as SprintTaskReviewFilter[]).map((value) => ({ value, label: reviewLabels[value] }));
+  const scoreOptions = (Object.keys(scoreLabels) as SprintTaskScoreFilter[]).map((value) => ({ value, label: scoreLabels[value] }));
 
   return (
     <>
       <FilterToolbar
         searchLabel="Sprint-Aufgaben durchsuchen"
         searchPlaceholder="Aufgabe, Bereich oder Zuständigkeit suchen"
-        query={query}
-        onQueryChange={setQuery}
+        query={filters.query}
+        onQueryChange={(query) => updateFilters({ query }, "replace")}
         expanded={filtersOpen}
         onExpandedChange={setFiltersOpen}
         activeFilters={activeFilters}
+        isDirty={JSON.stringify(filters) !== JSON.stringify(DEFAULT_SPRINT_TASK_FILTERS)}
         onReset={resetFilters}
-        visibleCount={visibleSprintTasks.length}
-        totalCount={sprintTasks.length}
+        results={[
+          { id: "sprint", label: "Sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length },
+          { id: "other", label: "Andere", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length },
+        ]}
         panelId="sprint-task-filters"
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <FilterField label="Status"><CustomSelect aria-label="Sprint-Aufgaben nach Status filtern" value={statusFilter} onChange={setStatusFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Status" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} /></FilterField>
-          <FilterField label="Zuständig"><CustomSelect aria-label="Sprint-Aufgaben nach Zuständigkeit filtern" value={assigneeFilter} onChange={setAssigneeFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))]} /></FilterField>
-          <FilterField label="Risiko"><CustomSelect aria-label="Sprint-Aufgaben nach Risiko filtern" value={riskFilter} onChange={(value) => setRiskFilter(value as SprintTaskRiskFilter)} className="h-10 text-sm" options={[{ value: "all", label: "Alle Risiken" }, { value: "github", label: "GitHub fehlt" }, { value: "carryover", label: "Carry-over" }, { value: "outcome", label: "Sprint-Ergebnis gesetzt" }]} /></FilterField>
-          <FilterField label="Sortierung"><CustomSelect aria-label="Sprint-Aufgaben sortieren" value={sort} onChange={(value) => setSort(value as SprintTaskSort)} className="h-10 text-sm" options={[{ value: "priority", label: "Priorität" }, { value: "title", label: "Titel" }, { value: "status", label: "Status" }, { value: "assignee", label: "Zuständigkeit" }]} /></FilterField>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <FilterField label="Status"><CustomSelect aria-label="Sprint-Aufgaben nach Status filtern" value={filters.status} onChange={(status) => updateFilters({ status })} className="h-10 text-sm" options={statusOptions} /></FilterField>
+          <FilterField label="Zuständig"><CustomSelect aria-label="Sprint-Aufgaben nach Zuständigkeit filtern" value={filters.assignee} onChange={(assignee) => updateFilters({ assignee })} className="h-10 text-sm" options={assigneeOptions} /></FilterField>
+          <FilterField label="Risiko"><CustomSelect aria-label="Sprint-Aufgaben nach Risiko filtern" value={filters.risk} onChange={(risk) => updateFilters({ risk: risk as SprintTaskRiskFilter })} className="h-10 text-sm" options={riskOptions} /></FilterField>
+          <FilterField label="Review"><CustomSelect aria-label="Sprint-Aufgaben nach Review filtern" value={filters.review} onChange={(review) => updateFilters({ review: review as SprintTaskReviewFilter })} className="h-10 text-sm" options={reviewOptions} /></FilterField>
+          <FilterField label="Score"><CustomSelect aria-label="Sprint-Aufgaben nach Score filtern" value={filters.score} onChange={(score) => updateFilters({ score: score as SprintTaskScoreFilter })} className="h-10 text-sm" options={scoreOptions} /></FilterField>
         </div>
       </FilterToolbar>
-      <DataSurface title="Sprint-Aufgaben">
-        <DataOverflow>
-          <DataTable minWidth={940}>
+      <DataTableFrame title="Sprint-Aufgaben" caption="Aufgaben im ausgewählten Sprint" results={[{ id: "sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length }]} filtering={{ mode: "external", labelledBy: "sprint-task-filters" }} minWidth={940}>
             <DataTableHead>
               <tr>
-                <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                <DataHeaderCell>Zuständig</DataHeaderCell>
-                <DataHeaderCell>Status / Review</DataHeaderCell>
-                <DataHeaderCell>Score</DataHeaderCell>
-                <DataHeaderCell>Risiko</DataHeaderCell>
+                <DataColumnHeader className="px-4" label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
+                <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Sprint-Aufgaben nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => updateFilters({ assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => updateFilters({ assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
+                <DataColumnHeader label="Status / Review" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Sprint-Aufgaben nach Status und Review filtern" activeCount={(filters.status === "Alle" ? 0 : 1) + (filters.review === "all" ? 0 : 1)} onReset={() => updateFilters({ status: "Alle", review: "all" })}><div className="grid gap-3"><CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => updateFilters({ status })} options={statusOptions} className="h-10" /><CustomSelect aria-label="Review wählen" value={filters.review} onChange={(review) => updateFilters({ review: review as SprintTaskReviewFilter })} options={reviewOptions} className="h-10" /></div></ColumnFilterPopover>} />
+                <DataColumnHeader label="Score" direction={directionFor("score")} onSort={() => toggleSort("score")} filter={<ColumnFilterPopover label="Sprint-Aufgaben nach Score filtern" activeCount={filters.score === "all" ? 0 : 1} onReset={() => updateFilters({ score: "all" })}><CustomSelect aria-label="Score wählen" value={filters.score} onChange={(score) => updateFilters({ score: score as SprintTaskScoreFilter })} options={scoreOptions} className="h-10" /></ColumnFilterPopover>} />
+                <DataColumnHeader label="Risiko" filter={<ColumnFilterPopover label="Sprint-Aufgaben nach Risiko filtern" activeCount={filters.risk === "all" ? 0 : 1} onReset={() => updateFilters({ risk: "all" })}><CustomSelect aria-label="Risiko wählen" value={filters.risk} onChange={(risk) => updateFilters({ risk: risk as SprintTaskRiskFilter })} options={riskOptions} className="h-10" /></ColumnFilterPopover>} />
                 <DataHeaderCell>Nächster Schritt</DataHeaderCell>
               </tr>
             </DataTableHead>
             <tbody>
               {visibleSprintTasks.map((task) => (
                 <DataRow key={task.id}>
-                  <DataCell className="max-w-[360px] px-4">
+                  <DataCell className="max-w-[360px] px-4" sticky>
                     <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full text-left font-semibold text-slate-950">
                       <span className="truncate">{task.title}</span>
                     </TaskReferenceLink>
@@ -175,23 +170,19 @@ export function SprintTaskTables({
               ))}
               {!visibleSprintTasks.length && (
                 <DataEmptyRow colSpan={6}>
-                  Keine Sprint-Aufgaben für diese Filter.
+                  {sprintTasks.length ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}
                 </DataEmptyRow>
               )}
             </tbody>
-          </DataTable>
-        </DataOverflow>
-      </DataSurface>
+      </DataTableFrame>
 
       {otherTasks.length > 0 && (
-        <DataSurface title="Backlog und andere Sprints" description="Nicht im ausgewählten Sprint.">
-          <DataOverflow>
-            <DataTable minWidth={840}>
+        <DataTableFrame title="Backlog und andere Sprints" description="Nicht im ausgewählten Sprint." caption="Aufgaben außerhalb des ausgewählten Sprints" results={[{ id: "other", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length }]} filtering={{ mode: "external", labelledBy: "sprint-task-filters" }} minWidth={840}>
               <DataTableHead>
                 <tr>
-                  <DataHeaderCell className="px-4">Aufgabe</DataHeaderCell>
-                  <DataHeaderCell>Zuständig</DataHeaderCell>
-                  <DataHeaderCell>Aktueller Sprint</DataHeaderCell>
+                  <DataColumnHeader className="px-4" label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
+                  <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Andere Aufgaben nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => updateFilters({ assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => updateFilters({ assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
+                  <DataColumnHeader label="Aktueller Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} />
                   <DataHeaderCell>Zuweisung</DataHeaderCell>
                 </tr>
               </DataTableHead>
@@ -200,7 +191,7 @@ export function SprintTaskTables({
                   const currentSprint = data.sprints.find((item) => item.id === task.sprintId);
                   return (
                     <DataRow key={task.id}>
-                      <DataCell className="max-w-[420px] px-4">
+                      <DataCell className="max-w-[420px] px-4" sticky>
                         <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full text-left font-semibold text-slate-950">
                           {task.title}
                         </TaskReferenceLink>
@@ -214,11 +205,9 @@ export function SprintTaskTables({
                     </DataRow>
                   );
                 })}
-                {!visibleOtherTasks.length && <DataEmptyRow colSpan={4}>Keine Aufgaben aus anderen Sprints für diese Filter.</DataEmptyRow>}
+                {!visibleOtherTasks.length && <DataEmptyRow colSpan={4}>{otherTasks.length ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</DataEmptyRow>}
               </tbody>
-            </DataTable>
-          </DataOverflow>
-        </DataSurface>
+        </DataTableFrame>
       )}
     </>
   );

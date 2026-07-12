@@ -2,10 +2,14 @@
 
 import { Fragment, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
+import { buildSprintAttendanceTableViewModel, DEFAULT_SPRINT_ATTENDANCE_FILTERS, type SprintAttendanceSignalFilter, type SprintAttendanceSort, type SprintAttendanceTableFilters } from "@/features/sprint/model/sprint-attendance-table-view-model";
 import { roleLabel } from "@/lib/platform";
 import type { Meeting, MeetingAttendance, MeetingAttendanceStatus, PlanningData, Profile } from "@/lib/types";
-import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
-import { DataCell, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead } from "@/shared/molecules/data-surface";
+import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
+import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
+import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
+import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
+import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
 
 const attendanceStatusLabels: Record<MeetingAttendanceStatus, string> = {
   pending: "Offen",
@@ -22,6 +26,17 @@ function attendanceStatusTone(status: MeetingAttendanceStatus) {
   if (status === "unexcused" || status === "no_show") return "red";
   return "slate";
 }
+
+const attendanceFilterSchema: TableUrlSchema<SprintAttendanceTableFilters> = {
+  query: stringUrlField(),
+  founder: stringUrlField("all"),
+  meeting: stringUrlField("all"),
+  status: enumUrlField("all", ["all", "pending", "present", "excused", "late_excused", "unexcused", "no_show"] as const),
+  signal: enumUrlField("all", ["all", "missing_update", "open_reason"] as const),
+  points: enumUrlField("all", ["all", "0", "1", "2"] as const),
+  sort: enumUrlField("meeting", ["founder", "meeting", "status", "points"] as const),
+  direction: enumUrlField("asc", ["asc", "desc"] as const),
+};
 
 export function SprintMeetingAttendanceSection({
   data,
@@ -40,41 +55,73 @@ export function SprintMeetingAttendanceSection({
 }) {
   const sprintMeetings = meetings.slice(0, 2);
   const [activeRowKey, setActiveRowKey] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "weekly", schema: attendanceFilterSchema });
+  const { visibleRows, totalCount } = buildSprintAttendanceTableViewModel({ data, meetings: sprintMeetings, filters });
+  const signalLabels: Record<SprintAttendanceSignalFilter, string> = { all: "Alle Hinweise", missing_update: "Update fehlt", open_reason: "Grund offen" };
+  const activeFilters: ActiveFilter[] = [
+    ...(filters.founder !== "all" ? [{ id: "founder", label: `Founder: ${data.profiles.find((profile) => profile.id === filters.founder)?.name || filters.founder}`, onRemove: () => updateFilters({ founder: "all" }) }] : []),
+    ...(filters.meeting !== "all" ? [{ id: "meeting", label: `Weekly: ${sprintMeetings.find((meeting) => String(meeting.id) === filters.meeting)?.title || filters.meeting}`, onRemove: () => updateFilters({ meeting: "all" }) }] : []),
+    ...(filters.status !== "all" ? [{ id: "status", label: `Status: ${attendanceStatusLabels[filters.status]}`, onRemove: () => updateFilters({ status: "all" }) }] : []),
+    ...(filters.signal !== "all" ? [{ id: "signal", label: signalLabels[filters.signal], onRemove: () => updateFilters({ signal: "all" }) }] : []),
+    ...(filters.points !== "all" ? [{ id: "points", label: `Punkte: ${filters.points}`, onRemove: () => updateFilters({ points: "all" }) }] : []),
+  ];
+  const toggleSort = (sort: SprintAttendanceSort) => updateFilters({ sort, direction: filters.sort === sort && filters.direction === "asc" ? "desc" : "asc" });
+  const directionFor = (sort: SprintAttendanceSort): SortDirection => filters.sort === sort ? filters.direction : null;
+  const founderOptions = [{ value: "all", label: "Alle Founder" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
+  const meetingOptions = [{ value: "all", label: "Alle Weeklys" }, ...sprintMeetings.map((meeting) => ({ value: String(meeting.id), label: meeting.title }))];
+  const statusFilterOptions = [{ value: "all", label: "Alle Status" }, ...Object.entries(attendanceStatusLabels).map(([value, label]) => ({ value, label }))];
+  const signalOptions = (Object.keys(signalLabels) as SprintAttendanceSignalFilter[]).map((value) => ({ value, label: signalLabels[value] }));
+  const pointsOptions = [{ value: "all", label: "Alle Punkte" }, ...[0, 1, 2].map((point) => ({ value: String(point), label: `${point} Punkte` }))];
+  const toolbar = (
+    <FilterToolbar
+      variant="embedded"
+      density="compact"
+      searchLabel="Weekly Updates durchsuchen"
+      searchPlaceholder="Founder, Weekly oder Update suchen"
+      query={filters.query}
+      onQueryChange={(query) => updateFilters({ query }, "replace")}
+      expanded={filtersOpen}
+      onExpandedChange={setFiltersOpen}
+      activeFilters={activeFilters}
+      isDirty={JSON.stringify(filters) !== JSON.stringify(DEFAULT_SPRINT_ATTENDANCE_FILTERS)}
+      onReset={resetFilters}
+      results={[{ id: "weekly", visibleCount: visibleRows.length, totalCount }]}
+      panelId="weekly-table-filters"
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <FilterField label="Founder"><CustomSelect aria-label="Weekly Updates nach Founder filtern" value={filters.founder} onChange={(founder) => updateFilters({ founder })} options={founderOptions} className="h-10 text-sm" /></FilterField>
+        <FilterField label="Weekly"><CustomSelect aria-label="Weekly Updates nach Termin filtern" value={filters.meeting} onChange={(meeting) => updateFilters({ meeting })} options={meetingOptions} className="h-10 text-sm" /></FilterField>
+        <FilterField label="Status"><CustomSelect aria-label="Weekly Updates nach Status filtern" value={filters.status} onChange={(status) => updateFilters({ status: status as SprintAttendanceTableFilters["status"] })} options={statusFilterOptions} className="h-10 text-sm" /></FilterField>
+        <FilterField label="Hinweis"><CustomSelect aria-label="Weekly Updates nach Hinweis filtern" value={filters.signal} onChange={(signal) => updateFilters({ signal: signal as SprintAttendanceSignalFilter })} options={signalOptions} className="h-10 text-sm" /></FilterField>
+        <FilterField label="Punkte"><CustomSelect aria-label="Weekly Updates nach Punkten filtern" value={filters.points} onChange={(points) => updateFilters({ points: points as SprintAttendanceTableFilters["points"] })} options={pointsOptions} className="h-10 text-sm" /></FilterField>
+      </div>
+    </FilterToolbar>
+  );
 
   return (
-    <DataSurface
+    <DataTableFrame
       title="Weekly Updates"
       description={sprintMeetings.length ? `${sprintMeetings.length}/2 Weeklys im Sprint` : "Noch kein Weekly für diesen Sprint angelegt."}
+      caption="Weekly-Teilnahme und Updates nach Founder"
+      results={[{ id: "weekly", visibleCount: visibleRows.length, totalCount }]}
+      filtering={{ mode: "embedded", toolbar }}
+      minWidth={900}
       actions={<UiBadge tone="white" size="md">max. 2 je Weekly, 4 je Sprint</UiBadge>}
     >
       {sprintMeetings.length ? (
-        <DataOverflow>
-          <DataTable minWidth={900}>
+        <>
             <DataTableHead>
               <tr>
-                <DataHeaderCell className="px-4">Founder</DataHeaderCell>
-                <DataHeaderCell>Status</DataHeaderCell>
-                <DataHeaderCell>Update</DataHeaderCell>
-                <DataHeaderCell>Punkte</DataHeaderCell>
+                <DataColumnHeader className="px-4" label="Founder" direction={directionFor("founder")} onSort={() => toggleSort("founder")} sticky filter={<ColumnFilterPopover label="Nach Founder filtern" activeCount={filters.founder === "all" ? 0 : 1} onReset={() => updateFilters({ founder: "all" })}><CustomSelect aria-label="Founder wählen" value={filters.founder} onChange={(founder) => updateFilters({ founder })} options={founderOptions} className="h-10" /></ColumnFilterPopover>} />
+                <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Nach Anwesenheitsstatus filtern" activeCount={filters.status === "all" ? 0 : 1} onReset={() => updateFilters({ status: "all" })}><CustomSelect aria-label="Anwesenheitsstatus wählen" value={filters.status} onChange={(status) => updateFilters({ status: status as SprintAttendanceTableFilters["status"] })} options={statusFilterOptions} className="h-10" /></ColumnFilterPopover>} />
+                <DataColumnHeader label="Update" filter={<ColumnFilterPopover label="Nach Update-Hinweis filtern" activeCount={filters.signal === "all" ? 0 : 1} onReset={() => updateFilters({ signal: "all" })}><CustomSelect aria-label="Update-Hinweis wählen" value={filters.signal} onChange={(signal) => updateFilters({ signal: signal as SprintAttendanceSignalFilter })} options={signalOptions} className="h-10" /></ColumnFilterPopover>} />
+                <DataColumnHeader label="Punkte" direction={directionFor("points")} onSort={() => toggleSort("points")} filter={<ColumnFilterPopover label="Nach Punkten filtern" activeCount={filters.points === "all" ? 0 : 1} onReset={() => updateFilters({ points: "all" })}><CustomSelect aria-label="Punkte wählen" value={filters.points} onChange={(points) => updateFilters({ points: points as SprintAttendanceTableFilters["points"] })} options={pointsOptions} className="h-10" /></ColumnFilterPopover>} />
                 <DataHeaderCell>Aktion</DataHeaderCell>
               </tr>
             </DataTableHead>
             <tbody>
-              {sprintMeetings.flatMap((meeting) => data.profiles.map((profile) => {
-                const rowKey = `${meeting.id}-${profile.id}`;
-                const existing = data.meetingAttendance.find((item) => item.meetingId === meeting.id && item.profileId === profile.id);
-                const attendance: MeetingAttendance = existing || {
-                  id: 0,
-                  meetingId: meeting.id,
-                  profileId: profile.id,
-                  status: "pending",
-                  absenceReason: "",
-                  reasonAccepted: false,
-                  writtenUpdate: "",
-                  points: 0,
-                  createdAt: "",
-                  updatedAt: "",
-                };
+              {visibleRows.map(({ rowKey, meeting, profile, attendance }) => {
                 const patchAttendance = (patch: Partial<MeetingAttendance>) => onUpdateMeetingAttendance(meeting, { ...attendance, ...patch, updatedAt: new Date().toISOString() });
                 const canEditAttendanceRow = canManageSprint || currentProfile?.id === profile.id;
                 const canScoreAttendance = canManageSprint;
@@ -98,7 +145,7 @@ export function SprintMeetingAttendanceSection({
                 return (
                   <Fragment key={rowKey}>
                     <DataRow>
-                      <DataCell className="px-4">
+                      <DataCell className="px-4" sticky>
                         <div className="font-semibold text-slate-950">{profile.name}</div>
                         <div className="text-xs text-slate-500">{meeting.title} · {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(meeting.meetingAt))}</div>
                         <div className="text-xs text-slate-500">
@@ -182,13 +229,13 @@ export function SprintMeetingAttendanceSection({
                     )}
                   </Fragment>
                 );
-              }))}
+              })}
+              {!visibleRows.length && <DataEmptyRow colSpan={5}>{totalCount ? "Keine Weekly Updates für diese Filter." : "Noch keine Weekly Updates vorhanden."}</DataEmptyRow>}
             </tbody>
-          </DataTable>
-        </DataOverflow>
+        </>
       ) : (
-        <UiEmptyState className="m-4">Pro Sprint werden zwei Weekly-Einträge angelegt.</UiEmptyState>
+        <tbody><DataEmptyRow colSpan={5}>Pro Sprint werden zwei Weekly-Einträge angelegt.</DataEmptyRow></tbody>
       )}
-    </DataSurface>
+    </DataTableFrame>
   );
 }
