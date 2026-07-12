@@ -31,11 +31,19 @@ export default async function TaskPage({ params }: Props) {
     authUser = auth.user;
   }
 
-  const { availability, data, headerData, source } = await getPlanningData(taskDetailPageDataScope, {
+  const supabase = getServerSupabase();
+  const planningDataPromise = getPlanningData(taskDetailPageDataScope, {
     workspace: "planning",
     currentProfileId: authProfile?.id || null,
     platformRole: authProfile?.platformRole || null,
   });
+  const taskDetailPromise = supabase
+    ? loadTaskDetailData(supabase, id)
+    : Promise.resolve({ ok: true as const, data: emptyTaskDetailData });
+  const [
+    { availability, data, headerData, source },
+    taskDetailResult,
+  ] = await Promise.all([planningDataPromise, taskDetailPromise]);
   if (availability === "unavailable") {
     return <PlanningDataUnavailablePage workspace="planning" />;
   }
@@ -44,8 +52,6 @@ export default async function TaskPage({ params }: Props) {
   if (!task && source === "seed") return <SeedTaskDetailPage taskId={id} />;
   if (!task) notFound();
 
-  const supabase = getServerSupabase();
-  const taskDetailResult = supabase ? await loadTaskDetailData(supabase, id) : { ok: true as const, data: emptyTaskDetailData };
   if (!taskDetailResult.ok && taskDetailResult.status === 404) notFound();
   const taskDetailData = taskDetailResult.ok ? taskDetailResult.data : emptyTaskDetailData;
   const initialData = mergeTaskDetailData(data, id, taskDetailData);

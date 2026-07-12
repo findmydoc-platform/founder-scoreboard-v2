@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { driver } from "driver.js";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { featureTours } from "@/features/product-tours/model/feature-tour-registry";
+import {
+  shouldReleaseFeatureTourClaim,
+  type FeatureTourRunClaim,
+} from "@/features/product-tours/model/feature-tour-run-state";
 import { selectNextFeatureTour } from "@/features/product-tours/model/feature-tour-selection";
 
 type FeatureTourProviderProps = {
@@ -18,6 +21,11 @@ type FeatureTourProviderProps = {
   source: "seed" | "supabase";
   workspace: AppWorkspace;
 };
+
+type TourStatus = {
+  kind: "error" | "loading";
+  message: string;
+} | null;
 
 function waitForElement(selector: string, timeoutMs = 8000) {
   const existing = document.querySelector(selector);
@@ -69,23 +77,52 @@ export function FeatureTourProvider({
     return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
   }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
   const [tourRequested, setTourRequested] = useState(false);
+  const [tourStatus, setTourStatus] = useState<TourStatus>(null);
   const startedTourRef = useRef("");
 
   useEffect(() => {
-    const startFeatureTour = () => setTourRequested(true);
+    const startFeatureTour = () => {
+      if (!tour) {
+        setTourRequested(false);
+        setTourStatus({ kind: "error", message: "Keine neue Hilfe-Tour verfügbar." });
+        return;
+      }
+      if (startedTourRef.current === tour.id) return;
+      setTourStatus({ kind: "loading", message: "Hilfe-Tour wird vorbereitet …" });
+      setTourRequested(true);
+    };
     window.addEventListener("fmd:start-feature-tour", startFeatureTour);
     return () => window.removeEventListener("fmd:start-feature-tour", startFeatureTour);
-  }, []);
+  }, [tour]);
+
+  useEffect(() => {
+    if (tourStatus?.kind !== "error") return;
+    const timeout = window.setTimeout(() => setTourStatus(null), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [tourStatus]);
 
   useEffect(() => {
     if (!tourRequested || !tour || !currentProfile || startedTourRef.current === tour.id) return;
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
+    const run: FeatureTourRunClaim = {
+      driverStarted: false,
+      tourId: activeTour.id,
+    };
     startedTourRef.current = activeTour.id;
 
+    const runIsActive = () => active;
+
+    const failTour = (message: string) => {
+      if (!runIsActive()) return;
+      if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+      setTourRequested(false);
+      setTourStatus({ kind: "error", message });
+    };
+
     const markSeen = async () => {
-      if (seenMarked || !active) return;
+      if (seenMarked || !runIsActive()) return;
       seenMarked = true;
       if (source !== "supabase") {
         setData((current) => upsertAcknowledgement(current, {
@@ -107,22 +144,24 @@ export function FeatureTourProvider({
       }
 
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
-      if (!active || !trigger) {
-        startedTourRef.current = "";
-        setTourRequested(false);
+      if (!runIsActive()) return;
+      if (!trigger) {
+        failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
         return;
       }
 
       if (activeTour.openAccountMenu) {
         window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
         const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
-        if (!active || !menuItem) {
-          startedTourRef.current = "";
-          setTourRequested(false);
+        if (!runIsActive()) return;
+        if (!menuItem) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
           return;
         }
       }
 
+      const { driver } = await import("driver.js");
+      if (!runIsActive()) return;
       const driverObject = driver({
         allowClose: true,
         animate: true,
@@ -133,6 +172,9 @@ export function FeatureTourProvider({
         showProgress: true,
         stagePadding: 6,
         stageRadius: 8,
+        onDestroyed: () => {
+          if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+        },
         steps: activeTour.steps.map((step, index) => ({
           ...step,
           popover: {
@@ -150,19 +192,44 @@ export function FeatureTourProvider({
         })),
       });
 
+      run.driverStarted = true;
       driverObject.drive();
       setTourRequested(false);
+      setTourStatus(null);
     }
 
     startTour().catch(() => {
-      startedTourRef.current = "";
-      setTourRequested(false);
+      failTour("Hilfe-Tour konnte nicht geladen werden. Bitte versuche es erneut.");
     });
 
     return () => {
       active = false;
+      if (shouldReleaseFeatureTourClaim(run, startedTourRef.current)) {
+        startedTourRef.current = "";
+      }
     };
   }, [apiClient, currentProfile, setData, setWorkspace, source, tour, tourRequested]);
 
-  return null;
+  if (!tourStatus) return null;
+
+  return (
+    <div
+      role={tourStatus.kind === "error" ? "alert" : "status"}
+      aria-live={tourStatus.kind === "error" ? "assertive" : "polite"}
+      aria-busy={tourStatus.kind === "loading"}
+      className={`fixed bottom-5 right-5 z-[70] max-w-sm rounded-lg border px-4 py-3 text-sm font-medium shadow-xl ${
+        tourStatus.kind === "error"
+          ? "border-red-200 bg-red-50 text-red-800"
+          : "border-blue-200 bg-white text-slate-700"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`mr-3 inline-block h-2.5 w-2.5 rounded-full ${
+          tourStatus.kind === "loading" ? "animate-pulse bg-blue-500" : "bg-red-500"
+        }`}
+      />
+      {tourStatus.message}
+    </div>
+  );
 }
