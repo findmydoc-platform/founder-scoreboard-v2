@@ -358,6 +358,8 @@ test("production cutover builds first, migrates with lock guard, verifies, deplo
   assert.match(migrationDeploy, /0057_rename_github_issue_sync_fields\.sql/);
   assert.match(migrationDeploy, /0058_task_comment_github_delivery_outbox\.sql/);
   assert.match(workflow, /Read-only comment reconciliation/);
+  assert.match(workflow, /APP_URL: \$\{\{ secrets\.APP_URL \}\}/);
+  assert.match(workflow, /\$\{APP_URL%\/\}\/api\/github-comments\/reconcile/);
   assert.match(workflow, /Restore Previous GitHub Sync Fields After Failed Cutover/);
   assert.match(rollback, /rename column github_issue_sync_status to github_sync_status/);
 });

@@ -140,19 +140,19 @@ jobs:
       - name: Reconcile Existing GitHub Comments
         if: steps.vercel_production.outcome == 'success'
         env:
-          DEPLOYMENT_URL: ${{ steps.vercel_production.outputs.deploymentUrl }}
+          APP_URL: ${{ secrets.APP_URL }}
           FOUNDEROPS_DELIVERY_SECRET: ${{ secrets.FOUNDEROPS_DELIVERY_SECRET }}
         run: |
           preview=$(curl --fail --show-error --silent \
             --retry 3 --retry-all-errors --retry-delay 5 \
             --header "x-founderops-delivery-secret: ${FOUNDEROPS_DELIVERY_SECRET}" \
-            "${DEPLOYMENT_URL}/api/github-comments/reconcile")
+            "${APP_URL%/}/api/github-comments/reconcile")
           printf 'Read-only comment reconciliation: %s\n' "$preview"
           delivery=$(curl --fail --show-error --silent \
             --retry 3 --retry-all-errors --retry-delay 5 \
             --request POST \
             --header "x-founderops-delivery-secret: ${FOUNDEROPS_DELIVERY_SECRET}" \
-            "${DEPLOYMENT_URL}/api/github-comments/reconcile")
+            "${APP_URL%/}/api/github-comments/reconcile")
           printf 'Comment delivery result: %s\n' "$delivery"
 
       - name: Generate deployment summary
