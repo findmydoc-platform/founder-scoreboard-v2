@@ -139,12 +139,16 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           workspace={workspace}
         />
 
-        {showFilters && filtersAvailable && (
+        {filtersAvailable && (
           <PlanningFilters
             filters={filters}
             profiles={data.profiles}
             packages={data.packages}
             quickFilters={quickFilters}
+            expanded={showFilters}
+            visibleCount={controller.visibleTasks.length}
+            totalCount={data.tasks.filter((task) => task.taskType !== "sub_issue").length}
+            onExpandedChange={controller.setShowFilters}
             onChange={setFilters}
           />
         )}

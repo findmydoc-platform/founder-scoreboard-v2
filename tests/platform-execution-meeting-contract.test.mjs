@@ -60,11 +60,11 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolsSurface, /Filter zurücksetzen/);
   assert.match(toolsSurface, /Werkzeuge/);
   assert.match(toolsUi, /sm:grid-cols-2 xl:grid-cols-3/);
-  assert.match(toolsUi, /const \[showMissingLinks, setShowMissingLinks\] = useState\(false\)/);
+  assert.match(toolsUi, /const \[showMissingLinks, setShowMissingLinks\] = useState\(true\)/);
   assert.match(toolsUi, /visibleByLinkTools/);
   assert.match(toolsUi, /role="switch"/);
   assert.match(toolsUi, /Fehlende Links/);
-  assert.match(toolsUi, /setShowMissingLinks\(false\)/);
+  assert.match(toolsUi, /setShowMissingLinks\(true\)/);
   assert.match(toolsModel, /hasFmdToolLink/);
   assert.match(toolsModel, /Number\(hasFmdToolLink\(b\)\) - Number\(hasFmdToolLink\(a\)\)/);
   assert.match(toolsModel, /a\.name\.localeCompare\(b\.name, "de"\)/);
@@ -216,7 +216,7 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   assert.match(profileSync, /appWorkspaceFromValue\(value\) \|\| "planning"/);
   assert.match(profileSettingsModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
   assert.doesNotMatch(profileSettingsRoute, /"execution",/);
-  assert.match(taskViewModel, /filters\.quick === "critical"/);
+  assert.match(taskViewModel, /quickFilter === "critical"/);
   assert.match(taskViewModel, /taskHasCriticalAttention/);
   assert.match(taskViewModel, /taskHasMissingEvidenceAttention/);
   assert.match(taskSignals, /export type TaskAttentionSignal/);

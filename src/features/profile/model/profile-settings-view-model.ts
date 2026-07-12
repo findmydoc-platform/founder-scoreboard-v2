@@ -44,7 +44,7 @@ export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilt
     status: filters.status || "Alle",
     priority: filters.priority || "Alle",
     packageId: filters.packageId || "Alle",
-    quick: filters.quick || "",
+    quick: filters.quick || [],
   };
 }
 

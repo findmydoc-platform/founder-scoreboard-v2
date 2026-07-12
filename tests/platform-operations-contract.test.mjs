@@ -740,13 +740,13 @@ test("planning personal scope follows the effective current profile", async () =
 
   assert.match(ui, /serverCurrentProfile/);
   assert.match(ui, /currentProfileId: auth\.serverCurrentProfile\?\.id/);
-  assert.match(ui, /filters\.quick === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
+  assert.match(ui, /quickFilter === "mine" && taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(header, /data-tour-id="planning-task-scope"/);
   assert.match(header, /Aufgaben/);
   assert.match(header, /label: "Meine"/);
   assert.match(header, /assignee: "Alle"/);
   assert.match(header, /Ansicht/);
-  assert.doesNotMatch(filters, /Meine Aufgaben/);
+  assert.match(filters, /Meine Aufgaben/);
   assert.match(workspaceHook, /rawUrlWorkspace === "mine"/);
   assert.match(controller, /legacyMineWorkspace/);
   assert.doesNotMatch(ui, /currentProfile\?\.name \|\| "Volkan"/);

@@ -5,6 +5,7 @@ import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-
 import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiButton, UiEmptyState, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { FilterToggleGroup } from "@/shared/molecules/filter-toolbar";
 
 export function BoardSettingsSection({
   advancedBoardOpen,
@@ -81,9 +82,14 @@ export function BoardSettingsSection({
                   Initiative
                   <CustomSelect value={draft.planningFilters.packageId} onChange={(packageId) => onPlanningFiltersChange({ packageId })} options={packageOptions} className="h-9 text-sm" />
                 </UiField>
-                <UiField as="div">
-                  Schnellfilter
-                  <CustomSelect value={draft.planningFilters.quick} onChange={(quick) => onPlanningFiltersChange({ quick })} options={quickFilterOptions} className="h-9 text-sm" />
+                <UiField as="div" className="md:col-span-2">
+                  Schnellfilter kombinieren
+                  <FilterToggleGroup
+                    label="Standard-Schnellfilter"
+                    values={draft.planningFilters.quick}
+                    options={quickFilterOptions}
+                    onChange={(quick) => onPlanningFiltersChange({ quick })}
+                  />
                 </UiField>
                 <UiField>
                   Suche

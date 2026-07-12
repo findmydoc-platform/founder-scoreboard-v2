@@ -19,11 +19,16 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
-  quick: "",
+  quick: [],
 };
 
 function filterString(value: unknown, fallback: string) {
   return typeof value === "string" ? value : fallback;
+}
+
+function filterStringArray(value: unknown) {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return typeof value === "string" && value ? [value] : [];
 }
 
 function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
@@ -35,7 +40,7 @@ function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
     status: filterString(candidate.status, defaultPlanningFilters.status),
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
     packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),
-    quick: filterString(candidate.quick, defaultPlanningFilters.quick),
+    quick: filterStringArray(candidate.quick),
   };
 }
 

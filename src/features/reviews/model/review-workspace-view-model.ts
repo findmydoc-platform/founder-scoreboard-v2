@@ -4,10 +4,14 @@ import type { PlanningData, Profile, Task } from "@/lib/types";
 
 export type ReviewStatusFilter = "open" | "completed" | "rework" | "blocked" | "all";
 export type ReviewOwnerFilter = "mine" | "all" | string;
+export type ReviewSort = "priority" | "title" | "assignee" | "owner" | "status" | "date";
 
 export type ReviewWorkspaceFilters = {
   status: ReviewStatusFilter;
   owner: ReviewOwnerFilter;
+  query?: string;
+  sort?: ReviewSort;
+  direction?: "asc" | "desc";
 };
 
 export const reviewStatusFilterOptions: Array<{ value: ReviewStatusFilter; label: string }> = [
@@ -49,10 +53,17 @@ export function canActOnReview(task: Task, profile: Profile | null) {
 
 function taskMatchesStatus(task: Task, data: PlanningData, status: ReviewStatusFilter) {
   if (status === "all") return true;
-  if (status === "open") return isOpenReviewTask(task);
   if (status === "completed") return isCompletedReviewTask(task);
+  if (status === "blocked") return isBlockedReviewTask(task, data);
   if (status === "rework") return isReworkReviewTask(task);
-  return isBlockedReviewTask(task, data);
+  return isOpenReviewTask(task);
+}
+
+function reviewStatusBucket(task: Task, data: Pick<PlanningData, "tasks" | "taskRelations">): Exclude<ReviewStatusFilter, "all"> {
+  if (isCompletedReviewTask(task)) return "completed";
+  if (isBlockedReviewTask(task, data)) return "blocked";
+  if (isReworkReviewTask(task)) return "rework";
+  return "open";
 }
 
 function taskMatchesOwner(task: Task, owner: ReviewOwnerFilter, currentProfile: Profile | null) {
@@ -71,16 +82,25 @@ export function buildReviewWorkspaceViewModel({
   filters: ReviewWorkspaceFilters;
 }) {
   const reviewTasks = data.tasks.filter((task) => isReviewRelevantTask(task, data));
+  const query = filters.query?.trim().toLocaleLowerCase("de") || "";
+  const direction = filters.direction === "desc" ? -1 : 1;
+  const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || profileId || "";
   const visibleTasks = reviewTasks
     .filter((task) => taskMatchesStatus(task, data, filters.status))
     .filter((task) => taskMatchesOwner(task, filters.owner, currentProfile))
+    .filter((task) => !query || [task.title, task.description, task.assignee, profileName(task.reviewOwnerProfileId), task.priority, task.workstream].join(" ").toLocaleLowerCase("de").includes(query))
     .sort((left, right) => {
+      if (filters.sort === "title") return direction * left.title.localeCompare(right.title, "de");
+      if (filters.sort === "assignee") return direction * (left.assignee || "").localeCompare(right.assignee || "", "de");
+      if (filters.sort === "owner") return direction * profileName(left.reviewOwnerProfileId).localeCompare(profileName(right.reviewOwnerProfileId), "de");
+      if (filters.sort === "status") return direction * reviewStatusBucket(left, data).localeCompare(reviewStatusBucket(right, data), "de");
+      if (filters.sort === "date") return direction * (left.reviewRequestedAt || left.deadline || "").localeCompare(right.reviewRequestedAt || right.deadline || "");
       const leftOpen = isOpenReviewTask(left) ? 0 : 1;
       const rightOpen = isOpenReviewTask(right) ? 0 : 1;
-      return leftOpen - rightOpen
+      return direction * (leftOpen - rightOpen
         || priorityScore(left.priority) - priorityScore(right.priority)
         || (left.reviewRequestedAt || "").localeCompare(right.reviewRequestedAt || "")
-        || left.order - right.order;
+        || left.order - right.order);
     });
   const ownerOptions = [
     { value: "mine", label: "Meine" },
@@ -94,10 +114,10 @@ export function buildReviewWorkspaceViewModel({
     ownerOptions,
     metrics: {
       total: reviewTasks.length,
-      open: reviewTasks.filter(isOpenReviewTask).length,
-      completed: reviewTasks.filter(isCompletedReviewTask).length,
-      rework: reviewTasks.filter(isReworkReviewTask).length,
-      blocked: reviewTasks.filter((task) => isBlockedReviewTask(task, data)).length,
+      open: reviewTasks.filter((task) => taskMatchesStatus(task, data, "open")).length,
+      completed: reviewTasks.filter((task) => taskMatchesStatus(task, data, "completed")).length,
+      rework: reviewTasks.filter((task) => taskMatchesStatus(task, data, "rework")).length,
+      blocked: reviewTasks.filter((task) => taskMatchesStatus(task, data, "blocked")).length,
     },
   };
 }

@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { HTMLAttributes, ReactNode, TableHTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { classNames, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
@@ -92,7 +93,35 @@ export function DataRow({ className, ...props }: HTMLAttributes<HTMLTableRowElem
 }
 
 export function DataHeaderCell({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th className={classNames("border-b border-slate-200 px-3 py-3 font-semibold", className)} {...props} />;
+  return <th scope="col" className={classNames("border-b border-slate-200 px-3 py-3 font-semibold", className)} {...props} />;
+}
+
+export type SortDirection = "asc" | "desc" | null;
+
+export function SortableDataHeaderCell({
+  label,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  direction: SortDirection;
+  onSort: () => void;
+  className?: string;
+}) {
+  const Icon = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ArrowUpDown;
+  return (
+    <DataHeaderCell className={className} aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+      <button
+        type="button"
+        onClick={onSort}
+        className="flex min-h-8 w-full items-center gap-1.5 text-left hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100"
+      >
+        <span>{label}</span>
+        <Icon size={13} className={direction ? "text-blue-600" : "text-slate-400"} aria-hidden="true" />
+      </button>
+    </DataHeaderCell>
+  );
 }
 
 export function DataCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {

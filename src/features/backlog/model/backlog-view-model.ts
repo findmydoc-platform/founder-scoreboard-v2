@@ -3,6 +3,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
 
 export type BacklogScope = "all" | "proposals" | "ready" | "unscheduled";
+export type BacklogSort = "rank" | "priority" | "title" | "initiative" | "assignee";
 
 export type BacklogReadinessChip = {
   id: "owner" | "initiative" | "sprint";
@@ -13,6 +14,7 @@ export type BacklogReadinessChip = {
 export type BacklogItem = {
   initiative?: Package;
   isReadyForSprint: boolean;
+  rank: number;
   readiness: BacklogReadinessChip[];
   task: Task;
 };
@@ -51,7 +53,7 @@ function sprintCapacityHours(data: PlanningData, sprintId: string) {
   return data.profiles.reduce((sum, profile) => sum + profile.weeklyCapacity, 0);
 }
 
-function buildBacklogItem(task: Task, initiativeById: Map<string, Package>): BacklogItem {
+function buildBacklogItem(task: Task, initiativeById: Map<string, Package>, rank: number): BacklogItem {
   const initiative = initiativeById.get(task.packageId);
   const ownerReady = hasOwner(task);
   const initiativeReady = Boolean(initiative);
@@ -65,6 +67,7 @@ function buildBacklogItem(task: Task, initiativeById: Map<string, Package>): Bac
   return {
     initiative,
     isReadyForSprint: ownerReady && initiativeReady && !sprintReady && !taskIsDone(task),
+    rank,
     readiness,
     task,
   };
@@ -89,6 +92,17 @@ export function filterBacklogItemsByQuery(items: BacklogItem[], query: string) {
   ].join(" ").toLowerCase().includes(queryValue));
 }
 
+export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort) {
+  const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
+  return [...items].sort((left, right) => {
+    if (sort === "priority") return (priorityRank[left.task.priority] ?? 9) - (priorityRank[right.task.priority] ?? 9) || left.rank - right.rank;
+    if (sort === "title") return left.task.title.localeCompare(right.task.title, "de") || left.rank - right.rank;
+    if (sort === "initiative") return (left.initiative?.title || "").localeCompare(right.initiative?.title || "", "de") || left.rank - right.rank;
+    if (sort === "assignee") return (left.task.assignee || "").localeCompare(right.task.assignee || "", "de") || left.rank - right.rank;
+    return left.rank - right.rank;
+  });
+}
+
 function planningSprints(data: PlanningData) {
   const ordered = [...data.sprints]
     .filter((sprint) => sprint.status !== "closed")
@@ -107,7 +121,7 @@ export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
   const orderedTasks = data.tasks
     .filter((task) => task.taskType !== "sub_issue" && !taskIsDone(task))
     .sort(byBacklogOrder);
-  const allItems = orderedTasks.map((task) => buildBacklogItem(task, initiativeById));
+  const allItems = orderedTasks.map((task, index) => buildBacklogItem(task, initiativeById, index + 1));
   const visibleItems = allItems.filter((item) => filterItem(item, scope));
   const { current, sprints } = planningSprints(data);
   const sprintBuckets = sprints.map((sprint) => {
@@ -130,5 +144,11 @@ export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
     orderedTasks,
     sprintBuckets,
     visibleItems,
+    scopeCounts: {
+      all: allItems.length,
+      proposals: allItems.filter((item) => filterItem(item, "proposals")).length,
+      ready: allItems.filter((item) => filterItem(item, "ready")).length,
+      unscheduled: allItems.filter((item) => filterItem(item, "unscheduled")).length,
+    },
   };
 }

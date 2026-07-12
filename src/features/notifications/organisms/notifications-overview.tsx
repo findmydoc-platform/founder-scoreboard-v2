@@ -10,6 +10,7 @@ import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
 import { isOperationalLeadRole } from "@/lib/platform";
 import type { NotificationDelivery, NotificationEvent, PlanningData, Profile } from "@/lib/types";
 import { classNames, UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
+import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -125,22 +126,16 @@ export function NotificationsOverview({
                 {personalNewCount} neu · {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
               </p>
             </div>
-            <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
-              {(["pending", "done", "all"] as PersonalNotificationFilter[]).map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => setPersonalFilter(filter)}
-                  className={classNames(
-                    "h-8 min-w-20 rounded px-3 text-sm font-semibold",
-                    personalFilter === filter ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800",
-                  )}
-                  aria-pressed={personalFilter === filter}
-                >
-                  {personalFilterLabels[filter]} {personalFilterCount(filter, personalNotifications)}
-                </button>
-              ))}
-            </div>
+            <FilterSegmentedControl
+              label="Persönliche Hinweise filtern"
+              value={personalFilter}
+              options={(["pending", "done", "all"] as PersonalNotificationFilter[]).map((filter) => ({
+                value: filter,
+                label: personalFilterLabels[filter],
+                count: personalFilterCount(filter, personalNotifications),
+              }))}
+              onChange={setPersonalFilter}
+            />
           </div>
 
           <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain">

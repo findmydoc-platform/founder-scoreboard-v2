@@ -263,6 +263,27 @@ test("shared data surfaces centralize table shells without domain columns", asyn
   }
 });
 
+test("shared filter controls expose consistent accessible table filtering", async () => {
+  const toolbar = await readFile("src/shared/molecules/filter-toolbar.tsx", "utf8");
+  const dataSurface = await readFile("src/shared/molecules/data-surface.tsx", "utf8");
+  const planningFilters = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
+  const taskViewModel = await readFile("src/features/planning/hooks/use-planning-task-view-model.ts", "utf8");
+
+  assert.match(toolbar, /type="search"/);
+  assert.match(toolbar, /aria-expanded=\{expanded\}/);
+  assert.match(toolbar, /aria-controls=\{panelId\}/);
+  assert.match(toolbar, /hidden=\{!expanded\}/);
+  assert.match(toolbar, /aria-live="polite"/);
+  assert.match(toolbar, /aria-pressed=\{active\}/);
+  assert.match(toolbar, /Filter zurücksetzen/);
+  assert.match(toolbar, /isDirty/);
+  assert.match(dataSurface, /export function SortableDataHeaderCell/);
+  assert.match(dataSurface, /aria-sort=/);
+  assert.match(dataSurface, /scope="col"/);
+  assert.match(planningFilters, /FilterToggleGroup/);
+  assert.match(taskViewModel, /filters\.quick\.every/);
+});
+
 test("visible German app copy keeps real UTF-8 umlauts", async () => {
   const files = [
     ...(await listFiles("src", ".tsx")),

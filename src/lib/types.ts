@@ -318,7 +318,7 @@ export type PlanningFilterPreferences = {
   status: string;
   priority: string;
   packageId: string;
-  quick: string;
+  quick: string[];
 };
 
 export type ProfileUiPreference = {

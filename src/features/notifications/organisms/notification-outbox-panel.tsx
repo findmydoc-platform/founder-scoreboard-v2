@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/display";
 import { notificationChannelLabel, shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
 import type { NotificationDelivery, PlanningData } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
+import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
 
 type GoogleChatStatusSummary = {
   ready: boolean;
@@ -14,12 +15,17 @@ type GoogleChatStatusSummary = {
   mode: "space-webhook" | "direct-dm" | "not-configured";
 };
 
-type DeliveryFilter = "all" | "failed" | "sent" | "direct_dm" | "webhook_digest";
+type DeliveryStatusFilter = "all" | "failed" | "sent";
+type DeliveryModeFilter = "all" | "direct_dm" | "webhook_digest";
 
-const deliveryFilterLabels: Record<DeliveryFilter, string> = {
+const deliveryStatusLabels: Record<DeliveryStatusFilter, string> = {
   all: "alle",
   failed: "fehlgeschlagen",
   sent: "gesendet",
+};
+
+const deliveryModeLabels: Record<DeliveryModeFilter, string> = {
+  all: "alle Arten",
   direct_dm: "persönlich",
   webhook_digest: "Sammelmeldung",
 };
@@ -49,7 +55,8 @@ export function NotificationOutboxPanel({
   onSendGoogleChatTest: (testDelivery: "webhook_digest" | "direct_dm", profileId?: string) => void;
   className?: string;
 }) {
-  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<DeliveryStatusFilter>("all");
+  const [deliveryModeFilter, setDeliveryModeFilter] = useState<DeliveryModeFilter>("all");
   const [testActionsOpen, setTestActionsOpen] = useState(false);
   const pendingNotifications = data.notificationEvents.filter((event) => event.status === "pending");
   const failedNotifications = data.notificationEvents.filter((event) => event.status === "failed");
@@ -63,9 +70,9 @@ export function NotificationOutboxPanel({
   const outboxErrorCount = failedDigestNotifications.length + failedDeliveries.length;
   const recentDeliveries = data.notificationDeliveries.slice(0, 5);
   const filteredDeliveries = data.notificationDeliveries.filter((delivery) => {
-    if (deliveryFilter === "all") return true;
-    if (deliveryFilter === "failed" || deliveryFilter === "sent") return delivery.status === deliveryFilter;
-    return delivery.deliveryMode === deliveryFilter;
+    const statusMatches = deliveryStatusFilter === "all" || delivery.status === deliveryStatusFilter;
+    const modeMatches = deliveryModeFilter === "all" || delivery.deliveryMode === deliveryModeFilter;
+    return statusMatches && modeMatches;
   }).slice(0, 12);
   const googleChatReady = Boolean(googleChatStatus?.ready);
   const googleChatWebhookConfigured = Boolean(googleChatStatus?.webhookConfigured);
@@ -186,17 +193,19 @@ export function NotificationOutboxPanel({
         <div className="mt-4 grid gap-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sendungen</div>
-            <div className="flex flex-wrap gap-1">
-              {(["all", "failed", "sent", "direct_dm", "webhook_digest"] as DeliveryFilter[]).map((filter) => (
-                <UiButton
-                  key={filter}
-                  onClick={() => setDeliveryFilter(filter)}
-                  variant={deliveryFilter === filter ? "blue" : "secondary"}
-                  size="compact"
-                >
-                  {deliveryFilterLabels[filter]}
-                </UiButton>
-              ))}
+            <div className="grid gap-2">
+              <FilterSegmentedControl
+                label="Sendungen nach Status filtern"
+                value={deliveryStatusFilter}
+                options={(["all", "failed", "sent"] as DeliveryStatusFilter[]).map((filter) => ({ value: filter, label: deliveryStatusLabels[filter] }))}
+                onChange={setDeliveryStatusFilter}
+              />
+              <FilterSegmentedControl
+                label="Sendungen nach Zustellart filtern"
+                value={deliveryModeFilter}
+                options={(["all", "direct_dm", "webhook_digest"] as DeliveryModeFilter[]).map((filter) => ({ value: filter, label: deliveryModeLabels[filter] }))}
+                onChange={setDeliveryModeFilter}
+              />
             </div>
           </div>
           {filteredDeliveries.map((delivery) => (

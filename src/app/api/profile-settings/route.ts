@@ -73,7 +73,7 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
-  quick: "",
+  quick: [],
 };
 
 function cleanColor(value: unknown) {
@@ -94,7 +94,11 @@ function cleanFilters(value: unknown): PlanningFilterPreferences {
     status: typeof candidate.status === "string" ? candidate.status.slice(0, 80) : defaultPlanningFilters.status,
     priority: typeof candidate.priority === "string" ? candidate.priority.slice(0, 20) : defaultPlanningFilters.priority,
     packageId: typeof candidate.packageId === "string" ? candidate.packageId.slice(0, 160) : defaultPlanningFilters.packageId,
-    quick: typeof candidate.quick === "string" ? candidate.quick.slice(0, 80) : defaultPlanningFilters.quick,
+    quick: Array.isArray(candidate.quick)
+      ? candidate.quick.filter((item): item is string => typeof item === "string").map((item) => item.slice(0, 80)).slice(0, 12)
+      : typeof candidate.quick === "string" && candidate.quick
+        ? [candidate.quick.slice(0, 80)]
+        : defaultPlanningFilters.quick,
   };
 }
 
