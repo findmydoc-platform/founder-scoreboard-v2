@@ -1,5 +1,3 @@
-import { isOperationalLeadRole } from "@/lib/platform";
-import type { AuthenticatedProfile } from "@/lib/types";
 import {
   TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES,
   TEAM_TASK_INTAKE_MAX_TASKS,
@@ -28,8 +26,4 @@ export function canCreateTeamSubIssueUnderDeliverable({
   parentOwnerId: string | null | undefined;
 }) {
   return actorRole === "ceo" || actorRole === "deputy" || parentOwnerId === actorId;
-}
-
-export function teamTaskIntakeActorCanReadContext(actor: AuthenticatedProfile) {
-  return isOperationalLeadRole(actor.platformRole) || actor.platformRole === "founder";
 }

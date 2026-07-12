@@ -107,6 +107,23 @@ try {
   const taskIds = committedResult.tasks.map((task) => task.id);
   const originalFirstTitle = committedResult.tasks[0].title;
 
+  const rotatedTokenResult = await client.query(
+    `insert into public.team_task_intake_tokens (profile_id, label, token_hash, token_hint, expires_at)
+     values ($1, 'Rotation verification', $2, '…rotate', now() + interval '90 days')
+     returning id`,
+    [profileId, createHash("sha256").update(`rotation-${randomUUID()}`).digest("hex")],
+  );
+  const rotatedTokenId = rotatedTokenResult.rows[0]?.id;
+  const rotatedCommit = await commitBatch({ idempotencyKey, items, profileId, tokenId: rotatedTokenId, hash });
+  const rotatedTaskIds = rotatedCommit.rows[0]?.result?.tasks?.map((task) => task.id) || [];
+  if (
+    rotatedCommit.rows[0]?.result?.replayed !== false
+    || rotatedTaskIds.length !== taskIds.length
+    || rotatedTaskIds.some((taskId) => taskIds.includes(taskId))
+  ) {
+    throw new Error("A rotated token did not receive an independent idempotency namespace.");
+  }
+
   const persisted = await client.query(
     `select
       (select count(*)::integer from public.tasks where id = any($1::text[])) as task_count,
@@ -202,7 +219,7 @@ try {
     if (error?.code !== "22023") throw error;
     await client.query("rollback to savepoint failed_batch");
   }
-  const failedSuffix = replaceUuid(failedKey);
+  const failedSuffix = `${replaceUuid(token.id)}-${replaceUuid(failedKey)}`;
   const rolledBack = await client.query(
     `select
       (select count(*)::integer from public.tasks where id like $1) as task_count,

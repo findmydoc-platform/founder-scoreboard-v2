@@ -1,6 +1,10 @@
 import { cleanText } from "@/lib/api-input";
 import { normalizeLookup, slugify } from "@/lib/slug";
 import type { TaskIntakeInput } from "@/features/intake/model/task-intake";
+import {
+  TEAM_TASK_INTAKE_INPUT_RULES,
+  type TeamTaskIntakeInputKey,
+} from "@/features/intake/model/team-task-intake-contract";
 
 export type IntakeLookupProfile = {
   id: string;
@@ -19,7 +23,14 @@ export function intakeText(value: unknown, maxLength: number) {
 
 export function intakeDate(value: unknown) {
   const text = intakeText(value, 20);
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+    ? text
+    : "";
 }
 
 export function intakePriority(value: unknown) {
@@ -28,7 +39,39 @@ export function intakePriority(value: unknown) {
 }
 
 export function intakeHours(value: unknown) {
-  return Math.max(0, Math.min(200, Math.round(Number(value || 0))));
+  const hours = Number(value || 0);
+  if (!Number.isFinite(hours)) return 0;
+  return Math.max(0, Math.min(200, Math.round(hours)));
+}
+
+export function validateTeamTaskIntakeField(key: TeamTaskIntakeInputKey, value: unknown) {
+  const rule = TEAM_TASK_INTAKE_INPUT_RULES[key];
+  if (value === undefined) return "required" in rule && rule.required ? "ist erforderlich" : "";
+
+  if (rule.kind === "string") {
+    if (typeof value !== "string") return "muss Text sein";
+    if ("minLength" in rule && value.trim().length < rule.minLength) return `muss mindestens ${rule.minLength} Zeichen enthalten`;
+    if (value.length > rule.maxLength) return `darf höchstens ${rule.maxLength} Zeichen enthalten`;
+    return "";
+  }
+  if (rule.kind === "string-or-string-array") {
+    if (typeof value === "string") return value.length <= rule.maxLength ? "" : `darf höchstens ${rule.maxLength} Zeichen enthalten`;
+    if (Array.isArray(value) && value.every((item) => typeof item === "string")) return "";
+    return "muss Text oder eine Liste aus Texten sein";
+  }
+  if (rule.kind === "enum") {
+    return typeof value === "string" && (rule.values as readonly string[]).includes(value)
+      ? ""
+      : `muss einer der Werte ${rule.values.join(", ")} sein`;
+  }
+  if (rule.kind === "date") {
+    return typeof value === "string" && value.length > 0 && intakeDate(value) === value
+      ? ""
+      : "muss ein gültiges Datum im Format YYYY-MM-DD sein";
+  }
+  return typeof value === "number" && Number.isFinite(value) && value >= rule.minimum && value <= rule.maximum
+    ? ""
+    : `muss eine Zahl zwischen ${rule.minimum} und ${rule.maximum} sein`;
 }
 
 export function intakeProfileByValue<T extends IntakeLookupProfile>(profiles: T[], value: string) {

@@ -7,6 +7,7 @@ import {
   TEAM_TASK_INTAKE_MAX_TASKS,
 } from "@/features/intake/model/team-task-intake-contract";
 import { canCreateTeamSubIssueUnderDeliverable } from "@/features/intake/model/team-task-intake-policy";
+import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -56,7 +57,7 @@ function groupByTask<T extends { task_id: string }>(rows: T[]) {
   return grouped;
 }
 
-function relationStatsByTask(rows: Array<{ task_id: string; related_task_id: string; relation_type: string }>) {
+export function relationStatsByTask(rows: Array<{ task_id: string; related_task_id: string; relation_type: string }>) {
   const stats = new Map<string, { count: number; blocks: number; blockedBy: number }>();
   const ensure = (taskId: string) => {
     const current = stats.get(taskId) || { count: 0, blocks: 0, blockedBy: 0 };
@@ -66,57 +67,40 @@ function relationStatsByTask(rows: Array<{ task_id: string; related_task_id: str
   for (const relation of rows) {
     ensure(relation.task_id).count += 1;
     if (relation.related_task_id !== relation.task_id) ensure(relation.related_task_id).count += 1;
-    if (relation.relation_type === "blocks") ensure(relation.task_id).blocks += 1;
-    if (relation.relation_type === "blocked_by") ensure(relation.task_id).blockedBy += 1;
+    if (relation.relation_type === "blocks") {
+      ensure(relation.task_id).blocks += 1;
+      if (relation.related_task_id !== relation.task_id) ensure(relation.related_task_id).blockedBy += 1;
+    }
+    if (relation.relation_type === "blocked_by") {
+      ensure(relation.task_id).blockedBy += 1;
+      if (relation.related_task_id !== relation.task_id) ensure(relation.related_task_id).blocks += 1;
+    }
   }
   return stats;
 }
 
 export async function buildTeamTaskContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
-  const [
-    profilesResult,
-    milestonesResult,
-    initiativesResult,
-    sprintsResult,
-    tasksResult,
-    blockersResult,
-    relationsResult,
-    commentsResult,
-    externalCommentsResult,
-  ] = await Promise.all([
-    supabase.from("profiles").select("id,name").order("name"),
-    supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order"),
-    supabase.from("packages").select("id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,status,priority,target_date,sort_order").order("sort_order"),
-    supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date"),
-    supabase
+  const [profiles, milestones, initiatives, sprints, tasks, blockers, relations, comments, externalComments] = await Promise.all([
+    loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("packages").select("id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,status,priority,target_date,sort_order").order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
+    loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
       .from("tasks")
       .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,package_id,milestone_id,sprint_id,workstream,start_date,end_date,deadline,estimate_hours,evidence_link,github_issue_url,issue_url")
-      .order("sort_order"),
-    supabase.from("task_blockers").select("task_id,status,reason,impact,created_at").order("created_at", { ascending: false }),
-    supabase.from("task_relationship_edges").select("task_id,related_task_id,relation_type"),
-    supabase.from("task_comments").select("task_id"),
-    supabase.from("task_external_comments").select("task_id"),
+      .order("sort_order")
+      .order("id")
+      .range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("task_blockers").select("task_id,status,reason,impact,created_at").order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("task_relationship_edges").select("task_id,related_task_id,relation_type").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("task_comments").select("task_id").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("task_external_comments").select("task_id").order("id").range(from, to)),
   ]);
 
-  const firstError = [
-    profilesResult.error,
-    milestonesResult.error,
-    initiativesResult.error,
-    sprintsResult.error,
-    tasksResult.error,
-    blockersResult.error,
-    relationsResult.error,
-    commentsResult.error,
-    externalCommentsResult.error,
-  ].find(Boolean);
-  if (firstError) throw new Error(firstError.message);
-
-  const blockers = blockersResult.data || [];
-  const relations = relationsResult.data || [];
   const blockersByTaskId = groupByTask(blockers);
   const relationStats = relationStatsByTask(relations);
-  const internalCommentCounts = countByTask(commentsResult.data || []);
-  const externalCommentCounts = countByTask(externalCommentsResult.data || []);
+  const internalCommentCounts = countByTask(comments);
+  const externalCommentCounts = countByTask(externalComments);
 
   return {
     actor: {
@@ -130,17 +114,17 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       forbiddenWrites: TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
       subIssuePolicy: actor.platformRole === "founder" ? "own-deliverables-only" : "any-deliverable",
     },
-    profiles: (profilesResult.data || []).map((profile) => ({
+    profiles: profiles.map((profile) => ({
       id: profile.id,
       name: profile.name,
     })),
-    milestones: (milestonesResult.data || []).map((milestone) => ({
+    milestones: milestones.map((milestone) => ({
       id: milestone.id,
       title: milestone.title,
       status: milestone.status,
       targetDate: milestone.target_date || "",
     })),
-    initiatives: (initiativesResult.data || []).map((initiative) => ({
+    initiatives: initiatives.map((initiative) => ({
       id: initiative.id,
       title: initiative.title,
       milestoneId: initiative.milestone_id || "",
@@ -151,14 +135,14 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       priority: initiative.priority || "",
       targetDate: initiative.target_date || "",
     })),
-    sprints: (sprintsResult.data || []).map((sprint) => ({
+    sprints: sprints.map((sprint) => ({
       id: sprint.id,
       name: sprint.name,
       status: sprint.status,
       startDate: sprint.start_date || "",
       endDate: sprint.end_date || "",
     })),
-    tasks: ((tasksResult.data || []) as TaskContextRow[]).map((task) => {
+    tasks: tasks.map((task) => {
       const taskBlockers = blockersByTaskId.get(task.id) || [];
       const openBlockers = taskBlockers.filter((blocker) => blocker.status === "open");
       const taskRelationStats = relationStats.get(task.id) || { count: 0, blocks: 0, blockedBy: 0 };

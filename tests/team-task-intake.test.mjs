@@ -15,6 +15,7 @@ const normalization = await loadTranspiledModule(
       normalizeLookup: (value) => value.trim().toLowerCase(),
       slugify: (value) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
     },
+    "@/features/intake/model/team-task-intake-contract": contract,
   },
 );
 const policy = await loadTranspiledModule(
@@ -26,6 +27,7 @@ const policy = await loadTranspiledModule(
     "@/features/intake/model/team-task-intake-contract": contract,
   },
 );
+const pagination = await loadTranspiledModule("src/features/intake/model/supabase-pagination.ts");
 const intake = await loadTranspiledModule(
   "src/features/intake/model/team-task-intake.ts",
   {
@@ -33,6 +35,16 @@ const intake = await loadTranspiledModule(
     "@/features/intake/model/team-task-intake-contract": contract,
     "@/features/intake/model/task-intake-normalization": normalization,
     "@/features/intake/model/team-task-intake-policy": policy,
+    "@/features/intake/model/supabase-pagination": pagination,
+  },
+);
+const taskContext = await loadTranspiledModule(
+  "src/features/intake/model/team-task-context.ts",
+  {
+    "@/lib/status": { normalizeStatus: (status) => status },
+    "@/features/intake/model/team-task-intake-contract": contract,
+    "@/features/intake/model/team-task-intake-policy": policy,
+    "@/features/intake/model/supabase-pagination": pagination,
   },
 );
 const commit = await loadTranspiledModule(
@@ -100,6 +112,8 @@ test("team intake contract centralizes limits, task types, scopes, and UUID vali
   assert.equal(contract.TEAM_TASK_INTAKE_TOKEN_TTL_DAYS, 90);
   assert.deepEqual(contract.TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES, ["proposal", "sub_issue"]);
   assert.deepEqual(contract.TEAM_TASK_INTAKE_SCOPES, ["read:task-context", "write:task-intake"]);
+  assert.equal(contract.TEAM_TASK_INTAKE_INPUT_RULES.hours.maximum, 200);
+  assert.equal(contract.TEAM_TASK_INTAKE_INPUT_RULES.startDate.kind, "date");
   assert.equal(contract.isUuid("5e627de3-8e91-47ba-8c3f-e06ed8e26059"), true);
   assert.equal(contract.isUuid("not-a-uuid"), false);
 });
@@ -123,6 +137,38 @@ test("team intake accepts only the documented object payload and rejects unknown
   const unknown = intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Unknown field", unexpected: true }] });
   assert.equal(unknown.ok, false);
   assert.match(unknown.error, /unbekannte Feld unexpected/);
+  assert.match(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Valid title", startDate: "2026-99-99" }] }).error, /gültiges Datum/);
+  assert.match(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Valid title", startDate: "" }] }).error, /gültiges Datum/);
+  assert.match(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Valid title", hours: "invalid" }] }).error, /Zahl zwischen 0 und 200/);
+  assert.equal(intake.parseTeamTaskIntakePayload({ tasks: [{ title: "Valid title", hours: 12.5, deadline: "2026-07-12" }] }).ok, true);
+  assert.equal(normalization.intakeHours("invalid"), 0);
+  assert.equal(normalization.intakeDate("2026-02-29"), "");
+  assert.equal(normalization.intakeDate("2028-02-29"), "2028-02-29");
+});
+
+test("team context pagination loads every page and fails closed on page errors", async () => {
+  const source = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+  const loaded = await pagination.loadAllSupabaseRows(
+    async (from, to) => ({ data: source.slice(from, to + 1), error: null }),
+    2,
+  );
+  assert.deepEqual(loaded, source);
+  await assert.rejects(
+    pagination.loadAllSupabaseRows(async () => ({ data: null, error: { message: "page failed" } }), 2),
+    /page failed/,
+  );
+});
+
+test("team context relation statistics describe both sides of directed relationships", () => {
+  const stats = taskContext.relationStatsByTask([
+    { task_id: "a", related_task_id: "b", relation_type: "blocks" },
+    { task_id: "c", related_task_id: "d", relation_type: "blocked_by" },
+    { task_id: "a", related_task_id: "c", relation_type: "relates_to" },
+  ]);
+  assert.deepEqual(stats.get("a"), { count: 2, blocks: 1, blockedBy: 0 });
+  assert.deepEqual(stats.get("b"), { count: 1, blocks: 0, blockedBy: 1 });
+  assert.deepEqual(stats.get("c"), { count: 2, blocks: 0, blockedBy: 1 });
+  assert.deepEqual(stats.get("d"), { count: 1, blocks: 1, blockedBy: 0 });
 });
 
 test("idempotency hash uses only normalized request data", () => {
@@ -203,6 +249,8 @@ test("founder sub-issue preview rejects another founder's deliverable", () => {
 test("team intake routes, profile UI, OpenAPI, and database boundary share one guarded contract", async () => {
   const [
     hardeningMigration,
+    cleanupMigration,
+    baselineSchema,
     tokenAuthSource,
     tokenRoutes,
     contextRoute,
@@ -216,6 +264,8 @@ test("team intake routes, profile UI, OpenAPI, and database boundary share one g
     openapiSource,
   ] = await Promise.all([
     readFile("supabase/0055_team_task_intake_hardening.sql", "utf8"),
+    readFile("supabase/0056_team_task_intake_review_fixes.sql", "utf8"),
+    readFile("supabase/schema.sql", "utf8"),
     readFile("src/features/intake/model/team-task-intake-token.ts", "utf8"),
     Promise.all([
       readFile("src/app/api/team/task-intake-tokens/route.ts", "utf8"),
@@ -238,6 +288,9 @@ test("team intake routes, profile UI, OpenAPI, and database boundary share one g
   assert.match(hardeningMigration, /response_tasks/);
   assert.match(hardeningMigration, /interval '90 days'/);
   assert.doesNotMatch(hardeningMigration, /v_item->'taskInsert'/);
+  assert.match(cleanupMigration, /p_token_id::text/);
+  assert.match(cleanupMigration, /drop function if exists public\.create_team_task_intake_token\(text, text, text, text, timestamptz\)/);
+  assert.doesNotMatch(baselineSchema, /create or replace function public\.create_team_task_intake_token\(\s*p_profile_id text,\s*p_label text,\s*p_token_hash text,\s*p_token_hint text,\s*p_expires_at timestamptz/);
   assert.match(tokenAuthSource, /authenticate_team_task_intake_token/);
   assert.doesNotMatch(tokenAuthSource, /\.from\("team_task_intake_tokens"\)/);
   assert.match(tokenRoutes, /TEAM_TASK_INTAKE_TOKEN_HISTORY_LIMIT/);
@@ -259,8 +312,30 @@ test("team intake routes, profile UI, OpenAPI, and database boundary share one g
   assert.ok(openapi.components.schemas.TeamTaskIntakePreviewResponse);
   assert.ok(openapi.components.schemas.TeamTaskIntakeValidationErrorResponse);
   assert.ok(openapi.components.schemas.TeamTaskIntakeCommitResponse);
+  const inputSchema = openapi.components.schemas.TeamTaskIntakeInput;
+  for (const [key, rule] of Object.entries(contract.TEAM_TASK_INTAKE_INPUT_RULES)) {
+    const property = inputSchema.properties[key];
+    assert.ok(property, `OpenAPI input field is missing: ${key}`);
+    if (rule.kind === "string") {
+      if (rule.minLength !== undefined) assert.equal(property.minLength, rule.minLength);
+      assert.equal(property.maxLength, rule.maxLength);
+    } else if (rule.kind === "enum") {
+      assert.deepEqual(property.enum, [...rule.values]);
+    } else if (rule.kind === "date") {
+      assert.equal(property.format, "date");
+    } else if (rule.kind === "number") {
+      assert.equal(property.minimum, rule.minimum);
+      assert.equal(property.maximum, rule.maximum);
+    }
+  }
   for (const [path, method] of [["/api/team/task-context", "get"], ["/api/team/task-intake/preview", "post"], ["/api/team/task-intake/commit", "post"]]) {
     const responses = openapi.paths[path][method].responses;
+    const expectedStatuses = path === "/api/team/task-context"
+      ? ["200", "401", "403", "500", "501", "503"]
+      : path === "/api/team/task-intake/preview"
+        ? ["200", "400", "401", "403", "500", "501", "503"]
+        : ["200", "400", "401", "403", "409", "500", "501", "503"];
+    assert.deepEqual(Object.keys(responses).sort(), expectedStatuses.sort());
     assert.match(responses["200"].content["application/json"].schema.$ref, /^#\/components\/schemas\//);
     for (const [status, response] of Object.entries(responses).filter(([status]) => status !== "200")) {
       const schema = response.content["application/json"].schema;

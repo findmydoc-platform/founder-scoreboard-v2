@@ -14,7 +14,9 @@ import {
   intakeProfileByValue,
   intakeText,
   normalizeTaskIntakeBrief,
+  validateTeamTaskIntakeField,
 } from "@/features/intake/model/task-intake-normalization";
+import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
 import {
   canCreateTeamSubIssueUnderDeliverable,
   isAllowedTeamTaskIntakeTaskType,
@@ -101,6 +103,10 @@ export function parseTeamTaskIntakePayload(payload: unknown):
     }
     const unsupportedKey = Object.keys(task).find((key) => !allowedInputKeys.has(key));
     if (unsupportedKey) return { ok: false, error: `Aufgabe ${index + 1} enthält das unbekannte Feld ${unsupportedKey}.` };
+    for (const key of TEAM_TASK_INTAKE_INPUT_KEYS) {
+      const fieldError = validateTeamTaskIntakeField(key, (task as Record<string, unknown>)[key]);
+      if (fieldError) return { ok: false, error: `Aufgabe ${index + 1}: ${key} ${fieldError}.` };
+    }
   }
 
   return { ok: true, tasks: tasks as TaskIntakeInput[] };
@@ -138,26 +144,23 @@ export async function loadTeamTaskIntakeContext(
     .filter(Boolean))];
 
   const [profilesResult, initiativesResult, milestonesResult, parentsResult] = await Promise.all([
-    supabase.from("profiles").select("id,name,github_login").order("name"),
-    supabase.from("packages").select("id,title,milestone_id").order("sort_order"),
-    supabase.from("milestones").select("id"),
+    loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name,github_login").order("name").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("packages").select("id,title,milestone_id").order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id").order("id").range(from, to)),
     parentTaskIds.length
-      ? supabase.from("tasks").select("id,title,task_type,owner,assignee,package_id,milestone_id").in("id", parentTaskIds)
-      : Promise.resolve({ data: [], error: null }),
+      ? loadAllSupabaseRows((from, to) => supabase.from("tasks").select("id,title,task_type,owner,assignee,package_id,milestone_id").in("id", parentTaskIds).order("id").range(from, to))
+      : Promise.resolve([]),
   ]);
 
-  const firstError = profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error;
-  if (firstError) throw new Error(firstError.message);
-
   return {
-    profiles: (profilesResult.data || []).map((profile) => ({
+    profiles: profilesResult.map((profile) => ({
       id: profile.id,
       name: profile.name,
       githubLogin: profile.github_login || "",
     })),
-    initiatives: initiativesResult.data || [],
-    milestoneIds: new Set((milestonesResult.data || []).map((milestone) => milestone.id)),
-    parentTasks: parentsResult.data || [],
+    initiatives: initiativesResult,
+    milestoneIds: new Set(milestonesResult.map((milestone) => milestone.id)),
+    parentTasks: parentsResult,
   };
 }
 

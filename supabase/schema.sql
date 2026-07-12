@@ -1382,72 +1382,6 @@ is 'SHA-256 hash of the one-time visible personal intake token.';
 comment on table public.team_task_intake_batches
 is 'Immutable idempotency records for atomic Team Task Intake commits.';
 
-create or replace function public.create_team_task_intake_token(
-  p_profile_id text,
-  p_label text,
-  p_token_hash text,
-  p_token_hint text,
-  p_expires_at timestamptz
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_active_count integer;
-  v_token public.team_task_intake_tokens%rowtype;
-begin
-  if nullif(trim(coalesce(p_profile_id, '')), '') is null
-     or char_length(trim(coalesce(p_label, ''))) not between 1 and 80
-     or coalesce(p_token_hash, '') !~ '^[a-f0-9]{64}$'
-     or char_length(coalesce(p_token_hint, '')) not between 4 and 16
-     or p_expires_at is null
-     or p_expires_at <= now() then
-    raise exception using errcode = '22023', message = 'team intake token input is invalid';
-  end if;
-
-  if not exists (
-    select 1
-    from public.profiles
-    where id = p_profile_id
-      and platform_role in ('ceo', 'deputy', 'founder')
-  ) then
-    raise exception using errcode = 'P0002', message = 'operational profile not found';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended('team-intake-token:' || p_profile_id, 0));
-
-  select count(*)
-  into v_active_count
-  from public.team_task_intake_tokens
-  where profile_id = p_profile_id
-    and revoked_at is null
-    and expires_at > now();
-
-  if v_active_count >= 3 then
-    raise exception using errcode = 'P0003', message = 'active team intake token limit reached';
-  end if;
-
-  insert into public.team_task_intake_tokens (
-    profile_id,
-    label,
-    token_hash,
-    token_hint,
-    expires_at
-  ) values (
-    p_profile_id,
-    trim(p_label),
-    p_token_hash,
-    p_token_hint,
-    p_expires_at
-  )
-  returning * into v_token;
-
-  return to_jsonb(v_token) - 'token_hash';
-end;
-$$;
-
 create or replace function public.create_team_task_intake_batch_transaction(
   p_token_id uuid,
   p_profile_id text,
@@ -1585,13 +1519,8 @@ begin
 end;
 $$;
 
-revoke all on function public.create_team_task_intake_token(text, text, text, text, timestamptz) from public, anon, authenticated;
 revoke all on function public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text) from public, anon, authenticated;
-grant execute on function public.create_team_task_intake_token(text, text, text, text, timestamptz) to service_role;
 grant execute on function public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text) to service_role;
-
-comment on function public.create_team_task_intake_token(text, text, text, text, timestamptz)
-is 'Creates one expiring personal Team Task Intake token while enforcing the active-token limit.';
 
 comment on function public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text)
 is 'Atomically and idempotently creates a Team Task Intake batch through the guarded task transaction.';
@@ -3459,7 +3388,7 @@ begin
       raise exception using errcode = 'P0002', message = 'team intake owner profile not found';
     end if;
 
-    v_task_id := p_profile_id || '-team-intake-' || replace(p_idempotency_key::text, '-', '') || '-' || v_item_index::text;
+    v_task_id := p_profile_id || '-team-intake-' || replace(p_token_id::text, '-', '') || '-' || replace(p_idempotency_key::text, '-', '') || '-' || v_item_index::text;
     v_creation_request_id := 'team:' || p_token_id::text || ':' || p_idempotency_key::text || ':' || v_item_index::text;
     v_package_id := nullif(trim(v_item->>'packageId'), '');
     v_milestone_id := nullif(trim(v_item->>'milestoneId'), '');
@@ -3635,8 +3564,6 @@ revoke all on function public.create_team_task_intake_token(text, text, text, te
 revoke all on function public.authenticate_team_task_intake_token(text, text) from public, anon, authenticated;
 revoke all on function public.revoke_team_task_intake_token(uuid, text) from public, anon, authenticated;
 revoke all on function public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text) from public, anon, authenticated;
-revoke all on function public.create_team_task_intake_token(text, text, text, text, timestamptz) from service_role;
-
 grant execute on function public.create_team_task_intake_token(text, text, text, text) to service_role;
 grant execute on function public.authenticate_team_task_intake_token(text, text) to service_role;
 grant execute on function public.revoke_team_task_intake_token(uuid, text) to service_role;
@@ -3652,6 +3579,6 @@ comment on function public.revoke_team_task_intake_token(uuid, text)
 is 'Revokes one active personal Team Task Intake token owned by the current profile.';
 
 comment on function public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text)
-is 'Atomically revalidates Team Task Intake authority and creates a deterministic replayable batch from a narrow intent.';
+is 'Atomically revalidates Team Task Intake authority and creates a token-scoped deterministic replayable batch from a narrow intent.';
 
 notify pgrst, 'reload schema';

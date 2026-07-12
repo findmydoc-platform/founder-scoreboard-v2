@@ -353,9 +353,14 @@ async function verifyTeamTaskIntakeRpcs() {
     p_request_ip: null,
     p_user_agent: null,
   };
-  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch] = await Promise.all([
+  const legacyTokenParams = {
+    ...tokenParams,
+    p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  };
+  const [token, anonToken, legacyToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch] = await Promise.all([
     supabase.rpc("create_team_task_intake_token", tokenParams),
     anonSupabase.rpc("create_team_task_intake_token", tokenParams),
+    supabase.rpc("create_team_task_intake_token", legacyTokenParams),
     supabase.rpc("authenticate_team_task_intake_token", authParams),
     anonSupabase.rpc("authenticate_team_task_intake_token", authParams),
     supabase.rpc("revoke_team_task_intake_token", revokeParams),
@@ -367,11 +372,13 @@ async function verifyTeamTaskIntakeRpcs() {
   return [
     {
       name: "create_team_task_intake_token",
-      ok: token.error?.code === "P0002" && Boolean(anonToken.error),
+      ok: token.error?.code === "P0002" && Boolean(anonToken.error) && legacyToken.error?.code === "PGRST202",
       error: token.error?.code !== "P0002"
         ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
         : !anonToken.error
           ? "token RPC unexpectedly allowed anonymous execution"
+          : legacyToken.error?.code !== "PGRST202"
+            ? legacyToken.error?.message || "legacy token RPC overload is still available"
           : "",
     },
     {

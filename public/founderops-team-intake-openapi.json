@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Team Task Intake API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Personal-token API for complete task-centered team context and guarded proposal or sub-issue intake."
   },
   "servers": [
@@ -55,7 +55,7 @@
           "assignee": { "type": "string", "maxLength": 120 },
           "owner": { "type": "string", "maxLength": 120 },
           "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
-          "status": { "type": "string" },
+          "status": { "type": "string", "maxLength": 40 },
           "workstream": { "type": "string", "maxLength": 120 },
           "startDate": { "type": "string", "format": "date" },
           "endDate": { "type": "string", "format": "date" },
@@ -334,6 +334,14 @@
           "500": {
             "description": "Context could not be loaded",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "501": {
+            "description": "Supabase is not configured for Team Task Intake",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "503": {
+            "description": "Team Task Intake schema is not available",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
           }
         }
       }
@@ -369,6 +377,14 @@
           },
           "500": {
             "description": "Preview could not be built",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "501": {
+            "description": "Supabase is not configured for Team Task Intake",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "503": {
+            "description": "Team Task Intake schema is not available",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
           }
         }
@@ -426,6 +442,14 @@
           },
           "500": {
             "description": "Batch could not be committed",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "501": {
+            "description": "Supabase is not configured for Team Task Intake",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "503": {
+            "description": "Team Task Intake schema is not available",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
           }
         }

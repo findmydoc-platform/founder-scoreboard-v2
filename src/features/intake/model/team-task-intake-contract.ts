@@ -14,33 +14,36 @@ export const TEAM_TASK_INTAKE_FORBIDDEN_WRITES = [
   "github-sync",
 ] as const;
 
-export const TEAM_TASK_INTAKE_INPUT_KEYS = [
-  "title",
-  "description",
-  "problemStatement",
-  "intendedOutcome",
-  "scopeConstraints",
-  "acceptanceCriteria",
-  "evidenceRequired",
-  "definitionOfDone",
-  "taskType",
-  "parentTaskId",
-  "packageId",
-  "milestoneId",
-  "sprintId",
-  "assignee",
-  "owner",
-  "priority",
-  "status",
-  "workstream",
-  "startDate",
-  "endDate",
-  "deadline",
-  "hours",
-] as const;
+export const TEAM_TASK_INTAKE_INPUT_RULES = {
+  title: { kind: "string", required: true, minLength: 3, maxLength: 240 },
+  description: { kind: "string", maxLength: 4_000 },
+  problemStatement: { kind: "string", maxLength: 4_000 },
+  intendedOutcome: { kind: "string", maxLength: 4_000 },
+  scopeConstraints: { kind: "string", maxLength: 4_000 },
+  acceptanceCriteria: { kind: "string-or-string-array", maxLength: 6_000 },
+  evidenceRequired: { kind: "string", maxLength: 4_000 },
+  definitionOfDone: { kind: "string", maxLength: 4_000 },
+  taskType: { kind: "enum", values: TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES },
+  parentTaskId: { kind: "string", maxLength: 120 },
+  packageId: { kind: "string", maxLength: 120 },
+  milestoneId: { kind: "string", maxLength: 120 },
+  sprintId: { kind: "string", maxLength: 120 },
+  assignee: { kind: "string", maxLength: 120 },
+  owner: { kind: "string", maxLength: 120 },
+  priority: { kind: "enum", values: ["P0", "P1", "P2", "P3", "P4"] },
+  status: { kind: "string", maxLength: 40 },
+  workstream: { kind: "string", maxLength: 120 },
+  startDate: { kind: "date" },
+  endDate: { kind: "date" },
+  deadline: { kind: "date" },
+  hours: { kind: "number", minimum: 0, maximum: 200 },
+} as const;
+
+export const TEAM_TASK_INTAKE_INPUT_KEYS = Object.keys(TEAM_TASK_INTAKE_INPUT_RULES) as Array<keyof typeof TEAM_TASK_INTAKE_INPUT_RULES>;
 
 export type TeamTaskIntakeScope = (typeof TEAM_TASK_INTAKE_SCOPES)[number];
 export type TeamTaskIntakeTaskType = (typeof TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES)[number];
+export type TeamTaskIntakeInputKey = keyof typeof TEAM_TASK_INTAKE_INPUT_RULES;
 
 export type TeamTaskIntakeTokenRecord = {
   id: string;
