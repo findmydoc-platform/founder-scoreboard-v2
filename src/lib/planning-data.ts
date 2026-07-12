@@ -1,4 +1,4 @@
-import { emptyPlanningHeaderData, loadPlanningHeaderData } from "./planning-header-data";
+import { emptyPlanningHeaderData, loadPlanningHeaderData, type PlanningHeaderSharedSlotLoaders } from "./planning-header-data";
 import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, shouldLoad, type PlanningDataQueryScope } from "./planning-data-loader";
 import { isOperationalLeadRole } from "./platform";
 import { reconcileNotificationEvents } from "./notification-resolution";
@@ -48,6 +48,7 @@ export type PlanningDataAccessScope = {
 
 export type PlanningDataLoadOptions = {
   headerData?: "eager" | "deferred";
+  sharedHeaderSlotLoaders?: PlanningHeaderSharedSlotLoaders;
 };
 
 export type PlanningDataResult = {
@@ -122,6 +123,7 @@ export async function getPlanningData(
       fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
       eventsLoaded: shouldLoad(scope, "events"),
       notificationEventsLoaded,
+      sharedSlotLoaders: options.sharedHeaderSlotLoaders,
     });
 
   return {

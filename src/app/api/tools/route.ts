@@ -6,6 +6,7 @@ import { mapFmdTool } from "@/lib/planning-data-mappers";
 import type { DbFmdTool } from "@/lib/planning-data-row-types";
 import { slugify } from "@/lib/slug";
 import type { FmdTool } from "@/lib/types";
+import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 
 const maxCuratedFmdToolLinks = 5;
 
@@ -120,6 +121,8 @@ export async function POST(request: NextRequest) {
     after_data: insert,
     ...auditRequestMetadata(request),
   });
+
+  invalidateSharedPlanningHeaderCache("quickLinks");
 
   return NextResponse.json({ ok: true, tool: mapFmdTool(created as DbFmdTool) });
 }

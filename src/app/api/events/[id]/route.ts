@@ -4,6 +4,7 @@ import { requireOperationalLead } from "@/lib/authz";
 import { assertFounderEventParticipantsExist, buildFounderEventUpdatePatch, founderEventSelect, validateFounderEventRow, type EventPayload } from "@/features/events/model/event-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { mapFounderEvent } from "@/lib/planning-data-mappers";
+import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<EventPayload>(request, requireOperationalLead, {});
@@ -48,6 +49,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     after_data: patch,
     ...auditRequestMetadata(request),
   });
+
+  invalidateSharedPlanningHeaderCache("calendarEvents");
 
   return NextResponse.json({ event: mapFounderEvent(event) });
 }

@@ -75,10 +75,16 @@ type PlanningHeaderProjectionOptions = {
   platformRole?: PlatformRole | null;
 };
 
+export type PlanningHeaderSharedSlotLoaders = {
+  quickLinks?: () => Promise<HeaderDataSlot<HeaderQuickLink[]>>;
+  calendarEvents?: () => Promise<HeaderDataSlot<HeaderCalendarEvent[]>>;
+};
+
 type PlanningHeaderLoadOptions = PlanningHeaderProjectionOptions & {
   data?: PlanningData;
   notificationEventsReconciled?: boolean;
   slots?: readonly PlanningHeaderSlotKey[];
+  sharedSlotLoaders?: PlanningHeaderSharedSlotLoaders;
 };
 
 function headerSlot<T>(state: HeaderDataSlot<T>["state"], data: T, patch: Omit<HeaderDataSlot<T>, "state" | "data"> = {}): HeaderDataSlot<T> {
@@ -313,7 +319,7 @@ export function parsePlanningHeaderSlots(value: string | null): PlanningHeaderSl
   return [...new Set(slots)] as PlanningHeaderSlotKey[];
 }
 
-async function loadHeaderQuickLinks(supabase: SupabaseClient): Promise<HeaderDataSlot<HeaderQuickLink[]>> {
+export async function loadHeaderQuickLinks(supabase: SupabaseClient): Promise<HeaderDataSlot<HeaderQuickLink[]>> {
   const result = await supabase
     .from("fmd_tools")
     .select(headerQuickLinkSelect)
@@ -327,7 +333,7 @@ async function loadHeaderQuickLinks(supabase: SupabaseClient): Promise<HeaderDat
   return readyHeaderSlot(links, new Date().toISOString());
 }
 
-async function loadHeaderCalendarEvents(supabase: SupabaseClient): Promise<HeaderDataSlot<HeaderCalendarEvent[]>> {
+export async function loadHeaderCalendarEvents(supabase: SupabaseClient): Promise<HeaderDataSlot<HeaderCalendarEvent[]>> {
   const result = await supabase
     .from("founder_events")
     .select(headerCalendarEventSelect)
@@ -374,12 +380,16 @@ export async function loadPlanningHeaderData(
     requestedSlots.has("quickLinks")
       ? options.fmdToolsLoaded && options.data
         ? Promise.resolve(readyHeaderSlot(projectHeaderQuickLinks(options.data.fmdTools)))
-        : loadHeaderQuickLinks(supabase)
+        : options.sharedSlotLoaders?.quickLinks
+          ? options.sharedSlotLoaders.quickLinks()
+          : loadHeaderQuickLinks(supabase)
       : Promise.resolve(emptyPlanningHeaderData.quickLinks),
     requestedSlots.has("calendarEvents")
       ? options.eventsLoaded && options.data
         ? Promise.resolve(readyHeaderSlot(projectHeaderCalendarEvents(options.data.events)))
-        : loadHeaderCalendarEvents(supabase)
+        : options.sharedSlotLoaders?.calendarEvents
+          ? options.sharedSlotLoaders.calendarEvents()
+          : loadHeaderCalendarEvents(supabase)
       : Promise.resolve(emptyPlanningHeaderData.calendarEvents),
     requestedSlots.has("notifications")
       ? options.notificationEventsLoaded && options.data

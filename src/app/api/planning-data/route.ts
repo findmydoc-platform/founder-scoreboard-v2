@@ -4,6 +4,7 @@ import { getPlanningData } from "@/lib/planning-data";
 import { planningDataUnavailableMessage } from "@/lib/planning-data-availability";
 import { apiError, authzError } from "@/lib/api-response";
 import { getPlanningDataScopeForWorkspace, planningDataWorkspaceFromValue } from "@/lib/planning-data-scopes";
+import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 
 export async function GET(request: NextRequest) {
   const auth = await requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     workspace,
     currentProfileId: auth.profile?.id || null,
     platformRole: auth.profile?.platformRole || null,
-  });
+  }, { sharedHeaderSlotLoaders: sharedPlanningHeaderSlotLoaders });
   if (result.availability === "unavailable") return apiError(planningDataUnavailableMessage, 503);
   return NextResponse.json({ ...result, currentProfile: auth.profile });
 }
