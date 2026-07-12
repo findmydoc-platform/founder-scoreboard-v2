@@ -1,66 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState, type SetStateAction } from "react";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
-import type { ReviewOwnerFilter, ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
-import type { PlanningData, ViewMode } from "@/lib/types";
+import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 import { addDaysIso } from "@/lib/planning-schedule";
+import { dateUrlField, enumUrlField, multiEnumUrlField, stringUrlField, useTableUrlState, type TableUrlHistoryMode, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
 
-export type PlanningFilters = {
-  query: string;
-  assignee: string;
-  status: string;
-  priority: string;
-  packageId: string;
-  quick: string[];
-};
+export type PlanningFilters = PlanningFilterPreferences;
 
-const planningFiltersSessionKey = "fmd-planning-filters-v1";
-
-const defaultPlanningFilters: PlanningFilters = {
+export const DEFAULT_PLANNING_FILTERS: PlanningFilters = {
   query: "",
   assignee: "Alle",
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
   quick: [],
+  sprintId: "Alle",
+  workstream: "Alle",
+  risk: "Alle",
+  targetFrom: "",
+  targetTo: "",
+  sort: "priority",
+  direction: "asc",
 };
 
-function isFilterString(value: unknown): value is string {
-  return typeof value === "string";
-}
-
-function normalizeQuickFilters(value: unknown) {
-  if (Array.isArray(value)) return value.filter(isFilterString);
-  return isFilterString(value) && value ? [value] : [];
-}
-
-function normalizePlanningFilters(value: unknown): PlanningFilters {
-  if (!value || typeof value !== "object") return defaultPlanningFilters;
-
-  const candidate = value as Partial<Record<keyof PlanningFilters, unknown>>;
-
-  return {
-    query: isFilterString(candidate.query) ? candidate.query : defaultPlanningFilters.query,
-    assignee: isFilterString(candidate.assignee) ? candidate.assignee : isFilterString((candidate as { owner?: unknown }).owner) ? (candidate as { owner: string }).owner : defaultPlanningFilters.assignee,
-    status: isFilterString(candidate.status) ? candidate.status : defaultPlanningFilters.status,
-    priority: isFilterString(candidate.priority) ? candidate.priority : defaultPlanningFilters.priority,
-    packageId: isFilterString(candidate.packageId) ? candidate.packageId : defaultPlanningFilters.packageId,
-    quick: normalizeQuickFilters(candidate.quick),
-  };
-}
-
-function readPlanningFiltersFromSession(): PlanningFilters {
-  if (typeof window === "undefined") return defaultPlanningFilters;
-
-  try {
-    return normalizePlanningFilters(JSON.parse(window.sessionStorage.getItem(planningFiltersSessionKey) || "null"));
-  } catch {
-    return defaultPlanningFilters;
-  }
-}
+const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
+  query: stringUrlField(),
+  assignee: stringUrlField("Alle"),
+  status: stringUrlField("Alle"),
+  priority: stringUrlField("Alle"),
+  packageId: stringUrlField("Alle"),
+  quick: multiEnumUrlField<string>([], ["mine", "open", "critical", "blocked", "week", "high", "evidence"]),
+  sprintId: stringUrlField("Alle"),
+  workstream: stringUrlField("Alle"),
+  risk: stringUrlField("Alle"),
+  targetFrom: dateUrlField(),
+  targetTo: dateUrlField(),
+  sort: enumUrlField<string>("priority", ["priority", "title", "status", "assignee", "sprint", "start", "deadline"]),
+  direction: enumUrlField("asc", ["asc", "desc"] as const),
+};
 
 type UsePlanningViewStateOptions = {
   initialData: PlanningData;
@@ -77,8 +57,6 @@ export function usePlanningViewState({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(initialFocusedReviewTaskId);
   const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
-  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>("open");
-  const [reviewOwnerFilter, setReviewOwnerFilter] = useState<ReviewOwnerFilter>("all");
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -91,27 +69,24 @@ export function usePlanningViewState({
     horizonWeeks: 6,
     targetSprintNumber: 0,
   });
-  const [filters, setFilters] = useState<PlanningFilters>(() => readPlanningFiltersFromSession());
-
-  useEffect(() => {
-    window.sessionStorage.setItem(planningFiltersSessionKey, JSON.stringify(filters));
-  }, [filters]);
+  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema });
+  const setFilters = useCallback((next: SetStateAction<PlanningFilters>, history: TableUrlHistoryMode = "push") => {
+    updateFilters((current) => typeof next === "function" ? next(current) : next, history);
+  }, [updateFilters]);
 
   return {
     filters,
     focusedReviewTaskId,
+    hasPlanningFilterUrlState,
     initiativeDialogDefaults,
     mobileNavOpen,
-    reviewOwnerFilter,
-    reviewStatusFilter,
+    resetFilters,
     selectedReviewDetailTaskId,
     selectedTaskId,
     setFilters,
     setFocusedReviewTaskId,
     setInitiativeDialogDefaults,
     setMobileNavOpen,
-    setReviewOwnerFilter,
-    setReviewStatusFilter,
     setSelectedTaskId,
     setShowFilters,
     setShowNotifications,

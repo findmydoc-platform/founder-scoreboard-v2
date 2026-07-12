@@ -74,6 +74,13 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   priority: "Alle",
   packageId: "Alle",
   quick: [],
+  sprintId: "Alle",
+  workstream: "Alle",
+  risk: "Alle",
+  targetFrom: "",
+  targetTo: "",
+  sort: "priority",
+  direction: "asc",
 };
 
 function cleanColor(value: unknown) {
@@ -98,7 +105,14 @@ function cleanFilters(value: unknown): PlanningFilterPreferences {
       ? candidate.quick.filter((item): item is string => typeof item === "string").map((item) => item.slice(0, 80)).slice(0, 12)
       : typeof candidate.quick === "string" && candidate.quick
         ? [candidate.quick.slice(0, 80)]
-        : defaultPlanningFilters.quick,
+      : defaultPlanningFilters.quick,
+    sprintId: typeof candidate.sprintId === "string" ? candidate.sprintId.slice(0, 160) : defaultPlanningFilters.sprintId,
+    workstream: typeof candidate.workstream === "string" ? candidate.workstream.slice(0, 160) : defaultPlanningFilters.workstream,
+    risk: typeof candidate.risk === "string" ? candidate.risk.slice(0, 80) : defaultPlanningFilters.risk,
+    targetFrom: typeof candidate.targetFrom === "string" ? candidate.targetFrom.slice(0, 10) : defaultPlanningFilters.targetFrom,
+    targetTo: typeof candidate.targetTo === "string" ? candidate.targetTo.slice(0, 10) : defaultPlanningFilters.targetTo,
+    sort: typeof candidate.sort === "string" ? candidate.sort.slice(0, 40) : defaultPlanningFilters.sort,
+    direction: candidate.direction === "desc" ? "desc" : "asc",
   };
 }
 

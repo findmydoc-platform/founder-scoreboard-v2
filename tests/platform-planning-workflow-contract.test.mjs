@@ -185,8 +185,8 @@ test("planning app controller delegates command domains and stays a thin compose
       matches: [/setProtectedPlanningDataCache/, /requestPlanningData\(apiClient, workspace\)/],
     },
     {
-      label: "planning task view model hook",
-      path: "src/features/planning/hooks/use-planning-task-view-model.ts",
+      label: "planning task table view model",
+      path: "src/features/planning/model/planning-task-table-view-model.ts",
       matches: [/hasOpenWaitingRelation/],
     },
     { label: "initiative commands", path: "src/features/projects/hooks/use-initiative-commands.ts", matches: [/saveInitiativeRequest/] },
@@ -570,9 +570,10 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(routes, /href: "\/reviews"/);
   assert.match(app, /workspace === "reviews"/);
   assert.match(app, /ReviewWorkspaceOverview/);
-  assert.match(app, /reviewStatusFilter/);
-  assert.match(app, /reviewOwnerFilter/);
-  assert.match(app, /useState<ReviewOwnerFilter>\("all"\)/);
+  assert.match(workspace, /namespace: "reviews"/);
+  assert.match(workspace, /DEFAULT_REVIEW_FILTERS/);
+  assert.match(workspace, /FilterToolbar/);
+  assert.match(workspace, /DataTableFrame/);
   assert.match(app, /initialReviewTaskId/);
   assert.match(app, /ReviewDetailPage/);
   assert.match(app, /reopenReviewTask/);
@@ -582,7 +583,7 @@ test("review workspace has direct review detail routes filters and reopen guard"
   assert.match(model, /label: "Abgeschlossen"/);
   assert.match(model, /label: "Nacharbeit"/);
   assert.match(model, /label: "Geblockt"/);
-  assert.match(workspace, /metrics\.total === 0/);
+  assert.match(workspace, /metrics\.total \? "Keine Reviews für diese Filter\."/);
   assert.match(workspace, /Noch keine Reviews/);
   assert.match(workspace, /href="\/sprint"/);
   assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);

@@ -1,5 +1,5 @@
 import { Search, SlidersHorizontal, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { classNames, UiButton, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export type ActiveFilter = {
@@ -14,6 +14,13 @@ export type FilterOption<Value extends string = string> = {
   count?: number;
 };
 
+export type FilterResult = {
+  id: string;
+  label?: string;
+  visibleCount: number;
+  totalCount: number;
+};
+
 export function FilterToolbar({
   searchLabel,
   searchPlaceholder,
@@ -25,12 +32,14 @@ export function FilterToolbar({
   onReset,
   resetLabel = "Filter zurücksetzen",
   isDirty,
-  visibleCount,
-  totalCount,
+  results,
+  filterCount = activeFilters.length,
   primaryControls,
   children,
   className,
-  panelId = "data-filters",
+  panelId,
+  density = "default",
+  variant = "standalone",
 }: {
   searchLabel: string;
   searchPlaceholder: string;
@@ -42,21 +51,25 @@ export function FilterToolbar({
   onReset: () => void;
   resetLabel?: string;
   isDirty?: boolean;
-  visibleCount: number;
-  totalCount: number;
+  results: FilterResult[];
+  filterCount?: number;
   primaryControls?: ReactNode;
   children?: ReactNode;
   className?: string;
   panelId?: string;
+  density?: "default" | "compact";
+  variant?: "standalone" | "embedded";
 }) {
-  return (
-    <UiPanel padding="none" className={classNames("min-w-0 overflow-hidden", className)}>
+  const generatedId = useId();
+  const resolvedPanelId = panelId || `${generatedId}-filters`;
+  const content = (
+    <>
       {primaryControls && (
-        <div className="border-b border-slate-100 px-4 py-3">
+        <div className={classNames("border-b border-slate-100", density === "compact" ? "px-3 py-2.5" : "px-4 py-3")}>
           {primaryControls}
         </div>
       )}
-      <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(260px,1fr)_auto_auto] lg:items-center">
+      <div className={classNames("grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto_auto] lg:items-center", density === "compact" ? "px-3 py-2.5" : "px-4 py-3")}>
         <label className="relative min-w-0">
           <span className="sr-only">{searchLabel}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -85,12 +98,12 @@ export function FilterToolbar({
           <UiButton
             onClick={() => onExpandedChange(!expanded)}
             aria-expanded={expanded}
-            aria-controls={panelId}
-            variant={activeFilters.length ? "blue" : "secondary"}
+            aria-controls={resolvedPanelId}
+            variant={filterCount ? "blue" : "secondary"}
             size="md"
           >
             <SlidersHorizontal size={16} />
-            Filter{activeFilters.length ? ` (${activeFilters.length})` : ""}
+            Filter{filterCount ? ` (${filterCount})` : ""}
           </UiButton>
           {(isDirty ?? (activeFilters.length > 0 || Boolean(query))) && (
             <UiButton onClick={onReset} variant="ghost" size="md" className="text-slate-500">
@@ -98,8 +111,13 @@ export function FilterToolbar({
             </UiButton>
           )}
         </div>
-        <div className="whitespace-nowrap text-sm text-slate-500" aria-live="polite" aria-atomic="true">
-          <strong className="text-slate-900">{visibleCount}</strong> von {totalCount}
+        <div className="flex flex-wrap justify-start gap-x-3 gap-y-1 whitespace-nowrap text-sm text-slate-500 lg:justify-end" aria-live="polite" aria-atomic="true">
+          {results.map((result) => (
+            <span key={result.id}>
+              {result.label && <span>{result.label}: </span>}
+              <strong className="text-slate-900">{result.visibleCount}</strong> von {result.totalCount}
+            </span>
+          ))}
         </div>
       </div>
       {activeFilters.length > 0 && (
@@ -119,18 +137,23 @@ export function FilterToolbar({
         </div>
       )}
       {children && (
-        <div id={panelId} hidden={!expanded} className="border-t border-slate-100 bg-slate-50/60 px-4 py-4">
+        <div id={resolvedPanelId} hidden={!expanded} className={classNames("border-t border-slate-100 bg-slate-50/60", density === "compact" ? "px-3 py-3" : "px-4 py-4")}>
           {children}
         </div>
       )}
-    </UiPanel>
+    </>
   );
+
+  if (variant === "embedded") return <div className={classNames("min-w-0", className)}>{content}</div>;
+  return <UiPanel padding="none" className={classNames("min-w-0 overflow-hidden", className)}>{content}</UiPanel>;
 }
 
-export function FilterField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function FilterField({ label, children, className, labelId }: { label: string; children: ReactNode; className?: string; labelId?: string }) {
+  const generatedId = useId();
+  const resolvedLabelId = labelId || `${generatedId}-label`;
   return (
     <div className={classNames("grid min-w-0 gap-1.5", className)}>
-      <div className="text-xs font-semibold text-slate-600">{label}</div>
+      <div id={resolvedLabelId} className="text-xs font-semibold text-slate-600">{label}</div>
       {children}
     </div>
   );

@@ -6,7 +6,7 @@ import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-impor
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { useNotificationCommands } from "@/features/planning/hooks/use-notification-commands";
 import { usePlanningBoardState } from "@/features/planning/hooks/use-planning-board-state";
-import type { PlanningFilters, usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
+import type { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
@@ -19,7 +19,7 @@ import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutatio
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, PlanningHeaderData, Task, ViewMode } from "@/lib/types";
+import type { PlanningData, PlanningHeaderData, Task } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
@@ -29,9 +29,8 @@ type UsePlanningCommandRegistryOptions = {
   commandContext: PlanningCommandContext;
   currentProfileId: string;
   data: PlanningData;
-  filters: PlanningFilters;
+  hasPlanningFilterUrlState: boolean;
   openTaskPanel: (taskId: string) => void;
-  protectedDataLoaded: boolean;
   refreshPlanningData: () => Promise<void>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
@@ -45,7 +44,6 @@ type UsePlanningCommandRegistryOptions = {
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "seed" | "supabase";
   sprintPlanningOptions: PlanningViewState["sprintPlanningOptions"];
-  view: ViewMode;
   workspace: AppWorkspace;
 };
 
@@ -55,9 +53,8 @@ export function usePlanningCommandRegistry({
   commandContext,
   currentProfileId,
   data,
-  filters,
+  hasPlanningFilterUrlState,
   openTaskPanel,
-  protectedDataLoaded,
   refreshPlanningData,
   selectedTask,
   setFilters,
@@ -71,7 +68,6 @@ export function usePlanningCommandRegistry({
   setWorkspace,
   source,
   sprintPlanningOptions,
-  view,
   workspace,
 }: UsePlanningCommandRegistryOptions) {
   const taskMutationCommands = useTaskMutationCommands({
@@ -99,20 +95,13 @@ export function usePlanningCommandRegistry({
     updateTask,
   });
   useProfileUiPreferenceSync({
-    apiClient,
     currentProfileId,
     data,
-    expandedPackages: boardState.expandedPackages,
-    filters,
-    protectedDataLoaded,
-    setData: commandContext.setData,
+    hasPlanningFilterUrlState,
     setExpandedPackageIds: boardState.setExpandedPackageIds,
     setFilters,
     setView,
     setWorkspace,
-    source,
-    view,
-    workspace,
   });
   const eventCommands = useFounderEventCommands(commandContext);
   const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);

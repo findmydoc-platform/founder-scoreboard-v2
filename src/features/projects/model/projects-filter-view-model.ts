@@ -1,4 +1,6 @@
 import { normalizeStatus } from "@/lib/status";
+import { taskHasCriticalAttention } from "@/features/tasks/model/task-attention-signals";
+import { hasGitHubIssue } from "@/lib/platform";
 import type { Milestone, Package, PlanningData, Task } from "@/lib/types";
 
 export type ProjectHierarchyInitiative = {
@@ -18,6 +20,36 @@ export type ProjectsFilterViewModel = {
   visibleCount: number;
 };
 
+export type ProjectsRiskFilter = "all" | "blocked" | "critical" | "github";
+export type ProjectsSort = "title" | "owner" | "status" | "priority" | "hours" | "date";
+export type ProjectsTableFilters = {
+  query: string;
+  owner: string;
+  status: string;
+  priority: string;
+  milestone: string;
+  initiative: string;
+  risk: ProjectsRiskFilter;
+  from: string;
+  to: string;
+  sort: ProjectsSort;
+  direction: "asc" | "desc";
+};
+
+export const DEFAULT_PROJECTS_FILTERS: ProjectsTableFilters = {
+  query: "",
+  owner: "Alle",
+  status: "Alle",
+  priority: "Alle",
+  milestone: "Alle",
+  initiative: "Alle",
+  risk: "all",
+  from: "",
+  to: "",
+  sort: "title",
+  direction: "asc",
+};
+
 const withoutEpic: Milestone = {
   id: "",
   title: "Ohne Epic",
@@ -34,20 +66,18 @@ function includesQuery(values: Array<string | undefined>, query: string) {
 export function buildProjectsFilterViewModel({
   data,
   tasks,
-  query,
-  ownerFilter,
-  statusFilter,
+  filters,
 }: {
-  data: Pick<PlanningData, "milestones" | "packages">;
+  data: Pick<PlanningData, "milestones" | "packages"> & Partial<Pick<PlanningData, "taskBlockers" | "taskRelations">>;
   tasks: Task[];
-  query: string;
-  ownerFilter: string;
-  statusFilter: string;
+  filters: ProjectsTableFilters;
 }): ProjectsFilterViewModel {
   const milestones = data.milestones.length ? data.milestones : [withoutEpic];
   const deliverables = tasks.filter((task) => task.taskType !== "sub_issue");
-  const normalizedQuery = query.trim().toLocaleLowerCase("de");
-  const filtersActive = Boolean(normalizedQuery) || ownerFilter !== "Alle" || statusFilter !== "Alle";
+  const normalizedQuery = filters.query.trim().toLocaleLowerCase("de");
+  const filtersActive = Object.entries(filters).some(([key, value]) => key !== "sort" && key !== "direction" && value !== DEFAULT_PROJECTS_FILTERS[key as keyof ProjectsTableFilters]);
+  const direction = filters.direction === "desc" ? -1 : 1;
+  const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
 
   const filteredTasks = deliverables.filter((task) => {
     const initiative = data.packages.find((pack) => pack.id === task.packageId);
@@ -62,9 +92,30 @@ export function buildProjectsFilterViewModel({
       milestone?.title,
       milestone?.description,
     ], normalizedQuery);
-    const ownerMatches = ownerFilter === "Alle" || task.assigneeId === ownerFilter || task.assignee === ownerFilter || initiative?.ownerId === ownerFilter;
-    const statusMatches = statusFilter === "Alle" || normalizeStatus(task.status) === statusFilter;
-    return queryMatches && ownerMatches && statusMatches;
+    const ownerMatches = filters.owner === "Alle" || task.assigneeId === filters.owner || task.assignee === filters.owner || initiative?.ownerId === filters.owner;
+    const statusMatches = filters.status === "Alle" || normalizeStatus(task.status) === filters.status;
+    const priorityMatches = filters.priority === "Alle" || task.priority === filters.priority;
+    const milestoneMatches = filters.milestone === "Alle" || milestone?.id === filters.milestone;
+    const initiativeMatches = filters.initiative === "Alle" || task.packageId === filters.initiative;
+    const riskMatches = filters.risk === "all"
+      || filters.risk === "blocked" && (Boolean(task.dependsOn) || normalizeStatus(task.status) === "Blockiert")
+      || filters.risk === "critical" && taskHasCriticalAttention(task, {
+        tasks,
+        taskRelations: data.taskRelations || [],
+        taskBlockers: data.taskBlockers || [],
+      })
+      || filters.risk === "github" && !hasGitHubIssue(task);
+    const deadline = task.deadline || task.endDate || "";
+    return queryMatches && ownerMatches && statusMatches && priorityMatches && milestoneMatches && initiativeMatches && riskMatches && (!filters.from || deadline >= filters.from) && (!filters.to || deadline <= filters.to);
+  }).sort((left, right) => {
+    let comparison = 0;
+    if (filters.sort === "owner") comparison = (left.assignee || "").localeCompare(right.assignee || "", "de");
+    else if (filters.sort === "status") comparison = normalizeStatus(left.status).localeCompare(normalizeStatus(right.status), "de");
+    else if (filters.sort === "priority") comparison = (priorityRank[left.priority] ?? 9) - (priorityRank[right.priority] ?? 9);
+    else if (filters.sort === "hours") comparison = left.hours - right.hours;
+    else if (filters.sort === "date") comparison = (left.deadline || left.endDate || "").localeCompare(right.deadline || right.endDate || "");
+    else comparison = left.title.localeCompare(right.title, "de");
+    return direction * (comparison || left.order - right.order);
   });
 
   const hierarchy = milestones.flatMap((milestone) => {
@@ -79,12 +130,16 @@ export function buildProjectsFilterViewModel({
           initiative.title,
           initiative.goal,
         ], normalizedQuery);
-        const hierarchyOwnerMatches = ownerFilter === "Alle" || initiative.ownerId === ownerFilter;
-        const hierarchyStatusMatches = statusFilter === "Alle";
+        const hierarchyOwnerMatches = filters.owner === "Alle" || initiative.ownerId === filters.owner;
+        const hierarchyStatusMatches = filters.status === "Alle";
+        const hierarchyMilestoneMatches = filters.milestone === "Alle" || milestone.id === filters.milestone;
+        const hierarchyInitiativeMatches = filters.initiative === "Alle" || initiative.id === filters.initiative;
         const hierarchyDirectlyMatches = hierarchyQueryMatches
           && hierarchyOwnerMatches
           && hierarchyStatusMatches
-          && (Boolean(normalizedQuery) || ownerFilter !== "Alle");
+          && hierarchyMilestoneMatches
+          && hierarchyInitiativeMatches
+          && (Boolean(normalizedQuery) || filters.owner !== "Alle" || filters.milestone !== "Alle" || filters.initiative !== "Alle");
 
         return !filtersActive || initiativeTasks.length || hierarchyDirectlyMatches
           ? [{ initiative, tasks: initiativeTasks }]
@@ -92,8 +147,9 @@ export function buildProjectsFilterViewModel({
       });
     const milestoneDirectlyMatches = Boolean(normalizedQuery)
       && milestoneQueryMatches
-      && ownerFilter === "Alle"
-      && statusFilter === "Alle";
+      && filters.owner === "Alle"
+      && filters.status === "Alle"
+      && (filters.milestone === "Alle" || milestone.id === filters.milestone);
 
     if (filtersActive && !initiatives.length && !milestoneDirectlyMatches) return [];
     return [{

@@ -1,8 +1,9 @@
 "use client";
 
 import { Check, ChevronDown, CircleDot, Lock } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAnchoredPopover } from "@/shared/hooks/use-anchored-popover";
 
 export type CustomSelectOption = {
   value: string;
@@ -17,14 +18,9 @@ type CustomSelectProps = {
   onChange: (value: string) => void;
   disabled?: boolean;
   "aria-label"?: string;
+  "aria-labelledby"?: string;
   className?: string;
   menuClassName?: string;
-};
-
-type MenuPosition = {
-  top: number;
-  left: number;
-  width: number;
 };
 
 export function CustomSelect({
@@ -33,16 +29,18 @@ export function CustomSelect({
   onChange,
   disabled = false,
   "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
   className = "",
   menuClassName = "",
 }: CustomSelectProps) {
   const id = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const closeOnOutside = useCallback(() => setOpen(false), []);
+  const { rootRef, triggerRef, popoverRef: menuRef, position: menuPosition } = useAnchoredPopover({
+    open,
+    onClose: closeOnOutside,
+  });
   const stringValue = String(value);
   const selectedOptionIndex = options.findIndex((option) => option.value === stringValue);
   const selectedIndex = selectedOptionIndex >= 0 ? selectedOptionIndex : 0;
@@ -73,42 +71,8 @@ export function CustomSelect({
 
   useEffect(() => {
     if (!open) return;
-
-    const updateMenuPosition = () => {
-      const rect = rootRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setMenuPosition({
-        top: rect.bottom + 6,
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updateMenuPosition();
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     requestAnimationFrame(() => optionRefs.current[activeIndex]?.focus());
   }, [activeIndex, open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOnOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
-    };
-
-    window.addEventListener("pointerdown", closeOnOutside);
-    return () => window.removeEventListener("pointerdown", closeOnOutside);
-  }, [open]);
 
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
@@ -117,6 +81,7 @@ export function CustomSelect({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={id}
@@ -154,6 +119,7 @@ export function CustomSelect({
       {open && menuPosition && createPortal(
         <div
           ref={menuRef}
+          data-custom-control-popover
           id={id}
           role="listbox"
           tabIndex={-1}
@@ -190,8 +156,8 @@ export function CustomSelect({
               if (option) selectOption(option);
             }
           }}
-          style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.width }}
-          className={`fixed z-[100] max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
+          style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.triggerWidth }}
+          className={`fixed z-[120] max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-900/10 ${menuClassName}`}
         >
           {options.map((option, index) => {
             const selected = option.value === stringValue;

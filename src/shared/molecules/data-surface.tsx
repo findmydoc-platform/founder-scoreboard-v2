@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import type { HTMLAttributes, ReactNode, TableHTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
+import { useId, type HTMLAttributes, type ReactNode, type TableHTMLAttributes, type TdHTMLAttributes, type ThHTMLAttributes } from "react";
 import { classNames, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type DataSurfaceProps = HTMLAttributes<HTMLElement> & {
@@ -85,15 +85,15 @@ export function DataTable({ minWidth = 840, style, className, ...props }: DataTa
 }
 
 export function DataTableHead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={classNames("bg-slate-50 text-xs uppercase text-slate-500", className)} {...props} />;
+  return <thead className={classNames("sticky top-0 z-10 bg-slate-50 text-xs uppercase text-slate-500", className)} {...props} />;
 }
 
 export function DataRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return <tr className={classNames("align-top hover:bg-slate-50", className)} {...props} />;
 }
 
-export function DataHeaderCell({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th scope="col" className={classNames("border-b border-slate-200 px-3 py-3 font-semibold", className)} {...props} />;
+export function DataHeaderCell({ className, sticky = false, ...props }: ThHTMLAttributes<HTMLTableCellElement> & { sticky?: boolean }) {
+  return <th scope="col" className={classNames("border-b border-slate-200 bg-slate-50 px-3 py-3 font-semibold", sticky && "sticky left-0 z-20 shadow-[2px_0_0_0_rgb(226_232_240)]", className)} {...props} />;
 }
 
 export type SortDirection = "asc" | "desc" | null;
@@ -124,8 +124,84 @@ export function SortableDataHeaderCell({
   );
 }
 
-export function DataCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={classNames("border-b border-slate-100 px-3 py-3", className)} {...props} />;
+export function DataColumnHeader({
+  label,
+  direction = null,
+  onSort,
+  filter,
+  className,
+  sticky = false,
+}: {
+  label: string;
+  direction?: SortDirection;
+  onSort?: () => void;
+  filter?: ReactNode;
+  className?: string;
+  sticky?: boolean;
+}) {
+  const Icon = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ArrowUpDown;
+  return (
+    <DataHeaderCell className={className} sticky={sticky} aria-sort={onSort ? direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none" : undefined}>
+      <div className="flex min-w-0 items-center gap-1">
+        {onSort ? (
+          <button type="button" onClick={onSort} aria-label={`${label} sortieren`} className="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 text-left hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100">
+            <span className="truncate">{label}</span>
+            <Icon size={13} className={direction ? "shrink-0 text-blue-600" : "shrink-0 text-slate-400"} aria-hidden="true" />
+          </button>
+        ) : <span className="min-w-0 flex-1 truncate">{label}</span>}
+        {filter}
+      </div>
+    </DataHeaderCell>
+  );
+}
+
+export function DataCell({ className, sticky = false, ...props }: TdHTMLAttributes<HTMLTableCellElement> & { sticky?: boolean }) {
+  return <td className={classNames("border-b border-slate-100 bg-white px-3 py-3", sticky && "sticky left-0 z-[5] shadow-[2px_0_0_0_rgb(241_245_249)]", className)} {...props} />;
+}
+
+export function DataTableFrame({
+  title,
+  description,
+  caption,
+  results,
+  filtering,
+  actions,
+  minWidth = 840,
+  className,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  caption: string;
+  results: Array<{ id: string; label?: string; visibleCount: number; totalCount: number }>;
+  filtering: { mode: "embedded"; toolbar: ReactNode } | { mode: "external"; labelledBy: string };
+  actions?: ReactNode;
+  minWidth?: number | string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const generatedId = useId();
+  const titleId = `${generatedId}-title`;
+  const resultId = `${generatedId}-results`;
+  const describedBy = filtering.mode === "external" ? `${resultId} ${filtering.labelledBy}` : resultId;
+  return (
+    <DataSurface className={className} data-filter-mode={filtering.mode}>
+      <DataSurfaceHeader actions={actions}>
+        <h2 id={titleId} className="text-base font-semibold text-slate-950">{title}</h2>
+        {description && <div className="text-xs text-slate-500">{description}</div>}
+        <div id={resultId} className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500" aria-live="polite" aria-atomic="true">
+          {results.map((result) => <span key={result.id}>{result.label ? `${result.label}: ` : ""}<strong className="text-slate-800">{result.visibleCount}</strong> von {result.totalCount}</span>)}
+        </div>
+      </DataSurfaceHeader>
+      {filtering.mode === "embedded" && filtering.toolbar}
+      <DataOverflow aria-labelledby={titleId} aria-describedby={describedBy}>
+        <DataTable minWidth={minWidth} aria-labelledby={titleId} aria-describedby={describedBy}>
+          <caption className="sr-only">{caption}</caption>
+          {children}
+        </DataTable>
+      </DataOverflow>
+    </DataSurface>
+  );
 }
 
 type DataEmptyRowProps = TdHTMLAttributes<HTMLTableCellElement> & {

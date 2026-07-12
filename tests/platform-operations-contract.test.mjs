@@ -716,18 +716,18 @@ test("header actions are workspace aware", async () => {
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);
 });
 
-test("planning filters stay in session while task panel opens without routing", async () => {
+test("planning filters use namespaced URL state while task panel opens without routing", async () => {
   const ui = await readPlanningSurface();
+  const viewState = await readFile("src/features/planning/hooks/use-planning-view-state.ts", "utf8");
   const taskRoute = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
 
   assert.match(taskRoute, /<TaskDetailPage/);
   assert.match(taskRoute, /PlanningApp/);
   assert.doesNotMatch(taskRoute, /initialTaskId/);
-  assert.match(ui, /planningFiltersSessionKey = "fmd-planning-filters-v1"/);
-  assert.match(ui, /function readPlanningFiltersFromSession\(\): PlanningFilters/);
-  assert.match(ui, /window\.sessionStorage\.getItem\(planningFiltersSessionKey\)/);
-  assert.match(ui, /useState<PlanningFilters>\(\(\) => readPlanningFiltersFromSession\(\)\)/);
-  assert.match(ui, /window\.sessionStorage\.setItem\(planningFiltersSessionKey, JSON\.stringify\(filters\)\)/);
+  assert.match(viewState, /namespace: "tasks"/);
+  assert.match(viewState, /useTableUrlState/);
+  assert.match(viewState, /DEFAULT_PLANNING_FILTERS/);
+  assert.doesNotMatch(viewState, /sessionStorage|planningFiltersSessionKey/);
   assert.doesNotMatch(ui, /router\.push\(`\/tasks\/\$\{encodeURIComponent\(taskId\)\}`\)/);
 });
 

@@ -319,6 +319,13 @@ export type PlanningFilterPreferences = {
   priority: string;
   packageId: string;
   quick: string[];
+  sprintId: string;
+  workstream: string;
+  risk: string;
+  targetFrom: string;
+  targetTo: string;
+  sort: string;
+  direction: "asc" | "desc";
 };
 
 export type ProfileUiPreference = {

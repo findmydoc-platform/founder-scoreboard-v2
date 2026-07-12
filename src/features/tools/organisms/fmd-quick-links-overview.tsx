@@ -157,8 +157,7 @@ export function FmdQuickLinksOverview({
           onExpandedChange={setFiltersOpen}
           activeFilters={activeFilters}
           onReset={resetFilters}
-          visibleCount={filteredTools.length}
-          totalCount={sortedTools.length}
+          results={[{ id: "quicklinks", visibleCount: filteredTools.length, totalCount: sortedTools.length }]}
           panelId="quicklink-data-filters"
           primaryControls={(
             <FilterSegmentedControl

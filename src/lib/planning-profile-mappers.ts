@@ -20,6 +20,13 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   priority: "Alle",
   packageId: "Alle",
   quick: [],
+  sprintId: "Alle",
+  workstream: "Alle",
+  risk: "Alle",
+  targetFrom: "",
+  targetTo: "",
+  sort: "priority",
+  direction: "asc",
 };
 
 function filterString(value: unknown, fallback: string) {
@@ -41,6 +48,13 @@ function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
     packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),
     quick: filterStringArray(candidate.quick),
+    sprintId: filterString(candidate.sprintId, defaultPlanningFilters.sprintId),
+    workstream: filterString(candidate.workstream, defaultPlanningFilters.workstream),
+    risk: filterString(candidate.risk, defaultPlanningFilters.risk),
+    targetFrom: filterString(candidate.targetFrom, defaultPlanningFilters.targetFrom),
+    targetTo: filterString(candidate.targetTo, defaultPlanningFilters.targetTo),
+    sort: filterString(candidate.sort, defaultPlanningFilters.sort),
+    direction: candidate.direction === "desc" ? "desc" : "asc",
   };
 }
 
