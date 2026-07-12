@@ -30,6 +30,8 @@ type UseNotificationCommandsOptions = PlanningCommandContext & {
   workspace: AppWorkspace;
 };
 
+const taskOverlayWorkspaces = new Set<AppWorkspace>(["planning", "backlog", "reviews", "sprint", "projects"]);
+
 export function useNotificationCommands({
   apiClient,
   data,
@@ -167,9 +169,14 @@ export function useNotificationCommands({
     const target = notificationTarget(event);
     if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
-      if (!task) {
+      if (!task && taskOverlayWorkspaces.has(workspace)) {
         setSaveError("Die verknüpfte Aufgabe wurde nicht gefunden. Der Hinweis kann geschlossen werden.");
         setShowNotifications(false);
+        return;
+      }
+      if (!task || !taskOverlayWorkspaces.has(workspace)) {
+        setShowNotifications(false);
+        window.location.assign(target.href);
         return;
       }
       openTaskPanel(task.id);
