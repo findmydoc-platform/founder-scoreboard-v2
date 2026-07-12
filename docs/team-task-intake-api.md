@@ -16,7 +16,7 @@ Commit requests require a UUID idempotency key. Replaying the same canonical req
 Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 ```
 
-## v2 endpoints
+## Endpoints
 
 - `POST /api/team/task-intake/v2/preview` validates and normalizes one to 30 items without writing.
 - `POST /api/team/task-intake/v2/commit` validates again and commits the complete batch atomically.
@@ -41,7 +41,7 @@ The strict v2 payload uses `items` and `itemType = initiative | deliverable | su
 }
 ```
 
-## v2 write and approval policy
+## Write and approval policy
 
 - CEO and Deputy may propose Initiatives. Only the CEO may approve an Initiative in FounderOps.
 - CEO, Deputy, and Founder may propose a Deliverable in any Initiative that is not rejected.
@@ -51,11 +51,5 @@ The strict v2 payload uses `items` and `itemType = initiative | deliverable | su
 - Sub-Issues have no independent approval status, inherit their effective state from the parent Deliverable, have no Sprint, and are never score-relevant.
 - Deliverables always use `findmydoc-platform/management`. Only Sub-Issues may select an allowed technical `githubRepo`.
 - Intake v2 never assigns a Sprint, runs Review, changes scores, or starts GitHub sync.
-
-## Legacy v1.2 transition
-
-`POST /api/team/task-intake/preview` and `POST /api/team/task-intake/commit` remain available temporarily with their unchanged `tasks` payload and `taskType = proposal | sub_issue` contract. Both responses include `Deprecation: true` and a successor link to v2. Legacy strategic proposals are not silently reinterpreted.
-
-The v1.2 endpoints will be removed only after usage has stopped and all unresolved legacy proposals have been classified.
 
 The OpenAPI document is available at `/founderops-team-intake-openapi.json`.

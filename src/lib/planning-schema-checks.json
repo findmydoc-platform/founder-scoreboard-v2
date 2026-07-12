@@ -74,7 +74,7 @@
   {
     "name": "tasks.approval",
     "table": "tasks",
-    "select": "id,task_type,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,legacy_proposal_unresolved,github_repo,score_relevant",
+    "select": "id,task_type,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,github_repo,score_relevant",
     "health": true
   },
   {

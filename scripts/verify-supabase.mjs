@@ -393,42 +393,31 @@ async function verifyTeamTaskIntakeRpcs() {
     p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
     p_idempotency_key: randomUUID(),
     p_request_hash: "b".repeat(64),
-    p_items: [{ taskType: "proposal", title: "Verification" }],
+    p_items: [{ itemType: "deliverable", title: "Verification" }],
     p_request_ip: null,
     p_user_agent: null,
   };
-  const legacyTokenParams = {
-    ...tokenParams,
-    p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-  };
-  const v2BatchParams = {
-    ...batchParams,
-    p_items: [{ itemType: "deliverable", title: "Verification" }],
-  };
-  const [token, anonToken, legacyToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch, v2Batch, anonV2Batch] = await Promise.all([
+  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, legacyBatch, anonLegacyBatch, v2Batch, anonV2Batch] = await Promise.all([
     supabase.rpc("create_team_task_intake_token", tokenParams),
     anonSupabase.rpc("create_team_task_intake_token", tokenParams),
-    supabase.rpc("create_team_task_intake_token", legacyTokenParams),
     supabase.rpc("authenticate_team_task_intake_token", authParams),
     anonSupabase.rpc("authenticate_team_task_intake_token", authParams),
     supabase.rpc("revoke_team_task_intake_token", revokeParams),
     anonSupabase.rpc("revoke_team_task_intake_token", revokeParams),
     supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
     anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
-    supabase.rpc("create_team_task_intake_v2_transaction", v2BatchParams),
-    anonSupabase.rpc("create_team_task_intake_v2_transaction", v2BatchParams),
+    supabase.rpc("create_team_task_intake_v2_transaction", batchParams),
+    anonSupabase.rpc("create_team_task_intake_v2_transaction", batchParams),
   ]);
 
   return [
     {
       name: "create_team_task_intake_token",
-      ok: token.error?.code === "P0002" && Boolean(anonToken.error) && legacyToken.error?.code === "PGRST202",
+      ok: token.error?.code === "P0002" && Boolean(anonToken.error),
       error: token.error?.code !== "P0002"
         ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
         : !anonToken.error
           ? "token RPC unexpectedly allowed anonymous execution"
-          : legacyToken.error?.code !== "PGRST202"
-            ? legacyToken.error?.message || "legacy token RPC overload is still available"
           : "",
     },
     {
@@ -452,13 +441,11 @@ async function verifyTeamTaskIntakeRpcs() {
             : "",
     },
     {
-      name: "create_team_task_intake_batch_transaction",
-      ok: batch.error?.code === "P0004" && Boolean(anonBatch.error),
-      error: batch.error?.code !== "P0004"
-        ? batch.error?.message || "batch RPC unexpectedly accepted an inactive token"
-        : !anonBatch.error
-          ? "batch RPC unexpectedly allowed anonymous execution"
-          : "",
+      name: "create_team_task_intake_batch_transaction_removed",
+      ok: legacyBatch.error?.code === "PGRST202" && anonLegacyBatch.error?.code === "PGRST202",
+      error: legacyBatch.error?.code !== "PGRST202" || anonLegacyBatch.error?.code !== "PGRST202"
+        ? legacyBatch.error?.message || anonLegacyBatch.error?.message || "legacy Team Task Intake RPC is still available"
+        : "",
     },
     {
       name: "create_team_task_intake_v2_transaction",

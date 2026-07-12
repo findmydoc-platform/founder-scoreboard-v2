@@ -22,9 +22,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const owner = profileName(profiles, ownerId) || assignee;
   const createdBy = profileName(profiles, row.created_by);
   const taskType: Task["taskType"] = row.task_type === "sub_issue" ? "sub_issue" : "deliverable";
-  const approvalStatus = taskType === "sub_issue"
-    ? null
-    : row.approval_status || (row.task_type === "proposal" ? "proposed" : "approved");
+  const approvalStatus = taskType === "sub_issue" ? null : row.approval_status || "approved";
 
   return {
     id: row.id || "",

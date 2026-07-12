@@ -15,6 +15,21 @@ test("approval model separates active task type from approval state", async () =
   assert.match(migration, /legacy_proposal_unresolved/);
 });
 
+test("legacy Team Task Intake cleanup removes proposal storage and RPCs through the approved deploy path", async () => {
+  const [cleanup, schema, deploy] = await Promise.all([
+    readFile("supabase/migrations/20260712213443_remove_legacy_team_task_intake_v12.sql", "utf8"),
+    readFile("supabase/schema.sql", "utf8"),
+    readFile("scripts/deploy-production-schema.mjs", "utf8"),
+  ]);
+
+  assert.match(cleanup, /check \(task_type in \('deliverable', 'sub_issue'\)\)/);
+  assert.match(cleanup, /drop column if exists legacy_proposal_unresolved/);
+  assert.match(cleanup, /drop function if exists public\.create_team_task_intake_batch_transaction/);
+  assert.doesNotMatch(schema, /drop column if exists legacy_proposal_unresolved/);
+  assert.match(deploy, /20260712213443_remove_legacy_team_task_intake_v12\.sql/);
+  assert.match(deploy, /approvedDestructiveMigrations/);
+});
+
 test("approval transactions enforce revision, initiative prerequisite, and current accountable", async () => {
   const migration = await readFile("supabase/0059_planning_item_approval.sql", "utf8");
   const initiativeRoute = await readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8");
@@ -111,17 +126,15 @@ test("team intake v2 publishes an approval-aware repository contract", async () 
   const openapi = JSON.parse(await readFile("public/founderops-team-intake-openapi.json", "utf8"));
   const previewRoute = await readFile("src/app/api/team/task-intake/v2/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/team/task-intake/v2/commit/route.ts", "utf8");
-  const legacyRoute = await readFile("src/app/api/team/task-intake/preview/route.ts", "utf8");
   const intakeDocs = await readFile("docs/team-task-intake-api.md", "utf8");
 
   assert.ok(openapi.paths["/api/team/task-intake/v2/preview"]);
   assert.ok(openapi.paths["/api/team/task-intake/v2/commit"]);
-  assert.equal(openapi.paths["/api/team/task-intake/preview"].post.deprecated, true);
+  assert.equal(openapi.paths["/api/team/task-intake/preview"], undefined);
+  assert.equal(openapi.paths["/api/team/task-intake/commit"], undefined);
   assert.match(previewRoute, /buildTeamTaskIntakeV2Preview/);
   assert.match(commitRoute, /create_team_task_intake_v2_transaction/);
-  assert.match(legacyRoute, /Deprecation/);
   assert.match(intakeDocs, /itemType = initiative \| deliverable \| sub_issue/);
-  assert.match(intakeDocs, /Legacy v1\.2 transition/);
   assert.match(intakeDocs, /Only Sub-Issues may select an allowed technical/);
 });
 
@@ -129,7 +142,7 @@ test("github projection uses the item repository and native sub issue relationsh
   const repositories = await readFile("src/lib/github-repositories.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const migration = await readFile("supabase/0059_planning_item_approval.sql", "utf8");
+  const migration = await readFile("supabase/migrations/20260712213443_remove_legacy_team_task_intake_v12.sql", "utf8");
 
   assert.match(repositories, /findmydoc-platform\/management/);
   assert.match(repositories, /findmydoc-platform\/website/);
@@ -140,7 +153,7 @@ test("github projection uses the item repository and native sub issue relationsh
   assert.match(route, /resolveTaskGitHubRepository/);
   assert.match(route, /github:\$\{repository\}#/);
   assert.match(migration, /task_type = 'sub_issue' and github_repo in/);
-  assert.match(migration, /task_type in \('deliverable', 'proposal'\) and github_repo = 'findmydoc-platform\/management'/);
+  assert.match(migration, /task_type = 'deliverable' and github_repo = 'findmydoc-platform\/management'/);
 });
 
 test("carry-overs re-enter approval without a Sprint assignment", async () => {

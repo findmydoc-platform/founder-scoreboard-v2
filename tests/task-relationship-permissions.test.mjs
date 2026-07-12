@@ -47,13 +47,13 @@ test("initiative accountable can manage blocked_by without owning either task", 
   assert.equal(access.canRemoveRelation(blockedBy), true);
 });
 
-test("founder can manage blocked_by on an owned sub-issue but not on a proposal", () => {
+test("founder can manage blocked_by on an owned sub-issue but not on another founder's deliverable", () => {
   const profile = { id: "owner-1", name: "Owner", platformRole: "founder" };
   const subIssueAccess = taskRelationshipAccess({ task: { ...deliverable, taskType: "sub_issue" }, profile });
-  const proposalAccess = taskRelationshipAccess({ task: { ...deliverable, taskType: "proposal" }, profile });
+  const otherFounderAccess = taskRelationshipAccess({ task: { ...deliverable, owner: "other-founder", assignee: "other-founder" }, profile });
 
   assert.deepEqual(subIssueAccess.allowedRelationTypes, ["blocked_by"]);
-  assert.deepEqual(proposalAccess.allowedRelationTypes, []);
+  assert.deepEqual(otherFounderAccess.allowedRelationTypes, []);
 });
 
 test("unrelated founders and viewers remain read-only", () => {

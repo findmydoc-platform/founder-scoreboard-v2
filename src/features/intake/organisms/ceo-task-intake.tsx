@@ -23,7 +23,6 @@ const sampleTasks = {
       title: "Beispiel-Aufgabe aus CEO Intake",
       taskType: "deliverable",
       packageId: "initiative-id",
-      sprintId: "sprint-2",
       assignee: "sebastian",
       priority: "P1",
       hours: 4,
@@ -46,7 +45,6 @@ function previewState(tasks: TaskIntakePreviewTask[]) {
 }
 
 function taskTypeLabel(taskType: TaskIntakePreviewTask["taskType"]) {
-  if (taskType === "proposal") return "Vorschlag";
   if (taskType === "sub_issue") return "Sub-Issue";
   return "Deliverable";
 }
@@ -55,7 +53,6 @@ function intakeMessageLabel(message: string) {
   if (message.startsWith("Ungültiger Aufgabentyp:")) return "Aufgabentyp konnte nicht zugeordnet werden.";
   if (message.startsWith("Initiative wurde nicht gefunden:")) return "Initiative wurde nicht gefunden. Bitte eine vorhandene Initiative aus der Zuordnungshilfe verwenden.";
   if (message.startsWith("Epic / Meilenstein wurde nicht gefunden:")) return "Epic oder Meilenstein wurde nicht gefunden. Bitte eine vorhandene Zuordnung verwenden.";
-  if (message.startsWith("Sprint wurde nicht gefunden:")) return "Sprint wurde nicht gefunden. Bitte einen offenen Sprint aus der Zuordnungshilfe verwenden.";
   if (message.startsWith("Parent-Task wurde nicht gefunden:")) return "Übergeordnetes Deliverable wurde nicht gefunden. Bitte eine vorhandene Aufgabe verwenden.";
   if (message.startsWith("Zuständige Person wurde nicht gefunden:")) return "Zuständige Person wurde nicht gefunden. Bitte ein Teammitglied aus der Zuordnungshilfe verwenden.";
   if (message.startsWith("Status auf Offen gesetzt")) return "Status wurde auf Offen gesetzt, weil der importierte Wert nicht bekannt ist.";

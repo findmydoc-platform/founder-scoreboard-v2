@@ -2,11 +2,10 @@ import { normalizeStatus } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import {
-  TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES,
+  TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES,
   TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
   TEAM_TASK_INTAKE_MAX_TASKS,
 } from "@/features/intake/model/team-task-intake-contract";
-import { canCreateTeamSubIssueUnderDeliverable } from "@/features/intake/model/team-task-intake-policy";
 import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
@@ -109,10 +108,10 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       platformRole: actor.platformRole,
     },
     constraints: {
-      allowedTaskTypes: TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES,
+      allowedItemTypes: TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES,
       maxBatchSize: TEAM_TASK_INTAKE_MAX_TASKS,
       forbiddenWrites: TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
-      subIssuePolicy: actor.platformRole === "founder" ? "own-deliverables-only" : "any-deliverable",
+      subIssuePolicy: "any-deliverable",
     },
     profiles: profiles.map((profile) => ({
       id: profile.id,
@@ -146,7 +145,6 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       const taskBlockers = blockersByTaskId.get(task.id) || [];
       const openBlockers = taskBlockers.filter((blocker) => blocker.status === "open");
       const taskRelationStats = relationStats.get(task.id) || { count: 0, blocks: 0, blockedBy: 0 };
-      const ownerId = task.assignee || task.owner || "";
       return {
         id: task.id,
         title: task.title,
@@ -172,11 +170,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
         evidenceRequired: task.evidence_required || "",
         definitionOfDone: task.definition_of_done || "",
         evidencePresent: Boolean(task.evidence_link || task.github_issue_url || task.issue_url),
-        canCreateSubIssue: task.task_type === "deliverable" && canCreateTeamSubIssueUnderDeliverable({
-          actorId: actor.id,
-          actorRole: actor.platformRole,
-          parentOwnerId: ownerId,
-        }),
+        canCreateSubIssue: task.task_type === "deliverable",
         blockers: {
           openCount: openBlockers.length,
           latestReason: openBlockers[0]?.reason || "",

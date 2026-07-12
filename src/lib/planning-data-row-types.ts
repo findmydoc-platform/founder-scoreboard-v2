@@ -92,7 +92,7 @@ export type DbTask = {
   github_issue_sync_status: Task["githubIssueSyncStatus"] | null;
   github_issue_last_synced_at: string | null;
   github_issue_sync_error: string | null;
-  task_type: Task["taskType"] | "proposal" | null;
+  task_type: Task["taskType"] | null;
   parent_task_id: string | null;
   approval_status: Task["approvalStatus"];
   approval_revision: number | null;

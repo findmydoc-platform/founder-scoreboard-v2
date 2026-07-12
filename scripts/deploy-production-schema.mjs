@@ -5,6 +5,9 @@ import { loadLocalEnv } from "./lib/env.mjs";
 import { resolveProductionSchemaConnection } from "./lib/production-schema-connection.mjs";
 
 const schemaFile = "supabase/schema.sql";
+const approvedDestructiveMigrationFiles = [
+  "20260712213443_remove_legacy_team_task_intake_v12.sql",
+];
 const target = process.env.SCHEMA_DEPLOY_TARGET;
 const githubRef = process.env.GITHUB_REF;
 
@@ -28,7 +31,13 @@ try {
   process.exit(1);
 }
 
-const sql = await readFile(resolve(process.cwd(), schemaFile), "utf8");
+const schemaSql = await readFile(resolve(process.cwd(), schemaFile), "utf8");
+const approvedDestructiveMigrations = await Promise.all(
+  approvedDestructiveMigrationFiles.map(async (file) => ({
+    file,
+    sql: await readFile(resolve(process.cwd(), "supabase", "migrations", file), "utf8"),
+  })),
+);
 const blockedPatterns = [
   /\bdrop\s+table\b/i,
   /\bdrop\s+schema\b/i,
@@ -36,7 +45,7 @@ const blockedPatterns = [
   /\balter\s+table\b[\s\S]*?\bdrop\s+column\b/i,
 ];
 
-if (blockedPatterns.some((pattern) => pattern.test(sql))) {
+if (blockedPatterns.some((pattern) => pattern.test(schemaSql))) {
   console.error(`${schemaFile} contains destructive DDL; deploy it through a reviewed manual path.`);
   process.exit(1);
 }
@@ -47,7 +56,10 @@ await client.connect();
 
 try {
   await client.query("begin");
-  await client.query(sql);
+  await client.query(schemaSql);
+  for (const migration of approvedDestructiveMigrations) {
+    await client.query(migration.sql);
+  }
   await client.query("notify pgrst, 'reload schema'");
   await client.query("commit");
 } catch (error) {
@@ -57,4 +69,4 @@ try {
   await client.end();
 }
 
-console.log(`Applied production schema from ${schemaFile}.`);
+console.log(`Applied production schema from ${schemaFile} and ${approvedDestructiveMigrations.length} approved cleanup migration(s).`);

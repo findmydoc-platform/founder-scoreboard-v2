@@ -1,13 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { AuthenticatedProfile } from "@/lib/types";
-import {
-  buildTeamTaskIntakePreview,
-  loadTeamTaskIntakeContext,
-  parseTeamTaskIntakePayload,
-  teamTaskIntakePreviewIsValid,
-} from "@/features/intake/model/team-task-intake";
 import type { TeamTaskIntakeScope } from "@/features/intake/model/team-task-intake-contract";
-import { validateTeamTaskIntakeBatchSize } from "@/features/intake/model/team-task-intake-policy";
 import {
   requireTeamTaskIntakeScope,
   type TeamTaskIntakeAuthResult,
@@ -54,38 +46,4 @@ export async function handleTeamTaskIntakeRequest(
   } catch (error) {
     return publicCommitError(error, fallbackError);
   }
-}
-
-export async function buildTeamTaskIntakeForRoute({
-  actor,
-  payload,
-  rawTasks,
-  supabase,
-}: {
-  actor: AuthenticatedProfile;
-  payload?: unknown;
-  rawTasks?: import("@/features/intake/model/task-intake").TaskIntakeInput[];
-  supabase: SuccessfulTeamTaskIntakeAuth["supabase"];
-}) {
-  const parsed = rawTasks ? { ok: true as const, tasks: rawTasks } : parseTeamTaskIntakeForRoute(payload);
-  if (!parsed.ok) return parsed;
-
-  const context = await loadTeamTaskIntakeContext(supabase, parsed.tasks);
-  const preview = buildTeamTaskIntakePreview(parsed.tasks, context, actor);
-  return {
-    ok: true as const,
-    context,
-    preview,
-    rawTasks: parsed.tasks,
-    valid: teamTaskIntakePreviewIsValid(preview),
-  };
-}
-
-export function parseTeamTaskIntakeForRoute(payload: unknown) {
-  const parsed = parseTeamTaskIntakePayload(payload);
-  if (!parsed.ok) return { ok: false as const, error: parsed.error, status: 400 };
-
-  const batchError = validateTeamTaskIntakeBatchSize(parsed.tasks.length);
-  if (batchError) return { ok: false as const, error: batchError, status: 400 };
-  return { ok: true as const, tasks: parsed.tasks };
 }

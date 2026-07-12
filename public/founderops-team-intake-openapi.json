@@ -3,313 +3,20 @@
   "info": {
     "title": "FounderOps Team Task Intake API",
     "version": "2.0.0",
-    "description": "Personal-token API for task context and approval-aware Initiative, Deliverable, or Sub-Issue intake. The v1.2 paths remain temporarily available and deprecated."
+    "description": "Personal-token API for approval-aware Initiative, Deliverable, and Sub-Issue intake."
   },
-  "servers": [
-    { "url": "https://founder-ops.findmydoc.eu" }
-  ],
-  "security": [
-    { "bearerAuth": [] }
-  ],
+  "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
+  "security": [{ "bearerAuth": [] }],
   "components": {
     "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "opaque"
-      }
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "opaque" }
     },
     "schemas": {
       "ErrorResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": ["ok", "error"],
-        "properties": {
-          "ok": { "type": "boolean", "const": false },
-          "error": { "type": "string" }
-        }
-      },
-      "TeamTaskIntakeInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["title"],
-        "properties": {
-          "title": { "type": "string", "minLength": 3, "maxLength": 240 },
-          "description": { "type": "string", "maxLength": 4000 },
-          "problemStatement": { "type": "string", "maxLength": 4000 },
-          "intendedOutcome": { "type": "string", "maxLength": 4000 },
-          "scopeConstraints": { "type": "string", "maxLength": 4000 },
-          "acceptanceCriteria": {
-            "oneOf": [
-              { "type": "string", "maxLength": 6000 },
-              { "type": "array", "items": { "type": "string" } }
-            ]
-          },
-          "evidenceRequired": { "type": "string", "maxLength": 4000 },
-          "definitionOfDone": { "type": "string", "maxLength": 4000 },
-          "taskType": { "type": "string", "enum": ["proposal", "sub_issue"], "default": "proposal" },
-          "parentTaskId": { "type": "string", "maxLength": 120 },
-          "packageId": { "type": "string", "maxLength": 120 },
-          "milestoneId": { "type": "string", "maxLength": 120 },
-          "sprintId": { "type": "string", "maxLength": 120 },
-          "assignee": { "type": "string", "maxLength": 120 },
-          "owner": { "type": "string", "maxLength": 120 },
-          "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
-          "status": { "type": "string", "maxLength": 40 },
-          "workstream": { "type": "string", "maxLength": 120 },
-          "startDate": { "type": "string", "format": "date" },
-          "endDate": { "type": "string", "format": "date" },
-          "deadline": { "type": "string", "format": "date" },
-          "hours": { "type": "number", "minimum": 0, "maximum": 200 }
-        }
-      },
-      "TeamTaskIntakePayload": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["tasks"],
-        "properties": {
-          "tasks": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 30,
-            "items": { "$ref": "#/components/schemas/TeamTaskIntakeInput" }
-          }
-        }
-      },
-      "ProfileSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "name"],
-        "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" }
-        }
-      },
-      "MilestoneSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "title", "status", "targetDate"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "status": { "type": "string" },
-          "targetDate": { "type": "string" }
-        }
-      },
-      "InitiativeSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "title", "milestoneId", "ownerId", "accountableProfileId", "responsibleProfileIds", "status", "priority", "targetDate"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "milestoneId": { "type": "string" },
-          "ownerId": { "type": "string" },
-          "accountableProfileId": { "type": "string" },
-          "responsibleProfileIds": { "type": "array", "items": { "type": "string" } },
-          "status": { "type": "string" },
-          "priority": { "type": "string" },
-          "targetDate": { "type": "string" }
-        }
-      },
-      "SprintSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "name", "status", "startDate", "endDate"],
-        "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "status": { "type": "string" },
-          "startDate": { "type": "string" },
-          "endDate": { "type": "string" }
-        }
-      },
-      "TaskContextItem": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "title", "taskType", "parentTaskId", "status", "priority", "ownerId", "assigneeId", "createdById", "initiativeId", "milestoneId", "sprintId", "workstream", "startDate", "endDate", "deadline", "hours", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "evidencePresent", "canCreateSubIssue", "blockers", "comments", "relations"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "taskType": { "type": "string" },
-          "parentTaskId": { "type": "string" },
-          "status": { "type": "string" },
-          "priority": { "type": "string" },
-          "ownerId": { "type": "string" },
-          "assigneeId": { "type": "string" },
-          "createdById": { "type": "string" },
-          "initiativeId": { "type": "string" },
-          "milestoneId": { "type": "string" },
-          "sprintId": { "type": "string" },
-          "workstream": { "type": "string" },
-          "startDate": { "type": "string" },
-          "endDate": { "type": "string" },
-          "deadline": { "type": "string" },
-          "hours": { "type": "number" },
-          "problemStatement": { "type": "string" },
-          "intendedOutcome": { "type": "string" },
-          "scopeConstraints": { "type": "string" },
-          "acceptanceCriteria": { "type": "string" },
-          "evidenceRequired": { "type": "string" },
-          "definitionOfDone": { "type": "string" },
-          "evidencePresent": { "type": "boolean" },
-          "canCreateSubIssue": { "type": "boolean" },
-          "blockers": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["openCount", "latestReason", "latestImpact"],
-            "properties": {
-              "openCount": { "type": "integer" },
-              "latestReason": { "type": "string" },
-              "latestImpact": { "type": "string" }
-            }
-          },
-          "comments": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["internalCount", "externalCount"],
-            "properties": {
-              "internalCount": { "type": "integer" },
-              "externalCount": { "type": "integer" }
-            }
-          },
-          "relations": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["count", "blocks", "blockedBy"],
-            "properties": {
-              "count": { "type": "integer" },
-              "blocks": { "type": "integer" },
-              "blockedBy": { "type": "integer" }
-            }
-          }
-        }
-      },
-      "TeamTaskContextResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["ok", "context"],
-        "properties": {
-          "ok": { "type": "boolean", "const": true },
-          "context": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["actor", "constraints", "profiles", "milestones", "initiatives", "sprints", "tasks"],
-            "properties": {
-              "actor": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["id", "name", "platformRole"],
-                "properties": {
-                  "id": { "type": "string" },
-                  "name": { "type": "string" },
-                  "platformRole": { "type": "string", "enum": ["ceo", "deputy", "founder"] }
-                }
-              },
-              "constraints": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["allowedTaskTypes", "maxBatchSize", "forbiddenWrites", "subIssuePolicy"],
-                "properties": {
-                  "allowedTaskTypes": { "type": "array", "items": { "type": "string", "enum": ["proposal", "sub_issue"] } },
-                  "maxBatchSize": { "type": "integer", "const": 30 },
-                  "forbiddenWrites": { "type": "array", "items": { "type": "string" } },
-                  "subIssuePolicy": { "type": "string", "enum": ["own-deliverables-only", "any-deliverable"] }
-                }
-              },
-              "profiles": { "type": "array", "items": { "$ref": "#/components/schemas/ProfileSummary" } },
-              "milestones": { "type": "array", "items": { "$ref": "#/components/schemas/MilestoneSummary" } },
-              "initiatives": { "type": "array", "items": { "$ref": "#/components/schemas/InitiativeSummary" } },
-              "sprints": { "type": "array", "items": { "$ref": "#/components/schemas/SprintSummary" } },
-              "tasks": { "type": "array", "items": { "$ref": "#/components/schemas/TaskContextItem" } }
-            }
-          }
-        }
-      },
-      "TeamTaskIntakePreviewTask": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["clientId", "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "taskType", "parentTaskId", "parentTaskTitle", "packageId", "packageTitle", "milestoneId", "ownerId", "ownerName", "priority", "status", "workstream", "startDate", "endDate", "deadline", "hours", "scoreRelevant", "errors", "warnings"],
-        "properties": {
-          "clientId": { "type": "string" },
-          "title": { "type": "string" },
-          "description": { "type": "string" },
-          "problemStatement": { "type": "string" },
-          "intendedOutcome": { "type": "string" },
-          "scopeConstraints": { "type": "string" },
-          "acceptanceCriteria": { "type": "string" },
-          "evidenceRequired": { "type": "string" },
-          "definitionOfDone": { "type": "string" },
-          "taskType": { "type": "string", "enum": ["proposal", "sub_issue"] },
-          "parentTaskId": { "type": "string" },
-          "parentTaskTitle": { "type": "string" },
-          "packageId": { "type": "string" },
-          "packageTitle": { "type": "string" },
-          "milestoneId": { "type": "string" },
-          "ownerId": { "type": "string" },
-          "ownerName": { "type": "string" },
-          "priority": { "type": "string" },
-          "status": { "type": "string" },
-          "workstream": { "type": "string" },
-          "startDate": { "type": "string" },
-          "endDate": { "type": "string" },
-          "deadline": { "type": "string" },
-          "hours": { "type": "number" },
-          "scoreRelevant": { "type": "boolean", "const": false },
-          "errors": { "type": "array", "items": { "type": "string" } },
-          "warnings": { "type": "array", "items": { "type": "string" } }
-        }
-      },
-      "TeamTaskIntakePreviewResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["ok", "valid", "tasks"],
-        "properties": {
-          "ok": { "type": "boolean", "const": true },
-          "valid": { "type": "boolean" },
-          "tasks": { "type": "array", "items": { "$ref": "#/components/schemas/TeamTaskIntakePreviewTask" } }
-        }
-      },
-      "TeamTaskIntakeValidationErrorResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["ok", "error", "tasks"],
-        "properties": {
-          "ok": { "type": "boolean", "const": false },
-          "error": { "type": "string" },
-          "tasks": { "type": "array", "items": { "$ref": "#/components/schemas/TeamTaskIntakePreviewTask" } }
-        }
-      },
-      "TeamTaskIntakeCreatedTask": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "title", "status", "priority", "ownerId", "assigneeId", "createdById", "initiativeId", "milestoneId", "sprintId", "taskType", "parentTaskId", "scoreRelevant"],
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "status": { "type": "string" },
-          "priority": { "type": "string" },
-          "ownerId": { "type": "string" },
-          "assigneeId": { "type": "string" },
-          "createdById": { "type": "string" },
-          "initiativeId": { "type": "string" },
-          "milestoneId": { "type": "string" },
-          "sprintId": { "type": "string", "const": "" },
-          "taskType": { "type": "string", "enum": ["proposal", "sub_issue"] },
-          "parentTaskId": { "type": "string" },
-          "scoreRelevant": { "type": "boolean", "const": false }
-        }
-      },
-      "TeamTaskIntakeCommitResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["ok", "batchId", "replayed", "tasks"],
-        "properties": {
-          "ok": { "type": "boolean", "const": true },
-          "batchId": { "type": "string", "format": "uuid" },
-          "replayed": { "type": "boolean" },
-          "tasks": { "type": "array", "items": { "$ref": "#/components/schemas/TeamTaskIntakeCreatedTask" } }
-        }
+        "properties": { "ok": { "type": "boolean", "const": false }, "error": { "type": "string" } }
       },
       "TeamTaskIntakeV2Item": {
         "type": "object",
@@ -339,14 +46,65 @@
           "endDate": { "type": "string", "format": "date" },
           "deadline": { "type": "string", "format": "date" },
           "hours": { "type": "number", "minimum": 0, "maximum": 200 },
-          "githubRepo": { "type": "string", "description": "Only sub_issue items may select a technical repository. Deliverables must use findmydoc-platform/management.", "enum": ["findmydoc-platform/management", "findmydoc-platform/website", "findmydoc-platform/clinic-dashboard"] }
+          "githubRepo": { "type": "string", "enum": ["findmydoc-platform/management", "findmydoc-platform/website", "findmydoc-platform/clinic-dashboard"] }
         }
       },
       "TeamTaskIntakeV2Payload": {
         "type": "object",
         "additionalProperties": false,
         "required": ["items"],
-        "properties": { "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/TeamTaskIntakeV2Item" } } }
+        "properties": {
+          "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/TeamTaskIntakeV2Item" } }
+        }
+      },
+      "TeamTaskContextResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ok", "context"],
+        "properties": {
+          "ok": { "type": "boolean", "const": true },
+          "context": {
+            "type": "object",
+            "required": ["actor", "constraints", "profiles", "milestones", "initiatives", "sprints", "tasks"],
+            "properties": {
+              "actor": { "type": "object", "required": ["id", "name", "platformRole"] },
+              "constraints": {
+                "type": "object",
+                "required": ["allowedItemTypes", "maxBatchSize", "forbiddenWrites", "subIssuePolicy"],
+                "properties": {
+                  "allowedItemTypes": { "type": "array", "items": { "type": "string", "enum": ["initiative", "deliverable", "sub_issue"] } },
+                  "maxBatchSize": { "type": "integer", "const": 30 },
+                  "forbiddenWrites": { "type": "array", "items": { "type": "string" } },
+                  "subIssuePolicy": { "type": "string", "const": "any-deliverable" }
+                }
+              },
+              "profiles": { "type": "array", "items": { "type": "object" } },
+              "milestones": { "type": "array", "items": { "type": "object" } },
+              "initiatives": { "type": "array", "items": { "type": "object" } },
+              "sprints": { "type": "array", "items": { "type": "object" } },
+              "tasks": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        }
+      },
+      "PreviewResponse": {
+        "type": "object",
+        "required": ["ok", "valid", "items"],
+        "properties": {
+          "ok": { "type": "boolean", "const": true },
+          "valid": { "type": "boolean" },
+          "items": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "CommitResponse": {
+        "type": "object",
+        "required": ["ok", "batchId", "replayed", "items"],
+        "properties": {
+          "ok": { "type": "boolean", "const": true },
+          "batchId": { "type": "string", "format": "uuid" },
+          "replayed": { "type": "boolean" },
+          "items": { "type": "array", "items": { "type": "object" } }
+        }
       }
     }
   },
@@ -354,143 +112,11 @@
     "/api/team/task-context": {
       "get": {
         "operationId": "getTeamTaskContext",
-        "summary": "Read complete non-sensitive task-centered team context",
+        "summary": "Read the approval-aware task context",
         "responses": {
-          "200": {
-            "description": "Complete task-centered team context",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskContextResponse" } } }
-          },
-          "401": {
-            "description": "Missing, invalid, revoked, or expired token",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "403": {
-            "description": "Token lacks the required scope or profile role",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "500": {
-            "description": "Context could not be loaded",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "501": {
-            "description": "Supabase is not configured for Team Task Intake",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "503": {
-            "description": "Team Task Intake schema is not available",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          }
-        }
-      }
-    },
-    "/api/team/task-intake/preview": {
-      "post": {
-        "deprecated": true,
-        "operationId": "previewTeamTaskIntake",
-        "summary": "Validate and normalize a Team Task Intake batch without writes",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/TeamTaskIntakePayload" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Normalized preview with per-task errors and warnings",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakePreviewResponse" } } }
-          },
-          "400": {
-            "description": "Invalid, empty, or contract-breaking batch",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "401": {
-            "description": "Missing, invalid, revoked, or expired token",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "403": {
-            "description": "Token lacks write scope",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "500": {
-            "description": "Preview could not be built",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "501": {
-            "description": "Supabase is not configured for Team Task Intake",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "503": {
-            "description": "Team Task Intake schema is not available",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          }
-        }
-      }
-    },
-    "/api/team/task-intake/commit": {
-      "post": {
-        "deprecated": true,
-        "operationId": "commitTeamTaskIntake",
-        "summary": "Atomically and idempotently create a validated Team Task Intake batch",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": { "type": "string", "format": "uuid" }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/TeamTaskIntakePayload" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Created batch or immutable replay of the original response",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakeCommitResponse" } } }
-          },
-          "400": {
-            "description": "Invalid batch or idempotency key",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    { "$ref": "#/components/schemas/ErrorResponse" },
-                    { "$ref": "#/components/schemas/TeamTaskIntakeValidationErrorResponse" }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing, invalid, revoked, or expired token",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "403": {
-            "description": "Current profile role, scope, or parent ownership is not sufficient",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "409": {
-            "description": "Idempotency key was reused with different request data",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "500": {
-            "description": "Batch could not be committed",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "501": {
-            "description": "Supabase is not configured for Team Task Intake",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          },
-          "503": {
-            "description": "Team Task Intake schema is not available",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-          }
+          "200": { "description": "Current planning context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskContextResponse" } } } },
+          "401": { "description": "Missing, invalid, revoked, or expired token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Token lacks the required scope or role", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
       }
     },
@@ -500,25 +126,25 @@
         "summary": "Validate and normalize approval-aware planning items without writes",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakeV2Payload" } } } },
         "responses": {
-          "200": { "description": "Normalized preview; Initiative and Deliverable items are proposed and Sub-Issues inherit parent state" },
-          "400": { "description": "Invalid batch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "401": { "description": "Invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "403": { "description": "Role or scope is not sufficient", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+          "200": { "description": "Normalized preview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PreviewResponse" } } } },
+          "400": { "description": "Invalid payload", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Missing or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Token lacks the required scope or role", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
       }
     },
     "/api/team/task-intake/v2/commit": {
       "post": {
         "operationId": "commitTeamTaskIntakeV2",
-        "summary": "Atomically and idempotently create approval-aware planning items",
+        "summary": "Atomically create approval-aware planning items",
         "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakeV2Payload" } } } },
         "responses": {
-          "200": { "description": "Created batch or immutable replay" },
-          "400": { "description": "Invalid batch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "401": { "description": "Invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "403": { "description": "Role or scope is not sufficient", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-          "409": { "description": "Idempotency conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+          "200": { "description": "Created items or idempotent replay", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CommitResponse" } } } },
+          "400": { "description": "Invalid payload", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Missing or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Token lacks the required scope or role", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "409": { "description": "Idempotency key conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
       }
     }

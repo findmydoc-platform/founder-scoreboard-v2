@@ -128,26 +128,6 @@ export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: T
   if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
 }
 
-export function proposalPromotionState(currentTask: {
-  task_type?: string | null;
-  assignee?: string | null;
-  owner?: string | null;
-  status?: string | null;
-  package_id?: string | null;
-  sprint_id?: string | null;
-}, update: TaskRouteDbUpdate) {
-  const effectiveAssignee = typeof update.assignee === "string" ? update.assignee : currentTask.assignee || currentTask.owner || "";
-  const effectiveStatus = typeof update.status === "string" ? update.status : currentTask.status || "";
-  const effectivePackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
-  const effectiveSprintId = typeof update.sprint_id === "string" ? update.sprint_id : currentTask.sprint_id || "";
-  const shouldPromoteProposal =
-    currentTask.task_type === "proposal" &&
-    Boolean(effectiveAssignee) &&
-    effectiveStatus !== "Vorschlag";
-
-  return { effectivePackageId, effectiveSprintId, shouldPromoteProposal };
-}
-
 export function applyReviewStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload, isOperationalLead: boolean): RouteGuardResult {
   if (!payload.reviewStatus) return { ok: true };
   if (!reviewStatuses.has(payload.reviewStatus)) {

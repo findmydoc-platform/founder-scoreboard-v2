@@ -41,7 +41,7 @@
           },
           "evidenceRequired": { "type": "string" },
           "definitionOfDone": { "type": "string" },
-          "taskType": { "type": "string", "enum": ["deliverable", "proposal", "sub_issue"] },
+          "taskType": { "type": "string", "enum": ["deliverable", "sub_issue"] },
           "parentTaskId": { "type": "string" },
           "packageId": { "type": "string" },
           "milestoneId": { "type": "string" },

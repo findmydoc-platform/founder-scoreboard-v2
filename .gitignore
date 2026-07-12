@@ -45,6 +45,7 @@ tmp-next-*.log
 
 # generated legacy seed output; source of truth is src/lib/seed/source.json
 /supabase/seed.sql
+/supabase/.temp/
 
 # env files (can opt-in for committing if needed)
 .env*

@@ -3,10 +3,11 @@ export const TEAM_TASK_INTAKE_MAX_ACTIVE_TOKENS = 3;
 export const TEAM_TASK_INTAKE_TOKEN_HISTORY_LIMIT = 20;
 export const TEAM_TASK_INTAKE_TOKEN_TTL_DAYS = 90;
 
-export const TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES = ["proposal", "sub_issue"] as const;
+export const TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES = ["initiative", "deliverable", "sub_issue"] as const;
+export const TEAM_TASK_INTAKE_GENERIC_TASK_TYPES = ["deliverable", "sub_issue"] as const;
 export const TEAM_TASK_INTAKE_SCOPES = ["read:task-context", "write:task-intake"] as const;
 export const TEAM_TASK_INTAKE_FORBIDDEN_WRITES = [
-  "deliverable",
+  "approval",
   "score",
   "final-review",
   "review-owner",
@@ -23,7 +24,7 @@ export const TEAM_TASK_INTAKE_INPUT_RULES = {
   acceptanceCriteria: { kind: "string-or-string-array", maxLength: 6_000 },
   evidenceRequired: { kind: "string", maxLength: 4_000 },
   definitionOfDone: { kind: "string", maxLength: 4_000 },
-  taskType: { kind: "enum", values: TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES },
+  taskType: { kind: "enum", values: TEAM_TASK_INTAKE_GENERIC_TASK_TYPES },
   parentTaskId: { kind: "string", maxLength: 120 },
   packageId: { kind: "string", maxLength: 120 },
   milestoneId: { kind: "string", maxLength: 120 },
@@ -42,7 +43,8 @@ export const TEAM_TASK_INTAKE_INPUT_RULES = {
 export const TEAM_TASK_INTAKE_INPUT_KEYS = Object.keys(TEAM_TASK_INTAKE_INPUT_RULES) as Array<keyof typeof TEAM_TASK_INTAKE_INPUT_RULES>;
 
 export type TeamTaskIntakeScope = (typeof TEAM_TASK_INTAKE_SCOPES)[number];
-export type TeamTaskIntakeTaskType = (typeof TEAM_TASK_INTAKE_ALLOWED_TASK_TYPES)[number];
+export type TeamTaskIntakeItemType = (typeof TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES)[number];
+export type TeamTaskIntakeTaskType = (typeof TEAM_TASK_INTAKE_GENERIC_TASK_TYPES)[number];
 export type TeamTaskIntakeInputKey = keyof typeof TEAM_TASK_INTAKE_INPUT_RULES;
 
 export type TeamTaskIntakeTokenRecord = {
@@ -54,22 +56,6 @@ export type TeamTaskIntakeTokenRecord = {
   createdAt: string;
   lastUsedAt: string;
   revokedAt: string;
-};
-
-export type TeamTaskIntakeCreatedTask = {
-  id: string;
-  title: string;
-  status: string;
-  priority: string;
-  ownerId: string;
-  assigneeId: string;
-  createdById: string;
-  initiativeId: string;
-  milestoneId: string;
-  sprintId: string;
-  taskType: TeamTaskIntakeTaskType;
-  parentTaskId: string;
-  scoreRelevant: false;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

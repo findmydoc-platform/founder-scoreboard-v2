@@ -20,7 +20,7 @@ const supabase = await createSupabaseScriptClient({
 
 function normalizeTitle(value) {
   return normalizeWords(String(value || "")
-    .replace(/^\[(deliverable|sub-issue|proposal|vorschlag)\]\s*:?\s*/i, "")
+    .replace(/^\[(deliverable|sub-issue)\]\s*:?\s*/i, "")
     .replace(/^\[(deliverable|subtask|sub-task)\]\s*:?\s*/i, "")
     .replace(/\s+#\d+$/, ""));
 }
