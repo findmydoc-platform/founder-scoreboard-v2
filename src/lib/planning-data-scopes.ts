@@ -2,6 +2,10 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningDataQueryScope } from "@/lib/planning-data-loader";
 
 const baseWorkspaceDataScope = {
+  packages: false,
+  milestones: false,
+  tasks: false,
+  sprints: false,
   sprintCommitments: false,
   founderSprintScores: false,
   founderStrikeStates: false,
@@ -10,11 +14,14 @@ const baseWorkspaceDataScope = {
   taskComments: false,
   taskExternalComments: false,
   taskBlockers: false,
+  taskRelations: false,
   taskActivity: false,
   taskFocusItems: false,
   notificationEvents: false,
   notificationDeliveries: false,
   notificationPreferences: false,
+  profileUiPreferences: true,
+  profileFeatureTourAcknowledgements: true,
   fmdTools: false,
   events: false,
   meetings: false,
@@ -24,19 +31,44 @@ const baseWorkspaceDataScope = {
 
 export const taskDetailPageDataScope = {
   ...baseWorkspaceDataScope,
-  taskRelations: false,
+  packages: true,
+  milestones: true,
+  tasks: true,
+  sprints: true,
 } satisfies PlanningDataQueryScope;
 
 export const workspaceDataScopes = {
-  planning: baseWorkspaceDataScope,
+  planning: {
+    ...baseWorkspaceDataScope,
+    packages: true,
+    milestones: true,
+    tasks: true,
+    sprints: true,
+    taskRelations: true,
+  },
   backlog: {
     ...baseWorkspaceDataScope,
+    packages: true,
+    milestones: true,
+    tasks: true,
+    sprints: true,
     sprintCommitments: true,
   },
-  reviews: baseWorkspaceDataScope,
+  reviews: {
+    ...baseWorkspaceDataScope,
+    packages: true,
+    milestones: true,
+    tasks: true,
+    sprints: true,
+    taskRelations: true,
+  },
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
     ...baseWorkspaceDataScope,
+    packages: true,
+    milestones: true,
+    tasks: true,
+    sprints: true,
     sprintCommitments: true,
     founderSprintScores: true,
     founderStrikeStates: true,
@@ -45,17 +77,30 @@ export const workspaceDataScopes = {
     meetings: true,
     meetingAttendance: true,
   },
-  projects: baseWorkspaceDataScope,
+  projects: {
+    ...baseWorkspaceDataScope,
+    packages: true,
+    milestones: true,
+    tasks: true,
+    sprints: true,
+    taskRelations: true,
+  },
   tools: { ...baseWorkspaceDataScope, fmdTools: true },
-  team: baseWorkspaceDataScope,
+  team: { ...baseWorkspaceDataScope, tasks: true },
   notifications: {
     ...baseWorkspaceDataScope,
+    tasks: true,
     notificationEvents: true,
     notificationDeliveries: true,
   },
-  "ceo-intake": baseWorkspaceDataScope,
+  "ceo-intake": {
+    ...baseWorkspaceDataScope,
+    packages: true,
+    sprints: true,
+  },
   profile: {
     ...baseWorkspaceDataScope,
+    packages: true,
     notificationPreferences: true,
   },
 } satisfies Record<AppWorkspace, PlanningDataQueryScope>;
