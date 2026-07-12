@@ -50,7 +50,7 @@ const result = {
     githubMappedProfiles: await count("profiles", (query) => query.not("github_login", "is", null)),
     tasks: await count("tasks"),
     deliverables: await count("tasks", (query) => query.eq("task_type", "deliverable")),
-    proposals: await count("tasks", (query) => query.eq("task_type", "proposal")),
+    proposedDeliverables: await count("tasks", (query) => query.eq("task_type", "deliverable").eq("approval_status", "proposed")),
     subIssues: await count("tasks", (query) => query.eq("task_type", "sub_issue")),
     sprints: await count("sprints"),
     milestones: await count("milestones"),

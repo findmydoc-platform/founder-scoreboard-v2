@@ -47,7 +47,6 @@ const tasks = tasksResult.data || [];
 const milestoneById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
 const initiativeById = new Map(initiatives.map((initiative) => [initiative.id, initiative]));
 const deliverables = tasks.filter((task) => task.task_type === "deliverable" || !task.task_type);
-const proposals = tasks.filter((task) => task.task_type === "proposal");
 const subIssues = tasks.filter((task) => task.task_type === "sub_issue");
 const appOnly = tasks.filter((task) => !(task.github_issue_number || task.github_issue_url || task.issue_number || task.issue_url));
 
@@ -79,7 +78,6 @@ const result = {
     initiatives: initiatives.length,
     tasks: tasks.length,
     deliverables: deliverables.length,
-    proposals: proposals.length,
     subIssues: subIssues.length,
     appOnly: appOnly.length,
   },
@@ -107,7 +105,6 @@ const result = {
       hours: children.reduce((sum, task) => sum + Number(task.estimate_hours || 0), 0),
     };
   }),
-  proposals: proposals.map(taskSummary),
   appOnly: appOnly.map(taskSummary),
 };
 

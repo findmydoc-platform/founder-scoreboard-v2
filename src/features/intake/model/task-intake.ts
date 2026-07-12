@@ -1,7 +1,7 @@
 import { taskStatuses } from "@/lib/status";
 import type { TaskStatus } from "@/lib/types";
 
-export type LegacyTaskIntakeType = "deliverable" | "proposal" | "sub_issue";
+export type TaskIntakeType = "deliverable" | "sub_issue";
 import {
   intakeDate,
   intakeHours,
@@ -54,7 +54,6 @@ export type TaskIntakeInitiative = {
 export type TaskIntakeContext = {
   profiles: TaskIntakeProfile[];
   initiatives: TaskIntakeInitiative[];
-  sprintIds: Set<string>;
   milestoneIds: Set<string>;
   parentTaskIds: Set<string>;
 };
@@ -69,7 +68,7 @@ export type TaskIntakePreviewTask = {
   acceptanceCriteria: string;
   evidenceRequired: string;
   definitionOfDone: string;
-  taskType: LegacyTaskIntakeType;
+  taskType: TaskIntakeType;
   parentTaskId: string;
   packageId: string;
   packageTitle: string;
@@ -91,7 +90,7 @@ export type TaskIntakePreviewTask = {
   warnings: string[];
 };
 
-const taskTypes = new Set<LegacyTaskIntakeType>(["deliverable", "proposal", "sub_issue"]);
+const taskTypes = new Set<TaskIntakeType>(["deliverable", "sub_issue"]);
 
 function assigneeFromInitiative(initiative?: TaskIntakeInitiative) {
   return initiative?.responsibleProfileIds[0] || initiative?.ownerId || initiative?.accountableProfileId || "";
@@ -111,8 +110,8 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     const warnings: string[] = [];
     const brief = normalizeTaskIntakeBrief(rawTask);
     const requestedType = intakeText(rawTask.taskType, 40) || "deliverable";
-    const taskType: LegacyTaskIntakeType = taskTypes.has(requestedType as LegacyTaskIntakeType) ? requestedType as LegacyTaskIntakeType : "deliverable";
-    if (requestedType && !taskTypes.has(requestedType as LegacyTaskIntakeType)) errors.push(`Ungültiger Aufgabentyp: ${requestedType}.`);
+    const taskType: TaskIntakeType = taskTypes.has(requestedType as TaskIntakeType) ? requestedType as TaskIntakeType : "deliverable";
+    if (requestedType && !taskTypes.has(requestedType as TaskIntakeType)) errors.push(`Ungültiger Aufgabentyp: ${requestedType}.`);
 
     const title = brief.title;
     if (title.length < 3) errors.push("Titel ist erforderlich.");
@@ -126,9 +125,7 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     const milestoneId = requestedMilestoneId || initiative?.milestoneId || "";
     if (requestedMilestoneId && !context.milestoneIds.has(requestedMilestoneId)) errors.push(`Epic / Meilenstein wurde nicht gefunden: ${requestedMilestoneId}.`);
 
-    const sprintId = intakeText(rawTask.sprintId, 120);
-    if (taskType === "deliverable" && !sprintId) errors.push("Deliverables brauchen einen Sprint.");
-    if (sprintId && !context.sprintIds.has(sprintId)) errors.push(`Sprint wurde nicht gefunden: ${sprintId}.`);
+    if (intakeText(rawTask.sprintId, 120)) warnings.push("Sprint-Zuordnung wird erst nach der Freigabe vorgenommen.");
 
     const parentTaskId = intakeText(rawTask.parentTaskId, 120);
     if (taskType === "sub_issue" && !parentTaskId) errors.push("Sub-Issues brauchen ein Deliverable.");
@@ -138,7 +135,7 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     const fallbackAssignee = assigneeFromInitiative(initiative);
     const assigneeProfile = intakeProfileByValue(context.profiles, requestedAssignee || fallbackAssignee);
     if (requestedAssignee && !assigneeProfile) errors.push(`Zuständige Person wurde nicht gefunden: ${requestedAssignee}.`);
-    if (!requestedAssignee && !assigneeProfile && taskType !== "proposal") errors.push("Zuständigkeit fehlt und konnte nicht aus der Initiative abgeleitet werden.");
+    if (!requestedAssignee && !assigneeProfile) errors.push("Zuständigkeit fehlt und konnte nicht aus der Initiative abgeleitet werden.");
     if (!requestedAssignee && assigneeProfile) warnings.push(`Zuständigkeit aus Initiative-RACI gesetzt: ${assigneeProfile.name}.`);
 
     const reviewOwnerId = initiative?.accountableProfileId || initiative?.ownerId || "";
@@ -146,12 +143,10 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     if (taskType === "deliverable" && packageId && !reviewOwnerId) warnings.push("Ohne Review Owner: Initiative hat keinen Accountable oder Owner.");
 
     const requestedStatus = intakeText(rawTask.status, 40);
-    const status = taskType === "proposal"
-      ? "Vorschlag"
-      : taskStatuses.includes(requestedStatus as TaskStatus)
-        ? requestedStatus as TaskStatus
-        : "Offen";
-    if (requestedStatus && status !== requestedStatus && taskType !== "proposal") warnings.push(`Status auf Offen gesetzt, weil ${requestedStatus} ungültig ist.`);
+    const status = taskStatuses.includes(requestedStatus as TaskStatus)
+      ? requestedStatus as TaskStatus
+      : "Offen";
+    if (requestedStatus && status !== requestedStatus) warnings.push(`Status auf Offen gesetzt, weil ${requestedStatus} ungültig ist.`);
 
     const priority = intakePriority(rawTask.priority);
     const startDate = intakeDate(rawTask.startDate);
@@ -174,7 +169,7 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
       packageId,
       packageTitle: initiative?.title || "",
       milestoneId,
-      sprintId,
+      sprintId: "",
       assigneeId: assigneeProfile?.id || "",
       assigneeName: assigneeProfile?.name || "",
       priority,
@@ -186,7 +181,7 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
       hours: intakeHours(rawTask.hours),
       reviewOwnerProfileId: reviewOwnerId,
       reviewOwnerName: reviewOwnerProfile?.name || "",
-      scoreRelevant: taskType === "deliverable",
+      scoreRelevant: false,
       errors,
       warnings,
     };

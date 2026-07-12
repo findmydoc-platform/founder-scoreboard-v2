@@ -3833,7 +3833,6 @@ alter table public.tasks add column if not exists proposed_at timestamptz;
 alter table public.tasks add column if not exists decided_by text references public.profiles(id) on delete set null;
 alter table public.tasks add column if not exists decided_at timestamptz;
 alter table public.tasks add column if not exists decision_note text;
-alter table public.tasks add column if not exists legacy_proposal_unresolved boolean not null default false;
 
 update public.packages
 set approval_status = coalesce(approval_status, 'approved'),
@@ -3848,8 +3847,7 @@ set task_type = 'sub_issue',
     milestone_id = parent.milestone_id,
     sprint_id = null,
     score_relevant = false,
-    approval_status = null,
-    legacy_proposal_unresolved = false
+    approval_status = null
 from public.tasks as parent
 where child.task_type = 'proposal'
   and child.parent_task_id = parent.id
@@ -3862,8 +3860,7 @@ set task_type = 'deliverable',
     approval_revision = greatest(approval_revision, 1),
     proposed_at = coalesce(proposed_at, now()),
     sprint_id = null,
-    score_relevant = false,
-    legacy_proposal_unresolved = false
+    score_relevant = false
 where task_type = 'proposal'
   and package_id is not null
   and exists (select 1 from public.packages where packages.id = tasks.package_id);
@@ -3876,7 +3873,6 @@ set approval_status = case
     end,
     approval_revision = greatest(approval_revision, 1),
     proposed_at = case when task_type = 'proposal' then coalesce(proposed_at, now()) else proposed_at end,
-    legacy_proposal_unresolved = task_type = 'proposal',
     sprint_id = case when task_type in ('proposal', 'sub_issue') then null else sprint_id end,
     score_relevant = task_type = 'deliverable'
       and coalesce(approval_status, 'approved') = 'approved'
@@ -3935,9 +3931,6 @@ $$;
 
 create index if not exists packages_approval_status_idx on public.packages(approval_status);
 create index if not exists tasks_approval_status_idx on public.tasks(approval_status);
-create index if not exists tasks_legacy_proposal_unresolved_idx
-  on public.tasks(legacy_proposal_unresolved) where legacy_proposal_unresolved;
-
 create or replace function public.normalize_task_approval_state()
 returns trigger
 language plpgsql
@@ -3964,10 +3957,7 @@ begin
     return new;
   end if;
 
-  if new.task_type = 'proposal' then
-    new.approval_status := 'proposed';
-    new.legacy_proposal_unresolved := true;
-  elsif new.approval_status is null then
+  if new.approval_status is null then
     new.approval_status := 'proposed';
   end if;
 
@@ -4416,5 +4406,33 @@ $$;
 
 revoke all on function public.create_team_task_intake_v2_transaction(uuid, text, uuid, text, jsonb, text, text) from public, anon, authenticated;
 grant execute on function public.create_team_task_intake_v2_transaction(uuid, text, uuid, text, jsonb, text, text) to service_role;
+
+do $$
+begin
+  if exists (select 1 from public.tasks where task_type = 'proposal') then
+    raise exception 'Cannot remove legacy Team Task Intake v1.2 while proposal tasks remain.';
+  end if;
+end
+$$;
+
+alter table public.tasks drop constraint if exists tasks_task_type_check;
+alter table public.tasks add constraint tasks_task_type_check
+  check (task_type in ('deliverable', 'sub_issue'));
+
+alter table public.tasks drop constraint if exists tasks_approval_status_by_type_check;
+alter table public.tasks add constraint tasks_approval_status_by_type_check check (
+  (task_type = 'sub_issue' and approval_status is null)
+  or (task_type = 'deliverable' and approval_status in ('draft', 'proposed', 'approved', 'rejected'))
+);
+
+alter table public.tasks drop constraint if exists tasks_github_repo_allowed_check;
+alter table public.tasks add constraint tasks_github_repo_allowed_check check (
+  (task_type = 'sub_issue' and github_repo in ('findmydoc-platform/management', 'findmydoc-platform/website', 'findmydoc-platform/clinic-dashboard'))
+  or (task_type = 'deliverable' and github_repo = 'findmydoc-platform/management')
+);
+
+drop index if exists public.tasks_legacy_proposal_unresolved_idx;
+
+drop function if exists public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text);
 
 notify pgrst, 'reload schema';

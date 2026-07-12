@@ -240,7 +240,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (task.approval_status === "proposed" || task.task_type === "proposal" || task.status === "Vorschlag") {
+    if (task.approval_status === "proposed") {
       candidates.push({
         type: "task.proposed",
         actorProfileId: assignee,

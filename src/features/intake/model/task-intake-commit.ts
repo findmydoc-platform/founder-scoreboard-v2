@@ -42,11 +42,12 @@ function insertForTask(task: TaskIntakePreviewTask, id: string, sortOrder: numbe
     deadline: task.deadline || null,
     hours: task.hours,
     definitionOfDone: task.definitionOfDone,
-    sprintId: task.taskType === "deliverable" ? task.sprintId : null,
+    sprintId: null,
     reviewOwnerProfileId: task.reviewOwnerProfileId,
     taskType: task.taskType,
     parentTaskId: task.parentTaskId,
-    scoreRelevant: task.scoreRelevant,
+    scoreRelevant: false,
+    approvalStatus: task.taskType === "sub_issue" ? null : "proposed",
   });
 }
 

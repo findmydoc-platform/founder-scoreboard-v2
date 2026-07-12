@@ -21,7 +21,7 @@ Execution is no longer a top-level workspace. Reviews, sprint work, and task edi
 
 Critical signals:
 
-- `Owner fehlt`: P0 task without an accountable assignee, except proposal tasks.
+- `Owner fehlt`: P0 Deliverable without an accountable assignee, except Sub-Issues.
 - `Blocker fehlt`: task with status `Blockiert` but no open blocker.
 - `Wartet`: task waiting on an open blocking dependency.
 - `Sync fehlgeschlagen`: failed GitHub sync.

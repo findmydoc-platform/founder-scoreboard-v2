@@ -33,7 +33,7 @@ type BuildTaskInsertRowInput = {
   scoreFinal?: boolean | null;
   githubRepo?: string | null;
   githubIssueSyncStatus?: Task["githubIssueSyncStatus"] | null;
-  taskType?: Task["taskType"] | "proposal" | null;
+  taskType?: Task["taskType"] | null;
   parentTaskId?: string | null;
   scoreRelevant?: boolean | null;
   approvalStatus?: Task["approvalStatus"];
