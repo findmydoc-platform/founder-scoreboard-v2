@@ -267,25 +267,21 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   assert.doesNotMatch(plan, /Decision-to-Task Links/);
 });
 
-test("task creation supports deliverables proposals and non scoring sub issues", async () => {
-  const migration = await readFile("supabase/0006_task_creation_hierarchy.sql", "utf8");
+test("task creation uses approval-aware deliverables and inherited sub issues", async () => {
+  const migration = await readFile("supabase/0059_planning_item_approval.sql", "utf8");
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
-  const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
-  const promotionMigration = await readFile("supabase/0034_promote_assigned_proposals.sql", "utf8");
   const transactionalCreationMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
   const createCommand = await readFile("src/features/tasks/hooks/use-task-create-command.ts", "utf8");
   const ui = await readPlanningSurface();
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
-  const display = await readFile("src/lib/display.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
-  assert.match(migration, /task_type/);
-  assert.match(migration, /parent_task_id/);
-  assert.match(migration, /score_relevant/);
+  assert.match(migration, /approval_status/);
+  assert.match(migration, /decide_deliverable_approval_transaction/);
+  assert.match(migration, /task_type = 'sub_issue' and approval_status is null/);
   assert.match(route, /task\.proposed/);
-  assert.match(route, /create_task_transaction/);
+  assert.match(route, /create_planning_task_transaction/);
   assert.doesNotMatch(route, /from\("tasks"\)\.insert/);
   assert.match(transactionalCreationMigration, /create or replace function public\.create_task_transaction/);
   assert.match(transactionalCreationMigration, /insert into public\.task_relationship_edges/);
@@ -297,27 +293,21 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(route, /creationRequestId/);
   assert.match(createCommand, /setTaskDialogDefaults\(null\)/);
   assert.match(createCommand, /if \(!response\.ok \|\| !body\?\.task\)/);
-  assert.match(route, /Founder können nur eigene Deliverables verfeinern/);
-  assert.match(route, /taskType === "deliverable"/);
-  assert.match(route, /taskType === "proposal" \? null/);
-  assert.match(route, /Deliverables brauchen Initiative und Sprint/);
-  assert.match(updateRoute, /shouldPromoteProposal/);
-  assert.match(updateRoutePolicy, /currentTask\.task_type === "proposal"/);
-  assert.match(updateRoutePolicy, /effectiveStatus !== "Vorschlag"/);
-  assert.match(updateRoute, /update\.task_type = "deliverable"/);
-  assert.match(updateRoute, /update\.score_relevant = true/);
-  assert.match(promotionMigration, /task_type = 'proposal'/);
-  assert.match(promotionMigration, /status <> 'Vorschlag'/);
+  assert.doesNotMatch(route, /Founder können nur eigene Deliverables verfeinern/);
+  assert.match(route, /new Set<TaskType>\(\["deliverable", "sub_issue"\]\)/);
+  assert.match(route, /Deliverables brauchen eine Initiative/);
+  assert.match(route, /In einer abgelehnten Initiative/);
+  assert.match(route, /Nur der CEO kann beim Erstellen direkt freigeben/);
+  assert.match(updateRoute, /Nur freigegebene Deliverables können einem Sprint zugewiesen werden/);
+  assert.match(updateRoute, /update_planning_task_transaction/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);
-  assert.match(updateRoutePolicy, /Nur Vorschläge können ohne Zuständigkeit bleiben/);
   assert.match(ui, /NewTaskDialog/);
-  assert.match(display, /Nicht zugeordnet/);
-  assert.match(newTaskUi, /Vorschläge können bewusst ohne Zuständigkeit bleiben/);
   assert.match(newTaskUi, /taskAssigneeOptions\(draft\.taskType, data\.profiles\)/);
   assert.match(newTaskUi, /Sub-Issues/);
-  assert.match(newTaskUi, /werden nicht bewertet/);
+  assert.match(newTaskUi, /starten als vorgeschlagen/);
   assert.match(newTaskUi, /Zusätzlich extern anlegen/);
+  assert.match(newTaskUi, /Erstellen und freigeben/);
   assert.match(newTaskUi, /createGitHubIssue/);
   assert.match(newTaskUi, /Wird erstellt\.\.\./);
   assert.match(newTaskUi, /globalThis\.crypto\.randomUUID\(\)/);
@@ -325,7 +315,8 @@ test("task creation supports deliverables proposals and non scoring sub issues",
   assert.match(newTaskUi, /relatedTaskId/);
   assert.match(newTaskUi, /Zieltermin/);
   assert.match(ui, /createIfMissing: true/);
-  assert.match(types, /TaskType = "deliverable" \| "proposal" \| "sub_issue"/);
+  assert.match(types, /TaskType = "deliverable" \| "sub_issue"/);
+  assert.match(types, /ApprovalStatus = "draft" \| "proposed" \| "approved" \| "rejected"/);
 });
 
 test("weekly meeting attendance has scoring, absence reasons and updates", async () => {

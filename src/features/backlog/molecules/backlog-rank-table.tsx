@@ -36,11 +36,11 @@ function dragTaskId(event: DragEvent<HTMLElement>) {
 }
 
 function typeTone(task: Task) {
-  return task.taskType === "proposal" ? "blue" : "emerald";
+  return task.approvalStatus === "proposed" ? "blue" : "emerald";
 }
 
 function typeLabel(task: Task) {
-  return task.taskType === "proposal" ? "Vorschlag" : "Deliverable";
+  return task.approvalStatus === "proposed" ? "Vorgeschlagen" : task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
 }
 
 function rowStatusDot(task: Task) {

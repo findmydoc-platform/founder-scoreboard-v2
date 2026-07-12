@@ -33,7 +33,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
   const signals: TaskAttentionSignal[] = [];
   const status = normalizeStatus(task.status);
 
-  if (task.priority === "P0" && !taskHasOwner(task) && task.taskType !== "proposal") {
+  if (task.priority === "P0" && !taskHasOwner(task)) {
     signals.push({ id: "owner-missing", label: "Owner fehlt", kind: "critical" });
   }
   if (status === "Blockiert" && !taskHasOpenBlocker(task.id, data)) {

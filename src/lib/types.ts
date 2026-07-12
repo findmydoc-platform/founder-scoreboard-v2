@@ -6,7 +6,9 @@ export type GitHubCommentDeliveryStatus = "pending" | "waiting_for_issue" | "wai
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
 export type StrikeEventType = "strike_added" | "strike_reset" | "away_neutral" | "fulfilled_no_change" | "governance_review_required";
 export type ScoreObjectionStatus = "open" | "reviewed" | "dismissed" | "accepted";
-export type TaskType = "deliverable" | "proposal" | "sub_issue";
+export type ApprovalStatus = "draft" | "proposed" | "approved" | "rejected";
+export type ApprovalDecisionAction = "approve" | "reject" | "return_to_draft";
+export type TaskType = "deliverable" | "sub_issue";
 export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
 
 export type TaskStatus = "Vorschlag" | "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
@@ -51,6 +53,13 @@ export type Package = {
   successCriteria?: string;
   scopeConstraints?: string;
   sortOrder: number;
+  approvalStatus: ApprovalStatus;
+  approvalRevision: number;
+  proposedById?: string;
+  proposedAt?: string;
+  decidedById?: string;
+  decidedAt?: string;
+  decisionNote?: string;
 };
 
 export type Milestone = {
@@ -109,6 +118,14 @@ export type Task = {
   githubIssueSyncError: string;
   taskType: TaskType;
   parentTaskId: string;
+  approvalStatus: ApprovalStatus | null;
+  approvalRevision: number;
+  proposedById?: string;
+  proposedAt?: string;
+  decidedById?: string;
+  decidedAt?: string;
+  decisionNote?: string;
+  parentApprovalStatus: ApprovalStatus | null;
   scoreRelevant: boolean;
   originalSprintId?: string;
   carriedFromTaskId?: string;

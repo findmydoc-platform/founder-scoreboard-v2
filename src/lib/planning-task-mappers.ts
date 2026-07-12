@@ -21,6 +21,10 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const assignee = profileName(profiles, assigneeId);
   const owner = profileName(profiles, ownerId) || assignee;
   const createdBy = profileName(profiles, row.created_by);
+  const taskType: Task["taskType"] = row.task_type === "sub_issue" ? "sub_issue" : "deliverable";
+  const approvalStatus = taskType === "sub_issue"
+    ? null
+    : row.approval_status || (row.task_type === "proposal" ? "proposed" : "approved");
 
   return {
     id: row.id || "",
@@ -67,9 +71,17 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     githubIssueSyncStatus: row.github_issue_sync_status || "not_synced",
     githubIssueLastSyncedAt: row.github_issue_last_synced_at || "",
     githubIssueSyncError: row.github_issue_sync_error || "",
-    taskType: row.task_type || "deliverable",
+    taskType,
     parentTaskId: row.parent_task_id || "",
-    scoreRelevant: row.score_relevant !== false,
+    approvalStatus,
+    approvalRevision: Number(row.approval_revision || 1),
+    proposedById: row.proposed_by || "",
+    proposedAt: row.proposed_at || "",
+    decidedById: row.decided_by || "",
+    decidedAt: row.decided_at || "",
+    decisionNote: row.decision_note || "",
+    parentApprovalStatus: null,
+    scoreRelevant: approvalStatus === "approved" && row.score_relevant !== false,
     originalSprintId: row.original_sprint_id || "",
     carriedFromTaskId: row.carried_from_task_id || "",
     carriedFromSprintId: row.carried_from_sprint_id || "",

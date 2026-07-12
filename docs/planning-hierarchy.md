@@ -71,3 +71,21 @@ Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, St
 Lokale Kommentare werden über eine getrennte Zustellungs-Outbox mit dem persönlichen GitHub-Token ihres ursprünglichen Autors veröffentlicht. Fehlt diese Autorenverbindung, wartet nur der Kommentar; der Issue-Sync bleibt erfolgreich. Dauerhafte Kommentar-Marker und ein exakter Altbestandsabgleich verhindern doppelte GitHub-Kommentare.
 
 Alte Workflows oder Templates im Management-Repo dürfen nicht als Quelle der Wahrheit verwendet werden. Sie können später ersetzt oder gelöscht werden, aber nur nach expliziter Freigabe.
+
+## Approval lifecycle
+
+Approval is separate from work status. Initiatives and Deliverables use `draft`, `proposed`, `approved`, or `rejected`. Sub-Issues have no approval record and derive their effective state from the parent Deliverable.
+
+- Only the CEO approves Initiatives.
+- The CEO or the current Initiative Accountable approves Deliverables.
+- Approving an Initiative does not approve existing or future Deliverables.
+- A new Deliverable always starts as proposed unless the CEO explicitly uses the combined create-and-approve action.
+- Sprint carry-overs create a new proposed Deliverable without a Sprint assignment. They require the normal approval decision before later Sprint planning.
+- Approved Deliverables may remain in the backlog without a Sprint. They become score-relevant only after Sprint assignment.
+- Material brief or Initiative changes create a new approval revision and reset an approved Deliverable to proposed.
+- Sprint, work status, Evidence, comments, and GitHub sync metadata do not reset approval.
+- Proposed or rejected Deliverables cannot enter Sprint planning, Review, scoring, or GitHub projection.
+
+## GitHub item repositories
+
+Deliverables are projected exclusively to `findmydoc-platform/management`. Sub-Issues may use a repository from the server-side registry. FounderOps verifies repository and issue number before updates. A synced Sub-Issue is connected to its FounderOps parent as a native GitHub Sub-Issue, including cross-repository relationships.

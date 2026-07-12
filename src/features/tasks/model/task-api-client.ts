@@ -2,7 +2,14 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { TaskDetailData } from "@/lib/task-detail-data";
-import type { PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation } from "@/lib/types";
+
+export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
+  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
+    method: "POST",
+    json: { action, expectedRevision, note },
+  });
+}
 
 export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, patch: unknown) {
   return apiClient.requestJson<{ error?: string; activities?: TaskActivity[]; task?: Partial<Task> }>(`/api/tasks/${taskId}`, {

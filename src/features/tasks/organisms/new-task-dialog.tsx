@@ -12,12 +12,12 @@ import {
   milestoneOptions,
   priorityOptions,
   relatedTaskOptions,
-  sprintOptions,
   taskRelationTypeOptions,
   taskStatusOptions,
   taskTypeOptions,
 } from "@/features/tasks/model/task-form-options";
 import type { PlanningData, TaskRelationType } from "@/lib/types";
+import { allowedGitHubRepositories, defaultGitHubRepository } from "@/lib/github-repositories";
 
 export type NewTaskDraft = {
   creationRequestId: string;
@@ -28,7 +28,7 @@ export type NewTaskDraft = {
   scopeConstraints: string;
   acceptanceCriteria: string;
   evidenceRequired: string;
-  taskType: "deliverable" | "proposal" | "sub_issue";
+  taskType: "deliverable" | "sub_issue";
   parentTaskId: string;
   milestoneId: string;
   packageId: string;
@@ -43,6 +43,8 @@ export type NewTaskDraft = {
   hours: number;
   definitionOfDone: string;
   createGitHubIssue: boolean;
+  githubRepo: string;
+  approveNow: boolean;
   relationType: TaskRelationType;
   relatedTaskId: string;
   relationNote: string;
@@ -54,18 +56,20 @@ export function NewTaskDialog({
   pending,
   onClose,
   onCreate,
+  canApproveNow = false,
 }: {
   defaults: Partial<NewTaskDraft>;
   data: Pick<PlanningData, "milestones" | "packages" | "profiles" | "sprints" | "tasks">;
   pending: boolean;
   onClose: () => void;
   onCreate: (draft: NewTaskDraft) => void;
+  canApproveNow?: boolean;
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
   const initialTaskType = defaults.taskType || "deliverable";
   const fallbackAssignee = data.profiles[0]?.id || "volkan";
-  const defaultAssignee = defaults.assignee || (initialTaskType === "proposal" ? "" : fallbackAssignee);
+  const defaultAssignee = defaults.assignee || fallbackAssignee;
   const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
   const initiativesForDefaultMilestone = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
   const [draft, setDraft] = useState<NewTaskDraft>({
@@ -91,7 +95,9 @@ export function NewTaskDialog({
     deadline: defaults.deadline || "",
     hours: defaults.hours || 2,
     definitionOfDone: defaults.definitionOfDone || "",
-    createGitHubIssue: (defaults.taskType || "deliverable") === "deliverable",
+    createGitHubIssue: Boolean(defaults.createGitHubIssue),
+    githubRepo: defaults.githubRepo || defaultGitHubRepository,
+    approveNow: Boolean(defaults.approveNow),
     relationType: defaults.relationType || "blocked_by",
     relatedTaskId: defaults.relatedTaskId || "",
     relationNote: defaults.relationNote || "",
@@ -99,7 +105,7 @@ export function NewTaskDialog({
   const parentTask = data.tasks.find((task) => task.id === draft.parentTaskId);
   const visibleInitiatives = data.packages.filter((pack) => !draft.milestoneId || !pack.milestoneId || pack.milestoneId === draft.milestoneId);
   const selectedInitiative = data.packages.find((pack) => pack.id === draft.packageId);
-  const deliverableNeedsStructure = draft.taskType === "deliverable" && (!draft.packageId || !draft.sprintId);
+  const deliverableNeedsStructure = draft.taskType === "deliverable" && !draft.packageId;
   const invalidDateRange = Boolean(draft.startDate && draft.endDate && draft.startDate > draft.endDate);
   const canCreate = draft.title.trim().length >= 3 && !deliverableNeedsStructure && !invalidDateRange && (draft.taskType !== "sub_issue" || draft.parentTaskId);
 
@@ -117,7 +123,7 @@ export function NewTaskDialog({
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Neue Aufgabe</div>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">
-              {draft.taskType === "proposal" ? "Aufgabenvorschlag" : draft.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable"}
+              {draft.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable vorschlagen"}
             </h2>
           </div>
           <UiButton type="button" onClick={onClose} disabled={pending} size="iconMd" className="text-slate-500" aria-label="Dialog schließen">
@@ -134,8 +140,9 @@ export function NewTaskDialog({
                 setDraft((current) => ({
                   ...current,
                   taskType: value as NewTaskDraft["taskType"],
-                  assignee: value === "proposal" ? "" : current.assignee || fallbackAssignee,
+                  assignee: current.assignee || fallbackAssignee,
                   createGitHubIssue: value === "deliverable" ? current.createGitHubIssue : false,
+                  approveNow: value === "deliverable" ? current.approveNow : false,
                 }))
               }
               options={taskTypeOptions}
@@ -158,10 +165,10 @@ export function NewTaskDialog({
             />
             <UiSelectField
               label="Sprint"
-              value={draft.sprintId}
-              disabled={draft.taskType !== "deliverable"}
-              onChange={(value) => setDraft((current) => ({ ...current, sprintId: value }))}
-              options={sprintOptions(data.sprints)}
+              value=""
+              disabled
+              onChange={() => undefined}
+              options={[{ value: "", label: "Nach Freigabe zuweisen" }]}
             />
           </div>
 
@@ -230,7 +237,6 @@ export function NewTaskDialog({
               onChange={(value) => setDraft((current) => ({ ...current, assignee: value }))}
               options={taskAssigneeOptions(draft.taskType, data.profiles)}
             >
-              {draft.taskType === "proposal" && <span className="text-[11px] font-normal leading-4 text-slate-500">Vorschläge können bewusst ohne Zuständigkeit bleiben.</span>}
             </UiSelectField>
             <UiSelectField
               label="Priorität"
@@ -241,7 +247,6 @@ export function NewTaskDialog({
             <UiSelectField
               label="Status"
               value={draft.status}
-              disabled={draft.taskType === "proposal"}
               onChange={(value) => setDraft((current) => ({ ...current, status: value }))}
               options={taskStatusOptions}
             />
@@ -256,21 +261,30 @@ export function NewTaskDialog({
               <div>
                 <div className="text-sm font-semibold text-slate-950">Pflichtangaben</div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Deliverables brauchen Epic, Initiative und Sprint. Sub-Issues bleiben unter einem Deliverable und werden nicht bewertet.
+                  Deliverables brauchen eine Initiative und starten als vorgeschlagen. Sprint, Review und GitHub werden erst nach Freigabe aktiv.
                 </p>
               </div>
               <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                 <input
                   type="checkbox"
                   checked={draft.createGitHubIssue}
-                  disabled={draft.taskType !== "deliverable"}
+                  disabled={draft.taskType !== "deliverable" || !draft.approveNow}
                   onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
                   className="h-4 w-4 rounded border-slate-300"
                 />
                 Zusätzlich extern anlegen
               </label>
             </div>
-            {deliverableNeedsStructure && <div className="mt-2 text-xs font-semibold text-amber-700">Für ein Deliverable fehlen noch Sprint oder Initiative.</div>}
+            {draft.taskType === "deliverable" && canApproveNow && (
+              <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <input type="checkbox" checked={draft.approveNow} onChange={(event) => setDraft((current) => ({ ...current, approveNow: event.target.checked, createGitHubIssue: event.target.checked && current.createGitHubIssue }))} className="h-4 w-4 rounded border-slate-300" />
+                Erstellen und freigeben
+              </label>
+            )}
+            {draft.taskType === "sub_issue" && (
+              <UiSelectField label="GitHub-Ziel" value={draft.githubRepo} onChange={(value) => setDraft((current) => ({ ...current, githubRepo: value }))} options={[...allowedGitHubRepositories].map((repository) => ({ value: repository, label: repository }))} />
+            )}
+            {deliverableNeedsStructure && <div className="mt-2 text-xs font-semibold text-amber-700">Für ein Deliverable fehlt die Initiative.</div>}
             {invalidDateRange && <div className="mt-2 text-xs font-semibold text-red-700">Das Startdatum darf nicht nach dem Enddatum liegen.</div>}
           </div>
 
@@ -321,7 +335,7 @@ export function NewTaskDialog({
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <UiButton type="button" onClick={onClose} disabled={pending}>Abbrechen</UiButton>
           <UiButton type="submit" disabled={pending || !canCreate} variant="primary">
-            {pending ? "Wird erstellt..." : "Erstellen"}
+            {pending ? "Wird erstellt..." : draft.taskType === "deliverable" && draft.approveNow ? "Erstellen und freigeben" : "Erstellen"}
           </UiButton>
         </div>
       </form>

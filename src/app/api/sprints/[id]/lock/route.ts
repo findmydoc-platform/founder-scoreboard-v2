@@ -34,6 +34,7 @@ type TaskRow = {
   score_points: number | null;
   score_final: boolean | null;
   task_type: string | null;
+  approval_status: string | null;
   score_relevant: boolean | null;
   carryover_count: number | null;
   original_sprint_id: string | null;
@@ -148,14 +149,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
-    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
+    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
   if (tasksError) return apiError(tasksError.message, 500);
 
   const sprintTasks = (tasks || []) as TaskRow[];
   const carryoverTasks = sprintTasks.filter((task) =>
-    task.task_type !== "sub_issue"
+    task.task_type === "deliverable"
+    && task.approval_status === "approved"
     && task.score_relevant !== false
     && (!task.score_final || task.review_status === "partial")
   );
@@ -171,6 +173,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const notifications: ReturnType<typeof createNotificationPayload>[] = [];
   const taskUpdates = [];
   const acceptedBlockerTaskIds = [];
+  const now = new Date().toISOString();
 
   for (const task of carryoverTasks) {
     const outcome = sprintOutcome(task, openBlockerTaskIds.has(task.id));
@@ -217,9 +220,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         hours: task.estimate_hours,
         definitionOfDone: task.definition_of_done,
         evidenceLink: task.evidence_link,
-        sprintId: nextSprint.id,
+        sprintId: null,
         taskType: "deliverable",
-        scoreRelevant: true,
+        scoreRelevant: false,
+        approvalStatus: "proposed",
+        proposedById: permission.profile?.id || null,
+        proposedAt: now,
         originalSprintId: task.original_sprint_id || id,
         carriedFromTaskId: task.id,
         carriedFromSprintId: id,
@@ -235,7 +241,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
           entityType: "task",
           entityId: task.id,
           title: `Carry-over: ${task.title}`,
-          body: `${reason}\nNeuer Sprint: ${nextSprint.name || nextSprint.id}`,
+          body: `${reason}\nAls Deliverable-Vorschlag angelegt. Vor einer Sprint-Zuordnung ist eine Freigabe erforderlich.`,
         }));
       }
     }
@@ -323,7 +329,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const scoreRows = [];
   const strikeStateRows = [];
   const strikeEvents = [];
-  const now = new Date().toISOString();
 
   for (const profile of profiles) {
     const computedScore = computeFounderSprintScore({

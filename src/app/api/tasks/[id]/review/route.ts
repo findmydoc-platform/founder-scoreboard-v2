@@ -56,11 +56,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,sprint_id,title,status,assignee,owner,review_owner_profile_id,updated_at")
+    .select("id,task_type,approval_status,sprint_id,title,status,assignee,owner,review_owner_profile_id,updated_at")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  if (task.task_type !== "deliverable" || task.approval_status !== "approved") {
+    return apiError("Nur freigegebene Deliverables können reviewed werden.", 409);
+  }
   const permission = await requireTaskReviewer(request, task, founderPermission);
   if (!permission.ok) return authzError(permission);
 

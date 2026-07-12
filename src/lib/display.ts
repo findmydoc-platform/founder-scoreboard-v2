@@ -25,7 +25,7 @@ export function taskAssigneeLabel(task: Pick<Task, "assignee"> | { assignee: str
 
 export function taskAssigneeOptions(taskType: Task["taskType"], profiles: Profile[]) {
   const options = profiles.map((profile) => ({ value: profile.id, label: profile.name }));
-  return taskType === "proposal" ? [{ value: "", label: unassignedAssigneeLabel }, ...options] : options;
+  return options;
 }
 
 export function initiativeOptionLabel(initiative: Package) {

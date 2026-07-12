@@ -23,6 +23,10 @@ export type InitiativeDraft = {
   goal: string;
   successCriteria: string;
   scopeConstraints: string;
+  approveNow: boolean;
+  approvalStatus?: Package["approvalStatus"];
+  approvalRevision?: number;
+  decisionNote?: string;
 };
 
 export function InitiativeDialog({
@@ -31,12 +35,14 @@ export function InitiativeDialog({
   pending,
   onClose,
   onSave,
+  canApproveNow = false,
 }: {
   defaults: Partial<InitiativeDraft>;
   data: PlanningData;
   pending: boolean;
   onClose: () => void;
   onSave: (draft: InitiativeDraft) => void;
+  canApproveNow?: boolean;
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const activeMilestoneId = data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
@@ -56,6 +62,10 @@ export function InitiativeDialog({
     goal: defaults.goal || "",
     successCriteria: defaults.successCriteria || "",
     scopeConstraints: defaults.scopeConstraints || "",
+    approveNow: Boolean(defaults.approveNow),
+    approvalStatus: defaults.approvalStatus,
+    approvalRevision: defaults.approvalRevision,
+    decisionNote: defaults.decisionNote,
   });
   const canSave = draft.title.trim().length >= 3 && draft.milestoneId && draft.ownerId && draft.accountableProfileId && draft.responsibleProfileIds.length > 0 && draft.goal.trim().length >= 3;
 
@@ -160,9 +170,16 @@ export function InitiativeDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+          {!draft.id && canApproveNow && (
+            <label className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked={draft.approveNow} onChange={(event) => setDraft((current) => ({ ...current, approveNow: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
+              Erstellen und freigeben
+            </label>
+          )}
+          {draft.id && draft.approvalStatus && <span className="mr-auto text-xs text-slate-500">Freigabe: {draft.approvalStatus} · Revision {draft.approvalRevision || 1}{draft.decisionNote ? ` · ${draft.decisionNote}` : ""}</span>}
           <UiButton onClick={onClose}>Abbrechen</UiButton>
           <UiButton type="submit" disabled={pending || !canSave} variant="primary">
-            Speichern
+            {!draft.id && draft.approveNow ? "Erstellen und freigeben" : "Speichern"}
           </UiButton>
         </div>
       </form>

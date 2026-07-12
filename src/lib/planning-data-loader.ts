@@ -50,7 +50,7 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
   const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, profileUiPreferenceResult, profileFeatureTourAcknowledgementResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", founderProjectId).single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
-    supabase.from("packages").select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order").order("sort_order"),
+    supabase.from("packages").select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note").order("sort_order"),
     shouldLoad(scope, "milestones") ? supabase.from("milestones").select("id,title,description,target_date,status,sort_order").eq("project_id", founderProjectId).order("sort_order") : Promise.resolve(skippedListResult<DbMilestone>()),
     supabase
       .from("tasks")
@@ -125,6 +125,8 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
   }
 
   const profiles = (rows.profileResult.data as DbProfile[]).map(mapProfile);
+  const tasks = (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles));
+  const approvalByTaskId = new Map(tasks.map((task) => [task.id, task.approvalStatus]));
 
   return {
     project: {
@@ -135,7 +137,9 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
     profiles,
     packages: (rows.packageResult.data as DbPackage[]).map(mapPackage),
     milestones: rows.milestoneResult.error ? [] : (rows.milestoneResult.data as DbMilestone[]).map(mapMilestone),
-    tasks: (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles)),
+    tasks: tasks.map((task) => task.taskType === "sub_issue"
+      ? { ...task, parentApprovalStatus: approvalByTaskId.get(task.parentTaskId) || null }
+      : task),
     sprints: rows.sprintResult.error ? [] : (rows.sprintResult.data as DbSprint[]).map(mapSprint),
     sprintCommitments: rows.sprintCommitmentResult.error ? [] : (rows.sprintCommitmentResult.data as DbSprintCommitment[]).map(mapSprintCommitment),
     founderSprintScores: rows.founderSprintScoreResult.error ? [] : (rows.founderSprintScoreResult.data as DbFounderSprintScore[]).map(mapFounderSprintScore),

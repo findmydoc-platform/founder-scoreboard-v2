@@ -107,6 +107,7 @@ export function TaskDetailPage({
           }}
           onAddRelation={(payload) => controller.addTaskRelation(task, payload)}
           onRemoveRelation={(relation) => controller.removeTaskRelation(task, relation)}
+          onDecideApproval={(action, note) => controller.decideTaskApproval(task, action, note)}
         />
       </div>
 

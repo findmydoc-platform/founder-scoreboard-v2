@@ -401,7 +401,11 @@ async function verifyTeamTaskIntakeRpcs() {
     ...tokenParams,
     p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
   };
-  const [token, anonToken, legacyToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch] = await Promise.all([
+  const v2BatchParams = {
+    ...batchParams,
+    p_items: [{ itemType: "deliverable", title: "Verification" }],
+  };
+  const [token, anonToken, legacyToken, auth, anonAuth, revoke, anonRevoke, batch, anonBatch, v2Batch, anonV2Batch] = await Promise.all([
     supabase.rpc("create_team_task_intake_token", tokenParams),
     anonSupabase.rpc("create_team_task_intake_token", tokenParams),
     supabase.rpc("create_team_task_intake_token", legacyTokenParams),
@@ -411,6 +415,8 @@ async function verifyTeamTaskIntakeRpcs() {
     anonSupabase.rpc("revoke_team_task_intake_token", revokeParams),
     supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
     anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
+    supabase.rpc("create_team_task_intake_v2_transaction", v2BatchParams),
+    anonSupabase.rpc("create_team_task_intake_v2_transaction", v2BatchParams),
   ]);
 
   return [
@@ -452,6 +458,15 @@ async function verifyTeamTaskIntakeRpcs() {
         ? batch.error?.message || "batch RPC unexpectedly accepted an inactive token"
         : !anonBatch.error
           ? "batch RPC unexpectedly allowed anonymous execution"
+          : "",
+    },
+    {
+      name: "create_team_task_intake_v2_transaction",
+      ok: v2Batch.error?.code === "P0004" && Boolean(anonV2Batch.error),
+      error: v2Batch.error?.code !== "P0004"
+        ? v2Batch.error?.message || "v2 batch RPC unexpectedly accepted an inactive token"
+        : !anonV2Batch.error
+          ? "v2 batch RPC unexpectedly allowed anonymous execution"
           : "",
     },
   ];

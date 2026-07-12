@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireTeamMember } from "@/lib/authz";
-import { githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
+import { connectGitHubSubIssue, githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
+import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
+import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -70,50 +72,20 @@ type LoadedSyncTask =
     }
   | { ok: false; response: NextResponse };
 
-function issueFromGitHubUrl(value?: string | null) {
-  const match = (value || "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)(?:$|[?#])/i);
-  if (!match) return null;
-  return {
-    repo: `${match[1]}/${match[2]}`,
-    number: Number(match[3]),
-  };
-}
-
-function linkedIssueNumber(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
-  if (task.githubIssueNumber) return task.githubIssueNumber;
-
-  const githubIssue = issueFromGitHubUrl(task.githubIssueUrl);
-  if (githubIssue?.repo === githubRepoSlug()) return githubIssue.number;
-
-  const legacyNumber = Number(task.issueNumber || 0);
-  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
-
-  const legacyIssue = issueFromGitHubUrl(task.issueUrl);
-  return legacyIssue?.repo === githubRepoSlug() ? legacyIssue.number : null;
-}
-
 function githubSyncResourceKey(task: Task, createIfMissing: boolean) {
-  const issueNumber = linkedIssueNumber(task);
-  if (issueNumber) return `github:${githubRepoSlug()}#${issueNumber}`;
-  return createIfMissing ? `task:${task.id}:create-github-issue` : `task:${task.id}:github-sync`;
+  const repository = githubRepoSlug(task.githubRepo);
+  const issueNumber = resolveGitHubIssueNumber(task, { repository });
+  if (issueNumber) return `github:${repository}#${issueNumber}`;
+  return createIfMissing ? `task:${task.id}:${repository}:create-github-issue` : `task:${task.id}:${repository}:github-sync`;
 }
 
-function rowIssueNumber(row: RelationshipTaskRow, currentTaskId: string, currentIssueNumber: number) {
-  const syncRepo = githubRepoSlug();
+function rowIssueNumber(row: RelationshipTaskRow, currentTaskId: string, currentIssueNumber: number, syncRepo: string) {
   if (row.id === currentTaskId) return currentIssueNumber;
-  if (row.github_issue_number && (!row.github_repo || row.github_repo === syncRepo)) return row.github_issue_number;
-
-  const githubIssue = issueFromGitHubUrl(row.github_issue_url);
-  if (githubIssue?.repo === syncRepo) return githubIssue.number;
-
-  const legacyIssueNumber = Number(row.issue_number || 0);
-  if (Number.isInteger(legacyIssueNumber) && legacyIssueNumber > 0 && (!row.github_repo || row.github_repo === syncRepo)) return legacyIssueNumber;
-
-  const legacyIssue = issueFromGitHubUrl(row.issue_url);
-  return legacyIssue?.repo === syncRepo ? legacyIssue.number : null;
+  if (row.github_repo && row.github_repo !== syncRepo) return null;
+  return resolveGitHubIssueNumber(row, { repository: syncRepo });
 }
 
-async function githubDependencyContext(supabase: SupabaseClient, taskId: string, currentIssueNumber: number) {
+async function githubDependencyContext(supabase: SupabaseClient, taskId: string, currentIssueNumber: number, syncRepo: string) {
   const [outgoingRelationships, incomingRelationships, linkedTasks] = await Promise.all([
     supabase
       .from("task_relationship_edges")
@@ -137,7 +109,7 @@ async function githubDependencyContext(supabase: SupabaseClient, taskId: string,
   const issueNumberByTaskId = new Map<string, number>();
   const managedIssueNumbers = new Set<number>();
   for (const row of (linkedTasks.data || []) as RelationshipTaskRow[]) {
-    const issueNumber = rowIssueNumber(row, taskId, currentIssueNumber);
+    const issueNumber = rowIssueNumber(row, taskId, currentIssueNumber, syncRepo);
     if (!issueNumber) continue;
     issueNumberByTaskId.set(row.id, issueNumber);
     managedIssueNumbers.add(issueNumber);
@@ -166,6 +138,7 @@ async function githubDependencyContext(supabase: SupabaseClient, taskId: string,
     currentIssueNumber,
     desiredDependencies: [...desiredDependencies.values()],
     managedIssueNumbers: [...managedIssueNumbers],
+    repository: syncRepo,
   };
 }
 
@@ -185,6 +158,10 @@ async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<Lo
   }
 
   const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
+  if (task.taskType === "sub_issue" && task.parentTaskId) {
+    const { data: parent } = await supabase.from("tasks").select("approval_status").eq("id", task.parentTaskId).maybeSingle();
+    task.parentApprovalStatus = (parent?.approval_status as Task["parentApprovalStatus"]) || null;
+  }
   const assigneeProfileId = data.assignee || "";
   const assigneeLogin = assigneeProfileId ? profileGitHubLoginById.get(assigneeProfileId) || "" : "";
 
@@ -234,14 +211,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let { assigneeLogin, hasExistingGitHubIssue, task } = loaded;
 
-  if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
-    return NextResponse.json({
-      error: "Nur Deliverables können als GitHub Issue angelegt werden.",
-      task: {
-        githubIssueSyncStatus: task.githubIssueSyncStatus,
-        githubIssueSyncError: task.githubIssueSyncError,
-      },
-    }, { status: 400 });
+  const initialRepositoryPolicy = resolveTaskGitHubRepository(task.taskType, task.githubRepo);
+  if (!initialRepositoryPolicy.ok) return apiError(initialRepositoryPolicy.error, 409);
+
+  if (task.taskType === "deliverable" && task.approvalStatus !== "approved") {
+    return apiError("Nur freigegebene Deliverables können mit GitHub synchronisiert werden.", 409);
+  }
+  if (task.taskType === "sub_issue" && task.parentApprovalStatus !== "approved") {
+    return apiError("Das Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein.", 409);
   }
 
   if (!hasExistingGitHubIssue && !payload.createIfMissing) {
@@ -279,15 +256,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (!reloaded.ok) return reloaded.response;
     ({ assigneeLogin, hasExistingGitHubIssue, task } = reloaded);
 
-    if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
-      return NextResponse.json({
-        error: "Nur Deliverables können als GitHub Issue angelegt werden.",
-        task: {
-          githubIssueSyncStatus: task.githubIssueSyncStatus,
-          githubIssueSyncError: task.githubIssueSyncError,
-        },
-      }, { status: 400 });
-    }
+    const reloadedRepositoryPolicy = resolveTaskGitHubRepository(task.taskType, task.githubRepo);
+    if (!reloadedRepositoryPolicy.ok) return apiError(reloadedRepositoryPolicy.error, 409);
+
+    if (task.taskType === "deliverable" && task.approvalStatus !== "approved") return apiError("Nur freigegebene Deliverables können mit GitHub synchronisiert werden.", 409);
 
     if (!hasExistingGitHubIssue && !payload.createIfMissing) {
       return NextResponse.json({
@@ -305,10 +277,31 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (pendingError) throw new Error(`GitHub-Sync konnte nicht gestartet werden: ${pendingError.message}`);
 
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
-    const dependencyContext = await githubDependencyContext(supabase, id, issue.number);
-    await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
+    const githubRepo = githubRepoSlug(task.githubRepo);
+    if (task.taskType === "deliverable") {
+      const dependencyContext = await githubDependencyContext(supabase, id, issue.number, githubRepo);
+      await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
+    } else if (task.parentTaskId) {
+      const { data: parent } = await supabase
+        .from("tasks")
+        .select("id,approval_status,github_repo,github_issue_number,github_issue_url")
+        .eq("id", task.parentTaskId)
+        .maybeSingle();
+      const parentIssue = parent
+        ? resolveGitHubIssueNumber(parent, { repository: githubRepoSlug(parent.github_repo) })
+        : null;
+      if (!parent || parent.approval_status !== "approved" || !parentIssue) {
+        throw new Error("Parent-Deliverable ist nicht freigegeben oder noch nicht mit GitHub verknüpft.");
+      }
+      await connectGitHubSubIssue({
+        parentRepository: githubRepoSlug(parent.github_repo),
+        parentIssueNumber: parentIssue,
+        childRepository: githubRepo,
+        childIssueNumber: issue.number,
+        token: githubInstallationToken,
+      });
+    }
     const syncedAt = new Date().toISOString();
-    const githubRepo = githubRepoSlug();
     const warnings = issue.warnings || [];
     const activityMessage = [
       `GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`,

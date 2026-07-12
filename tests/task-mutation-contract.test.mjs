@@ -64,6 +64,7 @@ test("task brief fields stay together in the shared update payload", async () =>
   });
 
   const payload = taskUpdateRequestPayload({
+    title: "Neuer Titel",
     problemStatement: "Problem",
     intendedOutcome: "Zielbild",
     scopeConstraints: "Umfang",
@@ -72,6 +73,7 @@ test("task brief fields stay together in the shared update payload", async () =>
     definitionOfDone: "Qualitätsstandard",
   }, "2026-07-12T10:00:00.000Z");
 
+  assert.equal(payload.title, "Neuer Titel");
   assert.equal(payload.problemStatement, "Problem");
   assert.equal(payload.intendedOutcome, "Zielbild");
   assert.equal(payload.scopeConstraints, "Umfang");

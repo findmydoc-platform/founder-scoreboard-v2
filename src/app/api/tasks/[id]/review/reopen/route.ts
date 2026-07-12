@@ -15,11 +15,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,review_owner_profile_id,sprint_id,score_final")
+    .select("id,task_type,approval_status,title,assignee,owner,review_owner_profile_id,sprint_id,score_final")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  if (task.task_type !== "deliverable" || task.approval_status !== "approved") {
+    return apiError("Nur freigegebene Deliverables können erneut in Review gegeben werden.", 409);
+  }
 
   const permission = await requireTaskReviewer(request, task, founderPermission);
   if (!permission.ok) return authzError(permission);

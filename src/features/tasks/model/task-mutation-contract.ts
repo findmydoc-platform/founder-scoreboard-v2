@@ -4,6 +4,7 @@ import type { Package, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
   expectedUpdatedAt?: string;
+  title?: string;
   status?: string;
   assignee?: string;
   owner?: string;
@@ -35,6 +36,7 @@ export type TaskUpdatePayload = {
 };
 
 export type CurrentTaskForActivity = {
+  title?: string | null;
   task_type?: string | null;
   status?: string | null;
   review_status?: string | null;
@@ -103,6 +105,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
 
   return {
     expectedUpdatedAt,
+    title: patch.title,
     status: patch.status,
     assignee: patch.assigneeId || patch.assignee || patch.ownerId || patch.owner,
     priority: patch.priority,
@@ -141,6 +144,9 @@ function formatChange(previous?: string | number | boolean | null, next?: string
 
 export function activityMessages(payload: TaskUpdatePayload, currentTask?: CurrentTaskForActivity | null) {
   const messages: string[] = [];
+  if (payload.title !== undefined && payload.title !== currentTask?.title) {
+    messages.push(`Titel geändert: ${formatChange(currentTask?.title, payload.title)}`);
+  }
   if (payload.status && currentTask?.status && payload.status !== currentTask.status) {
     messages.push(`Status geändert: ${currentTask.status} → ${payload.status}`);
   }
@@ -180,6 +186,7 @@ export function buildTaskUpdateResponsePatch(
       id,
       ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
       ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
+      ...(update.title ? { title: String(update.title) } : {}),
       ...(update.status ? { status: String(update.status) } : {}),
       ...(update.review_status ? { reviewStatus: String(update.review_status) as Task["reviewStatus"] } : {}),
       ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
@@ -195,6 +202,7 @@ export function buildTaskUpdateResponsePatch(
       id,
       ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
       ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
+      ...(update.title ? { title: String(update.title) } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
     };

@@ -13,6 +13,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     commentImportNotice,
     commentImportPendingTaskIds,
     createTask,
+    decideTaskApproval,
     data,
     deleteTask,
     importGitHubComments,
@@ -97,12 +98,14 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onDelete={() => deleteTask(selectedTask)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
+          onDecideApproval={(action, note) => decideTaskApproval(selectedTask, action, note)}
         />
       )}
       {taskDialogDefaults && (
         <NewTaskDialog
           defaults={taskDialogDefaults}
           data={data}
+          canApproveNow={currentProfile?.platformRole === "ceo"}
           pending={isPending}
           onClose={() => setTaskDialogDefaults(null)}
           onCreate={createTask}
@@ -112,6 +115,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
         <InitiativeDialog
           defaults={initiativeDialogDefaults}
           data={data}
+          canApproveNow={currentProfile?.platformRole === "ceo"}
           pending={isPending}
           onClose={() => setInitiativeDialogDefaults(null)}
           onSave={saveInitiative}

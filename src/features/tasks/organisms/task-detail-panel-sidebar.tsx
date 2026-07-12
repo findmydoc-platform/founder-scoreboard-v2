@@ -2,6 +2,7 @@
 
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
@@ -9,6 +10,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
+import { UiButton } from "@/shared/atoms/ui-primitives";
 import { normalizeStatus } from "@/lib/status";
 import {
   assigneeOptions,
@@ -17,7 +19,7 @@ import {
   priorityOptions,
   sprintOptions,
 } from "@/features/tasks/model/task-form-options";
-import type { Milestone, Package, Profile, Sprint, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, Milestone, Package, Profile, Sprint, Task } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -32,12 +34,15 @@ type Props = {
   canOpenReview: boolean;
   canDeleteTask: boolean;
   canChangeTaskStatus?: boolean;
+  canDecideApproval: boolean;
+  canReturnToDraft: boolean;
   pending: boolean;
   githubInstallationAvailable: boolean;
   onUpdate: (patch: Partial<Task>) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
   onDelete: () => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
 export function TaskDetailPanelSidebar({
@@ -53,12 +58,15 @@ export function TaskDetailPanelSidebar({
   canOpenReview,
   canDeleteTask,
   canChangeTaskStatus = canManageTaskMeta,
+  canDecideApproval,
+  canReturnToDraft,
   pending,
   githubInstallationAvailable,
   onUpdate,
   onSyncGitHub,
   onOpenReview,
   onDelete,
+  onDecideApproval,
 }: Props) {
   const assigneeProfile = teamProfiles.find((profile) => profile.name === task.assignee || profile.id === task.assignee);
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
@@ -74,6 +82,7 @@ export function TaskDetailPanelSidebar({
   const externalSyncProblem = task.githubIssueSyncStatus === "failed" || Boolean(task.githubIssueSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
+  const effectivelyApproved = isTaskPlanningActive(task);
 
   const updatePackage = (packageId: string) => {
     const nextPackage = packages.find((item) => item.id === packageId);
@@ -87,6 +96,27 @@ export function TaskDetailPanelSidebar({
 
   return (
     <div className="grid h-fit min-w-0 gap-4 lg:sticky lg:top-24">
+      <section className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+        <h3 className="text-sm font-semibold text-slate-950">Freigabe</h3>
+        {task.taskType === "sub_issue" ? (
+          <p className="mt-2 text-sm text-slate-700">{task.parentApprovalStatus === "approved" ? "Durch Parent-Deliverable aktiv" : "Parent wartet auf Freigabe"}</p>
+        ) : (
+          <>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-800">{task.approvalStatus || "ohne Status"}</span>
+              <span className="text-xs text-slate-500">Revision {task.approvalRevision}</span>
+            </div>
+            {task.decisionNote && <p className="mt-2 text-xs leading-5 text-slate-600">{task.decisionNote}</p>}
+            {canDecideApproval && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideApproval("approve")}>Freigeben</UiButton>
+                <UiButton size="xs" disabled={pending} onClick={() => onDecideApproval("reject")}>Ablehnen</UiButton>
+              </div>
+            )}
+            {canReturnToDraft && <UiButton size="xs" className="mt-2" disabled={pending} onClick={() => onDecideApproval("return_to_draft")}>Zur Überarbeitung</UiButton>}
+          </>
+        )}
+      </section>
       <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-950">Steuerung</h3>
         <div className="mt-3 grid gap-3">
@@ -94,7 +124,7 @@ export function TaskDetailPanelSidebar({
             <div className="text-xs font-semibold text-slate-500">Status</div>
             <TaskStatusControl
               status={task.status}
-              canChange={canChangeTaskStatus}
+              canChange={canChangeTaskStatus && effectivelyApproved}
               onChange={(status) => onUpdate({ status })}
               options={statusOptions}
               className="mt-1"
@@ -137,7 +167,7 @@ export function TaskDetailPanelSidebar({
           {canManageTaskMeta ? (
             <>
               <UiSelectField label="Initiative" value={task.packageId} onChange={updatePackage} options={initiativeOptions(packages)} />
-              <UiSelectField label="Sprint" value={task.sprintId} onChange={(value) => onUpdate({ sprintId: value })} options={sprintOptions(sprints)} />
+              <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task)} onChange={(value) => onUpdate({ sprintId: value })} options={sprintOptions(sprints)} />
               <UiSelectField
                 label="Epic / Meilenstein"
                 value={task.milestoneId || ""}
@@ -186,7 +216,7 @@ export function TaskDetailPanelSidebar({
           <div>
             <div className="text-xs font-semibold text-slate-500">Review</div>
             <div className="mt-1">{reviewLabel(task.reviewStatus)} · {task.scoreFinal ? `${task.scorePoints} Punkte final` : "noch nicht final bewertet"}</div>
-            {reviewOpen && canOpenReview ? (
+            {reviewOpen && canOpenReview && effectivelyApproved ? (
               <button
                 type="button"
                 disabled={pending}
@@ -241,16 +271,16 @@ export function TaskDetailPanelSidebar({
           {canSyncExistingGitHubIssue ? (
             <button
               type="button"
-              disabled={pending || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
+              disabled={pending || !effectivelyApproved || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
               onClick={() => onSyncGitHub()}
               className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {task.githubIssueSyncStatus === "pending" ? "Sync..." : "Sync"}
             </button>
-          ) : task.taskType === "deliverable" ? (
+          ) : task.taskType === "deliverable" || task.taskType === "sub_issue" ? (
             <button
               type="button"
-              disabled={pending || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
+              disabled={pending || !effectivelyApproved || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >

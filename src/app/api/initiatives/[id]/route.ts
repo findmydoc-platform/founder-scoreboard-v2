@@ -9,10 +9,11 @@ import {
   initiativePriorities,
   initiativeSelect,
   initiativeStatuses,
-  mapInitiative,
   validateProfileIds,
   type InitiativePayload,
 } from "@/features/projects/model/initiative-api";
+import { mapPackage } from "@/lib/planning-profile-mappers";
+import type { DbPackage } from "@/lib/planning-data-row-types";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requirePlanningContributor);
@@ -60,7 +61,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const raciReferenceError = await validateProfileIds(supabase, raciProfileIds);
   if (raciReferenceError) return apiError(raciReferenceError, 404);
 
-  const update: Record<string, string | string[] | null> = {};
+  const update: Record<string, string | string[] | number | null> = {};
   if (payload.title !== undefined) {
     const title = payload.title.trim().slice(0, 240);
     if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
@@ -87,16 +88,35 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.successCriteria !== undefined) update.success_criteria = payload.successCriteria.trim().slice(0, 4000);
   if (payload.scopeConstraints !== undefined) update.scope_constraints = payload.scopeConstraints.trim().slice(0, 4000);
 
-  if (!Object.keys(update).length) return NextResponse.json({ ok: true, initiative: mapInitiative(current) });
+  const materialChange = [
+    ["title", current.title],
+    ["goal", current.goal],
+    ["success_criteria", current.success_criteria],
+    ["scope_constraints", current.scope_constraints],
+    ["milestone_id", current.milestone_id],
+  ].some(([field, previous]) => field in update && update[field] !== (previous || null));
+  if (materialChange) {
+    update.approval_status = "proposed";
+    update.approval_revision = Number(current.approval_revision || 1) + 1;
+    update.proposed_by = permission.profile?.id || null;
+    update.proposed_at = new Date().toISOString();
+    update.decided_by = null;
+    update.decided_at = null;
+    update.decision_note = null;
+  }
+
+  if (!Object.keys(update).length) return NextResponse.json({ ok: true, initiative: mapPackage(current as DbPackage) });
 
   const { data: updated, error } = await supabase
     .from("packages")
     .update(update)
     .eq("id", id)
+    .eq("approval_revision", Number(current.approval_revision || 1))
     .select("*")
-    .single();
+    .maybeSingle();
 
-  if (error || !updated) return apiError(error?.message || "Initiative konnte nicht gespeichert werden.", 500);
+  if (error) return apiError(error.message || "Initiative konnte nicht gespeichert werden.", 500);
+  if (!updated) return apiError("Initiative wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
@@ -108,5 +128,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ...auditRequestMetadata(request),
   });
 
-  return NextResponse.json({ ok: true, initiative: mapInitiative(updated) });
+  if (materialChange && update.approval_status === "proposed") {
+    await supabase.from("audit_log").insert({
+      actor_profile_id: permission.profile?.id || null,
+      action: current.approval_status === "approved"
+        ? "initiative.approval_reset"
+        : current.approval_status === "proposed"
+          ? "initiative.approval_revised"
+          : "initiative.approval_resubmitted",
+      entity_type: "initiative",
+      entity_id: id,
+      before_data: { approvalStatus: current.approval_status, revision: current.approval_revision },
+      after_data: { approvalStatus: "proposed", revision: update.approval_revision },
+      ...auditRequestMetadata(request),
+    });
+  }
+
+  return NextResponse.json({ ok: true, initiative: mapPackage(updated as DbPackage) });
 }

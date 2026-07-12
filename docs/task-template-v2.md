@@ -55,3 +55,7 @@ Nicht in die DoD gehören Meta-Punkte zur Aufgabenerstellung wie `Template v2 is
 
 ## Follow-up / Sub-Issues
 Optional. Dient der persönlichen Arbeitsstruktur und ist nicht score-relevant.
+
+## Approval-sensitive changes
+
+Changing the Deliverable type, Initiative, title, Problem Statement, Intended Outcome, Scope & Constraints, Acceptance Criteria, or Definition of Done creates a new approval revision. An approved Deliverable returns to `proposed`. Evidence, comments, work status, Sprint operations, and GitHub sync metadata remain operational changes and do not reset approval.

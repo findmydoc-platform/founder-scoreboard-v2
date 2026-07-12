@@ -7,7 +7,7 @@ import {
 } from "@/features/intake/model/team-task-intake-route";
 
 export async function POST(request: NextRequest) {
-  return handleTeamTaskIntakeRequest(request, "write:task-intake", "Team Task Intake konnte nicht geprüft werden.", async (permission) => {
+  const response = await handleTeamTaskIntakeRequest(request, "write:task-intake", "Team Task Intake konnte nicht geprüft werden.", async (permission) => {
     const intake = await buildTeamTaskIntakeForRoute({
       actor: permission.profile,
       payload: await request.json().catch(() => null),
@@ -21,4 +21,7 @@ export async function POST(request: NextRequest) {
       tasks: intake.preview,
     });
   });
+  response.headers.set("Deprecation", "true");
+  response.headers.set("Link", "</api/team/task-intake/v2/preview>; rel=successor-version");
+  return response;
 }
