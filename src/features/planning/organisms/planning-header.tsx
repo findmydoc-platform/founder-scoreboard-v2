@@ -25,7 +25,9 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     filters,
     filtersAvailable,
     githubConnectionState,
-    githubAppConnected,
+    githubInstallationAvailable,
+    githubUserConnected,
+    waitingGitHubCommentCount,
     githubReauthFailed,
     githubSyncQueueOpen,
     headerData,
@@ -55,8 +57,10 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
   } = controller;
   const showGitHubSyncTrigger = source === "supabase" && workspace === "planning";
   const githubSyncDeliverables = data.tasks.filter((task) => task.taskType === "deliverable");
-  const linkedGitHubQueue = githubSyncDeliverables.filter((task) => hasGitHubIssue(task) && task.githubSyncStatus !== "synced");
-  const failedGitHubSyncs = linkedGitHubQueue.filter((task) => task.githubSyncStatus === "failed");
+  const openCommentTaskIds = new Set(data.taskComments.filter((comment) => comment.githubDeliveryStatus !== "delivered").map((comment) => comment.taskId));
+  const failedCommentTaskIds = new Set(data.taskComments.filter((comment) => comment.githubDeliveryStatus === "failed").map((comment) => comment.taskId));
+  const linkedGitHubQueue = githubSyncDeliverables.filter((task) => hasGitHubIssue(task) && (task.githubIssueSyncStatus !== "synced" || openCommentTaskIds.has(task.id)));
+  const failedGitHubSyncs = linkedGitHubQueue.filter((task) => task.githubIssueSyncStatus === "failed" || failedCommentTaskIds.has(task.id));
   const missingGitHubIssues = githubSyncDeliverables.filter((task) => !hasGitHubIssue(task));
   const githubSyncQueueCount = linkedGitHubQueue.length + missingGitHubIssues.length;
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
@@ -132,7 +136,9 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           </button>
           <GitHubConnectionStatus
             authenticated={Boolean(authUser)}
-            available={githubAppConnected}
+            installationAvailable={githubInstallationAvailable}
+            userConnected={githubUserConnected}
+            waitingCommentCount={waitingGitHubCommentCount}
             failed={githubReauthFailed}
             busy={authBusy}
             state={githubConnectionState}
@@ -142,7 +148,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             <button
               type="button"
               onClick={() => setGithubSyncQueueOpen(true)}
-              disabled={!githubAppConnected}
+              disabled={!githubInstallationAvailable}
               aria-expanded={githubSyncQueueOpen}
               className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >

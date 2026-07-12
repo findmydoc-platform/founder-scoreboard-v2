@@ -561,7 +561,7 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
-  assert.match(commentsRoute, /requireFounder/);
+  assert.match(commentsRoute, /requirePlanningContributor/);
 });
 
 test("founderops agent api is token guarded and limited to planning intake", async () => {

@@ -2,7 +2,7 @@
 
 import { AlertCircle, CheckCircle2, Clock3, GitBranch, GitPullRequestArrow, MessageSquare, Paperclip } from "lucide-react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
-import type { Profile } from "@/lib/types";
+import type { GitHubCommentDeliveryStatus, Profile } from "@/lib/types";
 import { UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export type TaskCommentTimelineItem =
@@ -16,6 +16,8 @@ export type TaskCommentTimelineItem =
       authorLogin: string;
       authorAvatarUrl: string;
       htmlUrl: string;
+      githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+      githubCommentUrl?: string;
     }
   | {
       id: string;
@@ -27,6 +29,8 @@ export type TaskCommentTimelineItem =
       authorLogin: string;
       authorAvatarUrl: string;
       htmlUrl: string;
+      githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+      githubCommentUrl?: string;
     }
   | {
       id: string;
@@ -38,6 +42,8 @@ export type TaskCommentTimelineItem =
       authorLogin: string;
       authorAvatarUrl: string;
       htmlUrl: string;
+      githubDeliveryStatus?: GitHubCommentDeliveryStatus;
+      githubCommentUrl?: string;
     };
 
 function formatDateTime(value: string) {
@@ -131,7 +137,15 @@ function activityToneClass(tone: ReturnType<typeof describeActivity>["tone"]) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
-export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTimelineItem[]; profiles: Profile[] }) {
+function deliveryHint(status?: GitHubCommentDeliveryStatus) {
+  if (status === "waiting_for_author_connection") return "Wartet auf deine GitHub-Verbindung";
+  if (status === "waiting_for_issue") return "Wird nach der Issue-Anlage veröffentlicht";
+  if (status === "pending" || status === "processing" || status === "retry_scheduled") return "GitHub-Veröffentlichung ausstehend";
+  if (status === "failed") return "GitHub-Veröffentlichung braucht Aufmerksamkeit";
+  return "";
+}
+
+export function TaskCommentTimeline({ items, profiles, currentProfileId = "" }: { items: TaskCommentTimelineItem[]; profiles: Profile[]; currentProfileId?: string }) {
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const profileById = (profileId: string) => profiles.find((profile) => profile.id === profileId);
 
@@ -147,6 +161,16 @@ export function TaskCommentTimeline({ items, profiles }: { items: TaskCommentTim
                 <span>{formatDateTime(item.createdAt)}</span>
               </div>
               <CommentBody value={item.comment} />
+              {item.profileId === currentProfileId && deliveryHint(item.githubDeliveryStatus) && (
+                <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                  {deliveryHint(item.githubDeliveryStatus)}
+                </div>
+              )}
+              {item.profileId === currentProfileId && item.githubDeliveryStatus === "delivered" && item.githubCommentUrl && (
+                <a href={item.githubCommentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
+                  In GitHub öffnen
+                </a>
+              )}
             </div>
           </article>
         ) : item.type === "github-comment" ? (

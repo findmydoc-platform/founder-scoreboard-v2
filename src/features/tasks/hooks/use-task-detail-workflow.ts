@@ -64,7 +64,9 @@ export function useTaskDetailWorkflow({
   const [subIssueDialogOpen, setSubIssueDialogOpen] = useState(false);
   const seedProfile = source === "seed" ? profiles.find((profile) => profile.platformRole === "ceo") || null : null;
   const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile || seedProfile);
-  const [githubAppConnected, setGithubAppConnected] = useState(false);
+  const [githubInstallationAvailable, setGithubInstallationAvailable] = useState(false);
+  const [githubUserConnected, setGithubUserConnected] = useState(false);
+  const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState(0);
   const [githubReconnectFailed, setGithubReconnectFailed] = useState(false);
   const [apiClient] = useState(() => createBrowserApiClient());
   const [isPending, startTransition] = useTransition();
@@ -108,8 +110,10 @@ export function useTaskDetailWorkflow({
     let active = true;
     apiClient.getAuthSnapshot().then((snapshot) => {
       if (!active) return;
-      setGithubAppConnected(snapshot.githubAppConnected);
-      if (snapshot.githubAppConnected) setGithubReconnectFailed(false);
+      setGithubInstallationAvailable(snapshot.githubInstallationAvailable);
+      setGithubUserConnected(snapshot.githubUserConnected);
+      setWaitingGitHubCommentCount(snapshot.waitingGitHubCommentCount);
+      if (snapshot.githubUserConnected) setGithubReconnectFailed(false);
       const login = snapshot.githubLogin;
       const profile = profiles.find((item) => item.githubLogin === login);
       setCurrentProfile(profile || initialCurrentProfile);
@@ -200,7 +204,7 @@ export function useTaskDetailWorkflow({
       return;
     }
 
-    setGithubState((current) => ({ ...current, githubSyncStatus: "pending", githubSyncError: "" }));
+    setGithubState((current) => ({ ...current, githubIssueSyncStatus: "pending", githubIssueSyncError: "" }));
 
     startTransition(async () => {
       try {
@@ -208,8 +212,8 @@ export function useTaskDetailWorkflow({
         if (response.status === 409 && body?.code === "github_sync_locked") {
           setGithubState((current) => ({
             ...current,
-            githubSyncStatus: "pending",
-            githubSyncError: body.error || "GitHub-Sync läuft bereits.",
+            githubIssueSyncStatus: "pending",
+            githubIssueSyncError: body.error || "GitHub-Sync läuft bereits.",
           }));
           return;
         }
@@ -219,13 +223,13 @@ export function useTaskDetailWorkflow({
           githubRepo: body.task?.githubRepo || current.githubRepo,
           githubIssueNumber: body.task?.githubIssueNumber ?? current.githubIssueNumber,
           githubIssueUrl: body.task?.githubIssueUrl || current.githubIssueUrl,
-          githubSyncStatus: body.task?.githubSyncStatus || current.githubSyncStatus,
-          githubLastSyncedAt: body.task?.githubLastSyncedAt || current.githubLastSyncedAt,
-          githubSyncError: body.task?.githubSyncError || "",
+          githubIssueSyncStatus: body.task?.githubIssueSyncStatus || current.githubIssueSyncStatus,
+          githubIssueLastSyncedAt: body.task?.githubIssueLastSyncedAt || current.githubIssueLastSyncedAt,
+          githubIssueSyncError: body.task?.githubIssueSyncError || "",
         }));
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : "GitHub-Sync konnte nicht ausgeführt werden.";
-        setGithubState((current) => ({ ...current, githubSyncStatus: "failed", githubSyncError: message }));
+        setGithubState((current) => ({ ...current, githubIssueSyncStatus: "failed", githubIssueSyncError: message }));
         setError(message);
       }
     });
@@ -324,7 +328,8 @@ export function useTaskDetailWorkflow({
     deleteTask,
     error,
     githubCommentImportPending,
-    githubAppConnected,
+    githubInstallationAvailable,
+    githubUserConnected,
     githubReconnectFailed,
     githubState,
     importGitHubComments,
@@ -342,6 +347,7 @@ export function useTaskDetailWorkflow({
     taskExternalComments,
     taskSnapshot,
     taskSubIssues,
+    waitingGitHubCommentCount,
     updateTask,
     uploadAttachment,
     reportBlocker,

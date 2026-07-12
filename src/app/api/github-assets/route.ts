@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { apiError, authzError } from "@/lib/api-response";
 
@@ -23,7 +23,7 @@ function isAllowedGitHubAssetUrl(value: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const permission = await requireFounder(request);
+  const permission = await requirePlanningContributor(request);
   if (!permission.ok) return authzError(permission);
 
   const url = request.nextUrl.searchParams.get("url")?.trim() || "";

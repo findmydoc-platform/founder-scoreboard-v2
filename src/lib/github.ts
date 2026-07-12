@@ -5,6 +5,16 @@ const repo = process.env.GITHUB_SYNC_REPO || "management";
 const defaultGitHubApiVersion = "2022-11-28";
 const issueDependencyGitHubApiVersion = "2026-03-10";
 
+export class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
+
 export type GitHubIssueDependencyInput = {
   blockedIssueNumber: number;
   blockingIssueNumber: number;
@@ -409,20 +419,14 @@ export async function createGitHubIssueComment(issueNumber: number, comment: str
       body: marker ? `${comment}\n\n<!-- ${marker} -->` : comment,
     }),
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Kommentar konnte nicht erstellt werden"));
+  if (!response.ok) throw new GitHubApiError(await githubErrorMessage(response, "GitHub Kommentar konnte nicht erstellt werden"), response.status);
   return response.json() as Promise<{ id: number; html_url: string }>;
 }
 
 export async function listGitHubIssueComments(issueNumber: number, token: string) {
   if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`, {
-    method: "GET",
-    headers: githubHeaders(token),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Kommentare konnten nicht geladen werden"));
-  return response.json() as Promise<Array<{
+  const comments: Array<{
     id: number;
     body: string;
     html_url: string;
@@ -431,7 +435,21 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
       login?: string;
       avatar_url?: string;
     } | null;
-  }>>;
+  }> = [];
+
+  for (let page = 1; page <= 100; page += 1) {
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`, {
+      method: "GET",
+      headers: githubHeaders(token),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new GitHubApiError(await githubErrorMessage(response, "GitHub Kommentare konnten nicht geladen werden"), response.status);
+    const pageComments = await response.json() as typeof comments;
+    comments.push(...pageComments);
+    if (pageComments.length < 100) break;
+  }
+
+  return comments;
 }
 
 export async function getGitHubIssue(issueNumber: number, token: string) {

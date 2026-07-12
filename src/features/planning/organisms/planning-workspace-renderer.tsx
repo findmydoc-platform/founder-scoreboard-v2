@@ -47,7 +47,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     fmdToolMessage,
     fmdToolPending,
     googleChatStatus,
-    githubAppConnected,
+    githubInstallationAvailable,
+    githubSyncNotice,
     githubSyncQueueOpen,
     isPending,
     lockSprint,
@@ -254,8 +255,10 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
       <TaskGitHubSyncQueue
         open={githubSyncQueueOpen}
         tasks={data.tasks}
+        comments={data.taskComments}
         pending={isPending}
-        githubAppConnected={githubAppConnected}
+        githubInstallationAvailable={githubInstallationAvailable}
+        notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={(task) => openTaskPanel(task.id)}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}

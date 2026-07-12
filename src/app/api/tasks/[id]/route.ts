@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
 import {
@@ -49,7 +49,7 @@ type TaskDeletionSnapshotRow = Record<string, unknown> & {
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder, {
+  const apiContext = await requireApiContext(request, requirePlanningContributor, {
     supabaseUnavailableMessage: "Änderungen konnten nicht dauerhaft gespeichert werden.",
   });
   if (!apiContext.ok) return apiContext.response;
@@ -295,7 +295,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireApiContext(request, requirePlanningContributor);
   if (!apiContext.ok) return apiContext.response;
 
   const { permission, supabase } = apiContext;

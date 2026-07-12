@@ -33,23 +33,23 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function GitHubSyncStatusBadge({ task, compact = false }: { task: Task; compact?: boolean }) {
+export function GitHubIssueSyncStatusBadge({ task, compact = false }: { task: Task; compact?: boolean }) {
   if (!hasGitHubIssue(task)) return <GitHubMissingBadge compact={compact} />;
-  if (task.githubSyncStatus === "pending") {
+  if (task.githubIssueSyncStatus === "pending") {
     return (
       <UiBadge tone="amber" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
         Sync läuft
       </UiBadge>
     );
   }
-  if (task.githubSyncStatus === "failed") {
+  if (task.githubIssueSyncStatus === "failed") {
     return (
       <UiBadge tone="red" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
         Sync fehlgeschlagen
       </UiBadge>
     );
   }
-  if (task.githubSyncStatus !== "synced") {
+  if (task.githubIssueSyncStatus !== "synced") {
     return (
       <UiBadge tone="blue" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
         GitHub offen
@@ -82,9 +82,9 @@ function attentionTone(signal: TaskAttentionSignal): CardRiskSignal["tone"] {
 
 function githubRiskSignal(task: Task): CardRiskSignal | null {
   if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
-  if (task.githubSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
-  if (task.githubSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
-  if (task.githubSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
+  if (task.githubIssueSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
+  if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
+  if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
   return null;
 }
 

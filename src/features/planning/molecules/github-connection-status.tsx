@@ -2,7 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { GitHubAppConnectionState } from "@/features/planning/model/github-app-connection";
+import type { GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 
 function GitHubMark() {
   return (
@@ -14,37 +14,47 @@ function GitHubMark() {
 
 export function GitHubConnectionStatus({
   authenticated,
-  available,
+  installationAvailable,
+  userConnected,
+  waitingCommentCount = 0,
   failed,
   busy,
   state,
   onReconnect,
 }: {
   authenticated: boolean;
-  available: boolean;
+  installationAvailable: boolean;
+  userConnected: boolean;
+  waitingCommentCount?: number;
   failed: boolean;
   busy: boolean;
-  state?: GitHubAppConnectionState;
+  state?: GitHubUserConnectionState;
   onReconnect: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const effectiveState: GitHubAppConnectionState = state || (available ? "connected" : failed ? "reconnect_required" : "missing");
+  const effectiveState: GitHubUserConnectionState = state || (userConnected ? "connected" : failed ? "reconnect_required" : "missing");
   const isNeutral = effectiveState === "checking" || effectiveState === "unknown";
   const needsAction = authenticated && (effectiveState === "missing" || effectiveState === "reconnect_required");
   const isConnected = effectiveState === "connected";
-  const statusLabel = isNeutral ? "GitHub-App-Status wird geprüft" : needsAction ? "GitHub-App verbinden" : "GitHub-App verbunden";
-  const statusDotClass = isNeutral ? "bg-slate-300" : needsAction ? "bg-amber-500" : "bg-emerald-500";
-  const buttonBorderClass = needsAction ? "border-amber-200" : "border-slate-200";
-  const message = isConnected
-    ? "GitHub-Sync, Kommentare und Anhänge sind verbunden."
+  const statusLabel = isNeutral ? "GitHub-Autorenverbindung wird geprüft" : needsAction ? "GitHub-Autorenverbindung herstellen" : "GitHub-Autorenverbindung aktiv";
+  const statusDotClass = !installationAvailable ? "bg-red-500" : isNeutral ? "bg-slate-300" : needsAction ? "bg-amber-500" : "bg-emerald-500";
+  const buttonBorderClass = !installationAvailable ? "border-red-200" : needsAction ? "border-amber-200" : "border-slate-200";
+  const message = !installationAvailable
+    ? "Die technische GitHub-App-Installation ist nicht verfügbar. Issue-Sync ist aktuell gesperrt."
+    : isConnected
+    ? "Issue-Sync läuft über die App-Installation. Deine Kommentare und Anhänge werden mit deiner GitHub-Identität veröffentlicht."
     : effectiveState === "reconnect_required"
-      ? "Die GitHub-App-Verbindung muss einmal neu verbunden werden."
+      ? waitingCommentCount > 0
+        ? `Issue-Sync ist verfügbar. ${waitingCommentCount} deiner Kommentare warten auf eine erneute GitHub-Verbindung.`
+        : "Issue-Sync ist verfügbar. Deine GitHub-Autorenverbindung muss einmal erneuert werden."
       : effectiveState === "missing"
-        ? "GitHub-Sync, Kommentare und Anhänge brauchen eine GitHub-App-Verbindung."
+        ? waitingCommentCount > 0
+          ? `Issue-Sync ist verfügbar. ${waitingCommentCount} deiner Kommentare warten auf deine GitHub-Autorenverbindung.`
+          : "Issue-Sync ist verfügbar. Für Kommentare und Anhänge kannst du deine GitHub-Autorenverbindung herstellen."
         : effectiveState === "checking"
-          ? "GitHub-Status wird geprüft. Sync-Aktionen bleiben bis zur Prüfung gesperrt."
-          : "GitHub-Status ist gerade nicht verfügbar. Sync-Aktionen bleiben gesperrt, bis der Status geprüft ist.";
+          ? "Die persönliche GitHub-Autorenverbindung wird geprüft."
+          : "Die persönliche GitHub-Autorenverbindung konnte gerade nicht geprüft werden.";
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +91,7 @@ export function GitHubConnectionStatus({
                 ) : (
                   <RefreshCw size={16} className="text-slate-500" />
                 )}
-                GitHub-App-Verbindung
+                GitHub-Autorenverbindung
               </div>
               <p className="mt-2 leading-5 text-slate-600">{message}</p>
             </div>
@@ -102,7 +112,7 @@ export function GitHubConnectionStatus({
               className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw size={15} />
-              {busy ? "GitHub wird geöffnet..." : "GitHub-App verbinden"}
+              {busy ? "GitHub wird geöffnet..." : "GitHub verbinden"}
             </button>
           )}
         </section>

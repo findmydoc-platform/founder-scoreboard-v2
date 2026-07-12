@@ -52,6 +52,8 @@ Damit bleiben Kommentare und Historie in GitHub erhalten, während die aktuelle 
 
 Die App bleibt führend. GitHub im Repo `findmydoc-platform/management` ist ein One-way-Backup und eine nachvollziehbare Dokumentation.
 
+Jede gültige, einem Teamprofil zugeordnete Session darf den Issue-Sync auslösen, unabhängig von Rolle, Owner oder Assignee. Der Issue-Sync verwendet ausschließlich das GitHub-App-Installationstoken. Viewer bleiben für Task-Änderungen und neue Kommentare read-only.
+
 Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungskern:
 
 - `Problem Statement`
@@ -65,5 +67,7 @@ Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungsker
 Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können über native GitHub-Mittel wie Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
 
 `blocked_by` und `blocks` werden als native GitHub Issue Dependencies gespiegelt, wenn beide FounderOps-Aufgaben mit GitHub-Issues verknüpft sind. `relates_to` bleibt FounderOps-intern, weil GitHub dafür keine echte native Beziehung anbietet und Body- oder Kommentar-Links keinen Relationships-Ersatz bilden.
+
+Lokale Kommentare werden über eine getrennte Zustellungs-Outbox mit dem persönlichen GitHub-Token ihres ursprünglichen Autors veröffentlicht. Fehlt diese Autorenverbindung, wartet nur der Kommentar; der Issue-Sync bleibt erfolgreich. Dauerhafte Kommentar-Marker und ein exakter Altbestandsabgleich verhindern doppelte GitHub-Kommentare.
 
 Alte Workflows oder Templates im Management-Repo dürfen nicht als Quelle der Wahrheit verwendet werden. Sie können später ersetzt oder gelöscht werden, aber nur nach expliziter Freigabe.

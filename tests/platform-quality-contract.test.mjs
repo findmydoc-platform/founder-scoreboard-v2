@@ -148,7 +148,7 @@ test("representative api routes share setup without weakening route guards", asy
   for (const file of migratedRoutes) {
     const source = await readFile(file, "utf8");
 
-    assert.match(source, /requireJsonApiContext<[^>]+>\(request, requireFounder, \{\}\)/, `${file} should pass its existing founder guard to the shared setup helper`);
+    assert.match(source, /requireJsonApiContext<[^>]+>\(request, requirePlanningContributor, \{\}\)/, `${file} should pass its existing founder guard to the shared setup helper`);
     assert.doesNotMatch(source, /getServerSupabase\(\)/, `${file} should not repeat Supabase setup`);
     assert.doesNotMatch(source, /authzError\(permission\)/, `${file} should not repeat authorization error mapping`);
     assert.doesNotMatch(source, /supabaseUnavailable\(\)/, `${file} should not repeat Supabase availability errors`);

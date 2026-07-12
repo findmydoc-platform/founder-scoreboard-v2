@@ -268,9 +268,9 @@ function buildTaskPatch(task, initiativeTitle) {
   patch.evidence_required = override.evidence_required || defaultEvidence(task);
   patch.definition_of_done = override.definition_of_done || defaultDod(task);
 
-  if (task.github_issue_number && task.github_sync_status === "synced") {
-    patch.github_sync_status = "not_synced";
-    patch.github_sync_error = null;
+  if (task.github_issue_number && task.github_issue_sync_status === "synced") {
+    patch.github_issue_sync_status = "not_synced";
+    patch.github_issue_sync_error = null;
   }
 
   return patch;
@@ -278,7 +278,7 @@ function buildTaskPatch(task, initiativeTitle) {
 
 const { data: tasks, error: tasksError } = await supabase
   .from("tasks")
-  .select("id,title,description,status,priority,owner,assignee,workstream,package_id,milestone_id,task_type,score_relevant,github_issue_number,github_sync_status,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,dod_template_version")
+  .select("id,title,description,status,priority,owner,assignee,workstream,package_id,milestone_id,task_type,score_relevant,github_issue_number,github_issue_sync_status,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,dod_template_version")
   .order("sort_order", { ascending: true });
 
 if (tasksError) throw tasksError;
@@ -335,8 +335,8 @@ const summary = {
     packageTo: patch.package_id,
     milestoneFrom: task.milestone_id,
     milestoneTo: patch.milestone_id,
-    githubSyncFrom: task.github_sync_status,
-    githubSyncTo: patch.github_sync_status || task.github_sync_status,
+    githubSyncFrom: task.github_issue_sync_status,
+    githubSyncTo: patch.github_issue_sync_status || task.github_issue_sync_status,
   })),
 };
 

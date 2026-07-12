@@ -2,7 +2,7 @@ import type { PlanningData, Task } from "../types";
 import seedSource from "./source.json";
 
 type EmptySeedCollections = Omit<PlanningData, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
-type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubSyncStatus" | "githubLastSyncedAt" | "githubSyncError" | "taskType" | "parentTaskId" | "scoreRelevant">;
+type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee"> & Partial<SeedTaskDefaults> & {
   assigneeId: string;
   ownerId?: string;

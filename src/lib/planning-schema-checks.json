@@ -18,6 +18,12 @@
     "health": false
   },
   {
+    "name": "task_comment_github_deliveries",
+    "table": "task_comment_github_deliveries",
+    "select": "task_comment_id,task_id,author_profile_id,github_issue_number,status,status_reason,attempts,last_attempted_at,next_attempt_at,github_comment_id,github_comment_url,locked_at,lock_token,last_error,delivered_at,updated_at",
+    "health": false
+  },
+  {
     "name": "notification_preferences",
     "table": "notification_preferences",
     "select": "id,profile_id,channel,event_type,enabled",

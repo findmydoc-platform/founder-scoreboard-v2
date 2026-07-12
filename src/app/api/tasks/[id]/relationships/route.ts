@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import type { AuthenticatedProfile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -77,7 +77,7 @@ async function loadRelationshipAccess(
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -129,8 +129,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   });
 
   await supabase.from("tasks").update({
-    github_sync_status: "not_synced",
-    github_sync_error: null,
+    github_issue_sync_status: "not_synced",
+    github_issue_sync_error: null,
   }).in("id", [id, relatedTaskId]);
 
   await supabase.from("audit_log").insert({
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<RelationPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<RelationPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -201,8 +201,8 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   });
 
   await supabase.from("tasks").update({
-    github_sync_status: "not_synced",
-    github_sync_error: null,
+    github_issue_sync_status: "not_synced",
+    github_issue_sync_error: null,
   }).in("id", [relation.task_id, relation.related_task_id]);
 
   await supabase.from("audit_log").insert({

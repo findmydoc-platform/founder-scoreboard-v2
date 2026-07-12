@@ -42,7 +42,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
   if (hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
     signals.push({ id: "waiting", label: "Wartet", kind: "critical" });
   }
-  if (task.githubSyncStatus === "failed") {
+  if (task.githubIssueSyncStatus === "failed") {
     signals.push({ id: "sync-failed", label: "Sync fehlgeschlagen", kind: "critical" });
   }
 

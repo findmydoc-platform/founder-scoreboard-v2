@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import type { TaskFocusItem } from "@/lib/types";
 import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
@@ -35,7 +35,7 @@ function mapFocusItem(row: Record<string, string | number>): TaskFocusItem {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<FocusPayload>(request, requireFounder, {});
+  const context = await requireJsonApiContext<FocusPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const context = await requireApiContext(request, requireFounder);
+  const context = await requireApiContext(request, requirePlanningContributor);
   if (!context.ok) return context.response;
 
   const { permission, supabase } = context;

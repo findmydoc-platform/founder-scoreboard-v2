@@ -1,4 +1,4 @@
-import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -82,9 +82,9 @@ export type DbTask = {
   github_repo: string | null;
   github_issue_number: number | null;
   github_issue_url: string | null;
-  github_sync_status: Task["githubSyncStatus"] | null;
-  github_last_synced_at: string | null;
-  github_sync_error: string | null;
+  github_issue_sync_status: Task["githubIssueSyncStatus"] | null;
+  github_issue_last_synced_at: string | null;
+  github_issue_sync_error: string | null;
   task_type: Task["taskType"] | null;
   parent_task_id: string | null;
   score_relevant: boolean | null;
@@ -142,9 +142,9 @@ export const taskRowColumns = [
   "github_repo",
   "github_issue_number",
   "github_issue_url",
-  "github_sync_status",
-  "github_last_synced_at",
-  "github_sync_error",
+  "github_issue_sync_status",
+  "github_issue_last_synced_at",
+  "github_issue_sync_error",
   "task_type",
   "parent_task_id",
   "score_relevant",
@@ -255,6 +255,13 @@ export type DbTaskComment = {
   profile_id: string | null;
   comment: string;
   created_at: string;
+  task_comment_github_deliveries?: {
+    status: TaskComment["githubDeliveryStatus"];
+    github_comment_url: string | null;
+  } | Array<{
+    status: TaskComment["githubDeliveryStatus"];
+    github_comment_url: string | null;
+  }> | null;
 };
 
 export type DbTaskExternalComment = {

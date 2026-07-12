@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireFounder } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { apiError, requireApiContext } from "@/lib/api-response";
@@ -18,7 +18,7 @@ function extractEvidenceFromIssueBody(body: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireApiContext(request, requireTeamMember);
   if (!apiContext.ok) return apiContext.response;
 
   const { permission, supabase } = apiContext;
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .from("tasks")
       .update({
         evidence_link: importedEvidenceLink,
-        github_sync_status: "not_synced",
-        github_sync_error: null,
+        github_issue_sync_status: "not_synced",
+        github_issue_sync_error: null,
       })
       .eq("id", id);
     if (evidenceError) return apiError(evidenceError.message, 500);

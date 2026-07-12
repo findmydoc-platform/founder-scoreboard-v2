@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
-import { GitHubAppUserTokenRequiredError, getGitHubAppUserToken } from "@/lib/github-app";
+import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@/lib/github-app";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -31,7 +31,7 @@ function isImageType(type: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireApiContext(request, requirePlanningContributor);
   if (!apiContext.ok) return apiContext.response;
 
   const { permission, supabase } = apiContext;
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   let githubUserToken = "";
   try {
-    githubUserToken = await getGitHubAppUserToken(supabase, permission.profile);
+    githubUserToken = await getGitHubUserTokenForProfile(supabase, permission.profile);
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "GitHub-Verbindung konnte nicht geprüft werden.", error instanceof GitHubAppUserTokenRequiredError ? 401 : 403);
   }
@@ -78,8 +78,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     message: `Anhang hochgeladen: ${file.name}`,
   });
   await supabase.from("tasks").update({
-    github_sync_status: "not_synced",
-    github_sync_error: null,
+    github_issue_sync_status: "not_synced",
+    github_issue_sync_error: null,
   }).eq("id", id);
 
   return NextResponse.json({

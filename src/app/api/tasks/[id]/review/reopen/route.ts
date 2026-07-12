@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireFounder, requireTaskReviewer } from "@/lib/authz";
+import { requirePlanningContributor, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const supabase = getServerSupabase();
   if (!supabase) return supabaseUnavailable();
 
-  const founderPermission = await requireFounder(request);
+  const founderPermission = await requirePlanningContributor(request);
   if (!founderPermission.ok) return authzError(founderPermission);
 
   const { id } = await context.params;
@@ -43,8 +43,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       score_final: false,
       score_points: 0,
       review_requested_at: reviewRequestedAt,
-      github_sync_status: "not_synced",
-      github_sync_error: null,
+      github_issue_sync_status: "not_synced",
+      github_issue_sync_error: null,
     })
     .eq("id", id);
 
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       scorePoints: 0,
       reviewOwnerProfileId: task.review_owner_profile_id || "",
       reviewRequestedAt,
-      githubSyncStatus: "not_synced",
+      githubIssueSyncStatus: "not_synced",
     },
   });
 }

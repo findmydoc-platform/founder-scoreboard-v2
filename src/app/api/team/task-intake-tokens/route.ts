@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import {
   createTeamTaskIntakeToken,
   mapTeamTaskIntakeTokenRecord,
@@ -15,7 +15,7 @@ type CreateTokenPayload = {
 type TokenRecordRow = Parameters<typeof mapTeamTaskIntakeTokenRecord>[0];
 
 export async function GET(request: NextRequest) {
-  const context = await requireApiContext(request, requireFounder, {
+  const context = await requireApiContext(request, requirePlanningContributor, {
     supabaseUnavailableMessage: "Supabase ist für Team-Intake-Tokens erforderlich.",
   });
   if (!context.ok) return context.response;
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateTokenPayload>(request, requireFounder, {}, {
+  const context = await requireJsonApiContext<CreateTokenPayload>(request, requirePlanningContributor, {}, {
     supabaseUnavailableMessage: "Supabase ist für Team-Intake-Tokens erforderlich.",
   });
   if (!context.ok) return context.response;

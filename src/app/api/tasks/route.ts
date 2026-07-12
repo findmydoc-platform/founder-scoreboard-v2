@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
@@ -68,7 +68,7 @@ function profileId(value?: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateTaskPayload>(request, requireFounder, {});
+  const context = await requireJsonApiContext<CreateTaskPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;

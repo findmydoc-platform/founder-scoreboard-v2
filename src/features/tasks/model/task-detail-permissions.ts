@@ -17,7 +17,6 @@ export type TaskDetailPermissions = {
   canManageTaskMeta: boolean;
   canOpenReview: boolean;
   canReportBlocker: boolean;
-  canSyncGitHub: boolean;
   canUpdateStatus: boolean;
 };
 
@@ -52,7 +51,6 @@ export function taskDetailPermissions({
       canManageTaskMeta: true,
       canOpenReview: true,
       canReportBlocker: true,
-      canSyncGitHub: true,
       canUpdateStatus: true,
     };
   }
@@ -77,7 +75,6 @@ export function taskDetailPermissions({
     canManageTaskMeta: isOperationalLead,
     canOpenReview: isOperationalLead || Boolean(profile?.id && task.reviewOwnerProfileId === profile.id),
     canReportBlocker: canWorkOnTask,
-    canSyncGitHub: canWorkOnTask,
     canUpdateStatus: canWorkOnTask,
   };
 }

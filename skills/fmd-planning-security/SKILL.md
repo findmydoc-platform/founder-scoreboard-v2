@@ -16,7 +16,7 @@ Keep Founder Scoreboard data private to mapped team users and make security-rele
 1. Identify the trust boundary first: browser session, API route, Supabase service role, anon client, GitHub App installation token, encrypted GitHub App user token vault, or RLS policy.
 2. Fail closed when `REQUIRE_SUPABASE_AUTH=true`: do not render, serialize, cache, or fetch planning data until a valid Supabase session has been checked.
 3. Treat logout as a security transition: revoke or clear the session, clear local protected state, close sensitive panels, and show a visible German status message.
-4. Check every write API for `requireFounder`, `requireOperationalLead`, `requireCEO`, or an equally explicit role guard.
+4. Check every write API for `requirePlanningContributor`, `requireOperationalLead`, `requireCEO`, or an equally explicit role guard.
 5. Never persist or log Supabase access tokens, refresh tokens, raw GitHub tokens, or Authorization headers. Encrypted server-side GitHub App user tokens are allowed only in the service-role-only token vault.
 6. Add or update a focused contract test for any auth, role, guard, logout, RLS, grant, or data-loading change.
 

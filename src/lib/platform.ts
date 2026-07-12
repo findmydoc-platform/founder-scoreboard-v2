@@ -15,8 +15,8 @@ export function reviewLabel(status: Task["reviewStatus"]) {
   return labels[status];
 }
 
-export function syncLabel(status: Task["githubSyncStatus"]) {
-  const labels: Record<Task["githubSyncStatus"], string> = {
+export function syncLabel(status: Task["githubIssueSyncStatus"]) {
+  const labels: Record<Task["githubIssueSyncStatus"], string> = {
     not_synced: "Nicht synchronisiert",
     pending: "Sync offen",
     synced: "Synchronisiert",

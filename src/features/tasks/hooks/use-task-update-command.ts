@@ -23,7 +23,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "canManageFinalTaskStatus"
   | "canManageTaskMeta"
   | "data"
-  | "githubAppConnected"
+  | "githubInstallationAvailable"
   | "setData"
   | "setSaveError"
   | "source"
@@ -42,7 +42,7 @@ export function useTaskUpdateCommand({
   canManageFinalTaskStatus,
   canManageTaskMeta,
   data,
-  githubAppConnected,
+  githubInstallationAvailable,
   refreshPlanningData,
   setData,
   setSaveError,
@@ -98,7 +98,7 @@ export function useTaskUpdateCommand({
     applyPlanningDataUpdate((current) => {
       const nextData = {
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubSyncStatus: normalizedPatch.githubSyncStatus || "not_synced", githubSyncError: normalizedPatch.githubSyncStatus ? item.githubSyncError : "" } : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubIssueSyncStatus: normalizedPatch.githubIssueSyncStatus || "not_synced", githubIssueSyncError: normalizedPatch.githubIssueSyncStatus ? item.githubIssueSyncError : "" } : item)),
       };
 
       if (source === "seed") {
@@ -155,7 +155,7 @@ export function useTaskUpdateCommand({
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
         }
-        if (normalizedPatch.status && hasGitHubIssue(task) && githubAppConnected) {
+        if (normalizedPatch.status && hasGitHubIssue(task) && githubInstallationAvailable) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
       } catch (error) {

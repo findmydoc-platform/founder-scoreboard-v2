@@ -183,8 +183,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       score_final: true,
       sprint_outcome: outcome,
       carryover_reason: reason,
-      github_sync_status: "not_synced",
-      github_sync_error: null,
+      github_issue_sync_status: "not_synced",
+      github_issue_sync_error: null,
     });
 
     if (outcome === "communicated_blocker") {

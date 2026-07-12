@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 
 type BacklogOrderUpdate = {
@@ -33,7 +33,7 @@ function parseBacklogOrderUpdates(payload: unknown): BacklogOrderUpdate[] | stri
 }
 
 export async function PATCH(request: NextRequest) {
-  const apiContext = await requireApiContext(request, requireFounder, {
+  const apiContext = await requireApiContext(request, requirePlanningContributor, {
     supabaseUnavailableMessage: "Backlog-Reihenfolge konnte nicht dauerhaft gespeichert werden.",
   });
   if (!apiContext.ok) return apiContext.response;

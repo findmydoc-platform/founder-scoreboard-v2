@@ -35,9 +35,9 @@ function attentionTone(signal: TaskAttentionSignal): TableRiskSignal["tone"] {
 
 function githubRiskSignal(task: Task): TableRiskSignal | null {
   if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
-  if (task.githubSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
-  if (task.githubSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
-  if (task.githubSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
+  if (task.githubIssueSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
+  if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
+  if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
   return null;
 }
 

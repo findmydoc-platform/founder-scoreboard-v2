@@ -31,7 +31,7 @@ type BuildTaskInsertRowInput = {
   scorePoints?: number | null;
   scoreFinal?: boolean | null;
   githubRepo?: string | null;
-  githubSyncStatus?: Task["githubSyncStatus"] | null;
+  githubIssueSyncStatus?: Task["githubIssueSyncStatus"] | null;
   taskType?: Task["taskType"] | null;
   parentTaskId?: string | null;
   scoreRelevant?: boolean | null;
@@ -85,7 +85,7 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     score_points: input.scorePoints ?? 0,
     score_final: input.scoreFinal ?? false,
     github_repo: input.githubRepo || "findmydoc-platform/management",
-    github_sync_status: input.githubSyncStatus || "not_synced",
+    github_issue_sync_status: input.githubIssueSyncStatus || "not_synced",
     task_type: input.taskType || "deliverable",
     parent_task_id: input.parentTaskId || null,
     score_relevant: input.scoreRelevant ?? true,

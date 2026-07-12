@@ -66,8 +66,8 @@ try {
         score_final: true,
         status: "Erledigt",
         review_requested_at: null,
-        github_sync_status: "not_synced",
-        github_sync_error: null,
+        github_issue_sync_status: "not_synced",
+        github_issue_sync_error: null,
       }),
       JSON.stringify({
         acceptanceCriteriaMet: true,
@@ -124,8 +124,8 @@ try {
           score_final: true,
           status: "Erledigt",
           review_requested_at: null,
-          github_sync_status: "not_synced",
-          github_sync_error: null,
+          github_issue_sync_status: "not_synced",
+          github_issue_sync_error: null,
         }),
         JSON.stringify([{
           type: "task.review_completed",

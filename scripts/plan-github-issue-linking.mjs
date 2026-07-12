@@ -67,7 +67,7 @@ async function fetchIssues() {
 
 const { data: tasks, error: tasksError } = await supabase
   .from("tasks")
-  .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url,github_sync_status")
+  .select("id,title,github_issue_number,github_issue_url,issue_number,issue_url,github_issue_sync_status")
   .neq("task_type", "sub_issue")
   .order("sort_order");
 
@@ -108,8 +108,8 @@ if (apply) {
         github_repo: `${owner}/${repo}`,
         github_issue_number: match.issue.number,
         github_issue_url: match.issue.html_url,
-        github_sync_status: "not_synced",
-        github_sync_error: null,
+        github_issue_sync_status: "not_synced",
+        github_issue_sync_error: null,
       })
       .eq("id", match.task.id);
     if (error) throw new Error(`${match.task.id}: ${error.message}`);

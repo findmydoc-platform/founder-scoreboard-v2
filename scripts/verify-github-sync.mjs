@@ -9,7 +9,7 @@ const supabase = await createSupabaseScriptClient();
 async function fetchTasks() {
   const { data, error } = await supabase
     .from("tasks")
-    .select("id,title,task_type,status,owner,github_repo,github_issue_number,github_issue_url,github_sync_status,github_last_synced_at")
+    .select("id,title,task_type,status,owner,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,github_issue_last_synced_at")
     .order("sort_order", { ascending: true });
 
   if (error) throw new Error(`tasks: ${error.message}`);
@@ -33,7 +33,7 @@ const [tasks, relationshipCount] = await Promise.all([
 const deliverables = tasks.filter((task) => task.task_type === "deliverable");
 const linkedDeliverables = deliverables.filter((task) => task.github_issue_number || task.github_issue_url);
 const appOnlyDeliverables = deliverables.filter((task) => !task.github_issue_number && !task.github_issue_url);
-const syncQueue = linkedDeliverables.filter((task) => ["not_synced", "failed", "pending"].includes(task.github_sync_status));
+const syncQueue = linkedDeliverables.filter((task) => ["not_synced", "failed", "pending"].includes(task.github_issue_sync_status));
 
 const result = {
   repo: repoSlug,
@@ -52,7 +52,7 @@ const result = {
     id: task.id,
     title: task.title,
     status: task.status,
-    githubSyncStatus: task.github_sync_status,
+    githubIssueSyncStatus: task.github_issue_sync_status,
     githubIssueNumber: task.github_issue_number,
     githubIssueUrl: task.github_issue_url,
   })),

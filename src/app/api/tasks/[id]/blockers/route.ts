@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
@@ -12,7 +12,7 @@ type BlockerPayload = {
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<BlockerPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<BlockerPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -64,8 +64,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   await supabase.from("tasks").update({
     status: "Blockiert",
-    github_sync_status: "not_synced",
-    github_sync_error: null,
+    github_issue_sync_status: "not_synced",
+    github_issue_sync_error: null,
   }).eq("id", id);
 
   const { data: leads } = await supabase.from("profiles").select("id").in("platform_role", ["ceo", "deputy"]);

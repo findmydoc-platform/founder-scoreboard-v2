@@ -75,6 +75,15 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm dlx vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
 
+      - name: Apply GitHub Sync Cutover Migrations
+        id: github_sync_migrations
+        env:
+          SCHEMA_DEPLOY_TARGET: production
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: pnpm run deploy:github-sync-migrations
+
       - name: Deploy Supabase Schema to Production
         env:
           SCHEMA_DEPLOY_TARGET: production
@@ -90,6 +99,21 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm run verify:supabase
 
+      - name: Verify Production Auth Mapping
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm run verify:auth
+
+      - name: Verify Production GitHub Sync Contract
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm run verify:github-sync
+
+      - name: Verify Planning Hierarchy Contract
+        run: pnpm run verify:hierarchy
+
       - name: Deploy Prebuilt Output to Vercel Production
         id: vercel_production
         env:
@@ -103,6 +127,33 @@ jobs:
           GITHUB_SYNC_REPO: management
           GOOGLE_CHAT_DELIVERY_ENABLED: ${{ secrets.GOOGLE_CHAT_DELIVERY_ENABLED }}
         run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh production
+
+      - name: Restore Previous GitHub Sync Fields After Failed Cutover
+        if: failure() && steps.github_sync_migrations.outputs.schema_renamed == 'true' && steps.vercel_production.outcome != 'success'
+        env:
+          SCHEMA_DEPLOY_TARGET: production
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: pnpm run rollback:github-sync-fields
+
+      - name: Reconcile Existing GitHub Comments
+        if: steps.vercel_production.outcome == 'success'
+        env:
+          DEPLOYMENT_URL: ${{ steps.vercel_production.outputs.deploymentUrl }}
+          FOUNDEROPS_DELIVERY_SECRET: ${{ secrets.FOUNDEROPS_DELIVERY_SECRET }}
+        run: |
+          preview=$(curl --fail --show-error --silent \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --header "x-founderops-delivery-secret: ${FOUNDEROPS_DELIVERY_SECRET}" \
+            "${DEPLOYMENT_URL}/api/github-comments/reconcile")
+          printf 'Read-only comment reconciliation: %s\n' "$preview"
+          delivery=$(curl --fail --show-error --silent \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --request POST \
+            --header "x-founderops-delivery-secret: ${FOUNDEROPS_DELIVERY_SECRET}" \
+            "${DEPLOYMENT_URL}/api/github-comments/reconcile")
+          printf 'Comment delivery result: %s\n' "$delivery"
 
       - name: Generate deployment summary
         if: always()

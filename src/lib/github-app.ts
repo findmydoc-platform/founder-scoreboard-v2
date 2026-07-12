@@ -330,7 +330,7 @@ async function refreshGitHubAppUserToken(supabase: SupabaseClient, profile: Auth
   return token.access_token || "";
 }
 
-export async function getGitHubAppUserToken(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
+export async function getGitHubUserTokenForProfile(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
   if (!profile?.id || !profile.githubLogin) throw userTokenRequired();
   const row = await loadTokenRow(supabase, profile);
   if (!row || row.revoked_at) throw userTokenRequired();
@@ -338,7 +338,16 @@ export async function getGitHubAppUserToken(supabase: SupabaseClient, profile: A
     throw userTokenRequired("GitHub-Verbindung passt nicht zum angemeldeten Teamprofil. Bitte verbinde GitHub erneut.");
   }
   if (expiresSoon(row.access_token_expires_at)) {
-    return refreshGitHubAppUserToken(supabase, profile, row);
+    try {
+      return await refreshGitHubAppUserToken(supabase, profile, row);
+    } catch (error) {
+      if (error instanceof GitHubAppConfigurationError || error instanceof GitHubAppUserTokenRequiredError) throw error;
+      await supabase.from("github_app_user_tokens").update({
+        last_error: error instanceof Error ? error.message : "GitHub Token konnte nicht erneuert werden.",
+        updated_at: new Date().toISOString(),
+      }).eq("profile_id", profile.id);
+      throw userTokenRequired("GitHub-Verbindung konnte nicht erneuert werden. Bitte verbinde GitHub einmal neu.");
+    }
   }
 
   const token = decryptToken(row.encrypted_access_token);
@@ -350,7 +359,7 @@ export async function getGitHubAppUserToken(supabase: SupabaseClient, profile: A
   return token;
 }
 
-export async function getGitHubAppConnectionStatus(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
+export async function getGitHubUserConnectionStatus(supabase: SupabaseClient, profile: AuthenticatedProfile | null) {
   if (!profile?.id || !profile.githubLogin) {
     return { connected: false, githubLogin: profile?.githubLogin || "", needsReconnect: true, expiresAt: null as string | null };
   }

@@ -8,7 +8,9 @@ This document is the source of truth for the FounderOps web authentication flow.
 - `profiles.platform_role` is the application authorization boundary.
 - Planning data is never rendered or serialized in strict auth mode until the request has a verified Supabase user and a mapped profile role.
 - GitHub issue sync, dependencies, GitHub comment import, private asset proxying, and issue archival use server-side GitHub App installation tokens.
-- User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation.
+- User-authored GitHub comments and attachments use the original author's encrypted server-side GitHub App user token with refresh rotation.
+- Every valid mapped team session, including viewers, may trigger issue sync. Task mutations and comment creation keep their stricter role rules.
+- Issue projection status and comment delivery status are independent. A missing author connection never turns a successful issue sync into a failure.
 - GitHub App user tokens are never exposed to the browser, logs, GitHub issues, API responses, or documentation.
 - GitHub reconnect UI is centralized in the header/notification area. GitHub-dependent cards may show disabled actions, but they must not repeat their own reconnect button or start OAuth automatically.
 
@@ -53,7 +55,7 @@ sequenceDiagram
   APP->>APP: Verify session and role before loading data
 ```
 
-## GitHub App Connect
+## GitHub App Connect: Author Connection
 
 ```mermaid
 sequenceDiagram
@@ -75,6 +77,7 @@ sequenceDiagram
   CB->>GH: Read /user login
   CB->>CB: Require login to match profiles.github_login
   CB->>DB: Store encrypted access and refresh tokens
+  CB->>DB: Retry pending comments for this original author
   CB-->>UI: Redirect to safe relative next path
 ```
 
@@ -111,8 +114,20 @@ sequenceDiagram
   GH-->>API: Result
   API-->>UI: Return non-secret response
 
-  UI->>API: Create comment or upload attachment
-  API->>VAULT: Load encrypted user token for current profile
+  UI->>API: Create local comment
+  API->>API: Atomically create comment and delivery outbox row
+  API->>VAULT: Load encrypted user token for original author profile
+  alt author connection is missing or invalid
+    API->>API: Keep waiting_for_author_connection
+    API-->>UI: HTTP 200 with informational notice
+  else author connection is valid
+    API->>GH: Search issue comments for durable marker
+    API->>GH: Post only when no marker or exact legacy match exists
+    API->>API: Mark delivery as delivered
+  end
+
+  UI->>API: Upload attachment
+  API->>VAULT: Load encrypted user token for current uploader profile
   alt access token expires soon
     VAULT->>GH: Refresh GitHub App user token
     VAULT->>VAULT: Store encrypted rotated tokens
@@ -127,7 +142,7 @@ sequenceDiagram
 - Page reload with a valid session: the server verifies the cookie session, loads planning data, and the client checks `/api/github-app/status`. It must not flash the login gate.
 - Browser closed and reopened: Supabase cookies restore the app session when still valid; the saved encrypted GitHub App user token keeps GitHub comments and attachments usable without another manual reconnect.
 - Laptop standby then resume: the proxy and client refresh paths refresh the Supabase session. `/api/github-app/status` refreshes a soon-expiring GitHub App user access token when possible.
-- Missing, revoked, expired, or mismatched GitHub App user connection: the app remains usable and exposes one central reconnect action for GitHub-backed user-authored actions. It must not start OAuth only because a task was opened.
+- Missing, revoked, expired, or mismatched GitHub App user connection: issue sync remains available. A locally saved comment waits for its original author's connection and is retried after OAuth reconnect or a later task/bulk sync. It must not start OAuth only because a task was opened.
 - Expired or revoked Supabase session: the app clears protected client state and returns to the login gate.
 
 ## Token Handling

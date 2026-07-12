@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type ObjectionPayload = {
@@ -21,7 +21,7 @@ type ReviewPayload = {
 const objectionSelect = "id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,reviewed_at,resolved_delivery_points,resolved_form_points,resolved_weekly_points,second_reviewer_profile_id,second_review_decision,second_reviewed_at,created_at";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<ObjectionPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<ReviewPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<ReviewPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;

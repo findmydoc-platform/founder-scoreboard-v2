@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import {
@@ -15,7 +15,7 @@ import {
 } from "@/features/projects/model/initiative-api";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireApiContext(request, requirePlanningContributor);
   if (!apiContext.ok) return apiContext.response;
 
   const { permission, supabase } = apiContext;

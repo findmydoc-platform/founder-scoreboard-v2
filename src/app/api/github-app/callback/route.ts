@@ -1,7 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { exchangeGitHubAppCode, githubUserForAppUserToken, storeGitHubAppUserToken, verifyGitHubAppOAuthState } from "@/lib/github-app";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerSupabase } from "@/lib/supabase";
+import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,14 @@ export async function GET(request: NextRequest) {
     const token = await exchangeGitHubAppCode(code, redirectUri);
     const githubUser = await githubUserForAppUserToken(token.access_token || "");
     await storeGitHubAppUserToken({ supabase, profile: auth.profile, githubUser, token });
+    const connectedProfileId = auth.profile.id;
+    after(async () => {
+      await deliverPendingGitHubComments({
+        supabase,
+        authorProfileId: connectedProfileId,
+        limit: 100,
+      }).catch(() => undefined);
+    });
 
     return NextResponse.redirect(new URL(next, request.url));
   } catch {

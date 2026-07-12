@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
@@ -17,7 +17,7 @@ function canEditProfilePreference(actorProfileId: string, actorRole: string, tar
 }
 
 export async function PATCH(request: NextRequest) {
-  const context = await requireJsonApiContext<PreferencePayload>(request, requireFounder, {});
+  const context = await requireJsonApiContext<PreferencePayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;

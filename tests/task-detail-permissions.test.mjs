@@ -39,7 +39,6 @@ test("assigned Founder can work on own task but cannot change planning metadata"
   assert.equal(permissions.canEditEvidence, true);
   assert.equal(permissions.canEditNotes, true);
   assert.equal(permissions.canReportBlocker, true);
-  assert.equal(permissions.canSyncGitHub, true);
   assert.equal(permissions.canUpdateStatus, true);
   assert.equal(permissions.canManageTaskMeta, false);
   assert.equal(permissions.canDeleteTask, false);
@@ -52,7 +51,6 @@ test("unrelated Founder can collaborate but cannot mutate task fields", () => {
   assert.equal(permissions.canEditEvidence, false);
   assert.equal(permissions.canEditNotes, false);
   assert.equal(permissions.canReportBlocker, false);
-  assert.equal(permissions.canSyncGitHub, false);
   assert.equal(permissions.canUpdateStatus, false);
 });
 

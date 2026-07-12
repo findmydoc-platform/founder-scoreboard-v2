@@ -213,6 +213,50 @@ async function verifyTaskCreationAndGitHubSyncRpcs() {
   }));
 }
 
+async function verifyGitHubCommentDeliveryRpcs() {
+  const missingTaskId = `verify-missing-comment-delivery-${Date.now()}`;
+  const lockToken = randomUUID();
+  const claimParams = {
+    p_lock_token: lockToken,
+    p_task_id: missingTaskId,
+    p_author_profile_id: null,
+    p_limit: 1,
+    p_lease_seconds: 30,
+  };
+  const finalizeParams = {
+    p_task_comment_id: -1,
+    p_lock_token: lockToken,
+    p_status: "failed",
+    p_status_reason: "verification",
+    p_github_issue_number: null,
+    p_github_comment_id: null,
+    p_github_comment_url: null,
+    p_last_error: "verification",
+    p_next_attempt_at: null,
+  };
+  const [claim, anonClaim, finalize, anonFinalize] = await Promise.all([
+    supabase.rpc("claim_task_comment_github_deliveries", claimParams),
+    anonSupabase.rpc("claim_task_comment_github_deliveries", claimParams),
+    supabase.rpc("finalize_task_comment_github_delivery", finalizeParams),
+    anonSupabase.rpc("finalize_task_comment_github_delivery", finalizeParams),
+  ]);
+
+  return {
+    ok: !claim.error
+      && Array.isArray(claim.data)
+      && claim.data.length === 0
+      && Boolean(anonClaim.error)
+      && !finalize.error
+      && finalize.data === false
+      && Boolean(anonFinalize.error),
+    error: claim.error?.message
+      || (!anonClaim.error ? "comment delivery claim RPC allowed anonymous execution" : "")
+      || finalize.error?.message
+      || (finalize.data !== false ? "comment delivery finalize RPC matched a missing row" : "")
+      || (!anonFinalize.error ? "comment delivery finalize RPC allowed anonymous execution" : ""),
+  };
+}
+
 async function verifyPlanningBatchRpcs() {
   const backlog = await supabase.rpc("update_backlog_order_transaction", {
     p_updates: [],
@@ -442,6 +486,7 @@ const result = {
   reviews: await count("task_reviews"),
   audit: await count("audit_log"),
   comments: await count("task_comments"),
+  githubCommentDeliveries: await count("task_comment_github_deliveries"),
   externalComments: await count("task_external_comments"),
   blockers: await count("task_blockers"),
   relationships: await count("task_relationship_edges"),
@@ -460,6 +505,7 @@ const result = {
   taskUpdateRpc: await verifyTaskUpdateRpc(),
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
+  githubCommentDeliveryRpcs: await verifyGitHubCommentDeliveryRpcs(),
   planningBatchRpcs: await verifyPlanningBatchRpcs(),
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
@@ -500,6 +546,11 @@ if (missingTaskDeletionRpc) {
 const missingTaskCreationOrSyncRpc = result.taskCreationAndGitHubSyncRpcs.find((check) => !check.ok);
 if (missingTaskCreationOrSyncRpc) {
   console.error(`Task creation or GitHub sync RPC check failed for ${missingTaskCreationOrSyncRpc.name}: ${missingTaskCreationOrSyncRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.githubCommentDeliveryRpcs.ok) {
+  console.error(`GitHub comment delivery RPC check failed: ${result.githubCommentDeliveryRpcs.error}`);
   process.exit(1);
 }
 

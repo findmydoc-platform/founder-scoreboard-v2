@@ -90,12 +90,12 @@ Erwartung:
 Voraussetzung:
 - GitHub OAuth Login ist aktiv.
 - Die GitHub App ist auf `findmydoc-platform/management` installiert.
-- Der eingeloggte GitHub-User hat die GitHub App einmal über den Header verbunden.
+- Für Issue-Sync ist nur die technische GitHub-App-Installation erforderlich. Die persönliche Autorenverbindung wird nur für eigene Kommentare und Anhänge benötigt.
 
 Check:
 1. `pnpm run verify:github-sync` ausführen.
 2. Planning öffnen und die GitHub-Sync-Queue im Header öffnen.
-3. Falls die GitHub-App-Verbindung fehlt oder abgelaufen ist, die Verbindung zentral im Header erneuern.
+3. Die GitHub-Autorenverbindung im Header prüfen; sie darf den Issue-Sync nicht sperren.
 4. `Offene Issues syncen` oder an einem Task `Sync` klicken.
 5. Link zum GitHub Issue prüfen.
 
@@ -103,7 +103,11 @@ Erwartung:
 - Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
 - GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
 - Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
-- Kommentare auf verknüpften Issues werden als GitHub-Kommentar des eingeloggten Users erstellt.
+- CEO, Founder, Deputy und Viewer können den Issue-Sync mit einer gültigen Team-Session auslösen.
+- Viewer können weiterhin weder Task-Felder ändern noch neue Kommentare schreiben.
+- Kommentare auf verknüpften Issues werden mit dem persönlichen Token ihres ursprünglichen Autors erstellt, auch wenn ein anderer Benutzer den Sync auslöst.
+- Ohne gültige Autorenverbindung bleibt der Kommentar informativ wartend; der lokale Kommentar-Request und der Issue-Sync bleiben erfolgreich.
+- OAuth-Reconnect sowie spätere Task- und Bulk-Syncs liefern wartende Kommentare idempotent nach.
 - Body enthält den Aufgabenbrief mit Problem, Zielbild, Scope, Abnahmekriterien, Nachweis und Definition of Done.
 - Parallele Syncs derselben Aufgabe oder desselben GitHub Issues werden als laufender Sync angezeigt, nicht als Fehler.
 - GitHub Issues sind die native Arbeitsfläche für Issue-Inhalte; FounderOps ergänzt Planung, Review und Score-Kontext.

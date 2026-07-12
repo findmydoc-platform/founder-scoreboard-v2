@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import type { MeetingAttendanceStatus } from "@/lib/types";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
@@ -25,7 +25,7 @@ function defaultPoints(status: MeetingAttendanceStatus, reasonAccepted: boolean,
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requireFounder);
+  const apiContext = await requireApiContext(request, requirePlanningContributor);
   if (!apiContext.ok) return apiContext.response;
 
   const { permission, supabase } = apiContext;

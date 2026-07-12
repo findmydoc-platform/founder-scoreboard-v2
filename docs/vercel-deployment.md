@@ -73,7 +73,7 @@ Operational delivery endpoints still accept `FOUNDEROPS_DELIVERY_SECRET`, but th
 
 Operational event messages stay inside the application. The Google Chat release channel stays separate and may only carry release details or deployment summaries.
 
-Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, dependency sync, GitHub comment import, private asset proxying, and issue archival use the configured GitHub App installation token. User-authored comments and attachments use encrypted GitHub App user tokens stored server-side in Supabase with refresh rotation. Raw GitHub tokens must never be sent to the browser, logged, or returned from API responses.
+Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync, dependency sync, GitHub comment import, private asset proxying, and issue archival use the configured GitHub App installation token. User-authored comments use the original author's encrypted GitHub App user token; attachments use the uploader's token. Both are stored server-side in Supabase with refresh rotation. Raw GitHub tokens must never be sent to the browser, logged, or returned from API responses.
 
 ## GitHub Actions Workflow Shape
 
@@ -100,15 +100,18 @@ GitHub Actions executes the production flow in this order:
 
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
+- Refuse the cutover while an active GitHub issue sync lock exists, then apply `0057_rename_github_issue_sync_fields.sql` and `0058_task_comment_github_delivery_outbox.sql`.
 - Deploy the current Supabase baseline schema with `pnpm run deploy:supabase-schema`, guarded by `SCHEMA_DEPLOY_TARGET=production`.
-- Verify the production Supabase schema with `pnpm run verify:supabase`.
+- Verify the production Supabase schema, auth mapping, GitHub sync contract, and planning hierarchy.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
+- Reconcile the existing comment outbox idempotently through the protected production delivery endpoint.
+- If schema verification or the Vercel switch fails before a new production deployment is active, restore the previous issue-sync column names automatically.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
 `pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
 
-The production schema deploy applies `supabase/schema.sql` only. It intentionally does not run `supabase/*.sql` as a glob because historical migration files include duplicate numbering and legacy cleanup scripts that are not safe as a repeated automatic deploy set.
+The baseline production schema deploy applies `supabase/schema.sql` only. The explicit GitHub sync cutover step immediately before it applies exactly migrations `0057` and `0058`; it never runs `supabase/*.sql` as a glob because historical migration files include duplicate numbering and legacy cleanup scripts that are not safe as a repeated automatic deploy set.
 
 Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 
