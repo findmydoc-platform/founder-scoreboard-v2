@@ -46,6 +46,10 @@ export type PlanningDataAccessScope = {
   platformRole?: PlatformRole | null;
 };
 
+export type PlanningDataLoadOptions = {
+  headerData?: "eager" | "deferred";
+};
+
 export type PlanningDataResult = {
   data: PlanningData;
   headerData: PlanningHeaderData;
@@ -86,7 +90,11 @@ export function filterPlanningDataForWorkspaceAccess(data: PlanningData, access?
   };
 }
 
-export async function getPlanningData(scope?: PlanningDataQueryScope, access?: PlanningDataAccessScope): Promise<PlanningDataResult> {
+export async function getPlanningData(
+  scope?: PlanningDataQueryScope,
+  access?: PlanningDataAccessScope,
+  options: PlanningDataLoadOptions = {},
+): Promise<PlanningDataResult> {
   const supabase = getServerSupabase();
   if (!supabase) return planningDataFailureResult();
 
@@ -100,15 +108,17 @@ export async function getPlanningData(scope?: PlanningDataQueryScope, access?: P
   }
 
   const data = filterPlanningDataForWorkspaceAccess(mapPlanningDataRows(rows), access);
-  const headerData = await loadPlanningHeaderData(supabase, {
-    currentProfileId: access?.currentProfileId || null,
-    platformRole: access?.platformRole || null,
-    data,
-    notificationEventsReconciled: notificationReconciliation.ok,
-    fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
-    eventsLoaded: shouldLoad(scope, "events"),
-    notificationEventsLoaded: shouldLoad(scope, "notificationEvents"),
-  });
+  const headerData = options.headerData === "deferred"
+    ? emptyPlanningHeaderData
+    : await loadPlanningHeaderData(supabase, {
+      currentProfileId: access?.currentProfileId || null,
+      platformRole: access?.platformRole || null,
+      data,
+      notificationEventsReconciled: notificationReconciliation.ok,
+      fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
+      eventsLoaded: shouldLoad(scope, "events"),
+      notificationEventsLoaded: shouldLoad(scope, "notificationEvents"),
+    });
 
   return {
     source: "supabase",
