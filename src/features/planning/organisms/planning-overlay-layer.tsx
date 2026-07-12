@@ -1,8 +1,20 @@
+"use client";
+
+import dynamic from "next/dynamic";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
-import { StatusGuardDialog } from "@/features/planning/organisms/status-guard-dialog";
-import { InitiativeDialog } from "@/features/projects/organisms/initiative-dialog";
-import { NewTaskDialog } from "@/features/tasks/organisms/new-task-dialog";
-import { TaskDetailPanel } from "@/features/tasks/organisms/task-detail-panel";
+
+const StatusGuardDialog = dynamic(() =>
+  import("@/features/planning/organisms/status-guard-dialog").then((module) => module.StatusGuardDialog)
+);
+const InitiativeDialog = dynamic(() =>
+  import("@/features/projects/organisms/initiative-dialog").then((module) => module.InitiativeDialog)
+);
+const NewTaskDialog = dynamic(() =>
+  import("@/features/tasks/organisms/new-task-dialog").then((module) => module.NewTaskDialog)
+);
+const TaskDetailPanel = dynamic(() =>
+  import("@/features/tasks/organisms/task-detail-panel").then((module) => module.TaskDetailPanel)
+);
 
 export function PlanningOverlayLayer({ controller }: { controller: PlanningAppController }) {
   const {

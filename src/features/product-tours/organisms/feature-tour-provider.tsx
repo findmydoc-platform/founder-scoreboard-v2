@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { driver } from "driver.js";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -123,6 +122,8 @@ export function FeatureTourProvider({
         }
       }
 
+      const { driver } = await import("driver.js");
+      if (!active) return;
       const driverObject = driver({
         allowClose: true,
         animate: true,

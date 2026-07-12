@@ -42,6 +42,26 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(ui, /TaskDetailPanel/);
 });
 
+test("task detail loading avoids server waterfalls and defers inactive client features", async () => {
+  const route = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
+  const overlays = await readFile("src/features/planning/organisms/planning-overlay-layer.tsx", "utf8");
+  const tours = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
+
+  assert.match(route, /const planningDataPromise = getPlanningData/);
+  assert.match(route, /const taskDetailPromise = supabase/);
+  assert.match(route, /Promise\.all\(\[planningDataPromise, taskDetailPromise\]\)/);
+
+  assert.match(overlays, /dynamic\(\(\) =>\s*import\("@\/features\/planning\/organisms\/status-guard-dialog"\)/);
+  assert.match(overlays, /dynamic\(\(\) =>\s*import\("@\/features\/projects\/organisms\/initiative-dialog"\)/);
+  assert.match(overlays, /dynamic\(\(\) =>\s*import\("@\/features\/tasks\/organisms\/new-task-dialog"\)/);
+  assert.match(overlays, /dynamic\(\(\) =>\s*import\("@\/features\/tasks\/organisms\/task-detail-panel"\)/);
+  assert.doesNotMatch(overlays, /^import \{ (?:StatusGuardDialog|InitiativeDialog|NewTaskDialog|TaskDetailPanel) \}/m);
+
+  assert.doesNotMatch(tours, /import \{ driver \} from "driver\.js"/);
+  assert.match(tours, /const \{ driver \} = await import\("driver\.js"\)/);
+  assert.ok(tours.indexOf("await waitForElement") < tours.indexOf('await import("driver.js")'));
+});
+
 test("shared task detail surface keeps github-like field saves and role gates", async () => {
   const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const sidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
