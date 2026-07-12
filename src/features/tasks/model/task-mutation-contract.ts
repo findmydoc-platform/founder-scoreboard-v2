@@ -26,7 +26,7 @@ export type TaskUpdatePayload = {
   reviewStatus?: string;
   scorePoints?: number;
   scoreFinal?: boolean;
-  githubSyncStatus?: string;
+  githubIssueSyncStatus?: string;
   sprintId?: string;
   selfDodChecked?: boolean;
   selfEvidenceChecked?: boolean;
@@ -121,7 +121,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     reviewOwnerProfileId: isReviewRequest ? undefined : patch.reviewOwnerProfileId,
     scorePoints: patch.scorePoints,
     scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
-    githubSyncStatus: patch.githubSyncStatus,
+    githubIssueSyncStatus: patch.githubIssueSyncStatus,
     sprintId: patch.sprintId,
     milestoneId: patch.milestoneId,
     dependsOn: patch.dependsOn,

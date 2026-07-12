@@ -1,16 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireFounder } from "@/lib/authz";
+import { requireTeamMember } from "@/lib/authz";
 import { githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
-import { getGitHubAppConnectionStatus, getGitHubAppInstallationToken } from "@/lib/github-app";
+import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 
 type SyncRequestBody = {
   createIfMissing?: boolean;
 };
+
+function commentDeliveryNotice(summary: {
+  delivered: number;
+  waitingForAuthorConnection: number;
+  waitingForIssue: number;
+  retryScheduled: number;
+  failed: number;
+}) {
+  const parts = [
+    summary.delivered ? `${summary.delivered} zugestellt` : "",
+    summary.waitingForAuthorConnection ? `${summary.waitingForAuthorConnection} warten auf die Verbindung ihrer Autoren` : "",
+    summary.waitingForIssue ? `${summary.waitingForIssue} warten auf ein Issue` : "",
+    summary.retryScheduled ? `${summary.retryScheduled} für erneuten Versuch eingeplant` : "",
+    summary.failed ? `${summary.failed} technisch fehlgeschlagen` : "",
+  ].filter(Boolean);
+  return parts.length ? `Issue synchronisiert · Kommentare: ${parts.join(" · ")}.` : "";
+}
 
 function hasLinkedGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
   return Boolean(
@@ -199,18 +216,10 @@ async function releaseGitHubSyncLock(supabase: SupabaseClient, resourceKey: stri
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<SyncRequestBody>(request, requireTeamMember, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
-  const githubConnection = await getGitHubAppConnectionStatus(supabase, permission.profile);
-  if (!githubConnection.connected) {
-    return NextResponse.json({
-      code: "github_app_connection_required",
-      error: "GitHub-App-Verbindung fehlt oder ist abgelaufen. Bitte verbinde GitHub einmal neu.",
-    }, { status: 401 });
-  }
-
   let githubInstallationToken = "";
   try {
     githubInstallationToken = await getGitHubAppInstallationToken();
@@ -223,23 +232,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const loaded = await loadTaskForSync(supabase, id);
   if (!loaded.ok) return loaded.response;
 
-  const syncPermissions = taskDetailPermissions({
-    task: loaded.task,
-    profile: permission.profile,
-    unrestricted: !permission.profile,
-  });
-  if (!syncPermissions.canSyncGitHub) {
-    return apiError("Founder können GitHub nur für eigene Aufgaben synchronisieren.", 403);
-  }
-
   let { assigneeLogin, hasExistingGitHubIssue, task } = loaded;
 
   if (!hasExistingGitHubIssue && task.taskType !== "deliverable") {
     return NextResponse.json({
       error: "Nur Deliverables können als GitHub Issue angelegt werden.",
       task: {
-        githubSyncStatus: task.githubSyncStatus,
-        githubSyncError: task.githubSyncError,
+        githubIssueSyncStatus: task.githubIssueSyncStatus,
+        githubIssueSyncError: task.githubIssueSyncError,
       },
     }, { status: 400 });
   }
@@ -248,8 +248,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({
       error: "Diese Aufgabe hat noch kein GitHub Issue. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
       task: {
-        githubSyncStatus: task.githubSyncStatus,
-        githubSyncError: "",
+        githubIssueSyncStatus: task.githubIssueSyncStatus,
+        githubIssueSyncError: "",
       },
     }, { status: 409 });
   }
@@ -268,8 +268,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       code: "github_sync_locked",
       error: "GitHub-Sync läuft bereits für diese Aufgabe oder dieses Issue.",
       task: {
-        githubSyncStatus: "pending",
-        githubSyncError: "GitHub-Sync läuft bereits.",
+        githubIssueSyncStatus: "pending",
+        githubIssueSyncError: "GitHub-Sync läuft bereits.",
       },
     }, { status: 409 });
   }
@@ -283,8 +283,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return NextResponse.json({
         error: "Nur Deliverables können als GitHub Issue angelegt werden.",
         task: {
-          githubSyncStatus: task.githubSyncStatus,
-          githubSyncError: task.githubSyncError,
+          githubIssueSyncStatus: task.githubIssueSyncStatus,
+          githubIssueSyncError: task.githubIssueSyncError,
         },
       }, { status: 400 });
     }
@@ -293,8 +293,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return NextResponse.json({
         error: "Diese Aufgabe hat noch kein GitHub Issue. Ein neues Issue wird nur über eine bewusste Anlegen-Aktion erstellt.",
         task: {
-          githubSyncStatus: task.githubSyncStatus,
-          githubSyncError: "",
+          githubIssueSyncStatus: task.githubIssueSyncStatus,
+          githubIssueSyncError: "",
         },
       }, { status: 409 });
     }
@@ -326,17 +326,34 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     });
     if (finalizeError) throw new Error(`GitHub Issue wurde gespeichert, aber die Verknüpfung ist fehlgeschlagen: ${finalizeError.message}`);
 
+    const commentDelivery = await deliverPendingGitHubComments({ supabase, taskId: id }).catch(() => ({
+      delivered: 0,
+      reconciled: 0,
+      created: 0,
+      waitingForAuthorConnection: 0,
+      waitingForIssue: 0,
+      retryScheduled: 0,
+      failed: 1,
+    }));
+    const commentNotice = commentDeliveryNotice(commentDelivery);
+
     return NextResponse.json({
       ok: true,
       issue,
       warnings,
+      commentDelivery,
+      notices: commentNotice ? [{
+        code: "github_comment_delivery_summary",
+        level: "info",
+        message: commentNotice,
+      }] : [],
       task: {
         githubRepo,
         githubIssueNumber: issue.number,
         githubIssueUrl: issue.html_url,
-        githubSyncStatus: "synced",
-        githubLastSyncedAt: syncedAt,
-        githubSyncError: "",
+        githubIssueSyncStatus: "synced",
+        githubIssueLastSyncedAt: syncedAt,
+        githubIssueSyncError: "",
         updatedAt: finalizedTask?.updated_at || "",
       },
     });
@@ -350,8 +367,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({
       error: message,
       task: {
-        githubSyncStatus: "failed",
-        githubSyncError: message,
+        githubIssueSyncStatus: "failed",
+        githubIssueSyncError: message,
         updatedAt: failedTask?.updated_at || "",
       },
     }, { status: 502 });

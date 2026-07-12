@@ -16,7 +16,8 @@ export type PlanningCommandContext = {
   canManageTaskMeta: boolean;
   currentProfile: Profile | null;
   data: PlanningData;
-  githubAppConnected: boolean;
+  githubInstallationAvailable: boolean;
+  githubUserConnected: boolean;
   setData: Dispatch<SetStateAction<PlanningData>>;
   setSaveError: Dispatch<SetStateAction<string>>;
   source: PlanningSource;

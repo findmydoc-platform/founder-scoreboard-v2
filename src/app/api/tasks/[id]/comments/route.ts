@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
-import { createGitHubIssueComment } from "@/lib/github";
-import { getGitHubAppUserToken } from "@/lib/github-app";
+import { requirePlanningContributor } from "@/lib/authz";
+import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
@@ -12,7 +11,7 @@ type CommentPayload = {
 };
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<CommentPayload>(request, requireFounder, {});
+  const apiContext = await requireJsonApiContext<CommentPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
@@ -31,30 +30,28 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
-  const githubIssueNumber = Number(task.github_issue_number || task.issue_number || 0);
-  const hasLinkedGitHubIssue = Number.isInteger(githubIssueNumber) && githubIssueNumber > 0;
-
-  const { data: created, error: insertError } = await supabase
-    .from("task_comments")
-    .insert({
-      task_id: id,
-      profile_id: permission.profile?.id || null,
-      comment,
-    })
-    .select("id,task_id,profile_id,comment,created_at")
-    .single();
+  const { data: transaction, error: insertError } = await supabase.rpc("create_task_comment_with_github_delivery", {
+    p_task_id: id,
+    p_profile_id: permission.profile?.id || "",
+    p_comment: comment,
+  });
+  const created = transaction?.comment as {
+    id: number;
+    task_id: string;
+    profile_id: string | null;
+    comment: string;
+    created_at: string;
+  } | undefined;
 
   if (insertError || !created) return apiError(insertError?.message || "Kommentar konnte nicht gespeichert werden.", 500);
 
-  let githubSyncError = "";
-  if (hasLinkedGitHubIssue) {
-    try {
-      const githubUserToken = await getGitHubAppUserToken(supabase, permission.profile);
-      await createGitHubIssueComment(githubIssueNumber, comment, githubUserToken, `fmd-comment-id:${created.id}`);
-    } catch (syncError) {
-      githubSyncError = syncError instanceof Error ? syncError.message : "GitHub Kommentar konnte nicht erstellt werden.";
-    }
-  }
+  await deliverPendingGitHubComments({ supabase, taskId: id, limit: 20 }).catch(() => undefined);
+  const { data: delivery } = await supabase
+    .from("task_comment_github_deliveries")
+    .select("status,github_comment_url")
+    .eq("task_comment_id", created.id)
+    .maybeSingle<{ status: string; github_comment_url: string | null }>();
+  const deliveryStatus = delivery?.status || transaction?.deliveryStatus || "pending";
 
   const { data: profiles } = await supabase.from("profiles").select("id,name,github_login,platform_role");
   const mentionedRecipients = new Set(mentionedProfileIds(
@@ -101,16 +98,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     );
   }
 
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: `Kommentar hinzugefügt: ${comment.slice(0, 160)}`,
-  });
-
-  await supabase.from("tasks").update({
-    github_sync_status: githubSyncError ? "failed" : "not_synced",
-    github_sync_error: githubSyncError || null,
-  }).eq("id", id);
-
   return NextResponse.json({
     ok: true,
     comment: {
@@ -118,8 +105,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       taskId: created.task_id,
       profileId: created.profile_id || "",
       comment: created.comment,
+      githubDeliveryStatus: deliveryStatus,
+      githubCommentUrl: delivery?.github_comment_url || "",
       createdAt: created.created_at,
     },
-    githubSyncError,
+    notice: deliveryStatus === "waiting_for_author_connection" ? {
+      code: "github_author_connection_required",
+      level: "info",
+      message: "Kommentar gespeichert. Veröffentlichung wartet auf deine GitHub-Verbindung.",
+    } : null,
   });
 }

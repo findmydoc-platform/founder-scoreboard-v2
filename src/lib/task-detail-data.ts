@@ -46,7 +46,7 @@ export async function loadTaskDetailData(supabase: SupabaseClient, taskId: strin
     outgoingRelationResult,
     incomingRelationResult,
   ] = await Promise.all([
-    supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,task_comment_github_deliveries(status,github_comment_url)").eq("task_id", taskId).order("created_at", { ascending: false }).limit(200),
     supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(300),
     supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(200),
     supabase.from("task_activity").select("id,task_id,message,created_at").eq("task_id", taskId).order("created_at", { ascending: true }).limit(500),

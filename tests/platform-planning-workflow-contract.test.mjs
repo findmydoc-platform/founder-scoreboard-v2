@@ -297,9 +297,9 @@ test("task row descriptor covers planning UI mapping fields", async () => {
     ["github_repo", "githubRepo"],
     ["github_issue_number", "githubIssueNumber"],
     ["github_issue_url", "githubIssueUrl"],
-    ["github_sync_status", "githubSyncStatus"],
-    ["github_last_synced_at", "githubLastSyncedAt"],
-    ["github_sync_error", "githubSyncError"],
+    ["github_issue_sync_status", "githubIssueSyncStatus"],
+    ["github_issue_last_synced_at", "githubIssueLastSyncedAt"],
+    ["github_issue_sync_error", "githubIssueSyncError"],
     ["problem_statement", "problemStatement"],
     ["intended_outcome", "intendedOutcome"],
     ["scope_constraints", "scopeConstraints"],
@@ -529,7 +529,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.doesNotMatch(route, /review_owner_profile_id: null/);
   assert.doesNotMatch(route, /reviewOwnerProfileId: ""/);
   assert.match(route, /requireTaskReviewer/);
-  assert.match(route, /requireFounder/);
+  assert.match(route, /requirePlanningContributor/);
   assert.match(route, /review_task_transaction/);
   assert.match(reviewTransactionMigration, /insert into public\.task_reviews/);
   assert.match(reviewTransactionMigration, /public\.update_task_transaction/);
@@ -540,7 +540,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.doesNotMatch(route, /from\("task_reviews"\)\.insert/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
-  assert.match(route, /github_sync_status: "not_synced"/);
+  assert.match(route, /github_issue_sync_status: "not_synced"/);
   assert.match(route, /Nacharbeit/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
@@ -858,7 +858,7 @@ test("notification preferences are editable per profile and event type", async (
   const ownProfileCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
   const policy = await readFile("src/lib/notification-catalog.ts", "utf8");
 
-  assert.match(route, /requireFounder/);
+  assert.match(route, /requirePlanningContributor/);
   assert.match(selfRoute, /requireTeamMember/);
   assert.match(route, /notification_preferences/);
   assert.match(selfRoute, /notification_preferences/);

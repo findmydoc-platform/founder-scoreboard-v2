@@ -45,7 +45,7 @@ export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
       ? "Founder-Checkliste"
       : "",
     payload.reviewStatus !== undefined ? "Review" : "",
-    payload.githubSyncStatus !== undefined ? "GitHub-Sync" : "",
+    payload.githubIssueSyncStatus !== undefined ? "GitHub-Sync" : "",
   ].filter(Boolean);
 }
 
@@ -164,11 +164,11 @@ export function startsTaskReviewRequest(payload: TaskUpdatePayload) {
 }
 
 export function applyTaskSyncStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
-  if (!payload.githubSyncStatus) return { ok: true };
-  if (!syncStatuses.has(payload.githubSyncStatus)) {
+  if (!payload.githubIssueSyncStatus) return { ok: true };
+  if (!syncStatuses.has(payload.githubIssueSyncStatus)) {
     return { ok: false, error: "Ungültiger GitHub-Sync-Status.", status: 400 };
   }
-  update.github_sync_status = payload.githubSyncStatus;
+  update.github_issue_sync_status = payload.githubIssueSyncStatus;
   return { ok: true };
 }
 
@@ -180,8 +180,8 @@ export function applyTaskSelfChecklistUpdateFields(update: TaskRouteDbUpdate, pa
 }
 
 export function markTaskGitHubSyncDirty(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
-  if (Object.keys(update).length && payload.githubSyncStatus === undefined) {
-    update.github_sync_status = "not_synced";
-    update.github_sync_error = null;
+  if (Object.keys(update).length && payload.githubIssueSyncStatus === undefined) {
+    update.github_issue_sync_status = "not_synced";
+    update.github_issue_sync_error = null;
   }
 }

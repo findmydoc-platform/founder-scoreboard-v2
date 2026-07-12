@@ -1,7 +1,8 @@
 export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
-export type GitHubSyncStatus = "not_synced" | "synced" | "pending" | "failed";
+export type GitHubIssueSyncStatus = "not_synced" | "synced" | "pending" | "failed";
+export type GitHubCommentDeliveryStatus = "pending" | "waiting_for_issue" | "waiting_for_author_connection" | "processing" | "retry_scheduled" | "delivered" | "failed";
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
 export type StrikeEventType = "strike_added" | "strike_reset" | "away_neutral" | "fulfilled_no_change" | "governance_review_required";
 export type ScoreObjectionStatus = "open" | "reviewed" | "dismissed" | "accepted";
@@ -103,9 +104,9 @@ export type Task = {
   githubRepo: string;
   githubIssueNumber: number | null;
   githubIssueUrl: string;
-  githubSyncStatus: GitHubSyncStatus;
-  githubLastSyncedAt: string;
-  githubSyncError: string;
+  githubIssueSyncStatus: GitHubIssueSyncStatus;
+  githubIssueLastSyncedAt: string;
+  githubIssueSyncError: string;
   taskType: TaskType;
   parentTaskId: string;
   scoreRelevant: boolean;
@@ -213,6 +214,8 @@ export type TaskComment = {
   taskId: string;
   profileId: string;
   comment: string;
+  githubDeliveryStatus: GitHubCommentDeliveryStatus;
+  githubCommentUrl: string;
   createdAt: string;
 };
 

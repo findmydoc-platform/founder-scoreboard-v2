@@ -18,7 +18,7 @@ function localTaskState(task: Task) {
     note: task.note,
     reviewStatus: task.reviewStatus,
     scorePoints: task.scorePoints,
-    githubSyncStatus: task.githubSyncStatus,
+    githubIssueSyncStatus: task.githubIssueSyncStatus,
     sprintId: task.sprintId,
     milestoneId: task.milestoneId,
     dependsOn: task.dependsOn,

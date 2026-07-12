@@ -78,7 +78,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           relations={data.taskRelations}
           pending={isPending}
           error={controller.saveError}
-          githubAppConnected={controller.githubAppConnected}
+          githubInstallationAvailable={controller.githubInstallationAvailable}
           commentImportPending={commentImportPendingTaskIds.has(selectedTask.id)}
           onClose={closeTaskPanel}
           onUpdate={(patch) => updateTask(selectedTask, patch)}

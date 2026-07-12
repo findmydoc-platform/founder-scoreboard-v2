@@ -164,7 +164,7 @@ try {
     ) as result`,
     [createdTaskId],
   );
-  if (finalized.rows[0]?.result?.github_sync_status !== "synced") {
+  if (finalized.rows[0]?.result?.github_issue_sync_status !== "synced") {
     throw new Error("GitHub sync was not finalized transactionally.");
   }
 
@@ -192,7 +192,7 @@ try {
     `select public.fail_github_issue_sync_transaction($1, 'Expected verification failure', 'Transactional GitHub sync failed') as result`,
     [createdTaskId],
   );
-  if (failed.rows[0]?.result?.github_sync_status !== "failed") {
+  if (failed.rows[0]?.result?.github_issue_sync_status !== "failed") {
     throw new Error("GitHub sync failure was not recorded transactionally.");
   }
 

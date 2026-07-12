@@ -121,7 +121,7 @@ export async function requirePlatformRole(
   });
 }
 
-export function requireFounder(request: NextRequest) {
+export function requirePlanningContributor(request: NextRequest) {
   return requirePlatformRole(request, ["ceo", "founder", "deputy"]);
 }
 
@@ -142,7 +142,7 @@ export async function requireTaskReviewer(
   task: { review_owner_profile_id?: string | null },
   existingPermission?: AuthzResult,
 ) {
-  const permission = existingPermission || await requireFounder(request);
+  const permission = existingPermission || await requirePlanningContributor(request);
   if (!permission.ok) return permission;
   if (!requiresSupabaseAuth()) return permission;
 

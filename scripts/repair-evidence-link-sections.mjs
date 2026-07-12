@@ -60,7 +60,7 @@ async function main() {
 
   const { data, error } = await supabase
     .from("tasks")
-    .select("id,title,evidence_link,github_sync_status,github_issue_number,github_issue_url,issue_number,issue_url")
+    .select("id,title,evidence_link,github_issue_sync_status,github_issue_number,github_issue_url,issue_number,issue_url")
     .order("title", { ascending: true });
 
   if (error) {
@@ -97,10 +97,10 @@ async function main() {
   for (const repair of repairs) {
     const update = {
       evidence_link: repair.after || null,
-      github_sync_error: null,
+      github_issue_sync_error: null,
     };
     if (repair.hasGitHubIssue) {
-      update.github_sync_status = "not_synced";
+      update.github_issue_sync_status = "not_synced";
     }
 
     const { error: updateError } = await supabase

@@ -78,8 +78,8 @@ try {
       score_final: true,
       sprint_outcome: "partial",
       carryover_reason: "Verification carryover",
-      github_sync_status: "not_synced",
-      github_sync_error: null,
+      github_issue_sync_status: "not_synced",
+      github_issue_sync_error: null,
     }]),
     JSON.stringify([carryoverInsert]),
     JSON.stringify(resultData),
@@ -151,7 +151,7 @@ try {
       [
         failedSprintId,
         failedInsert.rows[0]?.updated_at,
-        JSON.stringify([{ id: failedTaskId, score_points: 0, score_final: true, sprint_outcome: "missed_uncommunicated", carryover_reason: "", github_sync_status: "not_synced", github_sync_error: null }]),
+        JSON.stringify([{ id: failedTaskId, score_points: 0, score_final: true, sprint_outcome: "missed_uncommunicated", carryover_reason: "", github_issue_sync_status: "not_synced", github_issue_sync_error: null }]),
         JSON.stringify([{ type: "sprint.task_carried_over", actor_profile_id: null, recipient_profile_id: `missing-profile-${suffix}`, entity_type: "task", entity_id: failedTaskId, title: "Must roll back", body: "Must roll back" }]),
       ],
     );

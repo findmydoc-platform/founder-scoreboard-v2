@@ -7,12 +7,19 @@ import assert from "node:assert/strict";
 test("platform migration contains the role, score and sync contracts", async () => {
   const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
   const cleanup = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
+  const syncRename = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
+  const schema = await readFile("supabase/schema.sql", "utf8");
 
   assert.match(sql, /platform_role text/);
   assert.match(sql, /github_login text unique/);
   assert.match(sql, /audit_log/);
   assert.match(sql, /review_status/);
   assert.match(sql, /github_sync_status/);
+  assert.match(syncRename, /rename column github_sync_status to github_issue_sync_status/);
+  assert.match(syncRename, /tasks_github_issue_sync_status_idx/);
+  assert.match(schema, /github_issue_sync_status/);
+  assert.match(schema, /task_comment_github_deliveries/);
+  assert.doesNotMatch(schema, /github_sync_status|github_last_synced_at|github_sync_error/);
   assert.match(sql, /current_platform_role/);
   assert.match(cleanup, /drop table if exists decision_log cascade/);
   assert.match(cleanup, /drop table if exists availability cascade/);
@@ -24,13 +31,18 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const github = await readFile("src/lib/github.ts", "utf8");
   const migration = await readFile("supabase/0038_github_sync_locks.sql", "utf8");
   const transactionalSyncMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
+  const syncRenameMigration = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
+  const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
+  const reconcileRoute = await readFile("src/app/api/github-comments/reconcile/route.ts", "utf8");
+  const authz = await readFile("src/lib/authz.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
-  assert.match(route, /requireFounder/);
-  assert.match(route, /taskDetailPermissions/);
-  assert.match(route, /getGitHubAppConnectionStatus/);
+  assert.match(route, /requireTeamMember/);
+  assert.match(authz, /requireTeamMember[\s\S]*\["ceo", "founder", "deputy", "viewer"\]/);
+  assert.doesNotMatch(route, /taskDetailPermissions/);
+  assert.doesNotMatch(route, /getGitHubUserConnectionStatus/);
   assert.match(route, /getGitHubAppInstallationToken/);
   assert.match(route, /githubInstallationToken/);
   assert.match(route, /syncGitHubIssueDependencies/);
@@ -56,7 +68,8 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.doesNotMatch(route, /buildSyncContext/);
   assert.doesNotMatch(route, /x-github-provider-token|provider_token|requireMatchingGitHubProviderToken/);
   assert.doesNotMatch(route, /requireOperationalLead/);
-  assert.doesNotMatch(route, /task_comments/);
+  assert.match(route, /deliverPendingGitHubComments/);
+  assert.match(route, /commentDelivery/);
   assert.doesNotMatch(route, /task_blockers/);
   assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
   assert.doesNotMatch(route, /parent_task_id/);
@@ -68,8 +81,15 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /finalize_github_issue_sync_transaction/);
   assert.match(route, /fail_github_issue_sync_transaction/);
   assert.match(transactionalSyncMigration, /github_sync_status = 'pending'/);
-  assert.match(transactionalSyncMigration, /github_sync_status = 'synced'/);
-  assert.match(transactionalSyncMigration, /github_sync_status = 'failed'/);
+  assert.match(syncRenameMigration, /github_issue_sync_status = 'pending'/);
+  assert.match(syncRenameMigration, /github_issue_sync_status = 'synced'/);
+  assert.match(syncRenameMigration, /github_issue_sync_status = 'failed'/);
+  assert.match(commentDelivery, /waiting_for_author_connection/);
+  assert.match(reconcileRoute, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(reconcileRoute, /requireOperationalLead/);
+  assert.match(reconcileRoute, /export async function GET/);
+  assert.match(reconcileRoute, /previewPendingGitHubComments/);
+  assert.match(reconcileRoute, /deliverPendingGitHubComments\(\{ supabase: context\.supabase, limit: 100 \}\)/);
   assert.match(github, /state: task\.status === "Erledigt" \? "closed" : "open"/);
   assert.match(github, /taskIssueMarker/);
   assert.match(github, /findGitHubIssueByTaskMarker/);
@@ -178,7 +198,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(migration, /blocked_by/);
   assert.match(migration, /blocks/);
   assert.match(migration, /relates_to/);
-  assert.match(route, /requireFounder/);
+  assert.match(route, /requirePlanningContributor/);
   assert.match(route, /taskRelationshipAccess/);
   assert.match(route, /allowedRelationTypes\.includes\(relationType\)/);
   assert.match(route, /canRemoveRelation\(mappedRelation\)/);
@@ -191,7 +211,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipPermissionMigration, /task_relationship_edges_update_operational/);
   assert.match(route, /task.relationship_created/);
   assert.match(route, /task.relationship_deleted/);
-  assert.match(route, /github_sync_status: "not_synced"/);
+  assert.match(route, /github_issue_sync_status: "not_synced"/);
   assert.match(types, /TaskRelationType/);
   assert.match(data, /task_relationship_edges/);
   assert.match(platform, /taskRelationsFor/);
@@ -243,7 +263,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(script, /relation_type: "blocked_by"/);
 });
 
-test("github sync queue is reopened by task comments blockers and relationship changes", async () => {
+test("github issue sync and comment delivery keep independent state", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
@@ -252,13 +272,16 @@ test("github sync queue is reopened by task comments blockers and relationship c
   const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
+  const deliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
 
-  assert.match(taskRoutePolicy, /payload\.githubSyncStatus === undefined/);
-  assert.match(taskRoutePolicy, /github_sync_status = "not_synced"/);
-  assert.match(commentsRoute, /github_sync_status: githubSyncError \? "failed" : "not_synced"/);
-  assert.match(commentsRoute, /github_sync_error: githubSyncError \|\| null/);
-  assert.match(blockersRoute, /github_sync_status: "not_synced"/);
-  assert.match(relationshipsRoute, /github_sync_status: "not_synced"/);
+  assert.match(taskRoutePolicy, /payload\.githubIssueSyncStatus === undefined/);
+  assert.match(taskRoutePolicy, /github_issue_sync_status = "not_synced"/);
+  assert.doesNotMatch(commentsRoute, /github_issue_sync_status|github_issue_sync_error/);
+  assert.match(commentsRoute, /create_task_comment_with_github_delivery/);
+  assert.match(commentsRoute, /deliverPendingGitHubComments/);
+  assert.match(deliveryMigration, /waiting_for_author_connection/);
+  assert.match(blockersRoute, /github_issue_sync_status: "not_synced"/);
+  assert.match(relationshipsRoute, /github_issue_sync_status: "not_synced"/);
   assert.match(syncRoute, /task_relationship_edges/);
   assert.match(syncRoute, /syncGitHubIssueDependencies/);
   assert.match(syncRoute, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
@@ -273,7 +296,7 @@ test("github sync queue is reopened by task comments blockers and relationship c
 test("github sync maps the visible task assignee to native github assignees", async () => {
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const migration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
+  const migration = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
 
   assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
   assert.match(syncRoute, /profileGitHubLoginById/);
@@ -282,8 +305,8 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
   assert.match(syncRoute, /Warnung:/);
   assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
-  assert.match(migration, /github_sync_status = 'synced'/);
-  assert.match(migration, /github_sync_error = null/);
+  assert.match(migration, /github_issue_sync_status = 'synced'/);
+  assert.match(migration, /github_issue_sync_error = null/);
   assert.match(syncRoute, /warnings/);
   assert.doesNotMatch(syncRoute, /review_owner_profile_id/);
   assert.doesNotMatch(syncRoute, /packages"\)/);
@@ -314,6 +337,29 @@ test("github sync verification is read-only and checks the management repo", asy
   assert.doesNotMatch(script, /method: "POST"/);
   assert.doesNotMatch(script, /method: "PATCH"/);
   assert.doesNotMatch(script, /method: "DELETE"/);
+});
+
+test("production cutover builds first, migrates with lock guard, verifies, deploys and reconciles", async () => {
+  const workflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
+  const migrationDeploy = await readFile("scripts/deploy-production-github-sync-migrations.mjs", "utf8");
+  const rollback = await readFile("supabase/rollback/0057_restore_github_sync_fields.sql", "utf8");
+
+  const buildIndex = workflow.indexOf("Build Vercel Output");
+  const migrationIndex = workflow.indexOf("Apply GitHub Sync Cutover Migrations");
+  const schemaVerifyIndex = workflow.indexOf("Verify Production Supabase Schema");
+  const deploymentIndex = workflow.indexOf("Deploy Prebuilt Output to Vercel Production");
+  const reconciliationIndex = workflow.indexOf("Reconcile Existing GitHub Comments");
+  assert.ok(buildIndex < migrationIndex);
+  assert.ok(migrationIndex < schemaVerifyIndex);
+  assert.ok(schemaVerifyIndex < deploymentIndex);
+  assert.ok(deploymentIndex < reconciliationIndex);
+  assert.match(migrationDeploy, /github_issue_sync_locks/);
+  assert.match(migrationDeploy, /expires_at > now\(\)/);
+  assert.match(migrationDeploy, /0057_rename_github_issue_sync_fields\.sql/);
+  assert.match(migrationDeploy, /0058_task_comment_github_delivery_outbox\.sql/);
+  assert.match(workflow, /Read-only comment reconciliation/);
+  assert.match(workflow, /Restore Previous GitHub Sync Fields After Failed Cutover/);
+  assert.match(rollback, /rename column github_issue_sync_status to github_sync_status/);
 });
 
 test("app-only tasks are visibly marked without creating github issues", async () => {
@@ -374,7 +420,7 @@ test("legacy github body sections are not kept inside evidence link fields", asy
   assert.match(repairScript, /No response/);
   assert.match(repairScript, /evidence_link/);
   assert.match(repairScript, /--apply/);
-  assert.match(repairScript, /github_sync_status = "not_synced"|github_sync_status: "not_synced"/);
+  assert.match(repairScript, /github_issue_sync_status = "not_synced"|github_issue_sync_status: "not_synced"/);
   assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
 });
 
@@ -400,6 +446,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
   const githubAppMigration = await readFile("supabase/0036_github_app_user_tokens.sql", "utf8");
+  const commentDeliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
+  const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
   const connectRoute = await readFile("src/app/api/github-app/connect/route.ts", "utf8");
   const appCallbackRoute = await readFile("src/app/api/github-app/callback/route.ts", "utf8");
   const appStatusRoute = await readFile("src/app/api/github-app/status/route.ts", "utf8");
@@ -420,17 +468,17 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(authHook, /scopes: "repo read:user user:email"/);
   assert.match(authHook, /\/api\/github-app\/status/);
   assert.match(authHook, /\/api\/github-app\/connect\?next=/);
-  assert.match(authHook, /githubAppConnected/);
+  assert.match(authHook, /githubUserConnected/);
   assert.match(authHook, /githubConnectionState/);
   assert.match(connectionModel, /"checking" \| "connected" \| "missing" \| "reconnect_required" \| "unknown"/);
-  assert.match(connectionModel, /githubAppConnectionStateFromStatus/);
+  assert.match(connectionModel, /githubUserConnectionStateFromStatus/);
   assert.match(authHook, /setGithubConnectionState\("checking"\)/);
-  assert.match(authHook, /githubAppConnectionStateFromStatus\(status\)/);
+  assert.match(authHook, /githubUserConnectionStateFromStatus\(status\?\.user \|\| null\)/);
   assert.doesNotMatch(authHook, /provider_token|markGitHubReauthAttempt|clearRememberedGitHubProviderToken|sessionStorage/);
   assert.match(requestContext, /createBrowserApiClient/);
   assert.match(browserApiClient, /\/api\/github-app\/status/);
   assert.match(browserApiClient, /startGitHubAppConnect/);
-  assert.match(browserApiClient, /githubAppConnected/);
+  assert.match(browserApiClient, /githubUserConnected/);
   assert.doesNotMatch(browserApiClient, /x-github-provider-token|getRememberedGitHubProviderToken|rememberGitHubProviderToken|includeGitHubToken|provider_token/);
   assert.doesNotMatch(detail, /x-github-provider-token|getRememberedGitHubProviderToken|getBrowserSupabase|auth\.getSession/);
   assert.match(supabase, /createBrowserClient/);
@@ -452,14 +500,15 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.doesNotMatch(ui, /GitHubAppReconnectBanner/);
   assert.match(detail, /GitHubConnectionStatus/);
   assert.match(planningShell, /<PlanningHeader controller=\{controller\} \/>/);
-  assert.doesNotMatch(planningShell, /GitHubAppReconnectBanner|githubAppConnected=\{githubAppConnected\}/);
+  assert.doesNotMatch(planningShell, /GitHubAppReconnectBanner|githubUserConnected=\{githubUserConnected\}/);
   assert.equal(existsSync("src/features/planning/molecules/github-app-reconnect-banner.tsx"), false);
-  assert.match(githubStatus, /GitHub-App-Verbindung/);
-  assert.match(githubStatus, /state\?: GitHubAppConnectionState/);
+  assert.match(githubStatus, /GitHub-Autorenverbindung/);
+  assert.match(githubStatus, /state\?: GitHubUserConnectionState/);
   assert.match(githubStatus, /effectiveState === "checking" \|\| effectiveState === "unknown"/);
   assert.match(githubStatus, /needsAction &&/);
-  assert.match(githubStatus, /GitHub-App verbinden/);
-  assert.match(githubStatus, /GitHub-Sync, Kommentare und Anhänge/);
+  assert.match(githubStatus, /Autorenverbindung herstellen/);
+  assert.match(githubStatus, /technische GitHub-App-Installation/);
+  assert.match(githubStatus, /waitingCommentCount/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
   assert.doesNotMatch(detailGitHubSyncCard, /GitHub-Verbindung .*erneuern/);
@@ -494,8 +543,12 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(appCallbackRoute, /exchangeGitHubAppCode/);
   assert.match(appCallbackRoute, /githubUserForAppUserToken/);
   assert.match(appCallbackRoute, /storeGitHubAppUserToken/);
+  assert.match(appCallbackRoute, /after\(/);
+  assert.match(appCallbackRoute, /deliverPendingGitHubComments/);
   assert.match(appStatusRoute, /requireTeamMember/);
-  assert.match(appStatusRoute, /getGitHubAppConnectionStatus/);
+  assert.match(appStatusRoute, /getGitHubUserConnectionStatus/);
+  assert.match(appStatusRoute, /waitingCommentCount/);
+  assert.match(appStatusRoute, /installation/);
   assert.match(appConnectionRoute, /export async function DELETE/);
   assert.match(appConnectionRoute, /revokeGitHubAppUserConnection/);
   assert.match(githubApp, /GITHUB_APP_ID/);
@@ -514,12 +567,16 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubAppMigration, /enable row level security/);
   assert.match(githubAppMigration, /grant select, insert, update, delete on github_app_user_tokens to service_role/);
   assert.doesNotMatch(githubAppMigration, /create policy/i);
-  assert.match(commentsRoute, /createGitHubIssueComment/);
-  assert.match(commentsRoute, /getGitHubAppUserToken/);
-  assert.doesNotMatch(commentsRoute, /GitHubAppUserTokenRequiredError/);
-  assert.ok(commentsRoute.indexOf('.from("task_comments")') < commentsRoute.indexOf("await getGitHubAppUserToken"));
-  assert.match(commentsRoute, /githubSyncError/);
-  assert.match(attachmentRoute, /getGitHubAppUserToken/);
+  assert.match(commentsRoute, /create_task_comment_with_github_delivery/);
+  assert.match(commentsRoute, /deliverPendingGitHubComments/);
+  assert.doesNotMatch(commentsRoute, /getGitHubUserTokenForProfile|githubIssueSyncError/);
+  assert.match(commentDelivery, /eq\("id", delivery\.author_profile_id\)/);
+  assert.match(commentDelivery, /getGitHubUserTokenForProfile\(supabase, authenticatedProfile\(profile\)\)/);
+  assert.match(commentDelivery, /createGitHubIssueComment/);
+  assert.match(commentDelivery, /githubCommentMarker/);
+  assert.match(commentDeliveryMigration, /for update skip locked/);
+  assert.match(commentDeliveryMigration, /task_comment_id bigint primary key/);
+  assert.match(attachmentRoute, /getGitHubUserTokenForProfile/);
   assert.match(attachmentRoute, /GitHubAppUserTokenRequiredError/);
   assert.match(attachmentRoute, /401/);
   assert.doesNotMatch(attachmentRoute, /requireMatchingGitHubProviderToken|x-github-provider-token|provider_token/);
@@ -545,6 +602,7 @@ test("github app connect persists reload-stable user tokens without browser toke
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readFile("supabase/0005_comments_blockers_notifications.sql", "utf8");
   const externalMigration = await readFile("supabase/0018_task_external_comments.sql", "utf8");
+  const commentDeliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
@@ -588,14 +646,14 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(commentsRoute, /mentionedProfileIds/);
   assert.match(commentsRoute, /task.mention/);
   assert.match(commentsRoute, /Du wurdest erwähnt/);
-  assert.match(commentsRoute, /Kommentar hinzugefügt/);
+  assert.match(commentDeliveryMigration, /Kommentar hinzugefügt/);
   assert.match(mentions, /githubLogin/);
   assert.match(notificationPolicy, /task\.mention/);
   assert.match(notificationPolicy, /Erwähnung/);
   assert.match(googleChat, /eventUrl/);
   assert.match(googleChat, /\/tasks\/\$\{encodeURIComponent\(event\.entityId\)\}/);
   assert.match(googleChat, /Aufgabe öffnen/);
-  assert.match(attachmentRoute, /requireFounder/);
+  assert.match(attachmentRoute, /requirePlanningContributor/);
   assert.match(attachmentRoute, /uploadGitHubAttachment/);
   assert.match(attachmentRoute, /\.fmd-attachments\/tasks/);
   assert.match(attachmentRoute, /10 MB/);
@@ -666,10 +724,10 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(commentComposer, /type="file"/);
   assert.match(commentComposer, /Paperclip/);
   assert.match(commentComposer, /Anhang/);
-  assert.match(githubAssetsRoute, /requireFounder/);
+  assert.match(githubAssetsRoute, /requirePlanningContributor/);
   assert.match(githubAssetsRoute, /getGitHubAppInstallationToken/);
   assert.match(githubCommentsRoute, /getGitHubAppInstallationToken/);
-  assert.match(attachmentRoute, /getGitHubAppUserToken/);
+  assert.match(attachmentRoute, /getGitHubUserTokenForProfile/);
   assert.doesNotMatch(githubAssetsRoute, /requireMatchingGitHubProviderToken|x-github-provider-token|provider_token/);
   assert.match(githubAssetsRoute, /user-attachments\/assets/);
   assert.match(githubAssetsRoute, /content-type/);

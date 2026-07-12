@@ -53,6 +53,8 @@ export function useTaskComments({
           taskId: task.id,
           profileId: profiles[0]?.id || "",
           comment,
+          githubDeliveryStatus: "pending",
+          githubCommentUrl: "",
           createdAt: new Date().toISOString(),
         },
         ...current,
@@ -65,9 +67,7 @@ export function useTaskComments({
 
       if (!response.ok || !body?.comment) throw new Error(body?.error || "Kommentar konnte nicht gespeichert werden.");
       setTaskComments((current) => [body.comment!, ...current]);
-      if (body.githubSyncError) {
-        setError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
-      }
+      setLocalCommentImportNotice(body.notice?.message || "");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Kommentar konnte nicht gespeichert werden.";
       setError(message);

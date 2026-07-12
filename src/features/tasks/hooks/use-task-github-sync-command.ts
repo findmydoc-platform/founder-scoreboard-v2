@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
@@ -20,13 +21,17 @@ export function useTaskGitHubSyncCommand({
   source,
   startTransition,
 }: UseTaskGitHubSyncCommandOptions) {
+  const [githubSyncNotice, setGithubSyncNotice] = useState("");
   const syncTaskToGitHub = (task: Task, options: { createIfMissing?: boolean; silent?: boolean } = {}) => {
-    if (!options.silent) setSaveError("");
+    if (!options.silent) {
+      setSaveError("");
+      setGithubSyncNotice("");
+    }
 
     const previousTask = task;
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubSyncStatus: "pending", githubSyncError: "" } : item)),
+      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "pending", githubIssueSyncError: "" } : item)),
     }));
 
     if (source !== "supabase") {
@@ -44,7 +49,7 @@ export function useTaskGitHubSyncCommand({
         if (response.status === 409 && body?.code === "github_sync_locked") {
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "pending", githubSyncError: body.error || syncLockedMessage } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
           }));
           if (!options.silent) setSaveError(body.error || syncLockedMessage);
           return;
@@ -55,11 +60,12 @@ export function useTaskGitHubSyncCommand({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
         }));
+        if (!options.silent) setGithubSyncNotice(body.notices?.[0]?.message || "");
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
         setData((current) => ({
           ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "failed", githubIssueSyncError: message } : item)),
         }));
         if (!options.silent) setSaveError(message);
       }
@@ -68,28 +74,45 @@ export function useTaskGitHubSyncCommand({
 
   const syncLinkedGitHubTasks = (options: { onlyFailed?: boolean } = {}) => {
     setSaveError("");
+    setGithubSyncNotice("");
 
     if (source !== "supabase") {
       setSaveError("GitHub-Sync ist in diesem Arbeitsmodus nicht verfügbar.");
       return;
     }
 
-    const queueTasks = data.tasks.filter((task) =>
-      task.taskType === "deliverable" &&
-      hasGitHubIssue(task) &&
-      task.githubSyncStatus !== "synced" &&
-      (!options.onlyFailed || task.githubSyncStatus === "failed")
-    );
+    const openCommentTaskIds = new Set(data.taskComments
+      .filter((comment) => comment.githubDeliveryStatus !== "delivered")
+      .map((comment) => comment.taskId));
+    const failedCommentTaskIds = new Set(data.taskComments
+      .filter((comment) => comment.githubDeliveryStatus === "failed")
+      .map((comment) => comment.taskId));
+    const queueTasks = data.tasks.filter((task) => {
+      const needsIssueSync = task.githubIssueSyncStatus !== "synced";
+      const needsCommentDelivery = openCommentTaskIds.has(task.id);
+      const failed = task.githubIssueSyncStatus === "failed" || failedCommentTaskIds.has(task.id);
+      return task.taskType === "deliverable"
+        && hasGitHubIssue(task)
+        && (needsIssueSync || needsCommentDelivery)
+        && (!options.onlyFailed || failed);
+    });
 
     if (!queueTasks.length) return;
 
     const previousTasks = new Map(queueTasks.map((task) => [task.id, task]));
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? { ...item, githubSyncStatus: "pending", githubSyncError: "" } : item),
+      tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? { ...item, githubIssueSyncStatus: "pending", githubIssueSyncError: "" } : item),
     }));
 
     startTransition(async () => {
+      const commentDelivery = {
+        delivered: 0,
+        waitingForAuthorConnection: 0,
+        waitingForIssue: 0,
+        retryScheduled: 0,
+        failed: 0,
+      };
       for (const task of queueTasks) {
         try {
           const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: false });
@@ -97,7 +120,7 @@ export function useTaskGitHubSyncCommand({
             const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
-              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "pending", githubSyncError: body.error || syncLockedMessage } : item)),
+              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
             }));
             continue;
           }
@@ -107,18 +130,31 @@ export function useTaskGitHubSyncCommand({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
           }));
+          commentDelivery.delivered += Number(body.commentDelivery?.delivered || 0);
+          commentDelivery.waitingForAuthorConnection += Number(body.commentDelivery?.waitingForAuthorConnection || 0);
+          commentDelivery.waitingForIssue += Number(body.commentDelivery?.waitingForIssue || 0);
+          commentDelivery.retryScheduled += Number(body.commentDelivery?.retryScheduled || 0);
+          commentDelivery.failed += Number(body.commentDelivery?.failed || 0);
         } catch (error) {
           const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
           const previousTask = previousTasks.get(task.id) || task;
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubSyncStatus: "failed", githubSyncError: message } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "failed", githubIssueSyncError: message } : item)),
           }));
           setSaveError(message);
         }
       }
+      const commentParts = [
+        commentDelivery.delivered ? `${commentDelivery.delivered} zugestellt` : "",
+        commentDelivery.waitingForAuthorConnection ? `${commentDelivery.waitingForAuthorConnection} warten auf die Verbindung ihrer Autoren` : "",
+        commentDelivery.waitingForIssue ? `${commentDelivery.waitingForIssue} warten auf ein Issue` : "",
+        commentDelivery.retryScheduled ? `${commentDelivery.retryScheduled} für erneuten Versuch eingeplant` : "",
+        commentDelivery.failed ? `${commentDelivery.failed} technisch fehlgeschlagen` : "",
+      ].filter(Boolean);
+      if (commentParts.length) setGithubSyncNotice(`Issues synchronisiert · Kommentare: ${commentParts.join(" · ")}.`);
     });
   };
 
-  return { syncLinkedGitHubTasks, syncTaskToGitHub };
+  return { githubSyncNotice, syncLinkedGitHubTasks, syncTaskToGitHub };
 }

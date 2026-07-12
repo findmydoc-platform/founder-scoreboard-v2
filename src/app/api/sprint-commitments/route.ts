@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
-import { requireFounder } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type CommitmentPayload = {
@@ -14,7 +14,7 @@ type CommitmentPayload = {
 const levels = new Set(["Lite", "Standard", "Heavy", "Away"]);
 
 export async function PUT(request: NextRequest) {
-  const context = await requireJsonApiContext<CommitmentPayload>(request, requireFounder, {});
+  const context = await requireJsonApiContext<CommitmentPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;

@@ -13,7 +13,7 @@ type UseTaskCollaborationCommandsOptions = PlanningCommandContext & {
 export function useTaskCollaborationCommands({
   apiClient,
   currentProfile,
-  githubAppConnected,
+  githubInstallationAvailable,
   selectedTask,
   setData,
   setSaveError,
@@ -41,6 +41,8 @@ export function useTaskCollaborationCommands({
             taskId: task.id,
             profileId: currentProfile.id,
             comment,
+            githubDeliveryStatus: "pending",
+            githubCommentUrl: "",
             createdAt: new Date().toISOString(),
           },
           ...current.taskComments,
@@ -55,16 +57,9 @@ export function useTaskCollaborationCommands({
 
       setData((current) => ({
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? {
-          ...item,
-          githubSyncStatus: body.githubSyncError ? "failed" : "not_synced",
-          githubSyncError: body.githubSyncError || "",
-        } : item)),
         taskComments: [body.comment!, ...current.taskComments],
       }));
-      if (body.githubSyncError) {
-        setSaveError(`Kommentar gespeichert, aber GitHub-Sync ist fehlgeschlagen: ${body.githubSyncError}`);
-      }
+      setCommentImportNotice(body.notice?.message || "");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Kommentar konnte nicht gespeichert werden.";
       setSaveError(message);
@@ -83,7 +78,7 @@ export function useTaskCollaborationCommands({
     if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" } : item)),
+      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
       taskActivity: [
         {
           id: Date.now(),
@@ -116,7 +111,7 @@ export function useTaskCollaborationCommands({
         setData((current) => ({
           ...current,
           tasks: body.evidenceLink
-            ? current.tasks.map((item) => (item.id === task.id ? { ...item, evidenceLink: body.evidenceLink || item.evidenceLink, githubSyncStatus: "not_synced" } : item))
+            ? current.tasks.map((item) => (item.id === task.id ? { ...item, evidenceLink: body.evidenceLink || item.evidenceLink, githubIssueSyncStatus: "not_synced" } : item))
             : current.tasks,
           taskExternalComments: [
             ...current.taskExternalComments.filter((comment) => comment.taskId !== task.id),
@@ -146,13 +141,13 @@ export function useTaskCollaborationCommands({
   useEffect(() => {
     if (!selectedTask) return;
     if (source !== "supabase") return;
-    if (!githubAppConnected) return;
+    if (!githubInstallationAvailable) return;
     if (!hasGitHubIssue(selectedTask)) return;
     if (autoImportedGitHubCommentsRef.current.has(selectedTask.id)) return;
 
     autoImportedGitHubCommentsRef.current.add(selectedTask.id);
     importGitHubComments(selectedTask, { silent: true });
-  }, [githubAppConnected, importGitHubComments, selectedTask, source]);
+  }, [githubInstallationAvailable, importGitHubComments, selectedTask, source]);
 
   const reportTaskBlocker = (task: Task, payload: { reason: string; impact: string; needsHelpFrom: string }) => {
     if (!currentProfile) {
@@ -177,7 +172,7 @@ export function useTaskCollaborationCommands({
 
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert", githubSyncStatus: "not_synced", githubSyncError: "" } : item)),
+      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, status: "Blockiert", githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
       taskBlockers: [localBlocker, ...current.taskBlockers],
     }));
 
@@ -222,7 +217,7 @@ export function useTaskCollaborationCommands({
       ...current,
       tasks: current.tasks.map((item) =>
         item.id === task.id || item.id === payload.relatedTaskId
-          ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" }
+          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
           : item,
       ),
     }));
@@ -254,7 +249,7 @@ export function useTaskCollaborationCommands({
       taskRelations: current.taskRelations.filter((item) => item.id !== relation.id),
       tasks: current.tasks.map((item) =>
         item.id === relation.taskId || item.id === relation.relatedTaskId
-          ? { ...item, githubSyncStatus: "not_synced", githubSyncError: "" }
+          ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" }
           : item,
       ),
     }));

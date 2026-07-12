@@ -35,7 +35,7 @@ type TaskDetailSurfaceProps = {
   detailDataLoading?: boolean;
   commentImportNotice?: string;
   commentImportPending?: boolean;
-  githubAppConnected: boolean;
+  githubInstallationAvailable: boolean;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
@@ -71,7 +71,7 @@ export function TaskDetailSurface({
   detailDataLoading = false,
   commentImportNotice = "",
   commentImportPending = false,
-  githubAppConnected,
+  githubInstallationAvailable,
   onUpdate,
   onAddComment,
   onUploadAttachment,
@@ -193,11 +193,10 @@ export function TaskDetailSurface({
           canManageTaskMeta={controller.permissions.canManageTaskMeta}
           canManageReviewOwner={controller.permissions.canManageReviewOwner}
           canOpenReview={controller.permissions.canOpenReview}
-          canSyncGitHub={controller.permissions.canSyncGitHub}
           canDeleteTask={controller.permissions.canDeleteTask}
           canChangeTaskStatus={controller.permissions.canUpdateStatus}
           pending={pending}
-          githubAppConnected={githubAppConnected}
+          githubInstallationAvailable={githubInstallationAvailable}
           onUpdate={onUpdate}
           onSyncGitHub={onSyncGitHub}
           onOpenReview={onOpenReview}
@@ -212,6 +211,7 @@ export function TaskDetailSurface({
           activities={activities}
           notice={commentImportNotice}
           profiles={teamProfiles}
+          currentProfileId={currentProfile?.id || ""}
           pending={pending}
           importPending={commentImportPending}
           readOnly={!controller.permissions.canComment}

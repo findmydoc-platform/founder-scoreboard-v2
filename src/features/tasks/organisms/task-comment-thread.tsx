@@ -12,6 +12,7 @@ type Props = {
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
   profiles: Profile[];
+  currentProfileId?: string;
   pending?: boolean;
   importPending?: boolean;
   notice?: string;
@@ -47,6 +48,8 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       authorLogin: "",
       authorAvatarUrl: "",
       htmlUrl: "",
+      githubDeliveryStatus: comment.githubDeliveryStatus,
+      githubCommentUrl: comment.githubCommentUrl,
     })),
     ...externalComments.map((comment) => ({
       id: `github-comment-${comment.id}`,
@@ -58,6 +61,8 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       authorLogin: comment.authorLogin,
       authorAvatarUrl: comment.authorAvatarUrl,
       htmlUrl: comment.htmlUrl,
+      githubDeliveryStatus: "delivered" as const,
+      githubCommentUrl: comment.htmlUrl,
     })),
   ].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
 }
@@ -67,6 +72,7 @@ export function TaskCommentThread({
   externalComments = [],
   activities = [],
   profiles,
+  currentProfileId = "",
   pending = false,
   importPending = false,
   notice = "",
@@ -126,7 +132,7 @@ export function TaskCommentThread({
         </div>
       )}
 
-      <TaskCommentTimeline items={timeline} profiles={profiles} />
+      <TaskCommentTimeline items={timeline} profiles={profiles} currentProfileId={currentProfileId} />
       {!readOnly && (
         <TaskCommentComposer
           pending={pending}

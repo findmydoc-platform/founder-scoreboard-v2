@@ -164,7 +164,7 @@ test("backlog ordering API is operational-lead guarded and does not dirty github
   const ordering = await readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8");
   const migration = await readFile("supabase/0048_transactional_planning_batches.sql", "utf8");
 
-  assert.match(route, /requireFounder/);
+  assert.match(route, /requirePlanningContributor/);
   assert.match(route, /isOperationalLeadRole/);
   assert.match(route, /Nur CEO oder Deputy können die Backlog-Reihenfolge ändern/);
   assert.match(route, /update_backlog_order_transaction/);
@@ -173,7 +173,7 @@ test("backlog ordering API is operational-lead guarded and does not dirty github
   assert.match(migration, /sort_order = requested\."sortOrder"/);
   assert.match(migration, /task\.backlog_reorder/);
   assert.match(migration, /task\.updated_at <> requested\."expectedUpdatedAt"/);
-  assert.doesNotMatch(route, /github_sync_status|github_sync_error|task_activity/);
+  assert.doesNotMatch(route, /github_issue_sync_status|github_issue_sync_error|task_activity/);
   assert.match(apiClient, /updateBacklogOrderRequest/);
   assert.match(apiClient, /\/api\/tasks\/backlog-order/);
 });

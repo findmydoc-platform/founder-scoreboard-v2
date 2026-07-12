@@ -15,11 +15,16 @@ export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
 }
 
 export function mapTaskComment(row: DbTaskComment): TaskComment {
+  const delivery = Array.isArray(row.task_comment_github_deliveries)
+    ? row.task_comment_github_deliveries[0]
+    : row.task_comment_github_deliveries;
   return {
     id: row.id,
     taskId: row.task_id,
     profileId: row.profile_id || "",
     comment: row.comment,
+    githubDeliveryStatus: delivery?.status || "pending",
+    githubCommentUrl: delivery?.github_comment_url || "",
     createdAt: row.created_at,
   };
 }

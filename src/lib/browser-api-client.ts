@@ -21,7 +21,9 @@ export type BrowserApiJsonResult<T> = {
 
 export type BrowserAuthSnapshot = {
   githubLogin: string;
-  githubAppConnected: boolean;
+  githubInstallationAvailable: boolean;
+  githubUserConnected: boolean;
+  waitingGitHubCommentCount: number;
 };
 
 function currentRelativeUrl() {
@@ -99,16 +101,26 @@ export function createBrowserApiClient({
 
   async function getAuthSnapshot(): Promise<BrowserAuthSnapshot> {
     const session = await readSession();
-    let githubAppConnected = false;
+    let githubInstallationAvailable = false;
+    let githubUserConnected = false;
+    let waitingGitHubCommentCount = 0;
     if (session?.access_token) {
       const status = await fetch("/api/github-app/status", {
         headers: { authorization: `Bearer ${session.access_token}` },
-      }).then((response) => response.ok ? response.json() : null).catch(() => null) as { connected?: boolean } | null;
-      githubAppConnected = Boolean(status?.connected);
+      }).then((response) => response.ok ? response.json() : null).catch(() => null) as {
+        installation?: { available?: boolean };
+        user?: { connected?: boolean };
+        waitingCommentCount?: number;
+      } | null;
+      githubInstallationAvailable = Boolean(status?.installation?.available);
+      githubUserConnected = Boolean(status?.user?.connected);
+      waitingGitHubCommentCount = Number(status?.waitingCommentCount || 0);
     }
     return {
       githubLogin: authLoginFromSession(session),
-      githubAppConnected,
+      githubInstallationAvailable,
+      githubUserConnected,
+      waitingGitHubCommentCount,
     };
   }
 

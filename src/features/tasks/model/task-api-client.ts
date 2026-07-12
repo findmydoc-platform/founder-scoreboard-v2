@@ -68,14 +68,32 @@ export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
 }
 
 export function syncTaskToGitHubRequest(apiClient: BrowserApiClient, taskId: string, options: { createIfMissing?: boolean } = {}) {
-  return apiClient.requestJson<{ code?: string; error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/sync-github`, {
+  return apiClient.requestJson<{
+    code?: string;
+    error?: string;
+    task?: Partial<Task>;
+    commentDelivery?: {
+      delivered: number;
+      reconciled: number;
+      created: number;
+      waitingForAuthorConnection: number;
+      waitingForIssue: number;
+      retryScheduled: number;
+      failed: number;
+    };
+    notices?: Array<{ code: string; level: "info" | "warning"; message: string }>;
+  }>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
     json: { createIfMissing: Boolean(options.createIfMissing) },
   });
 }
 
 export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: string, comment: string) {
-  return apiClient.requestJson<{ error?: string; githubSyncError?: string; comment?: PlanningData["taskComments"][number] }>(`/api/tasks/${taskId}/comments`, {
+  return apiClient.requestJson<{
+    error?: string;
+    notice?: { code: string; level: "info"; message: string } | null;
+    comment?: PlanningData["taskComments"][number];
+  }>(`/api/tasks/${taskId}/comments`, {
     method: "POST",
     json: { comment },
   });

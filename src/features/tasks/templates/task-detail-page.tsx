@@ -78,7 +78,9 @@ export function TaskDetailPage({
         actions={(
           <GitHubConnectionStatus
             authenticated={source === "supabase"}
-            available={workflow.githubAppConnected}
+            installationAvailable={workflow.githubInstallationAvailable}
+            userConnected={workflow.githubUserConnected}
+            waitingCommentCount={workflow.waitingGitHubCommentCount}
             failed={workflow.githubReconnectFailed}
             busy={workflow.isPending}
             onReconnect={workflow.reconnectGitHub}
@@ -107,7 +109,7 @@ export function TaskDetailPage({
           error={workflow.error}
           commentImportNotice={workflow.localCommentImportNotice}
           commentImportPending={workflow.githubCommentImportPending}
-          githubAppConnected={workflow.githubAppConnected}
+          githubInstallationAvailable={workflow.githubInstallationAvailable}
           onUpdate={workflow.updateTask}
           onAddComment={workflow.addComment}
           onUploadAttachment={workflow.uploadAttachment}

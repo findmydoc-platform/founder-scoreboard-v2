@@ -14,7 +14,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
     setTaskDialogDefaults,
   } = options;
 
-  const { syncLinkedGitHubTasks, syncTaskToGitHub } = useTaskGitHubSyncCommand(options);
+  const { githubSyncNotice, syncLinkedGitHubTasks, syncTaskToGitHub } = useTaskGitHubSyncCommand(options);
   const { updateTask } = useTaskUpdateCommand({
     ...options,
     setStatusGuardNotice,
@@ -33,6 +33,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
   return {
     createTask,
     deleteTask,
+    githubSyncNotice,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
     updateTask,

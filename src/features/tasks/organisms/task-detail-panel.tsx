@@ -27,7 +27,7 @@ type Props = {
   source: "seed" | "supabase";
   pending: boolean;
   error?: string;
-  githubAppConnected: boolean;
+  githubInstallationAvailable: boolean;
   onClose: () => void;
   onUpdate: (patch: Partial<Task>) => void;
   onAddComment: (comment: string) => Promise<void> | void;
