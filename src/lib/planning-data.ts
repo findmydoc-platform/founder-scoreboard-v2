@@ -98,10 +98,14 @@ export async function getPlanningData(
   const supabase = getServerSupabase();
   if (!supabase) return planningDataFailureResult();
 
-  const notificationReconciliation = await reconcileNotificationEvents(supabase, {
-    currentProfileId: access?.currentProfileId || null,
-    platformRole: access?.platformRole || null,
-  });
+  const notificationEventsLoaded = shouldLoad(scope, "notificationEvents");
+  const shouldReconcileNotifications = options.headerData !== "deferred" || notificationEventsLoaded;
+  const notificationReconciliation = shouldReconcileNotifications
+    ? await reconcileNotificationEvents(supabase, {
+      currentProfileId: access?.currentProfileId || null,
+      platformRole: access?.platformRole || null,
+    })
+    : null;
   const rows = await loadPlanningDataRows(supabase, scope);
   if (hasCorePlanningDataError(rows)) {
     return planningDataFailureResult();
@@ -114,10 +118,10 @@ export async function getPlanningData(
       currentProfileId: access?.currentProfileId || null,
       platformRole: access?.platformRole || null,
       data,
-      notificationEventsReconciled: notificationReconciliation.ok,
+      notificationEventsReconciled: notificationReconciliation?.ok || false,
       fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
       eventsLoaded: shouldLoad(scope, "events"),
-      notificationEventsLoaded: shouldLoad(scope, "notificationEvents"),
+      notificationEventsLoaded,
     });
 
   return {

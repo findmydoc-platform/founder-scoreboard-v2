@@ -4,27 +4,30 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const supabase = {};
 
-function planningDataLoader(rows = {}) {
+function planningDataLoader(rows = {}, options = {}) {
   return {
     hasCorePlanningDataError: () => false,
-    loadPlanningDataRows: async () => rows,
-    mapPlanningDataRows: () => ({
+    loadPlanningDataRows: async () => {
+      options.onLoadRows?.();
+      return rows;
+    },
+    mapPlanningDataRows: () => options.data || ({
       marker: "planning-data",
       notificationEvents: [],
       notificationDeliveries: [],
     }),
-    shouldLoad: () => false,
+    shouldLoad: (_scope, key) => options.loadedKeys?.includes(key) || false,
   };
 }
 
-test("planning data reconciliation is reused by the header load", async () => {
+test("deferred planning data skips SSR reconciliation when notification events are excluded", async () => {
   let reconciliationCalls = 0;
-  let headerOptions;
+  let headerCalls = 0;
   const planningData = await loadTranspiledModule("src/lib/planning-data.ts", {
     "./planning-header-data": {
-      emptyPlanningHeaderData: {},
-      loadPlanningHeaderData: async (_supabase, options) => {
-        headerOptions = options;
+      emptyPlanningHeaderData: { marker: "empty-header-data" },
+      loadPlanningHeaderData: async () => {
+        headerCalls += 1;
         return { marker: "header-data" };
       },
     },
@@ -40,12 +43,94 @@ test("planning data reconciliation is reused by the header load", async () => {
     "./planning-data-availability": { allowsLocalPlanningFallback: () => false },
   });
 
+  const result = await planningData.getPlanningData({ notificationEvents: false }, {
+    currentProfileId: "profile-1",
+    platformRole: "founder",
+  }, { headerData: "deferred" });
+
+  assert.equal(reconciliationCalls, 0);
+  assert.equal(headerCalls, 0);
+  assert.equal(result.headerData.marker, "empty-header-data");
+});
+
+test("deferred notification data reconciles exactly once before loading resolved rows", async () => {
+  const callOrder = [];
+  let notificationsResolved = false;
+  const planningData = await loadTranspiledModule("src/lib/planning-data.ts", {
+    "./planning-header-data": {
+      emptyPlanningHeaderData: {},
+      loadPlanningHeaderData: async () => {
+        assert.fail("deferred planning data must not load header data during SSR");
+      },
+    },
+    "./planning-data-loader": planningDataLoader({}, {
+      loadedKeys: ["notificationEvents"],
+      onLoadRows: () => {
+        callOrder.push("rows");
+        assert.equal(notificationsResolved, true);
+      },
+      data: {
+        marker: "planning-data",
+        notificationEvents: [{ id: 1, recipientProfileId: "profile-1", status: "resolved" }],
+        notificationDeliveries: [],
+      },
+    }),
+    "./platform": { isOperationalLeadRole: () => false },
+    "./notification-resolution": {
+      reconcileNotificationEvents: async () => {
+        callOrder.push("reconcile");
+        notificationsResolved = true;
+        return { ok: true, checked: 1, resolved: 1, error: "" };
+      },
+    },
+    "./supabase": { getServerSupabase: () => supabase },
+    "./planning-data-availability": { allowsLocalPlanningFallback: () => false },
+  });
+
+  const result = await planningData.getPlanningData({ notificationEvents: true }, {
+    currentProfileId: "profile-1",
+    platformRole: "founder",
+  }, { headerData: "deferred" });
+
+  assert.deepEqual(callOrder, ["reconcile", "rows"]);
+  assert.equal(result.data.notificationEvents[0].status, "resolved");
+});
+
+test("planning data reconciliation is reused by the header load", async () => {
+  let reconciliationCalls = 0;
+  let headerOptions;
+  const callOrder = [];
+  const planningData = await loadTranspiledModule("src/lib/planning-data.ts", {
+    "./planning-header-data": {
+      emptyPlanningHeaderData: {},
+      loadPlanningHeaderData: async (_supabase, options) => {
+        callOrder.push("header");
+        headerOptions = options;
+        return { marker: "header-data" };
+      },
+    },
+    "./planning-data-loader": planningDataLoader({}, {
+      onLoadRows: () => callOrder.push("rows"),
+    }),
+    "./platform": { isOperationalLeadRole: () => false },
+    "./notification-resolution": {
+      reconcileNotificationEvents: async () => {
+        callOrder.push("reconcile");
+        reconciliationCalls += 1;
+        return { ok: true, checked: 0, resolved: 0, error: "" };
+      },
+    },
+    "./supabase": { getServerSupabase: () => supabase },
+    "./planning-data-availability": { allowsLocalPlanningFallback: () => false },
+  });
+
   const result = await planningData.getPlanningData({}, {
     currentProfileId: "profile-1",
     platformRole: "founder",
   });
 
   assert.equal(reconciliationCalls, 1);
+  assert.deepEqual(callOrder, ["reconcile", "rows", "header"]);
   assert.equal(headerOptions.notificationEventsReconciled, true);
   assert.equal(result.headerData.marker, "header-data");
 });
