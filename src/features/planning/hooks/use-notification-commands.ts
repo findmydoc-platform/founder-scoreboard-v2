@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
+import { navigateAfterNotificationStatusUpdate } from "@/features/notifications/model/notification-navigation";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
@@ -46,6 +48,7 @@ export function useNotificationCommands({
   startTransition,
   workspace,
 }: UseNotificationCommandsOptions) {
+  const router = useRouter();
   const [googleChatStatus, setGoogleChatStatus] = useState<GoogleChatStatus | null>(null);
   const [notificationDispatchMessage, setNotificationDispatchMessage] = useState("");
 
@@ -116,7 +119,7 @@ export function useNotificationCommands({
     );
   };
 
-  const updateNotificationStatus = (eventId: number, action: NotificationUserAction) => {
+  const updateNotificationStatus = (eventId: number, action: NotificationUserAction): Promise<void> => {
     setHeaderData((current) => {
       const removedHeaderEvent = current.notifications.data.items.some((event) => event.id === eventId);
       return {
@@ -147,47 +150,56 @@ export function useNotificationCommands({
       return nextData;
     });
 
-    if (source !== "supabase") return;
+    if (source !== "supabase") return Promise.resolve();
 
-    startTransition(async () => {
-      try {
-        const { response, body } = await planningApi.updateNotificationStatusRequest(apiClient, eventId, action);
-        if (!response.ok) throw new Error(body?.error || "Notification konnte nicht aktualisiert werden.");
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          notificationEvents: current.notificationEvents,
-        }));
-        await refreshPlanningData();
-        setSaveError(error instanceof Error ? error.message : "Notification konnte nicht aktualisiert werden.");
-      }
+    return new Promise<void>((resolve) => {
+      startTransition(async () => {
+        try {
+          const { response, body } = await planningApi.updateNotificationStatusRequest(apiClient, eventId, action);
+          if (!response.ok) throw new Error(body?.error || "Notification konnte nicht aktualisiert werden.");
+        } catch (error) {
+          setData((current) => ({
+            ...current,
+            notificationEvents: current.notificationEvents,
+          }));
+          await refreshPlanningData();
+          setSaveError(error instanceof Error ? error.message : "Notification konnte nicht aktualisiert werden.");
+        } finally {
+          resolve();
+        }
+      });
     });
   };
 
   const openNotification = (event: HeaderNotification) => {
-    updateNotificationStatus(event.id, "seen");
     const target = notificationTarget(event);
     if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
       if (!task && taskOverlayWorkspaces.has(workspace)) {
+        void updateNotificationStatus(event.id, "seen");
         setSaveError("Die verknüpfte Aufgabe wurde nicht gefunden. Der Hinweis kann geschlossen werden.");
         setShowNotifications(false);
         return;
       }
       if (!task || !taskOverlayWorkspaces.has(workspace)) {
         setShowNotifications(false);
-        window.location.assign(target.href);
+        void navigateAfterNotificationStatusUpdate(
+          () => updateNotificationStatus(event.id, "seen"),
+          () => router.push(target.href),
+        );
         return;
       }
+      void updateNotificationStatus(event.id, "seen");
       openTaskPanel(task.id);
     } else {
+      void updateNotificationStatus(event.id, "seen");
       setWorkspace(target.workspace);
     }
     setShowNotifications(false);
   };
 
   const dismissNotification = (eventId: number) => {
-    updateNotificationStatus(eventId, "dismiss");
+    void updateNotificationStatus(eventId, "dismiss");
   };
 
   const openNotificationInbox = () => {
