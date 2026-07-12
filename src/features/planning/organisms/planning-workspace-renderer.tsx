@@ -123,6 +123,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           tasks={data.tasks}
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
+          onOpenTask={openTaskPanel}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({
             id: initiative.id,
             title: initiative.title,
@@ -146,7 +147,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           apiClient={apiClient}
           canManageBacklog={canManageTaskMeta}
           data={data}
-          onOpenTask={(task) => openTaskPanel(task.id)}
+          onOpenTask={openTaskPanel}
           onUpdateTask={updateTask}
           refreshPlanningData={refreshPlanningData}
           setData={setData}
@@ -161,6 +162,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           ownerFilter={reviewOwnerFilter}
           onStatusFilterChange={setReviewStatusFilter}
           onOwnerFilterChange={setReviewOwnerFilter}
+          onOpenTask={openTaskPanel}
         />
       )}
       {workspace === "events" && (
@@ -214,7 +216,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         <SprintScoreTableOverview
           data={data}
           pending={isPending}
-          onOpen={(task) => openTaskPanel(task.id)}
+          onOpenTask={openTaskPanel}
           onReview={reviewTask}
           onReopenReview={reopenReviewTask}
           onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
@@ -260,7 +262,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         githubInstallationAvailable={githubInstallationAvailable}
         notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
-        onOpenTask={(task) => openTaskPanel(task.id)}
+        onOpenTask={openTaskPanel}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
         onSyncTaskToGitHub={syncTaskToGitHub}
       />

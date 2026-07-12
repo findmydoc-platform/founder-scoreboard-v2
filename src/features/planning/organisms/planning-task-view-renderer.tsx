@@ -56,7 +56,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           packageForTask={(task) => packageById(data.packages, task.packageId)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
-          onOpenTask={(task) => openTaskPanel(task.id)}
+          onOpenTask={openTaskPanel}
           onCreateTask={setTaskDialogDefaults}
           onUpdateTask={updateTask}
           onDragOverStatus={setDragOverStatus}
@@ -77,7 +77,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
-          onOpenTask={(task) => openTaskPanel(task.id)}
+          onOpenTask={openTaskPanel}
           onUpdateTask={updateTask}
           onTogglePackage={togglePackageCollapse}
           onSetAllPackageCollapse={setAllPackageCollapse}
@@ -94,13 +94,13 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           blockers={data.taskBlockers}
           canChangeTaskStatus={canChangeTaskStatus}
           statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
-          onOpenTask={(task) => openTaskPanel(task.id)}
+          onOpenTask={openTaskPanel}
           onUpdateTask={updateTask}
         />
       )}
 
       {view === "gantt" && (
-        <GanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpen={(task) => openTaskPanel(task.id)} />
+        <GanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
       )}
     </>
   );

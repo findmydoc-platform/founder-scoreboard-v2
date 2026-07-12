@@ -1,5 +1,6 @@
 import { GripVertical } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { BacklogReadiness } from "@/features/backlog/molecules/backlog-readiness";
 import { backlogTableColumnCount, backlogTableColumns, backlogTableMinWidth } from "@/features/backlog/model/backlog-table-layout";
 import type { BacklogItem } from "@/features/backlog/model/backlog-view-model";
@@ -14,7 +15,7 @@ type BacklogRankTableProps = {
   isReordering: boolean;
   items: BacklogItem[];
   onMoveTask: (taskId: string, direction: -1 | 1) => void;
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onReorderTask: (taskId: string, beforeTaskId: string) => void;
 };
 
@@ -104,9 +105,9 @@ export function BacklogRankTable({
                 </DataCell>
                 <DataCell className="font-semibold text-slate-600">#{index + 1}</DataCell>
                 <DataCell className="max-w-sm">
-                  <button type="button" onClick={() => onOpenTask(item.task)} className="text-left font-semibold text-slate-950 hover:text-blue-700">
+                  <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="text-left font-semibold text-slate-950">
                     {item.task.title}
-                  </button>
+                  </TaskReferenceLink>
                 </DataCell>
                 <DataCell><UiBadge tone={typeTone(item.task)}>{typeLabel(item.task)}</UiBadge></DataCell>
                 <DataCell className="max-w-40 text-xs text-slate-600">{item.initiative?.title || "Nicht gesetzt"}</DataCell>

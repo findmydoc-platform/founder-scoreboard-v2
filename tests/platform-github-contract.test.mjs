@@ -232,9 +232,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(panelRelationshipContract, /Abhängigkeit existiert bereits/);
   assert.match(panelRelationshipContract, /Diese Abhängigkeit ist bereits gespeichert/);
   assert.match(relationshipSection, /relationMatchesDraft/);
-  assert.match(detail, /useTaskDetailWorkflow/);
+  assert.match(detail, /usePlanningAppController/);
   assert.match(taskDetailWorkflow, /useTaskRelationships/);
-  assert.match(detail, /task=\{workflow\.taskSnapshot\}/);
+  assert.match(detail, /onAddRelation=\{\(payload\) => controller\.addTaskRelation/);
   assert.match(relationshipHook, /Abhängigkeit konnte nicht gespeichert werden/);
   assert.match(relationshipHook, /Abhängigkeit konnte nicht entfernt werden/);
   assert.match(taskApiClient, /api\/tasks\/\$\{taskId\}\/relationships/);
@@ -376,14 +376,14 @@ test("app-only tasks are visibly marked without creating github issues", async (
 
   assert.match(ui, /GitHubMissingBadge/);
   assert.match(ui, /TaskGitHubSyncQueue/);
-  assert.match(taskCard, /Kein Issue/);
+  assert.match(taskCard, /Kein GitHub Issue/);
   assert.match(taskCard, /GitHub offen/);
   assert.match(taskCard, /Sync läuft/);
   assert.match(taskCard, /Sync fehlgeschlagen/);
   assert.doesNotMatch(notificationsOverviewUi, /task\.taskType === "deliverable"/);
   assert.doesNotMatch(notificationsOverviewUi, /Extern anlegen|Keine Aufgaben ohne externe Ablage/);
   assert.match(queue, /GitHub Issue anlegen/);
-  assert.match(queue, /Offene Issues syncen/);
+  assert.match(queue, /Offene GitHub Issues syncen/);
   assert.match(queue, /onlyFailed: true/);
   assert.match(queue, /Sync läuft bereits/);
   assert.match(panel, /TaskDetailSurface/);
@@ -393,8 +393,8 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(detailSurface, /TaskDetailPanelSidebar/);
   assert.match(panelSidebar, /Noch kein GitHub Issue/);
   assert.match(panelSidebar, /GitHub Issue anlegen/);
-  assert.match(detail, /onSyncGitHub=\{workflow\.syncGitHub\}/);
-  assert.match(detail, /taskSnapshot/);
+  assert.match(detail, /onSyncGitHub=\{\(options\) => controller\.syncTaskToGitHub\(task, options\)\}/);
+  assert.match(detail, /task=\{task\}/);
   assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
   assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
 });
@@ -495,9 +495,9 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(authHook, /visibilitychange/);
   assert.match(authHook, /5 \* 60 \* 1000/);
   assert.doesNotMatch(planningHeader, /markGitHubReauthAttempt|hasGitHubReauthAttempt/);
-  assert.match(detail, /useTaskDetailWorkflow/);
+  assert.match(detail, /usePlanningAppController/);
   assert.match(taskDetailWorkflow, /createBrowserApiClient/);
-  assert.match(taskDetailWorkflow, /startGitHubAppConnect/);
+  assert.match(detail, /controller\.signIn/);
   assert.match(ui, /GitHubConnectionStatus/);
   assert.doesNotMatch(ui, /GitHubAppReconnectBanner/);
   assert.match(detail, /GitHubConnectionStatus/);

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge, UiLinkButton, UiPanel } from "@/shared/atoms/ui-primitives";
 import { ReviewTaskAttentionBadges } from "@/features/tasks/molecules/task-attention-badges";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { buildReviewWorkspaceViewModel, isBlockedReviewTask, reviewStatusFilterOptions, type ReviewOwnerFilter, type ReviewStatusFilter } from "@/features/reviews/model/review-workspace-view-model";
@@ -17,6 +17,7 @@ type Props = {
   ownerFilter: ReviewOwnerFilter;
   onStatusFilterChange: (value: ReviewStatusFilter) => void;
   onOwnerFilterChange: (value: ReviewOwnerFilter) => void;
+  onOpenTask: (taskId: string) => void;
 };
 
 export function ReviewWorkspaceOverview({
@@ -26,6 +27,7 @@ export function ReviewWorkspaceOverview({
   ownerFilter,
   onStatusFilterChange,
   onOwnerFilterChange,
+  onOpenTask,
 }: Props) {
   const { visibleTasks, ownerOptions, metrics } = buildReviewWorkspaceViewModel({
     data,
@@ -121,9 +123,9 @@ export function ReviewWorkspaceOverview({
               {visibleTasks.map((task) => (
                 <tr key={task.id} className="hover:bg-slate-50">
                   <td className="max-w-[360px] border-b border-slate-100 px-4 py-3">
-                    <Link href={`/reviews/${encodeURIComponent(task.id)}`} className="block truncate font-semibold text-slate-950 hover:text-blue-700">
+                    <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full font-semibold text-slate-950">
                       {task.title}
-                    </Link>
+                    </TaskReferenceLink>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <ReviewTaskAttentionBadges task={task} />
                     </div>

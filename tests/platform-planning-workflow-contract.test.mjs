@@ -31,7 +31,7 @@ test("workflow logic hot spots are delegated to feature-local hooks", async () =
     {
       label: "task detail page shell",
       path: "src/features/tasks/templates/task-detail-page.tsx",
-      matches: [/useTaskDetailWorkflow/],
+      matches: [/usePlanningAppController/, /PlanningOverlayLayer/, /TaskDetailSurface/],
       excludes: [/createBrowserApiClient|updateTaskRequest|syncTaskToGitHubRequest|useTaskComments|useTaskRelationships|useTransition/],
     },
     {
@@ -176,7 +176,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning task selection hook",
       path: "src/features/planning/hooks/use-planning-task-selection.ts",
-      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /openReviewSheet/, /setSelectedTaskId\(taskId\)/, /addEventListener\("keydown"/],
+      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /openReviewSheet/, /setSelectedTaskId\(nextTaskId\)/, /addEventListener\("keydown"/, /pushTaskPanelHistory/, /backTaskPanelHistory/],
       excludes: [/window\.history\.length|router\.back\(\)|router\.push\(`\/tasks/],
     },
     {

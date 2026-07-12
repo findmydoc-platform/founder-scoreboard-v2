@@ -25,11 +25,15 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     authUser,
     currentProfile,
     data,
+    dismissNotification,
     filters,
     filtersAvailable,
     isPending,
     localStateLoaded,
     mobileNavOpen,
+    openNotification,
+    openNotificationInbox,
+    openTaskPanel,
     protectedDataLoaded,
     releaseSidebarFocus,
     reopenReviewTask,
@@ -42,6 +46,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     signIn,
     signOut,
     showFilters,
+    showNotifications,
     sidebarRef,
     workspace,
   } = controller;
@@ -85,16 +90,24 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
 
   if (selectedReviewDetailTaskId) {
     return (
-      <ReviewDetailPage
-        data={data}
-        headerData={controller.headerData}
-        task={selectedReviewDetailTask}
-        currentProfile={currentProfile}
-        pending={isPending}
-        source={source}
-        onReview={reviewTask}
-        onReopen={reopenReviewTask}
-      />
+      <>
+        <ReviewDetailPage
+          data={data}
+          headerData={controller.headerData}
+          task={selectedReviewDetailTask}
+          currentProfile={currentProfile}
+          pending={isPending}
+          source={source}
+          onReview={reviewTask}
+          onReopen={reopenReviewTask}
+          onOpenTask={openTaskPanel}
+          notificationsOpen={showNotifications}
+          onToggleNotifications={() => showNotifications ? controller.setShowNotifications(false) : openNotificationInbox()}
+          onOpenNotification={openNotification}
+          onDismissNotification={dismissNotification}
+        />
+        <PlanningOverlayLayer controller={controller} />
+      </>
     );
   }
 

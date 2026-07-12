@@ -1,4 +1,5 @@
 import { CircleHelp, X } from "lucide-react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { relationshipHelpText, taskAssigneeLabel } from "@/lib/display";
 import { relationshipBadgeFor, relationshipBadgeToneClass } from "@/lib/relationship-view-model";
 import { normalizeStatus } from "@/lib/status";
@@ -30,6 +31,7 @@ export function RelationshipList({
   empty,
   canRemove,
   onRemove,
+  onOpenTask,
 }: {
   title: string;
   currentTask: Task;
@@ -37,6 +39,7 @@ export function RelationshipList({
   empty: string;
   canRemove?: (relation: TaskRelation) => boolean;
   onRemove?: (relation: TaskRelation) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   return (
     <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
@@ -55,7 +58,13 @@ export function RelationshipList({
             <div key={`${relation.id}-${task?.id || "unknown"}`} className="flex items-start justify-between gap-2 rounded-md bg-white px-2 py-1.5 text-xs">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="break-words font-semibold text-slate-800">{task?.title || relation.relatedTaskId}</span>
+                  {task ? (
+                    <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="break-words font-semibold text-slate-800">
+                      {task.title}
+                    </TaskReferenceLink>
+                  ) : (
+                    <span className="break-words font-semibold text-slate-800">{relation.relatedTaskId}</span>
+                  )}
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${relationshipBadgeToneClass(badge.tone)}`}>
                     {badge.label}
                   </span>

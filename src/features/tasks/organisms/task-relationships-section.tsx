@@ -15,6 +15,7 @@ type Props = {
   relationTargetOptions: Array<{ value: string; label: string }>;
   allowedRelationTypes: TaskRelationType[];
   pending: boolean;
+  onOpenTask: (taskId: string) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
   canRemoveRelation: (relation: TaskRelation) => boolean;
   onDependsOnChange: (dependsOn: string) => void;
@@ -33,6 +34,7 @@ export function TaskRelationshipsSection({
   relationTargetOptions,
   allowedRelationTypes,
   pending,
+  onOpenTask,
   onRemoveRelation,
   canRemoveRelation,
   onDependsOnChange,
@@ -47,9 +49,9 @@ export function TaskRelationshipsSection({
     <div>
       <h3 className="text-sm font-semibold text-slate-950">Abhängigkeiten</h3>
       <div className="mt-2 grid gap-2">
-        <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
-        <RelationshipList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
-        <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="Keine losen Verknüpfungen." canRemove={canRemoveRelation} onRemove={onRemoveRelation} />
+        <RelationshipList title="Wartet auf" currentTask={task} rows={waitsOn} empty="Wartet auf keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} />
+        <RelationshipList title="Blockiert" currentTask={task} rows={blocks} empty="Blockiert keine andere Aufgabe." canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} />
+        <RelationshipList title="Verknüpft mit" currentTask={task} rows={related} empty="Keine losen Verknüpfungen." canRemove={canRemoveRelation} onRemove={onRemoveRelation} onOpenTask={onOpenTask} />
       </div>
       {dependsOn && (
         <textarea

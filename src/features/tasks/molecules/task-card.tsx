@@ -2,6 +2,7 @@
 
 import { Columns3, FileText, Link2, MessageSquare, PanelRight } from "lucide-react";
 import type { DragEvent } from "react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
@@ -28,7 +29,7 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
       title="Kein GitHub Issue angelegt."
       className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}
     >
-      Kein Issue
+      Kein GitHub Issue
     </UiBadge>
   );
 }
@@ -81,7 +82,7 @@ function attentionTone(signal: TaskAttentionSignal): CardRiskSignal["tone"] {
 }
 
 function githubRiskSignal(task: Task): CardRiskSignal | null {
-  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein Issue", tone: "amber" };
+  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein GitHub Issue", tone: "amber" };
   if (task.githubIssueSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
   if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
   if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
@@ -147,7 +148,7 @@ export function TaskCard({
   showOpenButton = true,
   showStatus = false,
   showStatusControl = false,
-  onOpen,
+  onOpenTask,
   onStatusChange,
   onDragStart,
   onDragEnd,
@@ -167,7 +168,7 @@ export function TaskCard({
   showOpenButton?: boolean;
   showStatus?: boolean;
   showStatusControl?: boolean;
-  onOpen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
@@ -191,24 +192,25 @@ export function TaskCard({
       }}
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => onOpen(task)}
+        <TaskReferenceLink
+          task={task}
+          onOpenTask={onOpenTask}
           className="min-w-0 max-w-full text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
         >
           <span className="inline-flex min-w-0 max-w-full items-start gap-1.5">
             <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.title}</span>
           </span>
-        </button>
+        </TaskReferenceLink>
         {showOpenButton && (
-          <button
-            type="button"
-            onClick={() => onOpen(task)}
+          <TaskReferenceLink
+            task={task}
+            onOpenTask={onOpenTask}
+            showIcon={false}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
             aria-label="Aufgabe öffnen"
           >
             <PanelRight size={15} />
-          </button>
+          </TaskReferenceLink>
         )}
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">

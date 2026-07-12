@@ -21,7 +21,7 @@ type TaskBoardViewProps = {
   statusOptionsForTask: (task: Task) => TaskStatus[];
   packageForTask: (task: Task) => Package | undefined;
   ownerColorForTask: (task: Task) => string;
-  onOpenTask: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onCreateTask: (defaults: Partial<NewTaskDraft>) => void;
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   onDragOverStatus: (status: TaskStatus | null) => void;
@@ -107,7 +107,7 @@ export function TaskBoardView({
                     showOpenButton={false}
                     showStatus={false}
                     showStatusControl={false}
-                    onOpen={onOpenTask}
+                    onOpenTask={onOpenTask}
                     onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}

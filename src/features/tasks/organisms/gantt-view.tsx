@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { taskRelationsFor } from "@/lib/platform";
 import type { Package, Sprint, Task, TaskRelation } from "@/lib/types";
 import { DataOverflow, DataSurface } from "@/shared/molecules/data-surface";
@@ -15,7 +16,7 @@ function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
 }
 
-export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tasks: Task[]; packages: Package[]; sprints: Sprint[]; relations: TaskRelation[]; onOpen: (task: Task) => void }) {
+export function GanttView({ tasks, packages, sprints, relations, onOpenTask }: { tasks: Task[]; packages: Package[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
   const firstTaskStart = tasks
     .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || "") || parseIsoDate(task.startDate))
     .filter((date): date is Date => Boolean(date))
@@ -34,10 +35,10 @@ export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tas
         <div className="border-r border-slate-200">
           <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabe</div>
           {tasks.map((task) => (
-            <button key={task.id} type="button" onClick={() => onOpen(task)} className="flex h-12 w-full items-center gap-2 border-b border-slate-100 px-4 text-left text-sm hover:bg-slate-50">
+            <TaskReferenceLink key={task.id} task={task} onOpenTask={onOpenTask} showIcon={false} layout="flex" className="h-12 w-full items-center gap-2 border-b border-slate-100 px-4 text-left text-sm hover:bg-slate-50 hover:no-underline">
               <ChevronRight size={14} className="text-slate-400" />
               <span className="min-w-0 truncate font-medium">{task.title}</span>
-            </button>
+            </TaskReferenceLink>
           ))}
         </div>
         <div>
@@ -57,16 +58,17 @@ export function GanttView({ tasks, packages, sprints, relations, onOpen }: { tas
             const pack = packageById(packages, task.packageId);
             return (
               <div key={task.id} className="relative h-12 border-b border-slate-100" style={{ backgroundImage: "linear-gradient(to right, transparent calc(100% - 1px), #eef2f7 1px)", backgroundSize: `${100 / days.length}% 100%` }}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(task)}
+                <TaskReferenceLink
+                  task={task}
+                  onOpenTask={onOpenTask}
+                  showIcon={false}
                   className="absolute top-3 h-6 rounded bg-blue-500 px-2 text-left text-[11px] font-semibold text-white shadow-sm"
                   style={{ left: `${(left / days.length) * 100}%`, width: `${Math.min(100 - (left / days.length) * 100, (length / days.length) * 100)}%` }}
                   title={`${task.title} · ${pack?.title || "ohne Initiative"}`}
                   aria-label={`${task.title} · ${length} Tage`}
                 >
                   <span className="block truncate">{length}d</span>
-                </button>
+                </TaskReferenceLink>
                 {taskRelationsFor(task.id, relations).waitsOn.length > 0 && <span className="absolute right-2 top-4 h-2 w-2 rounded-full bg-amber-400" title="Wartet auf andere Aufgabe" />}
                 {taskRelationsFor(task.id, relations).blocks.length > 0 && <span className="absolute right-5 top-4 h-2 w-2 rounded-full bg-blue-400" title="Blockiert andere Aufgabe" />}
               </div>

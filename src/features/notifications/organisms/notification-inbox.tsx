@@ -3,6 +3,7 @@
 import { Bell, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
 import { formatDate } from "@/lib/display";
@@ -90,17 +91,39 @@ export function NotificationInbox({
               <UiEmptyState className="px-4 py-8">
                 {notifications.error || "Benachrichtigungen konnten nicht geladen werden."}
               </UiEmptyState>
-            ) : items.length ? items.map((event) => (
+            ) : items.length ? items.map((event) => {
+              const taskReference = event.entityType.trim().toLowerCase() === "task" && event.entityId
+                ? { id: event.entityId, title: event.title }
+                : null;
+              const content = (
+                <>
+                  <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
+                    {notificationTypeLabel(event.type)}
+                  </UiBadge>
+                  <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
+                  {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
+                  <span className="mt-1 block text-xs text-slate-400">{formatDate(event.createdAt)}</span>
+                </>
+              );
+
+              return (
                 <article key={event.id} className="group rounded-md border border-transparent p-2 hover:border-slate-100 hover:bg-slate-50">
                   <div className="flex items-start justify-between gap-2">
-                    <button type="button" onClick={() => (onOpen || openHeaderNotificationTarget)(event)} className="min-w-0 flex-1 text-left">
-                      <UiBadge tone={notificationBadgeTone(event.type)} size="xs" className="text-[11px]">
-                        {notificationTypeLabel(event.type)}
-                      </UiBadge>
-                      <span className="mt-1.5 block truncate text-sm font-semibold text-slate-950">{event.title}</span>
-                      {event.body && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{event.body}</span>}
-                      <span className="mt-1 block text-xs text-slate-400">{formatDate(event.createdAt)}</span>
-                    </button>
+                    {taskReference ? (
+                      <TaskReferenceLink
+                        task={taskReference}
+                        onOpenTask={onOpen ? () => onOpen(event) : undefined}
+                        showIcon={false}
+                        layout="block"
+                        className="min-w-0 flex-1 text-left hover:no-underline"
+                      >
+                        {content}
+                      </TaskReferenceLink>
+                    ) : (
+                      <button type="button" onClick={() => (onOpen || openHeaderNotificationTarget)(event)} className="min-w-0 flex-1 cursor-pointer text-left">
+                        {content}
+                      </button>
+                    )}
                     {onDismiss && (
                       <button
                         type="button"
@@ -113,7 +136,8 @@ export function NotificationInbox({
                     )}
                   </div>
                 </article>
-            )) : (
+              );
+            }) : (
               <UiEmptyState className="px-4 py-8">
                 Keine neuen Hinweise.
               </UiEmptyState>

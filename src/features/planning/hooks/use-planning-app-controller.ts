@@ -135,6 +135,7 @@ export function usePlanningAppController({
     setSelectedTaskId,
   });
   const {
+    backTaskPanel,
     closeTaskPanel,
     openReviewSheet,
     openTaskPanel,
@@ -209,6 +210,7 @@ export function usePlanningAppController({
     canManageFinalTaskStatus,
     canManageTaskMeta,
     canUseCeoIntake,
+    backTaskPanel,
     closeTaskPanel,
     currentProfile,
     data,
@@ -254,6 +256,7 @@ export function usePlanningAppController({
     selectedTaskDetailLoading: taskDetailDataLoader.selectedTaskDetailLoading,
     selectedTaskExternalComments: taskSelection.selectedTaskExternalComments,
     selectedTaskSubIssues: taskSelection.selectedTaskSubIssues,
+    taskPanelPreviousTask: taskSelection.taskPanelPreviousTask,
     setData,
     setDevProfileId,
     setFilters,

@@ -25,7 +25,7 @@ type ReviewChecklist = {
 export function SprintScoreTableOverview({
   data,
   pending,
-  onOpen,
+  onOpenTask,
   onReview,
   onReopenReview,
   onRequestReview,
@@ -49,7 +49,7 @@ export function SprintScoreTableOverview({
 }: {
   data: PlanningData;
   pending: boolean;
-  onOpen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
   onReview: (
     task: Task,
     reviewStatus: ReviewStatus,
@@ -212,7 +212,7 @@ export function SprintScoreTableOverview({
         canReviewTask={canReviewTask}
         reviewOwnerName={reviewOwnerName}
         isSelfReview={isSelfReview}
-        onOpen={onOpen}
+        onOpenTask={onOpenTask}
         onRequestReview={onRequestReview}
         onChangeStatus={onChangeStatus}
         onAssignSprint={onAssignSprint}
@@ -227,6 +227,7 @@ export function SprintScoreTableOverview({
         pending={pending}
         onReview={onReview}
         onReopen={onReopenReview}
+        onOpenTask={onOpenTask}
       />
     </div>
   );

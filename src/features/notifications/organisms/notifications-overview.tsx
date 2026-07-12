@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { NotificationOutboxPanel } from "@/features/notifications/organisms/notification-outbox-panel";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { formatDate } from "@/lib/display";
 import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
 import { isOperationalLeadRole } from "@/lib/platform";
@@ -147,25 +148,41 @@ export function NotificationsOverview({
               {filteredPersonalNotifications.map((event) => {
                 const actorName = profileName(data.profiles, event.actorProfileId);
                 const showTypeBadge = shouldShowTypeBadge(event.type);
+                const task = event.entityType.trim().toLowerCase() === "task"
+                  ? data.tasks.find((item) => item.id === event.entityId) || null
+                  : null;
+                const content = (
+                  <>
+                    <span className="block truncate font-semibold text-slate-950">{event.title}</span>
+                    {event.body && <span className="mt-1 block line-clamp-2 text-sm leading-5 text-slate-600">{event.body}</span>}
+                    <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      {showTypeBadge && <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>}
+                      {(personalFilter === "all" || event.status === "pending" && event.seenAt) && (
+                        <UiBadge tone={eventStatusTone(event.status)} size="xs">{notificationLifecycleLabel(event)}</UiBadge>
+                      )}
+                      <span>{actorName || "System"}</span>
+                      <span>·</span>
+                      <span>{formatDate(event.createdAt)}</span>
+                    </span>
+                  </>
+                );
                 return (
                   <article key={event.id} className="group relative border-b border-slate-100 last:border-b-0">
-                    <button
-                      type="button"
-                      onClick={() => onOpenNotification(event)}
-                      className="block w-full min-w-0 px-4 py-3 pr-12 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    >
-                      <span className="block truncate font-semibold text-slate-950">{event.title}</span>
-                      {event.body && <span className="mt-1 block line-clamp-2 text-sm leading-5 text-slate-600">{event.body}</span>}
-                      <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        {showTypeBadge && <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>}
-                        {(personalFilter === "all" || event.status === "pending" && event.seenAt) && (
-                          <UiBadge tone={eventStatusTone(event.status)} size="xs">{notificationLifecycleLabel(event)}</UiBadge>
-                        )}
-                        <span>{actorName || "System"}</span>
-                        <span>·</span>
-                        <span>{formatDate(event.createdAt)}</span>
-                      </span>
-                    </button>
+                    {task ? (
+                      <TaskReferenceLink
+                        task={task}
+                        onOpenTask={() => onOpenNotification(event)}
+                        showIcon={false}
+                        layout="block"
+                        className="w-full min-w-0 px-4 py-3 pr-12 text-left transition hover:bg-slate-50 hover:no-underline focus-visible:ring-inset"
+                      >
+                        {content}
+                      </TaskReferenceLink>
+                    ) : (
+                      <button type="button" onClick={() => onOpenNotification(event)} className="block w-full min-w-0 cursor-pointer px-4 py-3 pr-12 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                        {content}
+                      </button>
+                    )}
                     {event.status === "pending" && (
                       <button
                         type="button"

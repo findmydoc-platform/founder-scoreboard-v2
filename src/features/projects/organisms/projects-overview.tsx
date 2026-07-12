@@ -1,9 +1,9 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
@@ -15,12 +15,14 @@ export function ProjectsOverview({
   currentProfile,
   canManageInitiatives,
   onEditInitiative,
+  onOpenTask,
 }: {
   data: PlanningData;
   tasks: Task[];
   currentProfile?: Profile | null;
   canManageInitiatives: boolean;
   onEditInitiative: (initiative: Package) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   const milestones = data.milestones.length
     ? data.milestones
@@ -83,6 +85,7 @@ export function ProjectsOverview({
                       canEdit={canManageInitiatives || pack.ownerId === currentProfile?.id}
                       onToggle={() => setOpenInitiativeIds((current) => toggleSetValue(current, pack.id))}
                       onEdit={() => onEditInitiative(pack)}
+                      onOpenTask={onOpenTask}
                     />
                   ))}
                   {!groups.length && (
@@ -109,6 +112,7 @@ function InitiativeTreeItem({
   canEdit,
   onToggle,
   onEdit,
+  onOpenTask,
 }: {
   data: PlanningData;
   initiative: Package;
@@ -118,6 +122,7 @@ function InitiativeTreeItem({
   canEdit: boolean;
   onToggle: () => void;
   onEdit: () => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   const done = tasks.filter((task) => normalizeStatus(task.status) === "Erledigt").length;
   const blocked = tasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
@@ -164,7 +169,7 @@ function InitiativeTreeItem({
                 <div className="rounded-md bg-slate-50 p-2"><div className="text-xs text-slate-500">Aufwand</div><div className="font-semibold text-slate-900">{effort}h</div></div>
               </div>
             </div>
-            <DeliverableTable tasks={tasks} />
+            <DeliverableTable tasks={tasks} onOpenTask={onOpenTask} />
           </div>
         </div>
       )}
@@ -172,7 +177,7 @@ function InitiativeTreeItem({
   );
 }
 
-function DeliverableTable({ tasks }: { tasks: Task[] }) {
+function DeliverableTable({ tasks, onOpenTask }: { tasks: Task[]; onOpenTask: (taskId: string) => void }) {
   return (
     <div className="overflow-x-auto rounded-md border border-slate-200">
       <div className="grid min-w-[760px] grid-cols-[minmax(220px,1fr)_120px_110px_90px_120px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
@@ -183,20 +188,18 @@ function DeliverableTable({ tasks }: { tasks: Task[] }) {
         <span>Zeitraum</span>
       </div>
       {tasks.map((task) => (
-        <Link
-          key={task.id}
-          href={`/tasks/${encodeURIComponent(task.id)}`}
-          className="grid min-w-[760px] grid-cols-[minmax(220px,1fr)_120px_110px_90px_120px] gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50"
-        >
+        <div key={task.id} className="grid min-w-[760px] grid-cols-[minmax(220px,1fr)_120px_110px_90px_120px] gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50">
           <span className="min-w-0">
-            <span className="block truncate font-semibold text-slate-950">{task.title}</span>
+            <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full font-semibold text-slate-950">
+              <span className="block truncate">{task.title}</span>
+            </TaskReferenceLink>
             <span className="mt-0.5 block text-xs text-slate-500">{task.priority} · {task.workstream || "ohne Bereich"}</span>
           </span>
           <span className="truncate text-slate-700">{taskAssigneeLabel(task)}</span>
           <span className="text-slate-700">{normalizeStatus(task.status)}</span>
           <span className="text-slate-700">{task.hours}h</span>
           <span className="truncate text-slate-700">{dateRange(task)}</span>
-        </Link>
+        </div>
       ))}
       {!tasks.length && (
         <div className="px-3 py-5 text-center text-sm text-slate-500">Noch keine Deliverables in dieser Initiative.</div>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { reviewChecklistItems, reviewChecklistScore } from "@/features/sprint/model/sprint-score-view-model";
 import type { Task } from "@/lib/types";
-import { UiBadge, UiButton, UiLinkButton, UiNotice } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type ReviewChecklist = {
   acceptanceCriteriaMet?: boolean;
@@ -22,9 +23,10 @@ type Props = {
   pending: boolean;
   onReview: (task: Task, reviewStatus: "accepted" | "partial" | "changes_requested", scorePoints: number, checklist: ReviewChecklist, comment: string) => void;
   onReopen: (task: Task) => void;
+  onOpenTask: (taskId: string) => void;
 };
 
-export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, pending, onReview, onReopen }: Props) {
+export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, pending, onReview, onReopen, onOpenTask }: Props) {
   const [comment, setComment] = useState("");
   const [checklist, setChecklist] = useState<ReviewChecklist>({
     acceptanceCriteriaMet: false,
@@ -41,7 +43,9 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
         <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Accountable Review-Blatt</div>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-slate-950">{task.title}</h2>
+            <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="text-base font-semibold text-slate-950">
+              {task.title}
+            </TaskReferenceLink>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <UiBadge tone="white" size="xs">{taskAssigneeLabel(task)}</UiBadge>
               <UiBadge tone="white" size="xs">{task.priority}</UiBadge>
@@ -51,9 +55,9 @@ export function TaskReviewSheet({ task, reviewOwnerName, canReview, canReopen, p
               <UiBadge tone="white" size="xs">{reviewOwnerName}</UiBadge>
             </div>
           </div>
-          <UiLinkButton href={`/tasks/${encodeURIComponent(task.id)}`} variant="blueOutline" size="sm">
+          <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="h-8 shrink-0 items-center rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:no-underline">
             Aufgabe öffnen
-          </UiLinkButton>
+          </TaskReferenceLink>
         </div>
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">

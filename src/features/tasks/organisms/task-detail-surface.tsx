@@ -42,6 +42,7 @@ type TaskDetailSurfaceProps = {
   onImportGitHubComments: () => void;
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
   onCreateSubIssue: () => void;
+  onOpenTask: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
   onDelete: () => void;
@@ -78,6 +79,7 @@ export function TaskDetailSurface({
   onImportGitHubComments,
   onReportBlocker,
   onCreateSubIssue,
+  onOpenTask,
   onSyncGitHub,
   onOpenReview,
   onDelete,
@@ -135,6 +137,7 @@ export function TaskDetailSurface({
                 relationTargetOptions={relationTargetOptions}
                 allowedRelationTypes={relationshipAccess.allowedRelationTypes}
                 pending={pending}
+                onOpenTask={onOpenTask}
                 onRemoveRelation={onRemoveRelation}
                 canRemoveRelation={relationshipAccess.canRemoveRelation}
                 onDependsOnChange={controller.setDependsOnDraft}
@@ -152,6 +155,7 @@ export function TaskDetailSurface({
             canCreate={controller.permissions.canCreateSubIssue}
             subIssues={subIssues}
             onCreateSubIssue={onCreateSubIssue}
+            onOpenTask={onOpenTask}
           />
 
           {(detailDataLoading || detailDataError) && (

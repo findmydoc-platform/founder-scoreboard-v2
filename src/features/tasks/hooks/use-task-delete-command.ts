@@ -38,7 +38,7 @@ export function useTaskDeleteCommand({
   const deleteTask = (task: Task) => {
     if (!canManageTaskMeta) {
       setSaveError("Nur CEO oder Deputy können Aufgaben löschen.");
-      return;
+      return false;
     }
     const deletion = removeTaskTreeFromPlanningData(data, task.id);
     const hasLinkedGitHubIssue = deletion.snapshot.tasks.some(hasGitHubIssue);
@@ -47,7 +47,7 @@ export function useTaskDeleteCommand({
         ? "Aufgabe und vorhandene Unteraufgaben aus der App löschen und alle verknüpften externen Ablagen schließen?"
         : "Aufgabe und vorhandene Unteraufgaben aus der App löschen?",
     );
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     setSaveError("");
 
@@ -60,7 +60,7 @@ export function useTaskDeleteCommand({
       } catch {
         // Local development remains usable when browser storage is unavailable.
       }
-      return;
+      return true;
     }
 
     startTransition(async () => {
@@ -73,6 +73,7 @@ export function useTaskDeleteCommand({
         setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht gelöscht werden.");
       }
     });
+    return true;
   };
 
   return { deleteTask };
