@@ -5,6 +5,7 @@ import { requireTeamMember } from "@/lib/authz";
 import { mapFmdTool } from "@/lib/planning-data-mappers";
 import type { DbFmdTool } from "@/lib/planning-data-row-types";
 import type { FmdTool } from "@/lib/types";
+import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 
 const maxCuratedFmdToolLinks = 5;
 
@@ -123,6 +124,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     after_data: update,
     ...auditRequestMetadata(request),
   });
+
+  invalidateSharedPlanningHeaderCache("quickLinks");
 
   return NextResponse.json({ ok: true, tool: mapFmdTool(updated as DbFmdTool) });
 }

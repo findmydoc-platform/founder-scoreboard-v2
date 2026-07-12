@@ -4,6 +4,7 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { getPlanningDataScopeForWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
@@ -18,7 +19,10 @@ function loadWorkspacePlanningData(
     workspace: initialWorkspace,
     currentProfileId: profile?.id || null,
     platformRole: profile?.platformRole || null,
-  }, options);
+  }, {
+    ...options,
+    sharedHeaderSlotLoaders: sharedPlanningHeaderSlotLoaders,
+  });
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {

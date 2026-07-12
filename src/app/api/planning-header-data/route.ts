@@ -3,6 +3,7 @@ import { requirePlatformRole } from "@/lib/authz";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { getServerSupabase } from "@/lib/supabase";
 import { loadPlanningHeaderData, parsePlanningHeaderSlots } from "@/lib/planning-header-data";
+import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 
 export async function GET(request: NextRequest) {
   const auth = await requirePlatformRole(request, ["ceo", "founder", "deputy", "viewer"]);
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
     currentProfileId: auth.profile?.id || null,
     platformRole: auth.profile?.platformRole || null,
     slots,
+    sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
   });
 
   return NextResponse.json({ headerData });
