@@ -77,6 +77,7 @@ type PlanningHeaderProjectionOptions = {
 
 type PlanningHeaderLoadOptions = PlanningHeaderProjectionOptions & {
   data?: PlanningData;
+  notificationEventsReconciled?: boolean;
   slots?: readonly PlanningHeaderSlotKey[];
 };
 
@@ -340,9 +341,12 @@ async function loadHeaderNotifications(
   supabase: SupabaseClient,
   currentProfileId?: string | null,
   platformRole?: PlatformRole | null,
+  notificationEventsReconciled = false,
 ): Promise<HeaderDataSlot<HeaderNotificationsData>> {
   if (!currentProfileId) return readyHeaderSlot(emptyHeaderNotifications, new Date().toISOString());
-  await reconcileNotificationEvents(supabase, { currentProfileId, platformRole });
+  if (!notificationEventsReconciled) {
+    await reconcileNotificationEvents(supabase, { currentProfileId, platformRole });
+  }
   let query = supabase
     .from("notification_events")
     .select(headerNotificationSelect, { count: "exact" })
@@ -380,7 +384,12 @@ export async function loadPlanningHeaderData(
     requestedSlots.has("notifications")
       ? options.notificationEventsLoaded && options.data
         ? Promise.resolve(readyHeaderSlot(projectHeaderNotifications(options.data.notificationEvents, options.currentProfileId, options.platformRole)))
-        : loadHeaderNotifications(supabase, options.currentProfileId, options.platformRole)
+        : loadHeaderNotifications(
+          supabase,
+          options.currentProfileId,
+          options.platformRole,
+          options.notificationEventsReconciled,
+        )
       : Promise.resolve(emptyPlanningHeaderData.notifications),
   ]);
 

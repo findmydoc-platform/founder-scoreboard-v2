@@ -90,7 +90,7 @@ export async function getPlanningData(scope?: PlanningDataQueryScope, access?: P
   const supabase = getServerSupabase();
   if (!supabase) return planningDataFailureResult();
 
-  await reconcileNotificationEvents(supabase, {
+  const notificationReconciliation = await reconcileNotificationEvents(supabase, {
     currentProfileId: access?.currentProfileId || null,
     platformRole: access?.platformRole || null,
   });
@@ -104,6 +104,7 @@ export async function getPlanningData(scope?: PlanningDataQueryScope, access?: P
     currentProfileId: access?.currentProfileId || null,
     platformRole: access?.platformRole || null,
     data,
+    notificationEventsReconciled: notificationReconciliation.ok,
     fmdToolsLoaded: shouldLoad(scope, "fmdTools"),
     eventsLoaded: shouldLoad(scope, "events"),
     notificationEventsLoaded: shouldLoad(scope, "notificationEvents"),
