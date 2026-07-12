@@ -1,19 +1,11 @@
 import type { Task } from "./types";
+import { requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
+import { assertGitHubIssueRepository, resolveGitHubIssueNumber } from "./github-issue-reference";
+import { githubJson, githubRequest } from "./github-http";
 
-const owner = process.env.GITHUB_SYNC_OWNER || "findmydoc-platform";
-const repo = process.env.GITHUB_SYNC_REPO || "management";
-const defaultGitHubApiVersion = "2022-11-28";
 const issueDependencyGitHubApiVersion = "2026-03-10";
 
-export class GitHubApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "GitHubApiError";
-  }
-}
+export { GitHubApiError } from "./github-http";
 
 export type GitHubIssueDependencyInput = {
   blockedIssueNumber: number;
@@ -53,27 +45,19 @@ export function hasGitHubSyncEnv() {
   return true;
 }
 
-export function githubRepoSlug() {
-  return `${owner}/${repo}`;
+export function githubRepoSlug(repository?: string | null) {
+  return requireAllowedGitHubRepository(repository);
 }
 
-function githubRawUrl(path: string) {
+function githubRawUrl(path: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
   const branch = process.env.GITHUB_SYNC_BRANCH || "main";
   return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 function taskTypeLabel(task: Task) {
-  if (task.taskType === "proposal") return "Vorschlag";
   if (task.taskType === "sub_issue") return "Sub-Issue";
   return "Deliverable";
-}
-
-function linkedIssueNumber(task: Task) {
-  if (task.githubIssueNumber) return task.githubIssueNumber;
-  const legacyNumber = Number(task.issueNumber);
-  if (Number.isInteger(legacyNumber) && legacyNumber > 0) return legacyNumber;
-  const legacyUrlMatch = task.issueUrl.match(/\/issues\/(\d+)(?:$|[?#])/);
-  return legacyUrlMatch ? Number(legacyUrlMatch[1]) : null;
 }
 
 function compactSection(title: string, rows: string[]) {
@@ -99,7 +83,6 @@ export function taskIssueLabels(task: Task) {
     "task",
     task.taskType === "deliverable" ? "deliverable" : "",
     task.taskType === "sub_issue" ? "sub-issue" : "",
-    task.taskType === "proposal" ? "follow-up" : "",
     task.status === "Review" ? "review:ready" : "",
     task.status === "Nacharbeit" ? "changes-requested" : "",
     task.status === "Blockiert" ? "blocked" : "",
@@ -166,41 +149,20 @@ export function taskIssueBody(task: Task) {
   ].join("\n");
 }
 
-function githubHeaders(token: string, apiVersion = defaultGitHubApiVersion) {
-  return {
-    accept: "application/vnd.github+json",
-    authorization: `Bearer ${token}`,
-    "content-type": "application/json",
-    "x-github-api-version": apiVersion,
-  };
-}
-
-async function githubErrorMessage(response: Response, fallback: string) {
-  const scopes = response.headers.get("x-oauth-scopes") || "";
-  const acceptedScopes = response.headers.get("x-accepted-oauth-scopes") || "";
-  const body = await response.json().catch(() => null) as { message?: string; documentation_url?: string } | null;
-  const details = [
-    body?.message ? `GitHub: ${body.message}` : "",
-    scopes ? `Token-Scopes: ${scopes}` : "",
-    acceptedScopes ? `Benötigte Scopes: ${acceptedScopes}` : "",
-  ].filter(Boolean).join(" | ");
-  return `${fallback}: ${response.status}${details ? ` (${details})` : ""}`;
-}
-
 export async function githubUserForToken(token: string) {
-  const response = await fetch("https://api.github.com/user", {
-    method: "GET",
-    headers: githubHeaders(token),
+  return githubJson<{ login: string }>("https://api.github.com/user", {
+    token,
+    errorMessage: "GitHub-Verbindung konnte nicht geprüft werden",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub-Verbindung konnte nicht geprüft werden"));
-  return response.json() as Promise<{ login: string }>;
 }
 
-async function assignableGitHubLogin(login: string, token: string) {
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/assignees/${encodeURIComponent(login)}`, {
-    method: "GET",
-    headers: githubHeaders(token),
+async function assignableGitHubLogin(login: string, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
+  const response = await githubRequest(`https://api.github.com/repos/${owner}/${repo}/assignees/${encodeURIComponent(login)}`, {
+    token,
     cache: "no-store",
+    errorMessage: "GitHub-Assignee konnte nicht geprüft werden",
+    allowFailure: true,
   });
   if (response.status === 204) return true;
   if (response.status === 404) return false;
@@ -211,14 +173,16 @@ function matchingTaskIssue(items: GitHubIssueSearchResult[], marker: string) {
   return items.find((issue) => !issue.pull_request && issue.body?.includes(marker)) || null;
 }
 
-async function findGitHubIssueByTaskMarker(taskId: string, token: string) {
+async function findGitHubIssueByTaskMarker(taskId: string, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
   const marker = taskIssueMarker(taskId);
   const markerToken = marker.slice(5, -4).trim();
   const query = encodeURIComponent(`repo:${owner}/${repo} is:issue in:body "${markerToken}"`);
-  const searchResponse = await fetch(`https://api.github.com/search/issues?q=${query}&per_page=10`, {
-    method: "GET",
-    headers: githubHeaders(token),
+  const searchResponse = await githubRequest(`https://api.github.com/search/issues?q=${query}&per_page=10`, {
+    token,
     cache: "no-store",
+    errorMessage: "GitHub Issue-Suche fehlgeschlagen",
+    allowFailure: true,
   });
   if (searchResponse.ok) {
     const search = await searchResponse.json() as { items?: GitHubIssueSearchResult[] };
@@ -227,12 +191,13 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string) {
   }
 
   for (let page = 1; page <= 5; page += 1) {
-    const response = await fetch(
+    const response = await githubRequest(
       `https://api.github.com/repos/${owner}/${repo}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`,
       {
-        method: "GET",
-        headers: githubHeaders(token),
+        token,
         cache: "no-store",
+        errorMessage: "GitHub Issue-Suche fehlgeschlagen",
+        allowFailure: true,
       },
     );
     if (!response.ok) break;
@@ -246,9 +211,9 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string) {
 }
 
 export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHubIssueAssigneeInput = {}) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+  const { owner, repo, repository } = splitGitHubRepository(task.githubRepo);
+  assertGitHubIssueRepository(task, repository);
 
-  const headers = githubHeaders(token);
   const payload: GitHubIssuePayload = {
     title: taskIssueTitle(task),
     body: taskIssueBody(task),
@@ -258,7 +223,7 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
   const warnings: string[] = [];
   const assigneeLogin = assignee.login?.trim();
   if (assigneeLogin) {
-    const isAssignable = await assignableGitHubLogin(assigneeLogin, token);
+    const isAssignable = await assignableGitHubLogin(assigneeLogin, token, repository);
     if (isAssignable) {
       payload.assignees = [assigneeLogin];
     } else if (isAssignable === false) {
@@ -270,87 +235,129 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
     warnings.push("GitHub-Assignee nicht gesetzt: Das verantwortliche Profil hat keinen GitHub-Login.");
   }
 
-  const issueNumber = linkedIssueNumber(task);
+  const issueNumber = resolveGitHubIssueNumber(task, { repository });
 
   if (issueNumber) {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+      token,
       method: "PATCH",
-      headers,
-      body: JSON.stringify(payload),
+      body: payload,
+      errorMessage: "GitHub Update fehlgeschlagen",
     });
-    if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Update fehlgeschlagen"));
-    const issue = await response.json() as { number: number; html_url: string };
     return { ...issue, warnings, recovered: false };
   }
 
-  const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token);
+  const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
   if (recoveredIssue) {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${recoveredIssue.number}`, {
+    const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${recoveredIssue.number}`, {
+      token,
       method: "PATCH",
-      headers,
-      body: JSON.stringify(payload),
+      body: payload,
+      errorMessage: "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
     });
-    if (!response.ok) throw new Error(await githubErrorMessage(response, "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden"));
-    const issue = await response.json() as { number: number; html_url: string };
     return { ...issue, warnings, recovered: true };
   }
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+  const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+    token,
     method: "POST",
-    headers,
-    body: JSON.stringify(payload),
+    body: payload,
+    errorMessage: "GitHub Issue-Erstellung fehlgeschlagen",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue-Erstellung fehlgeschlagen"));
-  const issue = await response.json() as { number: number; html_url: string };
   return { ...issue, warnings, recovered: false };
 }
 
-export async function listGitHubIssueBlockedBy(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
-
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`, {
-    method: "GET",
-    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependencies konnten nicht geladen werden"));
-  return response.json() as Promise<GitHubIssueDependency[]>;
-}
-
-export async function addGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
-
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by`, {
+export async function connectGitHubSubIssue({
+  parentRepository,
+  parentIssueNumber,
+  childRepository,
+  childIssueNumber,
+  token,
+}: {
+  parentRepository: string;
+  parentIssueNumber: number;
+  childRepository: string;
+  childIssueNumber: number;
+  token: string;
+}) {
+  const parent = splitGitHubRepository(parentRepository);
+  const child = splitGitHubRepository(childRepository);
+  const query = `query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) { issue(number: $number) { id } }
+  }`;
+  const parentResult = await githubJson<{ data?: { repository?: { issue?: { id?: string } | null } | null }; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
+    token,
     method: "POST",
-    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
-    body: JSON.stringify({ issue_id: blockingIssueId }),
+    body: { query, variables: { owner: parent.owner, repo: parent.repo, number: parentIssueNumber } },
+    errorMessage: "GitHub Parent-Issue konnte nicht geladen werden",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependency konnte nicht erstellt werden"));
-  return response.json() as Promise<GitHubIssueDependency>;
+  const parentId = parentResult.data?.repository?.issue?.id;
+  if (!parentId) throw new Error(parentResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+
+  const mutation = `mutation($parent: ID!, $childUrl: String!) {
+    addSubIssue(input: { issueId: $parent, subIssueUrl: $childUrl, replaceParent: true }) {
+      issue { number url }
+      subIssue { number url repository { nameWithOwner } parent { number url repository { nameWithOwner } } }
+    }
+  }`;
+  const childUrl = `https://github.com/${child.repository}/issues/${childIssueNumber}`;
+  const result = await githubJson<{ data?: unknown; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
+    token,
+    method: "POST",
+    body: { query: mutation, variables: { parent: parentId, childUrl } },
+    errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht erstellt werden",
+  });
+  if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));
+  return result.data;
 }
 
-export async function removeGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+export async function listGitHubIssueBlockedBy(issueNumber: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by/${blockingIssueId}`, {
+  return githubJson<GitHubIssueDependency[]>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`, {
+    token,
+    apiVersion: issueDependencyGitHubApiVersion,
+    cache: "no-store",
+    errorMessage: "GitHub Dependencies konnten nicht geladen werden",
+  });
+}
+
+export async function addGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
+
+  return githubJson<GitHubIssueDependency>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by`, {
+    token,
+    method: "POST",
+    apiVersion: issueDependencyGitHubApiVersion,
+    body: { issue_id: blockingIssueId },
+    errorMessage: "GitHub Dependency konnte nicht erstellt werden",
+  });
+}
+
+export async function removeGitHubIssueBlockedBy(issueNumber: number, blockingIssueId: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
+
+  const response = await githubRequest(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by/${blockingIssueId}`, {
+    token,
     method: "DELETE",
-    headers: githubHeaders(token, issueDependencyGitHubApiVersion),
+    apiVersion: issueDependencyGitHubApiVersion,
+    errorMessage: "GitHub Dependency konnte nicht entfernt werden",
+    allowedStatuses: [404],
   });
   if (response.status === 404) return;
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Dependency konnte nicht entfernt werden"));
 }
 
 export async function syncGitHubIssueDependencies({
   currentIssueNumber,
   desiredDependencies,
   managedIssueNumbers,
+  repository,
 }: {
   currentIssueNumber: number;
   desiredDependencies: GitHubIssueDependencyInput[];
   managedIssueNumbers: number[];
+  repository?: string;
 }, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
-
   const managedNumbers = new Set(managedIssueNumbers);
   const desiredByBlocked = new Map<number, Set<number>>();
   for (const dependency of desiredDependencies) {
@@ -364,14 +371,14 @@ export async function syncGitHubIssueDependencies({
   const issueReference = async (issueNumber: number) => {
     const cached = issueCache.get(issueNumber);
     if (cached) return cached;
-    const issue = await getGitHubIssue(issueNumber, token);
+    const issue = await getGitHubIssue(issueNumber, token, repository);
     issueCache.set(issueNumber, issue);
     return issue;
   };
 
   const blockedIssueNumbers = new Set([currentIssueNumber, ...desiredDependencies.map((dependency) => dependency.blockedIssueNumber)]);
   for (const blockedIssueNumber of blockedIssueNumbers) {
-    const existing = await listGitHubIssueBlockedBy(blockedIssueNumber, token);
+    const existing = await listGitHubIssueBlockedBy(blockedIssueNumber, token, repository);
     const existingManaged = new Map(
       existing
         .filter((dependency) => managedNumbers.has(dependency.number))
@@ -382,49 +389,48 @@ export async function syncGitHubIssueDependencies({
     for (const blockingIssueNumber of desiredBlockingNumbers) {
       if (existingManaged.has(blockingIssueNumber)) continue;
       const blockingIssue = await issueReference(blockingIssueNumber);
-      await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token);
+      await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token, repository);
     }
 
     if (blockedIssueNumber !== currentIssueNumber) continue;
     for (const existingDependency of existingManaged.values()) {
       if (desiredBlockingNumbers.has(existingDependency.number)) continue;
-      await removeGitHubIssueBlockedBy(blockedIssueNumber, existingDependency.id, token);
+      await removeGitHubIssueBlockedBy(blockedIssueNumber, existingDependency.id, token, repository);
     }
   }
 }
 
-export async function archiveGitHubIssue(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+export async function archiveGitHubIssue(issueNumber: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+  return githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    token,
     method: "PATCH",
-    headers: githubHeaders(token),
-    body: JSON.stringify({
+    body: {
       state: "closed",
       state_reason: "not_planned",
       labels: ["task", "test/deleted"],
-    }),
+    },
+    errorMessage: "GitHub Issue konnte nicht geschlossen werden",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue konnte nicht geschlossen werden"));
-  return response.json() as Promise<{ number: number; html_url: string }>;
 }
 
-export async function createGitHubIssueComment(issueNumber: number, comment: string, token: string, marker?: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+export async function createGitHubIssueComment(issueNumber: number, comment: string, token: string, marker?: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
+  return githubJson<{ id: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
+    token,
     method: "POST",
-    headers: githubHeaders(token),
-    body: JSON.stringify({
+    body: {
       body: marker ? `${comment}\n\n<!-- ${marker} -->` : comment,
-    }),
+    },
+    errorMessage: "GitHub Kommentar konnte nicht erstellt werden",
+    errorType: "api",
   });
-  if (!response.ok) throw new GitHubApiError(await githubErrorMessage(response, "GitHub Kommentar konnte nicht erstellt werden"), response.status);
-  return response.json() as Promise<{ id: number; html_url: string }>;
 }
 
-export async function listGitHubIssueComments(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+export async function listGitHubIssueComments(issueNumber: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
 
   const comments: Array<{
     id: number;
@@ -438,13 +444,12 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
   }> = [];
 
   for (let page = 1; page <= 100; page += 1) {
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`, {
-      method: "GET",
-      headers: githubHeaders(token),
+    const pageComments = await githubJson<typeof comments>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`, {
+      token,
       cache: "no-store",
+      errorMessage: "GitHub Kommentare konnten nicht geladen werden",
+      errorType: "api",
     });
-    if (!response.ok) throw new GitHubApiError(await githubErrorMessage(response, "GitHub Kommentare konnten nicht geladen werden"), response.status);
-    const pageComments = await response.json() as typeof comments;
     comments.push(...pageComments);
     if (pageComments.length < 100) break;
   }
@@ -452,16 +457,14 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
   return comments;
 }
 
-export async function getGitHubIssue(issueNumber: number, token: string) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+export async function getGitHubIssue(issueNumber: number, token: string, repository?: string | null) {
+  const { owner, repo } = splitGitHubRepository(repository);
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
-    method: "GET",
-    headers: githubHeaders(token),
+  return githubJson<{ id: number; number: number; body?: string | null; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+    token,
     cache: "no-store",
+    errorMessage: "GitHub Issue konnte nicht geladen werden",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub Issue konnte nicht geladen werden"));
-  return response.json() as Promise<{ id: number; number: number; body?: string | null; html_url: string }>;
 }
 
 export async function uploadGitHubAttachment(
@@ -469,23 +472,22 @@ export async function uploadGitHubAttachment(
   content: Buffer,
   token: string,
   message = "Add Founder Scoreboard attachment",
+  repository?: string | null,
 ) {
-  if (!token) throw new Error("GitHub-Verbindung ist nicht verfügbar. Bitte melde dich erneut mit GitHub an.");
+  const { owner, repo } = splitGitHubRepository(repository);
 
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+  const result = await githubJson<{ content?: { download_url?: string | null; html_url?: string | null } }>(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
+    token,
     method: "PUT",
-    headers: githubHeaders(token),
-    body: JSON.stringify({
+    body: {
       message,
       content: content.toString("base64"),
       branch: process.env.GITHUB_SYNC_BRANCH || "main",
-    }),
+    },
+    errorMessage: "GitHub-Anhang konnte nicht gespeichert werden",
   });
-  if (!response.ok) throw new Error(await githubErrorMessage(response, "GitHub-Anhang konnte nicht gespeichert werden"));
-
-  const result = await response.json() as { content?: { download_url?: string | null; html_url?: string | null } };
   return {
-    rawUrl: result.content?.download_url || githubRawUrl(path),
+    rawUrl: result.content?.download_url || githubRawUrl(path, repository),
     htmlUrl: result.content?.html_url || "",
   };
 }

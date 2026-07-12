@@ -1,4 +1,5 @@
 import { findCurrentSprint } from "@/lib/planning-schedule";
+import { isApprovedDeliverable, isProposedDeliverable } from "@/features/planning/model/approval-domain";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
 
@@ -65,7 +66,7 @@ function taskIsDone(task: Task) {
 }
 
 function taskIsProposal(task: Task) {
-  return task.taskType === "proposal" || normalizeStatus(task.status) === "Vorschlag";
+  return isProposedDeliverable(task);
 }
 
 function byBacklogOrder(a: Task, b: Task) {
@@ -94,7 +95,7 @@ function buildBacklogItem(task: Task, initiativeById: Map<string, Package>, rank
 
   return {
     initiative,
-    isReadyForSprint: ownerReady && initiativeReady && !sprintReady && !taskIsDone(task),
+    isReadyForSprint: isApprovedDeliverable(task) && ownerReady && initiativeReady && !sprintReady && !taskIsDone(task),
     rank,
     readiness,
     task,
@@ -177,7 +178,7 @@ export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
   const { current, sprints } = planningSprints(data);
   const sprintBuckets = sprints.map((sprint) => {
     const plannedHours = data.tasks
-      .filter((task) => task.taskType !== "sub_issue" && task.sprintId === sprint.id && !taskIsDone(task))
+      .filter((task) => isApprovedDeliverable(task) && task.sprintId === sprint.id && !taskIsDone(task))
       .reduce((sum, task) => sum + task.hours, 0);
     const capacityHours = sprintCapacityHours(data, sprint.id);
     return {

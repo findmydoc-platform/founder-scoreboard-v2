@@ -9,7 +9,10 @@ const checks = [
   ["src/lib/types.ts", /milestoneId\?: string/],
   ["src/features/projects/organisms/projects-overview.tsx", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
   ["src/features/projects/organisms/initiative-dialog.tsx", /Epic \/ Meilenstein/],
-  ["src/features/tasks/organisms/new-task-dialog.tsx", /Deliverables brauchen Epic, Initiative und Sprint/],
+  ["src/features/tasks/organisms/new-task-dialog.tsx", /Deliverables brauchen eine Initiative und starten als vorgeschlagen/],
+  ["src/features/tasks/organisms/new-task-dialog.tsx", /Nach Freigabe zuweisen/],
+  ["supabase/0059_planning_item_approval.sql", /task_type = 'sub_issue' and approval_status is null/],
+  ["supabase/0059_planning_item_approval.sql", /task_type = 'deliverable'[^]*approval_status = 'approved'[^]*sprint_id is not null/],
   ["src/features/tasks/organisms/task-detail-panel-sidebar.tsx", /Epic \/ Meilenstein/],
 ];
 

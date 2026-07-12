@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireTeamMember } from "@/lib/authz";
 import { getGitHubIssue, listGitHubIssueComments } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 
@@ -34,14 +35,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,review_owner_profile_id,evidence_link,issue_url,github_issue_number,issue_number")
+    .select("id,title,assignee,owner,review_owner_profile_id,evidence_link,issue_url,github_repo,github_issue_number,issue_number")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
-  const issueNumber = Number(task.github_issue_number || task.issue_number || 0);
-  if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+  const issueNumber = resolveGitHubIssueNumber(task, { repository: task.github_repo });
+  if (issueNumber === null || !Number.isInteger(issueNumber) || issueNumber <= 0) {
     return apiError("Diese Aufgabe hat noch kein GitHub Issue.", 409);
   }
 
@@ -49,8 +50,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   let importedEvidenceLink = "";
   try {
     const [issue, comments] = await Promise.all([
-      getGitHubIssue(issueNumber, githubInstallationToken),
-      listGitHubIssueComments(issueNumber, githubInstallationToken),
+      getGitHubIssue(issueNumber, githubInstallationToken, task.github_repo),
+      listGitHubIssueComments(issueNumber, githubInstallationToken, task.github_repo),
     ]);
     githubComments = comments;
     importedEvidenceLink = extractEvidenceFromIssueBody(issue.body || "");

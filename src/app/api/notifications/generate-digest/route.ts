@@ -19,6 +19,7 @@ type TaskRow = {
   task_type: string | null;
   score_relevant: boolean | null;
   score_final: boolean | null;
+  approval_status: string | null;
 };
 
 type BlockerRow = {
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,score_relevant,score_final")
+      .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,approval_status,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
     supabase
@@ -239,15 +240,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (task.task_type === "proposal" || task.status === "Vorschlag") {
+    if (task.approval_status === "proposed" || task.task_type === "proposal" || task.status === "Vorschlag") {
       candidates.push({
         type: "task.proposed",
         actorProfileId: assignee,
         recipientProfileId: null,
         entityType: "task",
         entityId: task.id,
-        title: `Aufgabenvorschlag offen: ${task.title}`,
-        body: taskBody(task, "Dieser Aufgabenvorschlag braucht Entscheidung oder Einordnung."),
+        title: `Deliverable-Vorschlag offen: ${task.title}`,
+        body: taskBody(task, "Dieses Deliverable braucht eine Freigabeentscheidung."),
         dedupeKey: dedupeKey("task.proposed", "task", task.id, today),
       });
     }

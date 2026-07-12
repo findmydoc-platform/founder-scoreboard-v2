@@ -1,5 +1,6 @@
 import { hasOpenWaitingRelation, isOperationalLeadRole } from "@/lib/platform";
 import { taskHasCriticalAttention } from "@/features/tasks/model/task-attention-signals";
+import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Profile, Task } from "@/lib/types";
 
@@ -63,6 +64,7 @@ export function isBlockedReviewTask(task: Task, data: Pick<PlanningData, "tasks"
 }
 
 export function isReviewRelevantTask(task: Task, data: Pick<PlanningData, "tasks" | "taskRelations">) {
+  if (!isApprovedDeliverable(task)) return false;
   return isOpenReviewTask(task) || isCompletedReviewTask(task) || isReworkReviewTask(task) || isBlockedReviewTask(task, data);
 }
 

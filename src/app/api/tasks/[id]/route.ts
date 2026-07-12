@@ -3,7 +3,7 @@ import { apiError, requireApiContext } from "@/lib/api-response";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { requirePlanningContributor } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
-import { linkedIssueNumber } from "@/features/tasks/model/task-route-github";
+import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import {
   applyReviewStatusUpdate,
   applyFinalStatusReopen,
@@ -14,8 +14,8 @@ import {
   applyTaskSelfChecklistUpdateFields,
   applyTaskStatusUpdate,
   applyTaskSyncStatusUpdate,
+  applyTaskTitleUpdate,
   markTaskGitHubSyncDirty,
-  proposalPromotionState,
   restrictedTaskUpdateFields,
   startsTaskReviewRequest,
   validateTaskStatusUpdate,
@@ -28,7 +28,18 @@ import { isOperationalLeadRole } from "@/lib/platform";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 
 type TaskUpdateTransactionResult = {
-  task?: { updated_at?: string };
+  task?: {
+    updated_at?: string;
+    approval_status?: "draft" | "proposed" | "approved" | "rejected" | null;
+    approval_revision?: number;
+    proposed_by?: string | null;
+    proposed_at?: string | null;
+    decided_by?: string | null;
+    decided_at?: string | null;
+    decision_note?: string | null;
+    sprint_id?: string | null;
+    score_relevant?: boolean | null;
+  };
   activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
 };
 
@@ -42,6 +53,7 @@ type TaskDeletionTransactionResult = {
 };
 
 type TaskDeletionSnapshotRow = Record<string, unknown> & {
+    github_repo?: string | null;
     github_issue_number?: number | null;
     issue_number?: string | null;
     github_issue_url?: string | null;
@@ -64,7 +76,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: TaskRouteDbUpdate = {};
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link,updated_at")
+    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -107,6 +119,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const priorityGuard = applyTaskPriorityUpdate(update, payload);
   if (!priorityGuard.ok) return apiError(priorityGuard.error, priorityGuard.status);
 
+  const titleGuard = applyTaskTitleUpdate(update, payload);
+  if (!titleGuard.ok) return apiError(titleGuard.error, titleGuard.status);
+
   if (payload.milestoneId !== undefined) {
     const nextMilestoneId = payload.milestoneId || null;
     if (nextMilestoneId) {
@@ -141,9 +156,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.assignee !== undefined || payload.owner !== undefined) {
     const nextAssignee = profileId(payload.assignee || payload.owner);
-    if (!nextAssignee && currentTask?.task_type !== "proposal") {
-      return apiError("Nur Vorschläge können ohne Zuständigkeit bleiben.", 400);
-    }
+    if (!nextAssignee) return apiError("Aufgaben brauchen eine Zuständigkeit.", 400);
     update.assignee = nextAssignee || null;
     update.owner = nextAssignee || null;
   }
@@ -151,6 +164,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   applyTaskBriefUpdateFields(update, payload);
 
   if (payload.sprintId !== undefined) {
+    if (currentTask.task_type !== "deliverable" || currentTask.approval_status !== "approved") {
+      return apiError("Nur freigegebene Deliverables können einem Sprint zugewiesen werden.", 409);
+    }
     const nextSprintId = payload.sprintId || null;
     if (nextSprintId) {
       const { data: sprint, error: sprintError } = await supabase
@@ -162,16 +178,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (sprint.score_locked) return apiError("Gelockte Sprints können nicht mehr zugewiesen werden.", 409);
     }
     update.sprint_id = nextSprintId;
-  }
-
-  const { effectivePackageId, effectiveSprintId, shouldPromoteProposal } = proposalPromotionState(currentTask, update);
-
-  if (shouldPromoteProposal) {
-    if (!effectivePackageId || !effectiveSprintId) {
-      return apiError("Für ein Deliverable fehlen noch Initiative oder Sprint.", 400);
-    }
-    update.task_type = "deliverable";
-    update.score_relevant = true;
+    update.score_relevant = Boolean(nextSprintId);
   }
 
   const reviewStatusGuard = applyReviewStatusUpdate(update, payload, isOperationalLead);
@@ -192,6 +199,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (startsReviewRequest) {
+    if (currentTask.task_type !== "deliverable" || currentTask.approval_status !== "approved") {
+      return apiError("Nur freigegebene Deliverables können in Review gegeben werden.", 409);
+    }
     if (currentTask.score_final && !isCeo) {
       return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
     }
@@ -223,9 +233,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   markTaskGitHubSyncDirty(update, payload);
 
   const messages = activityMessages(payload, currentTask);
-  if (update.task_type === "deliverable" && currentTask.task_type === "proposal") {
-    messages.push("Aufgabenvorschlag zu Deliverable konvertiert");
-  }
 
   const notifications: Array<Record<string, string | null>> = [];
   if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {
@@ -251,7 +258,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       })));
   }
 
-  const { data: transactionData, error: transactionError } = await supabase.rpc("update_task_transaction", {
+  const { data: transactionData, error: transactionError } = await supabase.rpc("update_planning_task_transaction", {
     p_task_id: id,
     p_expected_updated_at: payload.expectedUpdatedAt,
     p_task_patch: update,
@@ -261,6 +268,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     p_dependency_note: payload.dependsOn?.trim().slice(0, 2000) ?? null,
     p_activity_messages: [...new Set(messages)],
     p_notifications: notifications,
+    p_actor_profile_id: permission.profile?.id || null,
   });
 
   if (transactionError) {
@@ -285,6 +293,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest),
     id,
     updatedAt: result.task.updated_at,
+    approvalStatus: result.task.approval_status ?? null,
+    approvalRevision: Number(result.task.approval_revision || 1),
+    proposedById: result.task.proposed_by || "",
+    proposedAt: result.task.proposed_at || "",
+    decidedById: result.task.decided_by || "",
+    decidedAt: result.task.decided_at || "",
+    decisionNote: result.task.decision_note || "",
+    sprintId: result.task.sprint_id || "",
+    scoreRelevant: Boolean(result.task.score_relevant),
   };
 
   return NextResponse.json({
@@ -340,15 +357,19 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     });
   }
 
-  const issueNumbers = [...new Set((prepared.tasks || [prepared.task])
-    .map((task) => linkedIssueNumber(task))
-    .filter((issueNumber): issueNumber is number => Boolean(issueNumber)))];
+  const issuePairs = [...new Map((prepared.tasks || [prepared.task])
+    .map((task) => {
+      const repository = task.github_repo || "findmydoc-platform/management";
+      return { repository, issueNumber: resolveGitHubIssueNumber(task, { repository }) };
+    })
+    .filter((item): item is { repository: string; issueNumber: number } => Boolean(item.issueNumber))
+    .map((item) => [`${item.repository}#${item.issueNumber}`, item])).values()];
   let githubClosed = false;
-  if (issueNumbers.length) {
+  if (issuePairs.length) {
     try {
       const token = await getGitHubAppInstallationToken();
-      for (const issueNumber of issueNumbers) {
-        await archiveGitHubIssue(issueNumber, token);
+      for (const item of issuePairs) {
+        await archiveGitHubIssue(item.issueNumber, token, item.repository);
       }
       githubClosed = true;
     } catch (error) {

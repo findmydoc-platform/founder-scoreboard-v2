@@ -34,6 +34,13 @@ export type DbPackage = {
   success_criteria: string | null;
   scope_constraints: string | null;
   sort_order: number;
+  approval_status: Package["approvalStatus"] | null;
+  approval_revision: number | null;
+  proposed_by: string | null;
+  proposed_at: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
 };
 
 export type DbMilestone = {
@@ -85,8 +92,15 @@ export type DbTask = {
   github_issue_sync_status: Task["githubIssueSyncStatus"] | null;
   github_issue_last_synced_at: string | null;
   github_issue_sync_error: string | null;
-  task_type: Task["taskType"] | null;
+  task_type: Task["taskType"] | "proposal" | null;
   parent_task_id: string | null;
+  approval_status: Task["approvalStatus"];
+  approval_revision: number | null;
+  proposed_by: string | null;
+  proposed_at: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
   score_relevant: boolean | null;
   original_sprint_id: string | null;
   carried_from_task_id: string | null;
@@ -147,6 +161,13 @@ export const taskRowColumns = [
   "github_issue_sync_error",
   "task_type",
   "parent_task_id",
+  "approval_status",
+  "approval_revision",
+  "proposed_by",
+  "proposed_at",
+  "decided_by",
+  "decided_at",
+  "decision_note",
   "score_relevant",
   "original_sprint_id",
   "carried_from_task_id",

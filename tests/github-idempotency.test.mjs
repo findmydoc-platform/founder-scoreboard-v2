@@ -17,7 +17,33 @@ function task() {
 }
 
 test("github issue creation reuses an issue with the durable FounderOps marker", async () => {
-  const { taskIssueBody, taskIssueMarker, upsertGitHubIssue } = await loadTranspiledModule("src/lib/github.ts");
+  const { taskIssueBody, taskIssueMarker, upsertGitHubIssue } = await loadTranspiledModule("src/lib/github.ts", {
+    "./github-repositories": {
+      requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
+      splitGitHubRepository: (value) => {
+        const repository = value || "findmydoc-platform/management";
+        const [owner, repo] = repository.split("/");
+        return { owner, repo, repository };
+      },
+    },
+    "./github-issue-reference": {
+      assertGitHubIssueRepository: () => {},
+      resolveGitHubIssueNumber: (value) => value.githubIssueNumber || Number(value.issueNumber || 0) || null,
+    },
+    "./github-http": {
+      githubRequest: (url, options) => globalThis.fetch(url, {
+        method: options.method || "GET",
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      }),
+      githubJson: async (url, options) => {
+        const response = await globalThis.fetch(url, {
+          method: options.method || "GET",
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        });
+        return response.json();
+      },
+    },
+  });
   const sourceTask = task();
   const marker = taskIssueMarker(sourceTask.id);
   const requests = [];

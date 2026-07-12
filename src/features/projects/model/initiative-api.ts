@@ -17,6 +17,7 @@ export type InitiativePayload = {
   goal?: string;
   successCriteria?: string;
   scopeConstraints?: string;
+  approveNow?: boolean;
 };
 
 type SupabaseClient = NonNullable<ReturnType<typeof getServerSupabase>>;
@@ -24,33 +25,10 @@ type SupabaseClient = NonNullable<ReturnType<typeof getServerSupabase>>;
 export const initiativePriorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 export const initiativeStatuses = new Set(["planned", "active", "done", "paused"]);
 export const founderProjectId = "findmydoc-founder-execution";
-export const initiativeSelect = "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order";
+export const initiativeSelect = "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note";
 
 export function slugifyInitiativeId(value: string) {
   return slugify(value, { maxLength: 60 });
-}
-
-export function mapInitiative(row: Record<string, unknown>): Package {
-  const ownerId = String(row.owner_id || "");
-  const accountableProfileId = String(row.accountable_profile_id || ownerId);
-  const responsibleProfileIds = Array.isArray(row.responsible_profile_ids) ? row.responsible_profile_ids.map(String) : ownerId ? [ownerId] : [];
-  return {
-    id: String(row.id || ""),
-    milestoneId: String(row.milestone_id || ""),
-    ownerId,
-    accountableProfileId,
-    responsibleProfileIds,
-    consultedProfileIds: Array.isArray(row.consulted_profile_ids) ? row.consulted_profile_ids.map(String) : [],
-    informedProfileIds: Array.isArray(row.informed_profile_ids) ? row.informed_profile_ids.map(String) : [],
-    title: String(row.title || ""),
-    goal: String(row.goal || ""),
-    priority: String(row.priority || "P2"),
-    status: (row.status as Package["status"]) || "planned",
-    targetDate: String(row.target_date || ""),
-    successCriteria: String(row.success_criteria || ""),
-    scopeConstraints: String(row.scope_constraints || ""),
-    sortOrder: Number(row.sort_order || 0),
-  };
 }
 
 export function cleanProfileIds(value: unknown) {
@@ -104,7 +82,7 @@ export function resolveInitiativeRaci(payload: InitiativePayload) {
   };
 }
 
-export function buildInitiativeInsert(payload: InitiativePayload, title: string, maxSortOrder: number) {
+export function buildInitiativeInsert(payload: InitiativePayload, title: string, maxSortOrder: number, actorProfileId = "", approveNow = false) {
   const { accountableProfileId, responsibleProfileIds, consultedProfileIds, informedProfileIds } = resolveInitiativeRaci(payload);
   const idBase = `initiative-${slugifyInitiativeId(title) || "neu"}`;
   const id = `${idBase}-${Date.now().toString(36)}`;
@@ -128,6 +106,13 @@ export function buildInitiativeInsert(payload: InitiativePayload, title: string,
       success_criteria: cleanText(payload.successCriteria, 4000),
       scope_constraints: cleanText(payload.scopeConstraints, 4000),
       sort_order: maxSortOrder + 1,
+      approval_status: approveNow ? "approved" : "proposed",
+      approval_revision: 1,
+      proposed_by: actorProfileId || null,
+      proposed_at: new Date().toISOString(),
+      decided_by: approveNow ? actorProfileId || null : null,
+      decided_at: approveNow ? new Date().toISOString() : null,
+      decision_note: approveNow ? "Bei Erstellung durch CEO freigegeben." : null,
     },
     accountableProfileId,
     responsibleProfileIds,

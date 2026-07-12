@@ -64,7 +64,7 @@ export function taskDetailPermissions({
 
   return {
     canComment: Boolean(role && role !== "viewer"),
-    canCreateSubIssue: canWorkOnTask,
+    canCreateSubIssue: Boolean(role && role !== "viewer"),
     canDeleteTask: isOperationalLead,
     canEditBrief: canWorkOnTask,
     canEditChecklist: canWorkOnTask,

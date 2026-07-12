@@ -1,6 +1,7 @@
 "use client";
 
 import type { Sprint, Task } from "@/lib/types";
+import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 
 type UseBacklogSprintAssignmentOptions = {
   canManageBacklog: boolean;
@@ -13,7 +14,7 @@ function ownerMissing(task: Task) {
 }
 
 function sprintPatchForTask(task: Task, sprintId: string): Partial<Task> {
-  if (task.taskType === "proposal") {
+  if (!isApprovedDeliverable(task)) {
     return { sprintId, status: "Offen" };
   }
   return { sprintId };
@@ -33,7 +34,7 @@ export function useBacklogSprintAssignment({
       setMessage("Gelockte Sprints können nicht mehr zugewiesen werden.");
       return;
     }
-    if (task.taskType === "proposal" && (ownerMissing(task) || !task.packageId)) {
+    if (!isApprovedDeliverable(task) && (ownerMissing(task) || !task.packageId)) {
       setMessage("Für die Sprint-Zuordnung fehlen Zuständigkeit oder Initiative.");
       return;
     }

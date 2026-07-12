@@ -4,7 +4,8 @@ import type { Dispatch, SetStateAction } from "react";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import type { Package } from "@/lib/types";
+import { applyOptimisticApprovalDecision } from "@/features/planning/model/approval-domain";
+import type { ApprovalDecisionAction, Package } from "@/lib/types";
 
 type UseInitiativeCommandsOptions = PlanningCommandContext & {
   setInitiativeDialogDefaults: Dispatch<SetStateAction<Partial<InitiativeDraft> | null>>;
@@ -38,6 +39,8 @@ export function useInitiativeCommands({
       successCriteria: draft.successCriteria,
       scopeConstraints: draft.scopeConstraints,
       sortOrder: draft.id ? data.packages.find((pack) => pack.id === draft.id)?.sortOrder || data.packages.length + 1 : data.packages.length + 1,
+      approvalStatus: draft.id ? data.packages.find((pack) => pack.id === draft.id)?.approvalStatus || "approved" : draft.approveNow ? "approved" : "proposed",
+      approvalRevision: draft.id ? data.packages.find((pack) => pack.id === draft.id)?.approvalRevision || 1 : 1,
     };
     const isEdit = Boolean(draft.id);
 
@@ -74,5 +77,30 @@ export function useInitiativeCommands({
     });
   };
 
-  return { saveInitiative };
+  const decideInitiativeApproval = (initiative: Package, action: ApprovalDecisionAction, note = "") => {
+    setSaveError("");
+    if (source !== "supabase") {
+      setData((current) => ({
+        ...current,
+        packages: current.packages.map((pack) => pack.id === initiative.id
+          ? applyOptimisticApprovalDecision(pack, action, note)
+          : pack),
+      }));
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const { response, body } = await planningApi.decideInitiativeApprovalRequest(apiClient, initiative.id, action, initiative.approvalRevision, note);
+        if (!response.ok || !body?.initiative) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
+        setData((current) => ({
+          ...current,
+          packages: current.packages.map((pack) => pack.id === initiative.id ? body.initiative! : pack),
+        }));
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
+      }
+    });
+  };
+
+  return { decideInitiativeApproval, saveInitiative };
 }

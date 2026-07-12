@@ -1,5 +1,7 @@
 import { taskStatuses } from "@/lib/status";
-import type { TaskStatus, TaskType } from "@/lib/types";
+import type { TaskStatus } from "@/lib/types";
+
+export type LegacyTaskIntakeType = "deliverable" | "proposal" | "sub_issue";
 import {
   intakeDate,
   intakeHours,
@@ -67,7 +69,7 @@ export type TaskIntakePreviewTask = {
   acceptanceCriteria: string;
   evidenceRequired: string;
   definitionOfDone: string;
-  taskType: TaskType;
+  taskType: LegacyTaskIntakeType;
   parentTaskId: string;
   packageId: string;
   packageTitle: string;
@@ -89,7 +91,7 @@ export type TaskIntakePreviewTask = {
   warnings: string[];
 };
 
-const taskTypes = new Set<TaskType>(["deliverable", "proposal", "sub_issue"]);
+const taskTypes = new Set<LegacyTaskIntakeType>(["deliverable", "proposal", "sub_issue"]);
 
 function assigneeFromInitiative(initiative?: TaskIntakeInitiative) {
   return initiative?.responsibleProfileIds[0] || initiative?.ownerId || initiative?.accountableProfileId || "";
@@ -109,8 +111,8 @@ export function buildTaskIntakePreview(rawTasks: TaskIntakeInput[], context: Tas
     const warnings: string[] = [];
     const brief = normalizeTaskIntakeBrief(rawTask);
     const requestedType = intakeText(rawTask.taskType, 40) || "deliverable";
-    const taskType: TaskType = taskTypes.has(requestedType as TaskType) ? requestedType as TaskType : "deliverable";
-    if (requestedType && !taskTypes.has(requestedType as TaskType)) errors.push(`Ungültiger Aufgabentyp: ${requestedType}.`);
+    const taskType: LegacyTaskIntakeType = taskTypes.has(requestedType as LegacyTaskIntakeType) ? requestedType as LegacyTaskIntakeType : "deliverable";
+    if (requestedType && !taskTypes.has(requestedType as LegacyTaskIntakeType)) errors.push(`Ungültiger Aufgabentyp: ${requestedType}.`);
 
     const title = brief.title;
     if (title.length < 3) errors.push("Titel ist erforderlich.");

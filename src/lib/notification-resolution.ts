@@ -4,7 +4,7 @@ import { isOperationalLeadRole } from "./platform";
 import { normalizeStatus } from "./status";
 import type { FounderEvent, NotificationEvent, PlanningData, PlatformRole, Sprint, Task, TaskBlocker } from "./types";
 
-type ResolutionTask = Pick<Task, "id" | "status" | "assignee" | "owner" | "reviewOwnerProfileId" | "reviewStatus" | "scoreFinal" | "taskType" | "endDate" | "deadline">;
+type ResolutionTask = Pick<Task, "id" | "status" | "assignee" | "owner" | "reviewOwnerProfileId" | "reviewStatus" | "scoreFinal" | "taskType" | "approvalStatus" | "endDate" | "deadline">;
 type ResolutionSprint = Pick<Sprint, "id" | "status" | "scoreLocked" | "reviewDueAt">;
 type ResolutionEvent = Pick<FounderEvent, "id" | "status" | "startsAt" | "audienceMode" | "participantProfileIds" | "reminderDaysBefore">;
 
@@ -125,7 +125,7 @@ export function notificationResolution(
     const task = taskFor(event, context);
     if (task === undefined) return undefined;
     if (!task) return { reason: "source_deleted" };
-    if (task.taskType !== "proposal" && normalizeStatus(task.status) !== "Vorschlag") {
+    if (task.approvalStatus !== "proposed" && normalizeStatus(task.status) !== "Vorschlag") {
       return { reason: "proposal_closed" };
     }
     if (!event.recipientProfileId) return null;
@@ -236,7 +236,7 @@ async function loadResolutionContext(supabase: SupabaseClient, events: Notificat
   const profileIds = [...new Set(events.map((event) => event.recipientProfileId).filter(Boolean))];
 
   const [tasks, blockers, sprints, founderEvents, meetings, profiles] = await Promise.all([
-    taskIds.length ? supabase.from("tasks").select("id,status,assignee,owner,review_owner_profile_id,review_status,score_final,task_type,end_date,deadline").in("id", taskIds) : Promise.resolve({ data: [], error: null }),
+    taskIds.length ? supabase.from("tasks").select("id,status,assignee,owner,review_owner_profile_id,review_status,score_final,task_type,approval_status,end_date,deadline").in("id", taskIds) : Promise.resolve({ data: [], error: null }),
     taskIds.length ? supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").in("task_id", taskIds) : Promise.resolve({ data: [], error: null }),
     sprintIds.length ? supabase.from("sprints").select("id,status,score_locked,review_due_at").in("id", sprintIds) : Promise.resolve({ data: [], error: null }),
     founderEventIds.length ? supabase.from("founder_events").select("id,status,starts_at,audience_mode,participant_profile_ids,reminder_days_before").in("id", founderEventIds) : Promise.resolve({ data: [], error: null }),
@@ -253,6 +253,7 @@ async function loadResolutionContext(supabase: SupabaseClient, events: Notificat
     reviewStatus: row.review_status,
     scoreFinal: Boolean(row.score_final),
     taskType: row.task_type,
+    approvalStatus: row.approval_status,
     endDate: row.end_date || "",
     deadline: row.deadline || "",
   }]));

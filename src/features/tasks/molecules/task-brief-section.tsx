@@ -4,9 +4,9 @@ import { Pencil, Save, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { TaskChecklist } from "@/features/tasks/molecules/task-checklist";
 import type { Task } from "@/lib/types";
-import { UiButton, UiPanel } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
-export type TaskBriefState = Pick<Task, "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone">;
+export type TaskBriefState = Pick<Task, "title" | "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone">;
 
 const briefFields = [
   ["Problem", "problemStatement", "Welches Problem löst diese Aufgabe?"],
@@ -77,6 +77,21 @@ export function TaskBriefSection({
             </UiButton>
           ) : null}
         </div>
+      </div>
+      <div className="mt-4 grid gap-2 text-sm">
+        <div className="font-semibold text-slate-950">Titel</div>
+        {editing ? (
+          <UiTextInput
+            value={brief.title}
+            onChange={(event) => onBriefChange({ title: event.target.value })}
+            inputPadding="md"
+            placeholder="Konkretes Ergebnis"
+          />
+        ) : (
+          <p className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium leading-6 text-slate-700">
+            {brief.title}
+          </p>
+        )}
       </div>
       {briefFields.map(([label, key, placeholder]) => (
         <div key={key} className="mt-4 grid gap-2 text-sm">

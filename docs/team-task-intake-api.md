@@ -1,51 +1,61 @@
 # Team Task Intake API
 
-The Team Task Intake API lets operational FounderOps profiles use external Codex or ChatGPT clients without sharing the CEO Agent API token. Each request is attributed to the profile that created the personal token.
+The Team Task Intake API lets CEO, Deputy, and Founder profiles submit planning items from external Codex or ChatGPT clients. Each request is attributed to the profile that created the personal token. Viewer profiles cannot create tokens or write items.
 
 ## Authentication
 
-Create and revoke personal tokens in **My Profile → API Access**. A token is shown once, receives its fixed 90-day expiry from the database, and is stored by FounderOps only as a SHA-256 hash. All active tokens remain visible; the UI also keeps the 20 most recent expired or revoked tokens.
-
-Send the token as a bearer credential:
+Create and revoke personal tokens in **My Profile → API Access** and send the token as a bearer credential:
 
 ```http
 Authorization: Bearer fmd_ti_<opaque-token>
 ```
 
-Tokens have the fixed scopes `read:task-context` and `write:task-intake`. CEO, Deputy, and Founder profiles may create tokens; Viewer profiles may not.
-
-## Endpoints
-
-- `GET /api/team/task-context` returns the complete task-centered team context without scores, final review data, meetings, settings, audit records, comment bodies, evidence URLs, or provider credentials.
-- `POST /api/team/task-intake/preview` validates and normalizes one to 30 proposals or sub-issues without writing data.
-- `POST /api/team/task-intake/commit` validates again and commits the complete batch atomically.
-
-Commit requests require a UUID idempotency key:
+Commit requests require a UUID idempotency key. Replaying the same canonical request with the same key returns the immutable original response. Reusing the key with different data returns `409 Conflict`.
 
 ```http
 Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 ```
 
-Retrying the same payload with the same key returns an immutable snapshot of the original batch response, even when a task was edited afterwards. Reusing the key with changed data returns `409 Conflict`.
+## v2 endpoints
 
-The request body is strictly an object with a `tasks` array. Top-level arrays and unknown task fields are rejected so the runtime contract matches the OpenAPI document.
+- `POST /api/team/task-intake/v2/preview` validates and normalizes one to 30 items without writing.
+- `POST /api/team/task-intake/v2/commit` validates again and commits the complete batch atomically.
+- `GET /api/team/task-context` returns non-sensitive planning context.
 
-## Write policy
+The strict v2 payload uses `items` and `itemType = initiative | deliverable | sub_issue`.
 
-- `proposal` is stored with status `Vorschlag`, without a sprint, and is not score-relevant.
-- A Founder may name any existing team profile as the proposed owner. The assignment remains non-binding while the task has proposal status.
-- `sub_issue` requires `parentTaskId` for an existing Deliverable, inherits Initiative and Epic / Milestone, has no sprint, and is not score-relevant.
-- Founder tokens may create Sub-Issues only under Deliverables assigned to their profile. CEO and Deputy tokens may use any Deliverable.
-- `deliverable`, score changes, final review changes, Sprint configuration, and GitHub sync are rejected.
-
-## Example
-
-```bash
-curl -X POST \
-  -H "Authorization: Bearer $FOUNDEROPS_TEAM_INTAKE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"tasks":[{"taskType":"proposal","title":"Clarify onboarding risks","problemStatement":"The current risk list is incomplete.","intendedOutcome":"The team has a reviewable proposal.","acceptanceCriteria":["The main risks are listed."],"evidenceRequired":"Link to the proposal.","definitionOfDone":"CEO or Deputy can decide the next step."}]}' \
-  https://founder-ops.findmydoc.eu/api/team/task-intake/preview
+```json
+{
+  "items": [
+    {
+      "itemType": "deliverable",
+      "title": "Clarify onboarding risks",
+      "packageId": "initiative-id",
+      "problemStatement": "The current risk list is incomplete.",
+      "intendedOutcome": "The team has a reviewable risk register.",
+      "acceptanceCriteria": ["The main risks are listed."],
+      "evidenceRequired": "Link to the risk register.",
+      "definitionOfDone": "The Initiative Accountable can make a decision."
+    }
+  ]
+}
 ```
+
+## v2 write and approval policy
+
+- CEO and Deputy may propose Initiatives. Only the CEO may approve an Initiative in FounderOps.
+- CEO, Deputy, and Founder may propose a Deliverable in any Initiative that is not rejected.
+- Every Initiative and Deliverable created through v2 starts with `approvalStatus = proposed`.
+- CEO creation through this external intake never implies approval; approval remains a separate FounderOps decision.
+- CEO, Deputy, and Founder may create a Sub-Issue under any Deliverable.
+- Sub-Issues have no independent approval status, inherit their effective state from the parent Deliverable, have no Sprint, and are never score-relevant.
+- Deliverables always use `findmydoc-platform/management`. Only Sub-Issues may select an allowed technical `githubRepo`.
+- Intake v2 never assigns a Sprint, runs Review, changes scores, or starts GitHub sync.
+
+## Legacy v1.2 transition
+
+`POST /api/team/task-intake/preview` and `POST /api/team/task-intake/commit` remain available temporarily with their unchanged `tasks` payload and `taskType = proposal | sub_issue` contract. Both responses include `Deprecation: true` and a successor link to v2. Legacy strategic proposals are not silently reinterpreted.
+
+The v1.2 endpoints will be removed only after usage has stopped and all unresolved legacy proposals have been classified.
 
 The OpenAPI document is available at `/founderops-team-intake-openapi.json`.

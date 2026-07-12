@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { findExistingGitHubComment, githubCommentMarker } from "@/features/tasks/model/github-comment-delivery-policy";
 import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } from "./github";
 import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
+import { resolveGitHubIssueNumber } from "./github-issue-reference";
 import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
 
 type ClaimedDelivery = {
@@ -26,6 +27,7 @@ type CommentRow = {
 type TaskRow = {
   github_issue_number: number | null;
   issue_number: string | null;
+  github_repo: string | null;
 };
 
 type ProfileRow = {
@@ -62,13 +64,6 @@ export type GitHubCommentDeliveryPreview = {
   waitingForIssue: number;
   failed: number;
 };
-
-function issueNumber(task: TaskRow, fallback: number | null) {
-  if (task.github_issue_number && task.github_issue_number > 0) return task.github_issue_number;
-  const legacy = Number(task.issue_number || 0);
-  if (Number.isInteger(legacy) && legacy > 0) return legacy;
-  return fallback && fallback > 0 ? fallback : null;
-}
 
 function authenticatedProfile(row: ProfileRow): AuthenticatedProfile {
   return {
@@ -116,7 +111,7 @@ async function finalizeDelivery(
 async function loadDeliveryContext(supabase: SupabaseClient, delivery: ClaimedDelivery) {
   const [commentResult, taskResult, profileResult] = await Promise.all([
     supabase.from("task_comments").select("id,task_id,profile_id,comment").eq("id", delivery.task_comment_id).maybeSingle<CommentRow>(),
-    supabase.from("tasks").select("github_issue_number,issue_number").eq("id", delivery.task_id).maybeSingle<TaskRow>(),
+    supabase.from("tasks").select("github_issue_number,issue_number,github_repo").eq("id", delivery.task_id).maybeSingle<TaskRow>(),
     delivery.author_profile_id
       ? supabase.from("profiles").select("id,name,platform_role,github_login").eq("id", delivery.author_profile_id).maybeSingle<ProfileRow>()
       : Promise.resolve({ data: null, error: null }),
@@ -155,7 +150,10 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
         preview.failed += 1;
         continue;
       }
-      const targetIssueNumber = issueNumber(task, delivery.github_issue_number);
+      const targetIssueNumber = resolveGitHubIssueNumber(task, {
+        repository: task.github_repo,
+        fallback: delivery.github_issue_number,
+      });
       if (!targetIssueNumber) {
         preview.waitingForIssue += 1;
         continue;
@@ -165,11 +163,11 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
         continue;
       }
 
-      const cacheKey = `${profile.id}:${targetIssueNumber}`;
+      const cacheKey = `${profile.id}:${task.github_repo || "findmydoc-platform/management"}:${targetIssueNumber}`;
       let githubComments = commentsByAuthorAndIssue.get(cacheKey);
       if (!githubComments) {
         const authorToken = await getGitHubUserTokenForProfile(supabase, authenticatedProfile(profile));
-        githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken);
+        githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken, task.github_repo);
         commentsByAuthorAndIssue.set(cacheKey, githubComments);
       }
       const existing = findExistingGitHubComment(githubComments, {
@@ -225,7 +223,10 @@ export async function deliverPendingGitHubComments({
         continue;
       }
 
-      const targetIssueNumber = issueNumber(task, delivery.github_issue_number);
+      const targetIssueNumber = resolveGitHubIssueNumber(task, {
+        repository: task.github_repo,
+        fallback: delivery.github_issue_number,
+      });
       if (!targetIssueNumber) {
         await finalizeDelivery(supabase, lockToken, comment.id, "waiting_for_issue", {
           statusReason: "github_issue_missing",
@@ -256,7 +257,7 @@ export async function deliverPendingGitHubComments({
         continue;
       }
 
-      const githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken);
+      const githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken, task.github_repo);
       const existing = findExistingGitHubComment(githubComments, {
         commentId: comment.id,
         authorLogin: profile.github_login,
@@ -275,7 +276,7 @@ export async function deliverPendingGitHubComments({
         continue;
       }
 
-      const created = await createGitHubIssueComment(targetIssueNumber, comment.comment, authorToken, githubCommentMarker(comment.id));
+      const created = await createGitHubIssueComment(targetIssueNumber, comment.comment, authorToken, githubCommentMarker(comment.id), task.github_repo);
       await finalizeDelivery(supabase, lockToken, comment.id, "delivered", {
         statusReason: "created",
         issueNumber: targetIssueNumber,

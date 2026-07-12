@@ -1,4 +1,5 @@
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
+import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { packageById, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
@@ -36,9 +37,9 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   if (!filtersAvailable) return null;
 
-  const planningBoardTasks = visibleTasks.filter((task) => (
-    task.taskType !== "proposal" && normalizeStatus(task.status) !== "Vorschlag"
-  ));
+  const planningBoardTasks = visibleTasks
+    .filter(isTaskPlanningActive)
+    .filter((task) => normalizeStatus(task.status) !== "Vorschlag");
 
   return (
     <>
@@ -71,7 +72,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       {view === "structure" && (
         <TaskStructureView
           packages={data.packages}
-          visibleTasks={visibleTasks}
+          visibleTasks={planningBoardTasks}
           relations={data.taskRelations}
           allTasks={data.tasks}
           blockers={data.taskBlockers}
@@ -88,7 +89,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
       {view === "table" && (
         <TaskTableView
-          visibleTasks={visibleTasks}
+          visibleTasks={planningBoardTasks}
           profiles={data.profiles}
           sprints={data.sprints}
           relations={data.taskRelations}
@@ -104,7 +105,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       )}
 
       {view === "gantt" && (
-        <GanttView tasks={visibleTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
+        <GanttView tasks={planningBoardTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
       )}
     </>
   );

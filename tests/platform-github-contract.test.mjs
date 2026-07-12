@@ -72,11 +72,12 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /commentDelivery/);
   assert.doesNotMatch(route, /task_blockers/);
   assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
-  assert.doesNotMatch(route, /parent_task_id/);
+  assert.match(route, /connectGitHubSubIssue/);
   assert.match(route, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.match(route, /createIfMissing/);
   assert.match(route, /Diese Aufgabe hat noch kein GitHub Issue/);
-  assert.match(route, /Nur Deliverables können als GitHub Issue angelegt werden/);
+  assert.match(route, /Nur freigegebene Deliverables können mit GitHub synchronisiert werden/);
+  assert.match(route, /Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein/);
   assert.match(route, /begin_github_issue_sync_transaction/);
   assert.match(route, /finalize_github_issue_sync_transaction/);
   assert.match(route, /fail_github_issue_sync_transaction/);
@@ -113,7 +114,8 @@ test("operational leads can delete test tasks and close linked github issues", a
   assert.match(taskRoute, /finalize_task_deletion_transaction/);
   assert.match(taskRoute, /cancel_task_deletion_transaction/);
   assert.match(taskRoute, /prepared\.tasks \|\| \[prepared\.task\]/);
-  assert.match(taskRoute, /for \(const issueNumber of issueNumbers\)/);
+  assert.match(taskRoute, /for \(const item of issuePairs\)/);
+  assert.match(taskRoute, /archiveGitHubIssue\(item\.issueNumber, token, item\.repository\)/);
   assert.doesNotMatch(taskRoute, /from\("tasks"\)\.delete\(\)/);
   assert.match(taskApiClient, /json: \{ expectedUpdatedAt \}/);
   assert.match(taskDeleteCommand, /removeTaskTreeFromPlanningData/);
@@ -132,6 +134,7 @@ test("operational leads can delete test tasks and close linked github issues", a
 
 test("github issue export includes only the task brief and FounderOps source", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
+  const issueReferences = await readFile("src/lib/github-issue-reference.ts", "utf8");
   const ui = await readPlanningSurface();
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
@@ -163,7 +166,8 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.doesNotMatch(github, /Founder Scoreboard v2 Task ID/);
   assert.doesNotMatch(github, /Sync-Ziel/);
   assert.doesNotMatch(github, /Bestehendes GitHub Issue/);
-  assert.match(github, /task\.issueNumber/);
+  assert.match(github, /resolveGitHubIssueNumber/);
+  assert.match(issueReferences, /issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
   assert.match(ui, /syncTaskToGitHub/);
   assert.match(panelSidebar, /GitHub Issue/);

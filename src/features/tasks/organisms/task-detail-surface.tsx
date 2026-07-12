@@ -1,6 +1,7 @@
 "use client";
 
 import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
+import { canDecideDeliverableApproval, canReturnDeliverableForRevision } from "@/features/planning/model/approval-domain";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-detail-panel-notes-section";
@@ -11,7 +12,7 @@ import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-p
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
-import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
 
 type TaskDetailSurfaceProps = {
   task: Task;
@@ -48,6 +49,7 @@ type TaskDetailSurfaceProps = {
   onDelete: () => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
 export function TaskDetailSurface({
@@ -85,6 +87,7 @@ export function TaskDetailSurface({
   onDelete,
   onAddRelation,
   onRemoveRelation,
+  onDecideApproval,
 }: TaskDetailSurfaceProps) {
   const controller = useTaskDetailController({
     task,
@@ -102,6 +105,8 @@ export function TaskDetailSurface({
   });
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
+  const canDecideApproval = canDecideDeliverableApproval(task, currentPackage, currentProfile);
+  const canReturnToDraft = canReturnDeliverableForRevision(task, currentPackage, currentProfile);
 
   return (
     <>
@@ -199,12 +204,15 @@ export function TaskDetailSurface({
           canOpenReview={controller.permissions.canOpenReview}
           canDeleteTask={controller.permissions.canDeleteTask}
           canChangeTaskStatus={controller.permissions.canUpdateStatus}
+          canDecideApproval={canDecideApproval}
+          canReturnToDraft={canReturnToDraft}
           pending={pending}
           githubInstallationAvailable={githubInstallationAvailable}
           onUpdate={onUpdate}
           onSyncGitHub={onSyncGitHub}
           onOpenReview={onOpenReview}
           onDelete={onDelete}
+          onDecideApproval={onDecideApproval}
         />
       </div>
 

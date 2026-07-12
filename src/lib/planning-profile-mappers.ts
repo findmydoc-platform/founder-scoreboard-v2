@@ -120,6 +120,13 @@ export function mapPackage(row: DbPackage): Package {
     successCriteria: row.success_criteria || "",
     scopeConstraints: row.scope_constraints || "",
     sortOrder: row.sort_order,
+    approvalStatus: row.approval_status || "approved",
+    approvalRevision: Number(row.approval_revision || 1),
+    proposedById: row.proposed_by || "",
+    proposedAt: row.proposed_at || "",
+    decidedById: row.decided_by || "",
+    decidedAt: row.decided_at || "",
+    decisionNote: row.decision_note || "",
   };
 }
 

@@ -38,6 +38,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     createSprintPlan,
     currentProfile,
     data,
+    decideInitiativeApproval,
     dismissNotification,
     dispatchNotifications,
     eventMessage,
@@ -120,6 +121,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
           onOpenTask={openTaskPanel}
+          onDecideInitiative={decideInitiativeApproval}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({
             id: initiative.id,
             title: initiative.title,
@@ -135,6 +137,9 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
             goal: initiative.goal,
             successCriteria: initiative.successCriteria || "",
             scopeConstraints: initiative.scopeConstraints || "",
+            approvalStatus: initiative.approvalStatus,
+            approvalRevision: initiative.approvalRevision,
+            decisionNote: initiative.decisionNote,
           })}
         />
       )}

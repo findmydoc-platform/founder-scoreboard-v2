@@ -9,10 +9,6 @@ test("display helpers preserve shared labels and date formatting", async () => {
   assert.equal(display.unassignedAssigneeLabel, "Nicht zugeordnet");
   assert.equal(display.taskAssigneeLabel({ assignee: "" }), "Nicht zugeordnet");
   assert.equal(display.taskAssigneeLabel({ assignee: "Volkan" }), "Volkan");
-  assert.deepEqual(display.taskAssigneeOptions("proposal", profiles), [
-    { value: "", label: "Nicht zugeordnet" },
-    { value: "volkan", label: "Volkan" },
-  ]);
   assert.deepEqual(display.taskAssigneeOptions("deliverable", profiles), [
     { value: "volkan", label: "Volkan" },
   ]);

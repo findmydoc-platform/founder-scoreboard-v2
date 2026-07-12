@@ -33,7 +33,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
 
 export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
   return [
-    payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined
+    payload.title !== undefined || payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined
       || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined
       ? "Aufgabenbrief"
       : "",
@@ -104,6 +104,14 @@ export function applyTaskPriorityUpdate(update: TaskRouteDbUpdate, payload: Task
     return { ok: false, error: "Ungültige Priorität.", status: 400 };
   }
   update.priority = payload.priority;
+  return { ok: true };
+}
+
+export function applyTaskTitleUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
+  if (payload.title === undefined) return { ok: true };
+  const title = payload.title.trim().slice(0, 240);
+  if (title.length < 3) return { ok: false, error: "Titel ist erforderlich.", status: 400 };
+  update.title = title;
   return { ok: true };
 }
 

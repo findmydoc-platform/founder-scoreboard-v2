@@ -12,6 +12,7 @@ export type TaskRelationshipRows = {
 
 export type EditableTaskState = Pick<
   Task,
+  | "title"
   | "status"
   | "priority"
   | "assignee"
@@ -47,11 +48,12 @@ export type TaskDetailDetailsDraft = Pick<
 
 export type TaskBriefDraft = Pick<
   EditableTaskState,
-  "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone"
+  "title" | "problemStatement" | "intendedOutcome" | "scopeConstraints" | "acceptanceCriteria" | "evidenceRequired" | "definitionOfDone"
 >;
 
 export function buildEditableTaskState(task: Task): EditableTaskState {
   return {
+    title: task.title,
     status: normalizeStatus(task.status),
     priority: task.priority,
     assignee: task.assignee,
@@ -77,6 +79,7 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
 
 export function buildTaskBriefDraft(task: Task): TaskBriefDraft {
   return {
+    title: task.title,
     problemStatement: task.problemStatement || task.description,
     intendedOutcome: task.intendedOutcome || "",
     scopeConstraints: task.scopeConstraints || "",

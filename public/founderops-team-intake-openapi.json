@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Team Task Intake API",
-    "version": "1.2.0",
-    "description": "Personal-token API for complete task-centered team context and guarded proposal or sub-issue intake."
+    "version": "2.0.0",
+    "description": "Personal-token API for task context and approval-aware Initiative, Deliverable, or Sub-Issue intake. The v1.2 paths remain temporarily available and deprecated."
   },
   "servers": [
     { "url": "https://founder-ops.findmydoc.eu" }
@@ -310,6 +310,43 @@
           "replayed": { "type": "boolean" },
           "tasks": { "type": "array", "items": { "$ref": "#/components/schemas/TeamTaskIntakeCreatedTask" } }
         }
+      },
+      "TeamTaskIntakeV2Item": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemType", "title"],
+        "properties": {
+          "itemType": { "type": "string", "enum": ["initiative", "deliverable", "sub_issue"] },
+          "title": { "type": "string", "minLength": 3, "maxLength": 240 },
+          "description": { "type": "string", "maxLength": 4000 },
+          "problemStatement": { "type": "string", "maxLength": 4000 },
+          "intendedOutcome": { "type": "string", "maxLength": 4000 },
+          "scopeConstraints": { "type": "string", "maxLength": 4000 },
+          "acceptanceCriteria": { "oneOf": [{ "type": "string", "maxLength": 6000 }, { "type": "array", "items": { "type": "string" } }] },
+          "evidenceRequired": { "type": "string", "maxLength": 4000 },
+          "definitionOfDone": { "type": "string", "maxLength": 4000 },
+          "parentTaskId": { "type": "string", "maxLength": 120 },
+          "packageId": { "type": "string", "maxLength": 120 },
+          "milestoneId": { "type": "string", "maxLength": 120 },
+          "ownerId": { "type": "string", "maxLength": 120 },
+          "accountableProfileId": { "type": "string", "maxLength": 120 },
+          "responsibleProfileIds": { "type": "array", "items": { "type": "string" } },
+          "consultedProfileIds": { "type": "array", "items": { "type": "string" } },
+          "informedProfileIds": { "type": "array", "items": { "type": "string" } },
+          "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
+          "workstream": { "type": "string", "maxLength": 120 },
+          "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" },
+          "deadline": { "type": "string", "format": "date" },
+          "hours": { "type": "number", "minimum": 0, "maximum": 200 },
+          "githubRepo": { "type": "string", "description": "Only sub_issue items may select a technical repository. Deliverables must use findmydoc-platform/management.", "enum": ["findmydoc-platform/management", "findmydoc-platform/website", "findmydoc-platform/clinic-dashboard"] }
+        }
+      },
+      "TeamTaskIntakeV2Payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items"],
+        "properties": { "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/TeamTaskIntakeV2Item" } } }
       }
     }
   },
@@ -348,6 +385,7 @@
     },
     "/api/team/task-intake/preview": {
       "post": {
+        "deprecated": true,
         "operationId": "previewTeamTaskIntake",
         "summary": "Validate and normalize a Team Task Intake batch without writes",
         "requestBody": {
@@ -392,6 +430,7 @@
     },
     "/api/team/task-intake/commit": {
       "post": {
+        "deprecated": true,
         "operationId": "commitTeamTaskIntake",
         "summary": "Atomically and idempotently create a validated Team Task Intake batch",
         "parameters": [
@@ -452,6 +491,34 @@
             "description": "Team Task Intake schema is not available",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
           }
+        }
+      }
+    },
+    "/api/team/task-intake/v2/preview": {
+      "post": {
+        "operationId": "previewTeamTaskIntakeV2",
+        "summary": "Validate and normalize approval-aware planning items without writes",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakeV2Payload" } } } },
+        "responses": {
+          "200": { "description": "Normalized preview; Initiative and Deliverable items are proposed and Sub-Issues inherit parent state" },
+          "400": { "description": "Invalid batch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Role or scope is not sufficient", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/team/task-intake/v2/commit": {
+      "post": {
+        "operationId": "commitTeamTaskIntakeV2",
+        "summary": "Atomically and idempotently create approval-aware planning items",
+        "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TeamTaskIntakeV2Payload" } } } },
+        "responses": {
+          "200": { "description": "Created batch or immutable replay" },
+          "400": { "description": "Invalid batch", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Role or scope is not sufficient", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "409": { "description": "Idempotency conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
       }
     }

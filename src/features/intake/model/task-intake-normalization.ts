@@ -44,6 +44,12 @@ export function intakeHours(value: unknown) {
   return Math.max(0, Math.min(200, Math.round(hours)));
 }
 
+export function intakeStringList(value: unknown, maxLength = 120) {
+  return Array.isArray(value)
+    ? [...new Set(value.map((entry) => intakeText(entry, maxLength)).filter(Boolean))]
+    : [];
+}
+
 export function validateTeamTaskIntakeField(key: TeamTaskIntakeInputKey, value: unknown) {
   const rule = TEAM_TASK_INTAKE_INPUT_RULES[key];
   if (value === undefined) return "required" in rule && rule.required ? "ist erforderlich" : "";

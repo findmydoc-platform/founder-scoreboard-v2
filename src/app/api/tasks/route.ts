@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { requirePlanningContributor } from "@/lib/authz";
-import { isOperationalLeadRole } from "@/lib/platform";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
@@ -9,6 +8,7 @@ import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 
 type CreateTaskPayload = {
   title?: string;
@@ -37,9 +37,11 @@ type CreateTaskPayload = {
   relationType?: TaskRelationType;
   relatedTaskId?: string;
   relationNote?: string;
+  approveNow?: boolean;
+  githubRepo?: string;
 };
 
-const taskTypes = new Set(["deliverable", "proposal", "sub_issue"]);
+const taskTypes = new Set<TaskType>(["deliverable", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
 
@@ -81,11 +83,16 @@ export async function POST(request: NextRequest) {
 
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
+  const githubRepository = resolveTaskGitHubRepository(requestedType, payload.githubRepo);
+  if (!githubRepository.ok) return apiError(githubRepository.error, 400);
 
-  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
+  const isCeo = permission.profile?.platformRole === "ceo";
+  if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
   const packageId = payload.packageId || null;
+  let effectivePackageId = packageId;
+  let parentApprovalStatus: Task["parentApprovalStatus"] = null;
   let milestoneId = payload.milestoneId || null;
-  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null; accountable_profile_id?: string | null } | null = null;
+  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null; accountable_profile_id?: string | null; approval_status?: string | null } | null = null;
   const startDate = payload.startDate || null;
   const endDate = payload.endDate || null;
 
@@ -96,7 +103,7 @@ export async function POST(request: NextRequest) {
   if (packageId) {
     const { data: initiativeRow, error: initiativeError } = await supabase
       .from("packages")
-      .select("id,milestone_id,owner_id,accountable_profile_id")
+      .select("id,milestone_id,owner_id,accountable_profile_id,approval_status")
       .eq("id", packageId)
       .maybeSingle();
     if (initiativeError || !initiativeRow) {
@@ -107,33 +114,37 @@ export async function POST(request: NextRequest) {
   }
 
 
-  const canCreateDeliverable = isOperationalLead || (requestedType === "deliverable" && initiative?.owner_id === permission.profile?.id);
-  const taskType: TaskType = requestedType === "deliverable" && !canCreateDeliverable ? "proposal" : requestedType;
-  const scoreRelevant = taskType === "deliverable";
-  const status = taskType === "proposal" ? "Vorschlag" : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
+  const taskType: TaskType = requestedType;
+  const scoreRelevant = false;
+  const status = payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
   const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
-  const assignee = profileId(payload.assignee || payload.owner) || (taskType === "proposal" ? null : permission.profile?.id || null);
+  const assignee = profileId(payload.assignee || payload.owner) || permission.profile?.id || null;
   const reviewOwnerProfileId = packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
 
-  if (taskType === "deliverable" && (!packageId || !payload.sprintId)) {
-    return apiError("Deliverables brauchen Initiative und Sprint.", 400);
+  if (taskType === "deliverable" && !packageId) {
+    return apiError("Deliverables brauchen eine Initiative.", 400);
+  }
+  if (taskType === "deliverable" && initiative?.approval_status === "rejected") {
+    return apiError("In einer abgelehnten Initiative können keine Deliverables vorgeschlagen werden.", 409);
+  }
+  if (taskType === "deliverable" && payload.approveNow && initiative?.approval_status !== "approved") {
+    return apiError("Die Initiative muss vor dem Deliverable freigegeben sein.", 409);
   }
 
   if (taskType === "sub_issue" && !parentTaskId) {
     return apiError("Sub-Issue braucht ein Deliverable.", 400);
   }
-
   if (taskType === "sub_issue") {
     const { data: parent, error: parentError } = await supabase
       .from("tasks")
-      .select("id,assignee,owner,title")
+      .select("id,title,task_type,package_id,milestone_id,approval_status")
       .eq("id", parentTaskId)
       .single();
-    if (parentError || !parent) return apiError("Deliverable wurde nicht gefunden.", 404);
-    if (!isOperationalLead && (parent.assignee || parent.owner) !== permission.profile?.id) {
-      return apiError("Founder können nur eigene Deliverables verfeinern.", 403);
-    }
+    if (parentError || !parent || parent.task_type !== "deliverable") return apiError("Deliverable wurde nicht gefunden.", 404);
+    effectivePackageId = parent.package_id || null;
+    milestoneId = parent.milestone_id || null;
+    parentApprovalStatus = (parent.approval_status as Task["parentApprovalStatus"]) || null;
   }
 
   const relatedTaskId = cleanText(payload.relatedTaskId, 240);
@@ -157,7 +168,7 @@ export async function POST(request: NextRequest) {
   const insert = buildTaskInsertRow({
     id,
     creationRequestId,
-    packageId,
+    packageId: effectivePackageId,
     milestoneId,
     title,
     description: cleanText(payload.description, 4000),
@@ -178,15 +189,16 @@ export async function POST(request: NextRequest) {
     deadline: payload.deadline || null,
     hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
     definitionOfDone: cleanText(payload.definitionOfDone, 4000),
-    sprintId: taskType === "proposal" || taskType === "sub_issue" ? null : payload.sprintId || null,
+    sprintId: null,
     reviewOwnerProfileId,
     taskType,
     parentTaskId,
     scoreRelevant,
+    githubRepo: githubRepository.repository,
   });
 
   const notifications: Array<Record<string, string | null>> = [];
-  if (taskType === "proposal") {
+  if (taskType === "deliverable" && !payload.approveNow) {
     const { data: leads, error: leadError } = await supabase
       .from("profiles")
       .select("id")
@@ -199,18 +211,16 @@ export async function POST(request: NextRequest) {
         recipientProfileId: lead.id,
         entityType: "task",
         entityId: id,
-        title: `Aufgabenvorschlag: ${title}`,
-        body: insert.description || "Founder hat eine neue Aufgabe vorgeschlagen.",
+        title: `Deliverable vorgeschlagen: ${title}`,
+        body: insert.description || "Ein neues Deliverable wartet auf Freigabe.",
       })));
   }
 
-  const activityMessage = taskType === "proposal"
-    ? "Aufgabenvorschlag erstellt"
-    : taskType === "sub_issue"
+  const activityMessage = taskType === "sub_issue"
       ? "Sub-Issue erstellt"
-      : "Deliverable erstellt";
+      : payload.approveNow ? "Deliverable erstellt und freigegeben" : "Deliverable vorgeschlagen";
   const requestMetadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("create_task_transaction", {
+  const { data: transactionData, error: transactionError } = await supabase.rpc("create_planning_task_transaction", {
     p_task_insert: insert,
     p_relation_type: relatedTaskId ? relationType : null,
     p_related_task_id: relatedTaskId || null,
@@ -223,6 +233,7 @@ export async function POST(request: NextRequest) {
     p_actor_profile_id: permission.profile?.id || null,
     p_request_ip: requestMetadata.request_ip,
     p_user_agent: requestMetadata.user_agent || null,
+    p_approve_now: Boolean(payload.approveNow),
   });
   if (transactionError) {
     if (transactionError.code === "P0002") return apiError("Verknüpfte Aufgabe wurde nicht gefunden.", 404);
@@ -245,6 +256,7 @@ export async function POST(request: NextRequest) {
   const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 
   const task: Task = mapTaskRow(created as TaskRowForMapping, profileNameById);
+  if (task.taskType === "sub_issue") task.parentApprovalStatus = parentApprovalStatus;
   const relation: TaskRelation | null = transaction?.relation
     ? {
         id: transaction.relation.id,

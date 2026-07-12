@@ -3,7 +3,7 @@
 import { TaskDetailPanelHeader } from "@/features/tasks/molecules/task-detail-panel-header";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
-import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -43,6 +43,7 @@ type Props = {
   onDelete: () => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
+  onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
 export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {

@@ -38,7 +38,7 @@ export function useTaskCreateCommand({
     setSaveError("");
 
     const assigneeProfile = profileForAssigneeValue(data.profiles, draft.assignee || currentProfile?.id || "");
-    const assigneeId = draft.taskType === "proposal" && !draft.assignee ? "" : assigneeProfile?.id || "";
+    const assigneeId = assigneeProfile?.id || "";
     const assignee = assigneeId ? assigneeProfile?.name || "" : "";
     const localTask: Task = {
       id: `local-${Date.now()}`,
@@ -51,7 +51,7 @@ export function useTaskCreateCommand({
       acceptanceCriteria: draft.acceptanceCriteria,
       evidenceRequired: draft.evidenceRequired,
       dodTemplateVersion: "founder-deliverable-v2",
-      status: draft.taskType === "proposal" ? "Vorschlag" : draft.status || "Offen",
+      status: draft.status || "Offen",
       priority: draft.priority || "P2",
       assigneeId,
       assignee,
@@ -72,12 +72,12 @@ export function useTaskCreateCommand({
       hours: draft.hours,
       startDate: draft.startDate,
       endDate: draft.endDate,
-      sprintId: draft.taskType === "proposal" || draft.taskType === "sub_issue" ? "" : draft.sprintId,
+      sprintId: "",
       reviewStatus: "not_requested",
       reviewOwnerProfileId: reviewOwnerForTask({ packageId: draft.packageId }, data.packages),
       scorePoints: 0,
       scoreFinal: false,
-      githubRepo: "findmydoc-platform/management",
+      githubRepo: draft.githubRepo,
       githubIssueNumber: null,
       githubIssueUrl: "",
       githubIssueSyncStatus: "not_synced",
@@ -85,7 +85,12 @@ export function useTaskCreateCommand({
       githubIssueSyncError: "",
       taskType: draft.taskType,
       parentTaskId: draft.parentTaskId,
-      scoreRelevant: draft.taskType === "deliverable",
+      approvalStatus: draft.taskType === "sub_issue" ? null : draft.approveNow ? "approved" : "proposed",
+      approvalRevision: 1,
+      parentApprovalStatus: draft.taskType === "sub_issue"
+        ? data.tasks.find((task) => task.id === draft.parentTaskId)?.approvalStatus || null
+        : null,
+      scoreRelevant: false,
       selfDodChecked: false,
       selfEvidenceChecked: false,
       selfDocumentedChecked: false,

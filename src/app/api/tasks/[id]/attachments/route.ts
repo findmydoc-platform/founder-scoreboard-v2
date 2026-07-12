@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requirePlanningContributor } from "@/lib/authz";
 import { uploadGitHubAttachment } from "@/lib/github";
 import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@/lib/github-app";
+import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
 
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,github_issue_number,issue_number")
+    .select("id,title,github_repo,github_issue_number,issue_number")
     .eq("id", id)
     .single();
 
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     buffer,
     githubUserToken,
     `Add attachment for Founder Scoreboard task ${id}`,
+    task.github_repo,
   );
   const markdown = isImageType(file.type)
     ? `![${file.name}](${uploaded.rawUrl})`
@@ -91,6 +93,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     url: uploaded.rawUrl,
     htmlUrl: uploaded.htmlUrl,
     markdown,
-    githubIssueNumber: Number(task.github_issue_number || task.issue_number || 0) || null,
+    githubIssueNumber: resolveGitHubIssueNumber(task, { repository: task.github_repo }) || null,
   });
 }

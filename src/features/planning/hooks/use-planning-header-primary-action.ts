@@ -32,8 +32,8 @@ export function usePlanningHeaderPrimaryAction({
 
   if (workspace === "backlog") {
     return {
-      label: "Neuer Vorschlag",
-      onClick: () => setTaskDialogDefaults({ taskType: "proposal" }),
+      label: "Deliverable vorschlagen",
+      onClick: () => setTaskDialogDefaults({ taskType: "deliverable" }),
     };
   }
 

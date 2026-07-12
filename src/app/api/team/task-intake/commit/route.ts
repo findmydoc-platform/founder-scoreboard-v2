@@ -14,7 +14,7 @@ import {
 } from "@/features/intake/model/team-task-intake-route";
 
 export async function POST(request: NextRequest) {
-  return handleTeamTaskIntakeRequest(request, "write:task-intake", "Team Task Intake konnte nicht gespeichert werden.", async (permission) => {
+  const response = await handleTeamTaskIntakeRequest(request, "write:task-intake", "Team Task Intake konnte nicht gespeichert werden.", async (permission) => {
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
     if (!isUuid(idempotencyKey)) return teamTaskIntakeError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
 
@@ -55,4 +55,7 @@ export async function POST(request: NextRequest) {
     });
     return teamTaskIntakeJson({ ok: true, ...result });
   });
+  response.headers.set("Deprecation", "true");
+  response.headers.set("Link", "</api/team/task-intake/v2/commit>; rel=successor-version");
+  return response;
 }

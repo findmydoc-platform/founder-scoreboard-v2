@@ -18,6 +18,9 @@ test("open reviews remain visible in both open and blocked filters", async () =>
       "@/lib/platform": platformMock,
       "@/lib/status": statusMock,
       "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
+      "@/features/planning/model/approval-domain": {
+        isApprovedDeliverable: (task) => task.taskType === "deliverable" && task.approvalStatus === "approved",
+      },
     },
   );
   const openBlockedTask = {
@@ -32,6 +35,8 @@ test("open reviews remain visible in both open and blocked filters", async () =>
     assignee: "Founder",
     workstream: "Product",
     reviewOwnerProfileId: "reviewer",
+    taskType: "deliverable",
+    approvalStatus: "approved",
   };
   const data = {
     tasks: [openBlockedTask],
@@ -63,6 +68,7 @@ test("review filters combine owner priority and date and return no-results clean
       "@/lib/platform": { ...platformMock, hasOpenWaitingRelation: () => false },
       "@/lib/status": statusMock,
       "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
+      "@/features/planning/model/approval-domain": { isApprovedDeliverable: () => true },
     },
   );
   const tasks = [

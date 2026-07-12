@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/types";
+import { defaultGitHubRepository } from "@/lib/github-repositories";
 
 type BuildTaskInsertRowInput = {
   id: string;
@@ -32,9 +33,16 @@ type BuildTaskInsertRowInput = {
   scoreFinal?: boolean | null;
   githubRepo?: string | null;
   githubIssueSyncStatus?: Task["githubIssueSyncStatus"] | null;
-  taskType?: Task["taskType"] | null;
+  taskType?: Task["taskType"] | "proposal" | null;
   parentTaskId?: string | null;
   scoreRelevant?: boolean | null;
+  approvalStatus?: Task["approvalStatus"];
+  approvalRevision?: number | null;
+  proposedById?: string | null;
+  proposedAt?: string | null;
+  decidedById?: string | null;
+  decidedAt?: string | null;
+  decisionNote?: string | null;
   evidenceLink?: string | null;
   issueNumber?: string | null;
   issueUrl?: string | null;
@@ -84,11 +92,18 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     review_owner_profile_id: input.reviewOwnerProfileId || null,
     score_points: input.scorePoints ?? 0,
     score_final: input.scoreFinal ?? false,
-    github_repo: input.githubRepo || "findmydoc-platform/management",
+    github_repo: input.githubRepo || defaultGitHubRepository,
     github_issue_sync_status: input.githubIssueSyncStatus || "not_synced",
     task_type: input.taskType || "deliverable",
     parent_task_id: input.parentTaskId || null,
     score_relevant: input.scoreRelevant ?? true,
+    approval_status: input.taskType === "sub_issue" ? null : input.approvalStatus || undefined,
+    approval_revision: input.approvalRevision ?? undefined,
+    proposed_by: input.proposedById || null,
+    proposed_at: input.proposedAt || null,
+    decided_by: input.decidedById || null,
+    decided_at: input.decidedAt || null,
+    decision_note: input.decisionNote || null,
     original_sprint_id: input.originalSprintId || null,
     carried_from_task_id: input.carriedFromTaskId || null,
     carried_from_sprint_id: input.carriedFromSprintId || null,

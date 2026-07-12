@@ -220,7 +220,7 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
   assert.match(taskUpdateCommand, /latestMutationByTask/);
   assert.match(taskUpdateCommand, /refreshPlanningData/);
-  assert.match(route, /update_task_transaction/);
+  assert.match(route, /update_planning_task_transaction/);
   assert.match(route, /p_expected_updated_at: payload\.expectedUpdatedAt/);
   assert.doesNotMatch(route, /\.from\("task_notes"\)[\s\S]*\.upsert/);
   assert.doesNotMatch(route, /\.from\("task_dependencies"\)\.delete/);

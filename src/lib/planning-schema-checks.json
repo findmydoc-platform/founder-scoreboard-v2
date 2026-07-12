@@ -72,6 +72,12 @@
     "health": false
   },
   {
+    "name": "tasks.approval",
+    "table": "tasks",
+    "select": "id,task_type,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,legacy_proposal_unresolved,github_repo,score_relevant",
+    "health": true
+  },
+  {
     "name": "sprint_commitments",
     "table": "sprint_commitments",
     "select": "id,sprint_id,profile_id,commitment_level,weekly_hours,note",
@@ -127,6 +133,12 @@
     "name": "packages.initiative",
     "table": "packages",
     "select": "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints",
+    "health": true
+  },
+  {
+    "name": "packages.approval",
+    "table": "packages",
+    "select": "id,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note",
     "health": true
   },
   {

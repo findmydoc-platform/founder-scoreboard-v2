@@ -34,6 +34,7 @@ function basePlanningData() {
         owner: "CEO",
         packageId: "initiative-1",
         taskType: "deliverable",
+        approvalStatus: "approved",
         sprintId: "",
         hours: 8,
       },
@@ -47,7 +48,8 @@ function basePlanningData() {
         assignee: "Deputy",
         owner: "Deputy",
         packageId: "initiative-1",
-        taskType: "proposal",
+        taskType: "deliverable",
+        approvalStatus: "proposed",
         sprintId: "",
         hours: 5,
       },
@@ -62,6 +64,7 @@ function basePlanningData() {
         owner: "CEO",
         packageId: "initiative-1",
         taskType: "deliverable",
+        approvalStatus: "approved",
         sprintId: "sprint-4",
         hours: 13,
       },
@@ -76,6 +79,7 @@ function basePlanningData() {
         owner: "CEO",
         packageId: "initiative-1",
         taskType: "sub_issue",
+        approvalStatus: null,
         sprintId: "",
         hours: 1,
       },
@@ -131,13 +135,18 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   assert.match(renderer, /BacklogWorkspacePanelLoading/);
   assert.match(renderer, /workspace === "backlog"/);
   assert.match(headerAction, /workspace === "backlog"/);
-  assert.match(headerAction, /taskType: "proposal"/);
+  assert.match(headerAction, /Deliverable vorschlagen/);
+  assert.match(headerAction, /taskType: "deliverable"/);
 });
 
 test("backlog view model sorts by rank not priority and keeps sprint as assignment", async () => {
   const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS, filterBacklogItemsByQuery } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
     "@/lib/planning-schedule": scheduleMock,
     "@/lib/status": statusMock,
+    "@/features/planning/model/approval-domain": {
+      isApprovedDeliverable: (task) => task.taskType === "deliverable" && task.approvalStatus === "approved",
+      isProposedDeliverable: (task) => task.taskType === "deliverable" && task.approvalStatus === "proposed",
+    },
   });
   const { backlogTableColumns, backlogTableColumnCount, backlogTableMinWidth } = await loadTranspiledModule("src/features/backlog/model/backlog-table-layout.ts");
 
@@ -153,7 +162,7 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
 
   assert.deepEqual(all.visibleItems.map((item) => item.task.id), ["first-p2", "planned", "late-p0"]);
   assert.deepEqual(proposals.visibleItems.map((item) => item.task.id), ["first-p2"]);
-  assert.deepEqual(ready.visibleItems.map((item) => item.task.id), ["first-p2", "late-p0"]);
+  assert.deepEqual(ready.visibleItems.map((item) => item.task.id), ["late-p0"]);
   assert.deepEqual(queried.map((item) => item.task.id), ["late-p0"]);
   assert.deepEqual(combined.visibleItems.map((item) => item.task.id), ["late-p0"]);
   assert.equal(all.sprintBuckets[0].sprint.id, "sprint-4");
@@ -213,13 +222,13 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   assert.doesNotMatch(uiSurface, /<select|<\/select|<option|type="date"|type="datetime-local"/);
 });
 
-test("planning board keeps proposals out of the board columns", async () => {
+test("planning board keeps non-approved items out of the board columns", async () => {
   const renderer = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
   const board = await readFile("src/features/tasks/organisms/task-board-view.tsx", "utf8");
 
   assert.match(renderer, /planningBoardStatuses = taskStatuses\.filter\(\(status\) => status !== "Vorschlag"\)/);
-  assert.match(renderer, /planningBoardTasks = visibleTasks\.filter/);
-  assert.match(renderer, /task\.taskType !== "proposal"/);
+  assert.match(renderer, /planningBoardTasks = visibleTasks/);
+  assert.match(renderer, /isTaskPlanningActive/);
   assert.match(renderer, /normalizeStatus\(task\.status\) !== "Vorschlag"/);
   assert.match(renderer, /statuses=\{planningBoardStatuses\}/);
   assert.match(renderer, /visibleTasks=\{planningBoardTasks\}/);
