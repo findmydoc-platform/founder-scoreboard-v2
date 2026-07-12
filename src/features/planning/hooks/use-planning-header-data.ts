@@ -68,12 +68,12 @@ export function usePlanningHeaderData({
     if (source !== "supabase") return;
     if (!authUser?.id) return;
     if (authRequired && !protectedDataLoaded) return;
-    if (!idleSlots.length) return;
+    if (!idleSlotKey) return;
 
     if (inFlightKeyRef.current === idleSlotKey) return;
 
     const authUserId = authUser.id;
-    const requestedSlots = [...idleSlots];
+    const requestedSlots = idleSlotKey.split(",") as PlanningHeaderSlotKey[];
     inFlightKeyRef.current = idleSlotKey;
     const controller = new AbortController();
     let active = true;
@@ -120,7 +120,7 @@ export function usePlanningHeaderData({
       if (inFlightKeyRef.current === idleSlotKey) inFlightKeyRef.current = "";
       setLoadingSlots([]);
     };
-  }, [apiClient, authRequired, authUser, data, idleSlotKey, idleSlots, protectedDataLoaded, serverCurrentProfile, setHeaderData, source]);
+  }, [apiClient, authRequired, authUser, data, idleSlotKey, protectedDataLoaded, serverCurrentProfile, setHeaderData, source]);
 
   return headerData;
 }

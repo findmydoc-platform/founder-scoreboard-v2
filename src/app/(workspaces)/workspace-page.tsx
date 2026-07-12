@@ -2,19 +2,23 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { getPlanningDataScopeForWorkspace } from "@/lib/planning-data-scopes";
-import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
+import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 
-function loadWorkspacePlanningData(initialWorkspace: AppWorkspace, profile?: AuthenticatedProfile | null) {
+function loadWorkspacePlanningData(
+  initialWorkspace: AppWorkspace,
+  profile?: AuthenticatedProfile | null,
+  options?: PlanningDataLoadOptions,
+) {
   return getPlanningData(getPlanningDataScopeForWorkspace(initialWorkspace), {
     workspace: initialWorkspace,
     currentProfileId: profile?.id || null,
     platformRole: profile?.platformRole || null,
-  });
+  }, options);
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
@@ -34,7 +38,9 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
-    const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile);
+    const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile, {
+      headerData: "deferred",
+    });
     if (availability === "unavailable") {
       return <PlanningDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
     }

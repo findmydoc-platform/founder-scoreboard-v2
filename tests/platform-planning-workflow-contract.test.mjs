@@ -277,6 +277,23 @@ test("planning data loader separates query loading from public orchestration", a
   assert.doesNotMatch(headerData, /description|owner|audience_mode|participant_profile_ids|reminder_days_before/);
 });
 
+test("authenticated workspace SSR defers header data to the protected client loader", async () => {
+  const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
+  const data = await readFile("src/lib/planning-data.ts", "utf8");
+  const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const headerDataHook = await readFile("src/features/planning/hooks/use-planning-header-data.ts", "utf8");
+
+  assert.match(data, /headerData\?: "eager" \| "deferred"/);
+  assert.match(data, /options\.headerData === "deferred"[\s\S]*emptyPlanningHeaderData[\s\S]*await loadPlanningHeaderData/);
+  assert.match(page, /loadWorkspacePlanningData\(initialWorkspace, auth\.profile, \{[\s\S]*headerData: "deferred"/);
+  assert.match(page, /initialHeaderData=\{headerData\}[\s\S]*initialProtectedDataLoaded/);
+  assert.doesNotMatch(api, /headerData: "deferred"/);
+
+  assert.match(headerDataHook, /if \(authRequired && !protectedDataLoaded\) return;[\s\S]*if \(!idleSlotKey\) return;/);
+  assert.match(headerDataHook, /const requestedSlots = idleSlotKey\.split\(","\) as PlanningHeaderSlotKey\[\]/);
+  assert.doesNotMatch(headerDataHook, /idleSlotKey, idleSlots,/);
+});
+
 test("task row descriptor covers planning UI mapping fields", async () => {
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
