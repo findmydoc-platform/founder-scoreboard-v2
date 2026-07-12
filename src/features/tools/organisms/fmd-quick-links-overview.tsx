@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import type { FmdTool, Profile } from "@/lib/types";
 import {
@@ -29,8 +29,8 @@ import {
   UiEmptyState,
   UiNotice,
   UiPanel,
-  UiTextInput,
 } from "@/shared/atoms/ui-primitives";
+import { FilterToolbar, FilterSegmentedControl, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 
 type FmdQuickLinksOverviewProps = {
   tools?: FmdTool[];
@@ -60,7 +60,8 @@ export function FmdQuickLinksOverview({
   const [draft, setDraft] = useState<FmdToolDraft>(() => defaultFmdToolDraft(currentProfile?.name || ""));
   const [categoryFilter, setCategoryFilter] = useState<FmdQuickLinkCategoryFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [showMissingLinks, setShowMissingLinks] = useState(false);
+  const [showMissingLinks, setShowMissingLinks] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const sortedTools = useMemo(() => sortFmdTools(tools), [tools]);
   const visibleByLinkTools = useMemo(
@@ -83,7 +84,10 @@ export function FmdQuickLinksOverview({
   );
   const emptyStateLabel = emptyQuickLinksLabel(sortedTools.length, showMissingLinks);
 
-  const filtersActive = categoryFilter !== "all" || Boolean(normalizedSearch) || showMissingLinks;
+  const activeFilters: ActiveFilter[] = [
+    ...(categoryFilter !== "all" ? [{ id: "category", label: `Kategorie: ${categoryTabs.find((tab) => tab.value === categoryFilter)?.label || categoryFilter}`, onRemove: () => setCategoryFilter("all") }] : []),
+    ...(!showMissingLinks ? [{ id: "missing", label: "Nur verlinkte Einträge", onRemove: () => setShowMissingLinks(true) }] : []),
+  ];
 
   const openCreateDialog = () => {
     setEditingToolId(null);
@@ -106,7 +110,7 @@ export function FmdQuickLinksOverview({
   const resetFilters = () => {
     setCategoryFilter("all");
     setSearchTerm("");
-    setShowMissingLinks(false);
+    setShowMissingLinks(true);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -134,81 +138,6 @@ export function FmdQuickLinksOverview({
             </UiButton>
           </div>
 
-          <div className="grid gap-3">
-            <div className="flex min-w-0 flex-wrap gap-2">
-              {categoryTabs.map((tab) => {
-                const active = categoryFilter === tab.value;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => setCategoryFilter(tab.value)}
-                    aria-pressed={active}
-                    className={classNames(
-                      "inline-flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition",
-                      active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                    )}
-                  >
-                    <span className="truncate">{tab.label}</span>
-                    <span className={classNames(
-                      "rounded-full px-2 py-0.5 text-[11px]",
-                      active ? "bg-white text-blue-700" : "bg-slate-100 text-slate-500",
-                    )}>
-                      {categoryCounts[tab.value]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
-              <label className="relative min-w-0">
-                <span className="sr-only">Link suchen</span>
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <UiTextInput
-                  type="search"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  inputSize="lg"
-                  inputPadding="md"
-                  className="w-full pl-9"
-                  placeholder="Suchen nach Link, Owner, Kategorie..."
-                />
-              </label>
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                {missingLinkCount > 0 && (
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showMissingLinks}
-                    aria-label="Fehlende Links anzeigen"
-                    onClick={() => setShowMissingLinks((value) => !value)}
-                    className={classNames(
-                      "inline-flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-100",
-                      showMissingLinks ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                    )}
-                  >
-                    <span className="truncate">Fehlende Links</span>
-                    <span className={classNames(
-                      "rounded-full px-2 py-0.5 text-[11px]",
-                      showMissingLinks ? "bg-white text-amber-800" : "bg-slate-100 text-slate-500",
-                    )}>
-                      {missingLinkCount}
-                    </span>
-                    <span className={classNames("relative h-5 w-9 rounded-full transition", showMissingLinks ? "bg-amber-500" : "bg-slate-200")}>
-                      <span className={classNames("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition", showMissingLinks ? "left-4" : "left-0.5")} />
-                    </span>
-                  </button>
-                )}
-                {filtersActive && (
-                  <UiButton onClick={resetFilters} variant="ghost" size="sm" className="text-slate-500">
-                    Filter zurücksetzen
-                  </UiButton>
-                )}
-              </div>
-            </div>
-          </div>
-
           {message && <UiNotice tone="success" className="font-medium">{message}</UiNotice>}
           {!createAllowed && (
             <UiNotice tone="warning" className="font-medium">
@@ -216,6 +145,50 @@ export function FmdQuickLinksOverview({
             </UiNotice>
           )}
         </div>
+
+        <FilterToolbar
+          resetLabel="Filter zurücksetzen"
+          className="rounded-none border-x-0 border-b-0 shadow-none"
+          searchLabel="Links durchsuchen"
+          searchPlaceholder="Link, Owner oder Kategorie suchen"
+          query={searchTerm}
+          onQueryChange={setSearchTerm}
+          expanded={filtersOpen}
+          onExpandedChange={setFiltersOpen}
+          activeFilters={activeFilters}
+          onReset={resetFilters}
+          visibleCount={filteredTools.length}
+          totalCount={sortedTools.length}
+          panelId="quicklink-data-filters"
+          primaryControls={(
+            <FilterSegmentedControl
+              label="Link-Kategorie"
+              value={categoryFilter}
+              options={categoryTabs.map((tab) => ({ value: tab.value, label: tab.label, count: categoryCounts[tab.value] }))}
+              onChange={setCategoryFilter}
+            />
+          )}
+        >
+          {missingLinkCount > 0 && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showMissingLinks}
+              aria-label="Fehlende Links einbeziehen"
+              onClick={() => setShowMissingLinks((value) => !value)}
+              className={classNames(
+                "inline-flex min-h-10 min-w-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-100",
+                showMissingLinks ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              <span className="truncate">Fehlende Links einbeziehen</span>
+              <span className={classNames("rounded-full px-2 py-0.5 text-[11px]", showMissingLinks ? "bg-white text-amber-800" : "bg-slate-100 text-slate-500")}>{missingLinkCount}</span>
+              <span className={classNames("relative h-5 w-9 rounded-full transition", showMissingLinks ? "bg-amber-500" : "bg-slate-200")}>
+                <span className={classNames("absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition", showMissingLinks ? "left-4" : "left-0.5")} />
+              </span>
+            </button>
+          )}
+        </FilterToolbar>
 
         <div className="border-t border-slate-200 bg-slate-50/40 p-4 lg:p-5">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

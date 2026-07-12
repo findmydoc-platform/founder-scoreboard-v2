@@ -72,7 +72,7 @@ export function BacklogRankTable({
             </tr>
           </DataTableHead>
           <tbody>
-            {items.map((item, index) => (
+            {items.map((item) => (
               <DataRow
                 key={item.task.id}
                 draggable={canManageBacklog}
@@ -89,9 +89,9 @@ export function BacklogRankTable({
                   event.preventDefault();
                   onReorderTask(dragTaskId(event), item.task.id);
                 }}
-                className={index === 0 ? "bg-blue-50/45" : ""}
+                className={item.rank === 1 ? "bg-blue-50/45" : ""}
               >
-                <DataCell className={index === 0 ? "border-l-4 border-l-blue-600" : ""}>
+                <DataCell className={item.rank === 1 ? "border-l-4 border-l-blue-600" : ""}>
                   <button
                     type="button"
                     disabled={!canManageBacklog}
@@ -103,7 +103,7 @@ export function BacklogRankTable({
                     <GripVertical size={16} />
                   </button>
                 </DataCell>
-                <DataCell className="font-semibold text-slate-600">#{index + 1}</DataCell>
+                <DataCell className="font-semibold text-slate-600">#{item.rank}</DataCell>
                 <DataCell className="max-w-sm">
                   <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="text-left font-semibold text-slate-950">
                     {item.task.title}

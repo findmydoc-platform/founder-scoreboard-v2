@@ -14,7 +14,7 @@ export type PlanningFilters = {
   status: string;
   priority: string;
   packageId: string;
-  quick: string;
+  quick: string[];
 };
 
 const planningFiltersSessionKey = "fmd-planning-filters-v1";
@@ -25,11 +25,16 @@ const defaultPlanningFilters: PlanningFilters = {
   status: "Alle",
   priority: "Alle",
   packageId: "Alle",
-  quick: "",
+  quick: [],
 };
 
 function isFilterString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function normalizeQuickFilters(value: unknown) {
+  if (Array.isArray(value)) return value.filter(isFilterString);
+  return isFilterString(value) && value ? [value] : [];
 }
 
 function normalizePlanningFilters(value: unknown): PlanningFilters {
@@ -43,7 +48,7 @@ function normalizePlanningFilters(value: unknown): PlanningFilters {
     status: isFilterString(candidate.status) ? candidate.status : defaultPlanningFilters.status,
     priority: isFilterString(candidate.priority) ? candidate.priority : defaultPlanningFilters.priority,
     packageId: isFilterString(candidate.packageId) ? candidate.packageId : defaultPlanningFilters.packageId,
-    quick: isFilterString(candidate.quick) ? candidate.quick : defaultPlanningFilters.quick,
+    quick: normalizeQuickFilters(candidate.quick),
   };
 }
 

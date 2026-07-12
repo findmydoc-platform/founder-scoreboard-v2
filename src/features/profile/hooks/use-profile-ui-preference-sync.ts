@@ -84,7 +84,9 @@ export function useProfileUiPreferenceSync({
     setFilters({
       ...preference.planningFilters,
       assignee: preference.defaultWorkspace === "mine" ? "Alle" : preference.planningFilters.assignee,
-      quick: preference.defaultWorkspace === "mine" ? "mine" : preference.planningFilters.quick,
+      quick: preference.defaultWorkspace === "mine"
+        ? Array.from(new Set(["mine", ...preference.planningFilters.quick]))
+        : preference.planningFilters.quick,
     });
     setExpandedPackageIds(preference.expandedPackageIds);
     if (!pathHasWorkspace() && preference.defaultWorkspace !== "profile") {

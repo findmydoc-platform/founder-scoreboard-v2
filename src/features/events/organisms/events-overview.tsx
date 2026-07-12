@@ -7,6 +7,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { eventDateRangeLabel, founderEventAudienceLabel, founderEventCategories, founderEventCategoryLabel, founderEventStatusLabel, founderEventStatuses, normalizeEventDateTimeInput } from "@/lib/founder-events";
 import type { FounderEvent, Profile } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { FilterField, FilterSegmentedControl, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 
 export type FounderEventDraft = {
   id?: number;
@@ -23,6 +24,7 @@ export type FounderEventDraft = {
 };
 
 type EventFilter = "upcoming" | "past" | "cancelled" | "all";
+type EventCategoryFilter = FounderEvent["category"] | "all";
 
 type Props = {
   events: FounderEvent[];
@@ -82,18 +84,33 @@ export function EventsOverview({
   onUpdateEvent,
 }: Props) {
   const [filter, setFilter] = useState<EventFilter>("upcoming");
+  const [categoryFilter, setCategoryFilter] = useState<EventCategoryFilter>("all");
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [draft, setDraft] = useState<FounderEventDraft>(() => draftFromEvent());
   const [formPending, setFormPending] = useState(false);
   const [now] = useState(() => Date.now());
-  const visibleEvents = useMemo(() => sortEvents(events.filter((event) => filterEvent(event, filter, now))), [events, filter, now]);
+  const visibleEvents = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("de");
+    return sortEvents(events.filter((event) => (
+      filterEvent(event, filter, now)
+      && (categoryFilter === "all" || event.category === categoryFilter)
+      && (!normalizedQuery || [event.title, event.description, event.location, founderEventCategoryLabel(event.category)].join(" ").toLocaleLowerCase("de").includes(normalizedQuery))
+    )));
+  }, [categoryFilter, events, filter, now, query]);
   const editingEvent = editingEventId ? events.find((event) => event.id === editingEventId) || null : null;
   const metrics = {
     upcoming: events.filter((event) => filterEvent(event, "upcoming", now)).length,
     past: events.filter((event) => filterEvent(event, "past", now)).length,
     cancelled: events.filter((event) => filterEvent(event, "cancelled", now)).length,
   };
+  const activeFilters: ActiveFilter[] = categoryFilter !== "all" ? [{
+    id: "category",
+    label: `Kategorie: ${founderEventCategoryLabel(categoryFilter)}`,
+    onRemove: () => setCategoryFilter("all"),
+  }] : [];
 
   const openCreate = () => {
     setEditingEventId(null);
@@ -303,26 +320,46 @@ export function EventsOverview({
           <EventMetric label="Abgesagt" value={metrics.cancelled} />
           <EventMetric label="Gesamt" value={events.length} />
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {[
-            { id: "upcoming", label: "Bevorstehend" },
-            { id: "past", label: "Vergangen" },
-            { id: "cancelled", label: "Abgesagt" },
-            { id: "all", label: "Alle" },
-          ].map((option) => (
-            <UiButton
-              key={option.id}
-              onClick={() => setFilter(option.id as EventFilter)}
-              variant={filter === option.id ? "blue" : "secondary"}
-              size="sm"
-              className={filter === option.id ? "border-blue-300" : "text-slate-600"}
-            >
-              {option.label}
-            </UiButton>
-          ))}
-        </div>
         {message && <UiNotice className="mt-3 font-medium leading-normal">{message}</UiNotice>}
       </UiPanel>
+
+      <FilterToolbar
+        searchLabel="Events durchsuchen"
+        searchPlaceholder="Event, Ort oder Beschreibung suchen"
+        query={query}
+        onQueryChange={setQuery}
+        expanded={filtersOpen}
+        onExpandedChange={setFiltersOpen}
+        activeFilters={activeFilters}
+        isDirty={filter !== "upcoming" || categoryFilter !== "all" || Boolean(query)}
+        onReset={() => { setQuery(""); setFilter("upcoming"); setCategoryFilter("all"); }}
+        visibleCount={visibleEvents.length}
+        totalCount={events.length}
+        panelId="event-data-filters"
+        primaryControls={(
+          <FilterSegmentedControl
+            label="Event-Zeitraum"
+            value={filter}
+            options={[
+              { value: "upcoming", label: "Bevorstehend", count: metrics.upcoming },
+              { value: "past", label: "Vergangen", count: metrics.past },
+              { value: "cancelled", label: "Abgesagt", count: metrics.cancelled },
+              { value: "all", label: "Alle", count: events.length },
+            ]}
+            onChange={setFilter}
+          />
+        )}
+      >
+        <FilterField label="Kategorie" className="max-w-xs">
+          <CustomSelect
+            aria-label="Nach Event-Kategorie filtern"
+            value={categoryFilter}
+            onChange={(value) => setCategoryFilter(value as EventCategoryFilter)}
+            className="h-10 text-sm"
+            options={[{ value: "all", label: "Alle Kategorien" }, ...founderEventCategories]}
+          />
+        </FilterField>
+      </FilterToolbar>
 
       {eventForm}
 

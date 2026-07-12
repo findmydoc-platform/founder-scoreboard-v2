@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
@@ -8,6 +11,10 @@ import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataCell, DataEmptyRow, DataHeaderCell, DataOverflow, DataRow, DataSurface, DataTable, DataTableHead } from "@/shared/molecules/data-surface";
+import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
+
+type SprintTaskRiskFilter = "all" | "github" | "carryover" | "outcome";
+type SprintTaskSort = "priority" | "title" | "status" | "assignee";
 
 export function SprintTaskTables({
   data,
@@ -40,8 +47,67 @@ export function SprintTaskTables({
   onAssignSprint: (task: Task, sprintId: string) => void;
   onSelectReviewTask: (taskId: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Alle");
+  const [assigneeFilter, setAssigneeFilter] = useState("Alle");
+  const [riskFilter, setRiskFilter] = useState<SprintTaskRiskFilter>("all");
+  const [sort, setSort] = useState<SprintTaskSort>("priority");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const normalizedQuery = query.trim().toLocaleLowerCase("de");
+  const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
+  const filterTasks = (tasks: Task[]) => tasks.filter((task) => {
+    const queryMatches = !normalizedQuery || [task.title, task.description, task.assignee, task.workstream, task.priority].join(" ").toLocaleLowerCase("de").includes(normalizedQuery);
+    const statusMatches = statusFilter === "Alle" || normalizeStatus(task.status) === statusFilter;
+    const assigneeMatches = assigneeFilter === "Alle" || task.assigneeId === assigneeFilter || task.assignee === assigneeFilter;
+    const riskMatches = riskFilter === "all"
+      || riskFilter === "github" && !hasGitHubIssue(task)
+      || riskFilter === "carryover" && Boolean(task.carriedFromSprintId)
+      || riskFilter === "outcome" && Boolean(task.sprintOutcome);
+    return queryMatches && statusMatches && assigneeMatches && riskMatches;
+  }).sort((left, right) => {
+    if (sort === "title") return left.title.localeCompare(right.title, "de");
+    if (sort === "status") return normalizeStatus(left.status).localeCompare(normalizeStatus(right.status), "de") || left.order - right.order;
+    if (sort === "assignee") return (left.assignee || "").localeCompare(right.assignee || "", "de") || left.order - right.order;
+    return (priorityRank[left.priority] ?? 9) - (priorityRank[right.priority] ?? 9) || left.order - right.order;
+  });
+  const visibleSprintTasks = filterTasks(sprintTasks);
+  const visibleOtherTasks = filterTasks(otherTasks);
+  const activeFilters: ActiveFilter[] = [
+    ...(statusFilter !== "Alle" ? [{ id: "status", label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter("Alle") }] : []),
+    ...(assigneeFilter !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${data.profiles.find((profile) => profile.id === assigneeFilter)?.name || assigneeFilter}`, onRemove: () => setAssigneeFilter("Alle") }] : []),
+    ...(riskFilter !== "all" ? [{ id: "risk", label: `Risiko: ${riskFilter === "github" ? "GitHub fehlt" : riskFilter === "carryover" ? "Carry-over" : "Sprint-Ergebnis"}`, onRemove: () => setRiskFilter("all") }] : []),
+    ...(sort !== "priority" ? [{ id: "sort", label: `Sortierung: ${sort === "title" ? "Titel" : sort === "status" ? "Status" : "Zuständigkeit"}`, onRemove: () => setSort("priority") }] : []),
+  ];
+  const resetFilters = () => {
+    setQuery("");
+    setStatusFilter("Alle");
+    setAssigneeFilter("Alle");
+    setRiskFilter("all");
+    setSort("priority");
+  };
+
   return (
     <>
+      <FilterToolbar
+        searchLabel="Sprint-Aufgaben durchsuchen"
+        searchPlaceholder="Aufgabe, Bereich oder Zuständigkeit suchen"
+        query={query}
+        onQueryChange={setQuery}
+        expanded={filtersOpen}
+        onExpandedChange={setFiltersOpen}
+        activeFilters={activeFilters}
+        onReset={resetFilters}
+        visibleCount={visibleSprintTasks.length}
+        totalCount={sprintTasks.length}
+        panelId="sprint-task-filters"
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <FilterField label="Status"><CustomSelect aria-label="Sprint-Aufgaben nach Status filtern" value={statusFilter} onChange={setStatusFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Status" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} /></FilterField>
+          <FilterField label="Zuständig"><CustomSelect aria-label="Sprint-Aufgaben nach Zuständigkeit filtern" value={assigneeFilter} onChange={setAssigneeFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))]} /></FilterField>
+          <FilterField label="Risiko"><CustomSelect aria-label="Sprint-Aufgaben nach Risiko filtern" value={riskFilter} onChange={(value) => setRiskFilter(value as SprintTaskRiskFilter)} className="h-10 text-sm" options={[{ value: "all", label: "Alle Risiken" }, { value: "github", label: "GitHub fehlt" }, { value: "carryover", label: "Carry-over" }, { value: "outcome", label: "Sprint-Ergebnis gesetzt" }]} /></FilterField>
+          <FilterField label="Sortierung"><CustomSelect aria-label="Sprint-Aufgaben sortieren" value={sort} onChange={(value) => setSort(value as SprintTaskSort)} className="h-10 text-sm" options={[{ value: "priority", label: "Priorität" }, { value: "title", label: "Titel" }, { value: "status", label: "Status" }, { value: "assignee", label: "Zuständigkeit" }]} /></FilterField>
+        </div>
+      </FilterToolbar>
       <DataSurface title="Sprint-Aufgaben">
         <DataOverflow>
           <DataTable minWidth={940}>
@@ -56,7 +122,7 @@ export function SprintTaskTables({
               </tr>
             </DataTableHead>
             <tbody>
-              {sprintTasks.map((task) => (
+              {visibleSprintTasks.map((task) => (
                 <DataRow key={task.id}>
                   <DataCell className="max-w-[360px] px-4">
                     <TaskReferenceLink task={task} onOpenTask={onOpenTask} className="max-w-full text-left font-semibold text-slate-950">
@@ -107,9 +173,9 @@ export function SprintTaskTables({
                   </DataCell>
                 </DataRow>
               ))}
-              {!sprintTasks.length && (
+              {!visibleSprintTasks.length && (
                 <DataEmptyRow colSpan={6}>
-                  Noch keine Aufgaben in diesem Sprint.
+                  Keine Sprint-Aufgaben für diese Filter.
                 </DataEmptyRow>
               )}
             </tbody>
@@ -130,7 +196,7 @@ export function SprintTaskTables({
                 </tr>
               </DataTableHead>
               <tbody>
-                {otherTasks.map((task) => {
+                {visibleOtherTasks.map((task) => {
                   const currentSprint = data.sprints.find((item) => item.id === task.sprintId);
                   return (
                     <DataRow key={task.id}>
@@ -148,6 +214,7 @@ export function SprintTaskTables({
                     </DataRow>
                   );
                 })}
+                {!visibleOtherTasks.length && <DataEmptyRow colSpan={4}>Keine Aufgaben aus anderen Sprints für diese Filter.</DataEmptyRow>}
               </tbody>
             </DataTable>
           </DataOverflow>

@@ -48,7 +48,7 @@ export function usePlanningDerivedState({
 
   useEffect(() => {
     if (!legacyMineWorkspace) return;
-    setFilters((current) => ({ ...current, assignee: "Alle", quick: "mine" }));
+    setFilters((current) => ({ ...current, assignee: "Alle", quick: Array.from(new Set(["mine", ...current.quick])) }));
   }, [legacyMineWorkspace, setFilters]);
 
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });

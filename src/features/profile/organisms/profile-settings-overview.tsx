@@ -92,7 +92,7 @@ function ProfileSettingsForm({
   const statusOptions = [{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }));
   const packageOptions = [{ value: "Alle", label: "Alle" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.title }))];
-  const quickFilterOptions = [{ value: "", label: "Kein Schnellfilter" }, ...quickFilters.map((item) => ({ value: item.id, label: item.label }))];
+  const quickFilterOptions = quickFilters.map((item) => ({ value: item.id, label: item.label }));
 
   const updateDraft = <Key extends keyof ProfileSettingsDraft>(key: Key, value: ProfileSettingsDraft[Key]) => {
     setMessage("");

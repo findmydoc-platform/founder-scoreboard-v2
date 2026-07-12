@@ -84,7 +84,7 @@ export const quickFilters = [
   { id: "open", label: "Offen" },
   { id: "critical", label: "Kritisch" },
   { id: "blocked", label: "Blockiert" },
-  { id: "week", label: "Diese Woche" },
+  { id: "week", label: "Nächste 7 Tage" },
   { id: "high", label: "Hohe Priorität" },
   { id: "evidence", label: "Ohne Evidence" },
 ];

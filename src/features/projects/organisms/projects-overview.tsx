@@ -2,12 +2,15 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { CustomSelect } from "@/shared/atoms/custom-select";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
+import { buildProjectsFilterViewModel } from "@/features/projects/model/projects-filter-view-model";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
-import { normalizeStatus } from "@/lib/status";
+import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Package, PlanningData, Profile, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
+import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 
 export function ProjectsOverview({
   data,
@@ -24,25 +27,47 @@ export function ProjectsOverview({
   onEditInitiative: (initiative: Package) => void;
   onOpenTask: (taskId: string) => void;
 }) {
-  const milestones = data.milestones.length
-    ? data.milestones
-    : [{ id: "", title: "Ohne Epic", description: "Initiativen ohne zugeordneten Meilenstein.", targetDate: "", status: "planned" as const, sortOrder: 999 }];
   const [openMilestoneIds, setOpenMilestoneIds] = useState<Set<string>>(new Set());
   const [openInitiativeIds, setOpenInitiativeIds] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("Alle");
+  const [statusFilter, setStatusFilter] = useState("Alle");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || "Nicht gesetzt";
+  const filterViewModel = buildProjectsFilterViewModel({ data, tasks, query, ownerFilter, statusFilter });
+  const activeFilters: ActiveFilter[] = [
+    ...(ownerFilter !== "Alle" ? [{ id: "owner", label: `Owner: ${profileName(ownerFilter)}`, onRemove: () => setOwnerFilter("Alle") }] : []),
+    ...(statusFilter !== "Alle" ? [{ id: "status", label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter("Alle") }] : []),
+  ];
 
   return (
     <div className="grid gap-4">
+      <FilterToolbar
+        searchLabel="Meilensteine und Deliverables durchsuchen"
+        searchPlaceholder="Initiative, Deliverable oder Bereich suchen"
+        query={query}
+        onQueryChange={setQuery}
+        expanded={filtersOpen}
+        onExpandedChange={setFiltersOpen}
+        activeFilters={activeFilters}
+        onReset={() => { setQuery(""); setOwnerFilter("Alle"); setStatusFilter("Alle"); }}
+        visibleCount={filterViewModel.visibleCount}
+        totalCount={filterViewModel.totalCount}
+        panelId="project-data-filters"
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <FilterField label="Owner"><CustomSelect aria-label="Nach Owner filtern" value={ownerFilter} onChange={setOwnerFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Owner" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))]} /></FilterField>
+          <FilterField label="Status"><CustomSelect aria-label="Nach Deliverable-Status filtern" value={statusFilter} onChange={setStatusFilter} className="h-10 text-sm" options={[{ value: "Alle", label: "Alle Status" }, ...taskStatuses.map((status) => ({ value: status, label: status }))]} /></FilterField>
+        </div>
+      </FilterToolbar>
       <UiPanel>
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktives Projekt</div>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{data.project.name}</h2>
         <p className="mt-1 text-sm text-slate-500">Struktur: Epic / Meilenstein → Initiative → Deliverable → Sub-Issue. Sprints sind der Zeitcontainer für Deliverables.</p>
       </UiPanel>
       <section className="grid gap-3">
-        {milestones.map((milestone) => {
+        {filterViewModel.hierarchy.map(({ milestone, initiatives: groups, tasks: milestoneTasks }) => {
           const milestoneKey = milestone.id || "without-epic";
-          const groups = data.packages.filter((pack) => (milestone.id ? pack.milestoneId === milestone.id : !pack.milestoneId));
-          const milestoneTasks = tasks.filter((task) => groups.some((pack) => pack.id === task.packageId));
           const isMilestoneOpen = openMilestoneIds.has(milestoneKey);
           const blocked = milestoneTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
           const effort = milestoneTasks.reduce((sum, task) => sum + task.hours, 0);
@@ -74,12 +99,12 @@ export function ProjectsOverview({
               </button>
               {isMilestoneOpen && (
                 <div className="grid gap-3 border-t border-slate-100 bg-slate-50 p-3">
-                  {groups.map((pack) => (
+                  {groups.map(({ initiative: pack, tasks: initiativeTasks }) => (
                     <InitiativeTreeItem
                       key={pack.id}
                       data={data}
                       initiative={pack}
-                      tasks={tasks.filter((task) => task.packageId === pack.id && task.taskType !== "sub_issue")}
+                      tasks={initiativeTasks}
                       profileName={profileName}
                       isOpen={openInitiativeIds.has(pack.id)}
                       canEdit={canManageInitiatives || pack.ownerId === currentProfile?.id}

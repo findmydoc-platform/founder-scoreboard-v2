@@ -1,4 +1,4 @@
-import { Filter, GitBranch, HelpCircle, Import, Plus, X } from "lucide-react";
+import { GitBranch, HelpCircle, Import, Plus, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
@@ -41,7 +41,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     setFilters,
     setGithubSyncQueueOpen,
     setMobileNavOpen,
-    setShowFilters,
     setShowNotifications,
     setStatusGuardNotice,
     setStatusGuardTaskId,
@@ -178,7 +177,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     >
       {filtersAvailable && (
         <div className="grid gap-2 border-t border-slate-100 px-4 py-3 lg:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="grid gap-3 md:flex md:flex-wrap md:items-center md:justify-between">
             <div className="grid min-w-0 flex-1 gap-2">
               <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2" data-tour-id="planning-task-scope">
                 <div className="text-xs font-semibold uppercase text-slate-500">Aufgaben</div>
@@ -187,12 +186,18 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
                     { id: "", label: "Alle" },
                     { id: "mine", label: "Meine" },
                   ].map((scope) => {
-                    const active = filters.quick === scope.id || (!scope.id && filters.quick !== "mine");
+                    const active = scope.id ? filters.quick.includes(scope.id) : !filters.quick.includes("mine");
                     return (
                       <button
                         key={scope.label}
                         type="button"
-                        onClick={() => setFilters({ ...filters, quick: scope.id, assignee: "Alle" })}
+                        onClick={() => setFilters({
+                          ...filters,
+                          assignee: "Alle",
+                          quick: scope.id
+                            ? Array.from(new Set([scope.id, ...filters.quick.filter((item) => item !== "mine")]))
+                            : filters.quick.filter((item) => item !== "mine"),
+                        })}
                         className={`inline-flex h-8 shrink-0 items-center border-b-2 px-1 text-sm font-semibold ${
                           active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"
                         }`}
@@ -227,7 +232,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
               {headerPrimaryAction && (
                 <button
                   type="button"
@@ -238,14 +243,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
                   {headerPrimaryAction.label}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowFilters((value) => !value)}
-                className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-              >
-                <Filter size={16} />
-                Filter
-              </button>
             </div>
           </div>
         </div>
