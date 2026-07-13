@@ -6,7 +6,10 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("planning trash migration is additive, constrained, indexed, and hidden behind security-invoker views", async () => {
-  const migration = await read("supabase/0063_planning_trash_persistence.sql");
+  const [migration, schema] = await Promise.all([
+    read("supabase/0063_planning_trash_persistence.sql"),
+    read("supabase/schema.sql"),
+  ]);
 
   for (const table of ["packages", "tasks"]) {
     assert.match(migration, new RegExp(`alter table public\\.${table} add column if not exists trashed_at timestamptz`));
@@ -21,6 +24,20 @@ test("planning trash migration is additive, constrained, indexed, and hidden beh
   assert.match(migration, /revoke all on public\.active_packages from public, anon/);
   assert.match(migration, /grant select on public\.active_tasks to authenticated, service_role/);
   assert.doesNotMatch(migration, /drop table|drop column|truncate|delete from/i);
+
+  for (const sql of [migration, schema]) {
+    for (const [constraint, table] of [
+      ["packages_trash_revision_check", "packages"],
+      ["packages_trash_metadata_check", "packages"],
+      ["tasks_trash_revision_check", "tasks"],
+      ["tasks_trash_metadata_check", "tasks"],
+    ]) {
+      assert.match(
+        sql,
+        new RegExp(`conname = '${constraint}'[^]*conrelid = 'public\\.${table}'::regclass`),
+      );
+    }
+  }
 });
 
 test("normal planning and intake reads use the centralized active read models", async () => {

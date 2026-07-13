@@ -4622,11 +4622,19 @@ alter table public.tasks add column if not exists trash_revision integer not nul
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'packages_trash_revision_check') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'packages_trash_revision_check'
+      and conrelid = 'public.packages'::regclass
+  ) then
     alter table public.packages add constraint packages_trash_revision_check
       check (trash_revision >= 0);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'packages_trash_metadata_check') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'packages_trash_metadata_check'
+      and conrelid = 'public.packages'::regclass
+  ) then
     alter table public.packages add constraint packages_trash_metadata_check check (
       (
         trashed_at is null
@@ -4649,11 +4657,19 @@ begin
       )
     );
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_trash_revision_check') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tasks_trash_revision_check'
+      and conrelid = 'public.tasks'::regclass
+  ) then
     alter table public.tasks add constraint tasks_trash_revision_check
       check (trash_revision >= 0);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'tasks_trash_metadata_check') then
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tasks_trash_metadata_check'
+      and conrelid = 'public.tasks'::regclass
+  ) then
     alter table public.tasks add constraint tasks_trash_metadata_check check (
       (
         trashed_at is null
