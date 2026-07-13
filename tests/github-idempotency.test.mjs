@@ -60,6 +60,12 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
         }],
       }), { status: 200 });
     }
+    if (String(url).endsWith("/issues/42") && (!options.method || options.method === "GET")) {
+      return new Response(JSON.stringify({
+        number: 42,
+        labels: [{ name: "customer-reported" }, { name: "P1-High" }],
+      }), { status: 200 });
+    }
     if (String(url).endsWith("/issues/42") && options.method === "PATCH") {
       return new Response(JSON.stringify({
         number: 42,
@@ -76,7 +82,10 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
     assert.equal(issue.recovered, true);
     assert.match(taskIssueBody(sourceTask), /<!-- founderops-task-id:task-idempotency-verification -->/);
     assert.equal(requests.some((request) => request.method === "POST"), false);
+    assert.equal(requests.filter((request) => request.method === "GET" && request.url.endsWith("/issues/42")).length, 1);
     assert.equal(requests.filter((request) => request.method === "PATCH").length, 1);
+    const update = requests.find((request) => request.method === "PATCH");
+    assert.deepEqual(JSON.parse(update.body).labels, ["customer-reported", "task", "deliverable", "P2-Medium"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
