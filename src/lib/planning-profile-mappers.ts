@@ -127,6 +127,14 @@ export function mapPackage(row: DbPackage): Package {
     decidedById: row.decided_by || "",
     decidedAt: row.decided_at || "",
     decisionNote: row.decision_note || "",
+    trashedAt: row.trashed_at || "",
+    trashedById: row.trashed_by || "",
+    trashReason: row.trash_reason || "",
+    trashCause: row.trash_cause || undefined,
+    purgeAfter: row.purge_after || "",
+    trashRootType: row.trash_root_type || undefined,
+    trashRootId: row.trash_root_id || "",
+    trashRevision: Number(row.trash_revision || 0),
   };
 }
 

@@ -41,6 +41,14 @@ export type DbPackage = {
   decided_by: string | null;
   decided_at: string | null;
   decision_note: string | null;
+  trashed_at: string | null;
+  trashed_by: string | null;
+  trash_reason: string | null;
+  trash_cause: Package["trashCause"] | null;
+  purge_after: string | null;
+  trash_root_type: Package["trashRootType"] | null;
+  trash_root_id: string | null;
+  trash_revision: number;
 };
 
 export type DbMilestone = {
@@ -101,6 +109,14 @@ export type DbTask = {
   decided_by: string | null;
   decided_at: string | null;
   decision_note: string | null;
+  trashed_at: string | null;
+  trashed_by: string | null;
+  trash_reason: string | null;
+  trash_cause: Task["trashCause"] | null;
+  purge_after: string | null;
+  trash_root_type: Task["trashRootType"] | null;
+  trash_root_id: string | null;
+  trash_revision: number;
   score_relevant: boolean | null;
   original_sprint_id: string | null;
   carried_from_task_id: string | null;
@@ -168,6 +184,14 @@ export const taskRowColumns = [
   "decided_by",
   "decided_at",
   "decision_note",
+  "trashed_at",
+  "trashed_by",
+  "trash_reason",
+  "trash_cause",
+  "purge_after",
+  "trash_root_type",
+  "trash_root_id",
+  "trash_revision",
   "score_relevant",
   "original_sprint_id",
   "carried_from_task_id",

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapAuditEntry, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapProfileFeatureTourAcknowledgement, mapProfileUiPreference, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
 import { taskRowSelect } from "./planning-data-row-types";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import type { DbAuditEntry, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
 import type { PlanningData } from "./types";
 
@@ -53,10 +54,10 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
   const [projectResult, profileResult, packageResult, milestoneResult, taskResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, profileUiPreferenceResult, profileFeatureTourAcknowledgementResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label").eq("id", founderProjectId).single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
-    shouldLoad(scope, "packages") ? supabase.from("packages").select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note").order("sort_order") : Promise.resolve(skippedListResult<DbPackage>()),
+    shouldLoad(scope, "packages") ? supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,trashed_at,trashed_by,trash_reason,trash_cause,purge_after,trash_root_type,trash_root_id,trash_revision").order("sort_order") : Promise.resolve(skippedListResult<DbPackage>()),
     shouldLoad(scope, "milestones") ? supabase.from("milestones").select("id,title,description,target_date,status,sort_order").eq("project_id", founderProjectId).order("sort_order") : Promise.resolve(skippedListResult<DbMilestone>()),
     shouldLoad(scope, "tasks") ? supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select(taskRowSelect)
       .eq("project_id", founderProjectId)
       .order("sort_order") : Promise.resolve(skippedListResult<DbTask>()),
@@ -130,6 +131,8 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
   const profiles = (rows.profileResult.data as DbProfile[]).map(mapProfile);
   const tasks = (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles));
   const approvalByTaskId = new Map(tasks.map((task) => [task.id, task.approvalStatus]));
+  const activeTaskIds = new Set(tasks.map((task) => task.id));
+  const belongsToActiveTask = (row: { task_id: string }) => activeTaskIds.has(row.task_id);
 
   return {
     project: {
@@ -149,12 +152,12 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
     founderStrikeStates: rows.founderStrikeStateResult.error ? [] : (rows.founderStrikeStateResult.data as DbFounderStrikeState[]).map(mapFounderStrikeState),
     strikeEvents: rows.strikeEventResult.error ? [] : (rows.strikeEventResult.data as DbStrikeEvent[]).map(mapStrikeEvent),
     scoreObjections: rows.scoreObjectionResult.error ? [] : (rows.scoreObjectionResult.data as DbScoreObjection[]).map(mapScoreObjection),
-    taskComments: rows.taskCommentResult.error ? [] : (rows.taskCommentResult.data as DbTaskComment[]).map(mapTaskComment),
-    taskExternalComments: rows.taskExternalCommentResult.error ? [] : (rows.taskExternalCommentResult.data as DbTaskExternalComment[]).map(mapTaskExternalComment),
-    taskBlockers: rows.taskBlockerResult.error ? [] : (rows.taskBlockerResult.data as DbTaskBlocker[]).map(mapTaskBlocker),
-    taskRelations: rows.taskRelationResult.error ? [] : (rows.taskRelationResult.data as DbTaskRelation[]).map(mapTaskRelation),
-    taskActivity: rows.taskActivityResult.error ? [] : (rows.taskActivityResult.data as DbTaskActivity[]).map(mapTaskActivity),
-    taskFocusItems: rows.taskFocusResult.error ? [] : (rows.taskFocusResult.data as DbTaskFocusItem[]).map(mapTaskFocusItem),
+    taskComments: rows.taskCommentResult.error ? [] : (rows.taskCommentResult.data as DbTaskComment[]).filter(belongsToActiveTask).map(mapTaskComment),
+    taskExternalComments: rows.taskExternalCommentResult.error ? [] : (rows.taskExternalCommentResult.data as DbTaskExternalComment[]).filter(belongsToActiveTask).map(mapTaskExternalComment),
+    taskBlockers: rows.taskBlockerResult.error ? [] : (rows.taskBlockerResult.data as DbTaskBlocker[]).filter(belongsToActiveTask).map(mapTaskBlocker),
+    taskRelations: rows.taskRelationResult.error ? [] : (rows.taskRelationResult.data as DbTaskRelation[]).filter((row) => activeTaskIds.has(row.task_id) && activeTaskIds.has(row.related_task_id)).map(mapTaskRelation),
+    taskActivity: rows.taskActivityResult.error ? [] : (rows.taskActivityResult.data as DbTaskActivity[]).filter(belongsToActiveTask).map(mapTaskActivity),
+    taskFocusItems: rows.taskFocusResult.error ? [] : (rows.taskFocusResult.data as DbTaskFocusItem[]).filter(belongsToActiveTask).map(mapTaskFocusItem),
     notificationEvents: rows.notificationResult.error ? [] : (rows.notificationResult.data as DbNotificationEvent[]).map(mapNotificationEvent),
     notificationDeliveries: rows.notificationDeliveryResult.error ? [] : (rows.notificationDeliveryResult.data as DbNotificationDelivery[]).map(mapNotificationDelivery),
     notificationPreferences: rows.notificationPreferenceResult.error ? [] : (rows.notificationPreferenceResult.data as DbNotificationPreference[]).map(mapNotificationPreference),

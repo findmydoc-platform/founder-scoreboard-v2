@@ -1,14 +1,15 @@
 import type { TaskIntakeContext, TaskIntakeInitiative, TaskIntakeProfile } from "@/features/intake/model/task-intake";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type SupabaseReader = ReturnType<typeof import("@/lib/supabase").getServerSupabase>;
 
 export async function loadTaskIntakeContext(supabase: NonNullable<SupabaseReader>, parentTaskIds: string[] = []): Promise<TaskIntakeContext> {
   const [profileResult, initiativeResult, milestoneResult, parentTaskResult] = await Promise.all([
     supabase.from("profiles").select("id,name,github_login"),
-    supabase.from("packages").select("id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids"),
+    supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids"),
     supabase.from("milestones").select("id"),
     parentTaskIds.length
-      ? supabase.from("tasks").select("id").in("id", parentTaskIds)
+      ? supabase.from(ACTIVE_TASKS_TABLE).select("id").in("id", parentTaskIds)
       : Promise.resolve({ data: [] }),
   ]);
 

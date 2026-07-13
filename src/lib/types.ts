@@ -10,6 +10,8 @@ export type ApprovalStatus = "draft" | "proposed" | "approved" | "rejected";
 export type ApprovalDecisionAction = "approve" | "reject" | "return_to_draft";
 export type TaskType = "deliverable" | "sub_issue";
 export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
+export type TrashCause = "withdrawn" | "rejected";
+export type TrashRootType = "initiative" | "deliverable";
 
 export type TaskStatus = "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
 
@@ -60,6 +62,14 @@ export type Package = {
   decidedById?: string;
   decidedAt?: string;
   decisionNote?: string;
+  trashedAt?: string;
+  trashedById?: string;
+  trashReason?: string;
+  trashCause?: TrashCause;
+  purgeAfter?: string;
+  trashRootType?: TrashRootType;
+  trashRootId?: string;
+  trashRevision?: number;
 };
 
 export type Milestone = {
@@ -138,6 +148,14 @@ export type Task = {
   selfDocumentedChecked?: boolean;
   selfBlockersChecked?: boolean;
   updatedAt?: string;
+  trashedAt?: string;
+  trashedById?: string;
+  trashReason?: string;
+  trashCause?: TrashCause;
+  purgeAfter?: string;
+  trashRootType?: TrashRootType;
+  trashRootId?: string;
+  trashRevision?: number;
 };
 
 export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;

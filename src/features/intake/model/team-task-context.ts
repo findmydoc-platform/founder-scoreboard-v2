@@ -12,6 +12,7 @@ import {
   type TeamTaskContextInitiativeRow,
 } from "@/features/intake/model/team-task-context-initiative";
 import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -87,10 +88,10 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
   const [profiles, milestones, initiatives, sprints, tasks, blockers, relations, comments, externalComments] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order").order("id").range(from, to)),
-    loadAllSupabaseRows<TeamTaskContextInitiativeRow>((from, to) => supabase.from("packages").select(TEAM_TASK_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows<TeamTaskContextInitiativeRow>((from, to) => supabase.from(ACTIVE_PACKAGES_TABLE).select(TEAM_TASK_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,package_id,milestone_id,sprint_id,workstream,start_date,end_date,deadline,estimate_hours,evidence_link,github_issue_url,issue_url")
       .order("sort_order")
       .order("id")

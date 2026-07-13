@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AuthenticatedProfile } from "@/lib/types";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import type { getServerSupabase } from "@/lib/supabase";
 import { defaultGitHubRepository, resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { TEAM_TASK_INTAKE_MAX_TASKS } from "@/features/intake/model/team-task-intake-contract";
@@ -91,9 +92,9 @@ export function parseTeamTaskIntakeV2Payload(payload: unknown) {
 export async function buildTeamTaskIntakeV2Preview(items: TeamTaskIntakeV2Input[], actor: AuthenticatedProfile, supabase: SupabaseServer) {
   const [profilesResult, initiativesResult, milestonesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
-    supabase.from("packages").select("id,title,milestone_id,approval_status"),
+    supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,milestone_id,approval_status"),
     supabase.from("milestones").select("id"),
-    supabase.from("tasks").select("id,title,task_type,package_id,milestone_id,approval_status"),
+    supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type,package_id,milestone_id,approval_status"),
   ]);
   if (profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error) throw new Error("Team Task Intake v2 context could not be loaded.");
   const profileIds = new Set((profilesResult.data || []).map((profile) => profile.id));

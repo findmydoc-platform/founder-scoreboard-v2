@@ -91,6 +91,14 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     selfDocumentedChecked: Boolean(row.self_documented_checked),
     selfBlockersChecked: Boolean(row.self_blockers_checked),
     updatedAt: row.updated_at || "",
+    trashedAt: row.trashed_at || "",
+    trashedById: row.trashed_by || "",
+    trashReason: row.trash_reason || "",
+    trashCause: row.trash_cause || undefined,
+    purgeAfter: row.purge_after || "",
+    trashRootType: row.trash_root_type || undefined,
+    trashRootId: row.trash_root_id || "",
+    trashRevision: Number(row.trash_revision || 0),
   };
 }
 
