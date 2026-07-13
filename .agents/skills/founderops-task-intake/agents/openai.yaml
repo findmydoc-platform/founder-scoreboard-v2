@@ -1,0 +1,5 @@
+interface:
+  display_name: "FounderOps Task Intake"
+  short_description: "Place and propose FounderOps planning items"
+  default_prompt: "Use $founderops-task-intake to assess Initiative placement, draft a structured FounderOps item, and wait for my approval before submitting it."
+
