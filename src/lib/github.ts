@@ -235,14 +235,15 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
     errorMessage: "GitHub Issue-Suche fehlgeschlagen",
     allowFailure: true,
   });
-  let lookupSucceeded = false;
+  let searchFailed = !searchResponse.ok;
   if (searchResponse.ok) {
-    lookupSucceeded = true;
-    const search = await searchResponse.json() as { items?: GitHubIssueSearchResult[] };
+    const search = await searchResponse.json() as { incomplete_results?: boolean; items?: GitHubIssueSearchResult[] };
     const match = matchingTaskIssue(search.items || [], marker);
     if (match) return match;
+    searchFailed = search.incomplete_results === true;
   }
 
+  let repositoryLookupFailed = false;
   for (let page = 1; page <= 5; page += 1) {
     const response = await githubRequest(
       `https://api.github.com/repos/${owner}/${repo}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`,
@@ -253,15 +254,17 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
         allowFailure: true,
       },
     );
-    if (!response.ok) break;
-    lookupSucceeded = true;
+    if (!response.ok) {
+      repositoryLookupFailed = true;
+      break;
+    }
     const issues = await response.json() as GitHubIssueSearchResult[];
     const match = matchingTaskIssue(issues, marker);
     if (match) return match;
     if (issues.length < 100) break;
   }
 
-  if (!lookupSucceeded) {
+  if (searchFailed || repositoryLookupFailed) {
     throw new Error("GitHub Issue-Suche fehlgeschlagen: Die Abwesenheit eines FounderOps-Issues konnte nicht bestätigt werden.");
   }
   return null;

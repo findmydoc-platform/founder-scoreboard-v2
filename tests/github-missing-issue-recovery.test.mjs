@@ -22,7 +22,13 @@ function sourceTask() {
   };
 }
 
-async function loadGitHub({ updateStatus = 404, searchStatus = 200, searchItems = [], fallbackStatus = 200 } = {}) {
+async function loadGitHub({
+  updateStatus = 404,
+  searchStatus = 200,
+  searchItems = [],
+  searchIncomplete = false,
+  fallbackStatus = 200,
+} = {}) {
   const requests = [];
   const task = sourceTask();
   const github = await loadTranspiledModule("src/lib/github.ts", {
@@ -56,7 +62,7 @@ async function loadGitHub({ updateStatus = 404, searchStatus = 200, searchItems 
       githubRequest: async (url) => {
         requests.push({ kind: "request", url, method: "GET" });
         if (url.includes("/search/issues")) {
-          return new Response(JSON.stringify({ items: searchItems }), { status: searchStatus });
+          return new Response(JSON.stringify({ incomplete_results: searchIncomplete, items: searchItems }), { status: searchStatus });
         }
         return new Response(JSON.stringify([]), { status: fallbackStatus });
       },
@@ -100,6 +106,22 @@ test("does not create a replacement when every marker lookup fails", async () =>
   await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /Abwesenheit eines FounderOps-Issues konnte nicht bestätigt/);
   assert.equal(requests.some((request) => request.method === "POST"), false);
 });
+
+for (const scenario of [
+  { name: "the search endpoint fails", options: { searchStatus: 503 } },
+  { name: "the repository fallback fails", options: { fallbackStatus: 503 } },
+  { name: "GitHub reports incomplete search results", options: { searchIncomplete: true } },
+]) {
+  test(`does not create a replacement when ${scenario.name}`, async () => {
+    const { github, requests, task } = await loadGitHub(scenario.options);
+
+    await assert.rejects(
+      () => github.upsertGitHubIssue(task, "installation-token"),
+      /Abwesenheit eines FounderOps-Issues konnte nicht bestätigt/,
+    );
+    assert.equal(requests.some((request) => request.method === "POST"), false);
+  });
+}
 
 test("does not search or create when the linked issue update fails with a non-404 error", async () => {
   const { github, requests, task } = await loadGitHub({ updateStatus: 500 });
