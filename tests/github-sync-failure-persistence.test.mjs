@@ -129,10 +129,10 @@ test("route and clients preserve the explicit retryable persistence error contra
 
   assert.match(route, /code: "github_sync_state_persist_failed"/);
   assert.match(route, /status: 503/);
-  assert.match(commandHook, /body\?\.code === "github_sync_state_persist_failed"/);
+  assert.match(commandHook, /code === "github_sync_state_persist_failed"/);
   assert.match(commandHook, /githubIssueSyncStatus: "not_synced"/);
   assert.match(commandHook, /githubIssueSyncPendingSince: syncStartedAt/);
-  assert.match(detailHook, /body\?\.code === "github_sync_state_persist_failed"/);
+  assert.match(detailHook, /code === "github_sync_state_persist_failed"/);
   assert.match(detailHook, /githubIssueSyncStatus: "not_synced"/);
   assert.match(detailHook, /githubIssueSyncPendingSince: syncStartedAt/);
 });
