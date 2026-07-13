@@ -1,0 +1,123 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
+
+const parentRepository = "findmydoc-platform/management";
+const childRepository = "findmydoc-platform/website";
+
+function relationshipData(parent = null) {
+  return {
+    data: {
+      parentRepository: {
+        issue: {
+          id: "parent-node-id",
+          number: 338,
+          url: `https://github.com/${parentRepository}/issues/338`,
+        },
+      },
+      childRepository: {
+        issue: {
+          number: 1523,
+          url: `https://github.com/${childRepository}/issues/1523`,
+          repository: { nameWithOwner: childRepository },
+          parent,
+        },
+      },
+    },
+  };
+}
+
+async function loadGitHub(githubJson) {
+  return loadTranspiledModule("src/lib/github.ts", {
+    "./github-repositories": {
+      requireAllowedGitHubRepository: (value) => value || parentRepository,
+      splitGitHubRepository: (value) => {
+        const repository = value || parentRepository;
+        const [owner, repo] = repository.split("/");
+        return { owner, repo, repository };
+      },
+    },
+    "./github-issue-reference": {
+      assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: () => null,
+      resolveGitHubIssueNumber: () => null,
+    },
+    "./github-http": {
+      githubJson,
+      githubRequest: () => {
+        throw new Error("Unexpected GitHub request");
+      },
+    },
+  });
+}
+
+function connectionInput() {
+  return {
+    parentRepository,
+    parentIssueNumber: 338,
+    childRepository,
+    childIssueNumber: 1523,
+    token: "installation-token",
+  };
+}
+
+test("existing GitHub sub-issue relationship is treated as a successful no-op", async () => {
+  const requests = [];
+  const github = await loadGitHub(async (_url, options) => {
+    requests.push(options.body);
+    return relationshipData({
+      number: 338,
+      url: `https://github.com/${parentRepository}/issues/338`,
+      repository: { nameWithOwner: parentRepository },
+    });
+  });
+
+  const result = await github.connectGitHubSubIssue(connectionInput());
+
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].query, /childRepository: repository/);
+  assert.equal(result.addSubIssue.issue.number, 338);
+  assert.equal(result.addSubIssue.subIssue.number, 1523);
+});
+
+test("missing or different GitHub parent still uses addSubIssue with replacement", async () => {
+  const requests = [];
+  const github = await loadGitHub(async (_url, options) => {
+    requests.push(options.body);
+    if (requests.length === 1) return relationshipData(null);
+    return {
+      data: {
+        addSubIssue: {
+          issue: { number: 338 },
+          subIssue: { number: 1523 },
+        },
+      },
+    };
+  });
+
+  const result = await github.connectGitHubSubIssue(connectionInput());
+
+  assert.equal(requests.length, 2);
+  assert.match(requests[1].query, /replaceParent: true/);
+  assert.deepEqual(requests[1].variables, {
+    parent: "parent-node-id",
+    childUrl: `https://github.com/${childRepository}/issues/1523`,
+  });
+  assert.equal(result.addSubIssue.subIssue.number, 1523);
+});
+
+test("missing child issue fails before attempting the relationship mutation", async () => {
+  const requests = [];
+  const github = await loadGitHub(async (_url, options) => {
+    requests.push(options.body);
+    const result = relationshipData();
+    result.data.childRepository.issue = null;
+    return result;
+  });
+
+  await assert.rejects(
+    () => github.connectGitHubSubIssue(connectionInput()),
+    /GitHub Sub-Issue wurde nicht gefunden/,
+  );
+  assert.equal(requests.length, 1);
+});
