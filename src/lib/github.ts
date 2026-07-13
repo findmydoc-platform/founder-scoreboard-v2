@@ -623,7 +623,7 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
 export async function getGitHubIssue(issueNumber: number, token: string, repository?: string | null) {
   const { owner, repo } = splitGitHubRepository(repository);
 
-  return githubJson<{ id: number; number: number; body?: string | null; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
+  return githubJson<{ id: number; number: number; body?: string | null; html_url: string; pull_request?: unknown }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     token,
     cache: "no-store",
     errorMessage: "GitHub Issue konnte nicht geladen werden",

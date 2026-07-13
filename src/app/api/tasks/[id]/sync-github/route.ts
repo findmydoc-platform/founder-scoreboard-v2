@@ -6,6 +6,7 @@ import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
+import { preflightGitHubSubIssueParent, type GitHubSubIssueParentContext } from "@/lib/github-sub-issue-parent";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
@@ -277,6 +278,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       }, { status: 409 });
     }
 
+    let parentContext: GitHubSubIssueParentContext | null = null;
+    if (task.taskType === "sub_issue") {
+      parentContext = await preflightGitHubSubIssueParent(supabase, task, githubInstallationToken);
+    }
+
     const { error: pendingError } = await supabase.rpc("begin_github_issue_sync_transaction", {
       p_task_id: id,
     });
@@ -287,21 +293,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (task.taskType === "deliverable") {
       const dependencyContext = await githubDependencyContext(supabase, id, issue.number, githubRepo);
       await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
-    } else if (task.parentTaskId) {
-      const { data: parent } = await supabase
-        .from("tasks")
-        .select("id,approval_status,github_repo,github_issue_number,github_issue_url")
-        .eq("id", task.parentTaskId)
-        .maybeSingle();
-      const parentIssue = parent
-        ? resolveGitHubIssueNumber(parent, { repository: githubRepoSlug(parent.github_repo) })
-        : null;
-      if (!parent || parent.approval_status !== "approved" || !parentIssue) {
-        throw new Error("Parent-Deliverable ist nicht freigegeben oder noch nicht mit GitHub verknüpft.");
-      }
+    } else if (parentContext) {
       await connectGitHubSubIssue({
-        parentRepository: githubRepoSlug(parent.github_repo),
-        parentIssueNumber: parentIssue,
+        parentRepository: parentContext.repository,
+        parentIssueNumber: parentContext.issueNumber,
         childRepository: githubRepo,
         childIssueNumber: issue.number,
         token: githubInstallationToken,
