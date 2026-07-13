@@ -28,6 +28,10 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
     },
     "./github-issue-reference": {
       assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: (value) => {
+        const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
       resolveGitHubIssueNumber: (value) => value.githubIssueNumber || Number(value.issueNumber || 0) || null,
     },
     "./github-http": {
@@ -64,6 +68,9 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
       return new Response(JSON.stringify({
         number: 42,
         labels: [{ name: "customer-reported" }, { name: "P1-High" }],
+        html_url: "https://github.com/findmydoc-platform/management/issues/42",
+        title: "Existing marker-owned issue",
+        body: marker,
       }), { status: 200 });
     }
     if (String(url).endsWith("/issues/42") && options.method === "PATCH") {

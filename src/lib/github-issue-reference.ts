@@ -32,8 +32,37 @@ function issueUrls(fields: GitHubIssueFields) {
 
 export function resolveGitHubIssueNumber(
   fields: GitHubIssueFields,
-  options: { repository?: string | null; fallback?: number | null } = {},
+  options: { repository?: string | null; fallback?: number | null; requireConsistent?: boolean } = {},
 ) {
+  if (options.requireConsistent) {
+    const directValues = [
+      fields.githubIssueNumber,
+      fields.github_issue_number,
+      fields.issueNumber,
+      fields.issue_number,
+    ].filter((value) => value !== undefined && value !== null && String(value).trim() !== "");
+    const directNumbers = directValues.map((value) => {
+      const number = positiveInteger(value);
+      if (!number) throw new Error("Die lokal verknüpfte GitHub-Issue-Nummer ist ungültig.");
+      return number;
+    });
+    const urlReferences = issueUrls(fields)
+      .filter((value) => Boolean(value?.trim()))
+      .map((value) => {
+        const issue = parseGitHubIssueUrl(value);
+        if (!issue) throw new Error("Die lokal verknüpfte GitHub-Issue-URL ist ungültig.");
+        if (options.repository && issue.repository.toLowerCase() !== options.repository.toLowerCase()) {
+          throw new Error(`Verknüpftes GitHub Issue gehört zu ${issue.repository} statt ${options.repository}.`);
+        }
+        return issue;
+      });
+    const distinctNumbers = new Set([...directNumbers, ...urlReferences.map((issue) => issue.number)]);
+    if (distinctNumbers.size > 1) {
+      throw new Error("Die lokal verknüpften GitHub-Issue-Nummern und URLs widersprechen sich.");
+    }
+    return distinctNumbers.values().next().value || positiveInteger(options.fallback);
+  }
+
   const directIssueNumber = positiveInteger(fields.githubIssueNumber ?? fields.github_issue_number);
   if (directIssueNumber) return directIssueNumber;
 

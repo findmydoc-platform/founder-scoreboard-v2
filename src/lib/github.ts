@@ -1,6 +1,10 @@
 import type { Task } from "./types";
 import { requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
-import { assertGitHubIssueRepository, resolveGitHubIssueNumber } from "./github-issue-reference";
+import {
+  assertGitHubIssueRepository,
+  parseGitHubIssueUrl,
+  resolveGitHubIssueNumber,
+} from "./github-issue-reference";
 import { githubJson, githubRequest } from "./github-http";
 
 const issueDependencyGitHubApiVersion = "2026-03-10";
@@ -54,6 +58,11 @@ type GitHubIssueSearchResult = {
   html_url: string;
   body?: string | null;
   pull_request?: unknown;
+};
+
+type GitHubIssueUpdateTarget = GitHubIssueSearchResult & {
+  title: string;
+  labels?: GitHubIssueLabel[];
 };
 
 export function hasGitHubSyncEnv() {
@@ -252,21 +261,49 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
   return null;
 }
 
-async function updateGitHubIssue(
+export function assertGitHubIssueUpdateTarget(
+  task: Task,
+  issue: GitHubIssueUpdateTarget,
+  repository: string,
+  expectedIssueNumber: number,
+) {
+  if (issue.pull_request) {
+    throw new Error("Die lokale GitHub-Verknüpfung zeigt auf einen Pull Request statt auf ein Issue.");
+  }
+  const issueReference = parseGitHubIssueUrl(issue.html_url);
+  if (
+    issue.number !== expectedIssueNumber
+    || !issueReference
+    || issueReference.number !== expectedIssueNumber
+    || issueReference.repository.toLowerCase() !== repository.toLowerCase()
+  ) {
+    throw new Error("Das geladene GitHub Issue stimmt nicht mit der lokalen Verknüpfung überein.");
+  }
+  const expectedMarker = taskIssueMarker(task.id);
+  if (issue.body?.includes(expectedMarker)) return;
+  const containsFounderOpsMarker = /<!--\s*founderops-task-id:[^>]+-->/i.test(issue.body || "");
+  if (!containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
+  throw new Error("Das verknüpfte GitHub Issue gehört nicht zu dieser FounderOps-Aufgabe.");
+}
+
+async function updateValidatedGitHubIssue(
+  task: Task,
   issueNumber: number,
   payload: GitHubIssuePayload,
   token: string,
   owner: string,
   repo: string,
+  repository: string,
   errorMessage: string,
 ) {
   const issueUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
-  const existingIssue = await githubJson<{ labels?: GitHubIssueLabel[] }>(issueUrl, {
+  const target = await githubJson<GitHubIssueUpdateTarget>(issueUrl, {
     token,
     cache: "no-store",
-    errorMessage: "Bestehende GitHub-Labels konnten nicht geladen werden",
+    errorMessage: "Verknüpftes GitHub Issue konnte nicht geprüft werden",
   });
-  if (!Array.isArray(existingIssue.labels)) {
+  assertGitHubIssueUpdateTarget(task, target, repository, issueNumber);
+  if (!Array.isArray(target.labels)) {
     throw new Error("Bestehende GitHub-Labels konnten nicht sicher gelesen werden.");
   }
 
@@ -275,7 +312,7 @@ async function updateGitHubIssue(
     method: "PATCH",
     body: {
       ...payload,
-      labels: mergeGitHubIssueLabels(existingIssue.labels, payload.labels),
+      labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
   });
@@ -308,21 +345,32 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
     warnings.push("GitHub-Assignee nicht gesetzt: Das verantwortliche Profil hat keinen GitHub-Login.");
   }
 
-  const issueNumber = resolveGitHubIssueNumber(task, { repository });
+  const issueNumber = resolveGitHubIssueNumber(task, { repository, requireConsistent: true });
 
   if (issueNumber) {
-    const issue = await updateGitHubIssue(issueNumber, payload, token, owner, repo, "GitHub Update fehlgeschlagen");
+    const issue = await updateValidatedGitHubIssue(
+      task,
+      issueNumber,
+      payload,
+      token,
+      owner,
+      repo,
+      repository,
+      "GitHub Update fehlgeschlagen",
+    );
     return { ...issue, warnings, recovered: false };
   }
 
   const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
   if (recoveredIssue) {
-    const issue = await updateGitHubIssue(
+    const issue = await updateValidatedGitHubIssue(
+      task,
       recoveredIssue.number,
       payload,
       token,
       owner,
       repo,
+      repository,
       "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
     );
     return { ...issue, warnings, recovered: true };
