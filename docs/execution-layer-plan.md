@@ -9,7 +9,7 @@ Execution is no longer a top-level workspace. Reviews, sprint work, and task edi
 ## Current Contract
 
 - `Execution` must not appear in the sidebar, workspace picker, header metadata, or profile default workspace options.
-- Stale workspace inputs from `?workspace=execution`, local storage, or saved profile defaults normalize to `planning`.
+- Workspace navigation is path-based. The root route applies saved profile defaults; workspace query parameters and the retired local-storage key are ignored.
 - Visible Execution surfaces stay removed: metrics strip, review queue, today focus, focus history, day close, suggestions, and hygiene alert wall.
 - Task detail pages and panels do not show Focus context.
 - `/api/focus`, `task_focus_items`, existing data loading, and schema checks remain for legacy compatibility only. They are not a visible product surface.

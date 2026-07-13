@@ -17,8 +17,6 @@ type UsePlanningDerivedStateOptions = {
   currentProfile: Profile | null;
   data: PlanningData;
   filters: PlanningFilters;
-  legacyMineWorkspace: boolean;
-  setFilters: PlanningViewState["setFilters"];
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
   setWorkspace: (workspace: AppWorkspace) => void;
@@ -32,8 +30,6 @@ export function usePlanningDerivedState({
   currentProfile,
   data,
   filters,
-  legacyMineWorkspace,
-  setFilters,
   setInitiativeDialogDefaults,
   setTaskDialogDefaults,
   setWorkspace,
@@ -45,11 +41,6 @@ export function usePlanningDerivedState({
       setWorkspace("planning");
     }
   }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
-
-  useEffect(() => {
-    if (!legacyMineWorkspace) return;
-    setFilters((current) => ({ ...current, assignee: "Alle", quick: Array.from(new Set(["mine", ...current.quick])) }));
-  }, [legacyMineWorkspace, setFilters]);
 
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];

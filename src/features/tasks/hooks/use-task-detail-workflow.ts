@@ -304,7 +304,7 @@ export function useTaskDetailWorkflow({
     if (!window.confirm("Aufgabe und vorhandene Unteraufgaben aus der App löschen?")) return;
     if (source !== "supabase") {
       persistLocalPlanningTasks(allTasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id));
-      router.replace("/?workspace=planning");
+      router.replace("/planning");
       return;
     }
     startTransition(async () => {
@@ -313,7 +313,7 @@ export function useTaskDetailWorkflow({
         setError(body?.error || "Aufgabe konnte nicht gelöscht werden.");
         return;
       }
-      router.replace("/?workspace=planning");
+      router.replace("/planning");
       router.refresh();
     });
   };

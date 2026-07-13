@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
-import { appWorkspaceFromValue, workspaceFromPathname, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 type ProfileUiPreferenceSyncOptions = {
   currentProfileId: string;
@@ -11,17 +10,7 @@ type ProfileUiPreferenceSyncOptions = {
   setExpandedPackageIds: (packageIds: string[]) => void;
   setFilters: (filters: PlanningFilterPreferences) => void;
   setView: (view: ViewMode) => void;
-  setWorkspace: (workspace: AppWorkspace) => void;
 };
-
-function pathHasWorkspace() {
-  if (typeof window === "undefined") return true;
-  return Boolean(workspaceFromPathname(window.location.pathname));
-}
-
-function normalizedDefaultWorkspace(value: string) {
-  return appWorkspaceFromValue(value) || "planning";
-}
 
 export function useProfileUiPreferenceSync({
   currentProfileId,
@@ -30,7 +19,6 @@ export function useProfileUiPreferenceSync({
   setExpandedPackageIds,
   setFilters,
   setView,
-  setWorkspace,
 }: ProfileUiPreferenceSyncOptions) {
   const preference = useMemo(
     () => data.profileUiPreferences.find((item) => item.profileId === currentProfileId) || null,
@@ -54,8 +42,5 @@ export function useProfileUiPreferenceSync({
       });
     }
     setExpandedPackageIds(preference.expandedPackageIds);
-    if (!pathHasWorkspace() && preference.defaultWorkspace !== "profile") {
-      setWorkspace(normalizedDefaultWorkspace(preference.defaultWorkspace));
-    }
-  }, [currentProfileId, hasPlanningFilterUrlState, preference, setExpandedPackageIds, setFilters, setView, setWorkspace]);
+  }, [currentProfileId, hasPlanningFilterUrlState, preference, setExpandedPackageIds, setFilters, setView]);
 }

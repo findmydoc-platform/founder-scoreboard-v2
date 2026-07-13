@@ -19,7 +19,8 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
   assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
   assert.match(routes, /value === "mine" \|\| value === "execution"/);
-  assert.match(profileSync, /appWorkspaceFromValue\(value\) \|\| "planning"/);
+  assert.match(routes, /rootWorkspaceFromPreference/);
+  assert.doesNotMatch(profileSync, /setWorkspace|workspaceFromPathname|appWorkspaceFromValue/);
   assert.match(profileModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
   assert.match(routes, /value === "settings"\) return "notifications"/);
   assert.match(profileRoute, /value === "settings"\) return "notifications"/);

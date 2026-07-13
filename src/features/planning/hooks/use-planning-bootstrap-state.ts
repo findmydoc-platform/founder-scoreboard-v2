@@ -51,7 +51,7 @@ export function usePlanningBootstrapState({
   const [data, setData] = useState(initialClientData);
   const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
   const { localStateLoaded } = useLocalPlanningState({ source, setData });
-  const { legacyMineWorkspace, workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
+  const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
     initialFocusedReviewTaskId: searchParams.get("reviewTask") || "",
@@ -139,7 +139,6 @@ export function usePlanningBootstrapState({
     headerData,
     githubSyncQueueOpen,
     isPending,
-    legacyMineWorkspace,
     localStateLoaded,
     saveError,
     setData,

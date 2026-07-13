@@ -152,8 +152,6 @@ export function usePlanningAppController({
     currentProfile,
     data,
     filters,
-    legacyMineWorkspace: bootstrap.legacyMineWorkspace,
-    setFilters,
     setInitiativeDialogDefaults,
     setTaskDialogDefaults,
     setWorkspace,

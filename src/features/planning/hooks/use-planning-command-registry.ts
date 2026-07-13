@@ -101,7 +101,6 @@ export function usePlanningCommandRegistry({
     setExpandedPackageIds: boardState.setExpandedPackageIds,
     setFilters,
     setView,
-    setWorkspace,
   });
   const eventCommands = useFounderEventCommands(commandContext);
   const weeklyAttendanceCommands = useWeeklyAttendanceCommands(commandContext);
