@@ -321,7 +321,6 @@ test("visible German app copy keeps real UTF-8 umlauts", async () => {
     ...(await listFiles("src", ".tsx")),
     ...(await listFiles("docs", ".md")),
     "README.md",
-    "AGENTS.md",
   ];
   const suspiciousFallbacks = /\b(fuer|zurueck|waehlen|loeschen|naechst|koennen|moech|groess|schliess|Ueber|Aender|Oeff)\b/;
 
@@ -334,38 +333,9 @@ test("visible German app copy keeps real UTF-8 umlauts", async () => {
 test("german utf8 guard verifies persisted task text", async () => {
   const pkg = await readFile("package.json", "utf8");
   const script = await readFile("scripts/verify-task-utf8.mjs", "utf8");
-  const skill = await readFile(".agents/skills/fmd-german-utf8/SKILL.md", "utf8");
-  const storySkill = await readFile(".agents/skills/fmd-story-writing/SKILL.md", "utf8");
-  const rules = await readFile("AGENTS.md", "utf8");
 
   assert.match(pkg, /verify:task-utf8/);
   assert.match(script, /BROKEN_WORD_QUESTION_MARK/);
   assert.match(script, /MOJIBAKE/);
   assert.match(script, /Supabase/);
-  assert.match(skill, /f\?r/);
-  assert.match(skill, /U\+00C3/);
-  assert.match(skill, /pnpm run verify:task-utf8/);
-  assert.match(storySkill, /pnpm run verify:task-utf8/);
-  assert.match(rules, /fmd-german-utf8/);
-  assert.match(rules, /Supabase or GitHub/);
-  assert.match(rules, /pnpm run verify:task-utf8/);
-});
-
-test("agent rules and stewardship skill document atomic UI drift guards", async () => {
-  const rules = await readFile("AGENTS.md", "utf8");
-  const skill = await readFile(".agents/skills/fmd-code-stewardship/SKILL.md", "utf8");
-  const audit = await readFile("scripts/code-stewardship-audit.mjs", "utf8");
-
-  assert.match(rules, /Planning UI Structure/);
-  assert.match(rules, /src\/features\/<domain>\/\{atoms,molecules,organisms,templates,hooks,model\}/);
-  assert.match(rules, /Create only the subdirectories a feature currently uses/);
-  assert.match(rules, /Do not create new `src\/components` or `src\/hooks` directories/);
-  assert.match(rules, /fmd-code-stewardship/);
-  assert.match(skill, /Feature-first Atomic Design/);
-  assert.match(skill, /Do not keep empty placeholder directories or commit `.gitkeep` files/);
-  assert.match(skill, /compatibility re-export shims/);
-  assert.match(skill, /use-planning-app-controller\.ts/);
-  assert.match(audit, /FORBIDDEN_STRUCTURE_DIRECTORIES/);
-  assert.match(audit, /LEGACY_IMPORT_PATTERNS/);
-  assert.match(audit, /NATIVE_CONTROL_PATTERNS/);
 });

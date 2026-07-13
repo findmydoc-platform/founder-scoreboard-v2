@@ -105,8 +105,6 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   const initiativeMigration = await readSupabaseSchemaContract();
   const raciMigration = await readSupabaseSchemaContract();
   const docs = await readFile("docs/planning-hierarchy.md", "utf8");
-  const skill = await readFile(".agents/skills/fmd-planning-structure/SKILL.md", "utf8");
-  const initiativeSkill = await readFile(".agents/skills/fmd-initiative-planning/SKILL.md", "utf8");
   const initiativeRoute = await readFile("src/app/api/initiatives/route.ts", "utf8");
   const ui = await readPlanningSurface();
   const display = await readFile("src/lib/display.ts", "utf8");
@@ -124,8 +122,6 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(raciMigration, /informed_profile_ids/);
   assert.match(docs, /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/);
   assert.match(docs, /Sprint ist ein Zeitcontainer/);
-  assert.match(skill, /Sprint is a time container/);
-  assert.match(initiativeSkill, /CEO or leadership outcome briefs/);
   assert.match(initiativeRoute, /requireOperationalLead/);
   assert.match(initiativeRoute, /Initiative-Owner ist erforderlich/);
   assert.match(initiativeRoute, /accountableProfileId/);

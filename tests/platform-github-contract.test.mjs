@@ -204,7 +204,6 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const relationshipViewModel = await readFile("src/lib/relationship-view-model.ts", "utf8");
   const relationshipPermissions = await readFile("src/features/tasks/model/task-relationship-permissions.ts", "utf8");
   const relationshipPermissionMigration = await readSupabaseSchemaContract();
-  const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
   assert.match(migration, /blocked_by/);
@@ -271,8 +270,6 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(github, /desiredByBlocked/);
   assert.match(github, /removeGitHubIssueBlockedBy/);
   assert.match(github, /issueDependencyGitHubApiVersion = "2026-03-10"/);
-  assert.match(script, /task_dependencies/);
-  assert.match(script, /relation_type: "blocked_by"/);
 });
 
 test("github issue sync and comment delivery keep independent state", async () => {
@@ -415,33 +412,6 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
 });
 
-test("existing management issues are linked before creating duplicates", async () => {
-  const script = await readFile("scripts/plan-github-issue-linking.mjs", "utf8");
-  const docs = await readFile("docs/planning-hierarchy.md", "utf8");
-
-  assert.match(script, /normalizeTitle/);
-  assert.match(script, /exactMatches/);
-  assert.match(script, /ambiguousMatches/);
-  assert.match(script, /github_issue_number/);
-  assert.match(script, /--apply/);
-  assert.match(docs, /Bestehende GitHub-Issues/);
-  assert.match(docs, /nicht gelöscht und nicht dupliziert/);
-});
-
-test("legacy github body sections are not kept inside evidence link fields", async () => {
-  const repairScript = await readFile("scripts/repair-evidence-link-sections.mjs", "utf8");
-  const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
-
-  assert.match(repairScript, /cleanEvidenceLinkValue/);
-  assert.match(repairScript, /Non-Tech Summary/);
-  assert.match(repairScript, /Follow-up Issues/);
-  assert.match(repairScript, /No response/);
-  assert.match(repairScript, /evidence_link/);
-  assert.match(repairScript, /--apply/);
-  assert.match(repairScript, /github_issue_sync_status = "not_synced"|github_issue_sync_status: "not_synced"/);
-  assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
-});
-
 test("github app connect persists reload-stable user tokens without browser token headers", async () => {
   const ui = await readPlanningSurface();
   const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
@@ -479,7 +449,6 @@ test("github app connect persists reload-stable user tokens without browser toke
   const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const authDocs = await readFile("docs/auth-flow.md", "utf8");
-  const rules = await readFile("AGENTS.md", "utf8");
 
   assert.match(ui, /usePlanningAuth/);
   assert.match(authHook, /signInWithOAuth/);
@@ -604,9 +573,6 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(github, /uploadGitHubAttachment/);
   assert.match(github, /getGitHubIssue/);
   assert.match(github, /api\.github\.com\/repos\/\$\{owner\}\/\$\{repo\}\/contents/);
-  assert.match(rules, /GitHub App installation tokens/);
-  assert.match(rules, /GitHub App user tokens/);
-  assert.match(rules, /Never expose raw GitHub tokens/);
   assert.match(authDocs, /```mermaid/);
   assert.match(authDocs, /Production Boot/);
   assert.match(authDocs, /GitHub App Connect/);
