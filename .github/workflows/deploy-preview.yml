@@ -68,7 +68,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.preview_guard.outputs.ready == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
           run_install: false
