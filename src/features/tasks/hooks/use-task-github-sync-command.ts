@@ -13,6 +13,7 @@ type UseTaskGitHubSyncCommandOptions = Pick<
 >;
 
 const syncLockedMessage = "GitHub-Sync läuft bereits.";
+const syncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
 
 export function useTaskGitHubSyncCommand({
   apiClient,
@@ -53,6 +54,15 @@ export function useTaskGitHubSyncCommand({
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
           }));
           if (!options.silent) setSaveError(body.error || syncLockedMessage);
+          return;
+        }
+        if (response.status === 409 && body?.code === "github_sync_stale") {
+          const message = body.error || syncStaleMessage;
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: message } : item)),
+          }));
+          if (!options.silent) setSaveError(message);
           return;
         }
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
@@ -130,6 +140,17 @@ export function useTaskGitHubSyncCommand({
               tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
             }));
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
+            continue;
+          }
+          if (response.status === 409 && body?.code === "github_sync_stale") {
+            const previousTask = previousTasks.get(task.id) || task;
+            const message = body.error || syncStaleMessage;
+            setData((current) => ({
+              ...current,
+              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: message } : item)),
+            }));
+            if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
+            setSaveError(message);
             continue;
           }
           if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");

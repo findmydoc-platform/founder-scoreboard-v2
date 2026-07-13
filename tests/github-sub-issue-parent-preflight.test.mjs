@@ -166,7 +166,7 @@ test("does not write the child issue until the parent preflight completes", asyn
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const lockIndex = route.indexOf("lockToken = await acquireGitHubSyncLock");
   const preflightIndex = route.indexOf("parentContext = await preflightGitHubSubIssueParent");
-  const beginIndex = route.indexOf('supabase.rpc("begin_github_issue_sync_transaction"');
+  const beginIndex = route.indexOf('supabase.rpc("begin_github_issue_sync_transaction_v2"');
   const childWriteIndex = route.indexOf("const issue = await upsertGitHubIssue");
 
   assert.ok(lockIndex > 0);
