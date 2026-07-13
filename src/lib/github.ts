@@ -34,6 +34,21 @@ type GitHubIssuePayload = {
   assignees?: string[];
 };
 
+type GitHubIssueLabel = string | { name?: string | null };
+
+const founderOpsManagedIssueLabels = new Set([
+  "task",
+  "deliverable",
+  "sub-issue",
+  "review:ready",
+  "changes-requested",
+  "blocked",
+  "p0-urgent",
+  "p1-high",
+  "p2-medium",
+  "p3-low",
+]);
+
 type GitHubIssueSearchResult = {
   number: number;
   html_url: string;
@@ -91,6 +106,22 @@ export function taskIssueLabels(task: Task) {
     task.priority === "P2" ? "P2-Medium" : "",
     task.priority === "P3" || task.priority === "P4" ? "P3-Low" : "",
   ].filter(Boolean);
+}
+
+export function mergeGitHubIssueLabels(existingLabels: GitHubIssueLabel[], desiredLabels: string[]) {
+  const merged = existingLabels
+    .map((label) => (typeof label === "string" ? label : label.name || ""))
+    .filter((label) => label && !founderOpsManagedIssueLabels.has(label.toLowerCase()));
+  const seen = new Set(merged.map((label) => label.toLowerCase()));
+
+  for (const label of desiredLabels) {
+    const normalized = label.toLowerCase();
+    if (seen.has(normalized)) continue;
+    merged.push(label);
+    seen.add(normalized);
+  }
+
+  return merged;
 }
 
 function isPrivateHostname(hostname: string) {
@@ -210,6 +241,32 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
   return null;
 }
 
+async function updateGitHubIssue(
+  issueNumber: number,
+  payload: GitHubIssuePayload,
+  token: string,
+  owner: string,
+  repo: string,
+  errorMessage: string,
+) {
+  const issueUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`;
+  const existingIssue = await githubJson<{ labels?: GitHubIssueLabel[] }>(issueUrl, {
+    token,
+    cache: "no-store",
+    errorMessage: "Bestehende GitHub-Labels konnten nicht geladen werden",
+  });
+
+  return githubJson<{ number: number; html_url: string }>(issueUrl, {
+    token,
+    method: "PATCH",
+    body: {
+      ...payload,
+      labels: mergeGitHubIssueLabels(existingIssue.labels || [], payload.labels),
+    },
+    errorMessage,
+  });
+}
+
 export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHubIssueAssigneeInput = {}) {
   const { owner, repo, repository } = splitGitHubRepository(task.githubRepo);
   assertGitHubIssueRepository(task, repository);
@@ -238,23 +295,20 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
   const issueNumber = resolveGitHubIssueNumber(task, { repository });
 
   if (issueNumber) {
-    const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
-      token,
-      method: "PATCH",
-      body: payload,
-      errorMessage: "GitHub Update fehlgeschlagen",
-    });
+    const issue = await updateGitHubIssue(issueNumber, payload, token, owner, repo, "GitHub Update fehlgeschlagen");
     return { ...issue, warnings, recovered: false };
   }
 
   const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
   if (recoveredIssue) {
-    const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${recoveredIssue.number}`, {
+    const issue = await updateGitHubIssue(
+      recoveredIssue.number,
+      payload,
       token,
-      method: "PATCH",
-      body: payload,
-      errorMessage: "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
-    });
+      owner,
+      repo,
+      "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
+    );
     return { ...issue, warnings, recovered: true };
   }
 
