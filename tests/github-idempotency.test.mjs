@@ -98,3 +98,77 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
     globalThis.fetch = originalFetch;
   }
 });
+
+test("github issue creation reconciles a lost success response before another POST", async () => {
+  const sourceTask = task();
+  const marker = `<!-- founderops-task-id:${sourceTask.id} -->`;
+  let created = false;
+  let createCalls = 0;
+  const requests = [];
+  const github = await loadTranspiledModule("src/lib/github.ts", {
+    "./github-repositories": {
+      requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
+      splitGitHubRepository: (value) => {
+        const repository = value || "findmydoc-platform/management";
+        const [owner, repo] = repository.split("/");
+        return { owner, repo, repository };
+      },
+    },
+    "./github-issue-reference": {
+      assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: (value) => {
+        const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
+      resolveGitHubIssueNumber: () => null,
+    },
+    "./github-http": {
+      githubRequest: async (url) => {
+        requests.push({ method: "GET", url });
+        if (url.includes("/search/issues")) {
+          return new Response(JSON.stringify({
+            incomplete_results: false,
+            items: created ? [{
+              number: 42,
+              html_url: "https://github.com/findmydoc-platform/management/issues/42",
+              body: marker,
+            }] : [],
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify([]), { status: 200 });
+      },
+      githubJson: async (url, options) => {
+        requests.push({ method: options.method || "GET", url });
+        if (options.method === "POST") {
+          createCalls += 1;
+          created = true;
+          throw new Error("response lost after GitHub created the issue");
+        }
+        if ((!options.method || options.method === "GET") && url.endsWith("/issues/42")) {
+          return {
+            number: 42,
+            html_url: "https://github.com/findmydoc-platform/management/issues/42",
+            title: "Existing marker-owned issue",
+            body: marker,
+            labels: [],
+          };
+        }
+        if (options.method === "PATCH") {
+          return { number: 42, html_url: "https://github.com/findmydoc-platform/management/issues/42" };
+        }
+        throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+      },
+    },
+  });
+
+  await assert.rejects(
+    () => github.upsertGitHubIssue(sourceTask, "installation-token"),
+    /response lost/,
+  );
+  const replayed = await github.upsertGitHubIssue(sourceTask, "installation-token");
+
+  assert.equal(replayed.number, 42);
+  assert.equal(replayed.recovered, true);
+  assert.equal(createCalls, 1);
+  assert.equal(requests.filter((request) => request.method === "POST").length, 1);
+});

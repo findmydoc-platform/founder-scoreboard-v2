@@ -54,6 +54,7 @@ export async function closeGitHubIssueNotPlanned({
   const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     token,
     method: "PATCH",
+    operation: "mutation",
     body: { state: "closed", state_reason: "not_planned" },
     errorMessage: "GitHub Issue konnte nicht für den Papierkorb geschlossen werden",
   });
@@ -86,6 +87,7 @@ export async function reopenGitHubIssueForPlanning({
   const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     token,
     method: "PATCH",
+    operation: "mutation",
     body: { state: "open" },
     errorMessage: "GitHub Issue konnte nach der Freigabe nicht wieder geöffnet werden",
   });

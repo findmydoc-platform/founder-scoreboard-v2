@@ -121,3 +121,30 @@ test("missing child issue fails before attempting the relationship mutation", as
   );
   assert.equal(requests.length, 1);
 });
+
+test("a lost addSubIssue response is reconciled before another mutation", async () => {
+  let connected = false;
+  let mutationCalls = 0;
+  const github = await loadGitHub(async (_url, options) => {
+    if (options.body.query.includes("query(")) {
+      return relationshipData(connected ? {
+        number: 338,
+        url: `https://github.com/${parentRepository}/issues/338`,
+        repository: { nameWithOwner: parentRepository },
+      } : null);
+    }
+    mutationCalls += 1;
+    connected = true;
+    throw new Error("response lost after addSubIssue succeeded");
+  });
+
+  await assert.rejects(
+    () => github.connectGitHubSubIssue(connectionInput()),
+    /response lost/,
+  );
+  const replayed = await github.connectGitHubSubIssue(connectionInput());
+
+  assert.equal(replayed.addSubIssue.issue.number, 338);
+  assert.equal(replayed.addSubIssue.subIssue.number, 1523);
+  assert.equal(mutationCalls, 1);
+});

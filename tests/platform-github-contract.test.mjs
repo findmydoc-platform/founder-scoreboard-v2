@@ -190,6 +190,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
+  const githubHttp = await readFile("src/lib/github-http.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
@@ -269,7 +270,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(github, /blockingIssueNumber/);
   assert.match(github, /desiredByBlocked/);
   assert.match(github, /removeGitHubIssueBlockedBy/);
-  assert.match(github, /issueDependencyGitHubApiVersion = "2026-03-10"/);
+  assert.match(github, /GITHUB_ISSUE_DEPENDENCY_API_VERSION/);
+  assert.match(githubHttp, /GITHUB_ISSUE_DEPENDENCY_API_VERSION = "2026-03-10"/);
 });
 
 test("github issue sync and comment delivery keep independent state", async () => {
