@@ -20,6 +20,15 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const ids = {
   project: `verify-trash-project-${suffix}`,
   ceo: `verify-trash-ceo-${suffix}`,
+  deputy: `verify-trash-deputy-${suffix}`,
+  founder: `verify-trash-founder-${suffix}`,
+  viewer: `verify-trash-viewer-${suffix}`,
+  deputyApprovedInitiative: `verify-trash-deputy-approved-initiative-${suffix}`,
+  deputyApprovedDeliverable: `verify-trash-deputy-approved-deliverable-${suffix}`,
+  deputyRejectedInitiative: `verify-trash-deputy-rejected-initiative-${suffix}`,
+  deputyRejectedDeliverable: `verify-trash-deputy-rejected-deliverable-${suffix}`,
+  unapprovedInitiative: `verify-trash-unapproved-initiative-${suffix}`,
+  unapprovedDeliverable: `verify-trash-unapproved-deliverable-${suffix}`,
   parentInitiative: `verify-trash-parent-${suffix}`,
   separateDeliverable: `verify-trash-separate-${suffix}`,
   separateChild: `verify-trash-separate-child-${suffix}`,
@@ -70,6 +79,14 @@ try {
      values ($1, 'Lifecycle verifier', 'admin', 'ceo')`,
     [ids.ceo],
   );
+  await client.query(
+    `insert into public.profiles (id, name, role, platform_role)
+     values
+       ($1, 'Deputy verifier', 'member', 'deputy'),
+       ($2, 'Founder verifier', 'member', 'founder'),
+       ($3, 'Viewer verifier', 'viewer', 'viewer')`,
+    [ids.deputy, ids.founder, ids.viewer],
+  );
 
   await expectDatabaseError(
     "null_withdraw_revision",
@@ -86,6 +103,117 @@ try {
       'missing', null, 'approve', $1, null
     )`,
     [ids.ceo],
+  );
+
+  await client.query(
+    `insert into public.packages (
+       id, project_id, accountable_profile_id, title, approval_status,
+       approval_revision, proposed_by, proposed_at
+     ) values ($1, $2, $3, 'Deputy approval verification', 'proposed', 1, $3, now())`,
+    [ids.deputyApprovedInitiative, ids.project, ids.ceo],
+  );
+  await client.query(
+    `select public.decide_initiative_approval_transaction($1, 1, 'approve', $2, null)`,
+    [ids.deputyApprovedInitiative, ids.deputy],
+  );
+  const deputyApprovedInitiative = await client.query(
+    `select approval_status, decided_by
+     from public.packages
+     where id = $1`,
+    [ids.deputyApprovedInitiative],
+  );
+  if (
+    deputyApprovedInitiative.rows[0]?.approval_status !== "approved"
+    || deputyApprovedInitiative.rows[0]?.decided_by !== ids.deputy
+  ) {
+    throw new Error("Deputy could not approve a proposed Initiative.");
+  }
+
+  await insertDeliverable({ id: ids.deputyApprovedDeliverable, packageId: ids.deputyApprovedInitiative });
+  await client.query(
+    `select public.decide_deliverable_approval_transaction($1, 1, 'approve', $2, null)`,
+    [ids.deputyApprovedDeliverable, ids.deputy],
+  );
+  const deputyApprovedDeliverable = await client.query(
+    `select approval_status, decided_by
+     from public.tasks
+     where id = $1`,
+    [ids.deputyApprovedDeliverable],
+  );
+  if (
+    deputyApprovedDeliverable.rows[0]?.approval_status !== "approved"
+    || deputyApprovedDeliverable.rows[0]?.decided_by !== ids.deputy
+  ) {
+    throw new Error("Deputy could not approve a proposed Deliverable.");
+  }
+
+  await client.query(
+    `insert into public.packages (
+       id, project_id, accountable_profile_id, title, approval_status,
+       approval_revision, proposed_by, proposed_at
+     ) values ($1, $2, $3, 'Deputy Initiative rejection verification', 'proposed', 1, $3, now())`,
+    [ids.deputyRejectedInitiative, ids.project, ids.ceo],
+  );
+  await client.query(
+    `select public.decide_initiative_approval_transaction($1, 1, 'reject', $2, 'Deputy rejection verification')`,
+    [ids.deputyRejectedInitiative, ids.deputy],
+  );
+  const deputyRejectedInitiative = await client.query(
+    `select approval_status, trashed_at
+     from public.packages
+     where id = $1`,
+    [ids.deputyRejectedInitiative],
+  );
+  if (
+    deputyRejectedInitiative.rows[0]?.approval_status !== "rejected"
+    || !deputyRejectedInitiative.rows[0]?.trashed_at
+  ) {
+    throw new Error("Deputy could not reject a proposed Initiative.");
+  }
+
+  await insertDeliverable({ id: ids.deputyRejectedDeliverable, packageId: ids.deputyApprovedInitiative });
+  await client.query(
+    `select public.decide_deliverable_approval_transaction($1, 1, 'reject', $2, 'Deputy rejection verification')`,
+    [ids.deputyRejectedDeliverable, ids.deputy],
+  );
+  const deputyRejectedDeliverable = await client.query(
+    `select approval_status, trashed_at
+     from public.tasks
+     where id = $1`,
+    [ids.deputyRejectedDeliverable],
+  );
+  if (
+    deputyRejectedDeliverable.rows[0]?.approval_status !== "rejected"
+    || !deputyRejectedDeliverable.rows[0]?.trashed_at
+  ) {
+    throw new Error("Deputy could not reject a proposed Deliverable.");
+  }
+
+  await client.query(
+    `insert into public.packages (
+       id, project_id, accountable_profile_id, title, approval_status,
+       approval_revision, proposed_by, proposed_at
+     ) values ($1, $2, $3, 'Deputy parent gate verification', 'proposed', 1, $3, now())`,
+    [ids.unapprovedInitiative, ids.project, ids.ceo],
+  );
+  await insertDeliverable({ id: ids.unapprovedDeliverable, packageId: ids.unapprovedInitiative });
+  await expectDatabaseError(
+    "founder_cannot_approve_initiative",
+    "P0006",
+    `select public.decide_initiative_approval_transaction($1, 1, 'approve', $2, null)`,
+    [ids.unapprovedInitiative, ids.founder],
+  );
+  await expectDatabaseError(
+    "viewer_cannot_reject_deliverable",
+    "P0006",
+    `select public.decide_deliverable_approval_transaction($1, 1, 'reject', $2, 'Not allowed')`,
+    [ids.unapprovedDeliverable, ids.viewer],
+  );
+  await expectDatabaseError(
+    "deputy_requires_approved_parent_for_deliverable_approval",
+    "P0003",
+    `select public.decide_deliverable_approval_transaction($1, 1, 'approve', $2, null)`,
+    [ids.unapprovedDeliverable, ids.deputy],
   );
 
   await client.query(

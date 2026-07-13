@@ -58,7 +58,8 @@ export function isTaskPlanningActive(task: Pick<Task, "taskType" | "approvalStat
 }
 
 export function canDecideInitiativeApproval(initiative: Pick<Package, "approvalStatus">, profile?: Pick<Profile, "platformRole"> | null) {
-  return initiative.approvalStatus === "proposed" && profile?.platformRole === "ceo";
+  return initiative.approvalStatus === "proposed"
+    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy");
 }
 
 export function canReturnInitiativeForRevision(
@@ -78,7 +79,7 @@ function canDecideProposedDeliverable(
 ) {
   return isProposedDeliverable(task)
     && Boolean(initiative)
-    && (profile?.platformRole === "ceo" || initiative?.accountableProfileId === profile?.id);
+    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || initiative?.accountableProfileId === profile?.id);
 }
 
 export function canApproveDeliverableApproval(

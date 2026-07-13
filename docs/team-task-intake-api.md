@@ -51,8 +51,9 @@ Decision notes, comments, credentials, tokens, and other internal planning data 
 
 ## Write and approval policy
 
-- CEO and Deputy may propose Initiatives. Only the CEO may approve an Initiative in FounderOps.
+- CEO and Deputy may propose Initiatives. The CEO or a Deputy may approve or reject an Initiative in FounderOps.
 - CEO, Deputy, and Founder may propose a Deliverable in any Initiative that is not rejected.
+- The CEO, a Deputy, or the current Initiative Accountable may approve or reject a proposed Deliverable. Approval still requires an approved Initiative.
 - Every Initiative and Deliverable created through v2 starts with `approvalStatus = proposed`.
 - CEO creation through this external intake never implies approval; approval remains a separate FounderOps decision.
 - CEO, Deputy, and Founder may create a Sub-Issue under any Deliverable.

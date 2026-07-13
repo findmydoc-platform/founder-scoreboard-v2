@@ -51,13 +51,14 @@ test("production baseline excludes legacy proposal storage and the v1 intake RPC
   assert.doesNotMatch(deploy, /approvedDestructiveMigrations|remove_legacy_team_task_intake/);
 });
 
-test("approval transactions enforce revision, initiative prerequisite, and current accountable", async () => {
+test("approval transactions enforce revision, initiative prerequisite, and Deputy or accountable decisions", async () => {
   const migration = await readSupabaseSchemaContract();
   const initiativeRoute = await readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8");
 
   assert.match(migration, /approval_revision <> p_expected_revision/);
-  assert.match(migration, /v_actor_role <> 'ceo'/);
+  assert.match(migration, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
+  assert.match(migration, /v_actor_role not in \('ceo', 'deputy'\)[^]*v_initiative\.accountable_profile_id/);
   assert.match(migration, /v_initiative\.accountable_profile_id/);
   assert.match(migration, /initiative must be approved first/);
   assert.match(migration, /task\.approval_reset/);
@@ -129,7 +130,10 @@ test("approval domain keeps client affordances and optimistic state aligned", as
   assert.equal(approval.isTaskPlanningActive({ taskType: "sub_issue", approvalStatus: null, parentApprovalStatus: "approved" }), true);
   assert.equal(approval.canApproveDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "approved" }, { id: "owner-1", platformRole: "founder" }), true);
   assert.equal(approval.canRejectDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "proposed" }, { id: "owner-1", platformRole: "founder" }), true);
-  assert.equal(approval.canDecideInitiativeApproval(initiative, { platformRole: "deputy" }), false);
+  assert.equal(approval.canApproveDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "approved" }, { id: "deputy-1", platformRole: "deputy" }), true);
+  assert.equal(approval.canRejectDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "proposed" }, { id: "deputy-1", platformRole: "deputy" }), true);
+  assert.equal(approval.canDecideInitiativeApproval(initiative, { platformRole: "deputy" }), true);
+  assert.equal(approval.canDecideInitiativeApproval(initiative, { platformRole: "founder" }), false);
 });
 
 test("github issue references preserve repository matching before reuse", async () => {
