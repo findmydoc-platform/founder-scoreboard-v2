@@ -89,7 +89,7 @@ export function taskIssueLabels(task: Task) {
     task.priority === "P0" ? "P0-Urgent" : "",
     task.priority === "P1" ? "P1-High" : "",
     task.priority === "P2" ? "P2-Medium" : "",
-    task.priority === "P3" || task.priority === "P4" ? "P3-Low" : "",
+    task.priority === "P3" ? "P3-Low" : "",
   ].filter(Boolean);
 }
 
