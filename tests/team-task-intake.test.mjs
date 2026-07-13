@@ -113,6 +113,10 @@ test("Team Task Context maps complete Initiative briefs from the exact safe proj
       },
       "@/features/intake/model/team-task-context-initiative": initiativeModule,
       "@/features/intake/model/supabase-pagination": paginationModule,
+      "@/lib/planning-read-model": {
+        ACTIVE_PACKAGES_TABLE: "active_packages",
+        ACTIVE_TASKS_TABLE: "active_tasks",
+      },
     },
   );
   const packageRow = {
@@ -133,7 +137,7 @@ test("Team Task Context maps complete Initiative briefs from the exact safe proj
   };
   const selectedColumns = new Map();
   const rowsByTable = new Map([
-    ["packages", [packageRow]],
+    ["active_packages", [packageRow]],
   ]);
   const supabase = {
     from(table) {
@@ -158,7 +162,7 @@ test("Team Task Context maps complete Initiative briefs from the exact safe proj
   });
 
   assert.equal(initiativeModule.TEAM_TASK_CONTEXT_INITIATIVE_SELECT, initiativeContextSelect);
-  assert.equal(selectedColumns.get("packages"), initiativeContextSelect);
+  assert.equal(selectedColumns.get("active_packages"), initiativeContextSelect);
   assert.deepEqual(Object.keys(result.initiatives[0]), initiativeContextFields);
   assert.deepEqual(result.initiatives[0], {
     id: "initiative-1",

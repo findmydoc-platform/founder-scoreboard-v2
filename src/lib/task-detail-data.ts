@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskRelation } from "@/lib/planning-data-mappers";
 import type { DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskRelation } from "@/lib/planning-data-row-types";
 import type { PlanningData } from "@/lib/types";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 export type TaskDetailData = Pick<
   PlanningData,
@@ -34,7 +35,7 @@ function uniqueRelationRows(rows: DbTaskRelation[]) {
 }
 
 export async function loadTaskDetailData(supabase: SupabaseClient, taskId: string): Promise<TaskDetailDataResult> {
-  const taskResult = await supabase.from("tasks").select("id").eq("id", taskId).maybeSingle();
+  const taskResult = await supabase.from(ACTIVE_TASKS_TABLE).select("id").eq("id", taskId).maybeSingle();
   if (taskResult.error) return { ok: false, status: 500, error: taskResult.error.message };
   if (!taskResult.data) return { ok: false, status: 404, error: "Aufgabe wurde nicht gefunden." };
 
