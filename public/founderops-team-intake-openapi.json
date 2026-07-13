@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Team Task Intake API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Personal-token API for approval-aware Initiative, Deliverable, and Sub-Issue intake."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
@@ -57,6 +57,40 @@
           "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/TeamTaskIntakeV2Item" } }
         }
       },
+      "TeamTaskContextInitiative": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "milestoneId",
+          "ownerId",
+          "accountableProfileId",
+          "responsibleProfileIds",
+          "status",
+          "priority",
+          "targetDate",
+          "approvalStatus",
+          "goal",
+          "scopeConstraints",
+          "successCriteria"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "milestoneId": { "type": "string" },
+          "ownerId": { "type": "string" },
+          "accountableProfileId": { "type": "string" },
+          "responsibleProfileIds": { "type": "array", "items": { "type": "string" } },
+          "status": { "type": "string", "enum": ["planned", "active", "done", "paused"] },
+          "priority": { "type": "string" },
+          "targetDate": { "type": "string" },
+          "approvalStatus": { "type": "string", "enum": ["draft", "proposed", "approved", "rejected"] },
+          "goal": { "type": "string" },
+          "scopeConstraints": { "type": "string" },
+          "successCriteria": { "type": "string" }
+        }
+      },
       "TeamTaskContextResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -80,7 +114,7 @@
               },
               "profiles": { "type": "array", "items": { "type": "object" } },
               "milestones": { "type": "array", "items": { "type": "object" } },
-              "initiatives": { "type": "array", "items": { "type": "object" } },
+              "initiatives": { "type": "array", "items": { "$ref": "#/components/schemas/TeamTaskContextInitiative" } },
               "sprints": { "type": "array", "items": { "type": "object" } },
               "tasks": { "type": "array", "items": { "type": "object" } }
             }
