@@ -136,7 +136,7 @@ export function taskIssueBody(task: Task) {
     "",
     ...compactSection("Scope & Constraints", lines(task.scopeConstraints)),
     "",
-    ...compactSection("Acceptance Criteria", lines(task.acceptanceCriteria || task.definitionOfDone)),
+    ...compactSection("Acceptance Criteria", lines(task.acceptanceCriteria)),
     "",
     "## Evidence Required",
     task.evidenceRequired || task.evidenceLink || "_Nicht gesetzt._",
