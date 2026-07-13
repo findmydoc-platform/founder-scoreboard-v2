@@ -41,6 +41,14 @@ The strict v2 payload uses `items` and `itemType = initiative | deliverable | su
 }
 ```
 
+## Initiative context
+
+`GET /api/team/task-context` includes an Initiative brief for every entry in `context.initiatives`. In addition to placement, ownership, status, priority, and target date, each Initiative exposes its approval status, goal, scope constraints, and success criteria.
+
+External clients can use these briefs to explain why a new planning item belongs to an existing Initiative or to identify that no Initiative is a suitable match. FounderOps does not perform server-side matching or recommendations; the client and user retain the placement decision.
+
+Decision notes, comments, credentials, tokens, and other internal planning data are not part of this context.
+
 ## Write and approval policy
 
 - CEO and Deputy may propose Initiatives. Only the CEO may approve an Initiative in FounderOps.

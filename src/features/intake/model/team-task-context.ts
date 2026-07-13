@@ -6,6 +6,11 @@ import {
   TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
   TEAM_TASK_INTAKE_MAX_TASKS,
 } from "@/features/intake/model/team-task-intake-contract";
+import {
+  mapTeamTaskContextInitiative,
+  TEAM_TASK_CONTEXT_INITIATIVE_SELECT,
+  type TeamTaskContextInitiativeRow,
+} from "@/features/intake/model/team-task-context-initiative";
 import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
@@ -82,7 +87,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
   const [profiles, milestones, initiatives, sprints, tasks, blockers, relations, comments, externalComments] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order").order("id").range(from, to)),
-    loadAllSupabaseRows((from, to) => supabase.from("packages").select("id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,status,priority,target_date,sort_order").order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows<TeamTaskContextInitiativeRow>((from, to) => supabase.from("packages").select(TEAM_TASK_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
       .from("tasks")
@@ -123,17 +128,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       status: milestone.status,
       targetDate: milestone.target_date || "",
     })),
-    initiatives: initiatives.map((initiative) => ({
-      id: initiative.id,
-      title: initiative.title,
-      milestoneId: initiative.milestone_id || "",
-      ownerId: initiative.owner_id || "",
-      accountableProfileId: initiative.accountable_profile_id || "",
-      responsibleProfileIds: initiative.responsible_profile_ids || [],
-      status: initiative.status || "planned",
-      priority: initiative.priority || "",
-      targetDate: initiative.target_date || "",
-    })),
+    initiatives: initiatives.map(mapTeamTaskContextInitiative),
     sprints: sprints.map((sprint) => ({
       id: sprint.id,
       name: sprint.name,
