@@ -14,6 +14,7 @@ import {
 } from "@/features/projects/model/initiative-api";
 import { mapPackage } from "@/lib/planning-profile-mappers";
 import type { DbPackage } from "@/lib/planning-data-row-types";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireApiContext(request, requirePlanningContributor);
@@ -22,6 +23,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "packages", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: current, error: currentError } = await supabase
     .from("packages")
     .select(initiativeSelect)

@@ -37,6 +37,10 @@ export const taskDetailPageDataScope = {
   sprints: true,
 } satisfies PlanningDataQueryScope;
 
+export const initiativeDetailPageDataScope = {
+  ...baseWorkspaceDataScope,
+} satisfies PlanningDataQueryScope;
+
 export const workspaceDataScopes = {
   planning: {
     ...baseWorkspaceDataScope,

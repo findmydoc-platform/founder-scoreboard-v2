@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
-import { createTaskRequest, deleteTaskRequest, reportTaskBlockerRequest, syncTaskToGitHubRequest, updateTaskRequest } from "@/features/tasks/model/task-api-client";
+import { createTaskRequest, reportTaskBlockerRequest, syncTaskToGitHubRequest, updateTaskRequest, withdrawTaskRequest } from "@/features/tasks/model/task-api-client";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import {
@@ -300,17 +300,16 @@ export function useTaskDetailWorkflow({
     });
   };
 
-  const deleteTask = () => {
-    if (!window.confirm("Aufgabe und vorhandene Unteraufgaben aus der App löschen?")) return;
+  const withdrawTask = (reason: string) => {
     if (source !== "supabase") {
       persistLocalPlanningTasks(allTasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id));
       router.replace("/planning");
       return;
     }
     startTransition(async () => {
-      const { response, body } = await deleteTaskRequest(apiClient, task.id, updatedAtRef.current);
+      const { response, body } = await withdrawTaskRequest(apiClient, task.id, task.approvalRevision, reason);
       if (!response.ok) {
-        setError(body?.error || "Aufgabe konnte nicht gelöscht werden.");
+        setError(body?.error || "Deliverable konnte nicht zurückgezogen werden.");
         return;
       }
       router.replace("/planning");
@@ -325,7 +324,6 @@ export function useTaskDetailWorkflow({
     addRelation,
     createSubIssue,
     currentProfile,
-    deleteTask,
     error,
     githubCommentImportPending,
     githubInstallationAvailable,
@@ -348,6 +346,7 @@ export function useTaskDetailWorkflow({
     taskSnapshot,
     taskSubIssues,
     waitingGitHubCommentCount,
+    withdrawTask,
     updateTask,
     uploadAttachment,
     reportBlocker,

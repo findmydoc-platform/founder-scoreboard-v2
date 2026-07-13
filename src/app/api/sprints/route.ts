@@ -3,6 +3,7 @@ import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type SprintRow = {
   id: string;
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
   if (existingError) return apiError(existingError.message, 500);
 
   const { data: assignedTasks, error: assignedTasksError } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("sprint_id")
     .not("sprint_id", "is", null);
 

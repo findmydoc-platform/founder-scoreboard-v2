@@ -7,7 +7,6 @@ type TaskPermissionTask = Pick<Task, "assignee" | "assigneeId" | "owner" | "owne
 export type TaskDetailPermissions = {
   canComment: boolean;
   canCreateSubIssue: boolean;
-  canDeleteTask: boolean;
   canEditBrief: boolean;
   canEditChecklist: boolean;
   canEditEvidence: boolean;
@@ -42,7 +41,6 @@ export function taskDetailPermissions({
     return {
       canComment: true,
       canCreateSubIssue: true,
-      canDeleteTask: true,
       canEditBrief: true,
       canEditChecklist: true,
       canEditEvidence: true,
@@ -67,7 +65,6 @@ export function taskDetailPermissions({
   return {
     canComment: Boolean(role && role !== "viewer"),
     canCreateSubIssue: Boolean(role && role !== "viewer"),
-    canDeleteTask: isOperationalLead,
     canEditBrief: canWorkOnTask,
     canEditChecklist: canWorkOnTask,
     canEditEvidence: canWorkOnTask,

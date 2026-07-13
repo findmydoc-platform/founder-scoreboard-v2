@@ -5,6 +5,8 @@ import type { InitiativeDraft } from "@/features/projects/organisms/initiative-d
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import { applyOptimisticApprovalDecision } from "@/features/planning/model/approval-domain";
+import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
+import { removePlanningRootFromData } from "@/features/planning/model/planning-trash-state";
 import type { ApprovalDecisionAction, Package } from "@/lib/types";
 
 type UseInitiativeCommandsOptions = PlanningCommandContext & {
@@ -13,6 +15,7 @@ type UseInitiativeCommandsOptions = PlanningCommandContext & {
 
 export function useInitiativeCommands({
   apiClient,
+  currentProfile,
   data,
   setData,
   setInitiativeDialogDefaults,
@@ -80,27 +83,57 @@ export function useInitiativeCommands({
   const decideInitiativeApproval = (initiative: Package, action: ApprovalDecisionAction, note = "") => {
     setSaveError("");
     if (source !== "supabase") {
-      setData((current) => ({
-        ...current,
-        packages: current.packages.map((pack) => pack.id === initiative.id
-          ? applyOptimisticApprovalDecision(pack, action, note)
-          : pack),
-      }));
+      setData((current) => action === "reject"
+        ? removePlanningRootFromData(current, "initiative", initiative.id).data
+        : {
+            ...current,
+            packages: current.packages.map((pack) => pack.id === initiative.id
+              ? applyOptimisticApprovalDecision(pack, action, note)
+              : pack),
+          });
       return;
     }
     startTransition(async () => {
       try {
         const { response, body } = await planningApi.decideInitiativeApprovalRequest(apiClient, initiative.id, action, initiative.approvalRevision, note);
         if (!response.ok || !body?.initiative) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        setData((current) => ({
-          ...current,
-          packages: current.packages.map((pack) => pack.id === initiative.id ? body.initiative! : pack),
-        }));
+        setData((current) => action === "reject"
+          ? removePlanningRootFromData(current, "initiative", initiative.id).data
+          : {
+              ...current,
+              packages: current.packages.map((pack) => pack.id === initiative.id ? body.initiative! : pack),
+            });
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
       }
     });
   };
 
-  return { decideInitiativeApproval, saveInitiative };
+  const withdrawInitiative = (initiative: Package, reason: string) => {
+    const canWithdraw = canWithdrawPlanningRoot({
+      rootType: "initiative",
+      approvalStatus: initiative.approvalStatus,
+      proposedById: initiative.proposedById,
+    }, currentProfile, source === "seed");
+    if (!canWithdraw) {
+      setSaveError("Nur Antragsteller, CEO oder Deputy können vorgeschlagene Initiativen zurückziehen.");
+      return;
+    }
+    setSaveError("");
+    if (source !== "supabase") {
+      setData((current) => removePlanningRootFromData(current, "initiative", initiative.id).data);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const { response, body } = await planningApi.withdrawInitiativeRequest(apiClient, initiative.id, initiative.approvalRevision, reason);
+        if (!response.ok) throw new Error(body?.error || "Initiative konnte nicht zurückgezogen werden.");
+        setData((current) => removePlanningRootFromData(current, "initiative", initiative.id).data);
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Initiative konnte nicht zurückgezogen werden.");
+      }
+    });
+  };
+
+  return { decideInitiativeApproval, saveInitiative, withdrawInitiative };
 }

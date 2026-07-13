@@ -102,8 +102,8 @@ export function TaskDetailPage({
           onOpenTask={controller.openTaskPanel}
           onSyncGitHub={(options) => controller.syncTaskToGitHub(task, options)}
           onOpenReview={() => controller.openReviewSheet(task)}
-          onDelete={() => {
-            if (controller.deleteTask(task)) router.replace("/planning");
+          onWithdraw={(reason) => {
+            if (controller.withdrawTask(task, reason)) router.replace("/planning");
           }}
           onAddRelation={(payload) => controller.addTaskRelation(task, payload)}
           onRemoveRelation={(relation) => controller.removeTaskRelation(task, relation)}

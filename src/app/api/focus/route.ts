@@ -4,6 +4,7 @@ import { requirePlanningContributor } from "@/lib/authz";
 import { isOperationalLeadRole } from "@/lib/platform";
 import type { TaskFocusItem } from "@/lib/types";
 import { apiError, requireApiContext, requireJsonApiContext } from "@/lib/api-response";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type FocusPayload = {
   taskId?: string;
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
   const profileId = isOperationalLead ? payload.profileId || permission.profile?.id || "" : permission.profile?.id || "";
   const focusDate = payload.focusDate || todayIso();
   const { data: task, error: taskError } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("id,assignee,owner")
     .eq("id", taskId)
     .single();

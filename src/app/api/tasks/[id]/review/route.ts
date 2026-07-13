@@ -4,6 +4,7 @@ import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { requirePlanningContributor, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type ReviewPayload = {
   decision?: "accepted" | "partial" | "changes_requested";
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!founderPermission.ok) return authzError(founderPermission);
 
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const payload = (await request.json()) as ReviewPayload;
   const decision = payload.decision;
 

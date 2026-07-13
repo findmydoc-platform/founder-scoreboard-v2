@@ -18,6 +18,12 @@
     "health": false
   },
   {
+    "name": "planning_github_lifecycle_outbox",
+    "table": "planning_github_lifecycle_outbox",
+    "select": "id,root_type,root_id,root_trash_revision,task_id,github_repo,github_issue_number,action,source_type,source_revision,reason,status,status_reason,attempts,available_at,locked_at,lock_token,completed_at,last_error,created_at,updated_at",
+    "health": false
+  },
+  {
     "name": "task_comment_github_deliveries",
     "table": "task_comment_github_deliveries",
     "select": "task_comment_id,task_id,author_profile_id,github_issue_number,status,status_reason,attempts,last_attempted_at,next_attempt_at,github_comment_id,github_comment_url,locked_at,lock_token,last_error,delivered_at,updated_at",

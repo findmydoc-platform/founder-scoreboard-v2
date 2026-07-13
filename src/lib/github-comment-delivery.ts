@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import { findExistingGitHubComment, githubCommentMarker } from "@/features/tasks/model/github-comment-delivery-policy";
 import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } from "./github";
 import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
@@ -111,7 +112,7 @@ async function finalizeDelivery(
 async function loadDeliveryContext(supabase: SupabaseClient, delivery: ClaimedDelivery) {
   const [commentResult, taskResult, profileResult] = await Promise.all([
     supabase.from("task_comments").select("id,task_id,profile_id,comment").eq("id", delivery.task_comment_id).maybeSingle<CommentRow>(),
-    supabase.from("tasks").select("github_issue_number,issue_number,github_repo").eq("id", delivery.task_id).maybeSingle<TaskRow>(),
+    supabase.from(ACTIVE_TASKS_TABLE).select("github_issue_number,issue_number,github_repo").eq("id", delivery.task_id).maybeSingle<TaskRow>(),
     delivery.author_profile_id
       ? supabase.from("profiles").select("id,name,platform_role,github_login").eq("id", delivery.author_profile_id).maybeSingle<ProfileRow>()
       : Promise.resolve({ data: null, error: null }),

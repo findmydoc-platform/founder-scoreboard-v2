@@ -28,7 +28,6 @@ test("CEO receives full task detail permissions", () => {
 test("Deputy keeps operational rights but not CEO-only controls", () => {
   const permissions = taskDetailPermissions({ task, profile: { id: "deputy", name: "Deputy", platformRole: "deputy" } });
   assert.equal(permissions.canManageTaskMeta, true);
-  assert.equal(permissions.canDeleteTask, true);
   assert.equal(permissions.canOpenReview, true);
   assert.equal(permissions.canManageFinalStatus, false);
   assert.equal(permissions.canManageReviewOwner, false);
@@ -42,7 +41,6 @@ test("assigned Founder can work on own task but cannot change planning metadata"
   assert.equal(permissions.canReportBlocker, true);
   assert.equal(permissions.canUpdateStatus, true);
   assert.equal(permissions.canManageTaskMeta, false);
-  assert.equal(permissions.canDeleteTask, false);
   assert.equal(permissions.canReparentSubIssue, true);
 });
 

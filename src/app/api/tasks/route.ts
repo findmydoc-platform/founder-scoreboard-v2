@@ -9,6 +9,7 @@ import type { Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type CreateTaskPayload = {
   title?: string;
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   if (packageId) {
     const { data: initiativeRow, error: initiativeError } = await supabase
-      .from("packages")
+      .from(ACTIVE_PACKAGES_TABLE)
       .select("id,milestone_id,owner_id,accountable_profile_id,approval_status")
       .eq("id", packageId)
       .maybeSingle();
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
   }
   if (taskType === "sub_issue") {
     const { data: parent, error: parentError } = await supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id,title,task_type,package_id,milestone_id,approval_status")
       .eq("id", parentTaskId)
       .single();
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
       return apiError("Ungültige Abhängigkeitsart.", 400);
     }
     const { data: relatedTask, error: relatedTaskError } = await supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id")
       .eq("id", relatedTaskId)
       .maybeSingle();

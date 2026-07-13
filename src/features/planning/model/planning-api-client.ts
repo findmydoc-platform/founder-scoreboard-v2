@@ -39,6 +39,20 @@ export function decideInitiativeApprovalRequest(apiClient: BrowserApiClient, ini
   });
 }
 
+export function withdrawInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedRevision: number, reason: string) {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/initiatives/${initiativeId}/withdraw`, {
+    method: "POST",
+    json: { expectedRevision, reason },
+  });
+}
+
+export function restoreInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedTrashRevision: number) {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/initiatives/${initiativeId}/restore`, {
+    method: "POST",
+    json: { expectedTrashRevision },
+  });
+}
+
 export function saveFocusItemRequest(apiClient: BrowserApiClient, payload: unknown) {
   return apiClient.requestJson<{ error?: string; focusItem?: TaskFocusItem }>("/api/focus", {
     method: "POST",

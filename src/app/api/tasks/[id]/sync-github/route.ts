@@ -9,6 +9,8 @@ import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
 import type { Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type SyncRequestBody = {
   createIfMissing?: boolean;
@@ -98,7 +100,7 @@ async function githubDependencyContext(supabase: SupabaseClient, taskId: string,
       .eq("related_task_id", taskId)
       .in("relation_type", ["blocked_by", "blocks"]),
     supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id,github_repo,github_issue_number,github_issue_url,issue_number,issue_url"),
   ]);
 
@@ -143,7 +145,7 @@ async function githubDependencyContext(supabase: SupabaseClient, taskId: string,
 }
 
 async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<LoadedSyncTask> {
-  const { data, error } = await supabase.from("tasks").select("*").eq("id", id).single();
+  const { data, error } = await supabase.from(ACTIVE_TASKS_TABLE).select("*").eq("id", id).single();
   if (error || !data) return { ok: false, response: apiError(error?.message || "Aufgabe nicht gefunden.", 404) };
 
   const profileNameById = new Map<string, string>();
@@ -159,7 +161,7 @@ async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<Lo
 
   const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
   if (task.taskType === "sub_issue" && task.parentTaskId) {
-    const { data: parent } = await supabase.from("tasks").select("approval_status").eq("id", task.parentTaskId).maybeSingle();
+    const { data: parent } = await supabase.from(ACTIVE_TASKS_TABLE).select("approval_status").eq("id", task.parentTaskId).maybeSingle();
     task.parentApprovalStatus = (parent?.approval_status as Task["parentApprovalStatus"]) || null;
   }
   const assigneeProfileId = data.assignee || "";
@@ -197,6 +199,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;
+  const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   let githubInstallationToken = "";
   try {
     githubInstallationToken = await getGitHubAppInstallationToken();
@@ -205,7 +210,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError(message, 401);
   }
 
-  const { id } = await context.params;
   const loaded = await loadTaskForSync(supabase, id);
   if (!loaded.ok) return loaded.response;
 
@@ -252,6 +256,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   try {
+    const reloadedActiveItem = await requireActivePlanningItem(supabase, "tasks", id);
+    if (!reloadedActiveItem.ok) return apiError(reloadedActiveItem.error, reloadedActiveItem.status);
     const reloaded = await loadTaskForSync(supabase, id);
     if (!reloaded.ok) return reloaded.response;
     ({ assigneeLogin, hasExistingGitHubIssue, task } = reloaded);

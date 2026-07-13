@@ -5,6 +5,7 @@ import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { mentionedProfileIds } from "@/lib/mentions";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type CommentPayload = {
   comment?: string;
@@ -16,6 +17,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const comment = cleanText(payload.comment, 4000);
 
   if (comment.length < 2) {

@@ -5,6 +5,7 @@ import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 const maxUploadBytes = 10 * 1024 * 1024;
 const allowedMimeTypes = new Set([
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: task, error: taskError } = await supabase
     .from("tasks")
     .select("id,title,github_repo,github_issue_number,issue_number")

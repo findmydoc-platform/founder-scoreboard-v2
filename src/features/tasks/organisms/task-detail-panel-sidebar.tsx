@@ -3,6 +3,7 @@
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-decision-dialog";
+import { PlanningTrashActionDialog } from "@/features/planning/molecules/planning-trash-action-dialog";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { currentApprovalDecisionReason, isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
@@ -38,7 +39,7 @@ type Props = {
   canReparentSubIssue: boolean;
   canManageReviewOwner: boolean;
   canOpenReview: boolean;
-  canDeleteTask: boolean;
+  canWithdrawTask: boolean;
   canChangeTaskStatus?: boolean;
   canApprove: boolean;
   canReject: boolean;
@@ -48,7 +49,7 @@ type Props = {
   onUpdate: (patch: Partial<Task>) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
-  onDelete: () => void;
+  onWithdraw: (reason: string) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
@@ -65,7 +66,7 @@ export function TaskDetailPanelSidebar({
   canReparentSubIssue,
   canManageReviewOwner,
   canOpenReview,
-  canDeleteTask,
+  canWithdrawTask,
   canChangeTaskStatus = canManageTaskMeta,
   canApprove,
   canReject,
@@ -75,10 +76,11 @@ export function TaskDetailPanelSidebar({
   onUpdate,
   onSyncGitHub,
   onOpenReview,
-  onDelete,
+  onWithdraw,
   onDecideApproval,
 }: Props) {
   const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const assigneeProfile = teamProfiles.find((profile) => profile.name === task.assignee || profile.id === task.assignee);
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
   const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
@@ -397,22 +399,35 @@ export function TaskDetailPanelSidebar({
         </div>
       </section>
 
-      {canDeleteTask && (
-        <section className="rounded-lg border border-red-100 bg-red-50/40 p-4">
-          <h3 className="text-sm font-semibold text-red-950">Test & Bereinigung</h3>
-          <p className="mt-1 text-xs leading-5 text-red-800">
-            Löscht die Aufgabe aus der App. Ein bestehendes GitHub Issue wird vorher geschlossen.
+      {canWithdrawTask && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+          <h3 className="text-sm font-semibold text-amber-950">Papierkorb</h3>
+          <p className="mt-1 text-xs leading-5 text-amber-800">
+            Entfernt das Deliverable und seine Sub-Issues aus der aktiven Planung. Die Inhalte bleiben bis zur späteren Bereinigung erhalten.
           </p>
           <button
             type="button"
-            disabled={pending || (hasGitHubIssue(task) && !githubInstallationAvailable)}
-            onClick={onDelete}
-            className="mt-3 inline-flex h-8 items-center gap-2 rounded-md border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={pending}
+            onClick={() => setWithdrawOpen(true)}
+            className="mt-3 inline-flex h-8 items-center gap-2 rounded-md border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={14} />
-            Aufgabe löschen
+            Deliverable zurückziehen
           </button>
         </section>
+      )}
+      {withdrawOpen && (
+        <PlanningTrashActionDialog
+          action="withdraw"
+          entityLabel="Deliverable"
+          itemTitle={task.title}
+          pending={pending}
+          onClose={() => setWithdrawOpen(false)}
+          onConfirm={(reason) => {
+            setWithdrawOpen(false);
+            onWithdraw(reason);
+          }}
+        />
       )}
       {decisionAction && (
         <ApprovalDecisionDialog

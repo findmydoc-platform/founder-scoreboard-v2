@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, isIsoDate } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type UpdateSprintPayload = {
   name?: string;
@@ -71,7 +72,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (timelineChanged) {
     const { count, error: taskCountError } = await supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id", { count: "exact", head: true })
       .eq("sprint_id", id);
 

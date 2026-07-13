@@ -4,6 +4,7 @@ import { requirePlanningContributor } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type BlockerPayload = {
   reason?: string;
@@ -17,6 +18,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const reason = cleanText(payload.reason, 2000);
   const impact = cleanText(payload.impact, 2000);
   const needsHelpFrom = cleanText(payload.needsHelpFrom, 500);

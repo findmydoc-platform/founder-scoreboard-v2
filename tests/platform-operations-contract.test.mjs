@@ -116,13 +116,15 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(inboxUi, /unreadCount/);
   assert.match(inboxUi, /onDismiss\(event\.id\)/);
   assert.match(ui, /openTaskPanel\(task\.id\)/);
-  assert.match(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
+  assert.doesNotMatch(ui, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(notificationCommands, /updateNotificationStatus\(event\.id, "seen"\)/);
   assert.match(notificationCommands, /notificationTarget\(event\)/);
+  assert.match(notificationCommands, /if \(!task \|\| !taskOverlayWorkspaces\.has\(workspace\)\)/);
   assert.match(notificationRoute, /"seen", "dismiss"/);
   assert.match(notificationRoute, /requireTeamMember/);
   assert.match(notificationTarget, /entityType === "founder_event"/);
   assert.match(notificationTarget, /entityType === "fmd_tool"/);
+  assert.match(notificationTarget, /`\/initiatives\/\$\{encodeURIComponent\(entityId\)\}`/);
   assert.match(notificationTarget, /"meeting", "sprint", "sprint_commitment", "score_objection"/);
   assert.match(inboxUi, /notificationTarget\(event\)\.href/);
   assert.match(ui, /NotificationsOverview/);

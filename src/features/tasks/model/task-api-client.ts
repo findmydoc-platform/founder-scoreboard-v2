@@ -25,10 +25,17 @@ export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: 
   });
 }
 
-export function deleteTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedUpdatedAt: string) {
-  return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}`, {
-    method: "DELETE",
-    json: { expectedUpdatedAt },
+export function withdrawTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedRevision: number, reason: string) {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
+    method: "POST",
+    json: { expectedRevision, reason },
+  });
+}
+
+export function restoreTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedTrashRevision: number) {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/restore`, {
+    method: "POST",
+    json: { expectedTrashRevision },
   });
 }
 

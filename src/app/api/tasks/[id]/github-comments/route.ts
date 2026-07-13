@@ -5,6 +5,7 @@ import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 function isAppMirroredComment(body: string) {
   return /<!--\s*fmd-comment-id:\d+\s*-->/.test(body);
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { permission, supabase } = apiContext;
 
+  const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
+
   let githubInstallationToken = "";
   try {
     githubInstallationToken = await getGitHubAppInstallationToken();
@@ -32,7 +37,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError(message, 401);
   }
 
-  const { id } = await context.params;
   const { data: task, error: taskError } = await supabase
     .from("tasks")
     .select("id,title,assignee,owner,review_owner_profile_id,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type")

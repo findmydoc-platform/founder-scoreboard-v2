@@ -7,7 +7,7 @@ import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
-import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 function loadWorkspacePlanningData(
@@ -26,7 +26,7 @@ function loadWorkspacePlanningData(
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
-  if (hasSupabaseEnv() && requiresSupabaseAuth()) {
+  if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {
       return (

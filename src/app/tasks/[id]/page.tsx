@@ -4,12 +4,14 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { SeedTaskDetailPage } from "@/features/tasks/templates/seed-task-detail-page";
+import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
 import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
-import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { emptyTaskDetailData, loadTaskDetailData } from "@/lib/task-detail-data";
+import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import { mergeTaskDetailData } from "@/features/tasks/model/task-api-client";
 import type { AuthenticatedProfile } from "@/lib/types";
 
@@ -21,7 +23,7 @@ export default async function TaskPage({ params }: Props) {
   const { id } = await params;
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
-  const authRequired = hasSupabaseEnv() && requiresSupabaseAuth();
+  const authRequired = requiresSupabaseAuth();
   if (authRequired) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {
@@ -50,7 +52,20 @@ export default async function TaskPage({ params }: Props) {
   const task = data.tasks.find((item) => item.id === id);
 
   if (!task && source === "seed") return <SeedTaskDetailPage taskId={id} />;
-  if (!task) notFound();
+  if (!task) {
+    if (!supabase) notFound();
+    const trashDetailResult = await loadPlanningTrashTaskDetail(supabase, id, data.profiles);
+    if (!trashDetailResult.ok) {
+      if (trashDetailResult.status === 404) notFound();
+      return <PlanningDataUnavailablePage workspace="planning" />;
+    }
+    return (
+      <PlanningTrashTaskDetailPage
+        detail={trashDetailResult.detail}
+        currentPlatformRole={authProfile?.platformRole}
+      />
+    );
+  }
 
   if (!taskDetailResult.ok && taskDetailResult.status === 404) notFound();
   const taskDetailData = taskDetailResult.ok ? taskDetailResult.data : emptyTaskDetailData;
