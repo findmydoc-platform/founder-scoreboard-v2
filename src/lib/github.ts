@@ -109,10 +109,16 @@ export function taskIssueLabels(task: Task) {
 }
 
 export function mergeGitHubIssueLabels(existingLabels: GitHubIssueLabel[], desiredLabels: string[]) {
-  const merged = existingLabels
-    .map((label) => (typeof label === "string" ? label : label.name || ""))
-    .filter((label) => label && !founderOpsManagedIssueLabels.has(label.toLowerCase()));
-  const seen = new Set(merged.map((label) => label.toLowerCase()));
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const existingLabel of existingLabels) {
+    const label = typeof existingLabel === "string" ? existingLabel : existingLabel.name || "";
+    const normalized = label.toLowerCase();
+    if (!label || founderOpsManagedIssueLabels.has(normalized) || seen.has(normalized)) continue;
+    merged.push(label);
+    seen.add(normalized);
+  }
 
   for (const label of desiredLabels) {
     const normalized = label.toLowerCase();
@@ -255,13 +261,16 @@ async function updateGitHubIssue(
     cache: "no-store",
     errorMessage: "Bestehende GitHub-Labels konnten nicht geladen werden",
   });
+  if (!Array.isArray(existingIssue.labels)) {
+    throw new Error("Bestehende GitHub-Labels konnten nicht sicher gelesen werden.");
+  }
 
   return githubJson<{ number: number; html_url: string }>(issueUrl, {
     token,
     method: "PATCH",
     body: {
       ...payload,
-      labels: mergeGitHubIssueLabels(existingIssue.labels || [], payload.labels),
+      labels: mergeGitHubIssueLabels(existingIssue.labels, payload.labels),
     },
     errorMessage,
   });
