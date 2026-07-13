@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getGitHubIssue, githubRepoSlug } from "./github";
-import { resolveGitHubIssueNumber } from "./github-issue-reference";
+import { parseGitHubIssueUrl, resolveGitHubIssueNumber } from "./github-issue-reference";
 import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import type { Task } from "./types";
 
@@ -19,6 +19,32 @@ export type GitHubSubIssueParentContext = {
   repository: string;
   issueNumber: number;
 };
+
+function positiveIssueNumber(value: unknown) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function assertConsistentParentReference(parent: GitHubSubIssueParentRow, repository: string, issueNumber: number) {
+  const directReferences = [parent.github_issue_number, parent.issue_number]
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== "");
+  if (directReferences.some((value) => positiveIssueNumber(value) !== issueNumber)) {
+    throw new Error("Die lokale GitHub-Verknüpfung des Parent-Deliverables ist widersprüchlich.");
+  }
+
+  const urlReferences = [parent.github_issue_url, parent.issue_url]
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  for (const value of urlReferences) {
+    const reference = parseGitHubIssueUrl(value);
+    if (
+      !reference
+      || reference.number !== issueNumber
+      || reference.repository.toLowerCase() !== repository.toLowerCase()
+    ) {
+      throw new Error("Die lokale GitHub-Verknüpfung des Parent-Deliverables ist widersprüchlich.");
+    }
+  }
+}
 
 export async function preflightGitHubSubIssueParent(
   supabase: SupabaseClient,
@@ -44,9 +70,17 @@ export async function preflightGitHubSubIssueParent(
   const repository = githubRepoSlug(parent.github_repo);
   const issueNumber = resolveGitHubIssueNumber(parent, { repository });
   if (!issueNumber) throw new Error("Das Parent-Deliverable ist noch nicht mit GitHub verknüpft.");
+  assertConsistentParentReference(parent, repository, issueNumber);
 
   const githubIssue = await getGitHubIssue(issueNumber, token, repository);
-  if (githubIssue.number !== issueNumber) {
+  const githubReference = parseGitHubIssueUrl(githubIssue.html_url);
+  if (
+    githubIssue.pull_request
+    || githubIssue.number !== issueNumber
+    || !githubReference
+    || githubReference.number !== issueNumber
+    || githubReference.repository.toLowerCase() !== repository.toLowerCase()
+  ) {
     throw new Error("Das GitHub Issue des Parent-Deliverables stimmt nicht mit der lokalen Verknüpfung überein.");
   }
 
