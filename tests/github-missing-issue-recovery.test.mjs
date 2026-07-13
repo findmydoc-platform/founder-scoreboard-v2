@@ -5,6 +5,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 class MockGitHubApiError extends Error {
   constructor(message, status) {
     super(message);
+    this.name = "GitHubApiError";
     this.status = status;
   }
 }
@@ -42,14 +43,27 @@ async function loadGitHub({
     },
     "./github-issue-reference": {
       assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: (value) => {
+        const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
       resolveGitHubIssueNumber: (value) => value.githubIssueNumber || null,
     },
     "./github-http": {
       GitHubApiError: MockGitHubApiError,
       githubJson: async (url, options) => {
         requests.push({ kind: "json", url, ...options });
-        if (options.method === "PATCH" && url.endsWith("/issues/42")) {
+        if ((!options.method || options.method === "GET") && url.endsWith("/issues/42")) {
           throw new MockGitHubApiError("missing", updateStatus);
+        }
+        if ((!options.method || options.method === "GET") && url.endsWith("/issues/77")) {
+          return {
+            number: 77,
+            html_url: "https://github.com/findmydoc-platform/management/issues/77",
+            title: "Recovered marker issue",
+            body: "<!-- founderops-task-id:task-missing-issue -->",
+            labels: [],
+          };
         }
         if (options.method === "PATCH") {
           return { number: 77, html_url: "https://github.com/findmydoc-platform/management/issues/77" };

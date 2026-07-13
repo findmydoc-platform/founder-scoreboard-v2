@@ -5,11 +5,11 @@ import {
   parseGitHubIssueUrl,
   resolveGitHubIssueNumber,
 } from "./github-issue-reference";
-import { GitHubApiError, githubJson, githubRequest } from "./github-http";
+import { githubJson, githubRequest } from "./github-http";
 
 const issueDependencyGitHubApiVersion = "2026-03-10";
 
-export { GitHubApiError };
+export { GitHubApiError } from "./github-http";
 
 export type GitHubIssueDependencyInput = {
   blockedIssueNumber: number;
@@ -224,6 +224,13 @@ function matchingTaskIssue(items: GitHubIssueSearchResult[], marker: string) {
   return items.find((issue) => !issue.pull_request && issue.body?.includes(marker)) || null;
 }
 
+function isGitHubApiErrorWithStatus(error: unknown, status: number) {
+  return error instanceof Error
+    && error.name === "GitHubApiError"
+    && "status" in error
+    && error.status === status;
+}
+
 async function findGitHubIssueByTaskMarker(taskId: string, token: string, repository?: string | null) {
   const { owner, repo } = splitGitHubRepository(repository);
   const marker = taskIssueMarker(taskId);
@@ -382,7 +389,7 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
       );
       return { ...issue, warnings, recovered: false, recreated: false };
     } catch (updateError) {
-      if (!(updateError instanceof GitHubApiError) || updateError.status !== 404) throw updateError;
+      if (!isGitHubApiErrorWithStatus(updateError, 404)) throw updateError;
 
       const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
       if (recoveredIssue) {
