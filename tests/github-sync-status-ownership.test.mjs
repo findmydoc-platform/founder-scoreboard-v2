@@ -50,17 +50,19 @@ test("normal task update contract omits sync status and route rejects it before 
 });
 
 test("dedicated sync endpoint remains team-wide and its RPCs stay service-role only", async () => {
-  const [syncRoute, authz, migration] = await Promise.all([
+  const [syncRoute, failurePersistence, authz, migration] = await Promise.all([
     readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),
+    readFile("src/lib/github-sync-failure-persistence.ts", "utf8"),
     readFile("src/lib/authz.ts", "utf8"),
     readSupabaseSchemaContract(),
   ]);
 
   assert.match(syncRoute, /requireTeamMember/);
   assert.match(authz, /requireTeamMember[\s\S]*\["ceo", "founder", "deputy", "viewer"\]/);
-  assert.match(syncRoute, /begin_github_issue_sync_transaction/);
-  assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
-  assert.match(syncRoute, /fail_github_issue_sync_transaction/);
+  assert.match(syncRoute, /begin_github_issue_sync_transaction_v2/);
+  assert.match(syncRoute, /finalize_github_issue_sync_transaction_v2/);
+  assert.match(syncRoute, /persistGitHubSyncFailure/);
+  assert.match(failurePersistence, /fail_github_issue_sync_transaction/);
 
   for (const rpc of [
     "begin_github_issue_sync_transaction",
@@ -69,5 +71,13 @@ test("dedicated sync endpoint remains team-wide and its RPCs stay service-role o
   ]) {
     assert.match(migration, new RegExp(`REVOKE ALL ON FUNCTION "public"\\."${rpc}"[^;]+ FROM PUBLIC;`, "i"));
     assert.match(migration, new RegExp(`GRANT ALL ON FUNCTION "public"\\."${rpc}"[^;]+ TO "service_role";`, "i"));
+  }
+
+  for (const rpc of [
+    "begin_github_issue_sync_transaction_v2",
+    "finalize_github_issue_sync_transaction_v2",
+  ]) {
+    assert.match(migration, new RegExp(`revoke all on function public\\.${rpc}\\([^;]+ from public;`, "i"));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}\\([^;]+ to service_role;`, "i"));
   }
 });
