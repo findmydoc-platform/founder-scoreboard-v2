@@ -1,9 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { auditRequestMetadata } from "@/lib/api-input";
 import { requirePlanningContributor } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
-import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import {
   applyReviewStatusUpdate,
   applyFinalStatusReopen,
@@ -22,8 +20,6 @@ import {
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
-import { archiveGitHubIssue } from "@/lib/github";
-import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import type { Task } from "@/lib/types";
@@ -48,23 +44,6 @@ type TaskUpdateTransactionResult = {
     github_issue_sync_error?: string | null;
   };
   activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
-};
-
-type TaskDeletionTransactionResult = {
-  operationId?: string;
-  status?: "prepared" | "completed";
-  task?: TaskDeletionSnapshotRow;
-  tasks?: TaskDeletionSnapshotRow[];
-  deletedTaskIds?: string[];
-  githubClosed?: boolean;
-};
-
-type TaskDeletionSnapshotRow = Record<string, unknown> & {
-    github_repo?: string | null;
-    github_issue_number?: number | null;
-    issue_number?: string | null;
-    github_issue_url?: string | null;
-    issue_url?: string | null;
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -353,106 +332,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   });
 }
 
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireApiContext(request, requirePlanningContributor);
-  if (!apiContext.ok) return apiContext.response;
-
-  const { permission, supabase } = apiContext;
-  const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
-  if (!isOperationalLead) return apiError("Nur CEO oder Deputy können Aufgaben löschen.", 403);
-
-  const { id } = await context.params;
-  const payload = (await request.json().catch(() => ({}))) as { expectedUpdatedAt?: string };
-  if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
-    return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
-  }
-
-  const requestMetadata = auditRequestMetadata(request);
-  const { data: prepareData, error: prepareError } = await supabase.rpc("prepare_task_deletion_transaction", {
-    p_task_id: id,
-    p_expected_updated_at: payload.expectedUpdatedAt,
-    p_actor_profile_id: permission.profile?.id || null,
-    p_request_ip: requestMetadata.request_ip,
-    p_user_agent: requestMetadata.user_agent || null,
-  });
-
-  if (prepareError) {
-    if (prepareError.code === "P0001") {
-      return apiError("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
-    }
-    if (prepareError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
-    if (prepareError.code === "22023") return apiError("Aufgabenlöschung ist ungültig.", 400);
-    return apiError(prepareError.message, 500);
-  }
-
-  const prepared = prepareData as TaskDeletionTransactionResult | null;
-  if (!prepared?.operationId || !prepared.task) {
-    return apiError("Aufgabenlöschung konnte nicht vorbereitet werden.", 500);
-  }
-
-  if (prepared.status === "completed") {
-    return NextResponse.json({
-      ok: true,
-      deletedTaskId: id,
-      deletedTaskIds: prepared.deletedTaskIds || [id],
-      githubClosed: prepared.githubClosed || false,
-    });
-  }
-
-  const issuePairs = [...new Map((prepared.tasks || [prepared.task])
-    .map((task) => {
-      const repository = task.github_repo || "findmydoc-platform/management";
-      return { repository, issueNumber: resolveGitHubIssueNumber(task, { repository }) };
-    })
-    .filter((item): item is { repository: string; issueNumber: number } => Boolean(item.issueNumber))
-    .map((item) => [`${item.repository}#${item.issueNumber}`, item])).values()];
-  let githubClosed = false;
-  if (issuePairs.length) {
-    try {
-      const token = await getGitHubAppInstallationToken();
-      for (const item of issuePairs) {
-        await archiveGitHubIssue(item.issueNumber, token, item.repository);
-      }
-      githubClosed = true;
-    } catch (error) {
-      const { error: cancelError } = await supabase.rpc("cancel_task_deletion_transaction", {
-        p_operation_id: prepared.operationId,
-      });
-      const message = error instanceof Error ? error.message : "GitHub Issue konnte nicht geschlossen werden.";
-      return apiError(
-        cancelError
-          ? `${message} Der sichere Löschvorgang bleibt für einen erneuten Versuch vorgemerkt.`
-          : message,
-        502,
-      );
-    }
-  }
-
-  const { data: finalizeData, error: finalizeError } = await supabase.rpc("finalize_task_deletion_transaction", {
-    p_operation_id: prepared.operationId,
-    p_github_closed: githubClosed,
-  });
-
-  if (finalizeError) {
-    if (finalizeError.code === "P0001") {
-      await supabase.rpc("cancel_task_deletion_transaction", { p_operation_id: prepared.operationId });
-      return apiError(
-        githubClosed
-          ? "Aufgabe wurde parallel geändert. Die externe Ablage ist bereits geschlossen; bitte neu laden und die Löschung erneut bestätigen."
-          : "Aufgabe wurde parallel geändert. Bitte neu laden.",
-        409,
-      );
-    }
-    if (finalizeError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
-    return apiError(`Aufgabenlöschung konnte nicht abgeschlossen werden: ${finalizeError.message}`, 500);
-  }
-
-  const finalized = finalizeData as TaskDeletionTransactionResult | null;
-
-  return NextResponse.json({
-    ok: true,
-    deletedTaskId: id,
-    deletedTaskIds: finalized?.deletedTaskIds || prepared.deletedTaskIds || [id],
-    githubClosed: finalized?.githubClosed || githubClosed,
-  });
+export async function DELETE() {
+  return apiError("Direktes Löschen ist nicht mehr verfügbar. Nutze den Papierkorb-Workflow.", 410);
 }

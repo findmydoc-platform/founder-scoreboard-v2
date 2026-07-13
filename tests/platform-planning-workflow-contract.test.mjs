@@ -87,7 +87,7 @@ test("planning app controller delegates command domains and stays a thin compose
       ],
       excludes: [
         /planningApi\.|taskApi\./,
-        /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
+        /updateTaskRequest|createTaskRequest|withdrawTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
         /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
@@ -123,7 +123,7 @@ test("planning app controller delegates command domains and stays a thin compose
       ],
       excludes: [
         /planningApi\.|taskApi\./,
-        /updateTaskRequest|createTaskRequest|deleteTaskRequest|syncTaskToGitHubRequest/,
+        /updateTaskRequest|createTaskRequest|withdrawTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
         /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
@@ -133,8 +133,8 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task mutation commands",
       path: "src/features/tasks/hooks/use-task-mutation-commands.ts",
-      matches: [/useTaskGitHubSyncCommand/, /useTaskUpdateCommand/, /useTaskCreateCommand/, /useTaskDeleteCommand/],
-      excludes: [/updateTaskRequest|createTaskRequest|syncTaskToGitHubRequest|deleteTaskRequest|persistLocalPlanningTasks|window\.confirm/],
+      matches: [/useTaskGitHubSyncCommand/, /useTaskUpdateCommand/, /useTaskCreateCommand/, /useTaskWithdrawCommand/],
+      excludes: [/updateTaskRequest|createTaskRequest|syncTaskToGitHubRequest|withdrawTaskRequest|persistLocalPlanningTasks|window\.confirm/],
     },
     {
       label: "task github sync command",
@@ -152,9 +152,10 @@ test("planning app controller delegates command domains and stays a thin compose
       matches: [/createTaskRequest/, /applyPlanningDataUpdate/, /setTaskDialogDefaults/, /syncTaskToGitHubRequest/],
     },
     {
-      label: "task delete command",
-      path: "src/features/tasks/hooks/use-task-delete-command.ts",
-      matches: [/deleteTaskRequest/, /window\.confirm/],
+      label: "task withdraw command",
+      path: "src/features/tasks/hooks/use-task-withdraw-command.ts",
+      matches: [/withdrawTaskRequest/, /removePlanningRootFromData/, /restorePlanningRootToData/],
+      excludes: [/window\.confirm|deleteTaskRequest/],
     },
     {
       label: "task collaboration commands",

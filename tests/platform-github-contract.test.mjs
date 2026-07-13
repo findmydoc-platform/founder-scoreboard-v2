@@ -98,28 +98,27 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(github, /recovered: true/);
 });
 
-test("operational leads can delete test tasks and close linked github issues", async () => {
+test("planning items use the paper-bin workflow while legacy deletion artifacts remain available", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
-  const taskDeleteCommand = await readFile("src/features/tasks/hooks/use-task-delete-command.ts", "utf8");
+  const taskWithdrawCommand = await readFile("src/features/tasks/hooks/use-task-withdraw-command.ts", "utf8");
+  const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
   const deletionMigration = await readFile("supabase/0046_transactional_task_deletion.sql", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
   assert.match(taskRoute, /export async function DELETE/);
-  assert.match(taskRoute, /Nur CEO oder Deputy können Aufgaben löschen/);
-  assert.match(taskRoute, /archiveGitHubIssue/);
-  assert.match(taskRoute, /githubClosed/);
-  assert.match(taskRoute, /prepare_task_deletion_transaction/);
-  assert.match(taskRoute, /finalize_task_deletion_transaction/);
-  assert.match(taskRoute, /cancel_task_deletion_transaction/);
-  assert.match(taskRoute, /prepared\.tasks \|\| \[prepared\.task\]/);
-  assert.match(taskRoute, /for \(const item of issuePairs\)/);
-  assert.match(taskRoute, /archiveGitHubIssue\(item\.issueNumber, token, item\.repository\)/);
+  assert.match(taskRoute, /Direktes Löschen ist nicht mehr verfügbar/);
+  assert.match(taskRoute, /410/);
+  assert.doesNotMatch(taskRoute, /archiveGitHubIssue|prepare_task_deletion_transaction|finalize_task_deletion_transaction/);
   assert.doesNotMatch(taskRoute, /from\("tasks"\)\.delete\(\)/);
-  assert.match(taskApiClient, /json: \{ expectedUpdatedAt \}/);
-  assert.match(taskDeleteCommand, /removeTaskTreeFromPlanningData/);
-  assert.match(taskDeleteCommand, /restoreTaskTreeToPlanningData/);
+  assert.match(taskApiClient, /\/withdraw/);
+  assert.match(taskApiClient, /json: \{ expectedRevision, reason \}/);
+  assert.doesNotMatch(taskApiClient, /deleteTaskRequest/);
+  assert.match(taskWithdrawCommand, /removePlanningRootFromData/);
+  assert.match(taskWithdrawCommand, /restorePlanningRootToData/);
+  assert.match(trashApi, /withdraw_planning_item_transaction/);
+  assert.match(trashApi, /restore_planning_item_transaction/);
   assert.match(deletionMigration, /create table if not exists public\.task_deletion_operations/);
   assert.match(deletionMigration, /delete from public\.tasks where id = v_operation\.task_id/);
   assert.match(deletionMigration, /insert into public\.audit_log/);
@@ -128,8 +127,9 @@ test("operational leads can delete test tasks and close linked github issues", a
   assert.match(github, /export async function archiveGitHubIssue/);
   assert.match(github, /state_reason: "not_planned"/);
   assert.match(github, /test\/deleted/);
-  assert.match(panelSidebar, /Test & Bereinigung/);
-  assert.match(panelSidebar, /Aufgabe löschen/);
+  assert.match(panelSidebar, /Papierkorb/);
+  assert.match(panelSidebar, /Deliverable zurückziehen/);
+  assert.doesNotMatch(panelSidebar, /Aufgabe löschen/);
 });
 
 test("github issue export includes only the task brief and FounderOps source", async () => {

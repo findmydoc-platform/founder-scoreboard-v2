@@ -6,7 +6,9 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-decision-dialog";
+import { PlanningTrashActionDialog } from "@/features/planning/molecules/planning-trash-action-dialog";
 import { canDecideInitiativeApproval, canReturnInitiativeForRevision, isProposedDeliverable } from "@/features/planning/model/approval-domain";
+import { canWithdrawPlanningRoot, isWithdrawableApprovalStatus } from "@/features/planning/model/planning-trash-contract";
 import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRiskFilter, type ProjectsSort, type ProjectsTableFilters } from "@/features/projects/model/projects-filter-view-model";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
@@ -37,25 +39,30 @@ export function ProjectsOverview({
   data,
   tasks,
   currentProfile,
+  source,
   canManageInitiatives,
   pending,
   onEditInitiative,
   onOpenTask,
   onDecideInitiative,
+  onWithdrawInitiative,
 }: {
   data: PlanningData;
   tasks: Task[];
   currentProfile?: Profile | null;
+  source: "seed" | "supabase";
   canManageInitiatives: boolean;
   pending: boolean;
   onEditInitiative: (initiative: Package) => void;
   onOpenTask: (taskId: string) => void;
   onDecideInitiative: (initiative: Package, action: ApprovalDecisionAction, note?: string) => void;
+  onWithdrawInitiative: (initiative: Package, reason: string) => void;
 }) {
   const [openMilestoneIds, setOpenMilestoneIds] = useState<Set<string>>(new Set());
   const [openInitiativeIds, setOpenInitiativeIds] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [approvalDecision, setApprovalDecision] = useState<{ initiative: Package; action: ApprovalReasonAction } | null>(null);
+  const [withdrawal, setWithdrawal] = useState<Package | null>(null);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "deliverables", schema: projectsFilterSchema });
   const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || "Nicht gesetzt";
   const filterViewModel = buildProjectsFilterViewModel({ data, tasks, filters });
@@ -78,7 +85,7 @@ export function ProjectsOverview({
   const milestoneOptions = [{ value: "Alle", label: "Alle Meilensteine" }, ...data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))];
   const initiativeOptions = [{ value: "Alle", label: "Alle Initiativen" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.title }))];
   const riskOptions = (Object.keys(riskLabels) as ProjectsRiskFilter[]).map((value) => ({ value, label: riskLabels[value] }));
-  const proposedInitiatives = data.packages.filter((initiative) => initiative.approvalStatus === "proposed");
+  const pendingInitiatives = data.packages.filter((initiative) => isWithdrawableApprovalStatus(initiative.approvalStatus));
   const proposedDeliverables = tasks.filter(isProposedDeliverable);
 
   return (
@@ -114,26 +121,32 @@ export function ProjectsOverview({
       </UiPanel>
       <section className="grid gap-3 lg:grid-cols-2">
         <UiPanel>
-          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Proposed Initiatives</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Nicht freigegebene Initiativen</div>
           <div className="mt-3 grid gap-2">
-            {proposedInitiatives.map((initiative) => {
+            {pendingInitiatives.map((initiative) => {
               const canDecide = canDecideInitiativeApproval(initiative, currentProfile);
               const canReturn = canReturnInitiativeForRevision(initiative, currentProfile);
+              const canWithdraw = canWithdrawPlanningRoot({
+                rootType: "initiative",
+                approvalStatus: initiative.approvalStatus,
+                proposedById: initiative.proposedById,
+              }, currentProfile, source === "seed");
               return (
                 <div key={initiative.id} className="rounded-md border border-slate-200 p-3">
                   <div className="font-semibold text-slate-950">{initiative.title}</div>
-                  <div className="mt-1 text-xs text-slate-500">Revision {initiative.approvalRevision} · Antrag: {profileName(initiative.proposedById)}</div>
-                  {(canDecide || canReturn) && (
+                  <div className="mt-1 text-xs text-slate-500">{initiative.approvalStatus === "draft" ? "Entwurf" : "Eingereicht"} · Revision {initiative.approvalRevision} · Antrag: {profileName(initiative.proposedById)}</div>
+                  {(canDecide || canReturn || canWithdraw) && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {canDecide && <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideInitiative(initiative, "approve")}>Freigeben</UiButton>}
                       {canDecide && <UiButton size="xs" disabled={pending} onClick={() => setApprovalDecision({ initiative, action: "reject" })}>Ablehnen</UiButton>}
                       {canReturn && <UiButton size="xs" disabled={pending} onClick={() => setApprovalDecision({ initiative, action: "return_to_draft" })}>Zur Überarbeitung</UiButton>}
+                      {canWithdraw && <UiButton size="xs" variant="red" disabled={pending} onClick={() => setWithdrawal(initiative)}>Zurückziehen</UiButton>}
                     </div>
                   )}
                 </div>
               );
             })}
-            {!proposedInitiatives.length && <p className="text-sm text-slate-500">Keine Initiative wartet auf Freigabe.</p>}
+            {!pendingInitiatives.length && <p className="text-sm text-slate-500">Keine Initiative wartet auf Freigabe.</p>}
           </div>
         </UiPanel>
         <UiPanel>
@@ -228,6 +241,20 @@ export function ProjectsOverview({
             const { initiative, action } = approvalDecision;
             setApprovalDecision(null);
             onDecideInitiative(initiative, action, note);
+          }}
+        />
+      )}
+      {withdrawal && (
+        <PlanningTrashActionDialog
+          action="withdraw"
+          entityLabel="Initiative"
+          itemTitle={withdrawal.title}
+          pending={pending}
+          onClose={() => setWithdrawal(null)}
+          onConfirm={(reason) => {
+            const initiative = withdrawal;
+            setWithdrawal(null);
+            onWithdrawInitiative(initiative, reason);
           }}
         />
       )}

@@ -83,6 +83,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateSprint,
     updateSprintCommitment,
     updateTask,
+    withdrawInitiative,
     view,
     workspace,
   } = controller;
@@ -119,10 +120,12 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           data={data}
           tasks={data.tasks}
           currentProfile={currentProfile}
+          source={source}
           canManageInitiatives={canManageTaskMeta}
           pending={isPending}
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
+          onWithdrawInitiative={withdrawInitiative}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({
             id: initiative.id,
             title: initiative.title,

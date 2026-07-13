@@ -6,6 +6,7 @@ import {
   canRejectDeliverableApproval,
   canReturnDeliverableForRevision,
 } from "@/features/planning/model/approval-domain";
+import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-detail-panel-notes-section";
@@ -50,7 +51,7 @@ type TaskDetailSurfaceProps = {
   onOpenTask: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
-  onDelete: () => void;
+  onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
   onRemoveRelation: (relation: TaskRelation) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
@@ -88,7 +89,7 @@ export function TaskDetailSurface({
   onOpenTask,
   onSyncGitHub,
   onOpenReview,
-  onDelete,
+  onWithdraw,
   onAddRelation,
   onRemoveRelation,
   onDecideApproval,
@@ -112,6 +113,11 @@ export function TaskDetailSurface({
   const canApprove = canApproveDeliverableApproval(task, currentPackage, currentProfile);
   const canReject = canRejectDeliverableApproval(task, currentPackage, currentProfile);
   const canReturnToDraft = canReturnDeliverableForRevision(task, currentPackage, currentProfile);
+  const canWithdrawTask = task.taskType === "deliverable" && canWithdrawPlanningRoot({
+    rootType: "deliverable",
+    approvalStatus: task.approvalStatus,
+    proposedById: task.proposedById,
+  }, currentProfile, source === "seed");
 
   return (
     <>
@@ -209,7 +215,7 @@ export function TaskDetailSurface({
           canReparentSubIssue={controller.permissions.canReparentSubIssue}
           canManageReviewOwner={controller.permissions.canManageReviewOwner}
           canOpenReview={controller.permissions.canOpenReview}
-          canDeleteTask={controller.permissions.canDeleteTask}
+          canWithdrawTask={canWithdrawTask}
           canChangeTaskStatus={controller.permissions.canUpdateStatus}
           canApprove={canApprove}
           canReject={canReject}
@@ -219,7 +225,7 @@ export function TaskDetailSurface({
           onUpdate={onUpdate}
           onSyncGitHub={onSyncGitHub}
           onOpenReview={onOpenReview}
-          onDelete={onDelete}
+          onWithdraw={onWithdraw}
           onDecideApproval={onDecideApproval}
         />
       </div>

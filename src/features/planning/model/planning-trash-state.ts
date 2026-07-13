@@ -1,7 +1,8 @@
-import type { PlanningData } from "@/lib/types";
+import type { PlanningData, TrashRootType } from "@/lib/types";
 
-export type TaskDeletionSnapshot = Pick<
+export type PlanningTrashStateSnapshot = Pick<
   PlanningData,
+  | "packages"
   | "tasks"
   | "taskActivity"
   | "taskBlockers"
@@ -27,14 +28,22 @@ function collectTaskTreeIds(tasks: PlanningData["tasks"], rootTaskId: string) {
   return taskIds;
 }
 
+function taskIdsForRoot(data: PlanningData, rootType: TrashRootType, rootId: string) {
+  if (rootType === "initiative") {
+    return new Set(data.tasks.filter((task) => task.packageId === rootId).map((task) => task.id));
+  }
+  return collectTaskTreeIds(data.tasks, rootId);
+}
+
 function restoreMissingById<T extends { id: string | number }>(current: T[], removed: T[]) {
   const currentIds = new Set(current.map((item) => item.id));
   return [...removed.filter((item) => !currentIds.has(item.id)), ...current];
 }
 
-export function removeTaskTreeFromPlanningData(data: PlanningData, rootTaskId: string) {
-  const taskIds = collectTaskTreeIds(data.tasks, rootTaskId);
-  const snapshot: TaskDeletionSnapshot = {
+export function removePlanningRootFromData(data: PlanningData, rootType: TrashRootType, rootId: string) {
+  const taskIds = taskIdsForRoot(data, rootType, rootId);
+  const snapshot: PlanningTrashStateSnapshot = {
+    packages: rootType === "initiative" ? data.packages.filter((pack) => pack.id === rootId) : [],
     tasks: data.tasks.filter((task) => taskIds.has(task.id)),
     taskActivity: data.taskActivity.filter((activity) => taskIds.has(activity.taskId)),
     taskBlockers: data.taskBlockers.filter((blocker) => taskIds.has(blocker.taskId)),
@@ -49,6 +58,7 @@ export function removeTaskTreeFromPlanningData(data: PlanningData, rootTaskId: s
   return {
     data: {
       ...data,
+      packages: rootType === "initiative" ? data.packages.filter((pack) => pack.id !== rootId) : data.packages,
       tasks: data.tasks.filter((task) => !taskIds.has(task.id)),
       taskActivity: data.taskActivity.filter((activity) => !taskIds.has(activity.taskId)),
       taskBlockers: data.taskBlockers.filter((blocker) => !taskIds.has(blocker.taskId)),
@@ -64,9 +74,10 @@ export function removeTaskTreeFromPlanningData(data: PlanningData, rootTaskId: s
   };
 }
 
-export function restoreTaskTreeToPlanningData(data: PlanningData, snapshot: TaskDeletionSnapshot): PlanningData {
+export function restorePlanningRootToData(data: PlanningData, snapshot: PlanningTrashStateSnapshot): PlanningData {
   return {
     ...data,
+    packages: restoreMissingById(data.packages, snapshot.packages),
     tasks: restoreMissingById(data.tasks, snapshot.tasks),
     taskActivity: restoreMissingById(data.taskActivity, snapshot.taskActivity),
     taskBlockers: restoreMissingById(data.taskBlockers, snapshot.taskBlockers),

@@ -67,7 +67,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     createTask,
     decideTaskApproval,
     data,
-    deleteTask,
     importGitHubComments,
     initiativeDialogDefaults,
     isPending,
@@ -95,6 +94,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     taskDialogDefaults,
     updateTask,
     uploadTaskAttachment,
+    withdrawTask,
     currentProfile,
     source,
     taskPanelPreviousTask,
@@ -147,7 +147,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, assignee: selectedTask.assigneeId || selectedTask.assignee, status: "Offen" })}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onOpenReview={() => openReviewSheet(selectedTask)}
-          onDelete={() => deleteTask(selectedTask)}
+          onWithdraw={(reason) => withdrawTask(selectedTask, reason)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}
           onDecideApproval={(action, note) => decideTaskApproval(selectedTask, action, note)}

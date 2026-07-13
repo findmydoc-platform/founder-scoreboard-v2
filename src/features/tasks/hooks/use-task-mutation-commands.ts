@@ -2,7 +2,7 @@
 
 import type { TaskMutationCommandContext } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskCreateCommand } from "@/features/tasks/hooks/use-task-create-command";
-import { useTaskDeleteCommand } from "@/features/tasks/hooks/use-task-delete-command";
+import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw-command";
 import { useTaskGitHubSyncCommand } from "@/features/tasks/hooks/use-task-github-sync-command";
 import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-command";
 import { applyOptimisticDeliverableApprovalDecision } from "@/features/planning/model/approval-domain";
@@ -28,7 +28,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
     ...options,
     setTaskDialogDefaults,
   });
-  const { deleteTask } = useTaskDeleteCommand({
+  const { withdrawTask } = useTaskWithdrawCommand({
     ...options,
     closeTaskPanel,
   });
@@ -61,7 +61,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
   return {
     createTask,
     decideTaskApproval,
-    deleteTask,
+    withdrawTask,
     githubSyncNotice,
     syncLinkedGitHubTasks,
     syncTaskToGitHub,
