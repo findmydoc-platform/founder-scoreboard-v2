@@ -32,7 +32,10 @@ async function githubModule(assigneeStatus) {
       resolveGitHubIssueNumber: () => 42,
     },
     "./github-http": {
-      githubRequest: async () => new Response(null, { status: assigneeStatus }),
+      githubRequest: async () => {
+        if (assigneeStatus instanceof Error) throw assigneeStatus;
+        return new Response(null, { status: assigneeStatus });
+      },
       githubJson: async (_url, options) => {
         patchBody = options.body;
         return {
@@ -73,6 +76,15 @@ test("github sync clears a stale assignee when the new login is not assignable",
 
 test("github sync preserves the existing assignee when validation fails transiently", async () => {
   const github = await githubModule(503);
+
+  const result = await github.upsertGitHubIssue(task(), "installation-token", { login: "founder" });
+
+  assert.equal(Object.hasOwn(github.patchBody(), "assignees"), false);
+  assert.match(result.warnings[0], /konnte nicht geprüft werden/);
+});
+
+test("github sync preserves the existing assignee when validation cannot reach GitHub", async () => {
+  const github = await githubModule(new Error("network unavailable"));
 
   const result = await github.upsertGitHubIssue(task(), "installation-token", { login: "founder" });
 

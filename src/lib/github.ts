@@ -158,12 +158,17 @@ export async function githubUserForToken(token: string) {
 
 async function assignableGitHubLogin(login: string, token: string, repository?: string | null) {
   const { owner, repo } = splitGitHubRepository(repository);
-  const response = await githubRequest(`https://api.github.com/repos/${owner}/${repo}/assignees/${encodeURIComponent(login)}`, {
-    token,
-    cache: "no-store",
-    errorMessage: "GitHub-Assignee konnte nicht geprüft werden",
-    allowFailure: true,
-  });
+  let response: Response;
+  try {
+    response = await githubRequest(`https://api.github.com/repos/${owner}/${repo}/assignees/${encodeURIComponent(login)}`, {
+      token,
+      cache: "no-store",
+      errorMessage: "GitHub-Assignee konnte nicht geprüft werden",
+      allowFailure: true,
+    });
+  } catch {
+    return null;
+  }
   if (response.status === 204) return true;
   if (response.status === 404) return false;
   return null;
