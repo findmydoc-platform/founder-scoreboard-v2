@@ -104,6 +104,21 @@ test("review and assignee changes resolve actionable notifications", () => {
   );
 });
 
+test("proposal notifications resolve from approval state instead of task work status", () => {
+  const proposal = { ...baseNotification, type: "task.proposed", recipientProfileId: "ceo-1" };
+  const proposedTask = { ...baseTask, approvalStatus: "proposed", status: "Offen" };
+  const approvedTaskWithLegacyStatus = { ...baseTask, approvalStatus: "approved", status: "Vorschlag" };
+
+  assert.equal(
+    resolution.notificationResolution(proposal, context({ tasks: new Map([[baseTask.id, proposedTask]]) }), now),
+    null,
+  );
+  assert.equal(
+    resolution.notificationResolution(proposal, context({ tasks: new Map([[baseTask.id, approvedTaskWithLegacyStatus]]) }), now).reason,
+    "proposal_closed",
+  );
+});
+
 test("deadlines blockers sprints events and deleted targets reconcile by source truth", () => {
   const deadline = { ...baseNotification, type: "task.deadline_overdue", recipientProfileId: "founder-1" };
   assert.equal(resolution.notificationResolution(deadline, context(), now), null);

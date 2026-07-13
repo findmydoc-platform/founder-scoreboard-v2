@@ -123,6 +123,7 @@ create table if not exists tasks (
   title text not null,
   description text,
   status text not null,
+  constraint tasks_status_not_proposal_check check (status <> 'Vorschlag'),
   priority text not null,
   owner text references profiles(id) on delete set null,
   assignee text references profiles(id) on delete set null,
@@ -4434,5 +4435,27 @@ alter table public.tasks add constraint tasks_github_repo_allowed_check check (
 drop index if exists public.tasks_legacy_proposal_unresolved_idx;
 
 drop function if exists public.create_team_task_intake_batch_transaction(uuid, text, uuid, text, jsonb, text, text);
+
+-- Proposal state belongs to approval_status, never to the operational task status.
+update public.tasks
+set status = 'Offen'
+where status = 'Vorschlag';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'tasks_status_not_proposal_check'
+      and conrelid = 'public.tasks'::regclass
+  ) then
+    alter table public.tasks
+      add constraint tasks_status_not_proposal_check
+      check (status <> 'Vorschlag') not valid;
+  end if;
+end
+$$;
+
+alter table public.tasks validate constraint tasks_status_not_proposal_check;
 
 notify pgrst, 'reload schema';

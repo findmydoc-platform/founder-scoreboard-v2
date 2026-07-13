@@ -4,7 +4,7 @@ import { CustomSelect, type CustomSelectOption } from "@/shared/atoms/custom-sel
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { BacklogReadiness } from "@/features/backlog/molecules/backlog-readiness";
 import { backlogTableColumnCount, backlogTableMinWidth } from "@/features/backlog/model/backlog-table-layout";
-import type { BacklogItem, BacklogReadinessFilter, BacklogSort, BacklogTableFilters, BacklogTypeFilter } from "@/features/backlog/model/backlog-view-model";
+import type { BacklogItem, BacklogReadinessFilter, BacklogSort, BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
 import { taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Task } from "@/lib/types";
@@ -19,7 +19,6 @@ type BacklogRankTableProps = {
   allItems: BacklogItem[];
   filters: BacklogTableFilters;
   toolbar: ReactNode;
-  typeOptions: CustomSelectOption[];
   statusOptions: CustomSelectOption[];
   readinessOptions: CustomSelectOption[];
   priorityOptions: CustomSelectOption[];
@@ -35,12 +34,18 @@ function dragTaskId(event: DragEvent<HTMLElement>) {
   return event.dataTransfer.getData("text/plain");
 }
 
-function typeTone(task: Task) {
-  return task.approvalStatus === "proposed" ? "blue" : "emerald";
+function approvalTone(task: Task) {
+  if (task.approvalStatus === "approved") return "emerald";
+  if (task.approvalStatus === "proposed") return "amber";
+  if (task.approvalStatus === "rejected") return "rose";
+  return "slate";
 }
 
-function typeLabel(task: Task) {
-  return task.approvalStatus === "proposed" ? "Vorgeschlagen" : task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
+function approvalLabel(task: Task) {
+  if (task.approvalStatus === "approved") return "Freigegeben";
+  if (task.approvalStatus === "proposed") return "Vorgeschlagen";
+  if (task.approvalStatus === "rejected") return "Abgelehnt";
+  return "Entwurf";
 }
 
 function rowStatusDot(task: Task) {
@@ -48,7 +53,6 @@ function rowStatusDot(task: Task) {
   if (status === "Blockiert") return "bg-red-500";
   if (status === "Offen") return "bg-amber-500";
   if (status === "In Arbeit") return "bg-blue-600";
-  if (status === "Vorschlag") return "bg-slate-400";
   return "bg-emerald-500";
 }
 
@@ -71,7 +75,6 @@ export function BacklogRankTable({
   allItems,
   filters,
   toolbar,
-  typeOptions,
   statusOptions,
   readinessOptions,
   priorityOptions,
@@ -98,7 +101,7 @@ export function BacklogRankTable({
               <DataHeaderCell aria-label="Rang verschieben" />
               <DataColumnHeader label="#" direction={directionFor("rank")} onSort={() => toggleSort("rank")} />
               <DataColumnHeader label="Titel" direction={directionFor("title")} onSort={() => toggleSort("title")} />
-              <DataColumnHeader label="Typ" direction={directionFor("type")} onSort={() => toggleSort("type")} filter={<ColumnFilterPopover label="Backlog nach Typ filtern" activeCount={filters.type === "all" ? 0 : 1} onReset={() => onFiltersChange({ type: "all" })}><CustomSelect aria-label="Typ wählen" value={filters.type} onChange={(type) => onFiltersChange({ type: type as BacklogTypeFilter })} options={typeOptions} className="h-10" /></ColumnFilterPopover>} />
+              <DataColumnHeader label="Freigabe" direction={directionFor("approval")} onSort={() => toggleSort("approval")} />
               <DataColumnHeader label="Initiative" direction={directionFor("initiative")} onSort={() => toggleSort("initiative")} filter={<ColumnFilterPopover label="Backlog nach Initiative filtern" activeCount={filters.initiative === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ initiative: "Alle" })}><CustomSelect aria-label="Initiative wählen" value={filters.initiative} onChange={(initiative) => onFiltersChange({ initiative })} options={initiativeOptions} className="h-10" /></ColumnFilterPopover>} />
               <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Backlog nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => onFiltersChange({ assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
               <DataColumnHeader label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} filter={<ColumnFilterPopover label="Backlog nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />
@@ -144,7 +147,7 @@ export function BacklogRankTable({
                     {item.task.title}
                   </TaskReferenceLink>
                 </DataCell>
-                <DataCell><UiBadge tone={typeTone(item.task)}>{typeLabel(item.task)}</UiBadge></DataCell>
+                <DataCell><UiBadge tone={approvalTone(item.task)}>{approvalLabel(item.task)}</UiBadge></DataCell>
                 <DataCell className="max-w-40 text-xs text-slate-600">{item.initiative?.title || "Nicht gesetzt"}</DataCell>
                 <DataCell className="text-xs text-slate-600">{taskAssigneeLabel(item.task)}</DataCell>
                 <DataCell><UiBadge tone={priorityBadgeTone(item.task.priority)}>{item.task.priority}</UiBadge></DataCell>

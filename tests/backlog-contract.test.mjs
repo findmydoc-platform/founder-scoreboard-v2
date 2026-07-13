@@ -43,7 +43,7 @@ function basePlanningData() {
         order: 10,
         title: "P2 erster Rang",
         description: "",
-        status: "Vorschlag",
+        status: "Offen",
         priority: "P2",
         assignee: "Deputy",
         owner: "Deputy",
@@ -209,6 +209,9 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   assert.match(rankTable, /filtering=\{\{ mode: "embedded", toolbar \}\}/);
   assert.match(rankTable, /DataColumnHeader/);
   assert.match(rankTable, /ColumnFilterPopover/);
+  assert.doesNotMatch(overview, /BacklogTypeFilter|typeOptions|filters\.type/);
+  assert.doesNotMatch(rankTable, /BacklogTypeFilter|typeOptions|Backlog nach Typ/);
+  assert.match(rankTable, /directionFor\("approval"\)/);
   assert.match(uiSurface, /overflow-x-scroll/);
   assert.match(overview, /data-tour-id="backlog-overview"/);
   assert.match(scopeTabs, /data-tour-id="backlog-scope-tabs"/);
@@ -226,10 +229,10 @@ test("planning board keeps non-approved items out of the board columns", async (
   const renderer = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
   const board = await readFile("src/features/tasks/organisms/task-board-view.tsx", "utf8");
 
-  assert.match(renderer, /planningBoardStatuses = taskStatuses\.filter\(\(status\) => status !== "Vorschlag"\)/);
-  assert.match(renderer, /planningBoardTasks = visibleTasks/);
+  assert.match(renderer, /planningBoardStatuses = taskStatuses/);
+  assert.match(renderer, /planningBoardTasks = visibleTasks\.filter\(isTaskPlanningActive\)/);
   assert.match(renderer, /isTaskPlanningActive/);
-  assert.match(renderer, /normalizeStatus\(task\.status\) !== "Vorschlag"/);
+  assert.doesNotMatch(renderer, /Vorschlag|normalizeStatus/);
   assert.match(renderer, /statuses=\{planningBoardStatuses\}/);
   assert.match(renderer, /visibleTasks=\{planningBoardTasks\}/);
   assert.match(board, /taskType: "deliverable"/);

@@ -1,13 +1,13 @@
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { packageById, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
 import { TaskBoardView } from "@/features/tasks/organisms/task-board-view";
 import { TaskStructureView } from "@/features/tasks/organisms/task-structure-view";
 import { TaskTableView } from "@/features/tasks/organisms/task-table-view";
 
-const planningBoardStatuses = taskStatuses.filter((status) => status !== "Vorschlag");
+const planningBoardStatuses = taskStatuses;
 
 export function PlanningTaskViewRenderer({ controller }: { controller: PlanningAppController }) {
   const {
@@ -37,9 +37,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
   if (!filtersAvailable) return null;
 
-  const planningBoardTasks = visibleTasks
-    .filter(isTaskPlanningActive)
-    .filter((task) => normalizeStatus(task.status) !== "Vorschlag");
+  const planningBoardTasks = visibleTasks.filter(isTaskPlanningActive);
 
   return (
     <>
