@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import {
-  TEAM_TASK_INTAKE_MAX_ACTIVE_TOKENS,
-  type TeamTaskIntakeTokenRecord,
-} from "@/features/intake/model/team-task-intake-contract";
+  TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS,
+  type TeamPlanningItemTokenRecord,
+} from "@/features/planning-items/model/planning-items-contract";
 import {
-  createTeamIntakeToken,
-  loadTeamIntakeTokens,
-  revokeTeamIntakeToken,
-} from "@/features/profile/model/profile-team-intake-api";
+  createPlanningItemsToken,
+  loadPlanningItemsTokens,
+  revokePlanningItemsToken,
+} from "@/features/profile/model/profile-planning-items-api";
 
-export function useProfileTeamIntakeTokens({
+export function useProfilePlanningItemsTokens({
   apiClient,
   source,
 }: {
@@ -20,8 +20,9 @@ export function useProfileTeamIntakeTokens({
   source: "seed" | "supabase";
 }) {
   const mounted = useRef(true);
-  const [tokens, setTokens] = useState<TeamTaskIntakeTokenRecord[]>([]);
+  const [tokens, setTokens] = useState<TeamPlanningItemTokenRecord[]>([]);
   const [label, setLabel] = useState("");
+  const [allowUpdates, setAllowUpdates] = useState(false);
   const [visibleToken, setVisibleToken] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
@@ -34,7 +35,7 @@ export function useProfileTeamIntakeTokens({
   );
   const canCreate = source === "supabase"
     && label.trim().length > 0
-    && activeTokens.length < TEAM_TASK_INTAKE_MAX_ACTIVE_TOKENS
+    && activeTokens.length < TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS
     && !pending;
 
   useEffect(() => {
@@ -51,15 +52,15 @@ export function useProfileTeamIntakeTokens({
     setPending(true);
     setMessage("");
     try {
-      const { response, body } = await loadTeamIntakeTokens(apiClient);
-      if (!response.ok || !body?.tokens) throw new Error(body?.error || "Team-Intake-Tokens konnten nicht geladen werden.");
+      const { response, body } = await loadPlanningItemsTokens(apiClient);
+      if (!response.ok || !body?.tokens) throw new Error(body?.error || "Planning-API-Tokens konnten nicht geladen werden.");
       if (!mounted.current) return;
       setTokens(body.tokens);
       setLoaded(true);
     } catch (error) {
       if (!mounted.current) return;
       setMessageTone("warning");
-      setMessage(error instanceof Error ? error.message : "Team-Intake-Tokens konnten nicht geladen werden.");
+      setMessage(error instanceof Error ? error.message : "Planning-API-Tokens konnten nicht geladen werden.");
     } finally {
       if (mounted.current) setPending(false);
     }
@@ -76,16 +77,17 @@ export function useProfileTeamIntakeTokens({
     setMessage("");
     setVisibleToken("");
     try {
-      const { response, body } = await createTeamIntakeToken(apiClient, label.trim());
-      if (!response.ok || !body?.token || !body.tokenRecord) throw new Error(body?.error || "Team-Intake-Token konnte nicht erstellt werden.");
+      const { response, body } = await createPlanningItemsToken(apiClient, label.trim(), allowUpdates);
+      if (!response.ok || !body?.token || !body.tokenRecord) throw new Error(body?.error || "Planning-API-Token konnte nicht erstellt werden.");
       setTokens((current) => [body.tokenRecord!, ...current]);
       setVisibleToken(body.token);
       setLabel("");
+      setAllowUpdates(false);
       setMessageTone("success");
       setMessage("Token erstellt. Kopiere ihn jetzt; er wird nicht erneut angezeigt.");
     } catch (error) {
       setMessageTone("warning");
-      setMessage(error instanceof Error ? error.message : "Team-Intake-Token konnte nicht erstellt werden.");
+      setMessage(error instanceof Error ? error.message : "Planning-API-Token konnte nicht erstellt werden.");
     } finally {
       setPending(false);
     }
@@ -95,15 +97,15 @@ export function useProfileTeamIntakeTokens({
     setPending(true);
     setMessage("");
     try {
-      const { response, body } = await revokeTeamIntakeToken(apiClient, tokenId);
-      if (!response.ok || !body?.ok) throw new Error(body?.error || "Team-Intake-Token konnte nicht widerrufen werden.");
+      const { response, body } = await revokePlanningItemsToken(apiClient, tokenId);
+      if (!response.ok || !body?.ok) throw new Error(body?.error || "Planning-API-Token konnte nicht widerrufen werden.");
       setTokens((current) => current.map((token) => token.id === tokenId ? { ...token, revokedAt: new Date().toISOString() } : token));
       setVisibleToken("");
       setMessageTone("success");
       setMessage("Token widerrufen.");
     } catch (error) {
       setMessageTone("warning");
-      setMessage(error instanceof Error ? error.message : "Team-Intake-Token konnte nicht widerrufen werden.");
+      setMessage(error instanceof Error ? error.message : "Planning-API-Token konnte nicht widerrufen werden.");
     } finally {
       setPending(false);
     }
@@ -123,6 +125,7 @@ export function useProfileTeamIntakeTokens({
 
   return {
     activeTokenCount: activeTokens.length,
+    allowUpdates,
     canCreate,
     copyToken,
     createToken,
@@ -134,6 +137,7 @@ export function useProfileTeamIntakeTokens({
     messageTone,
     pending,
     revokeToken,
+    setAllowUpdates,
     setLabel,
     tokens,
     visibleToken,

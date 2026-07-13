@@ -388,46 +388,61 @@ async function verifyScoreObjectionRpc() {
   };
 }
 
-async function verifyTeamTaskIntakeRpcs() {
+async function verifyPlanningItemsRpcs() {
   const tokenParams = {
-    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_profile_id: `verify-missing-planning-items-profile-${Date.now()}`,
     p_label: "Verification",
     p_token_hash: "a".repeat(64),
     p_token_hint: "…verify",
+    p_allow_updates: false,
   };
   const authParams = {
     p_token_hash: "c".repeat(64),
-    p_scope: "read:task-context",
+    p_scope: "read:planning-context",
   };
   const revokeParams = {
     p_token_id: randomUUID(),
-    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_profile_id: `verify-missing-planning-items-profile-${Date.now()}`,
   };
-  const batchParams = {
+  const createParams = {
     p_token_id: randomUUID(),
-    p_profile_id: `verify-missing-team-intake-profile-${Date.now()}`,
+    p_profile_id: `verify-missing-planning-items-profile-${Date.now()}`,
     p_idempotency_key: randomUUID(),
     p_request_hash: "b".repeat(64),
     p_items: [{ itemType: "deliverable", title: "Verification" }],
     p_request_ip: null,
     p_user_agent: null,
   };
-  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, legacyBatch, anonLegacyBatch, v2Batch, anonV2Batch] = await Promise.all([
-    supabase.rpc("create_team_task_intake_token", tokenParams),
-    anonSupabase.rpc("create_team_task_intake_token", tokenParams),
-    supabase.rpc("authenticate_team_task_intake_token", authParams),
-    anonSupabase.rpc("authenticate_team_task_intake_token", authParams),
-    supabase.rpc("revoke_team_task_intake_token", revokeParams),
-    anonSupabase.rpc("revoke_team_task_intake_token", revokeParams),
-    supabase.rpc("create_team_task_intake_batch_transaction", batchParams),
-    anonSupabase.rpc("create_team_task_intake_batch_transaction", batchParams),
-    supabase.rpc("create_team_task_intake_v2_transaction", batchParams),
-    anonSupabase.rpc("create_team_task_intake_v2_transaction", batchParams),
+  const updateParams = {
+    p_token_id: randomUUID(),
+    p_profile_id: `verify-missing-planning-items-profile-${Date.now()}`,
+    p_item_type: "deliverable",
+    p_item_id: `verify-missing-planning-item-${Date.now()}`,
+    p_expected_updated_at: new Date().toISOString(),
+    p_idempotency_key: randomUUID(),
+    p_request_hash: "d".repeat(64),
+    p_patch: {},
+    p_changed_fields: [],
+    p_system_effects: [],
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, create, anonCreate, update, anonUpdate] = await Promise.all([
+    supabase.rpc("create_team_planning_items_token", tokenParams),
+    anonSupabase.rpc("create_team_planning_items_token", tokenParams),
+    supabase.rpc("authenticate_team_planning_items_token", authParams),
+    anonSupabase.rpc("authenticate_team_planning_items_token", authParams),
+    supabase.rpc("revoke_team_planning_items_token", revokeParams),
+    anonSupabase.rpc("revoke_team_planning_items_token", revokeParams),
+    supabase.rpc("create_team_planning_items_transaction", createParams),
+    anonSupabase.rpc("create_team_planning_items_transaction", createParams),
+    supabase.rpc("update_team_planning_item_transaction", updateParams),
+    anonSupabase.rpc("update_team_planning_item_transaction", updateParams),
   ]);
 
   return [
     {
-      name: "create_team_task_intake_token",
+      name: "create_team_planning_items_token",
       ok: token.error?.code === "P0002" && Boolean(anonToken.error),
       error: token.error?.code !== "P0002"
         ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
@@ -436,7 +451,7 @@ async function verifyTeamTaskIntakeRpcs() {
           : "",
     },
     {
-      name: "authenticate_team_task_intake_token",
+      name: "authenticate_team_planning_items_token",
       ok: auth.error?.code === "P0004" && Boolean(anonAuth.error),
       error: auth.error?.code !== "P0004"
         ? auth.error?.message || "token auth RPC unexpectedly accepted an inactive token"
@@ -445,7 +460,7 @@ async function verifyTeamTaskIntakeRpcs() {
           : "",
     },
     {
-      name: "revoke_team_task_intake_token",
+      name: "revoke_team_planning_items_token",
       ok: revoke.data === null && !revoke.error && Boolean(anonRevoke.error),
       error: revoke.error
         ? revoke.error.message
@@ -456,19 +471,21 @@ async function verifyTeamTaskIntakeRpcs() {
             : "",
     },
     {
-      name: "create_team_task_intake_batch_transaction_removed",
-      ok: legacyBatch.error?.code === "PGRST202" && anonLegacyBatch.error?.code === "PGRST202",
-      error: legacyBatch.error?.code !== "PGRST202" || anonLegacyBatch.error?.code !== "PGRST202"
-        ? legacyBatch.error?.message || anonLegacyBatch.error?.message || "legacy Team Task Intake RPC is still available"
-        : "",
+      name: "create_team_planning_items_transaction",
+      ok: create.error?.code === "P0004" && Boolean(anonCreate.error),
+      error: create.error?.code !== "P0004"
+        ? create.error?.message || "planning item create unexpectedly accepted an inactive token"
+        : !anonCreate.error
+          ? "planning item create unexpectedly allowed anonymous execution"
+          : "",
     },
     {
-      name: "create_team_task_intake_v2_transaction",
-      ok: v2Batch.error?.code === "P0004" && Boolean(anonV2Batch.error),
-      error: v2Batch.error?.code !== "P0004"
-        ? v2Batch.error?.message || "v2 batch RPC unexpectedly accepted an inactive token"
-        : !anonV2Batch.error
-          ? "v2 batch RPC unexpectedly allowed anonymous execution"
+      name: "update_team_planning_item_transaction",
+      ok: update.error?.code === "P0004" && Boolean(anonUpdate.error),
+      error: update.error?.code !== "P0004"
+        ? update.error?.message || "planning item update unexpectedly accepted an inactive token"
+        : !anonUpdate.error
+          ? "planning item update unexpectedly allowed anonymous execution"
           : "",
     },
   ];
@@ -643,7 +660,7 @@ const result = {
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
   scoreObjectionRpc: await verifyScoreObjectionRpc(),
-  teamTaskIntakeRpcs: await verifyTeamTaskIntakeRpcs(),
+  planningItemsRpcs: await verifyPlanningItemsRpcs(),
   approvalDecisionRpcs: await verifyApprovalDecisionRpcs(),
   planningTrashLifecycleRpcs: await verifyPlanningTrashLifecycleRpcs(),
   planningTrashPurgeRpc: await verifyPlanningTrashPurgeRpc(),
@@ -711,9 +728,9 @@ if (!result.scoreObjectionRpc.ok) {
   process.exit(1);
 }
 
-const missingTeamTaskIntakeRpc = result.teamTaskIntakeRpcs.find((check) => !check.ok);
-if (missingTeamTaskIntakeRpc) {
-  console.error(`Team Task Intake RPC check failed for ${missingTeamTaskIntakeRpc.name}: ${missingTeamTaskIntakeRpc.error}`);
+const missingPlanningItemsRpc = result.planningItemsRpcs.find((check) => !check.ok);
+if (missingPlanningItemsRpc) {
+  console.error(`Planning Items RPC check failed for ${missingPlanningItemsRpc.name}: ${missingPlanningItemsRpc.error}`);
   process.exit(1);
 }
 

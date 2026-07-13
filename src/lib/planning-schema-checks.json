@@ -220,15 +220,21 @@
     "health": false
   },
   {
-    "name": "team_task_intake_tokens",
+    "name": "planning_items_tokens",
     "table": "team_task_intake_tokens",
     "select": "id,profile_id,label,token_hint,scopes,expires_at,created_at,last_used_at,revoked_at",
     "health": false
   },
   {
-    "name": "team_task_intake_batches",
+    "name": "planning_items_create_batches",
     "table": "team_task_intake_batches",
     "select": "id,token_id,profile_id,idempotency_key,request_hash,task_ids,response_tasks,created_at",
+    "health": false
+  },
+  {
+    "name": "planning_item_update_requests",
+    "table": "team_planning_item_update_requests",
+    "select": "id,token_id,profile_id,item_type,item_id,expected_updated_at,idempotency_key,request_hash,response,created_at",
     "health": false
   }
 ]

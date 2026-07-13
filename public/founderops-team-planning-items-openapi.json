@@ -1,0 +1,131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FounderOps Planning Items API",
+    "version": "1.0.0",
+    "description": "Personal-token API for safe planning context, approval-aware creation, and scoped partial updates."
+  },
+  "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
+  "paths": {
+    "/api/team/planning-items/v1/context": {
+      "get": {
+        "operationId": "getPlanningItemsContext",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Safe planning context", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContextResponse" } } } } }
+      }
+    },
+    "/api/team/planning-items/v1/items/preview": {
+      "post": {
+        "operationId": "previewPlanningItemsCreate",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
+        "responses": { "200": { "description": "Normalized create preview" }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/team/planning-items/v1/items": {
+      "post": {
+        "operationId": "createPlanningItems",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
+        "responses": { "200": { "description": "Created planning items or an idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v1/items/{id}/preview": {
+      "post": {
+        "operationId": "previewPlanningItemUpdate",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
+        "responses": { "200": { "description": "Normalized partial update preview" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v1/items/{id}": {
+      "patch": {
+        "operationId": "updatePlanningItem",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
+        "responses": { "200": { "description": "Updated planning item or an idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v1/tokens": {
+      "get": {
+        "operationId": "listPlanningItemsTokens",
+        "responses": { "200": { "description": "Caller token records" } }
+      },
+      "post": {
+        "operationId": "createPlanningItemsToken",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenPayload" } } } },
+        "responses": { "200": { "description": "One-time visible token" } }
+      }
+    },
+    "/api/team/planning-items/v1/tokens/{id}": {
+      "delete": {
+        "operationId": "revokePlanningItemsToken",
+        "parameters": [{ "$ref": "#/components/parameters/TokenId" }],
+        "responses": { "200": { "description": "Revoked token" }, "404": { "description": "Active token not found" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "BearerAuth": { "type": "http", "scheme": "bearer" } },
+    "parameters": {
+      "ItemId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+      "TokenId": { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }
+    },
+    "responses": {
+      "BadRequest": { "description": "Invalid request" },
+      "Conflict": { "description": "Stale version or incompatible idempotency replay" }
+    },
+    "schemas": {
+      "CreatePayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items"],
+        "properties": { "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/PlanningItemCreate" } } }
+      },
+      "PlanningItemCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemType", "title"],
+        "properties": {
+          "itemType": { "type": "string", "enum": ["initiative", "deliverable", "sub_issue"] },
+          "title": { "type": "string", "minLength": 3, "maxLength": 240 },
+          "description": { "type": "string" }, "problemStatement": { "type": "string" }, "intendedOutcome": { "type": "string" },
+          "scopeConstraints": { "type": "string" }, "acceptanceCriteria": { "$ref": "#/components/schemas/AcceptanceCriteria" },
+          "evidenceRequired": { "type": "string" }, "definitionOfDone": { "type": "string" }, "parentTaskId": { "type": "string" },
+          "packageId": { "type": "string" }, "milestoneId": { "type": "string" }, "ownerId": { "type": "string" },
+          "accountableProfileId": { "type": "string" }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "priority": { "$ref": "#/components/schemas/Priority" }, "workstream": { "type": "string" }, "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" }, "deadline": { "type": "string", "format": "date" }, "hours": { "type": "integer", "minimum": 0, "maximum": 200 }, "githubRepo": { "type": "string" }
+        }
+      },
+      "PatchPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedUpdatedAt"],
+        "properties": {
+          "expectedUpdatedAt": { "type": "string", "format": "date-time" },
+          "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
+          "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
+          "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
+          "packageId": { "type": ["string", "null"] }, "milestoneId": { "type": ["string", "null"] }, "ownerId": { "type": ["string", "null"] },
+          "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },
+          "startDate": { "type": ["string", "null"], "format": "date" }, "endDate": { "type": ["string", "null"], "format": "date" }, "deadline": { "type": ["string", "null"], "format": "date" },
+          "hours": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 }, "githubRepo": { "type": ["string", "null"] }
+        }
+      },
+      "AcceptanceCriteria": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+      "NullableAcceptanceCriteria": { "oneOf": [{ "$ref": "#/components/schemas/AcceptanceCriteria" }, { "type": "null" }] },
+      "ProfileIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+      "Priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
+      "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false } } },
+      "ContextResponse": { "type": "object", "properties": { "ok": { "const": true }, "context": { "type": "object" } }, "required": ["ok", "context"] }
+    }
+  }
+}

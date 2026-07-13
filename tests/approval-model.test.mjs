@@ -168,18 +168,18 @@ test("deliverables always use management while sub issues may choose an allowed 
   });
 });
 
-test("team intake v2 publishes an approval-aware repository contract", async () => {
-  const openapi = JSON.parse(await readFile("public/founderops-team-intake-openapi.json", "utf8"));
-  const previewRoute = await readFile("src/app/api/team/task-intake/v2/preview/route.ts", "utf8");
-  const commitRoute = await readFile("src/app/api/team/task-intake/v2/commit/route.ts", "utf8");
-  const intakeDocs = await readFile("docs/team-task-intake-api.md", "utf8");
+test("planning items publish an approval-aware repository contract", async () => {
+  const openapi = JSON.parse(await readFile("public/founderops-team-planning-items-openapi.json", "utf8"));
+  const previewRoute = await readFile("src/app/api/team/planning-items/v1/items/preview/route.ts", "utf8");
+  const commitRoute = await readFile("src/app/api/team/planning-items/v1/items/route.ts", "utf8");
+  const intakeDocs = await readFile("docs/team-planning-items-api.md", "utf8");
 
-  assert.ok(openapi.paths["/api/team/task-intake/v2/preview"]);
-  assert.ok(openapi.paths["/api/team/task-intake/v2/commit"]);
-  assert.equal(openapi.paths["/api/team/task-intake/preview"], undefined);
-  assert.equal(openapi.paths["/api/team/task-intake/commit"], undefined);
-  assert.match(previewRoute, /buildTeamTaskIntakeV2Preview/);
-  assert.match(commitRoute, /create_team_task_intake_v2_transaction/);
+  assert.ok(openapi.paths["/api/team/planning-items/v1/items/preview"]);
+  assert.ok(openapi.paths["/api/team/planning-items/v1/items"]);
+  assert.equal(openapi.paths["/api/team/task-intake/v2/preview"], undefined);
+  assert.equal(openapi.paths["/api/team/task-intake/v2/commit"], undefined);
+  assert.match(previewRoute, /buildPlanningItemCreatePreview/);
+  assert.match(commitRoute, /create_team_planning_items_transaction/);
   assert.match(intakeDocs, /itemType = initiative \| deliverable \| sub_issue/);
   assert.match(intakeDocs, /Only Sub-Issues may select an allowed technical/);
 });

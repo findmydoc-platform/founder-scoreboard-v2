@@ -6,7 +6,7 @@ import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-m
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
-import { ProfileTeamIntakeTokens } from "@/features/profile/organisms/profile-team-intake-tokens";
+import { ProfilePlanningItemsTokens } from "@/features/profile/organisms/profile-planning-items-tokens";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
 import {
   buildInitialDraft,
@@ -223,7 +223,7 @@ function ProfileSettingsForm({
             />
           )}
           {activeSection === "api" && operationalProfile && (
-            <ProfileTeamIntakeTokens apiClient={apiClient} source={source} />
+            <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />
           )}
         </div>
       </div>

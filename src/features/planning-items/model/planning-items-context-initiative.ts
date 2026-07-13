@@ -2,9 +2,9 @@ import type { ApprovalStatus, Package } from "@/lib/types";
 
 type InitiativeStatus = NonNullable<Package["status"]>;
 
-export const TEAM_TASK_CONTEXT_INITIATIVE_SELECT = "id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,status,priority,target_date,sort_order,approval_status,goal,scope_constraints,success_criteria";
+export const PLANNING_ITEMS_CONTEXT_INITIATIVE_SELECT = "id,title,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,status,priority,target_date,sort_order,approval_status,goal,scope_constraints,success_criteria,updated_at";
 
-export type TeamTaskContextInitiativeRow = {
+export type PlanningItemsContextInitiativeRow = {
   id: string;
   title: string;
   milestone_id: string | null;
@@ -19,9 +19,10 @@ export type TeamTaskContextInitiativeRow = {
   goal: string | null;
   scope_constraints: string | null;
   success_criteria: string | null;
+  updated_at: string | null;
 };
 
-export type TeamTaskContextInitiative = {
+export type PlanningItemsContextInitiative = {
   id: string;
   title: string;
   milestoneId: string;
@@ -35,11 +36,12 @@ export type TeamTaskContextInitiative = {
   goal: string;
   scopeConstraints: string;
   successCriteria: string;
+  updatedAt: string;
 };
 
-export function mapTeamTaskContextInitiative(
-  initiative: TeamTaskContextInitiativeRow,
-): TeamTaskContextInitiative {
+export function mapPlanningItemsContextInitiative(
+  initiative: PlanningItemsContextInitiativeRow,
+): PlanningItemsContextInitiative {
   return {
     id: initiative.id,
     title: initiative.title,
@@ -54,5 +56,6 @@ export function mapTeamTaskContextInitiative(
     goal: initiative.goal || "",
     scopeConstraints: initiative.scope_constraints || "",
     successCriteria: initiative.success_criteria || "",
+    updatedAt: initiative.updated_at || "",
   };
 }

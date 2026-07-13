@@ -3,13 +3,23 @@ import type { AuthenticatedProfile } from "@/lib/types";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import type { getServerSupabase } from "@/lib/supabase";
 import { defaultGitHubRepository, resolveTaskGitHubRepository } from "@/lib/github-repositories";
-import { TEAM_TASK_INTAKE_MAX_TASKS } from "@/features/intake/model/team-task-intake-contract";
-import { intakeDate, intakeHours, intakePriority, intakeStringList, intakeText } from "@/features/intake/model/task-intake-normalization";
+import {
+  TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
+  TEAM_PLANNING_ITEM_CREATE_FIELDS,
+  TEAM_PLANNING_ITEM_TYPES,
+  type TeamPlanningItemType,
+} from "@/features/planning-items/model/planning-items-contract";
+import {
+  intakeDate,
+  intakeHours,
+  intakePriority,
+  intakeStringList,
+  intakeText,
+} from "@/features/planning-items/model/planning-item-normalization";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
-export type TeamTaskIntakeV2ItemType = "initiative" | "deliverable" | "sub_issue";
 
-export type TeamTaskIntakeV2Input = {
+export type PlanningItemCreateInput = {
   itemType?: unknown;
   title?: unknown;
   description?: unknown;
@@ -36,9 +46,9 @@ export type TeamTaskIntakeV2Input = {
   githubRepo?: unknown;
 };
 
-export type TeamTaskIntakeV2PreviewItem = {
+export type PlanningItemCreatePreviewItem = {
   clientId: string;
-  itemType: TeamTaskIntakeV2ItemType;
+  itemType: TeamPlanningItemType;
   title: string;
   description: string;
   problemStatement: string;
@@ -68,46 +78,63 @@ export type TeamTaskIntakeV2PreviewItem = {
   warnings: string[];
 };
 
-const itemTypes = new Set<TeamTaskIntakeV2ItemType>(["initiative", "deliverable", "sub_issue"]);
-const inputKeys = new Set<keyof TeamTaskIntakeV2Input>([
-  "itemType", "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
-  "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "parentTaskId", "packageId",
-  "milestoneId", "ownerId", "accountableProfileId", "responsibleProfileIds", "consultedProfileIds",
-  "informedProfileIds", "priority", "workstream", "startDate", "endDate", "deadline", "hours", "githubRepo",
-]);
+const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
+const inputKeys = new Set<string>(TEAM_PLANNING_ITEM_CREATE_FIELDS);
 
-export function parseTeamTaskIntakeV2Payload(payload: unknown) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return { ok: false as const, error: "Payload muss ein Objekt mit items sein." };
-  if (Object.keys(payload).some((key) => key !== "items")) return { ok: false as const, error: "Payload enthält unbekannte Felder." };
-  const items = (payload as { items?: unknown }).items;
-  if (!Array.isArray(items) || items.length < 1 || items.length > TEAM_TASK_INTAKE_MAX_TASKS) return { ok: false as const, error: "items muss 1 bis 30 Einträge enthalten." };
-  for (const [index, item] of items.entries()) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return { ok: false as const, error: `Eintrag ${index + 1} muss ein Objekt sein.` };
-    const unknownKey = Object.keys(item).find((key) => !inputKeys.has(key as keyof TeamTaskIntakeV2Input));
-    if (unknownKey) return { ok: false as const, error: `Eintrag ${index + 1} enthält das unbekannte Feld ${unknownKey}.` };
+export function parsePlanningItemCreatePayload(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false as const, error: "Payload muss ein Objekt mit items sein." };
   }
-  return { ok: true as const, items: items as TeamTaskIntakeV2Input[] };
+  if (Object.keys(payload).some((key) => key !== "items")) {
+    return { ok: false as const, error: "Payload enthält unbekannte Felder." };
+  }
+  const items = (payload as { items?: unknown }).items;
+  if (!Array.isArray(items) || items.length < 1 || items.length > TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE) {
+    return { ok: false as const, error: "items muss 1 bis 30 Einträge enthalten." };
+  }
+  for (const [index, item] of items.entries()) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { ok: false as const, error: `Eintrag ${index + 1} muss ein Objekt sein.` };
+    }
+    const unknownKey = Object.keys(item).find((key) => !inputKeys.has(key));
+    if (unknownKey) {
+      return { ok: false as const, error: `Eintrag ${index + 1} enthält das unbekannte Feld ${unknownKey}.` };
+    }
+  }
+  return { ok: true as const, items: items as PlanningItemCreateInput[] };
 }
 
-export async function buildTeamTaskIntakeV2Preview(items: TeamTaskIntakeV2Input[], actor: AuthenticatedProfile, supabase: SupabaseServer) {
+export async function buildPlanningItemCreatePreview(
+  items: PlanningItemCreateInput[],
+  actor: AuthenticatedProfile,
+  supabase: SupabaseServer,
+) {
   const [profilesResult, initiativesResult, milestonesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,milestone_id,approval_status"),
     supabase.from("milestones").select("id"),
     supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type,package_id,milestone_id,approval_status"),
   ]);
-  if (profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error) throw new Error("Team Task Intake v2 context could not be loaded.");
+  if (profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error) {
+    throw new Error("Planning-Items-Kontext konnte nicht geladen werden.");
+  }
+
   const profileIds = new Set((profilesResult.data || []).map((profile) => profile.id));
   const initiatives = new Map((initiativesResult.data || []).map((initiative) => [initiative.id, initiative]));
   const milestoneIds = new Set((milestonesResult.data || []).map((milestone) => milestone.id));
   const parents = new Map((parentsResult.data || []).map((task) => [task.id, task]));
 
-  return items.map((raw, index): TeamTaskIntakeV2PreviewItem => {
+  return items.map((raw, index): PlanningItemCreatePreviewItem => {
     const errors: string[] = [];
     const warnings: string[] = [];
     const requestedType = intakeText(raw.itemType, 40);
-    const itemType = itemTypes.has(requestedType as TeamTaskIntakeV2ItemType) ? requestedType as TeamTaskIntakeV2ItemType : "deliverable";
-    if (!itemTypes.has(requestedType as TeamTaskIntakeV2ItemType)) errors.push("itemType muss initiative, deliverable oder sub_issue sein.");
+    const itemType = itemTypes.has(requestedType as TeamPlanningItemType)
+      ? requestedType as TeamPlanningItemType
+      : "deliverable";
+    if (!itemTypes.has(requestedType as TeamPlanningItemType)) {
+      errors.push("itemType muss initiative, deliverable oder sub_issue sein.");
+    }
+
     const title = intakeText(raw.title, 240);
     if (title.length < 3) errors.push("Titel ist erforderlich.");
     let packageId = intakeText(raw.packageId, 120);
@@ -115,8 +142,12 @@ export async function buildTeamTaskIntakeV2Preview(items: TeamTaskIntakeV2Input[
     const parentTaskId = intakeText(raw.parentTaskId, 120);
     const parent = parentTaskId ? parents.get(parentTaskId) : null;
 
-    if (itemType === "initiative" && !["ceo", "deputy"].includes(actor.platformRole)) errors.push("Nur CEO oder Deputy können Initiativen vorschlagen.");
-    if (itemType === "initiative" && (!milestoneId || !milestoneIds.has(milestoneId))) errors.push("Initiative braucht einen gültigen Meilenstein.");
+    if (itemType === "initiative" && !["ceo", "deputy"].includes(actor.platformRole)) {
+      errors.push("Nur CEO oder Deputy können Initiativen vorschlagen.");
+    }
+    if (itemType === "initiative" && (!milestoneId || !milestoneIds.has(milestoneId))) {
+      errors.push("Initiative braucht einen gültigen Meilenstein.");
+    }
     if (itemType === "deliverable") {
       const initiative = initiatives.get(packageId);
       if (!initiative) errors.push("Deliverable braucht eine gültige Initiative.");
@@ -133,29 +164,39 @@ export async function buildTeamTaskIntakeV2Preview(items: TeamTaskIntakeV2Input[
     if (ownerId && !profileIds.has(ownerId)) errors.push("Owner wurde nicht gefunden.");
     const accountableProfileId = intakeText(raw.accountableProfileId, 120) || ownerId;
     const responsibleProfileIds = intakeStringList(raw.responsibleProfileIds);
-    if (itemType === "initiative" && (!accountableProfileId || !profileIds.has(accountableProfileId))) errors.push("Initiative braucht einen gültigen Accountable.");
-    if (itemType === "initiative" && !responsibleProfileIds.length) errors.push("Initiative braucht mindestens eine Responsible-Person.");
+    if (itemType === "initiative" && (!accountableProfileId || !profileIds.has(accountableProfileId))) {
+      errors.push("Initiative braucht einen gültigen Accountable.");
+    }
+    if (itemType === "initiative" && !responsibleProfileIds.length) {
+      errors.push("Initiative braucht mindestens eine Responsible-Person.");
+    }
+
     const requestedGitHubRepo = intakeText(raw.githubRepo, 120);
     const githubRepository = itemType === "initiative"
       ? { ok: true as const, repository: defaultGitHubRepository }
       : resolveTaskGitHubRepository(itemType, requestedGitHubRepo);
     if (!githubRepository.ok) errors.push(githubRepository.error);
     const githubRepo = githubRepository.ok ? githubRepository.repository : defaultGitHubRepository;
+
     const startDate = intakeDate(raw.startDate);
     const endDate = intakeDate(raw.endDate);
-    if (startDate && endDate && startDate > endDate) errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
+    if (startDate && endDate && startDate > endDate) {
+      errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
+    }
 
     return {
-      clientId: `team-intake-v2-${index + 1}`,
+      clientId: `planning-items-create-${index + 1}`,
       itemType,
       title,
-      description: intakeText(raw.description, 4000),
-      problemStatement: intakeText(raw.problemStatement, 4000),
-      intendedOutcome: intakeText(raw.intendedOutcome, 4000),
-      scopeConstraints: intakeText(raw.scopeConstraints, 4000),
-      acceptanceCriteria: Array.isArray(raw.acceptanceCriteria) ? raw.acceptanceCriteria.map((value) => intakeText(value, 1000)).filter(Boolean).join("\n") : intakeText(raw.acceptanceCriteria, 6000),
-      evidenceRequired: intakeText(raw.evidenceRequired, 4000),
-      definitionOfDone: intakeText(raw.definitionOfDone, 4000),
+      description: intakeText(raw.description, 4_000),
+      problemStatement: intakeText(raw.problemStatement, 4_000),
+      intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
+      scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
+      acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
+        ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
+        : intakeText(raw.acceptanceCriteria, 6_000),
+      evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
+      definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
       parentTaskId: itemType === "sub_issue" ? parentTaskId : "",
       packageId: itemType === "initiative" ? "" : packageId,
       milestoneId,
@@ -179,13 +220,15 @@ export async function buildTeamTaskIntakeV2Preview(items: TeamTaskIntakeV2Input[
   });
 }
 
-export function teamTaskIntakeV2CommitItem(item: TeamTaskIntakeV2PreviewItem) {
-  const result = { ...item } as Partial<TeamTaskIntakeV2PreviewItem>;
+export function planningItemCreateCommitItem(item: PlanningItemCreatePreviewItem) {
+  const result = { ...item } as Partial<PlanningItemCreatePreviewItem>;
   delete result.errors;
   delete result.warnings;
   return result;
 }
 
-export function teamTaskIntakeV2Hash(items: TeamTaskIntakeV2PreviewItem[]) {
-  return createHash("sha256").update(JSON.stringify(items.map(teamTaskIntakeV2CommitItem)), "utf8").digest("hex");
+export function planningItemCreateHash(items: PlanningItemCreatePreviewItem[]) {
+  return createHash("sha256")
+    .update(JSON.stringify(items.map(planningItemCreateCommitItem)), "utf8")
+    .digest("hex");
 }
