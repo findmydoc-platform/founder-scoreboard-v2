@@ -90,6 +90,21 @@ test("treats pending syncs as retryable after the ten-minute lock expires", () =
   assert.equal(syncQueue.isExpiredGitHubSyncPending({ ...expired, githubIssueSyncStatus: "failed" }, now), false);
 });
 
+test("all task surfaces stop presenting expired pending syncs as running", async () => {
+  const [card, table, queue, sidebar] = await Promise.all([
+    readFile("src/features/tasks/molecules/task-card.tsx", "utf8"),
+    readFile("src/features/tasks/organisms/task-table-view.tsx", "utf8"),
+    readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8"),
+    readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8"),
+  ]);
+
+  for (const surface of [card, table, queue, sidebar]) {
+    assert.match(surface, /isExpiredGitHubSyncPending/);
+  }
+  assert.match(card, /githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending\(task\)/);
+  assert.match(table, /githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending\(task\)/);
+});
+
 test("route and clients preserve the explicit retryable persistence error contract", async () => {
   const [route, commandHook, detailHook] = await Promise.all([
     readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),

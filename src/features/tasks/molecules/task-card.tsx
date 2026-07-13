@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
+import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
 import { dateRange, taskAssigneeLabel } from "@/lib/display";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone, statusBadgeTone } from "@/lib/status";
@@ -36,7 +37,7 @@ export function GitHubMissingBadge({ compact = false }: { compact?: boolean }) {
 
 export function GitHubIssueSyncStatusBadge({ task, compact = false }: { task: Task; compact?: boolean }) {
   if (!hasGitHubIssue(task)) return <GitHubMissingBadge compact={compact} />;
-  if (task.githubIssueSyncStatus === "pending") {
+  if (task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task)) {
     return (
       <UiBadge tone="amber" size="xs" className={`gap-1 ${compact ? "px-1.5 text-[10px]" : "text-[11px]"}`}>
         Sync läuft
@@ -83,7 +84,7 @@ function attentionTone(signal: TaskAttentionSignal): CardRiskSignal["tone"] {
 
 function githubRiskSignal(task: Task): CardRiskSignal | null {
   if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein GitHub Issue", tone: "amber" };
-  if (task.githubIssueSyncStatus === "pending") return { id: "github-pending", label: "Sync läuft", tone: "amber" };
+  if (task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task)) return { id: "github-pending", label: "Sync läuft", tone: "amber" };
   if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
   if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
   return null;
