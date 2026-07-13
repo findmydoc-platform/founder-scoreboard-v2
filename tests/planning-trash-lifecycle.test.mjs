@@ -47,8 +47,8 @@ test("trash and restore are atomic, revision-safe, role-guarded tree transitions
   assert.match(migration, /create or replace function public\.restore_planning_item_transaction/);
   assert.match(migration, /approval_status not in \('draft', 'proposed'\)/);
   assert.match(migration, /withdrawal requires proposer or operational lead/);
-  assert.match(migration, /only ceo may reject initiative approval/);
-  assert.match(migration, /deliverable rejection requires ceo or initiative accountable/);
+  assert.match(migration, /only ceo or deputy may decide initiative approval/);
+  assert.match(migration, /deliverable approval requires ceo, deputy, or initiative accountable/);
   assert.match(migration, /trash_revision = v_initiative\.trash_revision/);
   assert.match(migration, /v_root_trash_revision := v_task\.trash_revision \+ 1/);
   assert.match(migration, /trash_revision = v_root_trash_revision/);

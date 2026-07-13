@@ -38,14 +38,27 @@ test("return affordances match the server role and state contract", () => {
 test("deliverable decision affordances apply the parent approval gate only to approval", () => {
   const proposedDeliverable = { taskType: "deliverable", approvalStatus: "proposed" };
   const accountable = { id: "founder-1", platformRole: "founder" };
+  const deputy = { id: "deputy-1", platformRole: "deputy" };
   const approvedInitiative = { accountableProfileId: "founder-1", approvalStatus: "approved" };
   const proposedInitiative = { accountableProfileId: "founder-1", approvalStatus: "proposed" };
 
   assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, approvedInitiative, accountable), true);
   assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, proposedInitiative, accountable), false);
   assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, accountable), true);
+  assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, approvedInitiative, deputy), true);
+  assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, proposedInitiative, deputy), false);
+  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, deputy), true);
   assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, undefined, { id: "ceo-1", platformRole: "ceo" }), false);
-  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, { id: "deputy-1", platformRole: "deputy" }), false);
+  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, { id: "viewer-1", platformRole: "viewer" }), false);
+});
+
+test("Deputies can decide proposed Initiatives while Founder and Viewer cannot", () => {
+  const proposedInitiative = { approvalStatus: "proposed" };
+
+  assert.equal(approvalDomain.canDecideInitiativeApproval(proposedInitiative, { platformRole: "ceo" }), true);
+  assert.equal(approvalDomain.canDecideInitiativeApproval(proposedInitiative, { platformRole: "deputy" }), true);
+  assert.equal(approvalDomain.canDecideInitiativeApproval(proposedInitiative, { platformRole: "founder" }), false);
+  assert.equal(approvalDomain.canDecideInitiativeApproval(proposedInitiative, { platformRole: "viewer" }), false);
 });
 
 test("only the current rejection or return reason is exposed by the approval view model", () => {
@@ -92,6 +105,8 @@ test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return
     assert.match(sql, /char_length\(v_note\) > 2000/);
     assert.match(sql, /v_initiative\.approval_status <> 'proposed'/);
     assert.match(sql, /v_task\.approval_status <> 'proposed'/);
+    assert.match(sql, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
+    assert.match(sql, /v_actor_role not in \('ceo', 'deputy'\)[^]*v_initiative\.accountable_profile_id/);
     assert.match(sql, /v_actor_role not in \('ceo', 'deputy'\)/);
     assert.match(sql, /v_initiative\.accountable_profile_id/);
     assert.match(sql, /v_notification_recipient_id := v_initiative\.proposed_by/);

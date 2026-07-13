@@ -76,8 +76,8 @@ Alte Workflows oder Templates im Management-Repo dürfen nicht als Quelle der Wa
 
 Approval is separate from work status. Initiatives and Deliverables use `draft`, `proposed`, `approved`, or `rejected`. Sub-Issues have no approval record and derive their effective state from the parent Deliverable.
 
-- Only the CEO approves Initiatives.
-- The CEO or the current Initiative Accountable approves Deliverables.
+- The CEO or a Deputy approves or rejects Initiatives.
+- The CEO, a Deputy, or the current Initiative Accountable approves or rejects Deliverables.
 - Approving an Initiative does not approve existing or future Deliverables.
 - A new Deliverable always starts as proposed unless the CEO explicitly uses the combined create-and-approve action.
 - Sprint carry-overs create a new proposed Deliverable without a Sprint assignment. They require the normal approval decision before later Sprint planning.
