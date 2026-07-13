@@ -5,7 +5,7 @@ import { useTaskCreateCommand } from "@/features/tasks/hooks/use-task-create-com
 import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw-command";
 import { useTaskGitHubSyncCommand } from "@/features/tasks/hooks/use-task-github-sync-command";
 import { useTaskUpdateCommand } from "@/features/tasks/hooks/use-task-update-command";
-import { applyOptimisticDeliverableApprovalDecision } from "@/features/planning/model/approval-domain";
+import { applyDeliverableApprovalPatch, applyOptimisticDeliverableApprovalDecision } from "@/features/planning/model/approval-domain";
 import { removePlanningRootFromData } from "@/features/planning/model/planning-trash-state";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
@@ -39,12 +39,10 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
     if (options.source !== "supabase") {
       options.applyPlanningDataUpdate((current) => action === "reject"
         ? removePlanningRootFromData(current, "deliverable", task.id).data
-        : {
-            ...current,
-            tasks: current.tasks.map((item) => item.id === task.id
-              ? applyOptimisticDeliverableApprovalDecision(item, action, note)
-              : item),
-          });
+        : applyDeliverableApprovalPatch(
+            current,
+            applyOptimisticDeliverableApprovalDecision(task, action, note),
+          ));
       if (action === "reject") closeTaskPanel();
       return;
     }
@@ -54,10 +52,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
         if (!response.ok || !body?.task) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
         options.applyPlanningDataUpdate((current) => action === "reject"
           ? removePlanningRootFromData(current, "deliverable", task.id).data
-          : {
-              ...current,
-              tasks: current.tasks.map((item) => item.id === task.id ? body.task! : item),
-            });
+          : applyDeliverableApprovalPatch(current, body.task!));
         if (action === "reject") closeTaskPanel();
       } catch (error) {
         options.setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");

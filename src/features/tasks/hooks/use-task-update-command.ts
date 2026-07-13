@@ -8,6 +8,7 @@ import {
   founderStatusGuardMessage,
   founderTaskAssignmentGuardMessage,
 } from "@/features/planning/model/planning-app-model";
+import { applyDeliverableApprovalPatch } from "@/features/planning/model/approval-domain";
 import type { TaskSyncCommand } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
@@ -150,10 +151,16 @@ export function useTaskUpdateCommand({
           }));
         }
         if (body?.task && latestMutationByTask.current.get(task.id) === mutationId) {
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
-          }));
+          setData((current) => body.task?.approvalStatus !== undefined && task.taskType === "deliverable"
+            ? applyDeliverableApprovalPatch(current, {
+                ...body.task,
+                id: task.id,
+                approvalStatus: body.task.approvalStatus,
+              })
+            : {
+                ...current,
+                tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+              });
         }
         if (normalizedPatch.status && hasGitHubIssue(task) && githubInstallationAvailable) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });

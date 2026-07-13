@@ -30,6 +30,12 @@ export type PlanningGitHubLifecycleSummary = {
   errors: Array<{ jobId: string; message: string }>;
 };
 
+export type PlanningGitHubLifecycleScope = {
+  rootType: PlanningGitHubLifecycleJob["root_type"];
+  rootId: string;
+  taskIds: string[];
+};
+
 function closeComment(job: PlanningGitHubLifecycleJob) {
   const reason = job.reason?.trim();
   return [
@@ -92,10 +98,12 @@ export async function drainPlanningGitHubLifecycleJobs({
   supabase,
   limit = 25,
   githubToken,
+  scope,
 }: {
   supabase: SupabaseClient;
   limit?: number;
   githubToken?: string;
+  scope?: PlanningGitHubLifecycleScope;
 }): Promise<PlanningGitHubLifecycleSummary> {
   const summary: PlanningGitHubLifecycleSummary = {
     claimed: 0,
@@ -105,8 +113,20 @@ export async function drainPlanningGitHubLifecycleJobs({
     errors: [],
   };
   const lockToken = randomUUID();
-  const { data, error } = await supabase.rpc("claim_planning_github_lifecycle_jobs", {
+  const taskIds = scope
+    ? [...new Set(scope.taskIds.map((taskId) => taskId.trim()).filter(Boolean))]
+    : [];
+  if (scope && !taskIds.length) return summary;
+  const claimFunction = scope
+    ? "claim_planning_github_lifecycle_jobs_for_root"
+    : "claim_planning_github_lifecycle_jobs";
+  const { data, error } = await supabase.rpc(claimFunction, {
     p_lock_token: lockToken,
+    ...(scope ? {
+      p_root_type: scope.rootType,
+      p_root_id: scope.rootId,
+      p_task_ids: taskIds,
+    } : {}),
     p_limit: Math.max(1, Math.min(limit, 100)),
     p_lease_seconds: 120,
   });

@@ -9,7 +9,7 @@ import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
-import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { emptyTaskDetailData, loadTaskDetailData } from "@/lib/task-detail-data";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import { mergeTaskDetailData } from "@/features/tasks/model/task-api-client";
@@ -23,7 +23,7 @@ export default async function TaskPage({ params }: Props) {
   const { id } = await params;
   let authProfile: AuthenticatedProfile | null = null;
   let authUser: User | null = null;
-  const authRequired = hasSupabaseEnv() && requiresSupabaseAuth();
+  const authRequired = requiresSupabaseAuth();
   if (authRequired) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {

@@ -3,7 +3,7 @@ import { approvalTransactionError, validateApprovalDecision, type ApprovalDecisi
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
-import { attemptPlanningGitHubLifecycleDrain } from "@/lib/planning-github-lifecycle-trigger";
+import { attemptPlanningGitHubLifecycleDrain, loadOutstandingPlanningGitHubLifecycleTaskIds } from "@/lib/planning-github-lifecycle-trigger";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
@@ -33,11 +33,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? await serviceSupabase.from("profiles").select("id,name").in("id", [...new Set(profileIds)])
     : { data: [] };
   const profileNames = new Map((profiles || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({
-    rootType: "deliverable",
-    rootId: id,
-    eventIds: [],
-    supabase: serviceSupabase,
-  });
+  const lifecycleScope = await loadOutstandingPlanningGitHubLifecycleTaskIds(serviceSupabase, "deliverable", id);
+  const lifecycle = lifecycleScope.error
+    ? { attempted: false, completed: false, error: lifecycleScope.error }
+    : await attemptPlanningGitHubLifecycleDrain({
+        rootType: "deliverable",
+        rootId: id,
+        taskIds: lifecycleScope.taskIds,
+        supabase: serviceSupabase,
+      });
   return NextResponse.json({ ok: true, task: mapTaskRow(row, profileNames), lifecycle });
 }

@@ -4,7 +4,7 @@ import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
 import { mapPackage } from "@/lib/planning-profile-mappers";
 import type { DbPackage } from "@/lib/planning-data-row-types";
-import { attemptPlanningGitHubLifecycleDrain } from "@/lib/planning-github-lifecycle-trigger";
+import { attemptPlanningGitHubLifecycleDrain, loadOutstandingPlanningGitHubLifecycleTaskIds } from "@/lib/planning-github-lifecycle-trigger";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
@@ -27,11 +27,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     p_note: decision.note,
   });
   if (error) return approvalTransactionError(error, "Initiative");
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({
-    rootType: "initiative",
-    rootId: id,
-    eventIds: [],
-    supabase: serviceSupabase,
-  });
+  const lifecycleScope = await loadOutstandingPlanningGitHubLifecycleTaskIds(serviceSupabase, "initiative", id);
+  const lifecycle = lifecycleScope.error
+    ? { attempted: false, completed: false, error: lifecycleScope.error }
+    : await attemptPlanningGitHubLifecycleDrain({
+        rootType: "initiative",
+        rootId: id,
+        taskIds: lifecycleScope.taskIds,
+        supabase: serviceSupabase,
+      });
   return NextResponse.json({ ok: true, initiative: mapPackage(data as DbPackage), lifecycle });
 }

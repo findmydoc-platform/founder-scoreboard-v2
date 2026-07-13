@@ -12,6 +12,7 @@ const status = {
 };
 const resolution = await loadTranspiledModule("src/lib/notification-resolution.ts", {
   "./notification-catalog": catalog,
+  "./planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
   "./platform": platform,
   "./status": status,
 });
@@ -173,7 +174,7 @@ function fakeReconciliationSupabase(rows, { taskError = false } = {}) {
           in() {
             return Promise.resolve({
               data: [],
-              error: table === "tasks" && taskError ? { message: "source unavailable" } : null,
+              error: table === "active_tasks" && taskError ? { message: "source unavailable" } : null,
             });
           },
         };

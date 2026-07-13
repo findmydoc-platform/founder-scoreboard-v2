@@ -1,6 +1,7 @@
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 
 type NotificationTargetInput = {
+  type?: string;
   entityType: string;
   entityId: string;
 };
@@ -30,6 +31,9 @@ export function notificationTarget(event: NotificationTargetInput): Notification
     return { workspace: "events", href: "/events" };
   }
   if (entityType === "initiative") {
+    if (event.type === "planning_item.returned") {
+      return { workspace: "projects", href: "/projects" };
+    }
     return {
       workspace: "planning",
       href: entityId ? `/initiatives/${encodeURIComponent(entityId)}` : "/planning",

@@ -107,6 +107,26 @@ test("approval domain keeps client affordances and optimistic state aligned", as
     sprintId: "",
     scoreRelevant: false,
   });
+  const planningData = {
+    tasks: [
+      { ...deliverable, id: "deliverable-1" },
+      { id: "child-1", taskType: "sub_issue", parentTaskId: "deliverable-1", parentApprovalStatus: "proposed" },
+      { id: "child-2", taskType: "sub_issue", parentTaskId: "deliverable-2", parentApprovalStatus: "approved" },
+    ],
+  };
+  const approved = approval.applyDeliverableApprovalPatch(planningData, {
+    id: "deliverable-1",
+    approvalStatus: "approved",
+  });
+  assert.equal(approved.tasks[0].approvalStatus, "approved");
+  assert.equal(approved.tasks[1].parentApprovalStatus, "approved");
+  assert.equal(approved.tasks[2].parentApprovalStatus, "approved");
+  const reset = approval.applyDeliverableApprovalPatch(approved, {
+    id: "deliverable-1",
+    approvalStatus: "proposed",
+  });
+  assert.equal(reset.tasks[1].parentApprovalStatus, "proposed");
+  assert.equal(reset.tasks[2].parentApprovalStatus, "approved");
   assert.equal(approval.isTaskPlanningActive({ taskType: "sub_issue", approvalStatus: null, parentApprovalStatus: "approved" }), true);
   assert.equal(approval.canApproveDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "approved" }, { id: "owner-1", platformRole: "founder" }), true);
   assert.equal(approval.canRejectDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "proposed" }, { id: "owner-1", platformRole: "founder" }), true);

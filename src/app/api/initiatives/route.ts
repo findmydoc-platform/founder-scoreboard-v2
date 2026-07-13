@@ -14,6 +14,7 @@ import {
   type InitiativePayload,
 } from "@/features/projects/model/initiative-api";
 import { mapPackage } from "@/lib/planning-profile-mappers";
+import { ACTIVE_PACKAGES_TABLE } from "@/lib/planning-read-model";
 import type { DbPackage } from "@/lib/planning-data-row-types";
 
 export async function GET(request: NextRequest) {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { supabase } = context;
   const { data, error } = await supabase
-    .from("packages")
+    .from(ACTIVE_PACKAGES_TABLE)
     .select(initiativeSelect)
     .eq("project_id", founderProjectId)
     .order("sort_order");
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
   if (raciReferenceError) return apiError(raciReferenceError, 404);
 
   const { data: maxRow } = await supabase
-    .from("packages")
+    .from(ACTIVE_PACKAGES_TABLE)
     .select("sort_order")
     .eq("project_id", founderProjectId)
     .order("sort_order", { ascending: false })

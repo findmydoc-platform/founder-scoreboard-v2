@@ -5,6 +5,7 @@ import { slugify } from "@/lib/slug";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { TaskIntakeContext, TaskIntakePreviewTask } from "@/features/intake/model/task-intake";
 import type { Task } from "@/lib/types";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type SupabaseReader = ReturnType<typeof import("@/lib/supabase").getServerSupabase>;
 
@@ -61,7 +62,7 @@ export async function commitTaskIntake({
   activitySource,
 }: CommitTaskIntakeOptions) {
   const { data: maxRow } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("sort_order")
     .order("sort_order", { ascending: false })
     .limit(1)

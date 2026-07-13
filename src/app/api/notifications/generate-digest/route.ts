@@ -4,6 +4,7 @@ import { requireOperationalLead } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
 import { createNotificationPayload, type NotificationType } from "@/lib/notification-catalog";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type TaskRow = {
   id: string;
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
     profileResult,
   ] = await Promise.all([
     supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id,title,description,status,priority,assignee,owner,end_date,review_status,review_owner_profile_id,task_type,approval_status,score_relevant,score_final")
       .order("updated_at", { ascending: false })
       .limit(200),
@@ -269,6 +270,7 @@ export async function POST(request: NextRequest) {
 
   for (const blocker of (blockerResult.data || []) as BlockerRow[]) {
     const task = tasksById.get(blocker.task_id);
+    if (!task) continue;
     candidates.push({
       type: "task.blocker_reported",
       actorProfileId: blocker.profile_id,

@@ -104,12 +104,15 @@ test("approval decisions drain lifecycle jobs and rejected roots leave active UI
   ]);
 
   assert.match(trigger, /drainPlanningGitHubLifecycleJobs/);
-  assert.match(trigger, /limit: 100/);
+  assert.match(trigger, /taskIds/);
+  assert.match(trigger, /scope:/);
+  assert.doesNotMatch(trigger, /limit: 100/);
   assert.doesNotMatch(trigger, /registeredDrain|registerPlanningGitHubLifecycleDrain/);
   for (const route of [taskRoute, initiativeRoute]) {
     assert.match(route, /getServerServiceRoleSupabase/);
     assert.match(route, /attemptPlanningGitHubLifecycleDrain/);
     assert.match(route, /lifecycle/);
+    assert.match(route, /loadOutstandingPlanningGitHubLifecycleTaskIds/);
   }
   assert.match(taskCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "deliverable", task\.id\)/);
   assert.match(initiativeCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "initiative", initiative\.id\)/);

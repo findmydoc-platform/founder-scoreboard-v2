@@ -1,4 +1,4 @@
-import type { ApprovalDecisionAction, ApprovalStatus, Package, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, ApprovalStatus, Package, PlanningData, Profile, Task } from "@/lib/types";
 
 type ApprovalSubject = {
   approvalStatus: ApprovalStatus | null;
@@ -25,6 +25,22 @@ export function applyOptimisticDeliverableApprovalDecision(task: Task, action: A
   return updated.approvalStatus === "approved"
     ? updated
     : { ...updated, sprintId: "", scoreRelevant: false };
+}
+
+export function applyDeliverableApprovalPatch(
+  data: PlanningData,
+  deliverablePatch: Partial<Task> & Pick<Task, "id" | "approvalStatus">,
+): PlanningData {
+  return {
+    ...data,
+    tasks: data.tasks.map((task) => {
+      if (task.id === deliverablePatch.id) return { ...task, ...deliverablePatch };
+      if (task.taskType === "sub_issue" && task.parentTaskId === deliverablePatch.id) {
+        return { ...task, parentApprovalStatus: deliverablePatch.approvalStatus };
+      }
+      return task;
+    }),
+  };
 }
 
 export function isProposedDeliverable(task: Pick<Task, "taskType" | "approvalStatus">) {

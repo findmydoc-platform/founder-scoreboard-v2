@@ -74,6 +74,11 @@ function values(value: unknown): Array<string | number> {
   return value.filter((item): item is string | number => typeof item === "string" || typeof item === "number");
 }
 
+function stringValues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())))];
+}
+
 function normalizePlanningTrashTransactionResult(data: unknown, rootType: TrashRootType, rootId: string) {
   const result = data && typeof data === "object" ? data as PlanningTrashTransactionResult : {};
   return {
@@ -87,7 +92,7 @@ function normalizePlanningTrashTransactionResult(data: unknown, rootType: TrashR
       : typeof result.root_id === "string"
         ? result.root_id
         : rootId,
-    affectedTaskIds: values(result.affectedTaskIds ?? result.affected_task_ids),
+    affectedTaskIds: stringValues(result.affectedTaskIds ?? result.affected_task_ids),
     trashRevision: Number(result.trashRevision ?? result.trash_revision ?? 0),
     item: result.item && typeof result.item === "object" ? result.item : null,
     eventIds: values(result.eventIds ?? result.event_ids),
@@ -161,7 +166,7 @@ export async function handlePlanningTrashWithdraw(
   if (error) return planningTrashTransactionError(error, rootType, "withdraw");
 
   const result = normalizePlanningTrashTransactionResult(data, rootType, rootId);
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, eventIds: result.eventIds, supabase: serviceSupabase });
+  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, taskIds: result.affectedTaskIds, supabase: serviceSupabase });
   return NextResponse.json({ ok: true, ...result, lifecycle });
 }
 
@@ -201,6 +206,6 @@ export async function handlePlanningTrashRestore(
   if (error) return planningTrashTransactionError(error, rootType, "restore");
 
   const result = normalizePlanningTrashTransactionResult(data, rootType, rootId);
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, eventIds: result.eventIds, supabase: serviceSupabase });
+  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, taskIds: result.affectedTaskIds, supabase: serviceSupabase });
   return NextResponse.json({ ok: true, ...result, lifecycle });
 }

@@ -4,7 +4,7 @@ import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
-import { hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { requiresSupabaseAuth } from "@/lib/supabase";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -13,7 +13,7 @@ type Props = {
 export default async function ReviewPage({ params }: Props) {
   const { id } = await params;
 
-  if (hasSupabaseEnv() && requiresSupabaseAuth()) {
+  if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {
       return (

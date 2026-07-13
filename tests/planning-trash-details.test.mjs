@@ -96,7 +96,7 @@ test("initiative details require a team session and expose no mutation surface",
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
-test("notifications navigate directly to task and initiative details, including trashed items", async () => {
+test("notifications keep rejected initiative details read-only and return revisions to the editable workspace", async () => {
   const { notificationTarget } = await loadTranspiledModule(
     "src/features/notifications/model/notification-target.ts",
   );
@@ -104,6 +104,14 @@ test("notifications navigate directly to task and initiative details, including 
 
   assert.equal(notificationTarget({ entityType: "task", entityId: "task/1" }).href, "/tasks/task%2F1");
   assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
+  assert.deepEqual(
+    notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),
+    { workspace: "projects", href: "/projects" },
+  );
+  assert.equal(
+    notificationTarget({ type: "planning_item.rejected", entityType: "initiative", entityId: "initiative/1" }).href,
+    "/initiatives/initiative%2F1",
+  );
   assert.doesNotMatch(commands, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(commands, /if \(!task \|\| !taskOverlayWorkspaces\.has\(workspace\)\)/);
 });

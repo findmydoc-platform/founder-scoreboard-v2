@@ -7,7 +7,7 @@ import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { loadPlanningInitiativeDetail } from "@/lib/planning-trash-detail";
-import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
+import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 type Props = {
@@ -17,7 +17,7 @@ type Props = {
 export default async function InitiativePage({ params }: Props) {
   const { id } = await params;
   let authProfile: AuthenticatedProfile | null = null;
-  const authRequired = hasSupabaseEnv() && requiresSupabaseAuth();
+  const authRequired = requiresSupabaseAuth();
   if (authRequired) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
     if (!auth.ok) {

@@ -6,6 +6,7 @@ import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type TaskRow = {
   id: string;
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (nextSprintError) return apiError(nextSprintError.message, 500);
 
   const { data: tasks, error: tasksError } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
