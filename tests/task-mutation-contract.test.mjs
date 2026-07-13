@@ -85,7 +85,7 @@ test("task brief fields stay together in the shared update payload", async () =>
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
-    "@/lib/status": { taskStatuses: ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
+    "@/lib/status": { taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
   });
 
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", reviewStatus: "requested", scoreFinal: false }), []);
@@ -99,7 +99,7 @@ test("task route guard keeps final status CEO-only", async () => {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": {
       normalizeStatus: (status) => status,
-      taskStatuses: ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
+      taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
     },
   });
 

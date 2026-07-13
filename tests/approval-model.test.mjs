@@ -15,6 +15,28 @@ test("approval model separates active task type from approval state", async () =
   assert.match(migration, /legacy_proposal_unresolved/);
 });
 
+test("proposal is not an operational task status", async () => {
+  const [types, migration, schema, resolution, catalog] = await Promise.all([
+    readFile("src/lib/types.ts", "utf8"),
+    readFile("supabase/0060_remove_proposal_work_status.sql", "utf8"),
+    readFile("supabase/schema.sql", "utf8"),
+    readFile("src/lib/notification-resolution.ts", "utf8"),
+    readFile("src/lib/notification-catalog.ts", "utf8"),
+  ]);
+  const status = await loadTranspiledModule("src/lib/status.ts");
+
+  assert.match(types, /TaskStatus = "Offen" \| "In Arbeit" \| "Review" \| "Nacharbeit" \| "Blockiert" \| "Erledigt"/);
+  assert.deepEqual(status.taskStatuses, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
+  assert.equal(status.normalizeStatus("Vorschlag"), "Offen");
+  assert.equal(status.normalizeStatus("draft"), "Offen");
+  assert.equal(status.normalizeStatus("Idee"), "Offen");
+  assert.match(migration, /update public\.tasks[\s\S]*set status = 'Offen'[\s\S]*where status = 'Vorschlag'/);
+  assert.match(migration, /tasks_status_not_proposal_check[\s\S]*status <> 'Vorschlag'/);
+  assert.match(schema, /constraint tasks_status_not_proposal_check check \(status <> 'Vorschlag'\)/);
+  assert.doesNotMatch(resolution, /normalizeStatus\(task\.status\)[^\n]*Vorschlag/);
+  assert.match(catalog, /"task\.proposed"[^\n]*label: "Vorschlag"/);
+});
+
 test("legacy Team Task Intake cleanup removes proposal storage and RPCs through the approved deploy path", async () => {
   const [cleanup, schema, deploy] = await Promise.all([
     readFile("supabase/migrations/20260712213443_remove_legacy_team_task_intake_v12.sql", "utf8"),

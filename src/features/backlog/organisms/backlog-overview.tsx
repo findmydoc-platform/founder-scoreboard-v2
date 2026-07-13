@@ -6,7 +6,7 @@ import { useBacklogCommands } from "@/features/backlog/hooks/use-backlog-command
 import { BacklogRankTable } from "@/features/backlog/molecules/backlog-rank-table";
 import { BacklogScopeTabs } from "@/features/backlog/molecules/backlog-scope-tabs";
 import { BacklogSprintPane } from "@/features/backlog/molecules/backlog-sprint-pane";
-import { DEFAULT_BACKLOG_FILTERS, buildBacklogTableViewModel, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters, type BacklogTypeFilter } from "@/features/backlog/model/backlog-view-model";
+import { DEFAULT_BACKLOG_FILTERS, buildBacklogTableViewModel, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { normalizeStatus } from "@/lib/status";
 import type { PlanningData, Task } from "@/lib/types";
@@ -17,13 +17,12 @@ import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } f
 const backlogFilterSchema: TableUrlSchema<BacklogTableFilters> = {
   query: stringUrlField(),
   scope: enumUrlField("all", ["all", "proposals", "ready", "unscheduled"] as const),
-  type: enumUrlField("all", ["all", "proposal", "deliverable"] as const),
   status: stringUrlField("Alle"),
   readiness: enumUrlField("all", ["all", "ready", "incomplete"] as const),
   priority: stringUrlField("Alle"),
   initiative: stringUrlField("Alle"),
   assignee: stringUrlField("Alle"),
-  sort: enumUrlField("rank", ["rank", "priority", "title", "type", "initiative", "assignee", "readiness", "status"] as const),
+  sort: enumUrlField("rank", ["rank", "priority", "title", "approval", "initiative", "assignee", "readiness", "status"] as const),
   direction: enumUrlField("asc", ["asc", "desc"] as const),
 };
 
@@ -71,14 +70,12 @@ export function BacklogOverview({
   const taskById = useMemo(() => new Map(viewModel.orderedTasks.map((task) => [task.id, task])), [viewModel.orderedTasks]);
   const activeFilters: ActiveFilter[] = [
     ...(filters.scope !== "all" ? [{ id: "scope", label: `Scope: ${filters.scope === "proposals" ? "Vorschläge" : filters.scope === "ready" ? "Bereit" : "Ohne Sprint"}`, onRemove: () => updateFilters({ scope: "all" }) }] : []),
-    ...(filters.type !== "all" ? [{ id: "type", label: `Typ: ${filters.type === "proposal" ? "Vorschlag" : "Deliverable"}`, onRemove: () => updateFilters({ type: "all" }) }] : []),
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => updateFilters({ status: "Alle" }) }] : []),
     ...(filters.readiness !== "all" ? [{ id: "readiness", label: `Bereitschaft: ${filters.readiness === "ready" ? "Bereit" : "Unvollständig"}`, onRemove: () => updateFilters({ readiness: "all" }) }] : []),
     ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, onRemove: () => updateFilters({ priority: "Alle" }) }] : []),
     ...(filters.initiative !== "Alle" ? [{ id: "initiative", label: `Initiative: ${data.packages.find((pack) => pack.id === filters.initiative)?.title || filters.initiative}`, onRemove: () => updateFilters({ initiative: "Alle" }) }] : []),
     ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${data.profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee}`, onRemove: () => updateFilters({ assignee: "Alle" }) }] : []),
   ];
-  const typeOptions = [{ value: "all", label: "Alle Typen" }, { value: "proposal", label: "Vorschläge" }, { value: "deliverable", label: "Deliverables" }];
   const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(viewModel.allItems.map((item) => normalizeStatus(item.task.status)))).map((status) => ({ value: status, label: status }))];
   const readinessOptions = [{ value: "all", label: "Alle" }, { value: "ready", label: "Bereit" }, { value: "incomplete", label: "Unvollständig" }];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority }));
@@ -101,7 +98,6 @@ export function BacklogOverview({
       primaryControls={<BacklogScopeTabs scope={filters.scope} counts={viewModel.scopeCounts} onScopeChange={(scope: BacklogScope) => updateFilters({ scope })} />}
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <FilterField label="Typ"><CustomSelect aria-label="Backlog nach Typ filtern" value={filters.type} onChange={(type) => updateFilters({ type: type as BacklogTypeFilter })} options={typeOptions} className="h-10 text-sm" /></FilterField>
         <FilterField label="Status"><CustomSelect aria-label="Backlog nach Status filtern" value={filters.status} onChange={(status) => updateFilters({ status })} options={statusOptions} className="h-10 text-sm" /></FilterField>
         <FilterField label="Bereitschaft"><CustomSelect aria-label="Backlog nach Bereitschaft filtern" value={filters.readiness} onChange={(readiness) => updateFilters({ readiness: readiness as BacklogReadinessFilter })} options={readinessOptions} className="h-10 text-sm" /></FilterField>
         <FilterField label="Priorität"><CustomSelect aria-label="Backlog nach Priorität filtern" value={filters.priority} onChange={(priority) => updateFilters({ priority })} options={priorityOptions} className="h-10 text-sm" /></FilterField>
@@ -124,7 +120,6 @@ export function BacklogOverview({
           allItems={viewModel.allItems}
           filters={filters}
           toolbar={toolbar}
-          typeOptions={typeOptions}
           statusOptions={statusOptions}
           readinessOptions={readinessOptions}
           priorityOptions={priorityOptions}

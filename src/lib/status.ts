@@ -1,11 +1,11 @@
 import type { UiTone } from "@/shared/atoms/ui-primitives";
 import type { TaskStatus } from "./types";
 
-export const taskStatuses: TaskStatus[] = ["Vorschlag", "Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"];
+export const taskStatuses: TaskStatus[] = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"];
 
 export function normalizeStatus(status: string): TaskStatus {
   const lower = status.toLowerCase();
-  if (lower.includes("vorschlag") || lower.includes("draft") || lower.includes("idee")) return "Vorschlag";
+  if (lower.includes("vorschlag") || lower.includes("draft") || lower.includes("idee")) return "Offen";
   if (lower.includes("nacharbeit") || lower.includes("rework") || lower.includes("changes_requested")) return "Nacharbeit";
   if (lower.includes("erledigt") || lower.includes("done") || lower.includes("beendet")) return "Erledigt";
   if (lower.includes("review")) return "Review";
@@ -26,8 +26,6 @@ export function statusBadgeTone(status: string): UiTone {
       return "orange";
     case "Blockiert":
       return "rose";
-    case "Vorschlag":
-      return "white";
     default:
       return "slate";
   }

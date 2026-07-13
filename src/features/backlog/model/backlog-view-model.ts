@@ -4,14 +4,12 @@ import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
 
 export type BacklogScope = "all" | "proposals" | "ready" | "unscheduled";
-export type BacklogSort = "rank" | "priority" | "title" | "type" | "initiative" | "assignee" | "readiness" | "status";
-export type BacklogTypeFilter = "all" | "proposal" | "deliverable";
+export type BacklogSort = "rank" | "priority" | "title" | "approval" | "initiative" | "assignee" | "readiness" | "status";
 export type BacklogReadinessFilter = "all" | "ready" | "incomplete";
 
 export type BacklogTableFilters = {
   query: string;
   scope: BacklogScope;
-  type: BacklogTypeFilter;
   status: string;
   readiness: BacklogReadinessFilter;
   priority: string;
@@ -24,7 +22,6 @@ export type BacklogTableFilters = {
 export const DEFAULT_BACKLOG_FILTERS: BacklogTableFilters = {
   query: "",
   scope: "all",
-  type: "all",
   status: "Alle",
   readiness: "all",
   priority: "Alle",
@@ -127,7 +124,7 @@ export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direct
     let comparison = 0;
     if (sort === "priority") comparison = (priorityRank[left.task.priority] ?? 9) - (priorityRank[right.task.priority] ?? 9);
     else if (sort === "title") comparison = left.task.title.localeCompare(right.task.title, "de");
-    else if (sort === "type") comparison = Number(taskIsProposal(left.task)) - Number(taskIsProposal(right.task));
+    else if (sort === "approval") comparison = Number(taskIsProposal(left.task)) - Number(taskIsProposal(right.task));
     else if (sort === "initiative") comparison = (left.initiative?.title || "").localeCompare(right.initiative?.title || "", "de");
     else if (sort === "assignee") comparison = (left.task.assignee || "").localeCompare(right.task.assignee || "", "de");
     else if (sort === "readiness") comparison = Number(left.isReadyForSprint) - Number(right.isReadyForSprint);
@@ -139,13 +136,12 @@ export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direct
 
 export function filterBacklogItems(items: BacklogItem[], filters: BacklogTableFilters) {
   return filterBacklogItemsByQuery(items, filters.query).filter((item) => {
-    const typeMatches = filters.type === "all" || filters.type === "proposal" && taskIsProposal(item.task) || filters.type === "deliverable" && !taskIsProposal(item.task);
     const statusMatches = filters.status === "Alle" || normalizeStatus(item.task.status) === filters.status;
     const readinessMatches = filters.readiness === "all" || filters.readiness === "ready" && item.isReadyForSprint || filters.readiness === "incomplete" && !item.isReadyForSprint;
     const priorityMatches = filters.priority === "Alle" || item.task.priority === filters.priority;
     const initiativeMatches = filters.initiative === "Alle" || item.task.packageId === filters.initiative;
     const assigneeMatches = filters.assignee === "Alle" || item.task.assigneeId === filters.assignee || item.task.assignee === filters.assignee;
-    return typeMatches && statusMatches && readinessMatches && priorityMatches && initiativeMatches && assigneeMatches;
+    return statusMatches && readinessMatches && priorityMatches && initiativeMatches && assigneeMatches;
   });
 }
 

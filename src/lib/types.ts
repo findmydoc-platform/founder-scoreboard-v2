@@ -11,7 +11,7 @@ export type ApprovalDecisionAction = "approve" | "reject" | "return_to_draft";
 export type TaskType = "deliverable" | "sub_issue";
 export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
 
-export type TaskStatus = "Vorschlag" | "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
+export type TaskStatus = "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
 
 export type Profile = {
   id: string;

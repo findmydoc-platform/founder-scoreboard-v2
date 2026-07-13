@@ -125,7 +125,7 @@ export function notificationResolution(
     const task = taskFor(event, context);
     if (task === undefined) return undefined;
     if (!task) return { reason: "source_deleted" };
-    if (task.approvalStatus !== "proposed" && normalizeStatus(task.status) !== "Vorschlag") {
+    if (task.approvalStatus !== "proposed") {
       return { reason: "proposal_closed" };
     }
     if (!event.recipientProfileId) return null;

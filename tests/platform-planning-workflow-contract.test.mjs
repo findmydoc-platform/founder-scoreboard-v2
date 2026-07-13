@@ -941,7 +941,7 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
-  assert.match(status, /Vorschlag/);
+  assert.doesNotMatch(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
   assert.match(reviewSheet, /Accountable Review-Blatt/);

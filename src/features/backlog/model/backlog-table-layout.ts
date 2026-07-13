@@ -6,7 +6,7 @@ export const backlogTableColumns = [
   { id: "drag", label: "", skeletonWidth: "w-16" },
   { id: "rank", label: "#", skeletonWidth: "w-16" },
   { id: "title", label: "Titel", skeletonWidth: "w-16" },
-  { id: "type", label: "Typ", skeletonWidth: "w-16" },
+  { id: "approval", label: "Freigabe", skeletonWidth: "w-16" },
   { id: "initiative", label: "Initiative", skeletonWidth: "w-16" },
   { id: "owner", label: "Zuständig", skeletonWidth: "w-16" },
   { id: "priority", label: "Priorität", skeletonWidth: "w-16" },
