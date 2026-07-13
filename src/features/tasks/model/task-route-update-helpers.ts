@@ -15,7 +15,21 @@ type RouteGuardResult = { ok: true } | { ok: false; error: string; status: numbe
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
-const syncStatuses = new Set(["not_synced", "synced", "pending", "failed"]);
+
+export function rejectClientGitHubSyncStatusUpdate(payload: unknown): RouteGuardResult {
+  if (
+    typeof payload === "object"
+    && payload !== null
+    && Object.prototype.hasOwnProperty.call(payload, "githubIssueSyncStatus")
+  ) {
+    return {
+      ok: false,
+      error: "Der GitHub-Sync-Status wird ausschließlich vom Server verwaltet.",
+      status: 403,
+    };
+  }
+  return { ok: true };
+}
 
 export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   const isImplicitReviewScoreReset = startsTaskReviewRequest(payload) && payload.scoreFinal === false && payload.scorePoints === undefined;
@@ -45,7 +59,6 @@ export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
       ? "Founder-Checkliste"
       : "",
     payload.reviewStatus !== undefined ? "Review" : "",
-    payload.githubIssueSyncStatus !== undefined ? "GitHub-Sync" : "",
   ].filter(Boolean);
 }
 
@@ -151,15 +164,6 @@ export function startsTaskReviewRequest(payload: TaskUpdatePayload) {
   return payload.status === "Review" || payload.reviewStatus === "requested";
 }
 
-export function applyTaskSyncStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
-  if (!payload.githubIssueSyncStatus) return { ok: true };
-  if (!syncStatuses.has(payload.githubIssueSyncStatus)) {
-    return { ok: false, error: "Ungültiger GitHub-Sync-Status.", status: 400 };
-  }
-  update.github_issue_sync_status = payload.githubIssueSyncStatus;
-  return { ok: true };
-}
-
 export function applyTaskSelfChecklistUpdateFields(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
   if (payload.selfDodChecked !== undefined) update.self_dod_checked = Boolean(payload.selfDodChecked);
   if (payload.selfEvidenceChecked !== undefined) update.self_evidence_checked = Boolean(payload.selfEvidenceChecked);
@@ -167,8 +171,8 @@ export function applyTaskSelfChecklistUpdateFields(update: TaskRouteDbUpdate, pa
   if (payload.selfBlockersChecked !== undefined) update.self_blockers_checked = Boolean(payload.selfBlockersChecked);
 }
 
-export function markTaskGitHubSyncDirty(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
-  if (Object.keys(update).length && payload.githubIssueSyncStatus === undefined) {
+export function markTaskGitHubSyncDirty(update: TaskRouteDbUpdate) {
+  if (Object.keys(update).length) {
     update.github_issue_sync_status = "not_synced";
     update.github_issue_sync_error = null;
   }

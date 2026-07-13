@@ -286,7 +286,7 @@ test("github issue sync and comment delivery keep independent state", async () =
   const github = await readFile("src/lib/github.ts", "utf8");
   const deliveryMigration = await readSupabaseSchemaContract();
 
-  assert.match(taskRoutePolicy, /payload\.githubIssueSyncStatus === undefined/);
+  assert.match(taskRoutePolicy, /rejectClientGitHubSyncStatusUpdate/);
   assert.match(taskRoutePolicy, /github_issue_sync_status = "not_synced"/);
   assert.doesNotMatch(commentsRoute, /github_issue_sync_status|github_issue_sync_error/);
   assert.match(commentsRoute, /create_task_comment_with_github_delivery/);

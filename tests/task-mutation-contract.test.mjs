@@ -57,6 +57,21 @@ test("score and review owner payload fields remain available outside review requ
   assert.equal(payload.scorePoints, 8);
 });
 
+test("normal task updates omit the server-owned GitHub sync status", async () => {
+  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+
+  const payload = taskUpdateRequestPayload({
+    title: "Updated title",
+    githubIssueSyncStatus: "synced",
+  }, "2026-07-06T11:00:00.000Z");
+
+  assert.equal(payload.title, "Updated title");
+  assert.equal(Object.prototype.hasOwnProperty.call(payload, "githubIssueSyncStatus"), false);
+});
+
 test("task brief fields stay together in the shared update payload", async () => {
   const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
@@ -109,7 +124,7 @@ test("Sub-Issue parent updates keep CAS, activity, and sync state together", asy
   ]);
 
   const update = { parent_task_id: "deliverable-next" };
-  markTaskGitHubSyncDirty(update, payload);
+  markTaskGitHubSyncDirty(update);
   assert.equal(update.github_issue_sync_status, "not_synced");
   assert.equal(update.github_issue_sync_error, null);
 });

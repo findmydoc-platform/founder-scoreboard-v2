@@ -99,7 +99,7 @@ export function useTaskUpdateCommand({
     applyPlanningDataUpdate((current) => {
       const nextData = {
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubIssueSyncStatus: normalizedPatch.githubIssueSyncStatus || "not_synced", githubIssueSyncError: normalizedPatch.githubIssueSyncStatus ? item.githubIssueSyncError : "" } : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubIssueSyncStatus: "not_synced" as const, githubIssueSyncError: "" } : item)),
       };
 
       if (source === "seed") {
