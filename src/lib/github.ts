@@ -227,11 +227,13 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
     if (isAssignable) {
       payload.assignees = [assigneeLogin];
     } else if (isAssignable === false) {
+      payload.assignees = [];
       warnings.push(`GitHub-Assignee @${assigneeLogin} ist im Repository nicht zuweisbar.`);
     } else {
       warnings.push(`GitHub-Assignee @${assigneeLogin} konnte nicht geprüft werden.`);
     }
   } else {
+    payload.assignees = [];
     warnings.push("GitHub-Assignee nicht gesetzt: Das verantwortliche Profil hat keinen GitHub-Login.");
   }
 
