@@ -217,6 +217,16 @@ export function useTaskDetailWorkflow({
           }));
           return;
         }
+        if (response.status === 409 && body?.code === "github_sync_stale") {
+          const message = body.error || "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+          setGithubState((current) => ({
+            ...current,
+            githubIssueSyncStatus: "not_synced",
+            githubIssueSyncError: message,
+          }));
+          setError(message);
+          return;
+        }
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
 
         setGithubState((current) => ({

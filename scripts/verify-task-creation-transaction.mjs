@@ -6,8 +6,10 @@ await loadLocalEnv();
 
 const password = process.env.SUPABASE_DB_PASSWORD;
 const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const port = Number(process.env.SUPABASE_DB_PORT || 5432);
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
+const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
 
 if (!password) {
   console.error("Missing SUPABASE_DB_PASSWORD.");
@@ -16,11 +18,11 @@ if (!password) {
 
 const client = new pg.Client({
   host,
-  port: 5432,
+  port,
   user,
   password,
   database,
-  ssl: { rejectUnauthorized: false },
+  ssl,
 });
 
 const suffix = Date.now();
@@ -152,17 +154,26 @@ try {
     await client.query("rollback to savepoint changed_replay");
   }
 
-  await client.query(`select public.begin_github_issue_sync_transaction($1)`, [createdTaskId]);
+  const beforeSync = await client.query(`select updated_at::text as updated_at from public.tasks where id = $1`, [createdTaskId]);
+  const begun = await client.query(
+    `select public.begin_github_issue_sync_transaction_v2($1, $2) as result`,
+    [createdTaskId, beforeSync.rows[0]?.updated_at],
+  );
+  const pendingUpdatedAt = begun.rows[0]?.result?.updated_at;
+  if (begun.rows[0]?.result?.github_issue_sync_status !== "pending" || !pendingUpdatedAt) {
+    throw new Error("GitHub sync begin compare-and-set did not return the pending revision.");
+  }
   const finalized = await client.query(
-    `select public.finalize_github_issue_sync_transaction(
+    `select public.finalize_github_issue_sync_transaction_v2(
       $1,
+      $2,
       'findmydoc-platform/management',
       999999,
       'https://github.com/findmydoc-platform/management/issues/999999',
       now(),
       'Transactional GitHub sync finalized'
     ) as result`,
-    [createdTaskId],
+    [createdTaskId, pendingUpdatedAt],
   );
   if (finalized.rows[0]?.result?.github_issue_sync_status !== "synced") {
     throw new Error("GitHub sync was not finalized transactionally.");
@@ -185,6 +196,57 @@ try {
   );
   if (replayedAfterSync.rows[0]?.result?.replayed !== true) {
     throw new Error("Task mutation after creation broke idempotent create replay.");
+  }
+
+  const staleBeginRevision = await client.query(`select updated_at::text as updated_at from public.tasks where id = $1`, [createdTaskId]);
+  await client.query(`update public.tasks set updated_at = clock_timestamp() where id = $1`, [createdTaskId]);
+  await client.query("savepoint stale_sync_begin");
+  try {
+    await client.query(
+      `select public.begin_github_issue_sync_transaction_v2($1, $2)`,
+      [createdTaskId, staleBeginRevision.rows[0]?.updated_at],
+    );
+    throw new Error("Stale GitHub sync begin unexpectedly succeeded.");
+  } catch (error) {
+    if (error?.code !== "P0001") throw error;
+    await client.query("rollback to savepoint stale_sync_begin");
+  }
+
+  const beforeConflictingSync = await client.query(`select updated_at::text as updated_at from public.tasks where id = $1`, [createdTaskId]);
+  const conflictingBegin = await client.query(
+    `select public.begin_github_issue_sync_transaction_v2($1, $2) as result`,
+    [createdTaskId, beforeConflictingSync.rows[0]?.updated_at],
+  );
+  const staleFinalizeRevision = conflictingBegin.rows[0]?.result?.updated_at;
+  await client.query(`update public.tasks set updated_at = clock_timestamp() where id = $1`, [createdTaskId]);
+  await client.query("savepoint stale_sync_finalize");
+  try {
+    await client.query(
+      `select public.finalize_github_issue_sync_transaction_v2(
+        $1,
+        $2,
+        'findmydoc-platform/management',
+        999998,
+        'https://github.com/findmydoc-platform/management/issues/999998',
+        now(),
+        'Must not finalize stale GitHub sync'
+      )`,
+      [createdTaskId, staleFinalizeRevision],
+    );
+    throw new Error("Stale GitHub sync finalize unexpectedly succeeded.");
+  } catch (error) {
+    if (error?.code !== "P0001") throw error;
+    await client.query("rollback to savepoint stale_sync_finalize");
+  }
+  const afterFinalizeConflict = await client.query(
+    `select github_issue_sync_status, github_issue_number from public.tasks where id = $1`,
+    [createdTaskId],
+  );
+  if (
+    afterFinalizeConflict.rows[0]?.github_issue_sync_status === "synced"
+    || afterFinalizeConflict.rows[0]?.github_issue_number === 999998
+  ) {
+    throw new Error("Stale GitHub sync finalize persisted success state.");
   }
 
   await client.query(`select public.begin_github_issue_sync_transaction($1)`, [createdTaskId]);

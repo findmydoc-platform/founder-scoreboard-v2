@@ -185,6 +185,10 @@ async function verifyTaskCreationAndGitHubSyncRpcs() {
     p_user_agent: null,
   });
   const begin = await supabase.rpc("begin_github_issue_sync_transaction", { p_task_id: missingTaskId });
+  const beginV2 = await supabase.rpc("begin_github_issue_sync_transaction_v2", {
+    p_task_id: missingTaskId,
+    p_expected_updated_at: new Date().toISOString(),
+  });
   const finalize = await supabase.rpc("finalize_github_issue_sync_transaction", {
     p_task_id: missingTaskId,
     p_github_repo: "findmydoc-platform/management",
@@ -198,12 +202,23 @@ async function verifyTaskCreationAndGitHubSyncRpcs() {
     p_error_message: "verification",
     p_activity_message: "verification",
   });
+  const finalizeV2 = await supabase.rpc("finalize_github_issue_sync_transaction_v2", {
+    p_task_id: missingTaskId,
+    p_expected_updated_at: new Date().toISOString(),
+    p_github_repo: "findmydoc-platform/management",
+    p_github_issue_number: 1,
+    p_github_issue_url: "https://github.com/findmydoc-platform/management/issues/1",
+    p_synced_at: new Date().toISOString(),
+    p_activity_message: "verification",
+  });
 
   return [
     { name: "create_task_transaction", result: create, expectedCode: "22023" },
     { name: "begin_github_issue_sync_transaction", result: begin, expectedCode: "P0002" },
+    { name: "begin_github_issue_sync_transaction_v2", result: beginV2, expectedCode: "P0002" },
     { name: "finalize_github_issue_sync_transaction", result: finalize, expectedCode: "P0002" },
     { name: "fail_github_issue_sync_transaction", result: fail, expectedCode: "P0002" },
+    { name: "finalize_github_issue_sync_transaction_v2", result: finalizeV2, expectedCode: "P0002" },
   ].map(({ name, result: rpcResult, expectedCode }) => ({
     name,
     ok: rpcResult.error?.code === expectedCode,

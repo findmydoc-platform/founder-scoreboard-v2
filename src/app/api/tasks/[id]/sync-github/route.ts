@@ -17,6 +17,19 @@ type SyncRequestBody = {
   createIfMissing?: boolean;
 };
 
+const staleSyncMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+
+function githubSyncStaleResponse() {
+  return NextResponse.json({
+    code: "github_sync_stale",
+    error: staleSyncMessage,
+    task: {
+      githubIssueSyncStatus: "not_synced",
+      githubIssueSyncError: staleSyncMessage,
+    },
+  }, { status: 409 });
+}
+
 function commentDeliveryNotice(summary: {
   delivered: number;
   waitingForAuthorConnection: number;
@@ -283,10 +296,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       parentContext = await preflightGitHubSubIssueParent(supabase, task, githubInstallationToken);
     }
 
-    const { error: pendingError } = await supabase.rpc("begin_github_issue_sync_transaction", {
+    const { data: pendingTask, error: pendingError } = await supabase.rpc("begin_github_issue_sync_transaction_v2", {
       p_task_id: id,
+      p_expected_updated_at: task.updatedAt,
     });
+    if (pendingError?.code === "P0001") return githubSyncStaleResponse();
     if (pendingError) throw new Error(`GitHub-Sync konnte nicht gestartet werden: ${pendingError.message}`);
+    const pendingUpdatedAt = typeof pendingTask?.updated_at === "string" ? pendingTask.updated_at : "";
+    if (!pendingUpdatedAt) throw new Error("GitHub-Sync konnte nicht gestartet werden: Die neue Aufgabenrevision fehlt.");
 
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const githubRepo = githubRepoSlug(task.githubRepo);
@@ -311,14 +328,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       ...warnings.map((warning) => `Warnung: ${warning}`),
     ].filter(Boolean).join(" · ");
 
-    const { data: finalizedTask, error: finalizeError } = await supabase.rpc("finalize_github_issue_sync_transaction", {
+    const { data: finalizedTask, error: finalizeError } = await supabase.rpc("finalize_github_issue_sync_transaction_v2", {
       p_task_id: id,
+      p_expected_updated_at: pendingUpdatedAt,
       p_github_repo: githubRepo,
       p_github_issue_number: issue.number,
       p_github_issue_url: issue.html_url,
       p_synced_at: syncedAt,
       p_activity_message: activityMessage,
     });
+    if (finalizeError?.code === "P0001") return githubSyncStaleResponse();
     if (finalizeError) throw new Error(`GitHub Issue wurde gespeichert, aber die Verknüpfung ist fehlgeschlagen: ${finalizeError.message}`);
 
     const commentDelivery = await deliverPendingGitHubComments({ supabase, taskId: id }).catch(() => ({
