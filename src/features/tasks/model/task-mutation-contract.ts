@@ -29,6 +29,7 @@ export type TaskUpdatePayload = {
   scoreFinal?: boolean;
   githubIssueSyncStatus?: string;
   sprintId?: string;
+  parentTaskId?: string;
   selfDodChecked?: boolean;
   selfEvidenceChecked?: boolean;
   selfDocumentedChecked?: boolean;
@@ -49,6 +50,7 @@ export type CurrentTaskForActivity = {
   sprint_id?: string | null;
   milestone_id?: string | null;
   package_id?: string | null;
+  parent_task_id?: string | null;
   start_date?: string | null;
   end_date?: string | null;
   deadline?: string | null;
@@ -115,7 +117,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     acceptanceCriteria: patch.acceptanceCriteria,
     evidenceRequired: patch.evidenceRequired,
     definitionOfDone: patch.definitionOfDone,
-    packageId: patch.packageId,
+    packageId: patch.parentTaskId !== undefined ? undefined : patch.packageId,
     startDate: patch.startDate,
     endDate: patch.endDate,
     deadline: patch.deadline,
@@ -126,7 +128,8 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
     githubIssueSyncStatus: patch.githubIssueSyncStatus,
     sprintId: patch.sprintId,
-    milestoneId: patch.milestoneId,
+    parentTaskId: patch.parentTaskId,
+    milestoneId: patch.parentTaskId !== undefined ? undefined : patch.milestoneId,
     dependsOn: patch.dependsOn,
     evidenceLink: patch.evidenceLink,
     selfDodChecked: patch.selfDodChecked,
@@ -161,6 +164,9 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
   if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
   if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Initiative geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
+  if (payload.parentTaskId !== undefined && payload.parentTaskId !== currentTask?.parent_task_id) {
+    messages.push(`Parent-Deliverable geändert: ${formatChange(currentTask?.parent_task_id, payload.parentTaskId)}`);
+  }
   if (
     (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)
     || (payload.endDate !== undefined && payload.endDate !== currentTask?.end_date)

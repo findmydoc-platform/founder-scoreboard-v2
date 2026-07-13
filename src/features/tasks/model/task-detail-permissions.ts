@@ -2,7 +2,7 @@ import { isOperationalLeadRole } from "@/lib/platform";
 import type { AuthenticatedProfile, Profile, Task } from "@/lib/types";
 
 type TaskPermissionProfile = Pick<AuthenticatedProfile, "id" | "name" | "platformRole">;
-type TaskPermissionTask = Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId" | "reviewOwnerProfileId">;
+type TaskPermissionTask = Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId" | "reviewOwnerProfileId" | "taskType">;
 
 export type TaskDetailPermissions = {
   canComment: boolean;
@@ -17,6 +17,7 @@ export type TaskDetailPermissions = {
   canManageTaskMeta: boolean;
   canOpenReview: boolean;
   canReportBlocker: boolean;
+  canReparentSubIssue: boolean;
   canUpdateStatus: boolean;
 };
 
@@ -51,6 +52,7 @@ export function taskDetailPermissions({
       canManageTaskMeta: true,
       canOpenReview: true,
       canReportBlocker: true,
+      canReparentSubIssue: task.taskType === "sub_issue",
       canUpdateStatus: true,
     };
   }
@@ -75,6 +77,7 @@ export function taskDetailPermissions({
     canManageTaskMeta: isOperationalLead,
     canOpenReview: isOperationalLead || Boolean(profile?.id && task.reviewOwnerProfileId === profile.id),
     canReportBlocker: canWorkOnTask,
+    canReparentSubIssue: task.taskType === "sub_issue" && canWorkOnTask,
     canUpdateStatus: canWorkOnTask,
   };
 }

@@ -17,6 +17,7 @@ const task = {
   owner: "founder-1",
   ownerId: "founder-1",
   reviewOwnerProfileId: "reviewer-1",
+  taskType: "sub_issue",
 };
 
 test("CEO receives full task detail permissions", () => {
@@ -42,6 +43,15 @@ test("assigned Founder can work on own task but cannot change planning metadata"
   assert.equal(permissions.canUpdateStatus, true);
   assert.equal(permissions.canManageTaskMeta, false);
   assert.equal(permissions.canDeleteTask, false);
+  assert.equal(permissions.canReparentSubIssue, true);
+});
+
+test("assigned Founder cannot reparent a Deliverable", () => {
+  const permissions = taskDetailPermissions({
+    task: { ...task, taskType: "deliverable" },
+    profile: { id: "founder-1", name: "Founder One", platformRole: "founder" },
+  });
+  assert.equal(permissions.canReparentSubIssue, false);
 });
 
 test("unrelated Founder can collaborate but cannot mutate task fields", () => {
@@ -52,6 +62,7 @@ test("unrelated Founder can collaborate but cannot mutate task fields", () => {
   assert.equal(permissions.canEditNotes, false);
   assert.equal(permissions.canReportBlocker, false);
   assert.equal(permissions.canUpdateStatus, false);
+  assert.equal(permissions.canReparentSubIssue, false);
 });
 
 test("review owner can open review without receiving task edit rights", () => {

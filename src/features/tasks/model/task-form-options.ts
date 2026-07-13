@@ -36,6 +36,20 @@ export function initiativeOptions(packages: Package[]): CustomSelectOption[] {
   return packages.map((initiative) => ({ value: initiative.id, label: initiativeOptionLabel(initiative) }));
 }
 
+export function parentDeliverableOptions(tasks: Task[], packages: Package[]): CustomSelectOption[] {
+  const initiativeById = new Map(packages.map((initiative) => [initiative.id, initiative]));
+  return tasks
+    .filter((task) => task.taskType === "deliverable")
+    .map((task) => {
+      const initiative = initiativeById.get(task.packageId);
+      const approvalHint = task.approvalStatus === "approved" ? "" : " · wartet auf Freigabe";
+      return {
+        value: task.id,
+        label: `${task.title} · ${initiative?.title || "Ohne Initiative"}${approvalHint}`,
+      };
+    });
+}
+
 export function assigneeOptions(taskType: TaskType, profiles: Profile[]): CustomSelectOption[] {
   return taskAssigneeOptions(taskType, profiles);
 }

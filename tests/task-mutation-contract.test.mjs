@@ -82,6 +82,58 @@ test("task brief fields stay together in the shared update payload", async () =>
   assert.equal(payload.definitionOfDone, "Qualitätsstandard");
 });
 
+test("Sub-Issue parent updates keep CAS, activity, and sync state together", async () => {
+  const { activityMessages, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+  const { markTaskGitHubSyncDirty } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
+    "@/lib/status": { normalizeStatus: (status) => status, taskStatuses: ["Offen"] },
+  });
+
+  const payload = taskUpdateRequestPayload(
+    {
+      parentTaskId: "deliverable-next",
+      packageId: "derived-initiative",
+      milestoneId: "derived-milestone",
+    },
+    "2026-07-13T08:00:00.000Z",
+  );
+  assert.equal(payload.expectedUpdatedAt, "2026-07-13T08:00:00.000Z");
+  assert.equal(payload.parentTaskId, "deliverable-next");
+  assert.equal(payload.packageId, undefined);
+  assert.equal(payload.milestoneId, undefined);
+  assert.deepEqual(activityMessages(payload, { parent_task_id: "deliverable-old" }), [
+    "Parent-Deliverable geändert: deliverable-old → deliverable-next",
+  ]);
+
+  const update = { parent_task_id: "deliverable-next" };
+  markTaskGitHubSyncDirty(update, payload);
+  assert.equal(update.github_issue_sync_status, "not_synced");
+  assert.equal(update.github_issue_sync_error, null);
+});
+
+test("parent Deliverable options include Initiative and inactive approval context", async () => {
+  const { parentDeliverableOptions } = await loadTranspiledModule("src/features/tasks/model/task-form-options.ts", {
+    "@/lib/display": {
+      initiativeOptionLabel: (initiative) => initiative.title,
+      taskAssigneeLabel: () => "Owner",
+      taskAssigneeOptions: () => [],
+    },
+    "@/lib/status": { taskStatuses: ["Offen"] },
+  });
+
+  assert.deepEqual(parentDeliverableOptions([
+    { id: "approved", title: "Approved work", taskType: "deliverable", packageId: "initiative", approvalStatus: "approved" },
+    { id: "proposed", title: "Proposed work", taskType: "deliverable", packageId: "initiative", approvalStatus: "proposed" },
+    { id: "child", title: "Child", taskType: "sub_issue", packageId: "initiative", approvalStatus: null },
+  ], [{ id: "initiative", title: "Growth" }]), [
+    { value: "approved", label: "Approved work · Growth" },
+    { value: "proposed", label: "Proposed work · Growth · wartet auf Freigabe" },
+  ]);
+});
+
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
