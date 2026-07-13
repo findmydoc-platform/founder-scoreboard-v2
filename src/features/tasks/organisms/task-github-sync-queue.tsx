@@ -2,7 +2,7 @@
 
 import { GitBranch, Link2, RefreshCw, X } from "lucide-react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
-import { isGitHubSyncEligible, sortGitHubSyncTasks, taskNeedsGitHubSync } from "@/features/tasks/model/github-sync-queue";
+import { isExpiredGitHubSyncPending, isGitHubSyncEligible, sortGitHubSyncTasks, taskNeedsGitHubSync } from "@/features/tasks/model/github-sync-queue";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskComment } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
@@ -29,6 +29,7 @@ function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, has
   if (task.taskType === "sub_issue" && parent?.githubIssueSyncStatus === "failed") return "parent_failed";
   if (task.taskType === "sub_issue" && (!parent || !hasGitHubIssue(parent))) return "waiting_for_parent";
   if (!hasIssue) return "missing";
+  if (isExpiredGitHubSyncPending(task)) return "open";
   if (task.githubIssueSyncStatus === "pending" && task.githubIssueSyncError.includes("läuft bereits")) return "locked";
   if (task.githubIssueSyncStatus === "pending") return "running";
   if (task.githubIssueSyncStatus === "failed") return "failed";

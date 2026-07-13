@@ -35,7 +35,7 @@ test("route checks the revision before the GitHub write and before finalization"
 
 test("stale responses remain retryable instead of becoming failed", () => {
   for (const hook of [listHook, detailHook]) {
-    assert.match(hook, /body\?\.code === "github_sync_stale"/);
+    assert.match(hook, /code === "github_sync_stale"/);
     assert.match(hook, /githubIssueSyncStatus: "not_synced"/);
     assert.match(hook, /während des GitHub-Syncs geändert/);
   }

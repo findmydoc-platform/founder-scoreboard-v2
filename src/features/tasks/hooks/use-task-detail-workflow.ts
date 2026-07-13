@@ -15,6 +15,7 @@ import {
 import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
 import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
+import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
 
 type UseTaskDetailWorkflowOptions = {
   task: Task;
@@ -35,6 +36,14 @@ type UseTaskDetailWorkflowOptions = {
   commentImportNotice: string;
   initialCurrentProfile?: AuthenticatedProfile | null;
 };
+
+const githubSyncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+
+function retryableGitHubSyncMessage(status: number, code?: string, serverMessage?: string) {
+  if (status === 409 && code === "github_sync_stale") return serverMessage || githubSyncStaleMessage;
+  if (status === 503 && code === "github_sync_state_persist_failed") return serverMessage || githubSyncStatePersistFailedMessage;
+  return "";
+}
 
 export function useTaskDetailWorkflow({
   task,
@@ -204,7 +213,13 @@ export function useTaskDetailWorkflow({
       return;
     }
 
-    setGithubState((current) => ({ ...current, githubIssueSyncStatus: "pending", githubIssueSyncError: "" }));
+    const syncStartedAt = new Date().toISOString();
+    setGithubState((current) => ({
+      ...current,
+      githubIssueSyncStatus: "pending",
+      githubIssueSyncError: "",
+      githubIssueSyncPendingSince: syncStartedAt,
+    }));
 
     startTransition(async () => {
       try {
@@ -214,17 +229,19 @@ export function useTaskDetailWorkflow({
             ...current,
             githubIssueSyncStatus: "pending",
             githubIssueSyncError: body.error || "GitHub-Sync läuft bereits.",
+            githubIssueSyncPendingSince: syncStartedAt,
           }));
           return;
         }
-        if (response.status === 409 && body?.code === "github_sync_stale") {
-          const message = body.error || "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+        const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
+        if (retryableMessage) {
           setGithubState((current) => ({
             ...current,
             githubIssueSyncStatus: "not_synced",
-            githubIssueSyncError: message,
+            githubIssueSyncError: retryableMessage,
+            githubIssueSyncPendingSince: "",
           }));
-          setError(message);
+          setError(retryableMessage);
           return;
         }
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
@@ -236,10 +253,16 @@ export function useTaskDetailWorkflow({
           githubIssueSyncStatus: body.task?.githubIssueSyncStatus || current.githubIssueSyncStatus,
           githubIssueLastSyncedAt: body.task?.githubIssueLastSyncedAt || current.githubIssueLastSyncedAt,
           githubIssueSyncError: body.task?.githubIssueSyncError || "",
+          githubIssueSyncPendingSince: "",
         }));
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : "GitHub-Sync konnte nicht ausgeführt werden.";
-        setGithubState((current) => ({ ...current, githubIssueSyncStatus: "failed", githubIssueSyncError: message }));
+        setGithubState((current) => ({
+          ...current,
+          githubIssueSyncStatus: "failed",
+          githubIssueSyncError: message,
+          githubIssueSyncPendingSince: "",
+        }));
         setError(message);
       }
     });

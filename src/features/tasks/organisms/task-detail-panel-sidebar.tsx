@@ -8,6 +8,7 @@ import { InitiativeRaciList } from "@/features/projects/molecules/initiative-rac
 import { currentApprovalDecisionReason, isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
+import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
@@ -92,7 +93,7 @@ export function TaskDetailPanelSidebar({
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
   const canSyncExistingGitHubIssue = hasGitHubIssue(task);
-  const externalSyncPending = task.githubIssueSyncStatus === "pending";
+  const externalSyncPending = task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task);
   const externalSyncProblem = task.githubIssueSyncStatus === "failed" || Boolean(task.githubIssueSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
@@ -353,20 +354,20 @@ export function TaskDetailPanelSidebar({
           {canSyncExistingGitHubIssue ? (
             <button
               type="button"
-              disabled={pending || !effectivelyApproved || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
+              disabled={pending || !effectivelyApproved || externalSyncPending || !githubInstallationAvailable}
               onClick={() => onSyncGitHub()}
               className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubIssueSyncStatus === "pending" ? "Sync..." : "Sync"}
+              {externalSyncPending ? "Sync..." : "Sync"}
             </button>
           ) : task.taskType === "deliverable" || task.taskType === "sub_issue" ? (
             <button
               type="button"
-              disabled={pending || !effectivelyApproved || task.githubIssueSyncStatus === "pending" || !githubInstallationAvailable}
+              disabled={pending || !effectivelyApproved || externalSyncPending || !githubInstallationAvailable}
               onClick={() => onSyncGitHub({ createIfMissing: true })}
               className="h-8 rounded-md border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {task.githubIssueSyncStatus === "pending" ? "Anlegen..." : "GitHub Issue anlegen"}
+              {externalSyncPending ? "Anlegen..." : "GitHub Issue anlegen"}
             </button>
           ) : (
             <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">Nicht score-relevant</span>

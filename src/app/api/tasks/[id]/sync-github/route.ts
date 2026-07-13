@@ -4,6 +4,7 @@ import { requireTeamMember } from "@/lib/authz";
 import { connectGitHubSubIssue, githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
+import { githubSyncStatePersistFailedMessage, persistGitHubSyncFailure } from "@/lib/github-sync-failure-persistence";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { preflightGitHubSubIssueParent, type GitHubSubIssueParentContext } from "@/lib/github-sub-issue-parent";
@@ -373,17 +374,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     });
   } catch (syncError) {
     const message = syncError instanceof Error ? syncError.message : "GitHub-Sync fehlgeschlagen.";
-    const { data: failedTask } = await supabase.rpc("fail_github_issue_sync_transaction", {
-      p_task_id: id,
-      p_error_message: message,
-      p_activity_message: `GitHub-Sync fehlgeschlagen: ${message}`,
+    const failurePersistence = await persistGitHubSyncFailure(supabase, {
+      taskId: id,
+      errorMessage: message,
+      activityMessage: `GitHub-Sync fehlgeschlagen: ${message}`,
     });
+    if (!failurePersistence.ok) {
+      return NextResponse.json({
+        code: "github_sync_state_persist_failed",
+        error: githubSyncStatePersistFailedMessage,
+      }, { status: 503 });
+    }
+    const failedTask = failurePersistence.data;
     return NextResponse.json({
       error: message,
       task: {
         githubIssueSyncStatus: "failed",
         githubIssueSyncError: message,
-        updatedAt: failedTask?.updated_at || "",
+        updatedAt: typeof failedTask?.updated_at === "string" ? failedTask.updated_at : "",
       },
     }, { status: 502 });
   } finally {
