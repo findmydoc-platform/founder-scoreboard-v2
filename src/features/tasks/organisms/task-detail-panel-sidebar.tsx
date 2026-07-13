@@ -1,8 +1,10 @@
 "use client";
 
 import { CalendarDays, Link2, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-decision-dialog";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
-import { isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
+import { currentApprovalDecisionReason, isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
@@ -20,6 +22,7 @@ import {
   sprintOptions,
 } from "@/features/tasks/model/task-form-options";
 import type { ApprovalDecisionAction, Milestone, Package, Profile, Sprint, Task } from "@/lib/types";
+import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 
 type Props = {
   task: Task;
@@ -68,6 +71,7 @@ export function TaskDetailPanelSidebar({
   onDelete,
   onDecideApproval,
 }: Props) {
+  const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
   const assigneeProfile = teamProfiles.find((profile) => profile.name === task.assignee || profile.id === task.assignee);
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
   const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
@@ -83,6 +87,7 @@ export function TaskDetailPanelSidebar({
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
   const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
   const effectivelyApproved = isTaskPlanningActive(task);
+  const decisionReason = currentApprovalDecisionReason(task);
 
   const updatePackage = (packageId: string) => {
     const nextPackage = packages.find((item) => item.id === packageId);
@@ -106,14 +111,18 @@ export function TaskDetailPanelSidebar({
               <span className="rounded-full border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-800">{task.approvalStatus || "ohne Status"}</span>
               <span className="text-xs text-slate-500">Revision {task.approvalRevision}</span>
             </div>
-            {task.decisionNote && <p className="mt-2 text-xs leading-5 text-slate-600">{task.decisionNote}</p>}
+            {decisionReason && (
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                <span className="font-semibold text-slate-700">Begründung:</span> {decisionReason}
+              </p>
+            )}
             {canDecideApproval && (
               <div className="mt-3 flex flex-wrap gap-2">
                 <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideApproval("approve")}>Freigeben</UiButton>
-                <UiButton size="xs" disabled={pending} onClick={() => onDecideApproval("reject")}>Ablehnen</UiButton>
+                <UiButton size="xs" disabled={pending} onClick={() => setDecisionAction("reject")}>Ablehnen</UiButton>
               </div>
             )}
-            {canReturnToDraft && <UiButton size="xs" className="mt-2" disabled={pending} onClick={() => onDecideApproval("return_to_draft")}>Zur Überarbeitung</UiButton>}
+            {canReturnToDraft && <UiButton size="xs" className="mt-2" disabled={pending} onClick={() => setDecisionAction("return_to_draft")}>Zur Überarbeitung</UiButton>}
           </>
         )}
       </section>
@@ -333,6 +342,19 @@ export function TaskDetailPanelSidebar({
             Aufgabe löschen
           </button>
         </section>
+      )}
+      {decisionAction && (
+        <ApprovalDecisionDialog
+          action={decisionAction}
+          entityLabel="Deliverable"
+          pending={pending}
+          onClose={() => setDecisionAction(null)}
+          onConfirm={(note) => {
+            const action = decisionAction;
+            setDecisionAction(null);
+            onDecideApproval(action, note);
+          }}
+        />
       )}
     </div>
   );

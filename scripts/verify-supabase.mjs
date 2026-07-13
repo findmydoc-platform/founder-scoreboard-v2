@@ -459,6 +459,28 @@ async function verifyTeamTaskIntakeRpcs() {
   ];
 }
 
+async function verifyApprovalDecisionRpcs() {
+  const checks = [
+    ["decide_initiative_approval_transaction", "p_initiative_id"],
+    ["decide_deliverable_approval_transaction", "p_task_id"],
+  ];
+
+  return Promise.all(checks.map(async ([name, idField]) => {
+    const { error } = await supabase.rpc(name, {
+      [idField]: `verify-missing-approval-item-${Date.now()}`,
+      p_expected_revision: 1,
+      p_action: "return_to_draft",
+      p_actor_profile_id: "",
+      p_note: null,
+    });
+    return {
+      name,
+      ok: error?.code === "22023",
+      error: error?.code === "22023" ? "" : error?.message || "RPC did not require an approval decision note",
+    };
+  }));
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -513,6 +535,7 @@ const result = {
   taskReviewRpc: await verifyTaskReviewRpc(),
   scoreObjectionRpc: await verifyScoreObjectionRpc(),
   teamTaskIntakeRpcs: await verifyTeamTaskIntakeRpcs(),
+  approvalDecisionRpcs: await verifyApprovalDecisionRpcs(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -580,5 +603,11 @@ if (!result.scoreObjectionRpc.ok) {
 const missingTeamTaskIntakeRpc = result.teamTaskIntakeRpcs.find((check) => !check.ok);
 if (missingTeamTaskIntakeRpc) {
   console.error(`Team Task Intake RPC check failed for ${missingTeamTaskIntakeRpc.name}: ${missingTeamTaskIntakeRpc.error}`);
+  process.exit(1);
+}
+
+const missingApprovalDecisionRpc = result.approvalDecisionRpcs.find((check) => !check.ok);
+if (missingApprovalDecisionRpc) {
+  console.error(`Approval decision RPC check failed for ${missingApprovalDecisionRpc.name}: ${missingApprovalDecisionRpc.error}`);
   process.exit(1);
 }

@@ -120,6 +120,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           tasks={data.tasks}
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
+          pending={isPending}
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({

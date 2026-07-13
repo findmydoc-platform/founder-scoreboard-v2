@@ -1,4 +1,5 @@
 export const notificationCatalog = {
+  "planning_item.returned": { lifecycle: "actionable", label: "Überarbeitung", eventLabel: "Zur Überarbeitung zurückgegeben", tone: "amber", digest: true, directDm: true },
   "task.blocker_reported": { lifecycle: "actionable", label: "Blocker", eventLabel: "Blocker gemeldet", tone: "red", digest: true, directDm: true },
   "task.comment": { lifecycle: "informational", label: "Kommentar", eventLabel: "Kommentar", tone: "slate", digest: false, directDm: false },
   "task.mention": { lifecycle: "informational", label: "Erwähnung", eventLabel: "Erwähnung", tone: "blue", digest: true, directDm: true },

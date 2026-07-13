@@ -5,12 +5,14 @@ import { useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
-import { canDecideInitiativeApproval, isProposedDeliverable } from "@/features/planning/model/approval-domain";
+import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-decision-dialog";
+import { canDecideInitiativeApproval, canReturnInitiativeForRevision, isProposedDeliverable } from "@/features/planning/model/approval-domain";
 import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRiskFilter, type ProjectsSort, type ProjectsTableFilters } from "@/features/projects/model/projects-filter-view-model";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { ApprovalDecisionAction, Package, PlanningData, Profile, Task } from "@/lib/types";
+import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
@@ -36,6 +38,7 @@ export function ProjectsOverview({
   tasks,
   currentProfile,
   canManageInitiatives,
+  pending,
   onEditInitiative,
   onOpenTask,
   onDecideInitiative,
@@ -44,6 +47,7 @@ export function ProjectsOverview({
   tasks: Task[];
   currentProfile?: Profile | null;
   canManageInitiatives: boolean;
+  pending: boolean;
   onEditInitiative: (initiative: Package) => void;
   onOpenTask: (taskId: string) => void;
   onDecideInitiative: (initiative: Package, action: ApprovalDecisionAction, note?: string) => void;
@@ -51,6 +55,7 @@ export function ProjectsOverview({
   const [openMilestoneIds, setOpenMilestoneIds] = useState<Set<string>>(new Set());
   const [openInitiativeIds, setOpenInitiativeIds] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [approvalDecision, setApprovalDecision] = useState<{ initiative: Package; action: ApprovalReasonAction } | null>(null);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "deliverables", schema: projectsFilterSchema });
   const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || "Nicht gesetzt";
   const filterViewModel = buildProjectsFilterViewModel({ data, tasks, filters });
@@ -111,18 +116,23 @@ export function ProjectsOverview({
         <UiPanel>
           <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Proposed Initiatives</div>
           <div className="mt-3 grid gap-2">
-            {proposedInitiatives.map((initiative) => (
-              <div key={initiative.id} className="rounded-md border border-slate-200 p-3">
-                <div className="font-semibold text-slate-950">{initiative.title}</div>
-                <div className="mt-1 text-xs text-slate-500">Revision {initiative.approvalRevision} · Antrag: {profileName(initiative.proposedById)}</div>
-                {canDecideInitiativeApproval(initiative, currentProfile) && (
-                  <div className="mt-2 flex gap-2">
-                    <UiButton size="xs" variant="primary" onClick={() => onDecideInitiative(initiative, "approve")}>Freigeben</UiButton>
-                    <UiButton size="xs" onClick={() => onDecideInitiative(initiative, "reject")}>Ablehnen</UiButton>
-                  </div>
-                )}
-              </div>
-            ))}
+            {proposedInitiatives.map((initiative) => {
+              const canDecide = canDecideInitiativeApproval(initiative, currentProfile);
+              const canReturn = canReturnInitiativeForRevision(initiative, currentProfile);
+              return (
+                <div key={initiative.id} className="rounded-md border border-slate-200 p-3">
+                  <div className="font-semibold text-slate-950">{initiative.title}</div>
+                  <div className="mt-1 text-xs text-slate-500">Revision {initiative.approvalRevision} · Antrag: {profileName(initiative.proposedById)}</div>
+                  {(canDecide || canReturn) && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {canDecide && <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideInitiative(initiative, "approve")}>Freigeben</UiButton>}
+                      {canDecide && <UiButton size="xs" disabled={pending} onClick={() => setApprovalDecision({ initiative, action: "reject" })}>Ablehnen</UiButton>}
+                      {canReturn && <UiButton size="xs" disabled={pending} onClick={() => setApprovalDecision({ initiative, action: "return_to_draft" })}>Zur Überarbeitung</UiButton>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {!proposedInitiatives.length && <p className="text-sm text-slate-500">Keine Initiative wartet auf Freigabe.</p>}
           </div>
         </UiPanel>
@@ -208,6 +218,19 @@ export function ProjectsOverview({
           </UiEmptyState>
         )}
       </section>
+      {approvalDecision && (
+        <ApprovalDecisionDialog
+          action={approvalDecision.action}
+          entityLabel="Initiative"
+          pending={pending}
+          onClose={() => setApprovalDecision(null)}
+          onConfirm={(note) => {
+            const { initiative, action } = approvalDecision;
+            setApprovalDecision(null);
+            onDecideInitiative(initiative, action, note);
+          }}
+        />
+      )}
     </div>
   );
 }

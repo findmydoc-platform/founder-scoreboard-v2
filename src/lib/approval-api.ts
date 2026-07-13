@@ -1,5 +1,5 @@
-import { cleanText } from "@/lib/api-input";
 import { apiError } from "@/lib/api-response";
+import { validateApprovalDecisionNote } from "@/lib/approval-decision-policy";
 import type { ApprovalDecisionAction } from "@/lib/types";
 
 export type ApprovalDecisionPayload = {
@@ -17,11 +17,23 @@ export function validateApprovalDecision(payload: ApprovalDecisionPayload) {
   if (!Number.isInteger(payload.expectedRevision) || Number(payload.expectedRevision) < 1) {
     return { ok: false as const, response: apiError("Aktueller Freigabestand ist erforderlich.", 400) };
   }
+  const note = validateApprovalDecisionNote(payload.action, payload.note);
+  if (!note.ok) {
+    return {
+      ok: false as const,
+      response: apiError(
+        note.reason === "too_long"
+          ? "Die Begründung darf höchstens 2.000 Zeichen lang sein."
+          : "Für Ablehnung und Rückgabe ist eine Begründung erforderlich.",
+        400,
+      ),
+    };
+  }
   return {
     ok: true as const,
     action: payload.action,
     expectedRevision: Number(payload.expectedRevision),
-    note: cleanText(payload.note, 2000) || null,
+    note: note.note,
   };
 }
 
