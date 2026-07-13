@@ -19,7 +19,37 @@ export async function POST(request: NextRequest) {
 
   try {
     const summary = await drainPlanningGitHubLifecycleJobs({ supabase, limit: 25 });
-    return NextResponse.json({ ok: true, ...summary });
+    const [terminalResult, outstandingResult] = await Promise.all([
+      supabase
+        .from("planning_github_lifecycle_outbox")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "failed"),
+      supabase
+        .from("planning_github_lifecycle_outbox")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "completed"),
+    ]);
+    if (terminalResult.error || outstandingResult.error) {
+      throw new Error("Planning trash lifecycle state could not be loaded.");
+    }
+    const terminalFailed = terminalResult.count;
+    const outstandingLifecycleJobs = outstandingResult.count;
+    if (
+      typeof terminalFailed !== "number"
+      || !Number.isSafeInteger(terminalFailed)
+      || terminalFailed < 0
+      || typeof outstandingLifecycleJobs !== "number"
+      || !Number.isSafeInteger(outstandingLifecycleJobs)
+      || outstandingLifecycleJobs < 0
+    ) {
+      throw new Error("Planning trash lifecycle state was invalid.");
+    }
+    return NextResponse.json({
+      ok: true,
+      ...summary,
+      terminalFailed,
+      outstandingLifecycleJobs,
+    });
   } catch {
     return apiError("GitHub-Lifecycle des Planungspapierkorbs konnte nicht verarbeitet werden.", 500);
   }

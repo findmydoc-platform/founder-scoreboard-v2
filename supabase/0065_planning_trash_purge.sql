@@ -1,5 +1,215 @@
 -- Bounded, fail-closed physical cleanup for expired planning trash roots.
 
+create or replace function public.planning_trash_root_is_purge_eligible(
+  p_root_type text,
+  p_root_id text,
+  p_trash_revision integer
+)
+returns boolean
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v_root_package_id text;
+  v_root_trashed_at timestamptz;
+  v_root_purge_after timestamptz;
+  v_root_trash_cause text;
+begin
+  if p_root_type is null
+     or p_root_type not in ('initiative', 'deliverable')
+     or nullif(trim(coalesce(p_root_id, '')), '') is null
+     or p_trash_revision is null
+     or p_trash_revision < 1 then
+    return false;
+  end if;
+
+  if p_root_type = 'initiative' then
+    select package.trashed_at, package.purge_after, package.trash_cause
+    into v_root_trashed_at, v_root_purge_after, v_root_trash_cause
+    from public.packages package
+    where package.id = p_root_id
+      and package.trashed_at is not null
+      and package.trash_root_type = 'initiative'
+      and package.trash_root_id = package.id
+      and package.trash_revision = p_trash_revision
+      and package.purge_after <= now();
+    if not found then
+      return false;
+    end if;
+
+    if exists (
+      select 1
+      from public.tasks task
+      where task.package_id = p_root_id
+        and not (
+          task.trashed_at is not distinct from v_root_trashed_at
+          and task.purge_after is not distinct from v_root_purge_after
+          and task.trash_cause is not distinct from v_root_trash_cause
+          and task.trash_root_type = 'initiative'
+          and task.trash_root_id = p_root_id
+          and task.trash_revision = p_trash_revision
+        )
+    ) or exists (
+      select 1
+      from public.tasks task
+      where task.trashed_at is not null
+        and task.trash_root_type = 'initiative'
+        and task.trash_root_id = p_root_id
+        and task.trash_revision = p_trash_revision
+        and task.package_id is distinct from p_root_id
+    ) or exists (
+      select 1
+      from public.tasks task
+      where task.package_id = p_root_id
+        and not (
+          (task.task_type = 'deliverable' and task.parent_task_id is null)
+          or (
+            task.task_type = 'sub_issue'
+            and exists (
+              select 1
+              from public.tasks parent
+              where parent.id = task.parent_task_id
+                and parent.task_type = 'deliverable'
+                and parent.package_id = p_root_id
+            )
+          )
+        )
+    ) or exists (
+      select 1
+      from public.tasks external_task
+      where external_task.parent_task_id in (
+        select member.id
+        from public.tasks member
+        where member.package_id = p_root_id
+      )
+        and external_task.package_id is distinct from p_root_id
+    ) then
+      return false;
+    end if;
+  else
+    select task.package_id, task.trashed_at, task.purge_after, task.trash_cause
+    into v_root_package_id, v_root_trashed_at, v_root_purge_after, v_root_trash_cause
+    from public.tasks task
+    where task.id = p_root_id
+      and task.task_type = 'deliverable'
+      and task.parent_task_id is null
+      and task.package_id is not null
+      and task.trashed_at is not null
+      and task.trash_root_type = 'deliverable'
+      and task.trash_root_id = task.id
+      and task.trash_revision = p_trash_revision
+      and task.purge_after <= now();
+    if not found then
+      return false;
+    end if;
+
+    if exists (
+      select 1
+      from public.tasks task
+      where (task.id = p_root_id or task.parent_task_id = p_root_id)
+        and not (
+          task.trashed_at is not distinct from v_root_trashed_at
+          and task.purge_after is not distinct from v_root_purge_after
+          and task.trash_cause is not distinct from v_root_trash_cause
+          and task.trash_root_type = 'deliverable'
+          and task.trash_root_id = p_root_id
+          and task.trash_revision = p_trash_revision
+        )
+    ) or exists (
+      select 1
+      from public.tasks task
+      where task.trashed_at is not null
+        and task.trash_root_type = 'deliverable'
+        and task.trash_root_id = p_root_id
+        and task.trash_revision = p_trash_revision
+        and task.id is distinct from p_root_id
+        and task.parent_task_id is distinct from p_root_id
+    ) or exists (
+      select 1
+      from public.tasks child
+      where child.parent_task_id = p_root_id
+        and (
+          child.task_type <> 'sub_issue'
+          or child.package_id is distinct from v_root_package_id
+        )
+    ) or exists (
+      select 1
+      from public.tasks descendant
+      where descendant.parent_task_id in (
+        select child.id
+        from public.tasks child
+        where child.parent_task_id = p_root_id
+      )
+    ) then
+      return false;
+    end if;
+  end if;
+
+  if exists (
+    select 1
+    from public.tasks task
+    where task.trashed_at is not null
+      and task.trash_root_type = p_root_type
+      and task.trash_root_id = p_root_id
+      and task.trash_revision = p_trash_revision
+      and (
+        (p_root_type = 'initiative' and task.package_id = p_root_id)
+        or (
+          p_root_type = 'deliverable'
+          and (task.id = p_root_id or task.parent_task_id = p_root_id)
+        )
+      )
+      and not exists (
+        select 1
+        from public.planning_github_lifecycle_outbox lifecycle
+        where lifecycle.root_type = p_root_type
+          and lifecycle.root_id = p_root_id
+          and lifecycle.root_trash_revision = p_trash_revision
+          and lifecycle.task_id = task.id
+          and lifecycle.action = 'close_not_planned'
+          and lifecycle.status = 'completed'
+          and (
+            (lifecycle.github_issue_number is null and lifecycle.status_reason = 'issue_missing')
+            or (lifecycle.github_issue_number is not null and lifecycle.status_reason = 'delivered')
+          )
+      )
+  ) or exists (
+    select 1
+    from public.planning_github_lifecycle_outbox lifecycle
+    where lifecycle.root_type = p_root_type
+      and lifecycle.root_id = p_root_id
+      and lifecycle.root_trash_revision = p_trash_revision
+      and lifecycle.action = 'close_not_planned'
+      and not exists (
+        select 1
+        from public.tasks task
+        where task.id = lifecycle.task_id
+          and task.trashed_at is not null
+          and task.trash_root_type = p_root_type
+          and task.trash_root_id = p_root_id
+          and task.trash_revision = p_trash_revision
+          and (
+            (p_root_type = 'initiative' and task.package_id = p_root_id)
+            or (
+              p_root_type = 'deliverable'
+              and (task.id = p_root_id or task.parent_task_id = p_root_id)
+            )
+          )
+      )
+  ) then
+    return false;
+  end if;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.planning_trash_root_is_purge_eligible(text, text, integer)
+  from public, anon, authenticated;
+grant execute on function public.planning_trash_root_is_purge_eligible(text, text, integer)
+  to service_role;
+
 create or replace function public.purge_expired_planning_trash_batch(
   p_limit integer default 25,
   p_dry_run boolean default false
@@ -11,6 +221,7 @@ set search_path = public
 as $$
 declare
   v_limit integer := greatest(1, least(coalesce(p_limit, 25), 25));
+  v_scan_limit integer := least(greatest(1, coalesce(p_limit, 25)) * 4, 100);
   v_candidate record;
   v_root_record record;
   v_task_ids text[];
@@ -23,6 +234,8 @@ declare
   v_resolved_notifications integer := 0;
   v_eligible_roots integer := 0;
   v_eligible_tasks integer := 0;
+  v_blocked_expired_roots integer := 0;
+  v_locked_roots integer := 0;
   v_has_more boolean := false;
 begin
   if not pg_try_advisory_xact_lock(hashtextextended('planning-trash-purge', 0)) then
@@ -34,6 +247,7 @@ begin
       'purgedRoots', 0,
       'purgedTasks', 0,
       'resolvedNotifications', 0,
+      'blockedExpiredRoots', 0,
       'hasMore', true
     );
   end if;
@@ -41,7 +255,7 @@ begin
   perform set_config('founderops.trash_lifecycle_write', 'on', true);
 
   for v_candidate in
-    with expired_roots as (
+    with initiative_candidates as (
       select 'initiative'::text as root_type, package.id as root_id,
         package.trash_revision, package.purge_after
       from public.packages package
@@ -49,7 +263,9 @@ begin
         and package.trash_root_type = 'initiative'
         and package.trash_root_id = package.id
         and package.purge_after <= now()
-      union all
+      order by package.purge_after, package.id
+      limit v_scan_limit
+    ), deliverable_candidates as (
       select 'deliverable'::text as root_type, task.id as root_id,
         task.trash_revision, task.purge_after
       from public.tasks task
@@ -58,101 +274,27 @@ begin
         and task.trash_root_type = 'deliverable'
         and task.trash_root_id = task.id
         and task.purge_after <= now()
-    ), eligible_roots as (
-      select candidate.*
-      from expired_roots candidate
-      where not exists (
-        select 1
-        from public.tasks task
-        where (
-            (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
-            or (
-              candidate.root_type = 'deliverable'
-              and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
-            )
-          )
-          and not (
-            task.trashed_at is not null
-            and task.trash_root_type = candidate.root_type
-            and task.trash_root_id = candidate.root_id
-            and task.trash_revision = candidate.trash_revision
-          )
-      )
-        and not exists (
-          select 1
-          from public.tasks task
-          where task.trashed_at is not null
-            and task.trash_root_type = candidate.root_type
-            and task.trash_root_id = candidate.root_id
-            and task.trash_revision = candidate.trash_revision
-            and (
-              (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
-              or (
-                candidate.root_type = 'deliverable'
-                and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
-              )
-            ) is not true
-        )
-        and not exists (
-          select 1
-          from public.tasks task
-          where task.trashed_at is not null
-            and task.trash_root_type = candidate.root_type
-            and task.trash_root_id = candidate.root_id
-            and task.trash_revision = candidate.trash_revision
-            and (
-              (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
-              or (
-                candidate.root_type = 'deliverable'
-                and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
-              )
-            )
-            and not exists (
-              select 1
-              from public.planning_github_lifecycle_outbox lifecycle
-              where lifecycle.root_type = candidate.root_type
-                and lifecycle.root_id = candidate.root_id
-                and lifecycle.root_trash_revision = candidate.trash_revision
-                and lifecycle.task_id = task.id
-                and lifecycle.action = 'close_not_planned'
-                and lifecycle.status = 'completed'
-                and (
-                  (lifecycle.github_issue_number is null and lifecycle.status_reason = 'issue_missing')
-                  or (lifecycle.github_issue_number is not null and lifecycle.status_reason = 'delivered')
-                )
-            )
-        )
-        and not exists (
-          select 1
-          from public.planning_github_lifecycle_outbox lifecycle
-          where lifecycle.root_type = candidate.root_type
-            and lifecycle.root_id = candidate.root_id
-            and lifecycle.root_trash_revision = candidate.trash_revision
-            and lifecycle.action = 'close_not_planned'
-            and not exists (
-              select 1
-              from public.tasks task
-              where task.id = lifecycle.task_id
-                and task.trashed_at is not null
-                and task.trash_root_type = candidate.root_type
-                and task.trash_root_id = candidate.root_id
-                and task.trash_revision = candidate.trash_revision
-                and (
-                  (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
-                  or (
-                    candidate.root_type = 'deliverable'
-                    and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
-                  )
-                )
-            )
-        )
+      order by task.purge_after, task.id
+      limit v_scan_limit
+    ), candidate_roots as (
+      select * from initiative_candidates
+      union all
+      select * from deliverable_candidates
     )
     select candidate.root_type, candidate.root_id, candidate.trash_revision, candidate.purge_after
-    from eligible_roots candidate
+    from candidate_roots candidate
     order by candidate.purge_after, candidate.root_type, candidate.root_id
-    limit v_limit
+    limit v_scan_limit
   loop
-    exit when v_purged_roots + v_eligible_roots >= v_limit;
+    exit when v_locked_roots >= v_limit;
+
+    if not public.planning_trash_root_is_purge_eligible(
+      v_candidate.root_type,
+      v_candidate.root_id,
+      v_candidate.trash_revision
+    ) then
+      continue;
+    end if;
 
     if v_candidate.root_type = 'initiative' then
       select package.id, package.trash_cause, package.trashed_at, package.purge_after,
@@ -174,6 +316,8 @@ begin
       where task.id = v_candidate.root_id
         and task.trashed_at is not null
         and task.task_type = 'deliverable'
+        and task.parent_task_id is null
+        and task.package_id is not null
         and task.trash_root_type = 'deliverable'
         and task.trash_root_id = task.id
         and task.trash_revision = v_candidate.trash_revision
@@ -181,37 +325,35 @@ begin
       for update skip locked;
     end if;
 
-    if v_root_record.id is null then
+    if v_root_record.id is null
+    then
+      continue;
+    end if;
+
+    v_locked_roots := v_locked_roots + 1;
+    if v_candidate.root_type = 'initiative' then
+      perform task.id
+      from public.tasks task
+      where task.package_id = v_candidate.root_id
+      order by task.id
+      for update;
+    else
+      perform task.id
+      from public.tasks task
+      where task.id = v_candidate.root_id or task.parent_task_id = v_candidate.root_id
+      order by task.id
+      for update;
+    end if;
+
+    if not public.planning_trash_root_is_purge_eligible(
+         v_candidate.root_type,
+         v_candidate.root_id,
+         v_candidate.trash_revision
+       ) then
       continue;
     end if;
 
     if v_candidate.root_type = 'initiative' then
-      if exists (
-        select 1
-        from public.tasks task
-        where task.trashed_at is not null
-          and task.trash_root_type = 'initiative'
-          and task.trash_root_id = v_candidate.root_id
-          and task.trash_revision = v_candidate.trash_revision
-          and task.package_id is distinct from v_candidate.root_id
-      ) then
-        continue;
-      end if;
-
-      if exists (
-        select 1
-        from public.tasks task
-        where task.package_id = v_candidate.root_id
-          and not (
-            task.trashed_at is not null
-            and task.trash_root_type = 'initiative'
-            and task.trash_root_id = v_candidate.root_id
-            and task.trash_revision = v_candidate.trash_revision
-          )
-      ) then
-        continue;
-      end if;
-
       select coalesce(array_agg(task.id order by task.id), '{}'::text[]), count(*)::integer
       into v_task_ids, v_task_count
       from public.tasks task
@@ -221,33 +363,6 @@ begin
         and task.package_id = v_candidate.root_id
         and task.trashed_at is not null;
     else
-      if exists (
-        select 1
-        from public.tasks task
-        where task.trashed_at is not null
-          and task.trash_root_type = 'deliverable'
-          and task.trash_root_id = v_candidate.root_id
-          and task.trash_revision = v_candidate.trash_revision
-          and task.id is distinct from v_candidate.root_id
-          and task.parent_task_id is distinct from v_candidate.root_id
-      ) then
-        continue;
-      end if;
-
-      if exists (
-        select 1
-        from public.tasks task
-        where (task.id = v_candidate.root_id or task.parent_task_id = v_candidate.root_id)
-          and not (
-            task.trashed_at is not null
-            and task.trash_root_type = 'deliverable'
-            and task.trash_root_id = v_candidate.root_id
-            and task.trash_revision = v_candidate.trash_revision
-          )
-      ) then
-        continue;
-      end if;
-
       select coalesce(array_agg(task.id order by task.id), '{}'::text[]), count(*)::integer
       into v_task_ids, v_task_count
       from public.tasks task
@@ -317,7 +432,11 @@ begin
         resolution_reason = coalesce(notification.resolution_reason, 'source_purged')
     where notification.status in ('pending', 'sent', 'failed')
       and (
-        (notification.entity_type = 'initiative' and notification.entity_id = v_candidate.root_id)
+        (
+          v_candidate.root_type = 'initiative'
+          and notification.entity_type = 'initiative'
+          and notification.entity_id = v_candidate.root_id
+        )
         or (notification.entity_type = 'task' and notification.entity_id = any(v_task_ids))
       );
     get diagnostics v_resolved_count = row_count;
@@ -387,7 +506,10 @@ begin
 
   select exists (
     select 1 from public.packages package
-    where package.trashed_at is not null and package.purge_after <= now()
+    where package.trashed_at is not null
+      and package.trash_root_type = 'initiative'
+      and package.trash_root_id = package.id
+      and package.purge_after <= now()
     union all
     select 1 from public.tasks task
     where task.trashed_at is not null
@@ -397,6 +519,47 @@ begin
       and task.purge_after <= now()
   ) into v_has_more;
 
+  with initiative_candidates as (
+    select 'initiative'::text as root_type, package.id as root_id, package.trash_revision
+    from public.packages package
+    where package.trashed_at is not null
+      and package.trash_root_type = 'initiative'
+      and package.trash_root_id = package.id
+      and package.purge_after <= now()
+    order by package.purge_after, package.id
+    limit v_scan_limit
+  ), deliverable_candidates as (
+    select 'deliverable'::text as root_type, task.id as root_id, task.trash_revision
+    from public.tasks task
+    where task.trashed_at is not null
+      and task.task_type = 'deliverable'
+      and task.trash_root_type = 'deliverable'
+      and task.trash_root_id = task.id
+      and task.purge_after <= now()
+    order by task.purge_after, task.id
+    limit v_scan_limit
+  ), expired_probe as (
+    select * from initiative_candidates
+    union all
+    select * from deliverable_candidates
+  )
+  select count(*) filter (
+      where not public.planning_trash_root_is_purge_eligible(
+        candidate.root_type,
+        candidate.root_id,
+        candidate.trash_revision
+      )
+    )::integer
+  into v_blocked_expired_roots
+  from (
+    select probe.*
+    from expired_probe probe
+    order by probe.root_type, probe.root_id
+    limit v_scan_limit
+  ) candidate;
+
+  perform set_config('founderops.trash_lifecycle_write', 'off', true);
+
   return jsonb_build_object(
     'busy', false,
     'dryRun', coalesce(p_dry_run, false),
@@ -405,6 +568,7 @@ begin
     'purgedRoots', v_purged_roots,
     'purgedTasks', v_purged_tasks,
     'resolvedNotifications', v_resolved_notifications,
+    'blockedExpiredRoots', v_blocked_expired_roots,
     'hasMore', v_has_more
   );
 end;

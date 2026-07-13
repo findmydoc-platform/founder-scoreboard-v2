@@ -4,18 +4,10 @@ import {
   FOUNDEROPS_MAINTENANCE_SECRET_HEADER,
   validateMaintenanceSecret,
 } from "@/lib/maintenance-auth";
+import { parsePlanningTrashPurgeResult } from "@/lib/planning-trash-maintenance-result";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
-
-type PlanningTrashPurgeResult = {
-  busy?: boolean;
-  dryRun?: boolean;
-  purgedRoots?: number;
-  purgedTasks?: number;
-  resolvedNotifications?: number;
-  hasMore?: boolean;
-};
 
 export async function POST(request: NextRequest) {
   if (!validateMaintenanceSecret(request.headers.get(FOUNDEROPS_MAINTENANCE_SECRET_HEADER))) {
@@ -31,13 +23,11 @@ export async function POST(request: NextRequest) {
   });
   if (error) return apiError("Planungspapierkorb konnte nicht bereinigt werden.", 500);
 
-  const result = (data || {}) as PlanningTrashPurgeResult;
+  const result = parsePlanningTrashPurgeResult(data);
+  if (!result) return apiError("Planungspapierkorb lieferte ein ungültiges Bereinigungsergebnis.", 500);
+
   return NextResponse.json({
     ok: true,
-    busy: Boolean(result.busy),
-    purgedRoots: Number(result.purgedRoots || 0),
-    purgedTasks: Number(result.purgedTasks || 0),
-    resolvedNotifications: Number(result.resolvedNotifications || 0),
-    hasMore: Boolean(result.hasMore),
+    ...result,
   });
 }

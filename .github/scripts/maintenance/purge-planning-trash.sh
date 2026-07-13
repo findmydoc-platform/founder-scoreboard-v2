@@ -9,11 +9,24 @@ validate_lifecycle_response() {
     and (.completed | type == "number")
     and (.retryScheduled | type == "number")
     and (.failed | type == "number")
+    and (.terminalFailed | type == "number")
+    and (.outstandingLifecycleJobs | type == "number")
     and .claimed >= 0
     and .completed >= 0
     and .completed == .claimed
     and .retryScheduled == 0
     and .failed == 0
+    and .terminalFailed == 0
+    and .outstandingLifecycleJobs == 0
+  ' <<< "$response" > /dev/null
+}
+
+has_terminal_lifecycle_failure() {
+  local response="$1"
+  jq -e '
+    .ok == true
+    and (.terminalFailed | type == "number")
+    and .terminalFailed > 0
   ' <<< "$response" > /dev/null
 }
 
@@ -25,11 +38,13 @@ validate_purge_response() {
     and (.purgedRoots | type == "number")
     and (.purgedTasks | type == "number")
     and (.resolvedNotifications | type == "number")
+    and (.blockedExpiredRoots | type == "number")
     and (.hasMore | type == "boolean")
     and .purgedRoots >= 0
     and .purgedRoots <= 25
     and .purgedTasks >= 0
     and .resolvedNotifications >= 0
+    and .blockedExpiredRoots == 0
     and ((.hasMore == false) or (.purgedRoots == 25))
   ' <<< "$response" > /dev/null
 }
@@ -85,6 +100,10 @@ main() {
     fi
     lifecycle_response="$(<"$response_file")"
     if ! validate_lifecycle_response "$lifecycle_response"; then
+      if has_terminal_lifecycle_failure "$lifecycle_response"; then
+        echo "GitHub lifecycle has terminal failures and requires intervention: ${lifecycle_response}" >&2
+        return 1
+      fi
       echo "GitHub lifecycle returned an incomplete batch on attempt ${attempt}: ${lifecycle_response}" >&2
       attempt=$((attempt + 1))
       continue
