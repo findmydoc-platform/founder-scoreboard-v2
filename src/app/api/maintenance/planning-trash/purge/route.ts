@@ -4,7 +4,7 @@ import {
   FOUNDEROPS_MAINTENANCE_SECRET_HEADER,
   validateMaintenanceSecret,
 } from "@/lib/maintenance-auth";
-import { parsePlanningTrashPurgeResult } from "@/lib/planning-trash-maintenance-result";
+import { parsePlanningTrashPurgeResult } from "@/lib/planning-trash-maintenance-result.mjs";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";

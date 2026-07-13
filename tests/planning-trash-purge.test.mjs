@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { parsePlanningTrashPurgeResult } from "../src/lib/planning-trash-maintenance-result.mts";
+import { parsePlanningTrashPurgeResult } from "../src/lib/planning-trash-maintenance-result.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");

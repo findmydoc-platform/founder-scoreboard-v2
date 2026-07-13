@@ -1,19 +1,25 @@
-export type PlanningTrashPurgeResult = {
-  busy: boolean;
-  purgedRoots: number;
-  purgedTasks: number;
-  resolvedNotifications: number;
-  blockedExpiredRoots: number;
-  hasMore: boolean;
-};
+/**
+ * @typedef {object} PlanningTrashPurgeResult
+ * @property {boolean} busy
+ * @property {number} purgedRoots
+ * @property {number} purgedTasks
+ * @property {number} resolvedNotifications
+ * @property {number} blockedExpiredRoots
+ * @property {boolean} hasMore
+ */
 
-function isNonNegativeSafeInteger(value: unknown): value is number {
+/** @param {unknown} value */
+function isNonNegativeSafeInteger(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-export function parsePlanningTrashPurgeResult(value: unknown): PlanningTrashPurgeResult | null {
+/**
+ * @param {unknown} value
+ * @returns {PlanningTrashPurgeResult | null}
+ */
+export function parsePlanningTrashPurgeResult(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const result = value as Record<string, unknown>;
+  const result = /** @type {Record<string, unknown>} */ (value);
   if (
     typeof result.busy !== "boolean"
     || typeof result.hasMore !== "boolean"
