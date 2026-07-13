@@ -155,9 +155,9 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 
 ## Planning Trash Maintenance
 
-`.github/workflows/purge-planning-trash.yml` is the bounded production maintenance path for expired planning trash. It is scheduled for `03:15 UTC`, waits 45 seconds before the first network request, checks `/api/health`, and calls exactly one batch of at most 25 roots through `/api/maintenance/planning-trash/purge`. Network failures retry with bounded backoff; a second concurrent run is not cancelled into the first one.
+`.github/workflows/purge-planning-trash.yml` is the bounded production maintenance path for expired planning trash. It is scheduled for `03:15 UTC`, waits 45 seconds before the first network request, checks `/api/health`, processes at most 25 pending GitHub lifecycle jobs through `/api/maintenance/planning-trash/github-lifecycle`, and then calls exactly one batch of at most 25 roots through `/api/maintenance/planning-trash/purge`. Network failures retry with bounded backoff; a second concurrent run is not cancelled into the first one.
 
-The endpoint accepts only `x-founderops-maintenance-secret` backed by `FOUNDEROPS_MAINTENANCE_SECRET`. It has no user-session, bearer-token, or Supabase-anon fallback. The database operation requires the explicit service-role client and remains fail-closed while any matching GitHub lifecycle job is missing or incomplete.
+Both endpoints accept only `x-founderops-maintenance-secret` backed by `FOUNDEROPS_MAINTENANCE_SECRET`. They have no user-session, bearer-token, or Supabase-anon fallback. The server obtains GitHub App credentials internally; the workflow receives no GitHub token. Both operations require the explicit service-role client, and physical cleanup remains fail-closed while any matching GitHub lifecycle job is missing or incomplete.
 
 Publishing the workflow does not activate physical cleanup. Before enabling it, separately approve and complete all of the following:
 

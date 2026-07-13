@@ -211,6 +211,7 @@ for (const marker of [
   "backoffs=(0 45 90 180)",
   "--fail-with-body",
   "/api/health",
+  "/api/maintenance/planning-trash/github-lifecycle",
   "/api/maintenance/planning-trash/purge",
   "x-founderops-maintenance-secret",
 ]) {

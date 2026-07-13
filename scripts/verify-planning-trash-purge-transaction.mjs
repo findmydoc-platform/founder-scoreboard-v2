@@ -5,8 +5,10 @@ await loadLocalEnv();
 
 const password = process.env.SUPABASE_DB_PASSWORD;
 const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const port = Number(process.env.SUPABASE_DB_PORT || 5432);
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
+const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
 
 if (!password) {
   console.error("Missing SUPABASE_DB_PASSWORD.");
@@ -15,11 +17,11 @@ if (!password) {
 
 const client = new pg.Client({
   host,
-  port: 5432,
+  port,
   user,
   password,
   database,
-  ssl: { rejectUnauthorized: false },
+  ssl,
 });
 
 const suffix = Date.now();

@@ -4,7 +4,7 @@ import {
   FOUNDEROPS_MAINTENANCE_SECRET_HEADER,
   validateMaintenanceSecret,
 } from "@/lib/maintenance-auth";
-import { getServerServiceRoleSupabase } from "@/lib/supabase";
+import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
 

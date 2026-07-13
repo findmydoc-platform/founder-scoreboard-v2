@@ -6,21 +6,27 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("planning trash purge is bounded, locked, and fails closed on GitHub lifecycle coverage", async () => {
-  const migration = await read("supabase/0065_planning_trash_purge.sql");
+  const [migration, schema] = await Promise.all([
+    read("supabase/0065_planning_trash_purge.sql"),
+    read("supabase/schema.sql"),
+  ]);
 
-  assert.match(migration, /greatest\(1, least\(coalesce\(p_limit, 25\), 25\)\)/);
-  assert.match(migration, /pg_try_advisory_xact_lock/);
-  assert.match(migration, /for update skip locked/);
-  assert.match(migration, /set_config\('founderops\.trash_lifecycle_write', 'on', true\)/);
+  for (const sql of [migration, schema]) {
+    assert.match(sql, /create or replace function public\.purge_expired_planning_trash_batch/);
+    assert.match(sql, /greatest\(1, least\(coalesce\(p_limit, 25\), 25\)\)/);
+    assert.match(sql, /pg_try_advisory_xact_lock/);
+    assert.match(sql, /for update skip locked/);
+    assert.match(sql, /set_config\('founderops\.trash_lifecycle_write', 'on', true\)/);
+    assert.match(sql, /root_trash_revision = v_candidate\.trash_revision/);
+    assert.match(sql, /v_outbox_count <> v_task_count/);
+    assert.match(sql, /v_completed_outbox_count <> v_task_count/);
+    assert.match(sql, /lifecycle\.status = 'completed'/);
+    assert.match(sql, /lifecycle\.action = 'close_not_planned'/);
+    assert.match(sql, /p_dry_run/);
+    assert.match(sql, /to service_role/);
+    assert.match(sql, /from public, anon, authenticated/);
+  }
   assert.doesNotMatch(migration, /limit v_limit \* 4/);
-  assert.match(migration, /root_trash_revision = v_candidate\.trash_revision/);
-  assert.match(migration, /v_outbox_count <> v_task_count/);
-  assert.match(migration, /v_completed_outbox_count <> v_task_count/);
-  assert.match(migration, /lifecycle\.status = 'completed'/);
-  assert.match(migration, /lifecycle\.action = 'close_not_planned'/);
-  assert.match(migration, /p_dry_run/);
-  assert.match(migration, /to service_role/);
-  assert.match(migration, /from public, anon, authenticated/);
 });
 
 test("purge retains audit and notification history while removing only eligible source rows", async () => {
@@ -38,10 +44,11 @@ test("purge retains audit and notification history while removing only eligible 
 });
 
 test("maintenance API has a separate secret and an explicit service-role client", async () => {
-  const [route, auth, supabase] = await Promise.all([
+  const [route, lifecycleRoute, auth, serviceRoleClient] = await Promise.all([
     read("src/app/api/maintenance/planning-trash/purge/route.ts"),
+    read("src/app/api/maintenance/planning-trash/github-lifecycle/route.ts"),
     read("src/lib/maintenance-auth.ts"),
-    read("src/lib/supabase.ts"),
+    read("src/lib/supabase-service-role.ts"),
   ]);
 
   assert.match(route, /getServerServiceRoleSupabase/);
@@ -51,13 +58,13 @@ test("maintenance API has a separate secret and an explicit service-role client"
   assert.match(auth, /x-founderops-maintenance-secret/);
   assert.match(auth, /FOUNDEROPS_MAINTENANCE_SECRET/);
   assert.match(auth, /timingSafeEqual/);
-  assert.match(supabase, /export function getServerServiceRoleSupabase/);
-  assert.match(supabase, /SUPABASE_SERVICE_ROLE_KEY/);
-  const strictClientStart = supabase.indexOf("export function getServerServiceRoleSupabase");
-  const strictClientTail = supabase.slice(strictClientStart);
-  const nextExport = strictClientTail.indexOf("\nexport function", 1);
-  const strictClient = nextExport === -1 ? strictClientTail : strictClientTail.slice(0, nextExport);
-  assert.doesNotMatch(strictClient, /runtimeSupabaseAnonKey/);
+  assert.match(serviceRoleClient, /export function getServerServiceRoleSupabase/);
+  assert.match(serviceRoleClient, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(serviceRoleClient, /SUPABASE_SECRET_KEY/);
+  assert.doesNotMatch(serviceRoleClient, /ANON|PUBLISHABLE/);
+  assert.match(lifecycleRoute, /drainPlanningGitHubLifecycleJobs/);
+  assert.match(lifecycleRoute, /limit: 25/);
+  assert.match(lifecycleRoute, /validateMaintenanceSecret/);
 });
 
 test("daily workflow warms up and retries one production batch without GitHub credentials", async () => {
@@ -77,5 +84,10 @@ test("daily workflow warms up and retries one production batch without GitHub cr
   assert.match(script, /RANDOM % 6/);
   assert.match(script, /--fail-with-body/);
   assert.match(script, /\/api\/health/);
+  assert.match(script, /\/api\/maintenance\/planning-trash\/github-lifecycle/);
   assert.match(script, /\/api\/maintenance\/planning-trash\/purge/);
+  assert.ok(
+    script.indexOf("/api/maintenance/planning-trash/github-lifecycle")
+      < script.indexOf("/api/maintenance/planning-trash/purge"),
+  );
 });

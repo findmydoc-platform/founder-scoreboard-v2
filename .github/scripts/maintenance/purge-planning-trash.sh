@@ -31,20 +31,41 @@ for backoff in "${backoffs[@]}"; do
     continue
   fi
 
+  if ! curl --fail-with-body --show-error --silent \
+    --connect-timeout 15 --max-time 90 \
+    --request POST \
+    --header "x-founderops-maintenance-secret: ${FOUNDEROPS_MAINTENANCE_SECRET}" \
+    "${app_url}/api/maintenance/planning-trash/github-lifecycle" \
+    > "$response_file" 2> "$error_file"; then
+    echo "GitHub lifecycle request failed on attempt ${attempt}: $(<"$error_file")" >&2
+    attempt=$((attempt + 1))
+    continue
+  fi
+  lifecycle_response="$(<"$response_file")"
+
   if curl --fail-with-body --show-error --silent \
     --connect-timeout 15 --max-time 90 \
     --request POST \
     --header "x-founderops-maintenance-secret: ${FOUNDEROPS_MAINTENANCE_SECRET}" \
     "${app_url}/api/maintenance/planning-trash/purge" \
     > "$response_file" 2> "$error_file"; then
-    response="$(<"$response_file")"
-    echo "Planning trash purge completed: ${response}"
+    purge_response="$(<"$response_file")"
+    echo "Planning trash GitHub lifecycle completed: ${lifecycle_response}"
+    echo "Planning trash purge completed: ${purge_response}"
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
       {
-        echo "## Planning Trash Purge"
+        echo "## Planning Trash Maintenance"
+        echo
+        echo "### GitHub lifecycle"
         echo
         echo '```json'
-        echo "$response"
+        echo "$lifecycle_response"
+        echo '```'
+        echo
+        echo "### Physical purge"
+        echo
+        echo '```json'
+        echo "$purge_response"
         echo '```'
       } >> "$GITHUB_STEP_SUMMARY"
     fi
