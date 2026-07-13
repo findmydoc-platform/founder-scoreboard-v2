@@ -2,6 +2,7 @@
 
 import { GitBranch, Link2, RefreshCw, X } from "lucide-react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import { isGitHubSyncEligible, sortGitHubSyncTasks, taskNeedsGitHubSync } from "@/features/tasks/model/github-sync-queue";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskComment } from "@/lib/types";
 import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
@@ -14,7 +15,8 @@ type QueueRow = {
   task: Task;
   hasIssue: boolean;
   issueLabel: string;
-  state: "open" | "comments_waiting" | "running" | "locked" | "failed" | "missing";
+  parent?: Task;
+  state: "open" | "comments_waiting" | "running" | "locked" | "failed" | "missing" | "waiting_for_parent" | "parent_failed";
 };
 
 function issueLabel(task: Task) {
@@ -23,7 +25,9 @@ function issueLabel(task: Task) {
   return "GitHub Issue";
 }
 
-function queueState(task: Task, hasIssue: boolean, hasOpenComments: boolean): QueueRow["state"] {
+function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, hasOpenComments: boolean): QueueRow["state"] {
+  if (task.taskType === "sub_issue" && parent?.githubIssueSyncStatus === "failed") return "parent_failed";
+  if (task.taskType === "sub_issue" && (!parent || !hasGitHubIssue(parent))) return "waiting_for_parent";
   if (!hasIssue) return "missing";
   if (task.githubIssueSyncStatus === "pending" && task.githubIssueSyncError.includes("läuft bereits")) return "locked";
   if (task.githubIssueSyncStatus === "pending") return "running";
@@ -37,6 +41,8 @@ function stateBadge(row: QueueRow) {
   if (row.state === "locked") return <UiBadge tone="amber" size="xs">gesperrt</UiBadge>;
   if (row.state === "running") return <UiBadge tone="amber" size="xs">läuft</UiBadge>;
   if (row.state === "failed") return <UiBadge tone="red" size="xs">fehlgeschlagen</UiBadge>;
+  if (row.state === "parent_failed") return <UiBadge tone="red" size="xs">Parent fehlgeschlagen</UiBadge>;
+  if (row.state === "waiting_for_parent") return <UiBadge tone="amber" size="xs">wartet auf Parent</UiBadge>;
   if (row.state === "comments_waiting") return <UiBadge tone="blue" size="xs">Kommentare offen</UiBadge>;
   return <UiBadge tone="blue" size="xs">offen</UiBadge>;
 }
@@ -67,29 +73,24 @@ export function TaskGitHubSyncQueue({
   const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose });
   if (!open) return null;
 
-  const deliverables = tasks.filter((task) => task.taskType === "deliverable");
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
   const openCommentTaskIds = new Set(comments
     .filter((comment) => comment.githubDeliveryStatus !== "delivered")
     .map((comment) => comment.taskId));
-  const rows = deliverables
+  const rows = sortGitHubSyncTasks(tasks.filter((task) => isGitHubSyncEligible(task) && taskNeedsGitHubSync(task, openCommentTaskIds)), tasks)
     .map((task) => {
       const linked = hasGitHubIssue(task);
-      return { task, hasIssue: linked, issueLabel: issueLabel(task), state: queueState(task, linked, openCommentTaskIds.has(task.id)) } satisfies QueueRow;
+      const parent = task.taskType === "sub_issue" ? taskById.get(task.parentTaskId) : undefined;
+      return { task, parent, hasIssue: linked, issueLabel: issueLabel(task), state: queueState(task, parent, linked, openCommentTaskIds.has(task.id)) } satisfies QueueRow;
     })
-    .filter((row) => row.state !== "open" || row.task.githubIssueSyncStatus !== "synced")
-    .filter((row) => row.state !== "open" || row.hasIssue)
-    .sort((left, right) => {
-      const rank = { failed: 0, locked: 1, running: 2, comments_waiting: 3, open: 4, missing: 5 } as const;
-      return rank[left.state] - rank[right.state] || left.task.title.localeCompare(right.task.title);
-    });
   const linkedRows = rows.filter((row) => row.hasIssue && (row.task.githubIssueSyncStatus !== "synced" || row.state === "comments_waiting"));
   const failedCommentTaskIds = new Set(comments.filter((comment) => comment.githubDeliveryStatus === "failed").map((comment) => comment.taskId));
   const failedRows = rows.filter((row) => row.state === "failed" || failedCommentTaskIds.has(row.task.id));
   const missingRows = rows.filter((row) => row.state === "missing");
   const openRows = rows.filter((row) => row.state === "open");
 
-  const canRunLinkedSync = githubInstallationAvailable && !pending && linkedRows.length > 0;
-  const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked";
+  const canRunLinkedSync = githubInstallationAvailable && !pending && rows.length > 0;
+  const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked" || row.state === "waiting_for_parent" || row.state === "parent_failed";
 
   return (
     <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="GitHub-Sync">
@@ -151,11 +152,16 @@ export function TaskGitHubSyncQueue({
                   <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} className="mt-1 max-w-full text-left text-sm font-semibold text-slate-950">
                     {row.task.title}
                   </TaskReferenceLink>
+                  {row.parent && <p className="mt-1 text-xs text-slate-500">Sub-Issue von: {row.parent.title}</p>}
                   <p className="mt-1 line-clamp-1 text-xs text-slate-500">
                     {row.state === "locked"
                       ? "Sync läuft bereits."
                       : row.state === "failed"
                         ? row.task.githubIssueSyncError || "GitHub-Sync fehlgeschlagen."
+                        : row.state === "parent_failed"
+                          ? "Parent-Sync fehlgeschlagen; Sub-Issue wird übersprungen."
+                          : row.state === "waiting_for_parent"
+                            ? "Parent-Issue wird im Sammel-Sync zuerst angelegt."
                         : row.state === "missing"
                           ? "GitHub Issue bewusst anlegen."
                           : row.state === "comments_waiting"

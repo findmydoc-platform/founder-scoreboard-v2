@@ -32,6 +32,8 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
+  const syncQueue = await readFile("src/features/tasks/model/github-sync-queue.ts", "utf8");
+  const syncQueueUi = await readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8");
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(route, /requireTeamMember/);
@@ -60,6 +62,15 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(verifySupabase, /active lock was acquired twice/);
   assert.match(syncHook, /onlyFailed/);
   assert.match(syncHook, /continue;/);
+  assert.match(syncHook, /githubBulkSyncTasks/);
+  assert.match(syncHook, /createIfMissing: !hasGitHubIssue\(task\)/);
+  assert.match(syncHook, /failedParentTaskIds/);
+  assert.match(syncQueue, /task\.taskType === "sub_issue"/);
+  assert.match(syncQueue, /task\.parentApprovalStatus === "approved"/);
+  assert.match(syncQueue, /sortGitHubSyncTasks/);
+  assert.match(syncQueueUi, /Sub-Issue von:/);
+  assert.match(syncQueueUi, /wartet auf Parent/);
+  assert.match(syncQueueUi, /Parent-Sync fehlgeschlagen/);
   assert.doesNotMatch(route, /buildSyncContext/);
   assert.doesNotMatch(route, /x-github-provider-token|provider_token|requireMatchingGitHubProviderToken/);
   assert.doesNotMatch(route, /requireOperationalLead/);
@@ -170,7 +181,7 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(ui, /NotificationsOverview/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHubSyncQueueSection/);
   assert.doesNotMatch(notificationsOverviewUi, /SystemStatusSection|settings-readiness/);
-  assert.match(ui, /createIfMissing: false/);
+  assert.match(ui, /createIfMissing: !hasGitHubIssue\(task\)/);
 });
 
 test("task relationships use github-like blocked by and blocking semantics", async () => {
@@ -329,10 +340,12 @@ test("github sync verification is read-only and checks the management repo", asy
   assert.match(script, /github_app_installation_token/);
   assert.match(script, /GITHUB_SYNC_OWNER/);
   assert.match(script, /GITHUB_SYNC_REPO/);
-  assert.match(script, /linkedDeliverables\.filter/);
+  assert.match(script, /subIssues/);
+  assert.match(script, /isSyncEligible/);
+  assert.match(script, /approved_deliverables_and_sub_issues_parent_first/);
   assert.match(script, /automaticSyncScope/);
   assert.match(script, /syncQueuePreview/);
-  assert.match(script, /appOnlyPreview/);
+  assert.match(script, /missingGitHubIssuePreview/);
   assert.doesNotMatch(script, /method: "POST"/);
   assert.doesNotMatch(script, /method: "PATCH"/);
   assert.doesNotMatch(script, /method: "DELETE"/);

@@ -9,7 +9,7 @@ const supabase = await createSupabaseScriptClient();
 async function fetchTasks() {
   const { data, error } = await supabase
     .from("tasks")
-    .select("id,title,task_type,status,owner,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,github_issue_last_synced_at")
+    .select("id,title,task_type,parent_task_id,approval_status,status,owner,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,github_issue_last_synced_at")
     .order("sort_order", { ascending: true });
 
   if (error) throw new Error(`tasks: ${error.message}`);
@@ -31,9 +31,15 @@ const [tasks, relationshipCount] = await Promise.all([
 ]);
 
 const deliverables = tasks.filter((task) => task.task_type === "deliverable");
-const linkedDeliverables = deliverables.filter((task) => task.github_issue_number || task.github_issue_url);
-const appOnlyDeliverables = deliverables.filter((task) => !task.github_issue_number && !task.github_issue_url);
-const syncQueue = linkedDeliverables.filter((task) => ["not_synced", "failed", "pending"].includes(task.github_issue_sync_status));
+const subIssues = tasks.filter((task) => task.task_type === "sub_issue");
+const taskById = new Map(tasks.map((task) => [task.id, task]));
+const hasGitHubIssue = (task) => Boolean(task.github_issue_number || task.github_issue_url);
+const isSyncEligible = (task) => task.task_type === "deliverable"
+  ? task.approval_status === "approved"
+  : taskById.get(task.parent_task_id)?.approval_status === "approved";
+const syncQueue = tasks.filter((task) => isSyncEligible(task)
+  && (!hasGitHubIssue(task) || ["not_synced", "failed", "pending"].includes(task.github_issue_sync_status)));
+const missingGitHubIssues = syncQueue.filter((task) => !hasGitHubIssue(task));
 
 const result = {
   repo: repoSlug,
@@ -42,23 +48,27 @@ const result = {
   tasks: {
     total: tasks.length,
     deliverables: deliverables.length,
-    linkedDeliverables: linkedDeliverables.length,
-    appOnlyDeliverables: appOnlyDeliverables.length,
+    subIssues: subIssues.length,
     syncQueue: syncQueue.length,
-    automaticSyncScope: "linked_deliverables_only",
+    missingGitHubIssues: missingGitHubIssues.length,
+    automaticSyncScope: "approved_deliverables_and_sub_issues_parent_first",
     relationships: relationshipCount,
   },
   syncQueuePreview: syncQueue.slice(0, 10).map((task) => ({
     id: task.id,
     title: task.title,
+    taskType: task.task_type,
+    parentTaskId: task.parent_task_id,
     status: task.status,
     githubIssueSyncStatus: task.github_issue_sync_status,
     githubIssueNumber: task.github_issue_number,
     githubIssueUrl: task.github_issue_url,
   })),
-  appOnlyPreview: appOnlyDeliverables.slice(0, 10).map((task) => ({
+  missingGitHubIssuePreview: missingGitHubIssues.slice(0, 10).map((task) => ({
     id: task.id,
     title: task.title,
+    taskType: task.task_type,
+    parentTaskId: task.parent_task_id,
     status: task.status,
     owner: task.owner,
   })),
