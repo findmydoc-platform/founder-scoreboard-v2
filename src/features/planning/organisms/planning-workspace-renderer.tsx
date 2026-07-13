@@ -69,6 +69,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
+    setTaskDialogDefaults,
     setSprintPlanningOptions,
     sprintLockMessage,
     sprintPlanningOptions,
@@ -153,6 +154,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           canManageBacklog={canManageTaskMeta}
           data={data}
           onOpenTask={openTaskPanel}
+          onProposeDeliverable={() => setTaskDialogDefaults({ taskType: "deliverable" })}
           onUpdateTask={updateTask}
           refreshPlanningData={refreshPlanningData}
           setData={setData}

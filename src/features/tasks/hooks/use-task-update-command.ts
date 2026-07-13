@@ -9,7 +9,7 @@ import {
   founderTaskAssignmentGuardMessage,
 } from "@/features/planning/model/planning-app-model";
 import { applyDeliverableApprovalPatch } from "@/features/planning/model/approval-domain";
-import type { TaskSyncCommand } from "@/features/tasks/hooks/task-mutation-command-types";
+import type { TaskSyncCommand, TaskUpdateCommand, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { hasGitHubIssue } from "@/lib/platform";
@@ -55,24 +55,24 @@ export function useTaskUpdateCommand({
 }: UseTaskUpdateCommandOptions) {
   const latestMutationByTask = useRef(new Map<string, symbol>());
   const mutationEpochByTask = useRef(new Map<string, number>());
-  const mutationQueueByTask = useRef(new Map<string, Promise<void>>());
+  const mutationQueueByTask = useRef(new Map<string, Promise<TaskUpdateResult>>());
   const serverUpdatedAtByTask = useRef(new Map<string, string>());
 
-  const updateTask = (task: Task, patch: Partial<Task>) => {
+  const updateTask: TaskUpdateCommand = (task: Task, patch: Partial<Task>) => {
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
     const normalized = buildClientTaskUpdatePatch(task, patch, data.profiles, data.packages);
     if (!normalized.ok) {
       setSaveError(normalized.error);
-      return;
+      return Promise.resolve({ ok: false, error: normalized.error, status: 400 });
     }
     const normalizedPatch = normalized.patch;
 
     if (normalizedPatch.status && !canManageFinalTaskStatus && normalizeStatus(normalizedPatch.status) === "Erledigt") {
       setStatusGuardNotice(founderStatusGuardMessage(normalizedPatch.status as TaskStatus));
       setStatusGuardTaskId(task.id);
-      return;
+      return Promise.resolve({ ok: false, error: founderStatusGuardMessage(normalizedPatch.status as TaskStatus), status: 403 });
     }
 
     if (normalizedPatch.status && !canManageTaskMeta) {
@@ -80,20 +80,20 @@ export function useTaskUpdateCommand({
       if (guardedMessage) {
         setStatusGuardNotice(guardedMessage);
         setStatusGuardTaskId(task.id);
-        return;
+        return Promise.resolve({ ok: false, error: guardedMessage, status: 403 });
       }
     }
 
     if (normalizedPatch.status && normalizeStatus(task.status) === "Erledigt" && !canManageFinalTaskStatus) {
       setStatusGuardNotice(founderCompletedTaskGuardMessage());
       setStatusGuardTaskId(task.id);
-      return;
+      return Promise.resolve({ ok: false, error: founderCompletedTaskGuardMessage(), status: 403 });
     }
 
     if (normalizedPatch.status && !canChangeTaskStatus(task)) {
       setStatusGuardNotice(founderTaskAssignmentGuardMessage());
       setStatusGuardTaskId(task.id);
-      return;
+      return Promise.resolve({ ok: false, error: founderTaskAssignmentGuardMessage(), status: 403 });
     }
 
     applyPlanningDataUpdate((current) => {
@@ -113,14 +113,16 @@ export function useTaskUpdateCommand({
       return nextData;
     });
 
-    if (source !== "supabase") return;
+    if (source !== "supabase") return Promise.resolve({ ok: true, task: normalizedPatch });
 
     const mutationId = Symbol(task.id);
     const mutationEpoch = mutationEpochByTask.current.get(task.id) || 0;
     latestMutationByTask.current.set(task.id, mutationId);
-    const previousMutation = mutationQueueByTask.current.get(task.id) || Promise.resolve();
-    const queuedMutation = previousMutation.then(async () => {
-      if ((mutationEpochByTask.current.get(task.id) || 0) !== mutationEpoch) return;
+    const previousMutation = mutationQueueByTask.current.get(task.id) || Promise.resolve<TaskUpdateResult>({ ok: true, task: {} });
+    const queuedMutation: Promise<TaskUpdateResult> = previousMutation.then(async (): Promise<TaskUpdateResult> => {
+      if ((mutationEpochByTask.current.get(task.id) || 0) !== mutationEpoch) {
+        return { ok: false, error: "Aufgabe wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen.", status: 409 };
+      }
 
       try {
         const { response, body } = await taskApi.updateTaskRequest(
@@ -134,12 +136,17 @@ export function useTaskUpdateCommand({
         if (response.status === 409) {
           mutationEpochByTask.current.set(task.id, mutationEpoch + 1);
           serverUpdatedAtByTask.current.delete(task.id);
-          await refreshPlanningData();
-          setSaveError(body?.error || "Aufgabe wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen.");
-          return;
+          const error = body?.error || "Aufgabe wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen.";
+          try {
+            await refreshPlanningData();
+          } catch {
+            // The authoritative refresh is best-effort after a rejected mutation.
+          }
+          setSaveError(error);
+          return { ok: false, error, status: 409 };
         }
         if (!response.ok) {
-          throw new Error(body?.error || "Änderung konnte nicht gespeichert werden.");
+          throw Object.assign(new Error(body?.error || "Änderung konnte nicht gespeichert werden."), { status: response.status });
         }
         if (body?.task?.updatedAt) {
           serverUpdatedAtByTask.current.set(task.id, body.task.updatedAt);
@@ -165,21 +172,33 @@ export function useTaskUpdateCommand({
         if (normalizedPatch.status && hasGitHubIssue(task) && githubInstallationAvailable) {
           syncTaskToGitHub({ ...task, ...normalizedPatch }, { silent: true });
         }
+        return { ok: true, task: body?.task || normalizedPatch };
       } catch (error) {
         mutationEpochByTask.current.set(task.id, mutationEpoch + 1);
         serverUpdatedAtByTask.current.delete(task.id);
-        await refreshPlanningData();
-        setSaveError(error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden.");
+        try {
+          await refreshPlanningData();
+        } catch {
+          // The authoritative refresh is best-effort after a failed mutation.
+        }
+        const message = error instanceof Error ? error.message : "Änderung konnte nicht gespeichert werden.";
+        const status = typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
+          ? error.status
+          : undefined;
+        setSaveError(message);
+        return { ok: false, error: message, status };
       }
     });
     mutationQueueByTask.current.set(task.id, queuedMutation);
-    startTransition(async () => {
-      await queuedMutation;
-      if (mutationQueueByTask.current.get(task.id) === queuedMutation) {
-        mutationQueueByTask.current.delete(task.id);
-        latestMutationByTask.current.delete(task.id);
-      }
+    startTransition(() => {
+      void queuedMutation.then(() => {
+        if (mutationQueueByTask.current.get(task.id) === queuedMutation) {
+          mutationQueueByTask.current.delete(task.id);
+          latestMutationByTask.current.delete(task.id);
+        }
+      });
     });
+    return queuedMutation;
   };
 
   return { updateTask };

@@ -441,7 +441,8 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(shell, /function PlanningContentSkeleton/);
   assert.match(shell, /BacklogContentSkeleton/);
   assert.match(backlogSkeleton, /export function BacklogContentSkeleton/);
-  assert.match(backlogSkeleton, /overflow-x-scroll/);
+  assert.match(backlogSkeleton, /overflow-x-auto/);
+  assert.doesNotMatch(backlogSkeleton, /overflow-x-scroll/);
   assert.match(shell, /function ReviewContentSkeleton/);
   assert.match(shell, /function EventsContentSkeleton/);
   assert.match(shell, /function GenericWorkspaceSkeleton/);
@@ -745,7 +746,8 @@ test("tasks can be assigned to an unlocked sprint", async () => {
 
   assert.match(route, /sprintId/);
   assert.match(route, /sprint_id/);
-  assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
+  assert.match(route, /getBacklogSprintAssignmentEligibility/);
+  assert.match(route, /backlogSprintAssignmentMessage/);
 });
 
 test("decision log routes and data slices stay removed while legacy storage remains in the production baseline", async () => {

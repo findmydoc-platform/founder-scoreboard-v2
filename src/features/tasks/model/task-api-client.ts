@@ -18,10 +18,26 @@ export function updateTaskRequest(apiClient: BrowserApiClient, taskId: string, p
   });
 }
 
-export function updateBacklogOrderRequest(apiClient: BrowserApiClient, updates: Array<{ id: string; sortOrder: number; expectedUpdatedAt: string }>) {
-  return apiClient.requestJson<{ error?: string; updates?: Array<{ id: string; sortOrder: number; updatedAt: string }> }>("/api/tasks/backlog-order", {
+export type BacklogMovePlacement = "before" | "after";
+
+export type BacklogMoveRequest = {
+  taskId: string;
+  targetTaskId: string;
+  placement: BacklogMovePlacement;
+  expectedTaskUpdatedAt: string;
+  expectedTargetUpdatedAt: string;
+};
+
+export type BacklogMoveUpdate = {
+  id: string;
+  sortOrder: number;
+  updatedAt: string;
+};
+
+export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: BacklogMoveRequest) {
+  return apiClient.requestJson<{ error?: string; updates?: BacklogMoveUpdate[] }>("/api/tasks/backlog-order", {
     method: "PATCH",
-    json: { updates },
+    json: move,
   });
 }
 

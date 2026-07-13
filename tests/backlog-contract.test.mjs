@@ -135,13 +135,18 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   assert.match(renderer, /BacklogOverview/);
   assert.match(renderer, /BacklogWorkspacePanelLoading/);
   assert.match(renderer, /workspace === "backlog"/);
-  assert.match(headerAction, /workspace === "backlog"/);
-  assert.match(headerAction, /Deliverable vorschlagen/);
-  assert.match(headerAction, /taskType: "deliverable"/);
+  assert.match(renderer, /onProposeDeliverable/);
+  assert.match(renderer, /setTaskDialogDefaults\(\{ taskType: "deliverable" \}\)/);
+  assert.doesNotMatch(headerAction, /workspace === "backlog"/);
+  assert.doesNotMatch(headerAction, /Deliverable vorschlagen/);
 });
 
 test("backlog view model sorts by rank not priority and keeps sprint as assignment", async () => {
+  const planningState = await loadTranspiledModule("src/features/backlog/model/backlog-planning-state.ts", {
+    "@/lib/status": statusMock,
+  });
   const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS, filterBacklogItemsByQuery } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {
+    "@/features/backlog/model/backlog-planning-state": planningState,
     "@/lib/planning-schedule": scheduleMock,
     "@/lib/status": statusMock,
     "@/features/planning/model/approval-domain": {
@@ -168,10 +173,10 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
   assert.deepEqual(combined.visibleItems.map((item) => item.task.id), ["late-p0"]);
   assert.equal(all.sprintBuckets[0].sprint.id, "sprint-4");
   assert.equal(all.sprintBuckets[0].plannedHours, 13);
-  assert.equal(all.sprintBuckets[0].capacityHours, 42);
+  assert.equal(all.sprintBuckets[0].capacityHours, 84);
   assert.equal(backlogTableColumns.length, 9);
   assert.equal(backlogTableColumnCount, 9);
-  assert.equal(backlogTableMinWidth, 900);
+  assert.equal(backlogTableMinWidth, 960);
 });
 
 test("backlog ordering API is operational-lead guarded and does not dirty github sync", async () => {
@@ -183,14 +188,15 @@ test("backlog ordering API is operational-lead guarded and does not dirty github
   assert.match(route, /requirePlanningContributor/);
   assert.match(route, /isOperationalLeadRole/);
   assert.match(route, /Nur CEO oder Deputy können die Backlog-Reihenfolge ändern/);
-  assert.match(route, /update_backlog_order_transaction/);
-  assert.match(ordering, /expectedUpdatedAt/);
+  assert.match(route, /move_backlog_task_transaction/);
+  assert.match(ordering, /expectedTaskUpdatedAt/);
+  assert.match(ordering, /expectedTargetUpdatedAt/);
   assert.match(ordering, /updatedAt: persisted\.updatedAt/);
-  assert.match(migration, /sort_order = requested\."sortOrder"/);
+  assert.match(migration, /move_backlog_task_transaction/);
   assert.match(migration, /task\.backlog_reorder/);
-  assert.match(migration, /task\.updated_at <> requested\."expectedUpdatedAt"/);
+  assert.match(migration, /v_task\.updated_at is distinct from p_expected_task_updated_at/);
   assert.doesNotMatch(route, /github_issue_sync_status|github_issue_sync_error|task_activity/);
-  assert.match(apiClient, /updateBacklogOrderRequest/);
+  assert.match(apiClient, /moveBacklogTaskRequest/);
   assert.match(apiClient, /\/api\/tasks\/backlog-order/);
 });
 
@@ -199,30 +205,48 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   const rankTable = await readFile("src/features/backlog/molecules/backlog-rank-table.tsx", "utf8");
   const scopeTabs = await readFile("src/features/backlog/molecules/backlog-scope-tabs.tsx", "utf8");
   const sprintPane = await readFile("src/features/backlog/molecules/backlog-sprint-pane.tsx", "utf8");
+  const taskActions = await readFile("src/features/backlog/molecules/backlog-task-actions.tsx", "utf8");
+  const readiness = await readFile("src/features/backlog/molecules/backlog-readiness.tsx", "utf8");
   const skeleton = await readFile("src/features/backlog/organisms/backlog-content-skeleton.tsx", "utf8");
   const ordering = await readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8");
   const sprintAssignment = await readFile("src/features/backlog/hooks/use-backlog-sprint-assignment.ts", "utf8");
-  const uiSurface = [overview, rankTable, scopeTabs, sprintPane, skeleton].join("\n");
+  const uiSurface = [overview, rankTable, scopeTabs, sprintPane, taskActions, readiness, skeleton].join("\n");
 
   assert.match(overview, /BacklogRankTable/);
   assert.match(overview, /BacklogSprintPane/);
   assert.match(rankTable, /DataTableFrame/);
   assert.match(rankTable, /filtering=\{\{ mode: "embedded", toolbar \}\}/);
+  assert.match(rankTable, /surfaceVariant="structural"/);
+  assert.match(rankTable, /mobileContent=/);
+  assert.match(rankTable, /BacklogTaskActions/);
   assert.match(rankTable, /DataColumnHeader/);
   assert.match(rankTable, /ColumnFilterPopover/);
   assert.doesNotMatch(overview, /BacklogTypeFilter|typeOptions|filters\.type/);
   assert.doesNotMatch(rankTable, /BacklogTypeFilter|typeOptions|Backlog nach Typ/);
   assert.match(rankTable, /directionFor\("approval"\)/);
-  assert.match(uiSurface, /overflow-x-scroll/);
+  assert.match(scopeTabs, /variant="structural"/);
+  assert.match(taskActions, /CustomActionMenu/);
+  assert.match(taskActions, /triggerButtonProps/);
+  assert.match(taskActions, /Ganz nach oben/);
+  assert.match(taskActions, /Aus Sprint entfernen/);
+  assert.match(readiness, /backlogPlanningStateLabel/);
+  assert.match(sprintPane, /getBacklogSprintAssignmentEligibility/);
+  assert.match(sprintPane, /capacityUnavailable/);
+  assert.match(sprintPane, /overCapacity/);
+  assert.match(sprintPane, /formatDate/);
+  assert.match(uiSurface, /overflow-x-auto/);
+  assert.doesNotMatch(uiSurface, /overflow-x-scroll/);
   assert.match(overview, /data-tour-id="backlog-overview"/);
   assert.match(scopeTabs, /data-tour-id="backlog-scope-tabs"/);
   assert.match(rankTable, /data-tour-id="backlog-rank-table"/);
   assert.match(sprintPane, /data-tour-id="backlog-sprint-pane"/);
   assert.match(uiSurface, /onDrop/);
-  assert.match(rankTable, /title="Backlog-Rang per Drag oder Alt\+Pfeiltasten ändern"/);
-  assert.match(ordering, /updateBacklogOrderRequest/);
-  assert.match(sprintAssignment, /status: "Offen"/);
-  assert.match(sprintAssignment, /Für die Sprint-Zuordnung fehlen Zuständigkeit oder Initiative/);
+  assert.match(rankTable, /canReorder/);
+  assert.match(rankTable, /placement === "before"/);
+  assert.match(overview, /sprints: data\.sprints/);
+  assert.match(ordering, /moveBacklogTaskRequest/);
+  assert.match(sprintAssignment, /getBacklogSprintAssignmentEligibility/);
+  assert.doesNotMatch(sprintAssignment, /status:\s*"Offen"/);
   assert.doesNotMatch(uiSurface, /<select|<\/select|<option|type="date"|type="datetime-local"/);
 });
 
