@@ -38,7 +38,7 @@ begin
     );
   end if;
 
-  perform set_config('app.planning_trash_operation', 'purge', true);
+  perform set_config('founderops.trash_lifecycle_write', 'on', true);
 
   for v_candidate in
     select candidate.root_type, candidate.root_id, candidate.trash_revision, candidate.purge_after
@@ -61,7 +61,6 @@ begin
         and task.purge_after <= now()
     ) candidate
     order by candidate.purge_after, candidate.root_type, candidate.root_id
-    limit v_limit * 4
   loop
     exit when v_purged_roots + v_eligible_roots >= v_limit;
 

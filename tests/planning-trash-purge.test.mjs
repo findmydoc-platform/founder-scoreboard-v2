@@ -11,6 +11,8 @@ test("planning trash purge is bounded, locked, and fails closed on GitHub lifecy
   assert.match(migration, /greatest\(1, least\(coalesce\(p_limit, 25\), 25\)\)/);
   assert.match(migration, /pg_try_advisory_xact_lock/);
   assert.match(migration, /for update skip locked/);
+  assert.match(migration, /set_config\('founderops\.trash_lifecycle_write', 'on', true\)/);
+  assert.doesNotMatch(migration, /limit v_limit \* 4/);
   assert.match(migration, /root_trash_revision = v_candidate\.trash_revision/);
   assert.match(migration, /v_outbox_count <> v_task_count/);
   assert.match(migration, /v_completed_outbox_count <> v_task_count/);
