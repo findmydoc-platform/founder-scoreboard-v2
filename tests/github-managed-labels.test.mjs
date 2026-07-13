@@ -14,6 +14,10 @@ async function githubModule(githubHttp = {}) {
     },
     "./github-issue-reference": {
       assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: (value) => {
+        const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
       resolveGitHubIssueNumber: (task) => task.githubIssueNumber || null,
     },
     "./github-http": {
@@ -65,7 +69,12 @@ test("refuses to update when existing labels cannot be read safely", async () =>
   const github = await githubModule({
     githubJson: async (_url, options) => {
       if (options.method === "PATCH") patchCalls += 1;
-      return { number: 42 };
+      return {
+        number: 42,
+        html_url: "https://github.com/findmydoc-platform/management/issues/42",
+        title: "[Deliverable] Keep labels safe",
+        body: "<!-- founderops-task-id:task-label-safety -->",
+      };
     },
   });
 

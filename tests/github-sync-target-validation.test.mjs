@@ -37,7 +37,7 @@ async function loadGitHub(target) {
       githubRequest: async () => new Response(null, { status: 404 }),
       githubJson: async (url, options) => {
         requests.push({ url, ...options });
-        if (!options.method || options.method === "GET") return target;
+        if (!options.method || options.method === "GET") return { labels: [], ...target };
         return { number: 42, html_url: "https://github.com/findmydoc-platform/management/issues/42" };
       },
     },
