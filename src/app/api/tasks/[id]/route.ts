@@ -11,9 +11,9 @@ import {
   applyTaskScoreUpdateFields,
   applyTaskSelfChecklistUpdateFields,
   applyTaskStatusUpdate,
-  applyTaskSyncStatusUpdate,
   applyTaskTitleUpdate,
   markTaskGitHubSyncDirty,
+  rejectClientGitHubSyncStatusUpdate,
   restrictedTaskUpdateFields,
   startsTaskReviewRequest,
   validateTaskStatusUpdate,
@@ -57,9 +57,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
+  const rawPayload = await request.json() as unknown;
+  const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
+  if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
+  const payload = rawPayload as TaskUpdatePayload;
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
-  const payload = (await request.json()) as TaskUpdatePayload;
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
     return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
   }
@@ -244,10 +247,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
   applyFinalStatusReopen(update, currentTask, payload, isCeo);
 
-  const syncStatusGuard = applyTaskSyncStatusUpdate(update, payload);
-  if (!syncStatusGuard.ok) return apiError(syncStatusGuard.error, syncStatusGuard.status);
   applyTaskSelfChecklistUpdateFields(update, payload);
-  markTaskGitHubSyncDirty(update, payload);
+  markTaskGitHubSyncDirty(update);
 
   const messages = activityMessages(payload, currentTask);
 
