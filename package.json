@@ -13,6 +13,7 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:task-mutations": "node scripts/verify-task-update-transaction.mjs",
     "verify:task-deletion": "node scripts/verify-task-deletion-transaction.mjs",
+    "verify:planning-trash-purge": "node scripts/verify-planning-trash-purge-transaction.mjs",
     "verify:task-creation": "node scripts/verify-task-creation-transaction.mjs",
     "verify:team-intake": "node scripts/verify-team-task-intake-transaction.mjs",
     "verify:planning-batches": "node scripts/verify-planning-batch-transactions.mjs",

@@ -14,7 +14,9 @@ const requiredFiles = [
   ".github/dependabot.yml",
   ".github/workflows/deploy-preview.yml",
   ".github/workflows/deploy-production.yml",
+  ".github/workflows/purge-planning-trash.yml",
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
+  ".github/scripts/maintenance/purge-planning-trash.sh",
   ".github/workflows/send-release-google-chat.yml",
   "scripts/deploy-production-schema.mjs",
   "docs/vercel-deployment.md",
@@ -40,6 +42,7 @@ const requiredEnvKeys = [
   "GOOGLE_CHAT_PRIVATE_KEY",
   "GOOGLE_CHAT_DELIVERY_ENABLED",
   "FOUNDEROPS_DELIVERY_SECRET",
+  "FOUNDEROPS_MAINTENANCE_SECRET",
 ];
 
 const project = "founder-ops";
@@ -186,10 +189,34 @@ for (const marker of [
 }
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+const trashPurgeWorkflow = await read(".github/workflows/purge-planning-trash.yml");
+const trashPurgeScript = await read(".github/scripts/maintenance/purge-planning-trash.sh");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
 const productionSchemaDeployScript = await read("scripts/deploy-production-schema.mjs");
 const productionSchemaConnection = await read("scripts/lib/production-schema-connection.mjs");
 const productionSchemaDeployContract = `${productionSchemaDeployScript}\n${productionSchemaConnection}`;
+
+for (const marker of [
+  'cron: "15 3 * * *"',
+  "workflow_dispatch",
+  "name: production",
+  "cancel-in-progress: false",
+  "FOUNDEROPS_MAINTENANCE_SECRET",
+  "purge-planning-trash.sh",
+]) {
+  if (!trashPurgeWorkflow.includes(marker)) failures.push(`purge-planning-trash.yml missing: ${marker}`);
+}
+for (const marker of [
+  "sleep 45",
+  "backoffs=(0 45 90 180)",
+  "--fail-with-body",
+  "/api/health",
+  "/api/maintenance/planning-trash/github-lifecycle",
+  "/api/maintenance/planning-trash/purge",
+  "x-founderops-maintenance-secret",
+]) {
+  if (!trashPurgeScript.includes(marker)) failures.push(`purge-planning-trash.sh missing: ${marker}`);
+}
 if (!/name: Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL:/.test(productionWorkflow)) {
   failures.push("deploy-production.yml must expose NEXT_PUBLIC_SUPABASE_URL during the Vercel build step.");
 }

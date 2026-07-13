@@ -153,6 +153,21 @@ Before production GitHub features work, configure the GitHub App owned by `findm
 - Keep the webhook secret reserved for the later inbound webhook phase; the current runtime does not require `GITHUB_APP_WEBHOOK_SECRET`.
 - Run the additive Supabase migration that creates `github_app_user_tokens` before enabling the connect button for users.
 
+## Planning Trash Maintenance
+
+`.github/workflows/purge-planning-trash.yml` is the bounded production maintenance path for expired planning trash. It is scheduled for `03:15 UTC`, waits 45 seconds before the first network request, checks `/api/health`, processes at most 25 pending GitHub lifecycle jobs through `/api/maintenance/planning-trash/github-lifecycle`, and then calls exactly one batch of at most 25 roots through `/api/maintenance/planning-trash/purge`. Network failures retry with bounded backoff; a second concurrent run is not cancelled into the first one.
+
+Both endpoints accept only `x-founderops-maintenance-secret` backed by `FOUNDEROPS_MAINTENANCE_SECRET`. They have no user-session, bearer-token, or Supabase-anon fallback. The server obtains GitHub App credentials internally; the workflow receives no GitHub token. Both operations require the explicit service-role client, and physical cleanup remains fail-closed while any matching GitHub lifecycle job is missing or incomplete.
+
+Publishing the workflow does not activate physical cleanup. Before enabling it, separately approve and complete all of the following:
+
+- apply `0065_planning_trash_purge.sql` after the planning trash lifecycle migration;
+- configure the same `FOUNDEROPS_MAINTENANCE_SECRET` in the GitHub `production` environment and the production Vercel runtime;
+- run the rollback-based purge verification against the target Supabase project;
+- explicitly approve the first manual production run.
+
+The maintenance job never deletes GitHub Issues. It retains FounderOps audit records and notification delivery history.
+
 ## Verification
 
 Run from the repository root:

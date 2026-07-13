@@ -558,6 +558,22 @@ async function verifyPlanningTrashLifecycleRpcs() {
   }));
 }
 
+async function verifyPlanningTrashPurgeRpc() {
+  const serviceResult = await supabase.rpc("purge_expired_planning_trash_batch", {
+    p_limit: 1,
+    p_dry_run: true,
+  });
+  const anonResult = await anonSupabase.rpc("purge_expired_planning_trash_batch", {
+    p_limit: 1,
+    p_dry_run: true,
+  });
+  return {
+    ok: !serviceResult.error && Boolean(anonResult.error),
+    error: serviceResult.error?.message
+      || (!anonResult.error ? "purge RPC unexpectedly allowed anonymous execution" : ""),
+  };
+}
+
 const { data: project, error: projectError } = await supabase
   .from("projects")
   .select("id,name,range_label")
@@ -615,6 +631,7 @@ const result = {
   teamTaskIntakeRpcs: await verifyTeamTaskIntakeRpcs(),
   approvalDecisionRpcs: await verifyApprovalDecisionRpcs(),
   planningTrashLifecycleRpcs: await verifyPlanningTrashLifecycleRpcs(),
+  planningTrashPurgeRpc: await verifyPlanningTrashPurgeRpc(),
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -694,5 +711,10 @@ if (missingApprovalDecisionRpc) {
 const missingPlanningTrashLifecycleRpc = result.planningTrashLifecycleRpcs.find((check) => !check.ok);
 if (missingPlanningTrashLifecycleRpc) {
   console.error(`Planning trash lifecycle RPC check failed for ${missingPlanningTrashLifecycleRpc.name}: ${missingPlanningTrashLifecycleRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.planningTrashPurgeRpc.ok) {
+  console.error(`Planning trash purge RPC check failed: ${result.planningTrashPurgeRpc.error}`);
   process.exit(1);
 }
