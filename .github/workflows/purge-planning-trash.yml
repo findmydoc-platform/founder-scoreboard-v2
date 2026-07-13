@@ -1,0 +1,33 @@
+name: Purge Planning Trash
+
+on:
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: purge-planning-trash-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  purge:
+    name: Purge one bounded batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Purge expired planning trash
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          FOUNDEROPS_MAINTENANCE_SECRET: ${{ secrets.FOUNDEROPS_MAINTENANCE_SECRET }}
+        run: bash ./.github/scripts/maintenance/purge-planning-trash.sh

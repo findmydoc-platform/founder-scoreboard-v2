@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let browserClient: SupabaseClient | null = null;
 let serverClient: SupabaseClient | null = null;
+let serviceRoleClient: SupabaseClient | null = null;
 
 const browserSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const browserSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -53,6 +54,16 @@ export function getServerSupabase() {
     auth: { persistSession: false },
   });
   return serverClient;
+}
+
+export function getServerServiceRoleSupabase() {
+  const url = runtimeSupabaseUrl();
+  const key = runtimeEnv("SUPABASE_SERVICE_ROLE_KEY") || runtimeEnv("SUPABASE_SECRET_KEY");
+  if (!url || !key) return null;
+  serviceRoleClient ??= createClient(url, key, {
+    auth: { persistSession: false },
+  });
+  return serviceRoleClient;
 }
 
 export function getSupabaseForToken(token: string) {
