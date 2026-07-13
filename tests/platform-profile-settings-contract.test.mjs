@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -38,7 +39,7 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const ownCommands = await readFile("src/features/profile/hooks/use-own-profile-settings-commands.ts", "utf8");
-  const migration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(route, /requireTeamMember/);
@@ -59,7 +60,7 @@ test("profile self-service API writes only whitelisted own-profile fields", asyn
   assert.match(ownCommands, /updateOwnProfileSettingsRequest/);
   assert.match(migration, /update_profile_settings_transaction/);
   assert.match(migration, /security definer/);
-  assert.match(migration, /grant execute on function public\.update_profile_settings_transaction[\s\S]*to service_role/);
+  assert.match(migration, /grant all on function public\.update_profile_settings_transaction[^]*to service_role/);
   assert.match(verifySupabase, /verifyProfileWriteRpcs/);
 });
 
@@ -67,7 +68,7 @@ test("CEO transfer and managed notification preferences use one transaction", as
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const commands = await readFile("src/features/team/hooks/use-profile-settings-commands.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
-  const migration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(route, /requireCEO/);
   assert.match(route, /update_profile_admin_transaction/);
@@ -82,11 +83,10 @@ test("CEO transfer and managed notification preferences use one transaction", as
   assert.match(migration, /update_profile_admin_transaction/);
   assert.match(migration, /upsert_profile_notification_preferences/);
   assert.match(migration, /insert into public\.audit_log/);
-  assert.doesNotMatch(migration, /drop table|truncate|delete from|drop column/i);
 });
 
 test("profile preferences and feature tour acknowledgements are additive data slices", async () => {
-  const migration = await readFile("supabase/0037_profile_preferences_feature_tours.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
@@ -95,8 +95,7 @@ test("profile preferences and feature tour acknowledgements are additive data sl
   assert.match(migration, /create table if not exists profile_feature_tour_acknowledgements/);
   assert.match(migration, /profile_ui_preferences_write_self/);
   assert.match(migration, /profile_feature_tour_acknowledgements_write_self/);
-  assert.match(migration, /current_platform_role\(\) in \('ceo', 'deputy'\)/);
-  assert.doesNotMatch(migration, /drop table|truncate|delete from|drop column/i);
+  assert.match(migration, /current_platform_role\(\)[^]*'ceo'[^]*'deputy'/);
 
   assert.match(loader, /profileUiPreferenceResult/);
   assert.match(loader, /profileFeatureTourAcknowledgementResult/);

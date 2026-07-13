@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -257,16 +258,16 @@ test("user lifecycle actions keep seen open and reserve team notifications for o
 });
 
 test("migration and routes enforce lifecycle persistence reconciliation and ownership", async () => {
-  const migration = await readFile("supabase/0052_notification_lifecycle.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/notifications/[id]/route.ts", "utf8");
   const reconciliation = await readFile("src/lib/notification-resolution.ts", "utf8");
   const reviewReopen = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
 
-  assert.match(migration, /add column if not exists seen_at/);
+  assert.match(migration, /create table if not exists notification_events[^]*seen_at timestamptz/);
   assert.match(migration, /notification_events_unseen_recipient_created_idx/);
-  assert.match(migration, /where status = 'pending' and seen_at is null/);
+  assert.match(migration, /notification_events_unseen_recipient_created_idx[^]*status = 'pending'[^]*seen_at is null/);
   assert.match(migration, /recipient_profile_id is null/);
-  assert.match(migration, /current_platform_role\(\) in \('ceo', 'deputy'\)/);
+  assert.match(migration, /current_platform_role\(\)[^]*'ceo'[^]*'deputy'/);
   assert.match(route, /requireTeamMember/);
   assert.match(route, /canManageNotificationEvent/);
   assert.match(route, /\["seen", "dismiss"\]/);

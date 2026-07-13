@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -21,8 +22,8 @@ function validateMaintenanceResponse(functionName, response) {
 
 test("planning trash purge is bounded, locked, and fails closed on GitHub lifecycle coverage", async () => {
   const [migration, schema] = await Promise.all([
-    read("supabase/0065_planning_trash_purge.sql"),
-    read("supabase/schema.sql"),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
   ]);
 
   for (const sql of [migration, schema]) {
@@ -60,8 +61,8 @@ test("planning trash purge is bounded, locked, and fails closed on GitHub lifecy
     assert.match(sql, /exit when v_locked_roots >= v_limit/);
     assert.match(sql, /perform task\.id[\s\S]*order by task\.id[\s\S]*for update/);
     assert.match(sql, /expired_probe as/);
-    assert.match(sql, /to service_role/);
-    assert.match(sql, /from public, anon, authenticated/);
+    assert.match(sql, /grant all on function public\.purge_expired_planning_trash_batch[^]*to service_role/);
+    assert.match(sql, /revoke all on function public\.purge_expired_planning_trash_batch[^]*from public/);
   }
   const initiativeCandidates = migration.match(/with initiative_candidates as \(([\s\S]*?)\), deliverable_candidates as/)?.[1] || "";
   const deliverableCandidates = migration.match(/deliverable_candidates as \(([\s\S]*?)\), candidate_roots as/)?.[1] || "";
@@ -72,7 +73,7 @@ test("planning trash purge is bounded, locked, and fails closed on GitHub lifecy
 });
 
 test("purge retains audit and notification history while removing only eligible source rows", async () => {
-  const migration = await read("supabase/0065_planning_trash_purge.sql");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(migration, /set status = 'resolved'/);
   assert.match(migration, /resolution_reason = coalesce\(notification\.resolution_reason, 'source_purged'\)/);

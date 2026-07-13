@@ -12,11 +12,15 @@ Die App läuft standardmäßig auf `http://localhost:3000`.
 
 ## Supabase
 
-1. Supabase-Projekt anlegen.
-2. Supabase-Migrationen aus `supabase/` anwenden.
-3. `.env.example` nach `.env.local` kopieren und Werte setzen.
-4. Optional für Supabase-Demo-Import `SUPABASE_SERVICE_ROLE_KEY` oder `SUPABASE_SECRET_KEY` setzen.
-5. App starten und den Header-Button `Demo Import` ausführen.
+The repository uses the pinned Supabase CLI and timestamp migrations under `supabase/migrations/`. There is no separate schema file or direct SQL apply path.
+
+1. Copy `.env.example` to `.env.local` and configure the local values.
+2. Start the local Supabase stack with `pnpm exec supabase start`.
+3. Recreate the local database from the canonical migration history with `pnpm run db:reset`.
+4. Optionally set `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` for the local demo import.
+5. Start the app and use the `Demo Import` header action.
+
+Create a new migration with `pnpm run db:migration:new -- <clear_name>`. Validate migration structure with `pnpm run verify:migrations`. Production applies only pending migrations through the protected GitHub Actions workflow.
 
 Ohne Supabase-ENV oder bei fehlenden Core-Daten startet die App mit einem leeren lokalen Fallback. Demo-Daten aus `src/lib/seed/source.json` werden nur durch den lokalen `Demo Import` Button geladen. Mit leerer Supabase-Bootstrap-Datenbank schreibt der Button nach Supabase; ohne passende ENV befüllt er den lokalen Browser-State.
 
@@ -49,7 +53,7 @@ Für produktiven Teamzugriff:
 4. `REQUIRE_SUPABASE_AUTH=true` aktivieren.
 5. Supabase Redirect URLs für `/auth/callback` und die Produktionsdomain freigeben.
 
-Als Vorlage für die Zuordnung gibt es `supabase/profile-auth-map.example.sql`.
+Maintain `profiles.github_login` and `profiles.platform_role` through the Team profile management UI; there is no checked-in profile mapping SQL file.
 
 ## Founder Scoreboard v2 Module
 

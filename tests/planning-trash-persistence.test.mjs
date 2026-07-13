@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -5,37 +6,33 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("planning trash migration is additive, constrained, indexed, and hidden behind security-invoker views", async () => {
+test("production baseline keeps planning trash constrained, indexed, and hidden behind security-invoker views", async () => {
   const [migration, schema] = await Promise.all([
-    read("supabase/0063_planning_trash_persistence.sql"),
-    read("supabase/schema.sql"),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
   ]);
 
   for (const table of ["packages", "tasks"]) {
-    assert.match(migration, new RegExp(`alter table public\\.${table} add column if not exists trashed_at timestamptz`));
-    assert.match(migration, new RegExp(`alter table public\\.${table} add column if not exists trash_revision integer not null default 0`));
+    assert.match(migration, new RegExp(`create table if not exists public\\.${table}[^]*trashed_at timestamptz`));
+    assert.match(migration, new RegExp(`create table if not exists public\\.${table}[^]*trash_revision integer default 0 not null`));
   }
-  assert.match(migration, /trash_cause in \('withdrawn', 'rejected'\)/);
-  assert.match(migration, /purge_after = trashed_at \+ interval '90 days'/);
-  assert.match(migration, /create index if not exists packages_purge_after_idx/);
-  assert.match(migration, /create index if not exists tasks_purge_after_idx/);
-  assert.match(migration, /create or replace view public\.active_packages[^]*with \(security_invoker = true\)[^]*where trashed_at is null/);
-  assert.match(migration, /create or replace view public\.active_tasks[^]*with \(security_invoker = true\)[^]*where trashed_at is null/);
-  assert.match(migration, /revoke all on public\.active_packages from public, anon/);
-  assert.match(migration, /grant select on public\.active_tasks to authenticated, service_role/);
-  assert.doesNotMatch(migration, /drop table|drop column|truncate|delete from/i);
+  assert.match(migration, /packages_trash_metadata_check[^]*'withdrawn'[^]*'rejected'[^]*90 days/);
+  assert.match(migration, /tasks_trash_metadata_check[^]*'withdrawn'[^]*'rejected'[^]*90 days/);
+  assert.match(migration, /create index packages_purge_after_idx/);
+  assert.match(migration, /create index tasks_purge_after_idx/);
+  assert.match(migration, /create or replace view public\.active_packages[^]*with \(security_invoker='true'\)[^]*where \(trashed_at is null\)/);
+  assert.match(migration, /create or replace view public\.active_tasks[^]*with \(security_invoker='true'\)[^]*where \(trashed_at is null\)/);
+  assert.match(migration, /grant select,[^;]* on table public\.active_packages to authenticated/);
+  assert.match(migration, /grant select,[^;]* on table public\.active_tasks to authenticated/);
 
   for (const sql of [migration, schema]) {
-    for (const [constraint, table] of [
-      ["packages_trash_revision_check", "packages"],
-      ["packages_trash_metadata_check", "packages"],
-      ["tasks_trash_revision_check", "tasks"],
-      ["tasks_trash_metadata_check", "tasks"],
+    for (const constraint of [
+      "packages_trash_revision_check",
+      "packages_trash_metadata_check",
+      "tasks_trash_revision_check",
+      "tasks_trash_metadata_check",
     ]) {
-      assert.match(
-        sql,
-        new RegExp(`conname = '${constraint}'[^]*conrelid = 'public\\.${table}'::regclass`),
-      );
+      assert.match(sql, new RegExp(`constraint ${constraint} check`));
     }
   }
 });

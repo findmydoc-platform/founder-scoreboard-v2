@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
@@ -100,9 +101,9 @@ test("shared task detail surface keeps github-like field saves and role gates", 
 });
 
 test("planning hierarchy treats sprint as time container and packages as initiatives", async () => {
-  const migration = await readFile("supabase/0013_epic_group_commitment_hierarchy.sql", "utf8");
-  const initiativeMigration = await readFile("supabase/0027_initiative_structure.sql", "utf8");
-  const raciMigration = await readFile("supabase/0028_initiative_raci.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const initiativeMigration = await readSupabaseSchemaContract();
+  const raciMigration = await readSupabaseSchemaContract();
   const docs = await readFile("docs/planning-hierarchy.md", "utf8");
   const skill = await readFile(".agents/skills/fmd-planning-structure/SKILL.md", "utf8");
   const initiativeSkill = await readFile(".agents/skills/fmd-initiative-planning/SKILL.md", "utf8");
@@ -113,7 +114,7 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   const initiativeDialog = await readFile("src/features/projects/organisms/initiative-dialog.tsx", "utf8");
   const pkg = await readFile("package.json", "utf8");
 
-  assert.match(migration, /packages add column if not exists milestone_id/);
+  assert.match(migration, /create table if not exists packages[^]*milestone_id text/);
   assert.match(initiativeMigration, /owner_id/);
   assert.match(initiativeMigration, /success_criteria/);
   assert.match(initiativeMigration, /scope_constraints/);

@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -5,38 +6,32 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const read = (path) => readFile(path, "utf8");
 
-test("the checked-in schema contains the exact trash workflow migration", async () => {
-  const [migration, schema] = await Promise.all([
-    read("supabase/0064_planning_trash_workflow.sql"),
-    read("supabase/schema.sql"),
-  ]);
+test("the canonical migration corpus contains the trash workflow", async () => {
+  const migration = await readSupabaseSchemaContract();
 
-  assert.equal(schema.includes(migration.trim()), true);
+  assert.match(migration, /migration: 20260713120959_production_baseline\.sql/i);
+  assert.match(migration, /create or replace function public\.trash_planning_item_tree_transaction/);
 });
 
 test("trash workflow stores fail-closed root coverage for every affected task", async () => {
   const [migration, schema, checks] = await Promise.all([
-    read("supabase/0064_planning_trash_workflow.sql"),
-    read("supabase/schema.sql"),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
     read("src/lib/planning-schema-checks.json"),
   ]);
 
   for (const sql of [migration, schema]) {
-    const outboxTable = sql.slice(
-      sql.lastIndexOf("create table if not exists public.planning_github_lifecycle_outbox"),
-      sql.lastIndexOf("create index if not exists planning_github_lifecycle_outbox_claim_idx"),
-    );
     assert.match(sql, /create table if not exists public\.planning_github_lifecycle_outbox/);
     assert.match(sql, /root_type text not null/);
     assert.match(sql, /root_id text not null/);
     assert.match(sql, /root_trash_revision integer not null/);
-    assert.match(outboxTable, /task_id text not null,/);
-    assert.doesNotMatch(outboxTable, /task_id text not null references public\.tasks/);
+    assert.match(sql, /create table if not exists public\.planning_github_lifecycle_outbox[^]*task_id text not null/);
+    assert.doesNotMatch(sql, /planning_github_lifecycle_outbox_task_id_fkey/);
     assert.match(sql, /unique \(\s*root_type, root_id, root_trash_revision, task_id, action\s*\)/);
-    assert.match(sql, /status in \('pending', 'processing', 'retry_scheduled', 'completed', 'failed'\)/);
+    assert.match(sql, /planning_github_lifecycle_outbox_status_check[^]*'pending'[^]*'processing'[^]*'retry_scheduled'[^]*'completed'[^]*'failed'/);
     assert.match(sql, /select\s+p_root_type,\s+p_root_id,\s+v_root_trash_revision,\s+task\.id,[^]*from public\.tasks task[^]*where task\.id = any\(v_task_ids\)/);
     assert.doesNotMatch(
-      sql.match(/insert into public\.planning_github_lifecycle_outbox \([^]*?on conflict \(root_type, root_id, root_trash_revision, task_id, action\) do nothing;/)?.[0] || "",
+      sql.match(/insert into public\.planning_github_lifecycle_outbox \([^;]*?\)\s*select\s+p_root_type,[^;]*?on conflict \(root_type, root_id, root_trash_revision, task_id, action\) do nothing;/)?.[0] || "",
       /github_issue_number[^]*is not null/,
     );
   }
@@ -46,7 +41,7 @@ test("trash workflow stores fail-closed root coverage for every affected task", 
 });
 
 test("trash and restore are atomic, revision-safe, role-guarded tree transitions", async () => {
-  const migration = await read("supabase/0064_planning_trash_workflow.sql");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(migration, /create or replace function public\.withdraw_planning_item_transaction/);
   assert.match(migration, /create or replace function public\.restore_planning_item_transaction/);
@@ -74,7 +69,7 @@ test("trash and restore are atomic, revision-safe, role-guarded tree transitions
 });
 
 test("GitHub issue references normalize strictly and fail closed in the outbox", async () => {
-  const migration = await read("supabase/0064_planning_trash_workflow.sql");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(migration, /create or replace function public\.normalize_planning_github_issue_reference/);
   assert.equal(
@@ -88,11 +83,11 @@ test("GitHub issue references normalize strictly and fail closed in the outbox",
   assert.match(migration, /cross join lateral public\.normalize_planning_github_issue_reference/);
   assert.match(migration, /case when issue_reference\.reference_status = 'invalid' then 'failed' else 'pending' end/);
   assert.match(migration, /case when issue_reference\.reference_status = 'invalid' then 'invalid_issue_reference' end/);
-  assert.match(migration, /revoke all on function public\.normalize_planning_github_issue_reference[^]*from public, anon, authenticated/);
+  assert.match(migration, /revoke all on function public\.normalize_planning_github_issue_reference[^]*from public/);
 });
 
 test("approval rejection keeps the 0061 decision rules while moving the tree to trash", async () => {
-  const migration = await read("supabase/0064_planning_trash_workflow.sql");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(migration, /p_action in \('reject', 'return_to_draft'\) and v_note is null/);
   assert.match(migration, /char_length\(v_note\) > 2000/);
@@ -112,7 +107,7 @@ test("approval rejection keeps the 0061 decision rules while moving the tree to 
 
 test("outbox claiming is ordered, leased, retryable, and service-role only", async () => {
   const [migration, verification] = await Promise.all([
-    read("supabase/0064_planning_trash_workflow.sql"),
+    readSupabaseSchemaContract(),
     read("scripts/verify-supabase.mjs"),
   ]);
 
@@ -125,16 +120,16 @@ test("outbox claiming is ordered, leased, retryable, and service-role only", asy
   assert.match(migration, /else 'retry_scheduled'/);
   assert.match(migration, /job\.root_type = p_root_type\s+and job\.root_id = p_root_id\s+and job\.task_id = any\(p_task_ids\)/);
   assert.match(migration, /p_task_ids is null\s+or cardinality\(p_task_ids\) < 1/);
-  assert.match(migration, /revoke all on function public\.claim_planning_github_lifecycle_jobs[^]*from public, anon, authenticated/);
-  assert.match(migration, /revoke all on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*from public, anon, authenticated/);
-  assert.match(migration, /grant execute on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*to service_role/);
-  assert.match(migration, /grant execute on function public\.finalize_planning_github_lifecycle_job[^]*to service_role/);
+  assert.match(migration, /revoke all on function public\.claim_planning_github_lifecycle_jobs[^]*from public/);
+  assert.match(migration, /revoke all on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*from public/);
+  assert.match(migration, /grant all on function public\.claim_planning_github_lifecycle_jobs_for_root[^]*to service_role/);
+  assert.match(migration, /grant all on function public\.finalize_planning_github_lifecycle_job[^]*to service_role/);
   assert.match(verification, /verifyPlanningTrashLifecycleRpcs/);
   assert.match(verification, /p_limit: 0/);
 });
 
 test("approval reopen uses the latest close event and its stored canonical target", async () => {
-  const migration = await read("supabase/0064_planning_trash_workflow.sql");
+  const migration = await readSupabaseSchemaContract();
   const reopenInsert = migration.match(/if p_action = 'approve' then\s+insert into public\.planning_github_lifecycle_outbox \([^]*?on conflict \(root_type, root_id, root_trash_revision, task_id, action\) do nothing;/)?.[0] || "";
 
   assert.match(reopenInsert, /prior\.github_repo/);

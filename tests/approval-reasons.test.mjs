@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -80,8 +81,8 @@ test("approval routes and UI share the reason contract", async () => {
 
 test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return notifications", async () => {
   const [migration, schema, verification] = await Promise.all([
-    readFile("supabase/0061_approval_reasons_and_return.sql", "utf8"),
-    readFile("supabase/schema.sql", "utf8"),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
     readFile("scripts/verify-supabase.mjs", "utf8"),
   ]);
 
@@ -104,8 +105,8 @@ test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return
     assert.doesNotMatch(sql, /v_notification_recipient_id\s*<>\s*p_actor_profile_id/);
   }
 
-  assert.match(migration, /revoke all on function public\.decide_initiative_approval_transaction[\s\S]*from public, anon, authenticated/);
-  assert.match(migration, /grant execute on function public\.decide_deliverable_approval_transaction[\s\S]*to service_role/);
+  assert.match(migration, /revoke all on function public\.decide_initiative_approval_transaction[^]*from public/);
+  assert.match(migration, /grant all on function public\.decide_deliverable_approval_transaction[^]*to service_role/);
   assert.match(verification, /verifyApprovalDecisionRpcs/);
   assert.match(verification, /RPC did not require an approval decision note/);
 });
