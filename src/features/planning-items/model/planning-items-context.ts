@@ -2,16 +2,16 @@ import { normalizeStatus } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import {
-  TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES,
-  TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
-  TEAM_TASK_INTAKE_MAX_TASKS,
-} from "@/features/intake/model/team-task-intake-contract";
+  TEAM_PLANNING_ITEM_TYPES,
+  TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES,
+  TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
+} from "@/features/planning-items/model/planning-items-contract";
 import {
-  mapTeamTaskContextInitiative,
-  TEAM_TASK_CONTEXT_INITIATIVE_SELECT,
-  type TeamTaskContextInitiativeRow,
-} from "@/features/intake/model/team-task-context-initiative";
-import { loadAllSupabaseRows } from "@/features/intake/model/supabase-pagination";
+  mapPlanningItemsContextInitiative,
+  PLANNING_ITEMS_CONTEXT_INITIATIVE_SELECT,
+  type PlanningItemsContextInitiativeRow,
+} from "@/features/planning-items/model/planning-items-context-initiative";
+import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
@@ -44,6 +44,8 @@ type TaskContextRow = {
   evidence_link: string | null;
   github_issue_url: string | null;
   issue_url: string | null;
+  github_repo: string | null;
+  updated_at: string | null;
 };
 
 function countByTask(rows: Array<{ task_id: string }>) {
@@ -84,15 +86,15 @@ export function relationStatsByTask(rows: Array<{ task_id: string; related_task_
   return stats;
 }
 
-export async function buildTeamTaskContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
+export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
   const [profiles, milestones, initiatives, sprints, tasks, blockers, relations, comments, externalComments] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order").order("id").range(from, to)),
-    loadAllSupabaseRows<TeamTaskContextInitiativeRow>((from, to) => supabase.from(ACTIVE_PACKAGES_TABLE).select(TEAM_TASK_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows<PlanningItemsContextInitiativeRow>((from, to) => supabase.from(ACTIVE_PACKAGES_TABLE).select(PLANNING_ITEMS_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,package_id,milestone_id,sprint_id,workstream,start_date,end_date,deadline,estimate_hours,evidence_link,github_issue_url,issue_url")
+      .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,status,priority,owner,assignee,created_by,package_id,milestone_id,sprint_id,workstream,start_date,end_date,deadline,estimate_hours,evidence_link,github_issue_url,issue_url,github_repo,updated_at")
       .order("sort_order")
       .order("id")
       .range(from, to)),
@@ -108,28 +110,21 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
   const externalCommentCounts = countByTask(externalComments);
 
   return {
-    actor: {
-      id: actor.id,
-      name: actor.name,
-      platformRole: actor.platformRole,
-    },
+    actor: { id: actor.id, name: actor.name, platformRole: actor.platformRole },
     constraints: {
-      allowedItemTypes: TEAM_TASK_INTAKE_ALLOWED_ITEM_TYPES,
-      maxBatchSize: TEAM_TASK_INTAKE_MAX_TASKS,
-      forbiddenWrites: TEAM_TASK_INTAKE_FORBIDDEN_WRITES,
+      allowedItemTypes: TEAM_PLANNING_ITEM_TYPES,
+      maxBatchSize: TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
+      forbiddenWrites: TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES,
       subIssuePolicy: "any-deliverable",
     },
-    profiles: profiles.map((profile) => ({
-      id: profile.id,
-      name: profile.name,
-    })),
+    profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
     milestones: milestones.map((milestone) => ({
       id: milestone.id,
       title: milestone.title,
       status: milestone.status,
       targetDate: milestone.target_date || "",
     })),
-    initiatives: initiatives.map(mapTeamTaskContextInitiative),
+    initiatives: initiatives.map(mapPlanningItemsContextInitiative),
     sprints: sprints.map((sprint) => ({
       id: sprint.id,
       name: sprint.name,
@@ -144,6 +139,7 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
       return {
         id: task.id,
         title: task.title,
+        description: task.description || "",
         taskType: task.task_type || "deliverable",
         parentTaskId: task.parent_task_id || "",
         status: normalizeStatus(task.status || ""),
@@ -165,6 +161,8 @@ export async function buildTeamTaskContext(supabase: SupabaseServer, actor: Auth
         acceptanceCriteria: task.acceptance_criteria || "",
         evidenceRequired: task.evidence_required || "",
         definitionOfDone: task.definition_of_done || "",
+        githubRepo: task.github_repo || "",
+        updatedAt: task.updated_at || "",
         evidencePresent: Boolean(task.evidence_link || task.github_issue_url || task.issue_url),
         canCreateSubIssue: task.task_type === "deliverable",
         blockers: {

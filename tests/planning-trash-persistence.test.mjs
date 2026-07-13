@@ -38,21 +38,21 @@ test("production baseline keeps planning trash constrained, indexed, and hidden 
 });
 
 test("normal planning and intake reads use the centralized active read models", async () => {
-  const [readModel, loader, teamContext, ceoContext, v2Context, taskDetail] = await Promise.all([
+  const [readModel, loader, planningContext, ceoContext, planningItemsCreate, taskDetail] = await Promise.all([
     read("src/lib/planning-read-model.ts"),
     read("src/lib/planning-data-loader.ts"),
-    read("src/features/intake/model/team-task-context.ts"),
+    read("src/features/planning-items/model/planning-items-context.ts"),
     read("src/features/intake/model/task-intake-context.ts"),
-    read("src/features/intake/model/team-task-intake-v2.ts"),
+    read("src/features/planning-items/model/planning-items-create.ts"),
     read("src/lib/task-detail-data.ts"),
   ]);
 
   assert.match(readModel, /ACTIVE_PACKAGES_TABLE = "active_packages"/);
   assert.match(readModel, /ACTIVE_TASKS_TABLE = "active_tasks"/);
-  for (const source of [loader, teamContext, ceoContext, v2Context]) {
+  for (const source of [loader, planningContext, ceoContext, planningItemsCreate]) {
     assert.match(source, /ACTIVE_PACKAGES_TABLE/);
   }
-  for (const source of [loader, teamContext, ceoContext, v2Context, taskDetail]) {
+  for (const source of [loader, planningContext, ceoContext, planningItemsCreate, taskDetail]) {
     assert.match(source, /ACTIVE_TASKS_TABLE/);
   }
 });

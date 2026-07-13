@@ -9,7 +9,7 @@ import {
   intakeProfileByValue,
   intakeText,
   normalizeTaskIntakeBrief,
-} from "@/features/intake/model/task-intake-normalization";
+} from "@/features/planning-items/model/planning-item-normalization";
 
 export type TaskIntakeInput = {
   title?: unknown;
