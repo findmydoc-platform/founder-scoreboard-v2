@@ -282,7 +282,8 @@ export function assertGitHubIssueUpdateTarget(
   const expectedMarker = taskIssueMarker(task.id);
   if (issue.body?.includes(expectedMarker)) return;
   const containsFounderOpsMarker = /<!--\s*founderops-task-id:[^>]+-->/i.test(issue.body || "");
-  if (!containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
+  const isBeforeFirstSync = !task.githubIssueLastSyncedAt;
+  if (isBeforeFirstSync && !containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
   throw new Error("Das verknüpfte GitHub Issue gehört nicht zu dieser FounderOps-Aufgabe.");
 }
 

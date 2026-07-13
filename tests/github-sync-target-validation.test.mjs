@@ -14,6 +14,7 @@ function sourceTask(overrides = {}) {
     githubRepo: "findmydoc-platform/management",
     githubIssueNumber: 42,
     githubIssueUrl: "https://github.com/findmydoc-platform/management/issues/42",
+    githubIssueLastSyncedAt: "",
     issueNumber: "42",
     issueUrl: "https://github.com/findmydoc-platform/management/issues/42",
     ...overrides,
@@ -79,6 +80,14 @@ test("rejects contradictory local issue numbers and URLs without a GitHub write"
   assert.equal(requests.length, 0);
 });
 
+test("rejects contradictory local issue number fields without a GitHub write", async () => {
+  const task = sourceTask({ issueNumber: "43" });
+  const { github, requests } = await loadGitHub({});
+
+  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /widersprechen sich/);
+  assert.equal(requests.length, 0);
+});
+
 test("rejects pull requests before patching", async () => {
   const task = sourceTask();
   const { github, requests } = await loadGitHub({
@@ -104,6 +113,32 @@ test("allows a legacy link only when the issue title matches exactly", async () 
 
   await github.upsertGitHubIssue(task, "installation-token");
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+});
+
+test("rejects a title-only legacy match after the task was synced before", async () => {
+  const task = sourceTask({ githubIssueLastSyncedAt: "2026-07-13T12:00:00.000Z" });
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Deliverable] Validate linked target",
+    body: "Issue without a FounderOps marker",
+  });
+
+  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
+});
+
+test("rejects a loaded issue from another repository before patching", async () => {
+  const task = sourceTask();
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: "https://github.com/findmydoc-platform/website/issues/42",
+    title: "[Deliverable] Validate linked target",
+    body: githubMarker(task.id),
+  });
+
+  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /stimmt nicht mit der lokalen Verknüpfung/);
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
 test("rejects an unrelated issue even when its number and repository match", async () => {
