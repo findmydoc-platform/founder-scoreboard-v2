@@ -38,9 +38,15 @@ export function useTaskGitHubSyncCommand({
     }
 
     const previousTask = task;
+    const syncStartedAt = new Date().toISOString();
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "pending", githubIssueSyncError: "" } : item)),
+      tasks: current.tasks.map((item) => (item.id === task.id ? {
+        ...item,
+        githubIssueSyncStatus: "pending",
+        githubIssueSyncError: "",
+        githubIssueSyncPendingSince: syncStartedAt,
+      } : item)),
     }));
 
     if (source !== "supabase") {
@@ -58,7 +64,12 @@ export function useTaskGitHubSyncCommand({
         if (response.status === 409 && body?.code === "github_sync_locked") {
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? {
+              ...previousTask,
+              githubIssueSyncStatus: "pending",
+              githubIssueSyncError: body.error || syncLockedMessage,
+              githubIssueSyncPendingSince: syncStartedAt,
+            } : item)),
           }));
           if (!options.silent) setSaveError(body.error || syncLockedMessage);
           return;
@@ -67,7 +78,12 @@ export function useTaskGitHubSyncCommand({
         if (retryableMessage) {
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: retryableMessage } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? {
+              ...previousTask,
+              githubIssueSyncStatus: "not_synced",
+              githubIssueSyncError: retryableMessage,
+              githubIssueSyncPendingSince: "",
+            } : item)),
           }));
           if (!options.silent) setSaveError(retryableMessage);
           return;
@@ -76,14 +92,19 @@ export function useTaskGitHubSyncCommand({
 
         setData((current) => ({
           ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task, githubIssueSyncPendingSince: "" } : item)),
         }));
         if (!options.silent) setGithubSyncNotice(body.notices?.[0]?.message || "");
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
         setData((current) => ({
           ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "failed", githubIssueSyncError: message } : item)),
+          tasks: current.tasks.map((item) => (item.id === task.id ? {
+            ...previousTask,
+            githubIssueSyncStatus: "failed",
+            githubIssueSyncError: message,
+            githubIssueSyncPendingSince: "",
+          } : item)),
         }));
         if (!options.silent) setSaveError(message);
       }
@@ -116,9 +137,15 @@ export function useTaskGitHubSyncCommand({
 
     const previousTasks = new Map(queueTasks.map((task) => [task.id, task]));
     const failedParentTaskIds = new Set<string>();
+    const bulkStartedAt = new Date().toISOString();
     setData((current) => ({
       ...current,
-      tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? { ...item, githubIssueSyncStatus: "pending", githubIssueSyncError: "" } : item),
+      tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? {
+        ...item,
+        githubIssueSyncStatus: "pending",
+        githubIssueSyncError: "",
+        githubIssueSyncPendingSince: bulkStartedAt,
+      } : item),
     }));
 
     startTransition(async () => {
@@ -138,13 +165,23 @@ export function useTaskGitHubSyncCommand({
           }));
           continue;
         }
+        const syncStartedAt = new Date().toISOString();
+        setData((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncPendingSince: syncStartedAt } : item)),
+        }));
         try {
           const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: !hasGitHubIssue(task) });
           if (response.status === 409 && body?.code === "github_sync_locked") {
             const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
-              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
+              tasks: current.tasks.map((item) => (item.id === task.id ? {
+                ...previousTask,
+                githubIssueSyncStatus: "pending",
+                githubIssueSyncError: body.error || syncLockedMessage,
+                githubIssueSyncPendingSince: syncStartedAt,
+              } : item)),
             }));
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
             continue;
@@ -154,7 +191,12 @@ export function useTaskGitHubSyncCommand({
             const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
-              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: retryableMessage } : item)),
+              tasks: current.tasks.map((item) => (item.id === task.id ? {
+                ...previousTask,
+                githubIssueSyncStatus: "not_synced",
+                githubIssueSyncError: retryableMessage,
+                githubIssueSyncPendingSince: "",
+              } : item)),
             }));
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
             setSaveError(retryableMessage);
@@ -164,7 +206,7 @@ export function useTaskGitHubSyncCommand({
 
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task, githubIssueSyncPendingSince: "" } : item)),
           }));
           commentDelivery.delivered += Number(body.commentDelivery?.delivered || 0);
           commentDelivery.waitingForAuthorConnection += Number(body.commentDelivery?.waitingForAuthorConnection || 0);
@@ -176,7 +218,12 @@ export function useTaskGitHubSyncCommand({
           const previousTask = previousTasks.get(task.id) || task;
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "failed", githubIssueSyncError: message } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? {
+              ...previousTask,
+              githubIssueSyncStatus: "failed",
+              githubIssueSyncError: message,
+              githubIssueSyncPendingSince: "",
+            } : item)),
           }));
           if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
           setSaveError(message);

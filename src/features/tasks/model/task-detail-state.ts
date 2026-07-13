@@ -37,7 +37,7 @@ export type EditableTaskState = Pick<
 
 export type TaskDetailGitHubState = Pick<
   Task,
-  "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError"
+  "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "githubIssueSyncPendingSince"
 >;
 
 export type TaskDetailDetailsDraft = Pick<
@@ -111,6 +111,7 @@ export function buildTaskDetailGitHubState(task: Task): TaskDetailGitHubState {
     githubIssueSyncStatus: task.githubIssueSyncStatus,
     githubIssueLastSyncedAt: task.githubIssueLastSyncedAt,
     githubIssueSyncError: task.githubIssueSyncError,
+    githubIssueSyncPendingSince: task.githubIssueSyncPendingSince || "",
   };
 }
 

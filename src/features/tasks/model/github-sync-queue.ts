@@ -4,12 +4,12 @@ import type { Task } from "@/lib/types";
 export const githubSyncLockTtlMs = 10 * 60 * 1000;
 
 export function isExpiredGitHubSyncPending(
-  task: Pick<Task, "githubIssueSyncStatus" | "updatedAt">,
+  task: Pick<Task, "githubIssueSyncStatus" | "githubIssueSyncPendingSince" | "updatedAt">,
   now = Date.now(),
 ) {
   if (task.githubIssueSyncStatus !== "pending") return false;
-  const updatedAt = Date.parse(task.updatedAt || "");
-  return Number.isFinite(updatedAt) && now - updatedAt >= githubSyncLockTtlMs;
+  const pendingSince = Date.parse(task.githubIssueSyncPendingSince || task.updatedAt || "");
+  return Number.isFinite(pendingSince) && now - pendingSince >= githubSyncLockTtlMs;
 }
 
 export function taskNeedsGitHubSync(task: Task, openCommentTaskIds: Set<string>) {

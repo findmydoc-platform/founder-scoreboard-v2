@@ -213,7 +213,13 @@ export function useTaskDetailWorkflow({
       return;
     }
 
-    setGithubState((current) => ({ ...current, githubIssueSyncStatus: "pending", githubIssueSyncError: "" }));
+    const syncStartedAt = new Date().toISOString();
+    setGithubState((current) => ({
+      ...current,
+      githubIssueSyncStatus: "pending",
+      githubIssueSyncError: "",
+      githubIssueSyncPendingSince: syncStartedAt,
+    }));
 
     startTransition(async () => {
       try {
@@ -223,6 +229,7 @@ export function useTaskDetailWorkflow({
             ...current,
             githubIssueSyncStatus: "pending",
             githubIssueSyncError: body.error || "GitHub-Sync läuft bereits.",
+            githubIssueSyncPendingSince: syncStartedAt,
           }));
           return;
         }
@@ -232,6 +239,7 @@ export function useTaskDetailWorkflow({
             ...current,
             githubIssueSyncStatus: "not_synced",
             githubIssueSyncError: retryableMessage,
+            githubIssueSyncPendingSince: "",
           }));
           setError(retryableMessage);
           return;
@@ -245,10 +253,16 @@ export function useTaskDetailWorkflow({
           githubIssueSyncStatus: body.task?.githubIssueSyncStatus || current.githubIssueSyncStatus,
           githubIssueLastSyncedAt: body.task?.githubIssueLastSyncedAt || current.githubIssueLastSyncedAt,
           githubIssueSyncError: body.task?.githubIssueSyncError || "",
+          githubIssueSyncPendingSince: "",
         }));
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : "GitHub-Sync konnte nicht ausgeführt werden.";
-        setGithubState((current) => ({ ...current, githubIssueSyncStatus: "failed", githubIssueSyncError: message }));
+        setGithubState((current) => ({
+          ...current,
+          githubIssueSyncStatus: "failed",
+          githubIssueSyncError: message,
+          githubIssueSyncPendingSince: "",
+        }));
         setError(message);
       }
     });

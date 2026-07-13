@@ -126,6 +126,7 @@ export type Task = {
   githubIssueSyncStatus: GitHubIssueSyncStatus;
   githubIssueLastSyncedAt: string;
   githubIssueSyncError: string;
+  githubIssueSyncPendingSince?: string;
   taskType: TaskType;
   parentTaskId: string;
   approvalStatus: ApprovalStatus | null;
