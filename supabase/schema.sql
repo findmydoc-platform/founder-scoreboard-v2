@@ -350,7 +350,9 @@ create index if not exists audit_log_entity_idx on audit_log(entity_type, entity
 
 grant usage on schema public to anon, authenticated, service_role;
 grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
-grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+revoke insert, update, delete on table public.packages, public.tasks from public, anon, authenticated;
+grant insert, update, delete on table public.packages, public.tasks to service_role;
 grant select, insert on audit_log to authenticated, service_role;
 grant select, insert, update, delete on notification_preferences to authenticated, service_role;
 grant select, insert, update, delete on github_app_user_tokens to service_role;
@@ -366,6 +368,9 @@ stable
 as $$
   select role from public.profiles where auth_user_id = auth.uid()
 $$;
+
+revoke all on function public.current_profile_role() from public, anon;
+grant execute on function public.current_profile_role() to authenticated, service_role;
 
 create or replace function public.current_platform_role()
 returns text
@@ -1024,9 +1029,6 @@ drop policy if exists "packages_select_team" on packages;
 create policy "packages_select_team" on packages for select to authenticated using (auth.uid() is not null);
 
 drop policy if exists "packages_write_members" on packages;
-create policy "packages_write_members" on packages for all to authenticated
-using (public.current_profile_role() in ('admin', 'member'))
-with check (public.current_profile_role() in ('admin', 'member'));
 
 create table if not exists public.task_deletion_operations (
   id uuid primary key default gen_random_uuid(),
@@ -1678,9 +1680,6 @@ drop policy if exists "tasks_select_team" on tasks;
 create policy "tasks_select_team" on tasks for select to authenticated using (auth.uid() is not null);
 
 drop policy if exists "tasks_write_members" on tasks;
-create policy "tasks_write_members" on tasks for all to authenticated
-using (public.current_profile_role() in ('admin', 'member'))
-with check (public.current_profile_role() in ('admin', 'member'));
 
 drop policy if exists "sprints_select_team" on sprints;
 create policy "sprints_select_team" on sprints for select to authenticated using (auth.uid() is not null);
@@ -4035,9 +4034,17 @@ declare
   v_actor_role text;
   v_next_status text;
   v_before_status text;
+  v_note text := nullif(trim(coalesce(p_note, '')), '');
+  v_notification_recipient_id text;
 begin
   if p_action not in ('approve', 'reject', 'return_to_draft') or p_expected_revision < 1 then
     raise exception using errcode = '22023', message = 'initiative approval input is invalid';
+  end if;
+  if char_length(v_note) > 2000 then
+    raise exception using errcode = '22023', message = 'approval decision note exceeds 2000 characters';
+  end if;
+  if p_action in ('reject', 'return_to_draft') and v_note is null then
+    raise exception using errcode = '22023', message = 'approval decision note is required';
   end if;
 
   select platform_role into v_actor_role from public.profiles where id = p_actor_profile_id;
@@ -4048,6 +4055,9 @@ begin
   if v_initiative.approval_revision <> p_expected_revision then
     raise exception using errcode = 'P0001', message = 'initiative approval revision changed';
   end if;
+  if v_initiative.approval_status <> 'proposed' then
+    raise exception using errcode = 'P0003', message = 'initiative is not proposed';
+  end if;
 
   if p_action in ('approve', 'reject') and v_actor_role <> 'ceo' then
     raise exception using errcode = 'P0006', message = 'only ceo may decide initiative approval';
@@ -4055,27 +4065,44 @@ begin
   if p_action = 'return_to_draft' and v_actor_role not in ('ceo', 'deputy') then
     raise exception using errcode = 'P0006', message = 'initiative may only be returned by operational lead';
   end if;
-  if p_action in ('approve', 'reject') and v_initiative.approval_status <> 'proposed' then
-    raise exception using errcode = 'P0003', message = 'initiative is not proposed';
-  end if;
-
   v_before_status := v_initiative.approval_status;
+  v_notification_recipient_id := v_initiative.proposed_by;
   v_next_status := case p_action when 'approve' then 'approved' when 'reject' then 'rejected' else 'draft' end;
   update public.packages
   set approval_status = v_next_status,
       approval_revision = approval_revision + 1,
       decided_by = case when p_action in ('approve', 'reject') then p_actor_profile_id else null end,
       decided_at = case when p_action in ('approve', 'reject') then now() else null end,
-      decision_note = nullif(trim(coalesce(p_note, '')), ''),
-      proposed_by = case when p_action = 'return_to_draft' then p_actor_profile_id else proposed_by end,
-      proposed_at = case when p_action = 'return_to_draft' then now() else proposed_at end
+      decision_note = v_note
   where id = p_initiative_id
   returning * into v_initiative;
 
   insert into public.audit_log (actor_profile_id, action, entity_type, entity_id, before_data, after_data)
   values (p_actor_profile_id, 'initiative.approval_' || p_action, 'initiative', p_initiative_id,
     jsonb_build_object('approvalStatus', v_before_status, 'revision', p_expected_revision),
-    jsonb_build_object('approvalStatus', v_next_status, 'revision', v_initiative.approval_revision, 'note', p_note));
+    jsonb_build_object('approvalStatus', v_next_status, 'revision', v_initiative.approval_revision, 'note', v_note));
+
+  if p_action = 'return_to_draft' and v_notification_recipient_id is not null then
+    insert into public.notification_events (
+      type,
+      actor_profile_id,
+      recipient_profile_id,
+      entity_type,
+      entity_id,
+      title,
+      body,
+      dedupe_key
+    ) values (
+      'planning_item.returned',
+      p_actor_profile_id,
+      v_notification_recipient_id,
+      'initiative',
+      p_initiative_id,
+      'Initiative zur Überarbeitung: ' || v_initiative.title,
+      'Begründung: ' || v_note,
+      'planning-item-returned:initiative:' || p_initiative_id || ':' || v_initiative.approval_revision
+    );
+  end if;
 
   return to_jsonb(v_initiative);
 end;
@@ -4099,9 +4126,17 @@ declare
   v_actor_role text;
   v_next_status text;
   v_before_status text;
+  v_note text := nullif(trim(coalesce(p_note, '')), '');
+  v_notification_recipient_id text;
 begin
   if p_action not in ('approve', 'reject', 'return_to_draft') or p_expected_revision < 1 then
     raise exception using errcode = '22023', message = 'deliverable approval input is invalid';
+  end if;
+  if char_length(v_note) > 2000 then
+    raise exception using errcode = '22023', message = 'approval decision note exceeds 2000 characters';
+  end if;
+  if p_action in ('reject', 'return_to_draft') and v_note is null then
+    raise exception using errcode = '22023', message = 'approval decision note is required';
   end if;
 
   select platform_role into v_actor_role from public.profiles where id = p_actor_profile_id;
@@ -4112,6 +4147,9 @@ begin
   if v_task.task_type <> 'deliverable' then raise exception using errcode = '22023', message = 'task is not a deliverable'; end if;
   if v_task.approval_revision <> p_expected_revision then
     raise exception using errcode = 'P0001', message = 'deliverable approval revision changed';
+  end if;
+  if v_task.approval_status <> 'proposed' then
+    raise exception using errcode = 'P0003', message = 'deliverable is not proposed';
   end if;
 
   select * into v_initiative from public.packages where id = v_task.package_id for share;
@@ -4127,23 +4165,19 @@ begin
      and coalesce(v_initiative.accountable_profile_id, '') <> p_actor_profile_id then
     raise exception using errcode = 'P0006', message = 'deliverable may only be returned by operational lead or accountable';
   end if;
-  if p_action in ('approve', 'reject') and v_task.approval_status <> 'proposed' then
-    raise exception using errcode = 'P0003', message = 'deliverable is not proposed';
-  end if;
   if p_action = 'approve' and v_initiative.approval_status <> 'approved' then
     raise exception using errcode = 'P0003', message = 'initiative must be approved first';
   end if;
 
   v_before_status := v_task.approval_status;
+  v_notification_recipient_id := v_task.proposed_by;
   v_next_status := case p_action when 'approve' then 'approved' when 'reject' then 'rejected' else 'draft' end;
   update public.tasks
   set approval_status = v_next_status,
       approval_revision = approval_revision + 1,
       decided_by = case when p_action in ('approve', 'reject') then p_actor_profile_id else null end,
       decided_at = case when p_action in ('approve', 'reject') then now() else null end,
-      decision_note = nullif(trim(coalesce(p_note, '')), ''),
-      proposed_by = case when p_action = 'return_to_draft' then p_actor_profile_id else proposed_by end,
-      proposed_at = case when p_action = 'return_to_draft' then now() else proposed_at end,
+      decision_note = v_note,
       sprint_id = case when p_action = 'approve' then sprint_id else null end,
       review_status = case when p_action = 'approve' then review_status else 'not_requested' end,
       review_requested_at = case when p_action = 'approve' then review_requested_at else null end,
@@ -4157,14 +4191,36 @@ begin
 
   insert into public.task_activity (task_id, message)
   values (p_task_id, case p_action
-    when 'approve' then 'Deliverable freigegeben'
-    when 'reject' then 'Deliverable abgelehnt'
-    else 'Deliverable zur Überarbeitung zurückgegeben'
+    when 'approve' then 'Deliverable freigegeben · Revision ' || v_task.approval_revision
+    when 'reject' then 'Deliverable abgelehnt · Revision ' || v_task.approval_revision || ' · Begründung: ' || v_note
+    else 'Deliverable zur Überarbeitung zurückgegeben · Revision ' || v_task.approval_revision || ' · Begründung: ' || v_note
   end);
   insert into public.audit_log (actor_profile_id, action, entity_type, entity_id, before_data, after_data)
   values (p_actor_profile_id, 'task.approval_' || p_action, 'task', p_task_id,
     jsonb_build_object('approvalStatus', v_before_status, 'revision', p_expected_revision),
-    jsonb_build_object('approvalStatus', v_next_status, 'revision', v_task.approval_revision, 'note', p_note));
+    jsonb_build_object('approvalStatus', v_next_status, 'revision', v_task.approval_revision, 'note', v_note));
+
+  if p_action = 'return_to_draft' and v_notification_recipient_id is not null then
+    insert into public.notification_events (
+      type,
+      actor_profile_id,
+      recipient_profile_id,
+      entity_type,
+      entity_id,
+      title,
+      body,
+      dedupe_key
+    ) values (
+      'planning_item.returned',
+      p_actor_profile_id,
+      v_notification_recipient_id,
+      'task',
+      p_task_id,
+      'Deliverable zur Überarbeitung: ' || v_task.title,
+      'Begründung: ' || v_note,
+      'planning-item-returned:task:' || p_task_id || ':' || v_task.approval_revision
+    );
+  end if;
 
   return to_jsonb(v_task);
 end;

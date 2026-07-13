@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
+import { currentApprovalDecisionReason } from "@/features/planning/model/approval-domain";
 import type { Package, PlanningData } from "@/lib/types";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
@@ -68,6 +69,10 @@ export function InitiativeDialog({
     decisionNote: defaults.decisionNote,
   });
   const canSave = draft.title.trim().length >= 3 && draft.milestoneId && draft.ownerId && draft.accountableProfileId && draft.responsibleProfileIds.length > 0 && draft.goal.trim().length >= 3;
+  const decisionReason = currentApprovalDecisionReason({
+    approvalStatus: draft.approvalStatus || null,
+    decisionNote: draft.decisionNote,
+  });
 
   return (
     <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={draft.id ? "Initiative bearbeiten" : "Neue Initiative"} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
@@ -176,7 +181,12 @@ export function InitiativeDialog({
               Erstellen und freigeben
             </label>
           )}
-          {draft.id && draft.approvalStatus && <span className="mr-auto text-xs text-slate-500">Freigabe: {draft.approvalStatus} · Revision {draft.approvalRevision || 1}{draft.decisionNote ? ` · ${draft.decisionNote}` : ""}</span>}
+          {draft.id && draft.approvalStatus && (
+            <span className="mr-auto max-w-md text-xs leading-5 text-slate-500">
+              Freigabe: {draft.approvalStatus} · Revision {draft.approvalRevision || 1}
+              {decisionReason ? ` · Begründung: ${decisionReason}` : ""}
+            </span>
+          )}
           <UiButton onClick={onClose}>Abbrechen</UiButton>
           <UiButton type="submit" disabled={pending || !canSave} variant="primary">
             {!draft.id && draft.approveNow ? "Erstellen und freigeben" : "Speichern"}

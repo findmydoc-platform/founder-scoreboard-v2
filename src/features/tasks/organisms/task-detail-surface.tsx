@@ -1,7 +1,11 @@
 "use client";
 
 import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
-import { canDecideDeliverableApproval, canReturnDeliverableForRevision } from "@/features/planning/model/approval-domain";
+import {
+  canApproveDeliverableApproval,
+  canRejectDeliverableApproval,
+  canReturnDeliverableForRevision,
+} from "@/features/planning/model/approval-domain";
 import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-detail-panel-notes-section";
@@ -105,7 +109,8 @@ export function TaskDetailSurface({
   });
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const canDecideApproval = canDecideDeliverableApproval(task, currentPackage, currentProfile);
+  const canApprove = canApproveDeliverableApproval(task, currentPackage, currentProfile);
+  const canReject = canRejectDeliverableApproval(task, currentPackage, currentProfile);
   const canReturnToDraft = canReturnDeliverableForRevision(task, currentPackage, currentProfile);
 
   return (
@@ -204,7 +209,8 @@ export function TaskDetailSurface({
           canOpenReview={controller.permissions.canOpenReview}
           canDeleteTask={controller.permissions.canDeleteTask}
           canChangeTaskStatus={controller.permissions.canUpdateStatus}
-          canDecideApproval={canDecideApproval}
+          canApprove={canApprove}
+          canReject={canReject}
           canReturnToDraft={canReturnToDraft}
           pending={pending}
           githubInstallationAvailable={githubInstallationAvailable}

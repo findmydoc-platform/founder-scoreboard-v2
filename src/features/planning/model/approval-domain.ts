@@ -45,13 +45,41 @@ export function canDecideInitiativeApproval(initiative: Pick<Package, "approvalS
   return initiative.approvalStatus === "proposed" && profile?.platformRole === "ceo";
 }
 
-export function canDecideDeliverableApproval(
+export function canReturnInitiativeForRevision(
+  initiative: Pick<Package, "approvalStatus">,
+  profile?: Pick<Profile, "platformRole"> | null,
+) {
+  return initiative.approvalStatus === "proposed"
+    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy");
+}
+
+type DeliverableApprovalInitiative = Pick<Package, "accountableProfileId" | "approvalStatus">;
+
+function canDecideProposedDeliverable(
   task: Pick<Task, "taskType" | "approvalStatus">,
-  initiative: Pick<Package, "accountableProfileId"> | undefined,
+  initiative: DeliverableApprovalInitiative | undefined,
   profile?: Pick<Profile, "id" | "platformRole"> | null,
 ) {
   return isProposedDeliverable(task)
+    && Boolean(initiative)
     && (profile?.platformRole === "ceo" || initiative?.accountableProfileId === profile?.id);
+}
+
+export function canApproveDeliverableApproval(
+  task: Pick<Task, "taskType" | "approvalStatus">,
+  initiative: DeliverableApprovalInitiative | undefined,
+  profile?: Pick<Profile, "id" | "platformRole"> | null,
+) {
+  return initiative?.approvalStatus === "approved"
+    && canDecideProposedDeliverable(task, initiative, profile);
+}
+
+export function canRejectDeliverableApproval(
+  task: Pick<Task, "taskType" | "approvalStatus">,
+  initiative: DeliverableApprovalInitiative | undefined,
+  profile?: Pick<Profile, "id" | "platformRole"> | null,
+) {
+  return canDecideProposedDeliverable(task, initiative, profile);
 }
 
 export function canReturnDeliverableForRevision(
@@ -60,6 +88,14 @@ export function canReturnDeliverableForRevision(
   profile?: Pick<Profile, "id" | "platformRole"> | null,
 ) {
   return task.taskType === "deliverable"
-    && task.approvalStatus !== "draft"
+    && task.approvalStatus === "proposed"
     && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || initiative?.accountableProfileId === profile?.id);
+}
+
+export function currentApprovalDecisionReason(
+  item: Pick<ApprovalSubject, "approvalStatus" | "decisionNote">,
+) {
+  return item.decisionNote && (item.approvalStatus === "draft" || item.approvalStatus === "rejected")
+    ? item.decisionNote
+    : "";
 }
