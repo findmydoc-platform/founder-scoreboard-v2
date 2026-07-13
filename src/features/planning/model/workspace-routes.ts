@@ -12,6 +12,7 @@ import {
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
+import type { PlatformRole } from "@/lib/types";
 
 export type AppWorkspace = "planning" | "backlog" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
@@ -58,7 +59,10 @@ export function appWorkspaceFromValue(value: string | null | undefined): AppWork
   return appWorkspaceIds.find((id) => id === value) || null;
 }
 
-export function workspaceFromPathname(pathname: string) {
-  const normalized = pathname === "/" ? pathname : pathname.replace(/\/+$/, "");
-  return workspaceRoutes.find((route) => route.href === normalized)?.id || null;
+export function rootWorkspaceFromPreference(
+  value: string | null | undefined,
+  platformRole: PlatformRole | null | undefined,
+): AppWorkspace {
+  const workspace = appWorkspaceFromValue(value) || "planning";
+  return workspace === "ceo-intake" && platformRole !== "ceo" ? "planning" : workspace;
 }

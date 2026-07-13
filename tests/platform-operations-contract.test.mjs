@@ -438,12 +438,15 @@ test("active founder feedback is removed while historical migration stays intact
   assert.doesNotMatch(notificationPolicy, /feedback\.bug_reported|feedback\.feature_requested/);
 });
 
-test("workspace selection uses path routes and preserves legacy mine filter", async () => {
+test("workspace selection uses path routes and root-only profile defaults", async () => {
   const ui = await readPlanningSurface();
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
+  const preferenceSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const rootPage = await readFile("src/app/page.tsx", "utf8");
+  const planningAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
+  const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
   const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
@@ -485,8 +488,13 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   }
   assert.match(workspacePages.find((page) => /redirect\("\/notifications"\)/.test(page)) || "", /dynamic = "force-dynamic"/);
   assert.match(executionPage, /redirect\("\/planning"\)/);
-  assert.match(rootPage, /redirect\(`\$\{workspacePath\(workspace\)\}/);
-  assert.match(rootPage, /rawWorkspace === "mine"/);
+  assert.match(rootPage, /getServerPlanningHomeWorkspace/);
+  assert.match(rootPage, /redirect\(workspacePath\(workspace\)\)/);
+  assert.doesNotMatch(rootPage, /searchParams|rawWorkspace|URLSearchParams|workspace=/);
+  assert.match(planningAuth, /getServerPlanningAuthContext\(teamMemberRoles\)/);
+  assert.match(planningAuth, /\.from\("profile_ui_preferences"\)/);
+  assert.match(planningAuth, /\.eq\("profile_id", auth\.profile\.id\)/);
+  assert.match(planningAuth, /rootWorkspaceFromPreference\(data\?\.default_workspace, auth\.profile\.platformRole\)/);
   assert.match(routes, /value === "settings"\) return "notifications"/);
   assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\),/);
   assert.match(dataScopes, /export const workspaceDataScopes/);
@@ -516,15 +524,12 @@ test("workspace selection uses path routes and preserves legacy mine filter", as
   assert.match(planningDataApi, /planningDataWorkspaceFromValue\(rawWorkspace\)/);
   assert.match(planningDataApi, /apiError\("Unknown planning workspace\.", 400\)/);
   assert.match(planningDataApi, /platformRole: auth\.profile\?\.platformRole/);
-  assert.match(workspaceHook, /workspaceStateKey/);
-  assert.match(workspaceHook, /workspacePath\(initialWorkspace\)/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
-  assert.match(workspaceHook, /router\.replace/);
   assert.match(workspaceHook, /router\.push/);
-  assert.match(workspaceHook, /window\.queueMicrotask/);
-  assert.match(workspaceHook, /window\.localStorage\.setItem\(workspaceStateKey, legacyMine \? "mine" : initialWorkspace\)/);
-  assert.match(workspaceHook, /url\.searchParams\.delete\("workspace"\)/);
-  assert.doesNotMatch(workspaceHook, /url\.searchParams\.set\("workspace", workspace\)/);
+  assert.doesNotMatch(workspaceHook, /workspaceStateKey|localStorage|searchParams|legacyMineWorkspace|router\.replace/);
+  assert.doesNotMatch(preferenceSync, /setWorkspace|pathHasWorkspace|workspaceFromPathname/);
+  assert.match(taskDetailWorkflow, /router\.replace\("\/planning"\)/);
+  assert.doesNotMatch(taskDetailWorkflow, /\/\?workspace=/);
 });
 
 test("ceo task intake is ceo-only and separated from team ai work access", async () => {
@@ -747,8 +752,8 @@ test("planning personal scope follows the effective current profile", async () =
   assert.match(header, /assignee: "Alle"/);
   assert.match(header, /Ansicht/);
   assert.match(filters, /Meine Aufgaben/);
-  assert.match(workspaceHook, /rawUrlWorkspace === "mine"/);
-  assert.match(controller, /legacyMineWorkspace/);
+  assert.doesNotMatch(workspaceHook, /rawUrlWorkspace|localStorage|legacyMineWorkspace/);
+  assert.doesNotMatch(controller, /legacyMineWorkspace/);
   assert.doesNotMatch(ui, /currentProfile\?\.name \|\| "Volkan"/);
   assert.doesNotMatch(ui, /currentProfile\?\.id \|\| "volkan"/);
   assert.doesNotMatch(workspaceHook, /nextWorkspace === "mine"/);

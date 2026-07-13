@@ -213,7 +213,8 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   assert.match(routes, /value === "mine" \|\| value === "execution"/);
   assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.doesNotMatch(ui, /ExecutionLayerOverview|Heute-Fokus|Hygiene Alerts|Fokus-Kontext|buildHygieneAlerts/);
-  assert.match(profileSync, /appWorkspaceFromValue\(value\) \|\| "planning"/);
+  assert.match(routes, /rootWorkspaceFromPreference/);
+  assert.doesNotMatch(profileSync, /setWorkspace|workspaceFromPathname|appWorkspaceFromValue/);
   assert.match(profileSettingsModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
   assert.doesNotMatch(profileSettingsRoute, /"execution",/);
   assert.match(taskViewModel, /quickFilter === "critical"/);
