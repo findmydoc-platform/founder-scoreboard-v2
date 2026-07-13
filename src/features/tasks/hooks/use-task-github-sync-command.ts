@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
+import { githubBulkSyncTasks } from "@/features/tasks/model/github-sync-queue";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
@@ -87,19 +88,17 @@ export function useTaskGitHubSyncCommand({
     const failedCommentTaskIds = new Set(data.taskComments
       .filter((comment) => comment.githubDeliveryStatus === "failed")
       .map((comment) => comment.taskId));
-    const queueTasks = data.tasks.filter((task) => {
-      const needsIssueSync = task.githubIssueSyncStatus !== "synced";
-      const needsCommentDelivery = openCommentTaskIds.has(task.id);
-      const failed = task.githubIssueSyncStatus === "failed" || failedCommentTaskIds.has(task.id);
-      return task.taskType === "deliverable"
-        && hasGitHubIssue(task)
-        && (needsIssueSync || needsCommentDelivery)
-        && (!options.onlyFailed || failed);
+    const queueTasks = githubBulkSyncTasks({
+      tasks: data.tasks,
+      openCommentTaskIds,
+      failedCommentTaskIds,
+      onlyFailed: options.onlyFailed,
     });
 
     if (!queueTasks.length) return;
 
     const previousTasks = new Map(queueTasks.map((task) => [task.id, task]));
+    const failedParentTaskIds = new Set<string>();
     setData((current) => ({
       ...current,
       tasks: current.tasks.map((item) => queueTasks.some((task) => task.id === item.id) ? { ...item, githubIssueSyncStatus: "pending", githubIssueSyncError: "" } : item),
@@ -114,14 +113,23 @@ export function useTaskGitHubSyncCommand({
         failed: 0,
       };
       for (const task of queueTasks) {
+        if (task.taskType === "sub_issue" && failedParentTaskIds.has(task.parentTaskId)) {
+          const previousTask = previousTasks.get(task.id) || task;
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+          }));
+          continue;
+        }
         try {
-          const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: false });
+          const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: !hasGitHubIssue(task) });
           if (response.status === 409 && body?.code === "github_sync_locked") {
             const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
               tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "pending", githubIssueSyncError: body.error || syncLockedMessage } : item)),
             }));
+            if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
             continue;
           }
           if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
@@ -142,6 +150,7 @@ export function useTaskGitHubSyncCommand({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "failed", githubIssueSyncError: message } : item)),
           }));
+          if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
           setSaveError(message);
         }
       }

@@ -96,13 +96,14 @@ Check:
 1. `pnpm run verify:github-sync` ausführen.
 2. Planning öffnen und die GitHub-Sync-Queue im Header öffnen.
 3. Die GitHub-Autorenverbindung im Header prüfen; sie darf den Issue-Sync nicht sperren.
-4. `Offene Issues syncen` oder an einem Task `Sync` klicken.
+4. `Offene GitHub Issues syncen` klicken; fehlende Parent-Deliverables werden vor ihren Sub-Issues angelegt.
 5. Link zum GitHub Issue prüfen.
 
 Erwartung:
-- Read-only-Verify meldet verknüpfte Deliverables, Sync Queue und App-only-Deliverables.
+- Read-only-Verify meldet Deliverables, Sub-Issues, die Sync-Queue und fehlende GitHub Issues.
 - GitHub-Reconnect erscheint nicht mehrfach in einzelnen Karten, sondern zentral im Header/Benachrichtigungsbereich.
 - Issue wird im Management-Repo über die GitHub-App-Installation erstellt oder aktualisiert.
+- Der Sammel-Sync verarbeitet freigegebene Deliverables und ihre Sub-Issues Parent-first. Bei einem fehlgeschlagenen Parent wird das Kind übersprungen und bleibt in der Queue sichtbar.
 - CEO, Founder, Deputy und Viewer können den Issue-Sync mit einer gültigen Team-Session auslösen.
 - Viewer können weiterhin weder Task-Felder ändern noch neue Kommentare schreiben.
 - Kommentare auf verknüpften Issues werden mit dem persönlichen Token ihres ursprünglichen Autors erstellt, auch wenn ein anderer Benutzer den Sync auslöst.
