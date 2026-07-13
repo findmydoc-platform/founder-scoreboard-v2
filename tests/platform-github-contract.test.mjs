@@ -34,6 +34,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
   const syncQueue = await readFile("src/features/tasks/model/github-sync-queue.ts", "utf8");
   const syncQueueUi = await readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8");
+  const syncFailurePersistence = await readFile("src/lib/github-sync-failure-persistence.ts", "utf8");
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(route, /requireTeamMember/);
@@ -86,7 +87,8 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein/);
   assert.match(route, /begin_github_issue_sync_transaction/);
   assert.match(route, /finalize_github_issue_sync_transaction/);
-  assert.match(route, /fail_github_issue_sync_transaction/);
+  assert.match(route, /persistGitHubSyncFailure/);
+  assert.match(syncFailurePersistence, /fail_github_issue_sync_transaction/);
   assert.match(transactionalSyncMigration, /github_issue_sync_status = 'pending'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'pending'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'synced'/);

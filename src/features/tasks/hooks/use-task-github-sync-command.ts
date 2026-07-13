@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { githubBulkSyncTasks } from "@/features/tasks/model/github-sync-queue";
 import * as taskApi from "@/features/tasks/model/task-api-client";
+import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
 
@@ -14,6 +15,12 @@ type UseTaskGitHubSyncCommandOptions = Pick<
 
 const syncLockedMessage = "GitHub-Sync läuft bereits.";
 const syncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+
+function retryableGitHubSyncMessage(status: number, code?: string, serverMessage?: string) {
+  if (status === 409 && code === "github_sync_stale") return serverMessage || syncStaleMessage;
+  if (status === 503 && code === "github_sync_state_persist_failed") return serverMessage || githubSyncStatePersistFailedMessage;
+  return "";
+}
 
 export function useTaskGitHubSyncCommand({
   apiClient,
@@ -56,13 +63,13 @@ export function useTaskGitHubSyncCommand({
           if (!options.silent) setSaveError(body.error || syncLockedMessage);
           return;
         }
-        if (response.status === 409 && body?.code === "github_sync_stale") {
-          const message = body.error || syncStaleMessage;
+        const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
+        if (retryableMessage) {
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: message } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: retryableMessage } : item)),
           }));
-          if (!options.silent) setSaveError(message);
+          if (!options.silent) setSaveError(retryableMessage);
           return;
         }
         if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
@@ -142,15 +149,15 @@ export function useTaskGitHubSyncCommand({
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
             continue;
           }
-          if (response.status === 409 && body?.code === "github_sync_stale") {
+          const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
+          if (retryableMessage) {
             const previousTask = previousTasks.get(task.id) || task;
-            const message = body.error || syncStaleMessage;
             setData((current) => ({
               ...current,
-              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: message } : item)),
+              tasks: current.tasks.map((item) => (item.id === task.id ? { ...previousTask, githubIssueSyncStatus: "not_synced", githubIssueSyncError: retryableMessage } : item)),
             }));
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
-            setSaveError(message);
+            setSaveError(retryableMessage);
             continue;
           }
           if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
