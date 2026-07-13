@@ -87,6 +87,7 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
 
     assert.equal(issue.number, 42);
     assert.equal(issue.recovered, true);
+    assert.equal(issue.recreated, false);
     assert.match(taskIssueBody(sourceTask), /<!-- founderops-task-id:task-idempotency-verification -->/);
     assert.equal(requests.some((request) => request.method === "POST"), false);
     assert.equal(requests.filter((request) => request.method === "GET" && request.url.endsWith("/issues/42")).length, 1);

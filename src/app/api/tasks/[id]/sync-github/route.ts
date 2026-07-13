@@ -312,6 +312,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const activityMessage = [
       `GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`,
       issue.recovered ? "Vorhandenes FounderOps-Issue wiederverwendet" : "",
+      issue.recreated ? "Gelöschtes GitHub Issue ersetzt" : "",
       ...warnings.map((warning) => `Warnung: ${warning}`),
     ].filter(Boolean).join(" · ");
 

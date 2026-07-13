@@ -5,11 +5,11 @@ import {
   parseGitHubIssueUrl,
   resolveGitHubIssueNumber,
 } from "./github-issue-reference";
-import { githubJson, githubRequest } from "./github-http";
+import { GitHubApiError, githubJson, githubRequest } from "./github-http";
 
 const issueDependencyGitHubApiVersion = "2026-03-10";
 
-export { GitHubApiError } from "./github-http";
+export { GitHubApiError };
 
 export type GitHubIssueDependencyInput = {
   blockedIssueNumber: number;
@@ -235,7 +235,9 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
     errorMessage: "GitHub Issue-Suche fehlgeschlagen",
     allowFailure: true,
   });
+  let lookupSucceeded = false;
   if (searchResponse.ok) {
+    lookupSucceeded = true;
     const search = await searchResponse.json() as { items?: GitHubIssueSearchResult[] };
     const match = matchingTaskIssue(search.items || [], marker);
     if (match) return match;
@@ -252,12 +254,16 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
       },
     );
     if (!response.ok) break;
+    lookupSucceeded = true;
     const issues = await response.json() as GitHubIssueSearchResult[];
     const match = matchingTaskIssue(issues, marker);
     if (match) return match;
     if (issues.length < 100) break;
   }
 
+  if (!lookupSucceeded) {
+    throw new Error("GitHub Issue-Suche fehlgeschlagen: Die Abwesenheit eines FounderOps-Issues konnte nicht bestätigt werden.");
+  }
   return null;
 }
 
@@ -302,6 +308,7 @@ async function updateValidatedGitHubIssue(
     token,
     cache: "no-store",
     errorMessage: "Verknüpftes GitHub Issue konnte nicht geprüft werden",
+    errorType: "api",
   });
   assertGitHubIssueUpdateTarget(task, target, repository, issueNumber);
   if (!Array.isArray(target.labels)) {
@@ -316,6 +323,16 @@ async function updateValidatedGitHubIssue(
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
+    errorType: "api",
+  });
+}
+
+async function createGitHubIssue(payload: GitHubIssuePayload, token: string, owner: string, repo: string) {
+  return githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues`, {
+    token,
+    method: "POST",
+    body: payload,
+    errorMessage: "GitHub Issue-Erstellung fehlgeschlagen",
   });
 }
 
@@ -349,17 +366,39 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
   const issueNumber = resolveGitHubIssueNumber(task, { repository, requireConsistent: true });
 
   if (issueNumber) {
-    const issue = await updateValidatedGitHubIssue(
-      task,
-      issueNumber,
-      payload,
-      token,
-      owner,
-      repo,
-      repository,
-      "GitHub Update fehlgeschlagen",
-    );
-    return { ...issue, warnings, recovered: false };
+    try {
+      const issue = await updateValidatedGitHubIssue(
+        task,
+        issueNumber,
+        payload,
+        token,
+        owner,
+        repo,
+        repository,
+        "GitHub Update fehlgeschlagen",
+      );
+      return { ...issue, warnings, recovered: false, recreated: false };
+    } catch (updateError) {
+      if (!(updateError instanceof GitHubApiError) || updateError.status !== 404) throw updateError;
+
+      const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
+      if (recoveredIssue) {
+        const issue = await updateValidatedGitHubIssue(
+          task,
+          recoveredIssue.number,
+          payload,
+          token,
+          owner,
+          repo,
+          repository,
+          "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
+        );
+        return { ...issue, warnings, recovered: true, recreated: false };
+      }
+
+      const issue = await createGitHubIssue(payload, token, owner, repo);
+      return { ...issue, warnings, recovered: false, recreated: true };
+    }
   }
 
   const recoveredIssue = await findGitHubIssueByTaskMarker(task.id, token, repository);
@@ -374,16 +413,11 @@ export async function upsertGitHubIssue(task: Task, token = "", assignee: GitHub
       repository,
       "Wiedergefundenes GitHub Issue konnte nicht aktualisiert werden",
     );
-    return { ...issue, warnings, recovered: true };
+    return { ...issue, warnings, recovered: true, recreated: false };
   }
 
-  const issue = await githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues`, {
-    token,
-    method: "POST",
-    body: payload,
-    errorMessage: "GitHub Issue-Erstellung fehlgeschlagen",
-  });
-  return { ...issue, warnings, recovered: false };
+  const issue = await createGitHubIssue(payload, token, owner, repo);
+  return { ...issue, warnings, recovered: false, recreated: false };
 }
 
 export async function connectGitHubSubIssue({
