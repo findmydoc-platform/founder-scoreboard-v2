@@ -445,17 +445,75 @@ export async function connectGitHubSubIssue({
 }) {
   const parent = splitGitHubRepository(parentRepository);
   const child = splitGitHubRepository(childRepository);
-  const query = `query($owner: String!, $repo: String!, $number: Int!) {
-    repository(owner: $owner, name: $repo) { issue(number: $number) { id } }
+  const query = `query(
+    $parentOwner: String!,
+    $parentRepo: String!,
+    $parentNumber: Int!,
+    $childOwner: String!,
+    $childRepo: String!,
+    $childNumber: Int!
+  ) {
+    parentRepository: repository(owner: $parentOwner, name: $parentRepo) {
+      issue(number: $parentNumber) { id number url }
+    }
+    childRepository: repository(owner: $childOwner, name: $childRepo) {
+      issue(number: $childNumber) {
+        number
+        url
+        repository { nameWithOwner }
+        parent { number url repository { nameWithOwner } }
+      }
+    }
   }`;
-  const parentResult = await githubJson<{ data?: { repository?: { issue?: { id?: string } | null } | null }; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
+  const relationshipResult = await githubJson<{
+    data?: {
+      parentRepository?: { issue?: { id?: string; number?: number; url?: string } | null } | null;
+      childRepository?: {
+        issue?: {
+          number: number;
+          url: string;
+          repository: { nameWithOwner: string };
+          parent?: { number: number; url: string; repository: { nameWithOwner: string } } | null;
+        } | null;
+      } | null;
+    };
+    errors?: Array<{ message?: string }>;
+  }>("https://api.github.com/graphql", {
     token,
     method: "POST",
-    body: { query, variables: { owner: parent.owner, repo: parent.repo, number: parentIssueNumber } },
-    errorMessage: "GitHub Parent-Issue konnte nicht geladen werden",
+    body: {
+      query,
+      variables: {
+        parentOwner: parent.owner,
+        parentRepo: parent.repo,
+        parentNumber: parentIssueNumber,
+        childOwner: child.owner,
+        childRepo: child.repo,
+        childNumber: childIssueNumber,
+      },
+    },
+    errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht geprüft werden",
   });
-  const parentId = parentResult.data?.repository?.issue?.id;
-  if (!parentId) throw new Error(parentResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+  const parentIssue = relationshipResult.data?.parentRepository?.issue;
+  if (!parentIssue?.id) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+
+  const childIssue = relationshipResult.data?.childRepository?.issue;
+  if (!childIssue) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Sub-Issue wurde nicht gefunden.");
+
+  const currentParent = childIssue.parent;
+  const alreadyConnected = currentParent?.number === parentIssueNumber
+    && currentParent.repository.nameWithOwner.toLowerCase() === parent.repository.toLowerCase();
+  if (alreadyConnected) {
+    return {
+      addSubIssue: {
+        issue: {
+          number: parentIssue.number || parentIssueNumber,
+          url: parentIssue.url || `https://github.com/${parent.repository}/issues/${parentIssueNumber}`,
+        },
+        subIssue: childIssue,
+      },
+    };
+  }
 
   const mutation = `mutation($parent: ID!, $childUrl: String!) {
     addSubIssue(input: { issueId: $parent, subIssueUrl: $childUrl, replaceParent: true }) {
@@ -467,7 +525,7 @@ export async function connectGitHubSubIssue({
   const result = await githubJson<{ data?: unknown; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
     token,
     method: "POST",
-    body: { query: mutation, variables: { parent: parentId, childUrl } },
+    body: { query: mutation, variables: { parent: parentIssue.id, childUrl } },
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht erstellt werden",
   });
   if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));
