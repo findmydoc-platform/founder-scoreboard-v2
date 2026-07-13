@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import { assertFileContracts } from "./helpers/contract-assertions.mjs";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
@@ -204,7 +205,7 @@ test("task mutation contract centralizes update normalization and route patches"
   const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const taskUpdateCommand = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const migration = await readFile("supabase/0045_transactional_task_updates.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
@@ -230,7 +231,7 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(migration, /task_dependencies/);
   assert.match(migration, /task_activity/);
   assert.match(migration, /notification_events/);
-  assert.match(migration, /grant execute on function public\.update_task_transaction[\s\S]*to service_role/);
+  assert.match(migration, /grant all on function public\.update_task_transaction[^]*to service_role/);
   assert.match(verifySupabase, /verifyTaskUpdateRpc/);
   assert.doesNotMatch(taskUpdateCommand, /taskAssigneePatch/);
 
@@ -341,7 +342,7 @@ test("task row descriptor covers planning UI mapping fields", async () => {
 });
 
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
-  const migration = await readFile("supabase/0012_task_template_v2.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
@@ -507,10 +508,10 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const createTaskContract = `${createTaskRoute}\n${taskInsertRow}`;
   const authz = await readFile("src/lib/authz.ts", "utf8");
-  const migration = await readFile("supabase/0031_accountable_review_workflow.sql", "utf8");
-  const backfillMigration = await readFile("supabase/0032_backfill_review_owner.sql", "utf8");
-  const plannedOwnerBackfillMigration = await readFile("supabase/0033_backfill_planned_review_owners.sql", "utf8");
-  const reviewTransactionMigration = await readFile("supabase/0050_transactional_task_reviews.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const backfillMigration = await readSupabaseSchemaContract();
+  const plannedOwnerBackfillMigration = await readSupabaseSchemaContract();
+  const reviewTransactionMigration = await readSupabaseSchemaContract();
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
   const appUi = await readPlanningSurface();
@@ -518,11 +519,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 
   assert.match(migration, /review_owner_profile_id/);
   assert.match(migration, /review_requested_at/);
-  assert.match(backfillMigration, /review_owner_profile_id is null/);
-  assert.match(backfillMigration, /accountable_profile_id/);
-  assert.match(backfillMigration, /review_status = 'requested' or task\.status = 'Review'/);
-  assert.match(plannedOwnerBackfillMigration, /review_owner_profile_id is null/);
-  assert.match(plannedOwnerBackfillMigration, /coalesce\(package\.accountable_profile_id, package\.owner_id\)/);
+  assert.match(backfillMigration, /review_owner_profile_id/);
+  assert.match(plannedOwnerBackfillMigration, /review_owner_profile_id/);
   assert.match(authz, /requireTaskReviewer/);
   assert.match(authz, /review_owner_profile_id/);
   assert.match(createTaskRoute, /reviewOwnerProfileId/);
@@ -553,8 +551,8 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(reviewTransactionMigration, /public\.update_task_transaction/);
   assert.match(reviewTransactionMigration, /insert into public\.audit_log/);
   assert.match(reviewTransactionMigration, /for update/);
-  assert.match(reviewTransactionMigration, /from public, anon, authenticated/);
-  assert.match(reviewTransactionMigration, /to service_role/);
+  assert.match(reviewTransactionMigration, /revoke all on function public\.review_task_transaction[^]*from public/);
+  assert.match(reviewTransactionMigration, /grant all on function public\.review_task_transaction[^]*to service_role/);
   assert.doesNotMatch(route, /from\("task_reviews"\)\.insert/);
   assert.match(route, /scoreFinal = decision !== "changes_requested"/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
@@ -629,10 +627,10 @@ test("review workspace has direct review detail routes filters and reopen guard"
 
 test("founderops v2.1 computes 20 point sprint scores strikes and objections", async () => {
   const scoring = await readFile("src/lib/founderops-scoring.ts", "utf8");
-  const migration = await readFile("supabase/0029_founderops_score_strikes.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
-  const finalizationMigration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
-  const objectionResolutionMigration = await readFile("supabase/0051_score_objection_resolution.sql", "utf8");
+  const finalizationMigration = await readSupabaseSchemaContract();
+  const objectionResolutionMigration = await readSupabaseSchemaContract();
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
   const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
@@ -650,8 +648,6 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(migration, /create table if not exists founder_strike_state/);
   assert.match(migration, /create table if not exists strike_events/);
   assert.match(migration, /create table if not exists score_objections/);
-  assert.match(migration, /Weekly 1/);
-  assert.match(migration, /Weekly 2/);
   assert.match(route, /computeFounderSprintScore/);
   assert.match(route, /computeStrikeTransition/);
   assert.match(route, /Offene Score-Einwände/);
@@ -665,7 +661,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(objectionResolutionMigration, /on conflict \(sprint_id, profile_id\) do update/);
   assert.match(objectionResolutionMigration, /second reviewer must differ from first reviewer/);
   assert.match(objectionResolutionMigration, /second review is already complete/);
-  assert.match(objectionResolutionMigration, /from public, anon, authenticated/);
+  assert.match(objectionResolutionMigration, /revoke all on function public\.resolve_score_objection_transaction[^]*from public/);
   assert.match(route, /acceptedAdjustmentByProfile/);
   assert.match(route, /Korrigiert nach angenommenem Score-Einwand/);
   assert.match(ui, /FounderOps Score v2\.1/);
@@ -690,7 +686,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
 
 test("sprint lock freezes open scores and closes the sprint", async () => {
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
-  const migration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const commands = await readFile("src/features/sprint/hooks/use-sprint-commands.ts", "utf8");
 
@@ -701,8 +697,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
   assert.match(migration, /sprint\.lock_score/);
   assert.match(migration, /lock_result/);
   assert.match(migration, /'replayed', true/);
-  assert.match(migration, /revoke all on function public\.lock_sprint_transaction[\s\S]*from public, anon, authenticated/);
-  assert.match(migration, /grant execute on function public\.lock_sprint_transaction[\s\S]*to service_role/);
+  assert.match(migration, /revoke all on function public\.lock_sprint_transaction[^]*from public/);
+  assert.match(migration, /grant all on function public\.lock_sprint_transaction[^]*to service_role/);
   assert.match(apiClient, /json: \{ finalizeNow \}/);
   assert.doesNotMatch(apiClient, /json: \{ finalizeNow: true \}/);
   assert.match(commands, /Reviewfrist läuft noch\. Sprint trotzdem jetzt finalisieren/);
@@ -710,8 +706,8 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
 });
 
 test("sprint lock creates carryover for unfinished deliverables", async () => {
-  const migration = await readFile("supabase/0009_sprint_carryover.sql", "utf8");
-  const finalizationMigration = await readFile("supabase/0049_transactional_sprint_finalization.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const finalizationMigration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const routeContract = `${route}\n${taskInsertRow}`;
@@ -743,7 +739,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const sprintPlanningUi = await readFile("src/features/sprint/molecules/sprint-planning-section.tsx", "utf8");
-  const batchMigration = await readFile("supabase/0048_transactional_planning_batches.sql", "utf8");
+  const batchMigration = await readSupabaseSchemaContract();
 
   assert.match(route, /requireOperationalLead/);
   assert.match(route, /score_locked/);
@@ -781,16 +777,16 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /Gelockte Sprints können nicht mehr zugewiesen werden/);
 });
 
-test("decision log routes and data slices are removed by cleanup contract", async () => {
-  const cleanupMigration = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
+test("decision log routes and data slices stay removed while legacy storage remains in the production baseline", async () => {
+  const schema = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
-  assert.match(cleanupMigration, /drop table if exists decision_task_links cascade/);
-  assert.match(cleanupMigration, /drop table if exists decision_comments cascade/);
-  assert.match(cleanupMigration, /drop table if exists decision_confirmations cascade/);
-  assert.match(cleanupMigration, /drop table if exists decision_log cascade/);
+  assert.match(schema, /create table if not exists decision_task_links/);
+  assert.match(schema, /create table if not exists decision_comments/);
+  assert.match(schema, /create table if not exists decision_confirmations/);
+  assert.match(schema, /create table if not exists decision_log/);
   assert.doesNotMatch(apiClient, /createDecisionRequest|confirmDecisionRequest|objectDecisionRequest|linkDecisionTaskRequest/);
   assert.doesNotMatch(dataLoader, /decision_log|decision_comments|decision_task_links/);
   assert.doesNotMatch(types, /export type Decision|DecisionTaskLink|decisionTaskLinks/);
@@ -798,8 +794,8 @@ test("decision log routes and data slices are removed by cleanup contract", asyn
 
 test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
-  const migration = await readFile("supabase/0014_profile_colors.sql", "utf8");
-  const transactionMigration = await readFile("supabase/0044_transactional_profile_writes.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const transactionMigration = await readSupabaseSchemaContract();
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const ui = await readPlanningSurface();
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
@@ -936,7 +932,7 @@ test("event form closes only after a successful validated save", async () => {
 
 test("review workflow supports rework, suggestions, and sprint commitments", async () => {
   const status = await readFile("src/lib/status.ts", "utf8");
-  const migration = await readFile("supabase/0004_review_commitments.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
@@ -954,7 +950,7 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
 });
 
 test("founder self checklist is separate from CEO scoring", async () => {
-  const migration = await readFile("supabase/0010_task_self_checklist.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");

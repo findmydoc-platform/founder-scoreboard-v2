@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -177,7 +178,7 @@ test("backlog ordering API is operational-lead guarded and does not dirty github
   const route = await readFile("src/app/api/tasks/backlog-order/route.ts", "utf8");
   const apiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const ordering = await readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8");
-  const migration = await readFile("supabase/0048_transactional_planning_batches.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(route, /requirePlanningContributor/);
   assert.match(route, /isOperationalLeadRole/);

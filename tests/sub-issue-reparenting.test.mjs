@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -6,7 +7,7 @@ test("Sub-Issue reparenting stays guarded by task type, ownership, and CAS", asy
   const [route, permissions, migration] = await Promise.all([
     readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
     readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8"),
-    readFile("supabase/0062_sub_issue_reparenting.sql", "utf8"),
+    readSupabaseSchemaContract(),
   ]);
 
   assert.match(route, /payload\.parentTaskId !== undefined/);
@@ -22,9 +23,9 @@ test("Sub-Issue reparenting stays guarded by task type, ownership, and CAS", asy
 
 test("database transaction inherits hierarchy and audits the old and new parent", async () => {
   const [migration, schema, approvalMigration] = await Promise.all([
-    readFile("supabase/0062_sub_issue_reparenting.sql", "utf8"),
-    readFile("supabase/schema.sql", "utf8"),
-    readFile("supabase/0059_planning_item_approval.sql", "utf8"),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
+    readSupabaseSchemaContract(),
   ]);
 
   for (const sql of [migration, schema]) {

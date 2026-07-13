@@ -1,10 +1,11 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { readFile } from "node:fs/promises";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 test("fmd tools workspace keeps internal tools repos notion and drive visible", async () => {
-  const migration = await readFile("supabase/0015_fmd_tools_hub.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const ui = await readPlanningSurface();
   const toolsUi = await readFile("src/features/tools/organisms/fmd-quick-links-overview.tsx", "utf8");
   const toolDialog = await readFile("src/features/tools/molecules/fmd-quick-link-dialog.tsx", "utf8");
@@ -15,11 +16,8 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   const toolRoute = await readFile("src/app/api/tools/route.ts", "utf8");
   const toolUpdateRoute = await readFile("src/app/api/tools/[id]/route.ts", "utf8");
   const toolCommands = await readFile("src/features/tools/hooks/use-fmd-tool-commands.ts", "utf8");
-  const toolRegistrationMigration = await readFile("supabase/0039_fmd_tools_team_registration.sql", "utf8");
-  const toolSeedExamplesMigration = await readFile("supabase/0040_quicklinks_seed_examples.sql", "utf8");
-  const toolCuratedLinksMigration = await readFile("supabase/0041_fmd_tools_curated_links.sql", "utf8");
-  const toolPreviewMigration = await readFile("supabase/0042_fmd_tools_preview_images.sql", "utf8");
-  const toolLegacyBackfillMigration = await readFile("supabase/0043_backfill_legacy_quicklink_links.sql", "utf8");
+  const toolRegistrationMigration = await readSupabaseSchemaContract();
+  const toolPreviewMigration = await readSupabaseSchemaContract();
   const toolMetadataRoute = await readFile("src/app/api/tools/metadata/route.ts", "utf8");
   const toolPreviewRoute = await readFile("src/app/api/tools/preview-image/route.ts", "utf8");
   const toolMetadataHelper = await readFile("src/lib/fmd-tool-metadata.ts", "utf8");
@@ -34,17 +32,9 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /create table if not exists fmd_tools/);
-  assert.match(migration, /email-signature-tool/);
-  assert.match(migration, /https:\/\/mailsig\.findmydoc\.eu\//);
-  assert.match(migration, /'email-signature-tool'.*'active'/s);
-  assert.match(migration, /investor-calculator/);
-  assert.match(migration, /notion-docs-source/);
-  assert.match(migration, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
-  assert.match(migration, /google-drive-assets/);
-  assert.match(migration, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
-  const pitchdeckMigration = await readFile("supabase/0021_pitchdeck_tool.sql", "utf8");
-  assert.match(pitchdeckMigration, /pitchdeck-site/);
-  assert.match(pitchdeckMigration, /https:\/\/pitchdeck\.findmydoc\.eu\//);
+  assert.match(migration, /is_curated/);
+  assert.match(migration, /preview_image_url/);
+  assert.match(migration, /preview_image_source/);
   assert.match(ui, /FmdQuickLinksOverview/);
   assert.match(toolsSurface, /Link eintragen/);
   assert.match(toolsSurface, /role="dialog"/);
@@ -122,31 +112,10 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolRegistrationMigration, /fmd_tools_insert_team/);
   assert.match(toolRegistrationMigration, /'viewer'/);
   assert.match(toolRegistrationMigration, /fmd_tools_update_team/);
-  assert.match(toolSeedExamplesMigration, /offer-calculator/);
-  assert.match(toolSeedExamplesMigration, /tool-repos/);
-  assert.match(toolSeedExamplesMigration, /clinic-outreach-crm/);
-  assert.match(toolSeedExamplesMigration, /brand-asset-library/);
-  assert.match(toolCuratedLinksMigration, /add column if not exists is_curated/);
-  assert.match(toolCuratedLinksMigration, /email-signature-tool/);
-  assert.match(toolCuratedLinksMigration, /google-drive-assets/);
   assert.match(toolPreviewMigration, /preview_image_url/);
   assert.match(toolPreviewMigration, /preview_image_source/);
   assert.match(toolPreviewMigration, /fmd-tool-previews/);
   assert.match(toolPreviewMigration, /image\/webp/);
-  assert.match(toolLegacyBackfillMigration, /email-signature-tool/);
-  assert.match(toolLegacyBackfillMigration, /https:\/\/mailsig\.findmydoc\.eu\//);
-  assert.match(toolLegacyBackfillMigration, /tool-repos/);
-  assert.match(toolLegacyBackfillMigration, /https:\/\/github\.com\/findmydoc-platform\/management/);
-  assert.match(toolLegacyBackfillMigration, /notion-docs-source/);
-  assert.match(toolLegacyBackfillMigration, /https:\/\/www\.notion\.so\/Team-Workspace-31c283c73e6180cf9eedc8e0694cf2db/);
-  assert.match(toolLegacyBackfillMigration, /pitchdeck-site/);
-  assert.match(toolLegacyBackfillMigration, /https:\/\/pitchdeck\.findmydoc\.eu\//);
-  assert.match(toolLegacyBackfillMigration, /google-drive-assets/);
-  assert.match(toolLegacyBackfillMigration, /https:\/\/drive\.google\.com\/drive\/shared-drives/);
-  assert.match(toolLegacyBackfillMigration, /on conflict \(id\) do nothing/);
-  assert.match(toolLegacyBackfillMigration, /nullif\(btrim\(tool\.url\), ''\)/);
-  assert.match(toolLegacyBackfillMigration, /where tool\.id = legacy_links\.id/);
-  assert.doesNotMatch(toolLegacyBackfillMigration, /on conflict \(id\) do update/);
   assert.match(toolMetadataRoute, /requireTeamMember/);
   assert.match(toolMetadataRoute, /loadFmdToolMetadata/);
   assert.match(toolMetadataHelper, /assertPublicHttpUrl/);
@@ -180,8 +149,8 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(types, /previewImageSource: "none" \| "og" \| "manual"/);
 });
 
-test("execution workspace is retired while focus storage remains legacy-compatible", async () => {
-  const migration = await readFile("supabase/0020_execution_layer.sql", "utf8");
+test("execution workspace is retired while legacy storage remains compatible", async () => {
+  const migration = await readSupabaseSchemaContract();
   const ui = await readPlanningSurface();
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
@@ -201,7 +170,7 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
-  const schema = await readFile("supabase/schema.sql", "utf8");
+  const schema = await readSupabaseSchemaContract();
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
   const agents = await readFile("AGENTS.md", "utf8");
@@ -261,7 +230,7 @@ test("execution workspace is retired while focus storage remains legacy-compatib
   assert.match(schemaChecks, /task_focus_items/);
   assert.doesNotMatch(schemaChecks, /decision_task_links/);
   assert.match(schema, /create table if not exists task_focus_items/);
-  assert.doesNotMatch(schema, /create table if not exists decision_task_links/);
+  assert.match(schema, /create table if not exists decision_task_links/);
   assert.match(agents, /Execution workspace is retired/);
   assert.match(plan, /retired/);
   assert.match(plan, /TaskAttentionSignal/);
@@ -269,10 +238,10 @@ test("execution workspace is retired while focus storage remains legacy-compatib
 });
 
 test("task creation uses approval-aware deliverables and inherited sub issues", async () => {
-  const migration = await readFile("supabase/0059_planning_item_approval.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/tasks/route.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
-  const transactionalCreationMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
+  const transactionalCreationMigration = await readSupabaseSchemaContract();
   const createCommand = await readFile("src/features/tasks/hooks/use-task-create-command.ts", "utf8");
   const ui = await readPlanningSurface();
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
@@ -280,7 +249,7 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
 
   assert.match(migration, /approval_status/);
   assert.match(migration, /decide_deliverable_approval_transaction/);
-  assert.match(migration, /task_type = 'sub_issue' and approval_status is null/);
+  assert.match(migration, /tasks_approval_status_by_type_check[^]*task_type = 'sub_issue'[^]*approval_status is null/);
   assert.match(route, /task\.proposed/);
   assert.match(route, /create_planning_task_transaction/);
   assert.doesNotMatch(route, /from\("tasks"\)\.insert/);
@@ -321,7 +290,7 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
 });
 
 test("weekly meeting attendance has scoring, absence reasons and updates", async () => {
-  const migration = await readFile("supabase/0007_meeting_attendance_scoring.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
@@ -349,13 +318,12 @@ test("weekly meeting attendance has scoring, absence reasons and updates", async
   assert.match(types, /MeetingAttendanceStatus/);
 });
 
-test("meeting finder, calendar sync and decision log surfaces are removed while weekly score storage remains", async () => {
+test("meeting finder, calendar sync and decision log surfaces are removed while deployed legacy storage remains", async () => {
   const ui = await readPlanningSurface();
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
-  const schema = await readFile("supabase/schema.sql", "utf8");
-  const cleanupMigration = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
+  const schema = await readSupabaseSchemaContract();
   const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
@@ -367,13 +335,9 @@ test("meeting finder, calendar sync and decision log surfaces are removed while 
   assert.match(schemaChecks, /meetings\.weekly_score/);
   assert.match(schema, /create table if not exists meetings/);
   assert.match(schema, /create table if not exists meeting_attendance/);
-  assert.doesNotMatch(schema, /google_calendar|decision_task_links/);
+  assert.match(schema, /google_calendar/);
+  assert.match(schema, /create table if not exists decision_task_links/);
   assert.match(types, /meetings: Meeting\[\]/);
   assert.match(types, /meetingAttendance: MeetingAttendance\[\]/);
   assert.doesNotMatch(types, /export type AvailabilityEntry|export type DecisionTaskLink|export type Decision/);
-  assert.match(cleanupMigration, /drop table if exists availability cascade/);
-  assert.match(cleanupMigration, /drop table if exists decision_log cascade/);
-  assert.match(cleanupMigration, /drop column if exists google_calendar_email/);
-  assert.match(cleanupMigration, /default_workspace = 'meetings' then 'sprint'/);
-  assert.match(cleanupMigration, /default_workspace = 'decisions' then 'planning'/);
 });

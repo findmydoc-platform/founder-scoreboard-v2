@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
@@ -5,9 +6,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("google chat delivery is outbox based and webhook gated", async () => {
-  const migration = await readFile("supabase/0008_google_chat_delivery.sql", "utf8");
-  const dedupeMigration = await readFile("supabase/0030_notification_digest_dedupe.sql", "utf8");
-  const resolvedStatusMigration = await readFile("supabase/0039_notification_resolved_status.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const dedupeMigration = await readSupabaseSchemaContract();
+  const resolvedStatusMigration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const generatorRoute = await readFile("src/app/api/notifications/generate-digest/route.ts", "utf8");
   const chat = await readFile("src/lib/google-chat.ts", "utf8");
@@ -27,9 +28,9 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(migration, /google_chat_user_id/);
   assert.match(migration, /google_chat_dm_space/);
   assert.match(migration, /notification_preferences/);
-  assert.match(dedupeMigration, /add column if not exists dedupe_key/);
+  assert.match(dedupeMigration, /create table if not exists notification_events[^]*dedupe_key text/);
   assert.match(dedupeMigration, /notification_events_dedupe_key_uidx/);
-  assert.match(dedupeMigration, /where dedupe_key is not null/);
+  assert.match(dedupeMigration, /notification_events_dedupe_key_uidx[^]*dedupe_key is not null/);
   assert.match(resolvedStatusMigration, /notification_events_status_check/);
   assert.match(resolvedStatusMigration, /'resolved'/);
   assert.match(types, /"pending" \| "sent" \| "failed" \| "dismissed" \| "resolved"/);
@@ -304,7 +305,7 @@ test("founder events are modeled as team-visible operational reminders", async (
   const types = await readFile("src/lib/types.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const mappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
-  const migration = await readFile("supabase/0035_founder_events.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(routes, /id: "events"/);
@@ -398,10 +399,10 @@ test("health is slim while verification scripts detect operational migrations", 
   assert.match(schemaChecks, /tasks\.template_v2/);
   assert.match(schemaChecks, /task_relationship_edges/);
   assert.match(schemaChecks, /task_external_comments/);
-  assert.match(verify, /0008_google_chat_delivery\.sql/);
+  assert.match(verify, /canonical migration history/);
   assert.match(verify, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /notification_events\.dedupe_key/);
-  assert.match(verify, /0009_sprint_carryover\.sql/);
+  assert.match(verify, /pnpm run db:reset/);
   assert.match(verify, /notificationDeliveries/);
   assert.match(operational, /Founder Planning/);
   assert.match(operational, /githubMappedProfiles/);
@@ -412,7 +413,7 @@ test("health is slim while verification scripts detect operational migrations", 
 });
 
 test("active founder feedback is removed while historical migration stays intact", async () => {
-  const migration = await readFile("supabase/0014_founder_feedback.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const ui = await readPlanningSurface();
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const notificationOutboxUi = await readFile("src/features/notifications/organisms/notification-outbox-panel.tsx", "utf8");
@@ -422,7 +423,7 @@ test("active founder feedback is removed while historical migration stays intact
   const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
 
   assert.match(migration, /create table if not exists feedback_items/);
-  assert.match(migration, /type text not null check \(type in \('bug', 'feature'\)\)/);
+  assert.match(migration, /feedback_items_type_check[^]*'bug'[^]*'feature'/);
   assert.equal(existsSync("src/app/api/feedback/route.ts"), false);
   assert.equal(existsSync("src/features/settings/molecules/feedback-dialog.tsx"), false);
   assert.equal(existsSync("src/features/settings/hooks/use-feedback-commands.ts"), false);

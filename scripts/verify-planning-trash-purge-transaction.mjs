@@ -1,22 +1,17 @@
 import pg from "pg";
-import { readFile } from "node:fs/promises";
 import { loadLocalEnv } from "./lib/env.mjs";
 
 await loadLocalEnv();
 
 const password = process.env.SUPABASE_DB_PASSWORD;
-const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const host = process.env.SUPABASE_DB_HOST?.trim();
 const port = Number(process.env.SUPABASE_DB_PORT || 5432);
-const user = process.env.SUPABASE_DB_USER || "postgres";
+const user = process.env.SUPABASE_DB_USER?.trim();
 const database = process.env.SUPABASE_DB_NAME || "postgres";
 const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
-const migrationSql = await readFile(
-  new URL("../supabase/0065_planning_trash_purge.sql", import.meta.url),
-  "utf8",
-);
 
-if (!password) {
-  console.error("Missing SUPABASE_DB_PASSWORD.");
+if (!host || !user || !password) {
+  console.error("Missing SUPABASE_DB_HOST, SUPABASE_DB_USER, or SUPABASE_DB_PASSWORD.");
   process.exit(1);
 }
 
@@ -59,7 +54,6 @@ await client.connect();
 await client.query("begin");
 
 try {
-  await client.query(migrationSql);
   await client.query(
     `insert into public.profiles (id, name, role, platform_role)
      values ($1, 'Planning trash purge verifier', 'admin', 'ceo')`,

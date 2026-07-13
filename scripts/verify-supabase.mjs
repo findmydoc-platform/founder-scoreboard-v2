@@ -638,7 +638,7 @@ console.log(JSON.stringify(result, null, 2));
 
 const missingSchema = result.schema.filter((check) => !check.ok);
 if (missingSchema.length) {
-  console.error("Supabase schema is incomplete. Run the missing migrations in order, especially 0008_google_chat_delivery.sql, 0009_sprint_carryover.sql and 0010_task_self_checklist.sql.");
+  console.error("Supabase schema is incomplete. Apply the canonical migration history with pnpm run db:reset locally or the protected production migration workflow.");
   process.exit(1);
 }
 

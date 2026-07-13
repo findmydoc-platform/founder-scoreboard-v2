@@ -18,7 +18,11 @@ const requiredFiles = [
   ".github/scripts/deploy/vercel-deploy-prebuilt.sh",
   ".github/scripts/maintenance/purge-planning-trash.sh",
   ".github/workflows/send-release-google-chat.yml",
-  "scripts/deploy-production-schema.mjs",
+  "scripts/deploy-production-migrations.mjs",
+  "scripts/verify-supabase-migrations.mjs",
+  "scripts/lib/supabase-migrations.mjs",
+  "supabase/config.toml",
+  "supabase/migrations/20260713120959_production_baseline.sql",
   "docs/vercel-deployment.md",
   "skills/fmd-vercel-readiness/SKILL.md",
 ];
@@ -63,7 +67,7 @@ for (const file of requiredFiles) {
 
 const packageJson = JSON.parse(await read("package.json"));
 const pnpmWorkspace = await read("pnpm-workspace.yaml");
-for (const script of ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-schema"]) {
+for (const script of ["build", "start", "lint", "test", "verify:migrations", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 if (packageJson.packageManager !== "pnpm@10.13.1") failures.push("package.json must pin packageManager to pnpm@10.13.1.");
@@ -123,7 +127,9 @@ for (const marker of [
   "VERCEL_ORG_ID",
   "VERCEL_PROJECT_ID",
   "SUPABASE_DB_PASSWORD",
-  "deploy:supabase-schema",
+  "deploy:supabase-migrations",
+  "migration repair",
+  "14 days",
   "Supabase Auth",
   "GOOGLE_CHAT_DELIVERY_ENABLED=false",
   productionDomain,
@@ -192,9 +198,10 @@ const productionWorkflow = await read(".github/workflows/deploy-production.yml")
 const trashPurgeWorkflow = await read(".github/workflows/purge-planning-trash.yml");
 const trashPurgeScript = await read(".github/scripts/maintenance/purge-planning-trash.sh");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
-const productionSchemaDeployScript = await read("scripts/deploy-production-schema.mjs");
+const productionMigrationDeployScript = await read("scripts/deploy-production-migrations.mjs");
+const migrationContract = await read("scripts/lib/supabase-migrations.mjs");
 const productionSchemaConnection = await read("scripts/lib/production-schema-connection.mjs");
-const productionSchemaDeployContract = `${productionSchemaDeployScript}\n${productionSchemaConnection}`;
+const productionMigrationDeployContract = `${productionMigrationDeployScript}\n${migrationContract}\n${productionSchemaConnection}`;
 
 for (const marker of [
   'cron: "15 3 * * *"',
@@ -233,12 +240,14 @@ for (const marker of [
   "url: ${{ steps.vercel_production.outputs.deploymentUrl }}",
   "pull --yes --environment=production",
   "build --prod",
-  "Deploy Supabase Schema to Production",
+  "Verify Supabase Migration History",
+  "Apply Supabase Migrations to Production",
   "SCHEMA_DEPLOY_TARGET: production",
   "SUPABASE_DB_HOST",
   "SUPABASE_DB_USER",
   "SUPABASE_DB_PASSWORD",
-  "pnpm run deploy:supabase-schema",
+  "pnpm run verify:migrations",
+  "pnpm run deploy:supabase-migrations",
   "Verify Production Supabase Schema",
   "pnpm run verify:supabase",
   "vercel-deploy-prebuilt.sh production",
@@ -249,8 +258,8 @@ for (const marker of [
 ]) {
   if (!productionWorkflow.includes(marker)) failures.push(`deploy-production.yml missing: ${marker}`);
 }
-if (!/pnpm run deploy:supabase-schema[\s\S]*pnpm run verify:supabase[\s\S]*vercel-deploy-prebuilt\.sh production/.test(productionWorkflow)) {
-  failures.push("deploy-production.yml must deploy and verify Supabase schema before Vercel production deploy.");
+if (!/pnpm run deploy:supabase-migrations[\s\S]*pnpm run verify:supabase[\s\S]*vercel-deploy-prebuilt\.sh production/.test(productionWorkflow)) {
+  failures.push("deploy-production.yml must apply and verify Supabase migrations before Vercel production deploy.");
 }
 
 const deployScript = await read(".github/scripts/deploy/vercel-deploy-prebuilt.sh");
@@ -285,13 +294,17 @@ for (const marker of [
   "SUPABASE_DB_HOST",
   "SUPABASE_DB_USER",
   "SUPABASE_DB_PASSWORD",
-  "supabase/schema.sql",
+  "supabase_migrations.schema_migrations",
+  "productionBaseline",
+  "github_issue_sync_locks",
+  '"db", "push"',
+  '"--dry-run"',
   "notify pgrst, 'reload schema'",
 ]) {
-  if (!productionSchemaDeployContract.includes(marker)) failures.push(`production schema deploy contract missing: ${marker}`);
+  if (!productionMigrationDeployContract.includes(marker)) failures.push(`production migration deploy contract missing: ${marker}`);
 }
 for (const marker of ["drop\\s+table", "drop\\s+schema", "truncate", "drop\\s+column"]) {
-  if (!productionSchemaDeployScript.includes(marker)) failures.push(`deploy-production-schema.mjs missing destructive DDL guard: ${marker}`);
+  if (!migrationContract.includes(marker)) failures.push(`supabase-migrations.mjs missing destructive DDL guard: ${marker}`);
 }
 
 for (const marker of [
@@ -340,7 +353,7 @@ console.log(JSON.stringify({
   requiredEnvKeys,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "test", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-schema"],
+    scripts: ["build", "start", "lint", "test", "verify:migrations", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"],
     workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,

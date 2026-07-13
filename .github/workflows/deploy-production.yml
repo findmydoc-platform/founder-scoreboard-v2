@@ -63,6 +63,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify Supabase Migration History
+        run: pnpm run verify:migrations
+
       - name: Pull Vercel Environment Variables for Production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -75,22 +78,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: pnpm dlx vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
 
-      - name: Apply GitHub Sync Cutover Migrations
-        id: github_sync_migrations
+      - name: Apply Supabase Migrations to Production
         env:
           SCHEMA_DEPLOY_TARGET: production
           SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: pnpm run deploy:github-sync-migrations
-
-      - name: Deploy Supabase Schema to Production
-        env:
-          SCHEMA_DEPLOY_TARGET: production
-          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
-          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: pnpm run deploy:supabase-schema
+        run: pnpm run deploy:supabase-migrations
 
       - name: Verify Production Supabase Schema
         env:
@@ -127,15 +121,6 @@ jobs:
           GITHUB_SYNC_REPO: management
           GOOGLE_CHAT_DELIVERY_ENABLED: ${{ secrets.GOOGLE_CHAT_DELIVERY_ENABLED }}
         run: bash ./.github/scripts/deploy/vercel-deploy-prebuilt.sh production
-
-      - name: Restore Previous GitHub Sync Fields After Failed Cutover
-        if: failure() && steps.github_sync_migrations.outputs.schema_renamed == 'true' && steps.vercel_production.outcome != 'success'
-        env:
-          SCHEMA_DEPLOY_TARGET: production
-          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
-          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: pnpm run rollback:github-sync-fields
 
       - name: Reconcile Existing GitHub Comments
         if: steps.vercel_production.outcome == 'success'

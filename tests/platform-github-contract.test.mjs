@@ -1,3 +1,4 @@
+import { readSupabaseSchemaContract } from "../scripts/lib/supabase-migrations.mjs";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { readFeatureSurface, readPlanningSurface } from "./helpers/planning-surface.mjs";
@@ -5,33 +6,27 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("platform migration contains the role, score and sync contracts", async () => {
-  const sql = await readFile("supabase/0002_founder_platform.sql", "utf8");
-  const cleanup = await readFile("supabase/0038_remove_meeting_finder_decision_log.sql", "utf8");
-  const syncRename = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
-  const schema = await readFile("supabase/schema.sql", "utf8");
+  const sql = await readSupabaseSchemaContract();
 
   assert.match(sql, /platform_role text/);
-  assert.match(sql, /github_login text unique/);
+  assert.match(sql, /github_login text/);
+  assert.match(sql, /profiles_github_login_key[^]*unique \(github_login\)/);
   assert.match(sql, /audit_log/);
   assert.match(sql, /review_status/);
-  assert.match(sql, /github_sync_status/);
-  assert.match(syncRename, /rename column github_sync_status to github_issue_sync_status/);
-  assert.match(syncRename, /tasks_github_issue_sync_status_idx/);
-  assert.match(schema, /github_issue_sync_status/);
-  assert.match(schema, /task_comment_github_deliveries/);
-  assert.doesNotMatch(schema, /github_sync_status|github_last_synced_at|github_sync_error/);
+  assert.match(sql, /github_issue_sync_status/);
+  assert.match(sql, /tasks_github_issue_sync_status_idx/);
+  assert.match(sql, /task_comment_github_deliveries/);
+  assert.doesNotMatch(sql, /\bgithub_sync_status\b|github_last_synced_at|\bgithub_sync_error\b/);
   assert.match(sql, /current_platform_role/);
-  assert.match(cleanup, /drop table if exists decision_log cascade/);
-  assert.match(cleanup, /drop table if exists availability cascade/);
 });
 
 test("github sync route is team-scoped and locked per github resource", async () => {
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const migration = await readFile("supabase/0038_github_sync_locks.sql", "utf8");
-  const transactionalSyncMigration = await readFile("supabase/0047_transactional_task_creation_and_github_sync.sql", "utf8");
-  const syncRenameMigration = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const transactionalSyncMigration = await readSupabaseSchemaContract();
+  const syncRenameMigration = await readSupabaseSchemaContract();
   const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
   const reconcileRoute = await readFile("src/app/api/github-comments/reconcile/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
@@ -81,7 +76,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /begin_github_issue_sync_transaction/);
   assert.match(route, /finalize_github_issue_sync_transaction/);
   assert.match(route, /fail_github_issue_sync_transaction/);
-  assert.match(transactionalSyncMigration, /github_sync_status = 'pending'/);
+  assert.match(transactionalSyncMigration, /github_issue_sync_status = 'pending'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'pending'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'synced'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'failed'/);
@@ -103,7 +98,7 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const taskWithdrawCommand = await readFile("src/features/tasks/hooks/use-task-withdraw-command.ts", "utf8");
   const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
-  const deletionMigration = await readFile("supabase/0046_transactional_task_deletion.sql", "utf8");
+  const deletionMigration = await readSupabaseSchemaContract();
   const github = await readFile("src/lib/github.ts", "utf8");
   const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
 
@@ -179,7 +174,7 @@ test("github issue export includes only the task brief and FounderOps source", a
 });
 
 test("task relationships use github-like blocked by and blocking semantics", async () => {
-  const migration = await readFile("supabase/0016_task_relationship_edges.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
@@ -195,7 +190,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const relationshipViewModel = await readFile("src/lib/relationship-view-model.ts", "utf8");
   const relationshipPermissions = await readFile("src/features/tasks/model/task-relationship-permissions.ts", "utf8");
-  const relationshipPermissionMigration = await readFile("supabase/0053_task_relationship_permissions.sql", "utf8");
+  const relationshipPermissionMigration = await readSupabaseSchemaContract();
   const script = await readFile("scripts/migrate-task-relationships.mjs", "utf8");
 
   assert.match(migration, /create table if not exists task_relationship_edges/);
@@ -276,7 +271,7 @@ test("github issue sync and comment delivery keep independent state", async () =
   const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const deliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
+  const deliveryMigration = await readSupabaseSchemaContract();
 
   assert.match(taskRoutePolicy, /payload\.githubIssueSyncStatus === undefined/);
   assert.match(taskRoutePolicy, /github_issue_sync_status = "not_synced"/);
@@ -300,7 +295,7 @@ test("github issue sync and comment delivery keep independent state", async () =
 test("github sync maps the visible task assignee to native github assignees", async () => {
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const migration = await readFile("supabase/0057_rename_github_issue_sync_fields.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
 
   assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
   assert.match(syncRoute, /profileGitHubLoginById/);
@@ -343,29 +338,31 @@ test("github sync verification is read-only and checks the management repo", asy
   assert.doesNotMatch(script, /method: "DELETE"/);
 });
 
-test("production cutover builds first, migrates with lock guard, verifies, deploys and reconciles", async () => {
+test("production deploy verifies the ledger, builds, migrates with lock guard, verifies, deploys and reconciles", async () => {
   const workflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
-  const migrationDeploy = await readFile("scripts/deploy-production-github-sync-migrations.mjs", "utf8");
-  const rollback = await readFile("supabase/rollback/0057_restore_github_sync_fields.sql", "utf8");
+  const migrationDeploy = await readFile("scripts/deploy-production-migrations.mjs", "utf8");
 
+  const migrationVerifyIndex = workflow.indexOf("Verify Supabase Migration History");
   const buildIndex = workflow.indexOf("Build Vercel Output");
-  const migrationIndex = workflow.indexOf("Apply GitHub Sync Cutover Migrations");
+  const migrationIndex = workflow.indexOf("Apply Supabase Migrations to Production");
   const schemaVerifyIndex = workflow.indexOf("Verify Production Supabase Schema");
   const deploymentIndex = workflow.indexOf("Deploy Prebuilt Output to Vercel Production");
   const reconciliationIndex = workflow.indexOf("Reconcile Existing GitHub Comments");
+  assert.ok(migrationVerifyIndex < buildIndex);
   assert.ok(buildIndex < migrationIndex);
   assert.ok(migrationIndex < schemaVerifyIndex);
   assert.ok(schemaVerifyIndex < deploymentIndex);
   assert.ok(deploymentIndex < reconciliationIndex);
   assert.match(migrationDeploy, /github_issue_sync_locks/);
   assert.match(migrationDeploy, /expires_at > now\(\)/);
-  assert.match(migrationDeploy, /0057_rename_github_issue_sync_fields\.sql/);
-  assert.match(migrationDeploy, /0058_task_comment_github_delivery_outbox\.sql/);
+  assert.match(migrationDeploy, /supabase_migrations\.schema_migrations/);
+  assert.match(migrationDeploy, /productionBaseline/);
+  assert.match(migrationDeploy, /"db", "push"/);
+  assert.match(migrationDeploy, /"--dry-run"/);
   assert.match(workflow, /Read-only comment reconciliation/);
   assert.match(workflow, /APP_URL: \$\{\{ secrets\.APP_URL \}\}/);
   assert.match(workflow, /\$\{APP_URL%\/\}\/api\/github-comments\/reconcile/);
-  assert.match(workflow, /Restore Previous GitHub Sync Fields After Failed Cutover/);
-  assert.match(rollback, /rename column github_issue_sync_status to github_sync_status/);
+  assert.doesNotMatch(workflow, /Restore Previous GitHub Sync Fields|rollback:github-sync-fields/);
 });
 
 test("app-only tasks are visibly marked without creating github issues", async () => {
@@ -451,8 +448,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
   const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
-  const githubAppMigration = await readFile("supabase/0036_github_app_user_tokens.sql", "utf8");
-  const commentDeliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
+  const githubAppMigration = await readSupabaseSchemaContract();
+  const commentDeliveryMigration = await readSupabaseSchemaContract();
   const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
   const connectRoute = await readFile("src/app/api/github-app/connect/route.ts", "utf8");
   const appCallbackRoute = await readFile("src/app/api/github-app/callback/route.ts", "utf8");
@@ -571,8 +568,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubAppMigration, /encrypted_access_token/);
   assert.match(githubAppMigration, /encrypted_refresh_token/);
   assert.match(githubAppMigration, /enable row level security/);
-  assert.match(githubAppMigration, /grant select, insert, update, delete on github_app_user_tokens to service_role/);
-  assert.doesNotMatch(githubAppMigration, /create policy/i);
+  assert.match(githubAppMigration, /grant all on table github_app_user_tokens to service_role/);
+  assert.doesNotMatch(githubAppMigration, /create policy [^\n]*github_app_user_tokens/i);
   assert.match(commentsRoute, /create_task_comment_with_github_delivery/);
   assert.match(commentsRoute, /deliverPendingGitHubComments/);
   assert.doesNotMatch(commentsRoute, /getGitHubUserTokenForProfile|githubIssueSyncError/);
@@ -581,7 +578,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(commentDelivery, /createGitHubIssueComment/);
   assert.match(commentDelivery, /githubCommentMarker/);
   assert.match(commentDeliveryMigration, /for update skip locked/);
-  assert.match(commentDeliveryMigration, /task_comment_id bigint primary key/);
+  assert.match(commentDeliveryMigration, /create table if not exists task_comment_github_deliveries[^]*task_comment_id bigint not null/);
+  assert.match(commentDeliveryMigration, /task_comment_github_deliveries_pkey[^]*primary key \(task_comment_id\)/);
   assert.match(attachmentRoute, /getGitHubUserTokenForProfile/);
   assert.match(attachmentRoute, /GitHubAppUserTokenRequiredError/);
   assert.match(attachmentRoute, /401/);
@@ -606,9 +604,9 @@ test("github app connect persists reload-stable user tokens without browser toke
 });
 
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
-  const migration = await readFile("supabase/0005_comments_blockers_notifications.sql", "utf8");
-  const externalMigration = await readFile("supabase/0018_task_external_comments.sql", "utf8");
-  const commentDeliveryMigration = await readFile("supabase/0058_task_comment_github_delivery_outbox.sql", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const externalMigration = await readSupabaseSchemaContract();
+  const commentDeliveryMigration = await readSupabaseSchemaContract();
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");

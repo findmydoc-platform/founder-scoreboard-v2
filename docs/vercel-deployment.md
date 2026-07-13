@@ -98,20 +98,29 @@ Production deploys start automatically on every push to `main`, which includes m
 
 GitHub Actions executes the production flow in this order:
 
+- Verify the timestamp migration history and immutable production baseline.
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
-- Refuse the cutover while an active GitHub issue sync lock exists, then apply `0057_rename_github_issue_sync_fields.sql` and `0058_task_comment_github_delivery_outbox.sql`.
-- Deploy the current Supabase baseline schema with `pnpm run deploy:supabase-schema`, guarded by `SCHEMA_DEPLOY_TARGET=production`.
+- Run `pnpm run deploy:supabase-migrations`, guarded by `SCHEMA_DEPLOY_TARGET=production`. The deploy refuses a missing baseline ledger or an active GitHub issue sync lock, performs a CLI dry run, and pushes only pending migrations.
 - Verify the production Supabase schema, auth mapping, GitHub sync contract, and planning hierarchy.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Reconcile the existing comment outbox idempotently through the protected canonical production endpoint. Do not call the Vercel deployment URL because deployment protection redirects that URL to Vercel SSO.
-- If schema verification or the Vercel switch fails before a new production deployment is active, restore the previous issue-sync column names automatically.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
 `pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
 
-The baseline production schema deploy applies `supabase/schema.sql` only. The explicit GitHub sync cutover step immediately before it applies exactly migrations `0057` and `0058`; it never runs `supabase/*.sql` as a glob because historical migration files include duplicate numbering and legacy cleanup scripts that are not safe as a repeated automatic deploy set.
+`supabase/migrations/20260713120959_production_baseline.sql` is an immutable dump of the deployed production schema. A fresh local database starts from that baseline and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
+
+Before the first merge that activates the migration ledger, restore-test a private roles/schema/data backup, confirm that production still matches the baseline, and mark only the baseline version as applied:
+
+```bash
+pnpm exec supabase migration repair --db-url "$SUPABASE_DB_URL" --status applied 20260713120959
+```
+
+The bucket configuration migration remains pending and is applied by the first production workflow run. The deploy script fails closed while the ledger is absent or the baseline version is missing. Keep the verified pre-cutover backup for 14 days.
+
+All later schema changes start with `pnpm run db:migration:new -- <clear_name>` and are committed under `supabase/migrations/`. Run `pnpm run verify:migrations` and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
 
 Configure all three production database secrets from the values shown under **Connect > Session pooler** in Supabase. To update the password from local `.env.local` without printing it, run from the repository root:
 
@@ -161,7 +170,7 @@ Both endpoints accept only `x-founderops-maintenance-secret` backed by `FOUNDERO
 
 Publishing the workflow does not activate physical cleanup. Before enabling it, separately approve and complete all of the following:
 
-- apply `0065_planning_trash_purge.sql` after the planning trash lifecycle migration;
+- confirm the canonical migration history contains the planning-trash purge contract and has been deployed through the production ledger;
 - configure the same `FOUNDEROPS_MAINTENANCE_SECRET` in the GitHub `production` environment and the production Vercel runtime;
 - run the rollback-based purge verification against the target Supabase project;
 - explicitly approve the first manual production run.
