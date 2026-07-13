@@ -108,7 +108,8 @@ test("approval domain keeps client affordances and optimistic state aligned", as
     scoreRelevant: false,
   });
   assert.equal(approval.isTaskPlanningActive({ taskType: "sub_issue", approvalStatus: null, parentApprovalStatus: "approved" }), true);
-  assert.equal(approval.canDecideDeliverableApproval(deliverable, { accountableProfileId: "owner-1" }, { id: "owner-1", platformRole: "founder" }), true);
+  assert.equal(approval.canApproveDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "approved" }, { id: "owner-1", platformRole: "founder" }), true);
+  assert.equal(approval.canRejectDeliverableApproval(deliverable, { accountableProfileId: "owner-1", approvalStatus: "proposed" }, { id: "owner-1", platformRole: "founder" }), true);
   assert.equal(approval.canDecideInitiativeApproval(initiative, { platformRole: "deputy" }), false);
 });
 

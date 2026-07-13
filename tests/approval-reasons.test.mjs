@@ -34,6 +34,19 @@ test("return affordances match the server role and state contract", () => {
   assert.equal(approvalDomain.canReturnDeliverableForRevision({ ...proposedDeliverable, approvalStatus: "rejected" }, { accountableProfileId: "founder-1" }, { id: "founder-1", platformRole: "founder" }), false);
 });
 
+test("deliverable decision affordances apply the parent approval gate only to approval", () => {
+  const proposedDeliverable = { taskType: "deliverable", approvalStatus: "proposed" };
+  const accountable = { id: "founder-1", platformRole: "founder" };
+  const approvedInitiative = { accountableProfileId: "founder-1", approvalStatus: "approved" };
+  const proposedInitiative = { accountableProfileId: "founder-1", approvalStatus: "proposed" };
+
+  assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, approvedInitiative, accountable), true);
+  assert.equal(approvalDomain.canApproveDeliverableApproval(proposedDeliverable, proposedInitiative, accountable), false);
+  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, accountable), true);
+  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, undefined, { id: "ceo-1", platformRole: "ceo" }), false);
+  assert.equal(approvalDomain.canRejectDeliverableApproval(proposedDeliverable, proposedInitiative, { id: "deputy-1", platformRole: "deputy" }), false);
+});
+
 test("only the current rejection or return reason is exposed by the approval view model", () => {
   assert.equal(approvalDomain.currentApprovalDecisionReason({ approvalStatus: "draft", decisionNote: "Bitte überarbeiten." }), "Bitte überarbeiten.");
   assert.equal(approvalDomain.currentApprovalDecisionReason({ approvalStatus: "rejected", decisionNote: "Passt nicht zum Ziel." }), "Passt nicht zum Ziel.");

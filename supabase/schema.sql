@@ -350,7 +350,9 @@ create index if not exists audit_log_entity_idx on audit_log(entity_type, entity
 
 grant usage on schema public to anon, authenticated, service_role;
 grant select on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
-grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, packages, tasks, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+grant insert, update, delete on profiles, profile_ui_preferences, profile_feature_tour_acknowledgements, projects, sprints, meetings, meeting_attendance, task_dependencies, task_links, task_notes, task_activity, task_focus_items, founder_sprint_scores, founder_strike_state, strike_events, score_objections, founder_events to authenticated, service_role;
+revoke insert, update, delete on table public.packages, public.tasks from public, anon, authenticated;
+grant insert, update, delete on table public.packages, public.tasks to service_role;
 grant select, insert on audit_log to authenticated, service_role;
 grant select, insert, update, delete on notification_preferences to authenticated, service_role;
 grant select, insert, update, delete on github_app_user_tokens to service_role;
@@ -366,6 +368,9 @@ stable
 as $$
   select role from public.profiles where auth_user_id = auth.uid()
 $$;
+
+revoke all on function public.current_profile_role() from public, anon;
+grant execute on function public.current_profile_role() to authenticated, service_role;
 
 create or replace function public.current_platform_role()
 returns text
@@ -1024,9 +1029,6 @@ drop policy if exists "packages_select_team" on packages;
 create policy "packages_select_team" on packages for select to authenticated using (auth.uid() is not null);
 
 drop policy if exists "packages_write_members" on packages;
-create policy "packages_write_members" on packages for all to authenticated
-using (public.current_profile_role() in ('admin', 'member'))
-with check (public.current_profile_role() in ('admin', 'member'));
 
 create table if not exists public.task_deletion_operations (
   id uuid primary key default gen_random_uuid(),
@@ -1678,9 +1680,6 @@ drop policy if exists "tasks_select_team" on tasks;
 create policy "tasks_select_team" on tasks for select to authenticated using (auth.uid() is not null);
 
 drop policy if exists "tasks_write_members" on tasks;
-create policy "tasks_write_members" on tasks for all to authenticated
-using (public.current_profile_role() in ('admin', 'member'))
-with check (public.current_profile_role() in ('admin', 'member'));
 
 drop policy if exists "sprints_select_team" on sprints;
 create policy "sprints_select_team" on sprints for select to authenticated using (auth.uid() is not null);

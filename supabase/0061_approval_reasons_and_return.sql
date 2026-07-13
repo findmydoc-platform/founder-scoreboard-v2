@@ -213,3 +213,15 @@ revoke all on function public.decide_deliverable_approval_transaction(text, inte
 
 grant execute on function public.decide_initiative_approval_transaction(text, integer, text, text, text) to service_role;
 grant execute on function public.decide_deliverable_approval_transaction(text, integer, text, text, text) to service_role;
+
+-- Planning writes cross a server-side authorization boundary. Authenticated
+-- clients keep read access, while mutations remain service-role only.
+revoke insert, update, delete on table public.packages, public.tasks from public, anon, authenticated;
+grant select on table public.packages, public.tasks to authenticated, service_role;
+grant insert, update, delete on table public.packages, public.tasks to service_role;
+
+drop policy if exists "packages_write_members" on public.packages;
+drop policy if exists "tasks_write_members" on public.tasks;
+
+revoke all on function public.current_profile_role() from public, anon;
+grant execute on function public.current_profile_role() to authenticated, service_role;

@@ -53,13 +53,33 @@ export function canReturnInitiativeForRevision(
     && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy");
 }
 
-export function canDecideDeliverableApproval(
+type DeliverableApprovalInitiative = Pick<Package, "accountableProfileId" | "approvalStatus">;
+
+function canDecideProposedDeliverable(
   task: Pick<Task, "taskType" | "approvalStatus">,
-  initiative: Pick<Package, "accountableProfileId"> | undefined,
+  initiative: DeliverableApprovalInitiative | undefined,
   profile?: Pick<Profile, "id" | "platformRole"> | null,
 ) {
   return isProposedDeliverable(task)
+    && Boolean(initiative)
     && (profile?.platformRole === "ceo" || initiative?.accountableProfileId === profile?.id);
+}
+
+export function canApproveDeliverableApproval(
+  task: Pick<Task, "taskType" | "approvalStatus">,
+  initiative: DeliverableApprovalInitiative | undefined,
+  profile?: Pick<Profile, "id" | "platformRole"> | null,
+) {
+  return initiative?.approvalStatus === "approved"
+    && canDecideProposedDeliverable(task, initiative, profile);
+}
+
+export function canRejectDeliverableApproval(
+  task: Pick<Task, "taskType" | "approvalStatus">,
+  initiative: DeliverableApprovalInitiative | undefined,
+  profile?: Pick<Profile, "id" | "platformRole"> | null,
+) {
+  return canDecideProposedDeliverable(task, initiative, profile);
 }
 
 export function canReturnDeliverableForRevision(

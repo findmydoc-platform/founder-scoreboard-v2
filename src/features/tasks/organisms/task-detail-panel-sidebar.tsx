@@ -37,7 +37,8 @@ type Props = {
   canOpenReview: boolean;
   canDeleteTask: boolean;
   canChangeTaskStatus?: boolean;
-  canDecideApproval: boolean;
+  canApprove: boolean;
+  canReject: boolean;
   canReturnToDraft: boolean;
   pending: boolean;
   githubInstallationAvailable: boolean;
@@ -61,7 +62,8 @@ export function TaskDetailPanelSidebar({
   canOpenReview,
   canDeleteTask,
   canChangeTaskStatus = canManageTaskMeta,
-  canDecideApproval,
+  canApprove,
+  canReject,
   canReturnToDraft,
   pending,
   githubInstallationAvailable,
@@ -116,10 +118,10 @@ export function TaskDetailPanelSidebar({
                 <span className="font-semibold text-slate-700">Begründung:</span> {decisionReason}
               </p>
             )}
-            {canDecideApproval && (
+            {(canApprove || canReject) && (
               <div className="mt-3 flex flex-wrap gap-2">
-                <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideApproval("approve")}>Freigeben</UiButton>
-                <UiButton size="xs" disabled={pending} onClick={() => setDecisionAction("reject")}>Ablehnen</UiButton>
+                {canApprove && <UiButton size="xs" variant="primary" disabled={pending} onClick={() => onDecideApproval("approve")}>Freigeben</UiButton>}
+                {canReject && <UiButton size="xs" disabled={pending} onClick={() => setDecisionAction("reject")}>Ablehnen</UiButton>}
               </div>
             )}
             {canReturnToDraft && <UiButton size="xs" className="mt-2" disabled={pending} onClick={() => setDecisionAction("return_to_draft")}>Zur Überarbeitung</UiButton>}
