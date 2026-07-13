@@ -83,22 +83,26 @@ export function useInitiativeCommands({
   const decideInitiativeApproval = (initiative: Package, action: ApprovalDecisionAction, note = "") => {
     setSaveError("");
     if (source !== "supabase") {
-      setData((current) => ({
-        ...current,
-        packages: current.packages.map((pack) => pack.id === initiative.id
-          ? applyOptimisticApprovalDecision(pack, action, note)
-          : pack),
-      }));
+      setData((current) => action === "reject"
+        ? removePlanningRootFromData(current, "initiative", initiative.id).data
+        : {
+            ...current,
+            packages: current.packages.map((pack) => pack.id === initiative.id
+              ? applyOptimisticApprovalDecision(pack, action, note)
+              : pack),
+          });
       return;
     }
     startTransition(async () => {
       try {
         const { response, body } = await planningApi.decideInitiativeApprovalRequest(apiClient, initiative.id, action, initiative.approvalRevision, note);
         if (!response.ok || !body?.initiative) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        setData((current) => ({
-          ...current,
-          packages: current.packages.map((pack) => pack.id === initiative.id ? body.initiative! : pack),
-        }));
+        setData((current) => action === "reject"
+          ? removePlanningRootFromData(current, "initiative", initiative.id).data
+          : {
+              ...current,
+              packages: current.packages.map((pack) => pack.id === initiative.id ? body.initiative! : pack),
+            });
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : "Freigabeentscheidung konnte nicht gespeichert werden.");
       }

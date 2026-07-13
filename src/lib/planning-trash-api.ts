@@ -127,7 +127,9 @@ export async function handlePlanningTrashWithdraw(
     return apiError("Aktueller Freigabestand ist erforderlich.", 400);
   }
 
-  const { data: root, error: rootError } = await loadPlanningTrashRoot(context.supabase, rootType, rootId);
+  const serviceSupabase = getServerServiceRoleSupabase();
+  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
+  const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
   if (rootError) return apiError(rootError.message, 500);
   if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
   if (rootType === "deliverable" && root.task_type !== "deliverable") {
@@ -147,8 +149,6 @@ export async function handlePlanningTrashWithdraw(
   }
 
   const requestMetadata = auditRequestMetadata(request);
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
   const { data, error } = await serviceSupabase.rpc("withdraw_planning_item_transaction", {
     p_root_type: rootType,
     p_root_id: rootId,
@@ -176,7 +176,9 @@ export async function handlePlanningTrashRestore(
     return apiError("Aktueller Papierkorbstand ist erforderlich.", 400);
   }
 
-  const { data: root, error: rootError } = await loadPlanningTrashRoot(context.supabase, rootType, rootId);
+  const serviceSupabase = getServerServiceRoleSupabase();
+  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
+  const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
   if (rootError) return apiError(rootError.message, 500);
   if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
   if (rootType === "deliverable" && root.task_type !== "deliverable") {
@@ -188,8 +190,6 @@ export async function handlePlanningTrashRestore(
   }
 
   const requestMetadata = auditRequestMetadata(request);
-  const serviceSupabase = getServerServiceRoleSupabase();
-  if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
   const { data, error } = await serviceSupabase.rpc("restore_planning_item_transaction", {
     p_root_type: rootType,
     p_root_id: rootId,
