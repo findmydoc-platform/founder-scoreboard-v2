@@ -18,6 +18,7 @@ import {
   assigneeOptions,
   initiativeOptions,
   milestoneOptions,
+  parentDeliverableOptions,
   priorityOptions,
   sprintOptions,
 } from "@/features/tasks/model/task-form-options";
@@ -29,10 +30,12 @@ type Props = {
   pack?: Package;
   teamProfiles: Profile[];
   packages: Package[];
+  parentDeliverables: Task[];
   sprints: Sprint[];
   milestones: Milestone[];
   canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
+  canReparentSubIssue: boolean;
   canManageReviewOwner: boolean;
   canOpenReview: boolean;
   canDeleteTask: boolean;
@@ -54,10 +57,12 @@ export function TaskDetailPanelSidebar({
   pack,
   teamProfiles,
   packages,
+  parentDeliverables,
   sprints,
   milestones,
   canManageFinalTaskStatus,
   canManageTaskMeta,
+  canReparentSubIssue,
   canManageReviewOwner,
   canOpenReview,
   canDeleteTask,
@@ -81,6 +86,7 @@ export function TaskDetailPanelSidebar({
     || teamProfiles.find((profile) => profile.platformRole === "ceo")
     || assigneeProfile;
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
+  const currentParent = parentDeliverables.find((item) => item.id === task.parentTaskId);
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const currentMilestone = milestones.find((item) => item.id === task.milestoneId);
   const canSyncExistingGitHubIssue = hasGitHubIssue(task);
@@ -99,6 +105,16 @@ export function TaskDetailPanelSidebar({
   const updateMilestone = (milestoneId: string) => {
     const nextPackage = packages.find((item) => !milestoneId || !item.milestoneId || item.milestoneId === milestoneId);
     onUpdate({ milestoneId, packageId: nextPackage?.id || task.packageId });
+  };
+
+  const updateParentDeliverable = (parentTaskId: string) => {
+    const parent = parentDeliverables.find((item) => item.id === parentTaskId);
+    onUpdate({
+      parentTaskId,
+      packageId: parent?.packageId || "",
+      milestoneId: parent?.milestoneId || "",
+      parentApprovalStatus: parent?.approvalStatus || null,
+    });
   };
 
   return (
@@ -175,7 +191,60 @@ export function TaskDetailPanelSidebar({
       <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="text-sm font-semibold text-slate-950">Planung</h3>
         <div className="mt-3 grid gap-3">
-          {canManageTaskMeta ? (
+          {task.taskType === "sub_issue" ? (
+            <>
+              {canReparentSubIssue ? (
+                <UiSelectField
+                  label="Parent-Deliverable"
+                  value={task.parentTaskId}
+                  disabled={pending}
+                  onChange={updateParentDeliverable}
+                  options={parentDeliverableOptions(parentDeliverables, packages)}
+                />
+              ) : (
+                <div>
+                  <div className="text-xs font-semibold text-slate-500">Parent-Deliverable</div>
+                  <div className="mt-1 break-words text-sm text-slate-800">{currentParent?.title || task.parentTaskId || "Nicht gesetzt"}</div>
+                </div>
+              )}
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Geerbte Initiative</div>
+                <div className="mt-1 break-words text-sm text-slate-800">{currentPackage?.title || "Ohne Initiative"}</div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Geerbtes Epic / Meilenstein</div>
+                <div className="mt-1 break-words text-sm text-slate-800">{currentMilestone?.title || "Kein Epic"}</div>
+              </div>
+              {task.parentApprovalStatus !== "approved" && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                  Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.
+                </p>
+              )}
+              {canManageTaskMeta ? (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
+                    <div className="mt-1 grid grid-cols-2 gap-2">
+                      <CustomDatePicker value={task.startDate || ""} onChange={(value) => onUpdate({ startDate: value })} className="h-9 text-sm" />
+                      <CustomDatePicker value={task.endDate || ""} onChange={(value) => onUpdate({ endDate: value })} className="h-9 text-sm" />
+                    </div>
+                  </div>
+                  <UiDateField label="Zieltermin" value={task.deadline || ""} onChange={(value) => onUpdate({ deadline: value })} />
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zeitraum</div>
+                    <div className="mt-1 flex items-center gap-2 text-sm text-slate-800"><CalendarDays size={15} />{dateRange(task)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-500">Zieltermin</div>
+                    <div className="mt-1 text-sm text-slate-800">{task.deadline ? formatDate(task.deadline) : "Kein Zieltermin"}</div>
+                  </div>
+                </>
+              )}
+            </>
+          ) : canManageTaskMeta ? (
             <>
               <UiSelectField label="Initiative" value={task.packageId} onChange={updatePackage} options={initiativeOptions(packages)} />
               <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task)} onChange={(value) => onUpdate({ sprintId: value })} options={sprintOptions(sprints)} />

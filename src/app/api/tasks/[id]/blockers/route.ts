@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,status")
+    .select("id,title,assignee,owner,status,task_type")
     .eq("id", id)
     .single();
 
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       owner: task.owner || "",
       ownerId: task.owner || "",
       reviewOwnerProfileId: "",
+      taskType: task.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,
     unrestricted: !permission.profile,

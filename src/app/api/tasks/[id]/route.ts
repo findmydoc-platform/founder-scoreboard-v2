@@ -26,8 +26,10 @@ import { archiveGitHubIssue } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import type { Task } from "@/lib/types";
 
 type TaskUpdateTransactionResult = {
+  parentApprovalStatus?: Task["parentApprovalStatus"];
   task?: {
     updated_at?: string;
     approval_status?: "draft" | "proposed" | "approved" | "rejected" | null;
@@ -39,6 +41,11 @@ type TaskUpdateTransactionResult = {
     decision_note?: string | null;
     sprint_id?: string | null;
     score_relevant?: boolean | null;
+    package_id?: string | null;
+    milestone_id?: string | null;
+    parent_task_id?: string | null;
+    github_issue_sync_status?: Task["githubIssueSyncStatus"] | null;
+    github_issue_sync_error?: string | null;
   };
   activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
 };
@@ -74,9 +81,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
   }
   const update: TaskRouteDbUpdate = {};
+  let nextParentApprovalStatus: Task["parentApprovalStatus"] | undefined;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,start_date,end_date,deadline,evidence_link,updated_at")
+    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -95,6 +103,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       owner: currentTask.owner || "",
       ownerId: currentTask.owner || "",
       reviewOwnerProfileId: currentTask.review_owner_profile_id || "",
+      taskType: currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,
     unrestricted: !permission.profile,
@@ -110,6 +119,31 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest) {
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
+  }
+
+  if (payload.parentTaskId !== undefined) {
+    if (currentTask.task_type !== "sub_issue") {
+      return apiError("Nur Sub-Issues können einem anderen Parent-Deliverable zugeordnet werden.", 400);
+    }
+    if (!detailPermissions.canReparentSubIssue) {
+      return apiError("Nur CEO, Deputy oder die aktuelle Zuständigkeit können dieses Sub-Issue verschieben.", 403);
+    }
+
+    const nextParentTaskId = payload.parentTaskId.trim();
+    if (!nextParentTaskId) return apiError("Ein Parent-Deliverable ist erforderlich.", 400);
+    const { data: nextParent, error: nextParentError } = await supabase
+      .from("tasks")
+      .select("id,task_type,approval_status")
+      .eq("id", nextParentTaskId)
+      .maybeSingle();
+    if (nextParentError) return apiError(nextParentError.message, 500);
+    if (!nextParent) return apiError("Parent-Deliverable wurde nicht gefunden.", 404);
+    if (nextParent.task_type !== "deliverable") {
+      return apiError("Sub-Issues können nur unter Deliverables verschoben werden.", 400);
+    }
+
+    nextParentApprovalStatus = nextParent.approval_status as Task["parentApprovalStatus"];
+    if (nextParentTaskId !== currentTask.parent_task_id) update.parent_task_id = nextParentTaskId;
   }
 
   const statusGuard = validateTaskStatusUpdate({ currentTask, isOperationalLead, isCeo, payload, profile: permission.profile });
@@ -302,6 +336,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     decisionNote: result.task.decision_note || "",
     sprintId: result.task.sprint_id || "",
     scoreRelevant: Boolean(result.task.score_relevant),
+    ...(payload.parentTaskId !== undefined ? {
+      parentTaskId: result.task.parent_task_id || "",
+      packageId: result.task.package_id || "",
+      milestoneId: result.task.milestone_id || "",
+      parentApprovalStatus: result.parentApprovalStatus ?? nextParentApprovalStatus ?? null,
+      githubIssueSyncStatus: result.task.github_issue_sync_status || "not_synced",
+      githubIssueSyncError: result.task.github_issue_sync_error || "",
+    } : {}),
   };
 
   return NextResponse.json({

@@ -201,10 +201,12 @@ export function TaskDetailSurface({
           pack={pack}
           teamProfiles={teamProfiles}
           packages={packages}
+          parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
           sprints={sprints}
           milestones={milestones}
           canManageFinalTaskStatus={controller.permissions.canManageFinalStatus}
           canManageTaskMeta={controller.permissions.canManageTaskMeta}
+          canReparentSubIssue={controller.permissions.canReparentSubIssue}
           canManageReviewOwner={controller.permissions.canManageReviewOwner}
           canOpenReview={controller.permissions.canOpenReview}
           canDeleteTask={controller.permissions.canDeleteTask}
