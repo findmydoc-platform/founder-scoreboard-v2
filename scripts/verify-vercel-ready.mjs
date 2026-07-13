@@ -24,7 +24,6 @@ const requiredFiles = [
   "supabase/config.toml",
   "supabase/migrations/20260713120959_production_baseline.sql",
   "docs/vercel-deployment.md",
-  "skills/fmd-vercel-readiness/SKILL.md",
 ];
 
 const requiredEnvKeys = [
@@ -149,32 +148,6 @@ for (const marker of [
 }
 for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
   if (deploymentDoc.includes(banned)) failures.push(`docs/vercel-deployment.md must not include: ${banned}`);
-}
-
-const skill = await read("skills/fmd-vercel-readiness/SKILL.md");
-for (const marker of [
-  "GitHub Actions",
-  "GitHub Actions job logs",
-  "REQUIRE_SUPABASE_AUTH=true",
-  "GOOGLE_CHAT_DELIVERY_ENABLED=false",
-  "preview",
-  "production",
-  productionDomain,
-  "Git-metadata-free temporary directory",
-  "AI Guidance: Vercel Hobby Private Author Block",
-  "TEAM_ACCESS_REQUIRED",
-  "readyStateReason",
-  "seatBlock",
-]) {
-  if (!skill.includes(marker)) failures.push(`fmd-vercel-readiness skill missing: ${marker}`);
-}
-for (const banned of ["vercel login", "vercel link", "vercel deploy", "vercel build --prod", "vercel inspect", "vercel logs"]) {
-  if (skill.includes(banned)) failures.push(`fmd-vercel-readiness skill must not include: ${banned}`);
-}
-
-const workspaceRules = await read("AGENTS.md");
-for (const marker of ["GitHub App installation tokens", "GitHub App user tokens", "Never expose raw GitHub tokens"]) {
-  if (!workspaceRules.includes(marker)) failures.push(`AGENTS.md missing Vercel/security marker: ${marker}`);
 }
 
 const previewWorkflow = await read(".github/workflows/deploy-preview.yml");
@@ -357,6 +330,5 @@ console.log(JSON.stringify({
     workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,
-    skill: "fmd-vercel-readiness",
   },
 }, null, 2));

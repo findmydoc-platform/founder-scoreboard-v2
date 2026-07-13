@@ -5,7 +5,6 @@ const migrationCorpus = await readSupabaseMigrationCorpus();
 
 const checks = [
   ["docs/planning-hierarchy.md", /Epic \/ Meilenstein[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/],
-  ["AGENTS.md", /Epic \/ Milestone -> Initiative -> Deliverable -> Sub-Issue/],
   ["Supabase migration corpus", /CREATE TABLE IF NOT EXISTS "public"\."packages"[^]*"milestone_id"/i, migrationCorpus],
   ["Supabase migration corpus", /"owner_id"[^]*"success_criteria"[^]*"scope_constraints"/i, migrationCorpus],
   ["Supabase migration corpus", /"accountable_profile_id"[^]*"responsible_profile_ids"[^]*"consulted_profile_ids"[^]*"informed_profile_ids"/i, migrationCorpus],

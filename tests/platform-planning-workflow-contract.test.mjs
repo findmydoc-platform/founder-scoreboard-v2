@@ -374,35 +374,6 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 
-test("story writing skill protects approved stories and enforces template guardrails", async () => {
-  const skill = await readFile(".agents/skills/fmd-story-writing/SKILL.md", "utf8");
-  const examples = await readFile(".agents/skills/fmd-story-writing/references/examples.md", "utf8");
-  const agent = await readFile(".agents/skills/fmd-story-writing/agents/openai.yaml", "utf8");
-  const rules = await readFile("AGENTS.md", "utf8");
-  const docs = await readFile("docs/task-template-v2.md", "utf8");
-
-  assert.match(skill, /fmd-story-writing/);
-  assert.match(skill, /Approved, released, reviewed, or GitHub-synced story/);
-  assert.match(skill, /Never change Acceptance Criteria/);
-  assert.match(skill, /Problem Statement/);
-  assert.match(skill, /current state/);
-  assert.match(skill, /pain point/);
-  assert.match(skill, /Do not describe the solution/);
-  assert.match(skill, /Scope & Constraints/);
-  assert.match(skill, /Acceptance Criteria/);
-  assert.match(skill, /objective and testable/);
-  assert.match(skill, /controlled by the owner/);
-  assert.match(skill, /Definition of Done/);
-  assert.match(examples, /Good:/);
-  assert.match(examples, /Bad:/);
-  assert.match(examples, /Protected Existing Story/);
-  assert.match(agent, /FMD Story Writing/);
-  assert.match(rules, /\.agents\/skills\/fmd-story-writing/);
-  assert.match(rules, /Do not silently rewrite/);
-  assert.match(docs, /Keine Lösung, Umsetzungsschritte oder technische Vorgaben/);
-  assert.match(docs, /Harte Vorgaben wie Recht, Compliance, Datenschutz, Security/);
-});
-
 test("strict auth gates planning data until a valid session is present", async () => {
   const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const api = await readFile("src/app/api/planning-data/route.ts", "utf8");

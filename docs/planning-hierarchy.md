@@ -38,15 +38,9 @@ Persönliche Arbeitsunterteilung eines Deliverables. Founder dürfen damit eigen
 
 Alte Deliverable-Issues im `findmydoc-platform/management`-Repo werden nicht gelöscht und nicht dupliziert. Sie sind historische Hüllen und werden beim Sync auf die neue v2-Struktur aktualisiert.
 
-Vorgehen:
+Supabase bleibt führend. Bereits verknüpfte GitHub-Issues werden über die gespeicherte Repository-, Nummern- und URL-Zuordnung aktualisiert. Der normale Task-Sync durchsucht das Repository nicht anhand von Titeln, um alte Issues automatisch zu verknüpfen. Ein noch nicht verknüpftes Deliverable erhält nur über den bewussten Erstellungsablauf ein neues Issue; mehrdeutige historische Zuordnungen bleiben unverändert und brauchen eine separat geprüfte Datenkorrektur.
 
-1. Supabase bleibt führend.
-2. Bestehende GitHub-Issues werden über `scripts/plan-github-issue-linking.mjs` per normalisiertem Titel vorgeschlagen.
-3. Exakte Treffer können mit `pnpm run plan:github-linking -- --apply` in Supabase verknüpft werden.
-4. Danach aktualisiert der normale Task-Sync das bestehende Issue per `PATCH`, statt ein neues Issue zu öffnen.
-5. Unsichere oder mehrdeutige Treffer bleiben unberührt und werden manuell entschieden.
-
-Damit bleiben Kommentare und Historie in GitHub erhalten, während die aktuelle Aufgabenbeschreibung aus der App kommt.
+Damit bleiben Kommentare und Historie verknüpfter Issues in GitHub erhalten, während die aktuelle Aufgabenbeschreibung aus der App kommt.
 
 ## GitHub-Sync
 

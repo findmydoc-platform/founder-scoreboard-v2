@@ -4,40 +4,27 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## Founder Scoreboard v2 Rules
+## Repository-Wide Rules
 
-- Brand spelling is `findmydoc` in all user-facing copy and documentation. Do not write `FindMyDoc`, `Find My Doc`, or other capitalization variants unless quoting an external source or a technical identifier that already uses another spelling.
-- When the user asks to start "Localhost", "den Localhost", or the "Dev-Server" without naming another project, this means the new FounderOps app in this `fmd-planning/` directory. Start this Next.js app, not the legacy static dashboard in `../docs/findmydoc/dashboard-server.mjs`.
-- If `3000` or `3001` are already occupied by other projects, use a free app port such as `3002`. Verify the page responds with the title `findmydoc Planning` before reporting the URL.
-- Never report the old static dashboard URL `http://localhost:3005` as the FounderOps app unless the user explicitly asks for the old findmydoc Founder Task Dashboard.
-- Auth and roles are security boundaries. Any change to GitHub OAuth, `profiles.platform_role`, deputy handling, or API guards must include a focused test or contract check.
-- Use `.agents/skills/fmd-planning-security` for changes touching authentication, logout, API guards, Supabase sessions, provider tokens, grants, or RLS policies.
-- Use `.agents/skills/fmd-supabase-migrations` for Supabase SQL. Supabase schema changes must be additive by default, stored under `supabase/`, and reflected in `verify:supabase` when they add core tables.
-- Codex may create additive timestamp migrations with `pnpm run db:migration:new -- <name>` and apply them to the disposable local stack with `pnpm run db:reset`. Production migrations run only through the protected deployment workflow. Ask first before any destructive DB action such as drop, truncate, broad delete, disabling RLS, or removing columns.
-- Decision Log entries are CEO-editable only. Deputies may operate sprint/task workflows, but must not edit CEO decisions.
-- Task Intake, KI-gestützte Aufgabenerstellung und Bulk-Planung sind CEO-only. Do not expose these workflows to Deputy, Accountable, Responsible, Founder, Assignee, or Viewer roles without explicit CEO approval. Any change to Intake, Team-KI access, task role guards, or status permissions must include focused contract tests.
-- Agent API access must stay token-guarded and CEO-scoped. Do not expose direct database credentials, Supabase service keys, raw GitHub tokens, OpenAI keys, or in-app AI model calls through FounderOps; changes to Agent API scopes, intake writes, or planning reads must include focused contract tests.
-- GitHub Issues are a one-way backup from the app to `findmydoc-platform/management`; do not make GitHub the source of truth without a new plan.
-- GitHub issue sync, dependency sync, comment import, asset proxying, and issue archival use server-side GitHub App installation tokens. User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation. Never expose raw GitHub tokens in browser storage, logs, GitHub issues, API responses, or documentation.
-- Google Chat bot branding is `FounderOps`. The planned public Chat app event endpoint after GitHub Actions deployment and domain cutover is `https://founder-ops.findmydoc.eu/api/google-chat/events`; keep this decision aligned with `docs/google-chat-rollout.md`. Personal Google Chat DMs are not complete until GitHub Actions deployment, `/api/google-chat/events`, and Chat API delivery to `profiles.google_chat_dm_space` are implemented.
-- Planning hierarchy is fixed: `Epic / Milestone -> Initiative -> Deliverable -> Sub-Issue`; Sprint is a time container, not a parent level. Keep `docs/planning-hierarchy.md`, Supabase, UI, GitHub sync, and tests aligned.
-- Milestone management is a core workflow: keep the `milestones` table, `packages.milestone_id`, task assignment, GitHub mapping, and UI CRUD in sync when expanding this area.
-- New deliverables use `docs/task-template-v2.md`: keep Problem Statement, Intended Outcome, Acceptance Criteria, Evidence, and Definition of Done separate.
-- Use `.agents/skills/fmd-initiative-planning`, `.agents/skills/fmd-story-writing`, and `.agents/skills/fmd-german-utf8` when creating, reviewing, restructuring, or syncing initiatives, tasks, stories, deliverables, sub-issues, GitHub issue bodies, task templates, or Acceptance Criteria. Do not silently rewrite approved, reviewed, released, or GitHub-synced stories; content changes need explicit approval or a revision/follow-up comment.
-- Execution workspace is retired as visible UI. Do not rebuild Focus Board, Heute-Modus, or a Hygiene Alert wall. Focus API/table stay legacy-compatible only; task attention signals belong as compact Planning/Review badges and filters as described in `docs/execution-layer-plan.md`.
-- Use `.agents/skills/fmd-code-stewardship` for broad cleanup, refactoring, architecture, readability, duplication, maintainability, or "spaghetti code" tasks. Preserve user-visible behavior and run `pnpm run audit:stewardship` before broad cleanup.
-- Use `.agents/skills/fmd-german-utf8` for German UI copy, docs, task text, GitHub issue bodies, Supabase seed/import data, and any persisted German content. German visible text must use real UTF-8 umlauts and be checked before finishing. After writing German task/story text into Supabase or GitHub, run `pnpm run verify:task-utf8` or an equivalent stored-data scan before reporting completion.
-- Use `.agents/skills/fmd-custom-controls` for dropdowns, selects, filters, menus, mini calendars, date pickers, datetime pickers, and compact table controls. Do not add native `<select>`, `<option>`, `input type="date"`, or `input type="datetime-local"` to app UI.
-- When actively working on a Founder Scoreboard task from the app as an execution/research task, keep drafts, evidence matrices, private analyses, and working notes outside all Git repositories under `C:\tmp\fmd-private-work\` in a task-specific subfolder. Do not store sensitive founder reviews, personal performance notes, internal conflict analysis, or unfinished report drafts in this repo or GitHub unless explicitly requested. Publish final approved report content to Notion/Gmail/shared tools only after the user asks for that publication step. German-language private reports, Markdown drafts, Notion-ready text, and email drafts must use real UTF-8 German umlauts (`ä`, `ö`, `ü`, `Ä`, `Ö`, `Ü`, `ß`) instead of ASCII fallbacks such as `ae`, `oe`, `ue`, or `ss`, except in technical identifiers, URLs, slugs, or file names.
-- After meaningful frontend or API changes run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
-- If a pattern is repeated three times across API guards, schema verification, GitHub sync, Decision Log, or Meeting Finder, propose extracting it into a project skill/check before adding more duplication.
-
-### Planning UI Structure
-
-- Planning UI follows feature-first Atomic Design: feature UI belongs under `src/features/<domain>/{atoms,molecules,organisms,templates,hooks,model}`.
-- Create only the subdirectories a feature currently uses. Do not keep empty placeholder directories, `.gitkeep` files, or shape-only scaffolding just to satisfy structure expectations.
-- `src/shared` is only for domain-neutral primitives. Components or helpers named around Task, Sprint, Meeting, Decision, Founder, Milestone, GitHub issue, review, or planning workflow semantics must stay inside the owning feature.
-- Do not create new `src/components` or `src/hooks` directories. Do not add imports from `@/components`, `@/hooks`, `src/components`, or `src/hooks`; move code into the owning feature or `src/shared` instead.
-- Templates and shell components orchestrate layout and pass typed props. Business logic, API calls, mutations, auth/role decisions, and derived data belong in hooks, model/view-model files, API routes, or service helpers.
-- The custom-control policy is part of the UI structure contract: do not add native `<select>`, `<option>`, `input type="date"`, or `input type="datetime-local"` to app UI.
-- New operational data tables must follow `docs/table-filtering.md`, use the shared `DataTableFrame`, and declare an explicit `embedded` or `external` filtering mode. Raw HTML tables are reserved for content-only rendering such as Markdown in task comments.
+- Brand spelling is `findmydoc` in user-facing copy and documentation. Preserve other capitalization only when quoting source text or using an existing technical identifier.
+- When the user asks for Localhost or the dev server without naming another project, start this Next.js app. Use a free port such as `3002` when `3000` or `3001` is occupied, and verify the page title is `findmydoc Planning` before reporting the URL.
+- Follow the nearest nested `AGENTS.md` for the files being changed. Keep repository-wide rules here and domain-specific rules near their code.
+- The only project skills are `.agents/skills/supabase-migrations` and `.agents/skills/release-publish`. Do not add aliases or compatibility copies under `skills/`.
+- Repository rules override conflicting generic global Supabase or Vercel skills. Tracked schema changes must use timestamp migrations; deployments must use the repository's GitHub Actions workflows, never a direct local Vercel deployment.
+- Auth and roles are security boundaries. Changes to OAuth, sessions, `profiles.platform_role`, deputy handling, API guards, grants, or RLS require focused tests.
+- Supabase schema changes are additive by default. Use `.agents/skills/supabase-migrations`, store migrations under `supabase/migrations/`, and ask before drops, truncation, broad deletes, disabling RLS, or removing columns.
+- Production migrations run only through the protected deployment workflow. Local resets are allowed only against the disposable local stack.
+- Decision Log entries are CEO-editable only. Deputies may operate sprint and task workflows but must not edit CEO decisions.
+- Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope. Agent API access remains token-guarded and CEO-scoped.
+- Never expose database credentials, Supabase service keys, raw GitHub tokens, OpenAI keys, authorization headers, or in-app model access through browser state, logs, API responses, issues, or documentation.
+- GitHub Issues are a one-way backup from the app to `findmydoc-platform/management`; do not make GitHub the source of truth without a new approved plan.
+- Server-side GitHub sync uses GitHub App installation tokens. User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation.
+- Google Chat bot branding is `FounderOps`. Keep `https://founder-ops.findmydoc.eu/api/google-chat/events` aligned with `docs/google-chat-rollout.md`.
+- Planning hierarchy is `Epic / Milestone -> Initiative -> Deliverable -> Sub-Issue`. Sprint is a time container, not a parent. Keep docs, Supabase, UI, GitHub projection, and tests aligned.
+- Keep milestone storage, initiative assignment, GitHub mapping, and UI CRUD aligned when changing milestone behavior.
+- New deliverables follow `docs/task-template-v2.md`; keep Problem Statement, Intended Outcome, Acceptance Criteria, Evidence, and Definition of Done separate.
+- Execution workspace is retired as visible UI. Keep legacy Focus data compatible, and represent attention as compact Planning or Review signals.
+- German visible or persisted text must use real UTF-8 umlauts. Run `pnpm run verify:task-utf8` after writing German task content to Supabase or GitHub.
+- Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
+- After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
+- Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.

@@ -122,7 +122,7 @@ Check:
 1. Event erzeugen, z. B. Kommentar oder Review-Anfrage.
 2. Einstellungen öffnen.
 3. Eine kontrollierte Test-Sammelmeldung oder persönliche Test-DM senden.
-4. Für Release-Kommunikation den Dry Run `node .agents/skills/fmd-release-publish/scripts/publish-release.mjs --dry-run` prüfen und danach `.github/workflows/send-release-google-chat.yml` verwenden.
+4. Für Release-Kommunikation den Dry Run `node .agents/skills/release-publish/scripts/publish-release.mjs --dry-run` prüfen und danach `.github/workflows/send-release-google-chat.yml` verwenden.
 
 Erwartung:
 - Wichtige Events werden als Digest gesendet und je Event als `sent` Delivery gespeichert.

@@ -9,7 +9,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "audit:stewardship": "node scripts/code-stewardship-audit.mjs",
     "verify:migrations": "node scripts/verify-supabase-migrations.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:task-mutations": "node scripts/verify-task-update-transaction.mjs",
@@ -30,14 +29,12 @@
     "verify:github-sync": "node scripts/verify-github-sync.mjs",
     "verify:google-chat": "node scripts/verify-google-chat-rollout.mjs",
     "verify:task-utf8": "node scripts/verify-task-utf8.mjs",
-    "verify:release": "pnpm run verify:migrations && node --test tests/*.test.mjs && node scripts/verify-task-utf8.mjs && eslint && node scripts/verify-vercel-ready.mjs && node scripts/verify-google-chat-rollout.mjs && pnpm audit --audit-level=moderate",
+    "verify:release": "pnpm run verify:migrations && pnpm test && node scripts/verify-task-utf8.mjs && eslint && node scripts/verify-vercel-ready.mjs && node scripts/verify-google-chat-rollout.mjs && pnpm audit --audit-level=moderate",
     "verify:deploy": "pnpm run verify:migrations && pnpm test && pnpm run verify:vercel-ready && pnpm run verify:google-chat && pnpm run lint",
     "vercel:build": "pnpm run verify:deploy && pnpm run build",
     "db:migration:new": "supabase migration new",
     "db:reset": "supabase db reset --local --no-seed",
-    "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs",
-    "plan:github-linking": "node scripts/plan-github-issue-linking.mjs",
-    "migrate:relationships": "node scripts/migrate-task-relationships.mjs"
+    "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

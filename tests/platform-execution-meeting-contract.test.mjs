@@ -173,7 +173,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const schema = await readSupabaseSchemaContract();
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskPage = await readFile("src/app/tasks/[id]/page.tsx", "utf8");
-  const agents = await readFile("AGENTS.md", "utf8");
   const plan = await readFile("docs/execution-layer-plan.md", "utf8");
 
   assert.match(migration, /create table if not exists task_focus_items/);
@@ -231,7 +230,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.doesNotMatch(schemaChecks, /decision_task_links/);
   assert.match(schema, /create table if not exists task_focus_items/);
   assert.match(schema, /create table if not exists decision_task_links/);
-  assert.match(agents, /Execution workspace is retired/);
   assert.match(plan, /retired/);
   assert.match(plan, /TaskAttentionSignal/);
   assert.doesNotMatch(plan, /Decision-to-Task Links/);

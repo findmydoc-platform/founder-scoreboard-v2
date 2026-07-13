@@ -1,4 +1,0 @@
-interface:
-  display_name: "FMD Story Writing"
-  short_description: "Write FMD stories with clear guardrails."
-  default_prompt: "Create or review an FMD task/story using fmd-story-writing: protect approved stories, separate problem from solution, keep ACs measurable, and place hard constraints correctly."

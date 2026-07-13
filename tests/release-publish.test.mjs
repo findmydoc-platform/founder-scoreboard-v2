@@ -9,7 +9,7 @@ import {
   determineSemverBump,
   extractPrSummary,
   selectReleasePullRequests,
-} from "../.agents/skills/fmd-release-publish/scripts/lib.mjs";
+} from "../.agents/skills/release-publish/scripts/lib.mjs";
 
 function pr(overrides = {}) {
   return {

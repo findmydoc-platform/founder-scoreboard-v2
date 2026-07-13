@@ -212,7 +212,6 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   const dependabot = await readFile(".github/dependabot.yml", "utf8");
   const gitignore = await readFile(".gitignore", "utf8");
   const deployment = await readFile("docs/vercel-deployment.md", "utf8");
-  const skill = await readFile("skills/fmd-vercel-readiness/SKILL.md", "utf8");
   const pkg = await readFile("package.json", "utf8");
   const layout = await readFile("src/app/layout.tsx", "utf8");
   const css = await readFile("src/app/globals.css", "utf8");
@@ -276,19 +275,6 @@ test("repo readiness includes optional ci and deployment gates", async () => {
   assert.doesNotMatch(deployment, /vercel login/);
   assert.doesNotMatch(deployment, /vercel inspect/);
   assert.doesNotMatch(deployment, /vercel logs/);
-  assert.match(skill, /GitHub Actions/);
-  assert.match(skill, /GitHub Actions job logs/);
-  assert.match(skill, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(skill, /founder-ops\.findmydoc\.eu/);
-  assert.match(skill, /AI Guidance: Vercel Hobby Private Author Block/);
-  assert.match(skill, /TEAM_ACCESS_REQUIRED/);
-  assert.match(skill, /Git-metadata-free temporary directory/);
-  assert.match(skill, /Pull request jobs stay skipped when preview GitHub Environment secrets are not configured/);
-  assert.doesNotMatch(skill, /Vercel CLI/);
-  assert.doesNotMatch(skill, /vercel link --yes --project founder-ops/);
-  assert.doesNotMatch(skill, /vercel login/);
-  assert.doesNotMatch(skill, /vercel inspect/);
-  assert.doesNotMatch(skill, /vercel logs/);
   assert.doesNotMatch(layout, /next\/font\/google/);
   assert.match(css, /--font-sans: Inter, ui-sans-serif/);
   assert.match(ui, /NotificationsOverview/);
@@ -536,7 +522,6 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
 });
 
 test("ceo task intake is ceo-only and separated from team ai work access", async () => {
-  const agents = await readFile("AGENTS.md", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const ui = await readPlanningSurface();
@@ -548,9 +533,6 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
 
-  assert.match(agents, /Task Intake, KI-gestützte Aufgabenerstellung und Bulk-Planung sind CEO-only/);
-  assert.match(agents, /Deputy, Accountable, Responsible, Founder, Assignee, or Viewer/);
-  assert.match(agents, /focused contract tests/);
   assert.match(routes, /ceo-intake/);
   assert.match(routes, /ceoOnly: true/);
   assert.match(routes, /href: "\/ceo-intake"/);
@@ -573,7 +555,6 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
 });
 
 test("founderops agent api is token guarded and limited to planning intake", async () => {
-  const agents = await readFile("AGENTS.md", "utf8");
   const envExample = await readFile(".env.example", "utf8");
   const docs = await readFile("docs/founderops-agent-api.md", "utf8");
   const openapi = await readFile("public/founderops-agent-openapi.json", "utf8");
@@ -594,8 +575,6 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   const intakeContext = await readFile("src/features/intake/model/task-intake-context.ts", "utf8");
 
   assert.match(envExample, /FOUNDEROPS_AGENT_TOKEN_SHA256=/);
-  assert.match(agents, /Agent API access must stay token-guarded and CEO-scoped/);
-  assert.match(agents, /Do not expose direct database credentials/);
   assert.match(docs, /FOUNDEROPS_AGENT_TOKEN_SHA256/);
   assert.match(docs, /keine direkten Datenbank-Credentials/);
   assert.match(docs, /Keine AI-Funktion innerhalb von FounderOps/);
