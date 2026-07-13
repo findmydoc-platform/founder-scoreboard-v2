@@ -29,6 +29,10 @@ async function githubModule(assigneeStatus) {
     },
     "./github-issue-reference": {
       assertGitHubIssueRepository: () => {},
+      parseGitHubIssueUrl: (value) => {
+        const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
+        return match ? { repository: match[1], number: Number(match[2]) } : null;
+      },
       resolveGitHubIssueNumber: () => 42,
     },
     "./github-http": {
@@ -37,6 +41,15 @@ async function githubModule(assigneeStatus) {
         return new Response(null, { status: assigneeStatus });
       },
       githubJson: async (_url, options) => {
+        if (!options.method || options.method === "GET") {
+          return {
+            number: 42,
+            html_url: "https://github.com/findmydoc-platform/management/issues/42",
+            title: "[Deliverable] Keep GitHub assignee aligned",
+            body: "<!-- founderops-task-id:task-assignee-sync -->",
+            labels: [],
+          };
+        }
         patchBody = options.body;
         return {
           number: 42,
