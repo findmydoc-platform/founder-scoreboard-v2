@@ -30,7 +30,10 @@ export function notificationTarget(event: NotificationTargetInput): Notification
     return { workspace: "events", href: "/events" };
   }
   if (entityType === "initiative") {
-    return { workspace: "planning", href: "/planning" };
+    return {
+      workspace: "planning",
+      href: entityId ? `/initiatives/${encodeURIComponent(entityId)}` : "/planning",
+    };
   }
   if (entityType === "fmd_tool") {
     return { workspace: "tools", href: "/tools" };
@@ -38,4 +41,3 @@ export function notificationTarget(event: NotificationTargetInput): Notification
 
   return { workspace: "notifications", href: "/notifications" };
 }
-

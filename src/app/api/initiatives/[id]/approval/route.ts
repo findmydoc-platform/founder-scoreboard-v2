@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { approvalTransactionError, validateApprovalDecision, type ApprovalDecisionPayload } from "@/lib/approval-api";
-import { requireJsonApiContext } from "@/lib/api-response";
+import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
 import { mapPackage } from "@/lib/planning-profile-mappers";
 import type { DbPackage } from "@/lib/planning-data-row-types";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<ApprovalDecisionPayload>(request, requirePlanningContributor, {});
@@ -12,6 +13,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!decision.ok) return decision.response;
 
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(apiContext.supabase, "packages", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data, error } = await apiContext.supabase.rpc("decide_initiative_approval_transaction", {
     p_initiative_id: id,
     p_expected_revision: decision.expectedRevision,

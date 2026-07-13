@@ -175,12 +175,6 @@ export function useNotificationCommands({
     const target = notificationTarget(event);
     if (target.taskId) {
       const task = data.tasks.find((item) => item.id === event.entityId);
-      if (!task && taskOverlayWorkspaces.has(workspace)) {
-        void updateNotificationStatus(event.id, "seen");
-        setSaveError("Die verknüpfte Aufgabe wurde nicht gefunden. Der Hinweis kann geschlossen werden.");
-        setShowNotifications(false);
-        return;
-      }
       if (!task || !taskOverlayWorkspaces.has(workspace)) {
         setShowNotifications(false);
         void navigateAfterNotificationStatusUpdate(

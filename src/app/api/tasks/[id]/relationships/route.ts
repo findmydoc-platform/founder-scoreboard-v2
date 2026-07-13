@@ -5,6 +5,8 @@ import { requirePlanningContributor } from "@/lib/authz";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import type { AuthenticatedProfile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 type RelationPayload = {
   relationType?: TaskRelationType;
@@ -41,7 +43,7 @@ async function loadRelationshipAccess(
   profile: AuthenticatedProfile | null,
 ) {
   const { data: task, error: taskError } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("id,title,task_type,assignee,owner,package_id")
     .eq("id", taskId)
     .single<RelationshipTaskRow>();
@@ -50,7 +52,7 @@ async function loadRelationshipAccess(
   let initiative: RelationshipInitiativeRow | null = null;
   if (task.package_id) {
     const initiativeResult = await supabase
-      .from("packages")
+      .from(ACTIVE_PACKAGES_TABLE)
       .select("owner_id,accountable_profile_id")
       .eq("id", task.package_id)
       .maybeSingle<RelationshipInitiativeRow>();
@@ -82,6 +84,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const relationType = payload.relationType;
   const relatedTaskId = typeof payload.relatedTaskId === "string" ? payload.relatedTaskId.trim() : "";
   const note = cleanText(payload.note, 500);
@@ -92,6 +96,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!relatedTaskId || relatedTaskId === id) {
     return apiError("Bitte eine andere Aufgabe auswählen.", 400);
   }
+  const activeRelatedItem = await requireActivePlanningItem(supabase, "tasks", relatedTaskId);
+  if (!activeRelatedItem.ok) return apiError(activeRelatedItem.error, activeRelatedItem.status);
 
   const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
   if (!accessResult.ok) return accessResult.response;
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const { data: tasks, error: taskError } = await supabase
-    .from("tasks")
+    .from(ACTIVE_TASKS_TABLE)
     .select("id,title")
     .in("id", [id, relatedTaskId]);
   if (taskError) return apiError(taskError.message, 500);
@@ -162,6 +168,8 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   const { payload, permission, supabase } = apiContext;
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const relationId = Number(payload.relationId);
   if (!Number.isInteger(relationId) || relationId <= 0) {
     return apiError("Abhängigkeit ist erforderlich.", 400);
@@ -176,6 +184,9 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   if (relation.task_id !== id && relation.related_task_id !== id) {
     return apiError("Abhängigkeit gehört nicht zu dieser Aufgabe.", 403);
   }
+  const otherTaskId = relation.task_id === id ? relation.related_task_id : relation.task_id;
+  const activeRelatedItem = await requireActivePlanningItem(supabase, "tasks", otherTaskId);
+  if (!activeRelatedItem.ok) return apiError(activeRelatedItem.error, activeRelatedItem.status);
 
   const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
   if (!accessResult.ok) return accessResult.response;

@@ -22,6 +22,8 @@ import {
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { createNotificationPayload } from "@/lib/notification-catalog";
+import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
 
 type TaskUpdateTransactionResult = {
@@ -55,6 +57,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
+  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const payload = (await request.json()) as TaskUpdatePayload;
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
     return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
@@ -111,7 +115,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const nextParentTaskId = payload.parentTaskId.trim();
     if (!nextParentTaskId) return apiError("Ein Parent-Deliverable ist erforderlich.", 400);
     const { data: nextParent, error: nextParentError } = await supabase
-      .from("tasks")
+      .from(ACTIVE_TASKS_TABLE)
       .select("id,task_type,approval_status")
       .eq("id", nextParentTaskId)
       .maybeSingle();
@@ -152,7 +156,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const nextPackageId = payload.packageId || null;
     if (nextPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
-        .from("packages")
+        .from(ACTIVE_PACKAGES_TABLE)
         .select("id,milestone_id,owner_id,accountable_profile_id")
         .eq("id", nextPackageId)
         .single();
@@ -223,7 +227,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     let reviewOwnerProfileId = "";
     if (reviewPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
-        .from("packages")
+        .from(ACTIVE_PACKAGES_TABLE)
         .select("owner_id,accountable_profile_id")
         .eq("id", reviewPackageId)
         .maybeSingle();
