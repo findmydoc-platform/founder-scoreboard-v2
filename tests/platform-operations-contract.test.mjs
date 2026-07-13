@@ -694,7 +694,7 @@ test("header actions are workspace aware", async () => {
   assert.match(planningHeader, /Zeitraum: \$\{data\.project\.range\}/);
   assert.match(model, /workspaceDescriptions: Record<Workspace, string>/);
   assert.match(model, /planning: "Zeigt die Gesamtplanung/);
-  assert.match(model, /backlog: "Zeigt priorisierte Aufgaben/);
+  assert.match(model, /backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor/);
   assert.doesNotMatch(model, /workspaceSubtitles/);
   assert.match(ui, /label: "Neue Aufgabe"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);

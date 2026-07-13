@@ -8,6 +8,7 @@ type DataSurfaceProps = HTMLAttributes<HTMLElement> & {
   description?: ReactNode;
   actions?: ReactNode;
   headerClassName?: string;
+  variant?: "default" | "structural";
 };
 
 export function DataSurface({
@@ -16,6 +17,7 @@ export function DataSurface({
   description,
   actions,
   headerClassName,
+  variant = "default",
   className,
   children,
   ...props
@@ -23,9 +25,9 @@ export function DataSurface({
   const hasHeader = title || description || actions;
 
   return (
-    <UiPanel as={as} padding="none" className={classNames("min-w-0 overflow-hidden", className)} {...props}>
+    <UiPanel as={as} padding="none" appearance={variant} className={classNames("min-w-0 overflow-hidden", className)} {...props}>
       {hasHeader && (
-        <DataSurfaceHeader title={title} description={description} actions={actions} className={headerClassName} />
+        <DataSurfaceHeader title={title} description={description} actions={actions} variant={variant} className={headerClassName} />
       )}
       {children}
     </UiPanel>
@@ -36,11 +38,12 @@ type DataSurfaceHeaderProps = HTMLAttributes<HTMLDivElement> & {
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  variant?: "default" | "structural";
 };
 
-export function DataSurfaceHeader({ title, description, actions, className, children, ...props }: DataSurfaceHeaderProps) {
+export function DataSurfaceHeader({ title, description, actions, variant = "default", className, children, ...props }: DataSurfaceHeaderProps) {
   return (
-    <div className={classNames("flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3", className)} {...props}>
+    <div className={classNames("flex items-start justify-between gap-3 border-b px-4 py-3", variant === "structural" ? "border-slate-300" : "border-slate-100", className)} {...props}>
       <div className="min-w-0">
         {title && <h2 className="text-base font-semibold text-slate-950">{title}</h2>}
         {description && <p className="text-xs text-slate-500">{description}</p>}
@@ -168,6 +171,8 @@ export function DataTableFrame({
   actions,
   minWidth = 840,
   className,
+  surfaceVariant = "default",
+  mobileContent,
   children,
 }: {
   title: string;
@@ -178,6 +183,8 @@ export function DataTableFrame({
   actions?: ReactNode;
   minWidth?: number | string;
   className?: string;
+  surfaceVariant?: "default" | "structural";
+  mobileContent?: ReactNode;
   children: ReactNode;
 }) {
   const generatedId = useId();
@@ -185,8 +192,8 @@ export function DataTableFrame({
   const resultId = `${generatedId}-results`;
   const describedBy = filtering.mode === "external" ? `${resultId} ${filtering.labelledBy}` : resultId;
   return (
-    <DataSurface className={className} data-filter-mode={filtering.mode}>
-      <DataSurfaceHeader actions={actions}>
+    <DataSurface variant={surfaceVariant} className={className} data-filter-mode={filtering.mode}>
+      <DataSurfaceHeader variant={surfaceVariant} actions={actions}>
         <h2 id={titleId} className="text-base font-semibold text-slate-950">{title}</h2>
         {description && <div className="text-xs text-slate-500">{description}</div>}
         <div id={resultId} className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500" aria-live="polite" aria-atomic="true">
@@ -194,7 +201,8 @@ export function DataTableFrame({
         </div>
       </DataSurfaceHeader>
       {filtering.mode === "embedded" && filtering.toolbar}
-      <DataOverflow aria-labelledby={titleId} aria-describedby={describedBy}>
+      {mobileContent && <div className="lg:hidden">{mobileContent}</div>}
+      <DataOverflow className={mobileContent ? "hidden lg:block" : undefined} aria-labelledby={titleId} aria-describedby={describedBy}>
         <DataTable minWidth={minWidth} aria-labelledby={titleId} aria-describedby={describedBy}>
           <caption className="sr-only">{caption}</caption>
           {children}

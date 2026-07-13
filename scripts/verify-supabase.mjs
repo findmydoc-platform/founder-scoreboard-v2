@@ -273,29 +273,56 @@ async function verifyGitHubCommentDeliveryRpcs() {
 }
 
 async function verifyPlanningBatchRpcs() {
-  const backlog = await supabase.rpc("update_backlog_order_transaction", {
-    p_updates: [],
-    p_actor_profile_id: null,
-    p_request_ip: null,
-    p_user_agent: null,
-  });
-  const sprintPlan = await supabase.rpc("create_sprint_plan_transaction", {
-    p_sprints: [],
-    p_meetings: [],
-    p_audit_data: {},
-    p_actor_profile_id: null,
-    p_request_ip: null,
-    p_user_agent: null,
-  });
+  const [backlog, backlogMove, anonymousBacklogMove, sprintPlan] = await Promise.all([
+    supabase.rpc("update_backlog_order_transaction", {
+      p_updates: [],
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
+    supabase.rpc("move_backlog_task_transaction", {
+      p_task_id: "",
+      p_target_task_id: "",
+      p_placement: "before",
+      p_expected_task_updated_at: new Date().toISOString(),
+      p_expected_target_updated_at: new Date().toISOString(),
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
+    anonSupabase.rpc("move_backlog_task_transaction", {
+      p_task_id: "",
+      p_target_task_id: "",
+      p_placement: "before",
+      p_expected_task_updated_at: new Date().toISOString(),
+      p_expected_target_updated_at: new Date().toISOString(),
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
+    supabase.rpc("create_sprint_plan_transaction", {
+      p_sprints: [],
+      p_meetings: [],
+      p_audit_data: {},
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
+  ]);
 
   return [
     { name: "update_backlog_order_transaction", result: backlog },
+    { name: "move_backlog_task_transaction", result: backlogMove },
     { name: "create_sprint_plan_transaction", result: sprintPlan },
   ].map(({ name, result: rpcResult }) => ({
     name,
     ok: rpcResult.error?.code === "22023",
     error: rpcResult.error?.code === "22023" ? "" : rpcResult.error?.message || "RPC did not reject an empty batch",
-  }));
+  })).concat({
+    name: "move_backlog_task_transaction anonymous execution",
+    ok: Boolean(anonymousBacklogMove.error),
+    error: anonymousBacklogMove.error ? "" : "backlog move RPC unexpectedly allowed anonymous execution",
+  });
 }
 
 async function verifySprintFinalizationRpc() {

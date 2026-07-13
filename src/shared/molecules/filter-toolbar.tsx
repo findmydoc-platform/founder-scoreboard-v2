@@ -165,15 +165,20 @@ export function FilterSegmentedControl<Value extends string>({
   options,
   onChange,
   className,
+  variant = "default",
 }: {
   label: string;
   value: Value;
   options: Array<FilterOption<Value>>;
   onChange: (value: Value) => void;
   className?: string;
+  variant?: "default" | "structural";
 }) {
   return (
-    <div className={classNames("flex min-w-0 flex-wrap gap-2", className)} role="group" aria-label={label}>
+    <div className={classNames(
+      variant === "structural" ? "flex min-w-0 max-w-full overflow-x-auto border border-slate-300 bg-white" : "flex min-w-0 flex-wrap gap-2",
+      className,
+    )} role="group" aria-label={label}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -183,13 +188,17 @@ export function FilterSegmentedControl<Value extends string>({
             onClick={() => onChange(option.value)}
             aria-pressed={active}
             className={classNames(
-              "inline-flex min-h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-100",
-              active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+              "inline-flex min-h-9 min-w-0 items-center gap-2 px-3 text-sm font-semibold transition focus:outline-none focus:ring-2",
+              variant === "structural" ? "shrink-0 border-r border-slate-300 last:border-r-0 focus:ring-blue-500 focus:ring-inset" : "rounded-md border focus:ring-blue-100",
+              variant === "structural" && active ? "bg-slate-900 text-white" : variant === "structural" ? "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900" : active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
             )}
           >
             <span className="truncate">{option.label}</span>
             {option.count !== undefined && (
-              <span className={classNames("rounded-full px-2 py-0.5 text-[11px]", active ? "bg-white text-blue-700" : "bg-slate-100 text-slate-500")}>{option.count}</span>
+              <span className={classNames(
+                variant === "structural" ? "rounded-none px-2 py-0.5 text-[11px]" : "rounded-full px-2 py-0.5 text-[11px]",
+                variant === "structural" && active ? "bg-white/20 text-white" : active ? "bg-white text-blue-700" : "bg-slate-100 text-slate-500",
+              )}>{option.count}</span>
             )}
           </button>
         );

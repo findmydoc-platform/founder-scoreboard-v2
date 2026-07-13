@@ -22,6 +22,7 @@ export function BacklogScopeTabs({ onScopeChange, scope, counts }: BacklogScopeT
         value={scope}
         options={scopeTabs.map((tab) => ({ value: tab.id, label: tab.label, count: counts[tab.id] }))}
         onChange={onScopeChange}
+        variant="structural"
         className="w-full"
       />
     </div>

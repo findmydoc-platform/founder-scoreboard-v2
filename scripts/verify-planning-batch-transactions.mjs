@@ -64,6 +64,63 @@ try {
     throw new Error("Backlog reorder and audit were not committed together.");
   }
 
+  const persistedOrderById = new Map(reordered.rows[0].result.map((task) => [task.id, task.updatedAt]));
+  const moved = await client.query(
+    `select public.move_backlog_task_transaction(
+      $1::text,
+      $2::text,
+      'after'::text,
+      $3::timestamptz,
+      $4::timestamptz,
+      null,
+      null,
+      'transaction verifier move'
+    ) as result`,
+    [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1])],
+  );
+  if (!moved.rows[0]?.result?.some((task) => task.id === taskIds[0])) {
+    throw new Error("Backlog move did not return the moved task.");
+  }
+
+  const movedOrder = await client.query(
+    `select id, sort_order
+     from public.tasks
+     where id = any($1::text[])
+     order by sort_order, id`,
+    [taskIds],
+  );
+  if (movedOrder.rows.findIndex((task) => task.id === taskIds[1]) >= movedOrder.rows.findIndex((task) => task.id === taskIds[0])) {
+    throw new Error("Backlog move did not place the source after the target.");
+  }
+
+  const moveAudit = await client.query(
+    `select count(*)::integer as count
+     from public.audit_log
+     where action = 'task.backlog_reorder' and user_agent = 'transaction verifier move'`,
+  );
+  if (moveAudit.rows[0]?.count !== 1) throw new Error("Backlog move audit was not committed with the move.");
+
+  await client.query("savepoint stale_backlog_move");
+  try {
+    await client.query(
+      `select public.move_backlog_task_transaction(
+        $1::text,
+        $2::text,
+        'before'::text,
+        $3::timestamptz,
+        $4::timestamptz,
+        null,
+        null,
+        'transaction verifier move'
+      )`,
+      [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1])],
+    );
+    throw new Error("Stale backlog move unexpectedly succeeded.");
+  } catch (error) {
+    if (error?.code !== "P0001") throw error;
+    await client.query("rollback to savepoint stale_backlog_move");
+  }
+
   await client.query("savepoint stale_backlog");
   try {
     await client.query(

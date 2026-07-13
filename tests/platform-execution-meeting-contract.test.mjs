@@ -266,7 +266,8 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.match(route, /Deliverables brauchen eine Initiative/);
   assert.match(route, /In einer abgelehnten Initiative/);
   assert.match(route, /Nur der CEO kann beim Erstellen direkt freigeben/);
-  assert.match(updateRoute, /Nur freigegebene Deliverables können einem Sprint zugewiesen werden/);
+  assert.match(updateRoute, /getBacklogSprintAssignmentEligibility/);
+  assert.match(updateRoute, /backlogSprintAssignmentMessage/);
   assert.match(updateRoute, /update_planning_task_transaction/);
   assert.match(route, /deadline: payload\.deadline/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);

@@ -20,6 +20,10 @@ import {
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import {
+  backlogSprintAssignmentMessage,
+  getBacklogSprintAssignmentEligibility,
+} from "@/features/backlog/model/backlog-planning-state";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
@@ -68,9 +72,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
   const update: TaskRouteDbUpdate = {};
   let nextParentApprovalStatus: Task["parentApprovalStatus"] | undefined;
+  let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,updated_at")
+    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -184,10 +189,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   applyTaskBriefUpdateFields(update, payload);
 
   if (payload.sprintId !== undefined) {
-    if (currentTask.task_type !== "deliverable" || currentTask.approval_status !== "approved") {
-      return apiError("Nur freigegebene Deliverables können einem Sprint zugewiesen werden.", 409);
-    }
     const nextSprintId = payload.sprintId || null;
+    const nextPackageId = update.package_id === undefined
+      ? currentTask.package_id || ""
+      : typeof update.package_id === "string"
+        ? update.package_id
+        : "";
+    const nextAssignee = update.assignee === undefined
+      ? currentTask.assignee || ""
+      : typeof update.assignee === "string"
+        ? update.assignee
+        : "";
+    const nextOwner = update.owner === undefined
+      ? currentTask.owner || ""
+      : typeof update.owner === "string"
+        ? update.owner
+        : "";
+    const nextStatus = update.status === undefined
+      ? currentTask.status || ""
+      : typeof update.status === "string"
+        ? update.status
+        : "";
+    let hasInitiative = false;
+    if (nextPackageId) {
+      const { data: initiative, error: initiativeError } = await supabase
+        .from(ACTIVE_PACKAGES_TABLE)
+        .select("id")
+        .eq("id", nextPackageId)
+        .maybeSingle();
+      if (initiativeError) return apiError(initiativeError.message, 500);
+      hasInitiative = Boolean(initiative);
+    }
+
+    let targetSprint: { id: string; scoreLocked: boolean } | null = null;
     if (nextSprintId) {
       const { data: sprint, error: sprintError } = await supabase
         .from("sprints")
@@ -195,10 +229,40 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .eq("id", nextSprintId)
         .single();
       if (sprintError || !sprint) return apiError("Sprint wurde nicht gefunden.", 404);
-      if (sprint.score_locked) return apiError("Gelockte Sprints können nicht mehr zugewiesen werden.", 409);
+      targetSprint = { id: sprint.id, scoreLocked: Boolean(sprint.score_locked) };
     }
-    update.sprint_id = nextSprintId;
-    update.score_relevant = Boolean(nextSprintId);
+
+    let sourceSprintLocked = false;
+    if (currentTask.sprint_id && currentTask.sprint_id !== nextSprintId) {
+      const { data: sourceSprint, error: sourceSprintError } = await supabase
+        .from("sprints")
+        .select("id,score_locked")
+        .eq("id", currentTask.sprint_id)
+        .maybeSingle();
+      if (sourceSprintError) return apiError(sourceSprintError.message, 500);
+      if (!sourceSprint) return apiError("Aktueller Sprint wurde nicht gefunden.", 409);
+      sourceSprintLocked = Boolean(sourceSprint.score_locked);
+    }
+
+    const sprintEligibility = getBacklogSprintAssignmentEligibility({
+      taskType: currentTask.task_type,
+      approvalStatus: currentTask.approval_status,
+      status: nextStatus,
+      assignee: nextAssignee,
+      owner: nextOwner,
+      packageId: nextPackageId,
+      hasInitiative,
+      sprintId: currentTask.sprint_id,
+    }, targetSprint, { sourceSprintLocked });
+    if (!sprintEligibility.ok) {
+      return apiError(backlogSprintAssignmentMessage(sprintEligibility.reason), 409);
+    }
+    if (sprintEligibility.action === "noop") {
+      sprintAssignmentNoop = true;
+    } else {
+      update.sprint_id = nextSprintId;
+      update.score_relevant = Boolean(nextSprintId);
+    }
   }
 
   const reviewStatusGuard = applyReviewStatusUpdate(update, payload, isOperationalLead);
@@ -251,6 +315,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   markTaskGitHubSyncDirty(update);
 
   const messages = activityMessages(payload, currentTask);
+
+  if (sprintAssignmentNoop && Object.keys(update).length === 0 && payload.note === undefined && payload.dependsOn === undefined) {
+    return NextResponse.json({
+      ok: true,
+      activities: [],
+      task: {
+        id,
+        updatedAt: currentTask.updated_at,
+        approvalStatus: currentTask.approval_status ?? null,
+        approvalRevision: Number(currentTask.approval_revision || 1),
+        sprintId: currentTask.sprint_id || "",
+        scoreRelevant: Boolean(currentTask.score_relevant),
+      },
+    });
+  }
 
   const notifications: Array<Record<string, string | null>> = [];
   if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {

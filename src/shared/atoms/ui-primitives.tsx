@@ -35,14 +35,20 @@ const panelPadding = {
   xl: "p-6",
 };
 
+const panelAppearances = {
+  default: "rounded-lg border border-slate-200 bg-white shadow-sm",
+  structural: "rounded-none border border-slate-300 bg-white shadow-none",
+};
+
 type UiPanelProps = HTMLAttributes<HTMLElement> & {
   as?: "section" | "article" | "div";
   padding?: keyof typeof panelPadding;
+  appearance?: keyof typeof panelAppearances;
 };
 
-export function UiPanel({ as: Component = "section", padding = "md", className, children, ...props }: UiPanelProps) {
+export function UiPanel({ as: Component = "section", padding = "md", appearance = "default", className, children, ...props }: UiPanelProps) {
   return (
-    <Component className={classNames("rounded-lg border border-slate-200 bg-white shadow-sm", panelPadding[padding], className)} {...props}>
+    <Component className={classNames(panelAppearances[appearance], panelPadding[padding], className)} {...props}>
       {children}
     </Component>
   );
@@ -146,11 +152,12 @@ type UiBadgeProps = HTMLAttributes<HTMLSpanElement> & {
   tone?: UiTone;
   size?: keyof typeof badgeSizes;
   bordered?: boolean;
+  shape?: "pill" | "rectangular";
 };
 
-export function UiBadge({ tone = "slate", size = "sm", bordered = true, className, children, ...props }: UiBadgeProps) {
+export function UiBadge({ tone = "slate", size = "sm", bordered = true, shape = "pill", className, children, ...props }: UiBadgeProps) {
   return (
-    <span className={classNames("inline-flex items-center rounded-full font-semibold", bordered && "border", badgeSizes[size], badgeTones[tone], className)} {...props}>
+    <span className={classNames("inline-flex items-center font-semibold", shape === "pill" ? "rounded-full" : "rounded-none", bordered && "border", badgeSizes[size], badgeTones[tone], className)} {...props}>
       {children}
     </span>
   );

@@ -66,7 +66,7 @@ export const workspaceLabels: Record<Workspace, string> = {
 
 export const workspaceDescriptions: Record<Workspace, string> = {
   planning: "Zeigt die Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
-  backlog: "Zeigt priorisierte Aufgaben, vorbereitete Vorschläge und Sprint-Zuordnung.",
+  backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor und ordnet freigegebene Deliverables Sprints zu.",
   reviews: "Zeigt offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Zeigt wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Zeigt Weekly Updates, Punkte, Review-Reife und Sprintabschluss.",

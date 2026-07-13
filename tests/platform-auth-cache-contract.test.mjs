@@ -12,7 +12,7 @@ test("task updates keep the protected planning cache aligned across detail-route
   );
   assert.match(
     ui,
-    /const updateTask = \(task: Task, patch: Partial<Task>\) => \{[\s\S]*applyPlanningDataUpdate\(\(current\) => \{/,
+    /const updateTask: TaskUpdateCommand = \(task: Task, patch: Partial<Task>\) => \{[\s\S]*applyPlanningDataUpdate\(\(current\) => \{/,
   );
   assert.match(
     ui,

@@ -158,6 +158,7 @@ test("representative api routes share setup without weakening route guards", asy
 test("custom controls keep keyboard and aria contracts", async () => {
   const select = await readFile("src/shared/atoms/custom-select.tsx", "utf8");
   const datePicker = await readFile("src/shared/atoms/custom-date-picker.tsx", "utf8");
+  const actionMenu = await readFile("src/shared/molecules/custom-action-menu.tsx", "utf8");
 
   assert.match(select, /role="listbox"/);
   assert.match(select, /role="option"/);
@@ -188,6 +189,19 @@ test("custom controls keep keyboard and aria contracts", async () => {
   assert.match(datePicker, /onBlur=\{commitTime\}/);
   assert.match(datePicker, /aria-invalid=\{Boolean\(timeError\)\}/);
   assert.doesNotMatch(datePicker, /onChange=\{\(event\) => changeTime/);
+
+  assert.match(actionMenu, /role="menu"/);
+  assert.match(actionMenu, /role="menuitem"/);
+  assert.match(actionMenu, /aria-haspopup="menu"/);
+  assert.match(actionMenu, /triggerButtonProps/);
+  assert.match(actionMenu, /disabledReason/);
+  assert.match(actionMenu, /aria-describedby=\{reasonId\}/);
+  assert.match(actionMenu, /ArrowDown/);
+  assert.match(actionMenu, /ArrowUp/);
+  assert.match(actionMenu, /Home/);
+  assert.match(actionMenu, /End/);
+  assert.match(actionMenu, /Escape/);
+  assert.match(actionMenu, /triggerRef\.current\?\.focus\(\)/);
 });
 
 test("modal dialogs trap focus close on Escape and restore the trigger", async () => {
@@ -310,6 +324,9 @@ test("shared filter controls expose consistent accessible table filtering", asyn
   assert.match(columnFilter, /querySelector<HTMLElement>/);
   assert.match(columnFilter, /ignoreOutsideSelector: "\[data-custom-control-popover\]"/);
   assert.match(anchoredPopover, /target\.closest\(ignoreOutsideSelector\)/);
+  assert.match(anchoredPopover, /ResizeObserver/);
+  assert.match(anchoredPopover, /viewportPadding/);
+  assert.match(anchoredPopover, /resolvedPlacement/);
   assert.match(customSelect, /data-custom-control-popover/);
   assert.match(customDatePicker, /data-custom-control-popover/);
   assert.match(planningFilters, /FilterToggleGroup/);

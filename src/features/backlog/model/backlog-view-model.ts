@@ -1,5 +1,6 @@
 import { findCurrentSprint } from "@/lib/planning-schedule";
 import { isApprovedDeliverable, isProposedDeliverable } from "@/features/planning/model/approval-domain";
+import { getBacklogPlanningState, type BacklogPlanningState } from "@/features/backlog/model/backlog-planning-state";
 import { normalizeStatus } from "@/lib/status";
 import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
 
@@ -31,32 +32,25 @@ export const DEFAULT_BACKLOG_FILTERS: BacklogTableFilters = {
   direction: "asc",
 };
 
-export type BacklogReadinessChip = {
-  id: "owner" | "initiative" | "sprint";
-  label: string;
-  ready: boolean;
-};
-
 export type BacklogItem = {
   initiative?: Package;
   isReadyForSprint: boolean;
+  planningState: BacklogPlanningState;
   rank: number;
-  readiness: BacklogReadinessChip[];
   task: Task;
 };
 
 export type BacklogSprintBucket = {
-  capacityHours: number;
+  capacityHours: number | null;
+  capacityUnavailable: boolean;
   isCurrent: boolean;
   locked: boolean;
+  overCapacity: boolean;
+  overCapacityHours: number;
   plannedHours: number;
   sprint: Sprint;
   utilization: number;
 };
-
-function hasOwner(task: Task) {
-  return Boolean(task.assigneeId || task.ownerId || task.assignee || task.owner);
-}
 
 function taskIsDone(task: Task) {
   return normalizeStatus(task.status) === "Erledigt";
@@ -68,33 +62,48 @@ function taskIsProposal(task: Task) {
 
 function byBacklogOrder(a: Task, b: Task) {
   if (a.order !== b.order) return a.order - b.order;
-  return a.title.localeCompare(b.title, "de");
+  return a.id.localeCompare(b.id, "de");
 }
 
-function sprintCapacityHours(data: PlanningData, sprintId: string) {
-  const commitments = data.sprintCommitments.filter((commitment) => commitment.sprintId === sprintId);
-  if (commitments.length) {
-    return commitments.reduce((sum, commitment) => sum + commitment.weeklyHours, 0);
+function sprintDurationDays(sprint: Pick<Sprint, "startDate" | "endDate">) {
+  const startMatch = sprint.startDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const endMatch = sprint.endDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!startMatch || !endMatch) return null;
+  const start = Date.UTC(Number(startMatch[1]), Number(startMatch[2]) - 1, Number(startMatch[3]));
+  const end = Date.UTC(Number(endMatch[1]), Number(endMatch[2]) - 1, Number(endMatch[3]));
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const startIsValid = startDate.getUTCFullYear() === Number(startMatch[1])
+    && startDate.getUTCMonth() === Number(startMatch[2]) - 1
+    && startDate.getUTCDate() === Number(startMatch[3]);
+  const endIsValid = endDate.getUTCFullYear() === Number(endMatch[1])
+    && endDate.getUTCMonth() === Number(endMatch[2]) - 1
+    && endDate.getUTCDate() === Number(endMatch[3]);
+  if (!startIsValid || !endIsValid || end < start) return null;
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+function sprintCapacityHours(data: PlanningData, sprint: Sprint) {
+  const commitments = data.sprintCommitments.filter((commitment) => commitment.sprintId === sprint.id);
+  const weeklyHours = commitments.length
+    ? commitments.map((commitment) => commitment.weeklyHours)
+    : data.profiles.map((profile) => profile.weeklyCapacity);
+  const durationDays = sprintDurationDays(sprint);
+  if (!weeklyHours.length || durationDays === null || weeklyHours.some((hours) => !Number.isFinite(hours) || hours < 0)) {
+    return null;
   }
-  return data.profiles.reduce((sum, profile) => sum + profile.weeklyCapacity, 0);
+  return Math.round(weeklyHours.reduce((sum, hours) => sum + hours, 0) * durationDays / 7);
 }
 
 function buildBacklogItem(task: Task, initiativeById: Map<string, Package>, rank: number): BacklogItem {
   const initiative = initiativeById.get(task.packageId);
-  const ownerReady = hasOwner(task);
-  const initiativeReady = Boolean(initiative);
-  const sprintReady = Boolean(task.sprintId);
-  const readiness: BacklogReadinessChip[] = [
-    { id: "owner", label: "Z", ready: ownerReady },
-    { id: "initiative", label: "I", ready: initiativeReady },
-    { id: "sprint", label: "S", ready: sprintReady },
-  ];
+  const planningState = getBacklogPlanningState({ ...task, hasInitiative: Boolean(initiative) });
 
   return {
     initiative,
-    isReadyForSprint: isApprovedDeliverable(task) && ownerReady && initiativeReady && !sprintReady && !taskIsDone(task),
+    isReadyForSprint: planningState.kind === "ready",
+    planningState,
     rank,
-    readiness,
     task,
   };
 }
@@ -120,6 +129,13 @@ export function filterBacklogItemsByQuery(items: BacklogItem[], query: string) {
 
 export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direction: "asc" | "desc" = "asc") {
   const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
+  const planningStateRank: Record<BacklogPlanningState["kind"], number> = {
+    ready: 0,
+    scheduled: 1,
+    blocked: 2,
+    completed: 3,
+    unsupported: 4,
+  };
   return [...items].sort((left, right) => {
     let comparison = 0;
     if (sort === "priority") comparison = (priorityRank[left.task.priority] ?? 9) - (priorityRank[right.task.priority] ?? 9);
@@ -127,7 +143,7 @@ export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direct
     else if (sort === "approval") comparison = Number(taskIsProposal(left.task)) - Number(taskIsProposal(right.task));
     else if (sort === "initiative") comparison = (left.initiative?.title || "").localeCompare(right.initiative?.title || "", "de");
     else if (sort === "assignee") comparison = (left.task.assignee || "").localeCompare(right.task.assignee || "", "de");
-    else if (sort === "readiness") comparison = Number(left.isReadyForSprint) - Number(right.isReadyForSprint);
+    else if (sort === "readiness") comparison = planningStateRank[left.planningState.kind] - planningStateRank[right.planningState.kind];
     else if (sort === "status") comparison = normalizeStatus(left.task.status).localeCompare(normalizeStatus(right.task.status), "de");
     else comparison = left.rank - right.rank;
     return (direction === "desc" ? -comparison : comparison) || left.rank - right.rank;
@@ -137,7 +153,9 @@ export function sortBacklogItems(items: BacklogItem[], sort: BacklogSort, direct
 export function filterBacklogItems(items: BacklogItem[], filters: BacklogTableFilters) {
   return filterBacklogItemsByQuery(items, filters.query).filter((item) => {
     const statusMatches = filters.status === "Alle" || normalizeStatus(item.task.status) === filters.status;
-    const readinessMatches = filters.readiness === "all" || filters.readiness === "ready" && item.isReadyForSprint || filters.readiness === "incomplete" && !item.isReadyForSprint;
+    const readinessMatches = filters.readiness === "all"
+      || filters.readiness === "ready" && item.planningState.kind === "ready"
+      || filters.readiness === "incomplete" && item.planningState.kind === "blocked";
     const priorityMatches = filters.priority === "Alle" || item.task.priority === filters.priority;
     const initiativeMatches = filters.initiative === "Alle" || item.task.packageId === filters.initiative;
     const assigneeMatches = filters.assignee === "Alle" || item.task.assigneeId === filters.assignee || item.task.assignee === filters.assignee;
@@ -176,14 +194,19 @@ export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
     const plannedHours = data.tasks
       .filter((task) => isApprovedDeliverable(task) && task.sprintId === sprint.id && !taskIsDone(task))
       .reduce((sum, task) => sum + task.hours, 0);
-    const capacityHours = sprintCapacityHours(data, sprint.id);
+    const capacityHours = sprintCapacityHours(data, sprint);
+    const capacityUnavailable = capacityHours === null;
+    const overCapacityHours = capacityHours === null ? 0 : Math.max(plannedHours - capacityHours, 0);
     return {
       capacityHours,
+      capacityUnavailable,
       isCurrent: sprint.id === current?.id,
       locked: sprint.scoreLocked,
+      overCapacity: overCapacityHours > 0,
+      overCapacityHours,
       plannedHours,
       sprint,
-      utilization: capacityHours ? Math.min(plannedHours / capacityHours, 1) : 0,
+      utilization: capacityHours && capacityHours > 0 ? plannedHours / capacityHours : 0,
     };
   });
 

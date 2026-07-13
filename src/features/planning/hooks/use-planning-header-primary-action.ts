@@ -30,13 +30,6 @@ export function usePlanningHeaderPrimaryAction({
     };
   }
 
-  if (workspace === "backlog") {
-    return {
-      label: "Deliverable vorschlagen",
-      onClick: () => setTaskDialogDefaults({ taskType: "deliverable" }),
-    };
-  }
-
   if (workspace === "sprint") {
     return {
       label: "Aufgabe hinzufügen",

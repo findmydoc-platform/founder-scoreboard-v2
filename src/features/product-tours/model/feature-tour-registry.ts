@@ -44,7 +44,7 @@ export const featureTours = [
         element: "[data-tour-id='backlog-rank-table']",
         popover: {
           title: "Rangfolge statt Statusspalte",
-          description: "Ziehe Aufgaben nach oben oder unten. Wenn Spalten zu breit werden, scrollt die Tabelle horizontal, ohne die Sprint-Planung rechts zu verlieren.",
+          description: "Ziehe Aufgaben am Griff nach oben oder unten. Das Aktionsmenü bietet dieselben Rangaktionen für Tastatur und Touch.",
           side: "top",
           align: "start",
         },
@@ -53,7 +53,7 @@ export const featureTours = [
         element: "[data-tour-id='backlog-sprint-pane']",
         popover: {
           title: "In Sprints ziehen",
-          description: "Ziehe bereite Aufgaben auf einen offenen Sprint. Der Sprint bleibt ein Zeitcontainer; Initiative und Deliverable-Struktur bleiben unverändert.",
+          description: "Ziehe freigegebene, vollständige Deliverables auf einen offenen Sprint oder wähle ihn im Aktionsmenü. Der Sprint bleibt ein Zeitcontainer.",
           side: "left",
           align: "start",
           doneBtnText: "Verstanden",
