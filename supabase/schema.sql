@@ -4781,6 +4781,145 @@ alter table public.planning_github_lifecycle_outbox enable row level security;
 revoke all on public.planning_github_lifecycle_outbox from public, anon, authenticated;
 grant select, insert, update, delete on public.planning_github_lifecycle_outbox to service_role;
 
+create or replace function public.normalize_planning_github_issue_reference(
+  p_task_type text,
+  p_github_repo text,
+  p_github_issue_number integer,
+  p_issue_number text,
+  p_github_issue_url text,
+  p_issue_url text
+)
+returns table (
+  reference_status text,
+  normalized_repo text,
+  normalized_issue_number integer,
+  error_message text
+)
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_row_repo text := lower(nullif(trim(coalesce(p_github_repo, '')), ''));
+  v_legacy_number_text text := nullif(trim(coalesce(p_issue_number, '')), '');
+  v_github_url text := nullif(trim(coalesce(p_github_issue_url, '')), '');
+  v_legacy_url text := nullif(trim(coalesce(p_issue_url, '')), '');
+  v_legacy_number integer;
+  v_github_url_match text[];
+  v_legacy_url_match text[];
+  v_github_url_repo text;
+  v_legacy_url_repo text;
+  v_github_url_number integer;
+  v_legacy_url_number integer;
+  v_effective_repo text;
+  v_effective_number integer;
+begin
+  if p_task_type is null or p_task_type not in ('deliverable', 'sub_issue') then
+    return query select 'invalid', null::text, null::integer, 'unsupported task type';
+    return;
+  end if;
+
+  if p_github_issue_number is not null and p_github_issue_number < 1 then
+    return query select 'invalid', null::text, null::integer, 'github issue number must be positive';
+    return;
+  end if;
+
+  if v_legacy_number_text is not null then
+    if v_legacy_number_text !~ '^[1-9][0-9]*$' then
+      return query select 'invalid', null::text, null::integer, 'legacy issue number is malformed';
+      return;
+    end if;
+    if v_legacy_number_text::numeric > 2147483647 then
+      return query select 'invalid', null::text, null::integer, 'legacy issue number is malformed';
+      return;
+    end if;
+    v_legacy_number := v_legacy_number_text::integer;
+  end if;
+
+  if v_github_url is not null then
+    v_github_url_match := regexp_match(
+      v_github_url,
+      '^https://github[.]com/([^/?#]+)/([^/?#]+)/issues/([1-9][0-9]*)([?#].*)?$',
+      'i'
+    );
+    if v_github_url_match is null or v_github_url_match[3]::numeric > 2147483647 then
+      return query select 'invalid', null::text, null::integer, 'github issue url is malformed';
+      return;
+    end if;
+    v_github_url_repo := lower(v_github_url_match[1] || '/' || v_github_url_match[2]);
+    v_github_url_number := v_github_url_match[3]::integer;
+  end if;
+
+  if v_legacy_url is not null then
+    v_legacy_url_match := regexp_match(
+      v_legacy_url,
+      '^https://github[.]com/([^/?#]+)/([^/?#]+)/issues/([1-9][0-9]*)([?#].*)?$',
+      'i'
+    );
+    if v_legacy_url_match is null or v_legacy_url_match[3]::numeric > 2147483647 then
+      return query select 'invalid', null::text, null::integer, 'legacy issue url is malformed';
+      return;
+    end if;
+    v_legacy_url_repo := lower(v_legacy_url_match[1] || '/' || v_legacy_url_match[2]);
+    v_legacy_url_number := v_legacy_url_match[3]::integer;
+  end if;
+
+  if v_github_url_repo is not null and v_legacy_url_repo is not null
+     and (v_github_url_repo <> v_legacy_url_repo or v_github_url_number <> v_legacy_url_number) then
+    return query select 'invalid', null::text, null::integer, 'github issue urls conflict';
+    return;
+  end if;
+
+  if p_github_issue_number is not null then
+    v_effective_repo := v_row_repo;
+    v_effective_number := p_github_issue_number;
+    if v_legacy_number is not null and v_legacy_number <> v_effective_number then
+      return query select 'invalid', null::text, null::integer, 'github issue numbers conflict';
+      return;
+    end if;
+  elsif v_legacy_number is not null then
+    v_effective_repo := v_row_repo;
+    v_effective_number := v_legacy_number;
+  elsif v_github_url_repo is not null or v_legacy_url_repo is not null then
+    v_effective_repo := coalesce(v_github_url_repo, v_legacy_url_repo);
+    v_effective_number := coalesce(v_github_url_number, v_legacy_url_number);
+  else
+    return query select 'missing', null::text, null::integer, null::text;
+    return;
+  end if;
+
+  if v_effective_repo is null then
+    return query select 'invalid', null::text, null::integer, 'github repository is missing';
+    return;
+  end if;
+
+  if (v_github_url_repo is not null
+      and (v_github_url_repo <> v_effective_repo or v_github_url_number <> v_effective_number))
+     or (v_legacy_url_repo is not null
+      and (v_legacy_url_repo <> v_effective_repo or v_legacy_url_number <> v_effective_number)) then
+    return query select 'invalid', null::text, null::integer, 'github issue url conflicts with the effective issue';
+    return;
+  end if;
+
+  if v_effective_repo not in (
+       'findmydoc-platform/management',
+       'findmydoc-platform/website',
+       'findmydoc-platform/clinic-dashboard'
+     )
+     or (p_task_type = 'deliverable' and v_effective_repo <> 'findmydoc-platform/management') then
+    return query select 'invalid', null::text, null::integer, 'github repository is not allowed for this task type';
+    return;
+  end if;
+
+  return query select 'valid', v_effective_repo, v_effective_number, null::text;
+end;
+$$;
+
+revoke all on function public.normalize_planning_github_issue_reference(text, text, integer, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.normalize_planning_github_issue_reference(text, text, integer, text, text, text)
+  to service_role;
+
 create or replace function public.guard_planning_trash_mutation()
 returns trigger
 language plpgsql
@@ -4885,12 +5024,16 @@ declare
   v_event_ids bigint[] := array[]::bigint[];
   v_notification_id bigint;
   v_root_trash_revision integer;
+  v_package_id text;
   v_before_data jsonb;
   v_item jsonb;
 begin
-  if p_root_type not in ('initiative', 'deliverable')
+  if p_root_type is null
+     or p_root_type not in ('initiative', 'deliverable')
      or nullif(trim(coalesce(p_root_id, '')), '') is null
+     or p_expected_revision is null
      or p_expected_revision < 1
+     or p_cause is null
      or p_cause not in ('withdrawn', 'rejected') then
     raise exception using errcode = '22023', message = 'planning trash input is invalid';
   end if;
@@ -4988,12 +5131,30 @@ begin
     v_root_trash_revision := v_initiative.trash_revision;
     v_item := to_jsonb(v_initiative);
   else
+    select package_id into v_package_id
+    from public.tasks
+    where id = p_root_id;
+    if not found then
+      raise exception using errcode = 'P0002', message = 'deliverable not found';
+    end if;
+
+    select * into v_initiative
+    from public.packages
+    where id = v_package_id
+    for share;
+    if not found or v_initiative.trashed_at is not null then
+      raise exception using errcode = 'P0003', message = 'deliverable requires an active initiative';
+    end if;
+
     select * into v_task
     from public.tasks
     where id = p_root_id
     for update;
     if not found then
       raise exception using errcode = 'P0002', message = 'deliverable not found';
+    end if;
+    if v_task.package_id is distinct from v_package_id then
+      raise exception using errcode = 'P0001', message = 'deliverable initiative changed';
     end if;
     if v_task.task_type <> 'deliverable' then
       raise exception using errcode = '22023', message = 'only deliverables may be trashed as task roots';
@@ -5004,15 +5165,6 @@ begin
     if v_task.approval_revision <> p_expected_revision then
       raise exception using errcode = 'P0001', message = 'deliverable approval revision changed';
     end if;
-
-    select * into v_initiative
-    from public.packages
-    where id = v_task.package_id
-    for share;
-    if not found or v_initiative.trashed_at is not null then
-      raise exception using errcode = 'P0003', message = 'deliverable requires an active initiative';
-    end if;
-
     if p_cause = 'withdrawn' then
       if v_task.approval_status not in ('draft', 'proposed') then
         raise exception using errcode = 'P0003', message = 'only draft or proposed deliverables may be withdrawn';
@@ -5111,23 +5263,34 @@ begin
     action,
     source_type,
     source_revision,
-    reason
+    reason,
+    status,
+    status_reason,
+    last_error
   )
   select
     p_root_type,
     p_root_id,
     v_root_trash_revision,
     task.id,
-    coalesce(nullif(task.github_repo, ''), 'findmydoc-platform/management'),
-    coalesce(
-      task.github_issue_number,
-      case when coalesce(task.issue_number, '') ~ '^[0-9]+$' then task.issue_number::integer end
-    ),
+    issue_reference.normalized_repo,
+    issue_reference.normalized_issue_number,
     'close_not_planned',
     p_cause,
     v_root_trash_revision,
-    v_reason
+    v_reason,
+    case when issue_reference.reference_status = 'invalid' then 'failed' else 'pending' end,
+    case when issue_reference.reference_status = 'invalid' then 'invalid_issue_reference' end,
+    case when issue_reference.reference_status = 'invalid' then issue_reference.error_message end
   from public.tasks task
+  cross join lateral public.normalize_planning_github_issue_reference(
+    task.task_type,
+    task.github_repo,
+    task.github_issue_number,
+    task.issue_number,
+    task.github_issue_url,
+    task.issue_url
+  ) issue_reference
   where task.id = any(v_task_ids)
   on conflict (root_type, root_id, root_trash_revision, task_id, action) do nothing;
 
@@ -5248,12 +5411,15 @@ declare
   v_actor_role text;
   v_initiative public.packages%rowtype;
   v_root_task public.tasks%rowtype;
+  v_package_id text;
   v_task_ids text[] := array[]::text[];
   v_before_data jsonb;
   v_item jsonb;
 begin
-  if p_root_type not in ('initiative', 'deliverable')
+  if p_root_type is null
+     or p_root_type not in ('initiative', 'deliverable')
      or nullif(trim(coalesce(p_root_id, '')), '') is null
+     or p_expected_trash_revision is null
      or p_expected_trash_revision < 1 then
     raise exception using errcode = '22023', message = 'planning restore input is invalid';
   end if;
@@ -5345,12 +5511,30 @@ begin
 
     v_item := to_jsonb(v_initiative);
   else
+    select package_id into v_package_id
+    from public.tasks
+    where id = p_root_id;
+    if not found then
+      raise exception using errcode = 'P0002', message = 'deliverable not found';
+    end if;
+
+    select * into v_initiative
+    from public.packages
+    where id = v_package_id
+    for share;
+    if not found or v_initiative.trashed_at is not null then
+      raise exception using errcode = 'P0003', message = 'parent initiative must be restored first';
+    end if;
+
     select * into v_root_task
     from public.tasks
     where id = p_root_id
     for update;
     if not found then
       raise exception using errcode = 'P0002', message = 'deliverable not found';
+    end if;
+    if v_root_task.package_id is distinct from v_package_id then
+      raise exception using errcode = 'P0001', message = 'deliverable initiative changed';
     end if;
     if v_root_task.task_type <> 'deliverable'
        or v_root_task.trashed_at is null
@@ -5450,10 +5634,13 @@ begin
 end;
 $$;
 
-create or replace function public.claim_planning_github_lifecycle_jobs(
+create or replace function public.claim_planning_github_lifecycle_jobs_transaction(
   p_lock_token uuid,
-  p_limit integer default 25,
-  p_lease_seconds integer default 120
+  p_limit integer,
+  p_lease_seconds integer,
+  p_root_type text,
+  p_root_id text,
+  p_task_ids text[]
 )
 returns setof public.planning_github_lifecycle_outbox
 language plpgsql
@@ -5461,7 +5648,28 @@ security definer
 set search_path = public
 as $$
 begin
-  if p_lock_token is null or p_limit not between 1 and 100 or p_lease_seconds not between 30 and 900 then
+  if p_lock_token is null
+     or p_limit is null
+     or p_limit not between 1 and 100
+     or p_lease_seconds is null
+     or p_lease_seconds not between 30 and 900
+     or (
+       p_root_type is null
+       and (p_root_id is not null or p_task_ids is not null)
+     )
+     or (
+       p_root_type is not null
+       and (
+         p_root_type not in ('initiative', 'deliverable')
+         or nullif(trim(coalesce(p_root_id, '')), '') is null
+         or p_task_ids is null
+         or cardinality(p_task_ids) < 1
+         or exists (
+           select 1 from unnest(p_task_ids) task_id
+           where nullif(trim(coalesce(task_id, '')), '') is null
+         )
+       )
+     ) then
     raise exception using errcode = '22023', message = 'planning github lifecycle claim input is invalid';
   end if;
 
@@ -5473,6 +5681,14 @@ begin
       (job.status in ('pending', 'retry_scheduled') and job.available_at <= now())
       or (job.status = 'processing' and job.locked_at < now() - make_interval(secs => p_lease_seconds))
     )
+      and (
+        p_root_type is null
+        or (
+          job.root_type = p_root_type
+          and job.root_id = p_root_id
+          and job.task_id = any(p_task_ids)
+        )
+      )
       and not exists (
         select 1
         from public.planning_github_lifecycle_outbox predecessor
@@ -5498,6 +5714,62 @@ begin
   from candidates
   where job.id = candidates.id
   returning job.*;
+end;
+$$;
+
+create or replace function public.claim_planning_github_lifecycle_jobs(
+  p_lock_token uuid,
+  p_limit integer default 25,
+  p_lease_seconds integer default 120
+)
+returns setof public.planning_github_lifecycle_outbox
+language sql
+security definer
+set search_path = public
+as $$
+  select *
+  from public.claim_planning_github_lifecycle_jobs_transaction(
+    p_lock_token,
+    p_limit,
+    p_lease_seconds,
+    null,
+    null,
+    null
+  )
+$$;
+
+create or replace function public.claim_planning_github_lifecycle_jobs_for_root(
+  p_lock_token uuid,
+  p_root_type text,
+  p_root_id text,
+  p_task_ids text[],
+  p_limit integer default 25,
+  p_lease_seconds integer default 120
+)
+returns setof public.planning_github_lifecycle_outbox
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_root_type is null
+     or p_root_type not in ('initiative', 'deliverable')
+     or nullif(trim(coalesce(p_root_id, '')), '') is null
+     or p_task_ids is null
+     or cardinality(p_task_ids) < 1 then
+    raise exception using errcode = '22023', message = 'scoped planning github lifecycle claim input is invalid';
+  end if;
+
+  return query
+  select *
+  from public.claim_planning_github_lifecycle_jobs_transaction(
+    p_lock_token,
+    p_limit,
+    p_lease_seconds,
+    p_root_type,
+    p_root_id,
+    p_task_ids
+  );
 end;
 $$;
 
@@ -5583,7 +5855,10 @@ declare
   v_notification_recipient_id text;
   v_trash_result jsonb;
 begin
-  if p_action not in ('approve', 'reject', 'return_to_draft') or p_expected_revision < 1 then
+  if p_action is null
+     or p_action not in ('approve', 'reject', 'return_to_draft')
+     or p_expected_revision is null
+     or p_expected_revision < 1 then
     raise exception using errcode = '22023', message = 'initiative approval input is invalid';
   end if;
   if char_length(v_note) > 2000 then
@@ -5673,8 +5948,12 @@ declare
   v_note text := nullif(trim(coalesce(p_note, '')), '');
   v_notification_recipient_id text;
   v_trash_result jsonb;
+  v_package_id text;
 begin
-  if p_action not in ('approve', 'reject', 'return_to_draft') or p_expected_revision < 1 then
+  if p_action is null
+     or p_action not in ('approve', 'reject', 'return_to_draft')
+     or p_expected_revision is null
+     or p_expected_revision < 1 then
     raise exception using errcode = '22023', message = 'deliverable approval input is invalid';
   end if;
   if char_length(v_note) > 2000 then
@@ -5687,8 +5966,19 @@ begin
   select platform_role into v_actor_role from public.profiles where id = p_actor_profile_id;
   if not found then raise exception using errcode = 'P0006', message = 'approval actor not found'; end if;
 
+  select package_id into v_package_id from public.tasks where id = p_task_id;
+  if not found then raise exception using errcode = 'P0002', message = 'deliverable not found'; end if;
+
+  select * into v_initiative from public.packages where id = v_package_id for share;
+  if not found or v_initiative.trashed_at is not null then
+    raise exception using errcode = 'P0003', message = 'deliverable requires an active initiative';
+  end if;
+
   select * into v_task from public.tasks where id = p_task_id for update;
   if not found then raise exception using errcode = 'P0002', message = 'deliverable not found'; end if;
+  if v_task.package_id is distinct from v_package_id then
+    raise exception using errcode = 'P0001', message = 'deliverable initiative changed';
+  end if;
   if v_task.task_type <> 'deliverable' then raise exception using errcode = '22023', message = 'task is not a deliverable'; end if;
   if v_task.trashed_at is not null then raise exception using errcode = 'P0003', message = 'deliverable is trashed'; end if;
   if v_task.approval_revision <> p_expected_revision then
@@ -5697,12 +5987,6 @@ begin
   if v_task.approval_status <> 'proposed' then
     raise exception using errcode = 'P0003', message = 'deliverable is not proposed';
   end if;
-
-  select * into v_initiative from public.packages where id = v_task.package_id for share;
-  if not found or v_initiative.trashed_at is not null then
-    raise exception using errcode = 'P0003', message = 'deliverable requires an active initiative';
-  end if;
-
   if p_action in ('approve', 'reject')
      and v_actor_role <> 'ceo'
      and coalesce(v_initiative.accountable_profile_id, '') <> p_actor_profile_id then
@@ -5760,34 +6044,29 @@ begin
       action, source_type, source_revision, reason
     )
     select
-      prior.root_type,
-      prior.root_id,
-      prior.root_trash_revision,
+      'deliverable',
+      p_task_id,
+      v_task.trash_revision,
       linked.id,
-      coalesce(nullif(linked.github_repo, ''), 'findmydoc-platform/management'),
-      coalesce(
-        linked.github_issue_number,
-        case when coalesce(linked.issue_number, '') ~ '^[0-9]+$' then linked.issue_number::integer end
-      ),
+      prior.github_repo,
+      prior.github_issue_number,
       'reopen',
       'approval',
       v_task.approval_revision,
       null
     from public.tasks linked
     join lateral (
-      select closed.root_type, closed.root_id, closed.root_trash_revision
+      select closed.github_repo, closed.github_issue_number
       from public.planning_github_lifecycle_outbox closed
       where closed.task_id = linked.id and closed.action = 'close_not_planned'
-      order by closed.root_trash_revision desc, closed.created_at desc
+      order by closed.created_at desc, closed.id desc
       limit 1
     ) prior on true
     where (linked.id = p_task_id or linked.parent_task_id = p_task_id)
       and linked.trashed_at is null
       and linked.trash_revision > 0
-      and coalesce(
-        linked.github_issue_number,
-        case when coalesce(linked.issue_number, '') ~ '^[0-9]+$' then linked.issue_number::integer end
-      ) is not null
+      and prior.github_repo is not null
+      and prior.github_issue_number is not null
     on conflict (root_type, root_id, root_trash_revision, task_id, action) do nothing;
   end if;
 
@@ -5809,7 +6088,9 @@ $$;
 revoke all on function public.trash_planning_item_tree_transaction(text, text, integer, text, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.withdraw_planning_item_transaction(text, text, integer, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.restore_planning_item_transaction(text, text, integer, text, text, text) from public, anon, authenticated;
+revoke all on function public.claim_planning_github_lifecycle_jobs_transaction(uuid, integer, integer, text, text, text[]) from public, anon, authenticated;
 revoke all on function public.claim_planning_github_lifecycle_jobs(uuid, integer, integer) from public, anon, authenticated;
+revoke all on function public.claim_planning_github_lifecycle_jobs_for_root(uuid, text, text, text[], integer, integer) from public, anon, authenticated;
 revoke all on function public.finalize_planning_github_lifecycle_job(uuid, uuid, boolean, text, text) from public, anon, authenticated;
 revoke all on function public.decide_initiative_approval_transaction(text, integer, text, text, text) from public, anon, authenticated;
 revoke all on function public.decide_deliverable_approval_transaction(text, integer, text, text, text) from public, anon, authenticated;
@@ -5817,6 +6098,7 @@ revoke all on function public.decide_deliverable_approval_transaction(text, inte
 grant execute on function public.withdraw_planning_item_transaction(text, text, integer, text, text, text, text) to service_role;
 grant execute on function public.restore_planning_item_transaction(text, text, integer, text, text, text) to service_role;
 grant execute on function public.claim_planning_github_lifecycle_jobs(uuid, integer, integer) to service_role;
+grant execute on function public.claim_planning_github_lifecycle_jobs_for_root(uuid, text, text, text[], integer, integer) to service_role;
 grant execute on function public.finalize_planning_github_lifecycle_job(uuid, uuid, boolean, text, text) to service_role;
 grant execute on function public.decide_initiative_approval_transaction(text, integer, text, text, text) to service_role;
 grant execute on function public.decide_deliverable_approval_transaction(text, integer, text, text, text) to service_role;

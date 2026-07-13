@@ -502,6 +502,14 @@ async function verifyPlanningTrashLifecycleRpcs() {
     p_user_agent: null,
   };
   const claimParams = { p_lock_token: lockToken, p_limit: 0, p_lease_seconds: 120 };
+  const scopedClaimParams = {
+    p_lock_token: lockToken,
+    p_root_type: "deliverable",
+    p_root_id: `verify-missing-lifecycle-root-${Date.now()}`,
+    p_task_ids: [`verify-missing-lifecycle-task-${Date.now()}`],
+    p_limit: 0,
+    p_lease_seconds: 120,
+  };
   const finalizeParams = {
     p_job_id: randomUUID(),
     p_lock_token: lockToken,
@@ -509,13 +517,26 @@ async function verifyPlanningTrashLifecycleRpcs() {
     p_error_message: null,
     p_status_reason: "verification",
   };
-  const [withdraw, anonWithdraw, restore, anonRestore, claim, anonClaim, finalize, anonFinalize] = await Promise.all([
+  const [
+    withdraw,
+    anonWithdraw,
+    restore,
+    anonRestore,
+    claim,
+    anonClaim,
+    scopedClaim,
+    anonScopedClaim,
+    finalize,
+    anonFinalize,
+  ] = await Promise.all([
     supabase.rpc("withdraw_planning_item_transaction", withdrawParams),
     anonSupabase.rpc("withdraw_planning_item_transaction", withdrawParams),
     supabase.rpc("restore_planning_item_transaction", restoreParams),
     anonSupabase.rpc("restore_planning_item_transaction", restoreParams),
     supabase.rpc("claim_planning_github_lifecycle_jobs", claimParams),
     anonSupabase.rpc("claim_planning_github_lifecycle_jobs", claimParams),
+    supabase.rpc("claim_planning_github_lifecycle_jobs_for_root", scopedClaimParams),
+    anonSupabase.rpc("claim_planning_github_lifecycle_jobs_for_root", scopedClaimParams),
     supabase.rpc("finalize_planning_github_lifecycle_job", finalizeParams),
     anonSupabase.rpc("finalize_planning_github_lifecycle_job", finalizeParams),
   ]);
@@ -524,6 +545,7 @@ async function verifyPlanningTrashLifecycleRpcs() {
     ["withdraw_planning_item_transaction", withdraw, anonWithdraw, "P0006"],
     ["restore_planning_item_transaction", restore, anonRestore, "P0006"],
     ["claim_planning_github_lifecycle_jobs", claim, anonClaim, "22023"],
+    ["claim_planning_github_lifecycle_jobs_for_root", scopedClaim, anonScopedClaim, "22023"],
     ["finalize_planning_github_lifecycle_job", finalize, anonFinalize, "P0002"],
   ].map(([name, serviceResult, anonResult, expectedCode]) => ({
     name,
