@@ -6155,8 +6155,7 @@ begin
   perform set_config('founderops.trash_lifecycle_write', 'on', true);
 
   for v_candidate in
-    select candidate.root_type, candidate.root_id, candidate.trash_revision, candidate.purge_after
-    from (
+    with expired_roots as (
       select 'initiative'::text as root_type, package.id as root_id,
         package.trash_revision, package.purge_after
       from public.packages package
@@ -6173,8 +6172,99 @@ begin
         and task.trash_root_type = 'deliverable'
         and task.trash_root_id = task.id
         and task.purge_after <= now()
-    ) candidate
+    ), eligible_roots as (
+      select candidate.*
+      from expired_roots candidate
+      where not exists (
+        select 1
+        from public.tasks task
+        where (
+            (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
+            or (
+              candidate.root_type = 'deliverable'
+              and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
+            )
+          )
+          and not (
+            task.trashed_at is not null
+            and task.trash_root_type = candidate.root_type
+            and task.trash_root_id = candidate.root_id
+            and task.trash_revision = candidate.trash_revision
+          )
+      )
+        and not exists (
+          select 1
+          from public.tasks task
+          where task.trashed_at is not null
+            and task.trash_root_type = candidate.root_type
+            and task.trash_root_id = candidate.root_id
+            and task.trash_revision = candidate.trash_revision
+            and (
+              (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
+              or (
+                candidate.root_type = 'deliverable'
+                and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
+              )
+            ) is not true
+        )
+        and not exists (
+          select 1
+          from public.tasks task
+          where task.trashed_at is not null
+            and task.trash_root_type = candidate.root_type
+            and task.trash_root_id = candidate.root_id
+            and task.trash_revision = candidate.trash_revision
+            and (
+              (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
+              or (
+                candidate.root_type = 'deliverable'
+                and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
+              )
+            )
+            and not exists (
+              select 1
+              from public.planning_github_lifecycle_outbox lifecycle
+              where lifecycle.root_type = candidate.root_type
+                and lifecycle.root_id = candidate.root_id
+                and lifecycle.root_trash_revision = candidate.trash_revision
+                and lifecycle.task_id = task.id
+                and lifecycle.action = 'close_not_planned'
+                and lifecycle.status = 'completed'
+                and (
+                  (lifecycle.github_issue_number is null and lifecycle.status_reason = 'issue_missing')
+                  or (lifecycle.github_issue_number is not null and lifecycle.status_reason = 'delivered')
+                )
+            )
+        )
+        and not exists (
+          select 1
+          from public.planning_github_lifecycle_outbox lifecycle
+          where lifecycle.root_type = candidate.root_type
+            and lifecycle.root_id = candidate.root_id
+            and lifecycle.root_trash_revision = candidate.trash_revision
+            and lifecycle.action = 'close_not_planned'
+            and not exists (
+              select 1
+              from public.tasks task
+              where task.id = lifecycle.task_id
+                and task.trashed_at is not null
+                and task.trash_root_type = candidate.root_type
+                and task.trash_root_id = candidate.root_id
+                and task.trash_revision = candidate.trash_revision
+                and (
+                  (candidate.root_type = 'initiative' and task.package_id = candidate.root_id)
+                  or (
+                    candidate.root_type = 'deliverable'
+                    and (task.id = candidate.root_id or task.parent_task_id = candidate.root_id)
+                  )
+                )
+            )
+        )
+    )
+    select candidate.root_type, candidate.root_id, candidate.trash_revision, candidate.purge_after
+    from eligible_roots candidate
     order by candidate.purge_after, candidate.root_type, candidate.root_id
+    limit v_limit
   loop
     exit when v_purged_roots + v_eligible_roots >= v_limit;
 
@@ -6213,6 +6303,18 @@ begin
       if exists (
         select 1
         from public.tasks task
+        where task.trashed_at is not null
+          and task.trash_root_type = 'initiative'
+          and task.trash_root_id = v_candidate.root_id
+          and task.trash_revision = v_candidate.trash_revision
+          and task.package_id is distinct from v_candidate.root_id
+      ) then
+        continue;
+      end if;
+
+      if exists (
+        select 1
+        from public.tasks task
         where task.package_id = v_candidate.root_id
           and not (
             task.trashed_at is not null
@@ -6230,8 +6332,22 @@ begin
       where task.trash_root_type = 'initiative'
         and task.trash_root_id = v_candidate.root_id
         and task.trash_revision = v_candidate.trash_revision
+        and task.package_id = v_candidate.root_id
         and task.trashed_at is not null;
     else
+      if exists (
+        select 1
+        from public.tasks task
+        where task.trashed_at is not null
+          and task.trash_root_type = 'deliverable'
+          and task.trash_root_id = v_candidate.root_id
+          and task.trash_revision = v_candidate.trash_revision
+          and task.id is distinct from v_candidate.root_id
+          and task.parent_task_id is distinct from v_candidate.root_id
+      ) then
+        continue;
+      end if;
+
       if exists (
         select 1
         from public.tasks task
@@ -6252,11 +6368,18 @@ begin
       where task.trash_root_type = 'deliverable'
         and task.trash_root_id = v_candidate.root_id
         and task.trash_revision = v_candidate.trash_revision
+        and (task.id = v_candidate.root_id or task.parent_task_id = v_candidate.root_id)
         and task.trashed_at is not null;
     end if;
 
     select count(*)::integer,
-      count(*) filter (where lifecycle.status = 'completed')::integer
+      count(*) filter (
+        where lifecycle.status = 'completed'
+          and (
+            (lifecycle.github_issue_number is null and lifecycle.status_reason = 'issue_missing')
+            or (lifecycle.github_issue_number is not null and lifecycle.status_reason = 'delivered')
+          )
+      )::integer
     into v_outbox_count, v_completed_outbox_count
     from public.planning_github_lifecycle_outbox lifecycle
     where lifecycle.root_type = v_candidate.root_type
@@ -6264,7 +6387,35 @@ begin
       and lifecycle.root_trash_revision = v_candidate.trash_revision
       and lifecycle.action = 'close_not_planned';
 
-    if v_outbox_count <> v_task_count or v_completed_outbox_count <> v_task_count then
+    if v_outbox_count <> v_task_count
+       or v_completed_outbox_count <> v_task_count
+       or exists (
+         select 1
+         from unnest(v_task_ids) as expected(task_id)
+         where not exists (
+           select 1
+           from public.planning_github_lifecycle_outbox lifecycle
+           where lifecycle.root_type = v_candidate.root_type
+             and lifecycle.root_id = v_candidate.root_id
+             and lifecycle.root_trash_revision = v_candidate.trash_revision
+             and lifecycle.task_id = expected.task_id
+             and lifecycle.action = 'close_not_planned'
+             and lifecycle.status = 'completed'
+             and (
+               (lifecycle.github_issue_number is null and lifecycle.status_reason = 'issue_missing')
+               or (lifecycle.github_issue_number is not null and lifecycle.status_reason = 'delivered')
+             )
+         )
+       )
+       or exists (
+         select 1
+         from public.planning_github_lifecycle_outbox lifecycle
+         where lifecycle.root_type = v_candidate.root_type
+           and lifecycle.root_id = v_candidate.root_id
+           and lifecycle.root_trash_revision = v_candidate.trash_revision
+           and lifecycle.action = 'close_not_planned'
+           and not (lifecycle.task_id = any(v_task_ids))
+       ) then
       continue;
     end if;
 

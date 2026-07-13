@@ -1,4 +1,5 @@
 import pg from "pg";
+import { readFile } from "node:fs/promises";
 import { loadLocalEnv } from "./lib/env.mjs";
 
 await loadLocalEnv();
@@ -9,6 +10,10 @@ const port = Number(process.env.SUPABASE_DB_PORT || 5432);
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
 const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
+const migrationSql = await readFile(
+  new URL("../supabase/0065_planning_trash_purge.sql", import.meta.url),
+  "utf8",
+);
 
 if (!password) {
   console.error("Missing SUPABASE_DB_PASSWORD.");
@@ -31,6 +36,13 @@ const eligibleRootId = `verify-trash-purge-eligible-${suffix}`;
 const eligibleChildId = `${eligibleRootId}-child`;
 const blockedRootId = `verify-trash-purge-blocked-${suffix}`;
 const blockedChildId = `${blockedRootId}-child`;
+const substitutedRootId = `verify-trash-purge-substituted-${suffix}`;
+const substitutedChildId = `${substitutedRootId}-child`;
+const wrongReasonRootId = `verify-trash-purge-wrong-reason-${suffix}`;
+const scanBlockedRootIds = Array.from(
+  { length: 30 },
+  (_, index) => `verify-trash-purge-scan-blocked-${index}-${suffix}`,
+);
 const trashedAt = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000);
 const purgeAfter = new Date(trashedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
 
@@ -38,6 +50,7 @@ await client.connect();
 await client.query("begin");
 
 try {
+  await client.query(migrationSql);
   await client.query(
     `insert into public.profiles (id, name, role, platform_role)
      values ($1, 'Planning trash purge verifier', 'admin', 'ceo')`,
@@ -96,6 +109,52 @@ try {
       purgeAfter.toISOString(),
     ],
   );
+  await client.query(
+    `insert into public.tasks (
+       id, project_id, parent_task_id, title, status, priority, task_type,
+       approval_status, approval_revision, proposed_by, score_relevant, github_repo,
+       trashed_at, trashed_by, trash_reason, trash_cause, purge_after,
+       trash_root_type, trash_root_id, trash_revision
+     ) values
+       ($1, $4, null, 'Substituted purge root', 'Offen', 'P2', 'deliverable', 'draft',
+        1, $5, false, 'findmydoc-platform/management', $6, $5,
+        'Transactional purge verification', 'withdrawn', $7, 'deliverable', $1, 1),
+       ($2, $4, $1, 'Substituted purge child', 'Offen', 'P2', 'sub_issue', null,
+        1, $5, false, 'findmydoc-platform/management', $6, $5,
+        'Transactional purge verification', 'withdrawn', $7, 'deliverable', $1, 1),
+       ($3, $4, null, 'Wrong lifecycle reason root', 'Offen', 'P2', 'deliverable', 'draft',
+        1, $5, false, 'findmydoc-platform/management', $6, $5,
+        'Transactional purge verification', 'withdrawn', $7, 'deliverable', $3, 1)`,
+    [
+      substitutedRootId,
+      substitutedChildId,
+      wrongReasonRootId,
+      projectId,
+      profileId,
+      trashedAt.toISOString(),
+      purgeAfter.toISOString(),
+    ],
+  );
+  await client.query(
+    `insert into public.tasks (
+       id, project_id, title, status, priority, task_type, approval_status,
+       approval_revision, proposed_by, score_relevant, github_repo,
+       trashed_at, trashed_by, trash_reason, trash_cause, purge_after,
+       trash_root_type, trash_root_id, trash_revision
+     )
+     select blocked_id, $2, 'Bounded blocked root', 'Offen', 'P2', 'deliverable', 'draft',
+       1, $3, false, 'findmydoc-platform/management', $4, $3,
+       'Transactional purge verification', 'withdrawn', $5,
+       'deliverable', blocked_id, 1
+     from unnest($1::text[]) as blocked_id`,
+    [
+      scanBlockedRootIds,
+      projectId,
+      profileId,
+      trashedAt.toISOString(),
+      purgeAfter.toISOString(),
+    ],
+  );
   await client.query("select set_config('founderops.trash_lifecycle_write', 'off', true)");
 
   await client.query(
@@ -105,8 +164,27 @@ try {
      ) values
        ('deliverable', $1, 1, $1, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now()),
        ('deliverable', $1, 1, $2, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now()),
-       ('deliverable', $3, 1, $3, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now())`,
-    [eligibleRootId, eligibleChildId, blockedRootId],
+       ('deliverable', $3, 1, $3, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now()),
+       ('deliverable', $4, 1, $4, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now()),
+       ('deliverable', $4, 1, $5, 'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now())`,
+    [
+      eligibleRootId,
+      eligibleChildId,
+      blockedRootId,
+      substitutedRootId,
+      blockedChildId,
+    ],
+  );
+  await client.query(
+    `insert into public.planning_github_lifecycle_outbox (
+       root_type, root_id, root_trash_revision, task_id, github_repo,
+       github_issue_number, action, source_type, source_revision, status,
+       status_reason, completed_at
+     ) values (
+       'deliverable', $1, 1, $1, 'findmydoc-platform/management', 42,
+       'close_not_planned', 'withdrawn', 1, 'completed', 'issue_missing', now()
+     )`,
+    [wrongReasonRootId],
   );
 
   const notification = await client.query(
@@ -122,7 +200,7 @@ try {
   if (!notificationId) throw new Error("Could not create the purge verification notification.");
 
   const dryRun = await client.query(
-    "select public.purge_expired_planning_trash_batch(25, true) as result",
+    "select public.purge_expired_planning_trash_batch(1, true) as result",
   );
   if (dryRun.rows[0]?.result?.dryRun !== true || dryRun.rows[0]?.result?.eligibleRoots < 1) {
     throw new Error("Planning trash purge dry-run did not report the eligible root.");
@@ -136,7 +214,7 @@ try {
   }
 
   const purged = await client.query(
-    "select public.purge_expired_planning_trash_batch(25, false) as result",
+    "select public.purge_expired_planning_trash_batch(1, false) as result",
   );
   if (purged.rows[0]?.result?.purgedRoots !== 1 || purged.rows[0]?.result?.purgedTasks !== 2) {
     throw new Error("Planning trash purge did not remove exactly the eligible tree.");
@@ -146,6 +224,9 @@ try {
     `select
        (select count(*)::integer from public.tasks where id = any($1::text[])) as eligible_task_count,
        (select count(*)::integer from public.tasks where id = any($2::text[])) as blocked_task_count,
+       (select count(*)::integer from public.tasks where id = any($5::text[])) as substituted_task_count,
+       (select count(*)::integer from public.tasks where id = $6) as wrong_reason_task_count,
+       (select count(*)::integer from public.tasks where id = any($7::text[])) as scan_blocked_task_count,
        (select count(*)::integer from public.planning_github_lifecycle_outbox
          where root_type = 'deliverable' and root_id = $3 and root_trash_revision = 1) as eligible_outbox_count,
        (select count(*)::integer from public.audit_log
@@ -156,6 +237,9 @@ try {
       [blockedRootId, blockedChildId],
       eligibleRootId,
       notificationId,
+      [substitutedRootId, substitutedChildId],
+      wrongReasonRootId,
+      scanBlockedRootIds,
     ],
   );
   const result = persisted.rows[0];
@@ -164,6 +248,15 @@ try {
   }
   if (result?.blocked_task_count !== 2) {
     throw new Error("Incomplete GitHub lifecycle coverage did not block physical deletion.");
+  }
+  if (result?.substituted_task_count !== 2) {
+    throw new Error("Count-equal but task-mismatched GitHub lifecycle coverage allowed deletion.");
+  }
+  if (result?.wrong_reason_task_count !== 1) {
+    throw new Error("A linked issue without delivered lifecycle completion allowed deletion.");
+  }
+  if (result?.scan_blocked_task_count !== scanBlockedRootIds.length) {
+    throw new Error("Blocked roots were unexpectedly deleted by the bounded eligible-root batch.");
   }
   if (result?.audit_count !== 1 || result?.notification_status !== "resolved") {
     throw new Error("Purge audit or notification resolution was not committed atomically.");
