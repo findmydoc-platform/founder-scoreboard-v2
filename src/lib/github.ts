@@ -5,9 +5,7 @@ import {
   parseGitHubIssueUrl,
   resolveGitHubIssueNumber,
 } from "./github-issue-reference";
-import { githubJson, githubRequest } from "./github-http";
-
-const issueDependencyGitHubApiVersion = "2026-03-10";
+import { GITHUB_ISSUE_DEPENDENCY_API_VERSION, githubJson, githubRequest } from "./github-http";
 
 export { GitHubApiError } from "./github-http";
 
@@ -210,7 +208,7 @@ async function assignableGitHubLogin(login: string, token: string, repository?: 
       token,
       cache: "no-store",
       errorMessage: "GitHub-Assignee konnte nicht geprüft werden",
-      allowFailure: true,
+      acceptErrorResponse: true,
     });
   } catch {
     return null;
@@ -240,7 +238,7 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
     token,
     cache: "no-store",
     errorMessage: "GitHub Issue-Suche fehlgeschlagen",
-    allowFailure: true,
+    acceptErrorResponse: true,
   });
   let searchFailed = !searchResponse.ok;
   if (searchResponse.ok) {
@@ -258,7 +256,7 @@ async function findGitHubIssueByTaskMarker(taskId: string, token: string, reposi
         token,
         cache: "no-store",
         errorMessage: "GitHub Issue-Suche fehlgeschlagen",
-        allowFailure: true,
+        acceptErrorResponse: true,
       },
     );
     if (!response.ok) {
@@ -318,7 +316,6 @@ async function updateValidatedGitHubIssue(
     token,
     cache: "no-store",
     errorMessage: "Verknüpftes GitHub Issue konnte nicht geprüft werden",
-    errorType: "api",
   });
   assertGitHubIssueUpdateTarget(task, target, repository, issueNumber);
   if (!Array.isArray(target.labels)) {
@@ -328,12 +325,12 @@ async function updateValidatedGitHubIssue(
   return githubJson<{ number: number; html_url: string }>(issueUrl, {
     token,
     method: "PATCH",
+    operation: "mutation",
     body: {
       ...payload,
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
-    errorType: "api",
   });
 }
 
@@ -341,6 +338,7 @@ async function createGitHubIssue(payload: GitHubIssuePayload, token: string, own
   return githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     token,
     method: "POST",
+    operation: "mutation",
     body: payload,
     errorMessage: "GitHub Issue-Erstellung fehlgeschlagen",
   });
@@ -481,6 +479,7 @@ export async function connectGitHubSubIssue({
   }>("https://api.github.com/graphql", {
     token,
     method: "POST",
+    operation: "read",
     body: {
       query,
       variables: {
@@ -525,6 +524,7 @@ export async function connectGitHubSubIssue({
   const result = await githubJson<{ data?: unknown; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
     token,
     method: "POST",
+    operation: "mutation",
     body: { query: mutation, variables: { parent: parentIssue.id, childUrl } },
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht erstellt werden",
   });
@@ -537,7 +537,7 @@ export async function listGitHubIssueBlockedBy(issueNumber: number, token: strin
 
   return githubJson<GitHubIssueDependency[]>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`, {
     token,
-    apiVersion: issueDependencyGitHubApiVersion,
+    apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
     cache: "no-store",
     errorMessage: "GitHub Dependencies konnten nicht geladen werden",
   });
@@ -549,7 +549,8 @@ export async function addGitHubIssueBlockedBy(issueNumber: number, blockingIssue
   return githubJson<GitHubIssueDependency>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by`, {
     token,
     method: "POST",
-    apiVersion: issueDependencyGitHubApiVersion,
+    operation: "mutation",
+    apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
     body: { issue_id: blockingIssueId },
     errorMessage: "GitHub Dependency konnte nicht erstellt werden",
   });
@@ -561,7 +562,8 @@ export async function removeGitHubIssueBlockedBy(issueNumber: number, blockingIs
   const response = await githubRequest(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocked_by/${blockingIssueId}`, {
     token,
     method: "DELETE",
-    apiVersion: issueDependencyGitHubApiVersion,
+    operation: "mutation",
+    apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
     errorMessage: "GitHub Dependency konnte nicht entfernt werden",
     allowedStatuses: [404],
   });
@@ -627,6 +629,7 @@ export async function archiveGitHubIssue(issueNumber: number, token: string, rep
   return githubJson<{ number: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`, {
     token,
     method: "PATCH",
+    operation: "mutation",
     body: {
       state: "closed",
       state_reason: "not_planned",
@@ -642,11 +645,11 @@ export async function createGitHubIssueComment(issueNumber: number, comment: str
   return githubJson<{ id: number; html_url: string }>(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, {
     token,
     method: "POST",
+    operation: "mutation",
     body: {
       body: marker ? `${comment}\n\n<!-- ${marker} -->` : comment,
     },
     errorMessage: "GitHub Kommentar konnte nicht erstellt werden",
-    errorType: "api",
   });
 }
 
@@ -669,7 +672,6 @@ export async function listGitHubIssueComments(issueNumber: number, token: string
       token,
       cache: "no-store",
       errorMessage: "GitHub Kommentare konnten nicht geladen werden",
-      errorType: "api",
     });
     comments.push(...pageComments);
     if (pageComments.length < 100) break;
@@ -700,6 +702,7 @@ export async function uploadGitHubAttachment(
   const result = await githubJson<{ content?: { download_url?: string | null; html_url?: string | null } }>(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, "/")}`, {
     token,
     method: "PUT",
+    operation: "mutation",
     body: {
       message,
       content: content.toString("base64"),

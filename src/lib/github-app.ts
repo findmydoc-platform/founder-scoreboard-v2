@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { githubJson } from "./github-http";
 import type { AuthenticatedProfile } from "./types";
 
-const githubApiVersion = "2022-11-28";
 const tokenRefreshWindowMs = 5 * 60 * 1000;
 const oauthStateTtlMs = 10 * 60 * 1000;
 
@@ -110,23 +110,6 @@ async function githubAppJwt() {
   return `${data}.${signature}`;
 }
 
-async function githubJson<T>(url: string, token: string, init: RequestInit = {}) {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${token}`,
-      "x-github-api-version": githubApiVersion,
-      ...(init.headers || {}),
-    },
-  });
-  const body = await response.json().catch(() => null) as (T & { message?: string }) | null;
-  if (!response.ok) {
-    throw new Error(body?.message ? `GitHub: ${body.message}` : `GitHub API fehlgeschlagen: ${response.status}`);
-  }
-  return body as T;
-}
-
 function encryptToken(token: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", tokenEncryptionKey(), iv);
@@ -230,7 +213,10 @@ export async function exchangeGitHubAppCode(code: string, redirectUri: string) {
 }
 
 export async function githubUserForAppUserToken(token: string) {
-  return githubJson<GitHubUser>("https://api.github.com/user", token);
+  return githubJson<GitHubUser>("https://api.github.com/user", {
+    token,
+    errorMessage: "GitHub-Benutzer konnte nicht geladen werden",
+  });
 }
 
 export async function getGitHubAppInstallationToken() {
@@ -240,8 +226,12 @@ export async function getGitHubAppInstallationToken() {
 
   const body = await githubJson<{ token: string; expires_at: string }>(
     `https://api.github.com/app/installations/${encodeURIComponent(requireEnv("GITHUB_APP_INSTALLATION_ID"))}/access_tokens`,
-    await githubAppJwt(),
-    { method: "POST" },
+    {
+      token: await githubAppJwt(),
+      method: "POST",
+      operation: "mutation",
+      errorMessage: "GitHub-App-Installationstoken konnte nicht erzeugt werden",
+    },
   );
   cachedInstallationToken = {
     token: body.token,
