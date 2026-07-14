@@ -170,6 +170,7 @@ ready_state=""
 error_message=""
 ready_state_reason=""
 seat_block=""
+promote_status="not-required"
 
 for ((attempt = 1; attempt <= max_inspect_attempts; attempt++)); do
   if (cd "${staging_dir}" && "${inspect_command[@]}") >"${inspect_output_file}" 2>"${inspect_error_file}"; then
@@ -210,6 +211,23 @@ done
 
 case "${ready_state}" in
   READY)
+    if [[ "${target}" == "production" ]]; then
+      promote_command=(pnpm dlx "vercel@${vercel_cli_version}" promote "${deployment_url}" --yes --timeout=3m --token="${VERCEL_TOKEN}")
+      if [[ -n "${VERCEL_ORG_ID:-}" ]]; then
+        promote_command+=(--scope="${VERCEL_ORG_ID}")
+      fi
+
+      echo "Promoting ${deployment_url} to the current Vercel production deployment."
+      if ! (cd "${staging_dir}" && "${promote_command[@]}"); then
+        echo "Production promotion failed for ${deployment_url}." >&2
+        exit 1
+      fi
+      promote_status="success"
+    fi
+
+    {
+      echo "- **Production Promotion**: ${promote_status}"
+    } >> "${GITHUB_STEP_SUMMARY}"
     echo "${label} deployment ready: ${deployment_url}"
     ;;
   BLOCKED|ERROR|CANCELED)

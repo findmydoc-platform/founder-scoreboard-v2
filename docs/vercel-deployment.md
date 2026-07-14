@@ -105,6 +105,7 @@ GitHub Actions executes the production flow in this order:
 - Verify the production Supabase schema, auth mapping, GitHub sync contract, and planning hierarchy.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
+- Explicitly promote the ready production deployment so the configured production domains receive the deployment. The `--prod` prebuilt upload alone is not treated as the domain cutover contract.
 - Reconcile the existing comment outbox idempotently through the protected canonical production endpoint. Do not call the Vercel deployment URL because deployment protection redirects that URL to Vercel SSO.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 

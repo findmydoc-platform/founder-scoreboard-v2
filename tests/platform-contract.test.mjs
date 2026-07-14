@@ -128,6 +128,10 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployScript, /--no-wait/);
   assert.match(deployScript, /--target=preview/);
   assert.match(deployScript, /--prod/);
+  assert.match(deployScript, /promote/);
+  assert.match(deployScript, /if \[\[ "\$\{target\}" == "production" \]\][\s\S]*promote_command=/);
+  assert.match(deployScript, /--timeout=3m/);
+  assert.match(deployScript, /Production promotion failed/);
   assert.match(deployScript, /inspect/);
   assert.match(deployScript, /readyStateReason/);
   assert.match(deployScript, /seatBlock/);
