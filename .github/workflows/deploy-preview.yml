@@ -15,6 +15,7 @@ concurrency:
 env:
   NODE_VERSION: 24.14.0
   VERCEL_CLI_VERSION: 54.1.0
+  EXPECTED_VERCEL_PROJECT_ID: prj_siACjDyULbkdJRqGgKlGSfkU8iMP
   NEXT_TELEMETRY_DISABLED: 1
 
 defaults:
@@ -87,8 +88,13 @@ jobs:
       - name: Pull Vercel Environment Variables for Preview
         if: steps.preview_guard.outputs.ready == 'true'
         env:
+          EXPECTED_VERCEL_PROJECT_ID: ${{ env.EXPECTED_VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: pnpm dlx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        run: |
+          bash ./.github/scripts/deploy/assert-vercel-project-binding.sh
+          pnpm dlx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
       - name: Build Vercel Output
         if: steps.preview_guard.outputs.ready == 'true'

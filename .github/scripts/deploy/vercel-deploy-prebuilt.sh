@@ -27,6 +27,9 @@ if [[ -z "${VERCEL_TOKEN:-}" ]]; then
   exit 1
 fi
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+bash "${script_dir}/assert-vercel-project-binding.sh"
+
 if [[ -z "${GITHUB_OUTPUT:-}" ]]; then
   echo "GITHUB_OUTPUT is required." >&2
   exit 1
@@ -77,7 +80,9 @@ deploy_output_file="$(mktemp)"
 deploy_error_file="$(mktemp)"
 inspect_output_file="$(mktemp)"
 inspect_error_file="$(mktemp)"
-trap 'rm -f "${deploy_output_file}" "${deploy_error_file}" "${inspect_output_file}" "${inspect_error_file}"' EXIT
+promote_output_file="$(mktemp)"
+promote_error_file="$(mktemp)"
+trap 'rm -f "${deploy_output_file}" "${deploy_error_file}" "${inspect_output_file}" "${inspect_error_file}" "${promote_output_file}" "${promote_error_file}"' EXIT
 
 rm -rf "${staging_dir}"
 mkdir -p "${staging_dir}/.vercel"
@@ -102,6 +107,16 @@ extract_deployment_url() {
   fi
 
   grep -Eo 'https://[[:alnum:].-]+\.vercel\.app' "${file_path}" | tail -n 1 || true
+}
+
+is_already_current_production_error() {
+  local pattern='provided deploymentId .* is already the current production deployment\. \(409\)'
+  if command -v rg >/dev/null 2>&1; then
+    rg -qi "${pattern}" "$@"
+    return $?
+  fi
+
+  grep -Eqi "${pattern}" "$@"
 }
 
 json_field() {
@@ -218,11 +233,21 @@ case "${ready_state}" in
       fi
 
       echo "Promoting ${deployment_url} to the current Vercel production deployment."
-      if ! (cd "${staging_dir}" && "${promote_command[@]}"); then
-        echo "Production promotion failed for ${deployment_url}." >&2
-        exit 1
+      if (cd "${staging_dir}" && "${promote_command[@]}") >"${promote_output_file}" 2>"${promote_error_file}"; then
+        cat "${promote_output_file}"
+        cat "${promote_error_file}" >&2
+        promote_status="success"
+      else
+        cat "${promote_output_file}"
+        cat "${promote_error_file}" >&2
+        if is_already_current_production_error "${promote_output_file}" "${promote_error_file}"; then
+          echo "Production deployment is already current; treating promotion as an idempotent success."
+          promote_status="already-current"
+        else
+          echo "Production promotion failed for ${deployment_url}." >&2
+          exit 1
+        fi
       fi
-      promote_status="success"
     fi
 
     {
