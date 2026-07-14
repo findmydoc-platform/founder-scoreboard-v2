@@ -185,7 +185,14 @@ export function buildTaskUpdateResponsePatch(
   update: DbTaskUpdate,
   startsReviewRequest: boolean,
 ): (Partial<Task> & { id: string }) | undefined {
-  if (startsReviewRequest || update.review_owner_profile_id !== undefined) {
+  if (
+    startsReviewRequest
+    || update.review_owner_profile_id !== undefined
+    || update.review_status !== undefined
+    || update.review_requested_at !== undefined
+    || update.score_final !== undefined
+    || update.status !== undefined
+  ) {
     return {
       id,
       ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
@@ -194,8 +201,12 @@ export function buildTaskUpdateResponsePatch(
       ...(update.status ? { status: String(update.status) } : {}),
       ...(update.review_status ? { reviewStatus: String(update.review_status) as Task["reviewStatus"] } : {}),
       ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
-      reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
-      ...(update.review_requested_at ? { reviewRequestedAt: String(update.review_requested_at) } : {}),
+      ...(update.review_owner_profile_id !== undefined ? {
+        reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
+      } : {}),
+      ...(update.review_requested_at !== undefined ? {
+        reviewRequestedAt: typeof update.review_requested_at === "string" ? update.review_requested_at : "",
+      } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
     };

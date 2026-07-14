@@ -16,7 +16,9 @@ import {
   rejectClientGitHubSyncStatusUpdate,
   restrictedTaskUpdateFields,
   startsTaskReviewRequest,
+  validateSubIssueStatusParentApproval,
   validateTaskStatusUpdate,
+  withoutUnchangedTaskStatus,
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
@@ -64,7 +66,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const rawPayload = await request.json() as unknown;
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
-  const payload = rawPayload as TaskUpdatePayload;
+  let payload = rawPayload as TaskUpdatePayload;
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
@@ -81,6 +83,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!currentTask) {
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
+  const normalizedStatusUpdate = withoutUnchangedTaskStatus(currentTask, payload);
+  payload = normalizedStatusUpdate.payload;
+  const statusNoop = normalizedStatusUpdate.statusNoop;
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const isCeo = permission.profile?.platformRole === "ceo";
   const startsReviewRequest = startsTaskReviewRequest(payload);
@@ -97,7 +102,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       taskType: currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,
-    unrestricted: !permission.profile,
   });
 
   if (!isOperationalLead && restrictedFields.length) {
@@ -137,8 +141,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (nextParentTaskId !== currentTask.parent_task_id) update.parent_task_id = nextParentTaskId;
   }
 
-  const statusGuard = validateTaskStatusUpdate({ currentTask, isOperationalLead, isCeo, payload, profile: permission.profile });
+  const statusGuard = validateTaskStatusUpdate({
+    canCompleteSubIssue: detailPermissions.canCompleteSubIssue,
+    canReopenSubIssue: detailPermissions.canReopenSubIssue,
+    currentTask,
+    isOperationalLead,
+    isCeo,
+    payload,
+    profile: permission.profile,
+  });
   if (!statusGuard.ok) return apiError(statusGuard.error, statusGuard.status);
+
+  if (payload.status && currentTask.task_type === "sub_issue" && nextParentApprovalStatus === undefined) {
+    let currentParent: { approval_status?: string | null; task_type?: string | null } | null = null;
+    if (currentTask.parent_task_id) {
+      const { data, error } = await supabase
+        .from(ACTIVE_TASKS_TABLE)
+        .select("id,task_type,approval_status")
+        .eq("id", currentTask.parent_task_id)
+        .maybeSingle();
+      if (error) return apiError(error.message, 500);
+      currentParent = data;
+    }
+    nextParentApprovalStatus = currentParent?.task_type === "deliverable"
+      ? currentParent.approval_status as Task["parentApprovalStatus"]
+      : null;
+  }
+
+  const parentStatusGuard = validateSubIssueStatusParentApproval({
+    currentTask,
+    parentApprovalStatus: nextParentApprovalStatus,
+    payload,
+  });
+  if (!parentStatusGuard.ok) return apiError(parentStatusGuard.error, parentStatusGuard.status);
   applyTaskStatusUpdate(update, payload);
 
   const priorityGuard = applyTaskPriorityUpdate(update, payload);
@@ -309,14 +344,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_owner_profile_id = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
     update.review_requested_at = new Date().toISOString();
   }
-  applyFinalStatusReopen(update, currentTask, payload, isCeo);
+  applyFinalStatusReopen(update, currentTask, payload, isCeo, detailPermissions.canReopenSubIssue);
 
   applyTaskSelfChecklistUpdateFields(update, payload);
   markTaskGitHubSyncDirty(update);
 
   const messages = activityMessages(payload, currentTask);
 
-  if (sprintAssignmentNoop && Object.keys(update).length === 0 && payload.note === undefined && payload.dependsOn === undefined) {
+  if ((statusNoop || sprintAssignmentNoop) && Object.keys(update).length === 0 && payload.note === undefined && payload.dependsOn === undefined) {
     return NextResponse.json({
       ok: true,
       activities: [],
@@ -371,6 +406,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (transactionError) {
     if (transactionError.code === "P0001") {
       return apiError("Aufgabe wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+    }
+    if (transactionError.code === "P0008") {
+      return apiError("Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.", 409);
     }
     if (transactionError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
     if (transactionError.code === "22023") return apiError("Aufgabenänderung ist ungültig.", 400);

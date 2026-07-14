@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { TaskMutationCommandContext } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskCreateCommand } from "@/features/tasks/hooks/use-task-create-command";
 import { useTaskWithdrawCommand } from "@/features/tasks/hooks/use-task-withdraw-command";
@@ -11,6 +12,7 @@ import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { ApprovalDecisionAction, Task } from "@/lib/types";
 
 export function useTaskMutationCommands(options: TaskMutationCommandContext) {
+  const serverUpdatedAtByTask = useRef(new Map<string, string>());
   const {
     closeTaskPanel,
     setStatusGuardNotice,
@@ -18,9 +20,13 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
     setTaskDialogDefaults,
   } = options;
 
-  const { githubSyncNotice, syncLinkedGitHubTasks, syncTaskToGitHub } = useTaskGitHubSyncCommand(options);
+  const { githubSyncNotice, syncLinkedGitHubTasks, syncTaskToGitHub } = useTaskGitHubSyncCommand({
+    ...options,
+    serverUpdatedAtByTask,
+  });
   const { updateTask } = useTaskUpdateCommand({
     ...options,
+    serverUpdatedAtByTask,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     syncTaskToGitHub,

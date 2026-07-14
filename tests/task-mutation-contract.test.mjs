@@ -72,6 +72,32 @@ test("normal task updates omit the server-owned GitHub sync status", async () =>
   assert.equal(Object.prototype.hasOwnProperty.call(payload, "githubIssueSyncStatus"), false);
 });
 
+test("unchanged status payloads become true no-ops before route guards", async () => {
+  const { withoutUnchangedTaskStatus } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => false },
+    "@/lib/status": {
+      isTaskStatusChange: (current, next) => current !== next,
+      normalizeStatus: (status) => status,
+      taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
+    },
+  });
+
+  const unchanged = withoutUnchangedTaskStatus(
+    { status: "Review", task_type: "sub_issue" },
+    { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", status: "Review" },
+  );
+  assert.equal(unchanged.statusNoop, true);
+  assert.equal(unchanged.payload.status, undefined);
+  assert.equal(unchanged.payload.expectedUpdatedAt, "2026-07-14T10:00:00.000Z");
+
+  const invalid = withoutUnchangedTaskStatus(
+    { status: "Offen", task_type: "sub_issue" },
+    { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", status: "invalid" },
+  );
+  assert.equal(invalid.statusNoop, false);
+  assert.equal(invalid.payload.status, "invalid");
+});
+
 test("task brief fields stay together in the shared update payload", async () => {
   const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
@@ -161,40 +187,83 @@ test("task route guard allows only the implicit score reset for review requests"
   assert.deepEqual(restrictedTaskUpdateFields({ scoreFinal: false }), ["Score"]);
 });
 
-test("task route guard keeps final status CEO-only", async () => {
-  const { applyFinalStatusReopen, validateTaskStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
-    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
+test("task route guard limits role-based final transitions to Sub-Issues", async () => {
+  const { applyFinalStatusReopen, validateSubIssueStatusParentApproval, validateTaskStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": {
+      taskAssignedToProfile: (task, profile) => task.assignee === profile?.id,
+    },
     "@/lib/status": {
       normalizeStatus: (status) => status,
       taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
     },
   });
 
+  const contributorActors = [
+    { label: "CEO", id: "ceo", isOperationalLead: true, isCeo: true },
+    { label: "Deputy", id: "deputy", isOperationalLead: true, isCeo: false },
+    { label: "Founder", id: "founder-2", isOperationalLead: false, isCeo: false },
+  ];
+  const activeSubIssueStatuses = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert"];
+
+  for (const actor of contributorActors) {
+    for (const status of activeSubIssueStatuses) {
+      assert.deepEqual(
+        validateTaskStatusUpdate({
+          canCompleteSubIssue: true,
+          canReopenSubIssue: true,
+          currentTask: { status, assignee: "founder-1", task_type: "sub_issue" },
+          isOperationalLead: actor.isOperationalLead,
+          isCeo: actor.isCeo,
+          payload: { status: "Erledigt" },
+          profile: { id: actor.id },
+        }),
+        { ok: true },
+        `${actor.label} should complete a foreign Sub-Issue from ${status}`,
+      );
+    }
+
+    assert.deepEqual(
+      validateTaskStatusUpdate({
+        canCompleteSubIssue: true,
+        canReopenSubIssue: true,
+        currentTask: { status: "Erledigt", assignee: "founder-1", task_type: "sub_issue" },
+        isOperationalLead: actor.isOperationalLead,
+        isCeo: actor.isCeo,
+        payload: { status: "Offen" },
+        profile: { id: actor.id },
+      }),
+      { ok: true },
+      `${actor.label} should reopen a foreign Sub-Issue`,
+    );
+  }
+
   assert.deepEqual(
     validateTaskStatusUpdate({
-      currentTask: { status: "Offen", assignee: "founder-1" },
+      canCompleteSubIssue: true,
+      canReopenSubIssue: true,
+      currentTask: { status: "Offen", assignee: "founder-1", task_type: "sub_issue" },
+      isOperationalLead: false,
+      isCeo: false,
+      payload: { status: "In Arbeit" },
+      profile: { id: "founder-2" },
+    }),
+    { ok: false, error: "Founder können nur den Status ihrer eigenen Aufgaben ändern.", status: 403 },
+  );
+
+  assert.deepEqual(
+    validateTaskStatusUpdate({
+      currentTask: { status: "Offen", assignee: "deputy", task_type: "deliverable" },
       isOperationalLead: true,
       isCeo: false,
       payload: { status: "Erledigt" },
-      profile: { id: "founder-1" },
+      profile: { id: "deputy" },
     }),
     { ok: false, error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", status: 403 },
   );
 
   assert.deepEqual(
     validateTaskStatusUpdate({
-      currentTask: { status: "Erledigt", assignee: "founder-1" },
-      isOperationalLead: true,
-      isCeo: false,
-      payload: { status: "In Arbeit" },
-      profile: { id: "founder-1" },
-    }),
-    { ok: false, error: "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.", status: 403 },
-  );
-
-  assert.deepEqual(
-    validateTaskStatusUpdate({
-      currentTask: { status: "Erledigt", assignee: "founder-1" },
+      currentTask: { status: "Erledigt", assignee: "founder-1", task_type: "deliverable" },
       isOperationalLead: true,
       isCeo: true,
       payload: { status: "Review" },
@@ -203,9 +272,72 @@ test("task route guard keeps final status CEO-only", async () => {
     { ok: true },
   );
 
-  const update = {};
-  applyFinalStatusReopen(update, { status: "Erledigt" }, { status: "Review" }, true);
-  assert.equal(update.score_final, false);
-  assert.equal(update.review_status, "requested");
-  assert.equal(typeof update.review_requested_at, "string");
+  assert.deepEqual(
+    validateSubIssueStatusParentApproval({
+      currentTask: { task_type: "sub_issue" },
+      parentApprovalStatus: "approved",
+      payload: { status: "Erledigt" },
+    }),
+    { ok: true },
+  );
+  assert.deepEqual(
+    validateSubIssueStatusParentApproval({
+      currentTask: { task_type: "sub_issue" },
+      parentApprovalStatus: "proposed",
+      payload: { status: "Erledigt" },
+    }),
+    {
+      ok: false,
+      error: "Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.",
+      status: 409,
+    },
+  );
+  assert.deepEqual(
+    validateSubIssueStatusParentApproval({
+      currentTask: { task_type: "deliverable" },
+      parentApprovalStatus: "proposed",
+      payload: { status: "Erledigt" },
+    }),
+    { ok: true },
+  );
+
+  const founderReopen = {};
+  applyFinalStatusReopen(
+    founderReopen,
+    { status: "Erledigt", task_type: "sub_issue" },
+    { status: "Offen" },
+    false,
+    true,
+  );
+  assert.deepEqual(founderReopen, {
+    score_final: false,
+    review_status: "not_requested",
+    review_requested_at: null,
+  });
+
+  const ceoReopen = {};
+  applyFinalStatusReopen(ceoReopen, { status: "Erledigt", task_type: "deliverable" }, { status: "Review" }, true);
+  assert.equal(ceoReopen.score_final, false);
+  assert.equal(ceoReopen.review_status, "requested");
+  assert.equal(typeof ceoReopen.review_requested_at, "string");
+});
+
+test("reopen response returns the reset review fields without clearing the review owner", async () => {
+  const { buildTaskUpdateResponsePatch } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+
+  const patch = buildTaskUpdateResponsePatch("sub-issue", {
+    status: "Offen",
+    score_final: false,
+    review_status: "not_requested",
+    review_requested_at: null,
+  }, false);
+
+  assert.equal(patch.status, "Offen");
+  assert.equal(patch.scoreFinal, false);
+  assert.equal(patch.reviewStatus, "not_requested");
+  assert.equal(patch.reviewRequestedAt, "");
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "reviewOwnerProfileId"), false);
 });

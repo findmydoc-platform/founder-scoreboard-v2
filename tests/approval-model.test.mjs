@@ -31,6 +31,8 @@ test("proposal is not an operational task status", async () => {
   assert.equal(status.normalizeStatus("Vorschlag"), "Offen");
   assert.equal(status.normalizeStatus("draft"), "Offen");
   assert.equal(status.normalizeStatus("Idee"), "Offen");
+  assert.equal(status.isTaskStatusChange("In Arbeit", "progress"), false);
+  assert.equal(status.isTaskStatusChange("In Arbeit", "Erledigt"), true);
   assert.match(migration, /tasks_status_not_proposal_check[\s\S]*status <> 'Vorschlag'/i);
   assert.match(schema, /constraint tasks_status_not_proposal_check[^]*status <> 'Vorschlag'/i);
   assert.doesNotMatch(resolution, /normalizeStatus\(task\.status\)[^\n]*Vorschlag/);

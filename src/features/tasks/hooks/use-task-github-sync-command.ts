@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { githubBulkSyncTasks } from "@/features/tasks/model/github-sync-queue";
 import * as taskApi from "@/features/tasks/model/task-api-client";
+import { rememberTaskServerRevision, type TaskServerRevisionStore } from "@/features/tasks/model/task-server-revision";
 import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
@@ -11,7 +12,9 @@ import type { Task } from "@/lib/types";
 type UseTaskGitHubSyncCommandOptions = Pick<
   PlanningCommandContext,
   "apiClient" | "data" | "setData" | "setSaveError" | "source" | "startTransition"
->;
+> & {
+  serverUpdatedAtByTask: TaskServerRevisionStore;
+};
 
 const syncLockedMessage = "GitHub-Sync läuft bereits.";
 const syncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
@@ -27,6 +30,7 @@ export function useTaskGitHubSyncCommand({
   data,
   setData,
   setSaveError,
+  serverUpdatedAtByTask,
   source,
   startTransition,
 }: UseTaskGitHubSyncCommandOptions) {
@@ -37,7 +41,11 @@ export function useTaskGitHubSyncCommand({
       setGithubSyncNotice("");
     }
 
-    const previousTask = task;
+    const previousSyncState = {
+      githubIssueSyncStatus: task.githubIssueSyncStatus,
+      githubIssueSyncError: task.githubIssueSyncError,
+      githubIssueSyncPendingSince: task.githubIssueSyncPendingSince,
+    };
     const syncStartedAt = new Date().toISOString();
     setData((current) => ({
       ...current,
@@ -53,19 +61,22 @@ export function useTaskGitHubSyncCommand({
       setSaveError("GitHub-Sync ist in diesem Arbeitsmodus nicht verfügbar.");
       setData((current) => ({
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...previousSyncState } : item)),
       }));
       return;
     }
 
     startTransition(async () => {
+      let serverTaskPatch: Partial<Task> | undefined;
       try {
         const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
+        serverTaskPatch = body?.task;
+        rememberTaskServerRevision(serverUpdatedAtByTask, task.id, body?.task?.updatedAt);
         if (response.status === 409 && body?.code === "github_sync_locked") {
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? {
-              ...previousTask,
+              ...item,
               githubIssueSyncStatus: "pending",
               githubIssueSyncError: body.error || syncLockedMessage,
               githubIssueSyncPendingSince: syncStartedAt,
@@ -79,7 +90,7 @@ export function useTaskGitHubSyncCommand({
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? {
-              ...previousTask,
+              ...item,
               githubIssueSyncStatus: "not_synced",
               githubIssueSyncError: retryableMessage,
               githubIssueSyncPendingSince: "",
@@ -92,7 +103,7 @@ export function useTaskGitHubSyncCommand({
 
         setData((current) => ({
           ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task, githubIssueSyncPendingSince: "" } : item)),
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...serverTaskPatch, githubIssueSyncPendingSince: "" } : item)),
         }));
         if (!options.silent) setGithubSyncNotice(body.notices?.[0]?.message || "");
       } catch (error) {
@@ -100,7 +111,8 @@ export function useTaskGitHubSyncCommand({
         setData((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? {
-            ...previousTask,
+            ...item,
+            ...serverTaskPatch,
             githubIssueSyncStatus: "failed",
             githubIssueSyncError: message,
             githubIssueSyncPendingSince: "",
@@ -135,7 +147,11 @@ export function useTaskGitHubSyncCommand({
 
     if (!queueTasks.length) return;
 
-    const previousTasks = new Map(queueTasks.map((task) => [task.id, task]));
+    const previousSyncStates = new Map(queueTasks.map((task) => [task.id, {
+      githubIssueSyncStatus: task.githubIssueSyncStatus,
+      githubIssueSyncError: task.githubIssueSyncError,
+      githubIssueSyncPendingSince: task.githubIssueSyncPendingSince,
+    }]));
     const failedParentTaskIds = new Set<string>();
     const bulkStartedAt = new Date().toISOString();
     setData((current) => ({
@@ -158,10 +174,17 @@ export function useTaskGitHubSyncCommand({
       };
       for (const task of queueTasks) {
         if (task.taskType === "sub_issue" && failedParentTaskIds.has(task.parentTaskId)) {
-          const previousTask = previousTasks.get(task.id) || task;
+          const previousSyncState = previousSyncStates.get(task.id);
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+            tasks: current.tasks.map((item) => (
+              item.id === task.id
+              && item.githubIssueSyncStatus === "pending"
+              && item.githubIssueSyncPendingSince === bulkStartedAt
+              && previousSyncState
+                ? { ...item, ...previousSyncState }
+                : item
+            )),
           }));
           continue;
         }
@@ -170,14 +193,17 @@ export function useTaskGitHubSyncCommand({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncPendingSince: syncStartedAt } : item)),
         }));
+        let serverTaskPatch: Partial<Task> | undefined;
         try {
           const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: !hasGitHubIssue(task) });
+          serverTaskPatch = body?.task;
+          rememberTaskServerRevision(serverUpdatedAtByTask, task.id, body?.task?.updatedAt);
           if (response.status === 409 && body?.code === "github_sync_locked") {
-            const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
               tasks: current.tasks.map((item) => (item.id === task.id ? {
-                ...previousTask,
+                ...item,
+                ...serverTaskPatch,
                 githubIssueSyncStatus: "pending",
                 githubIssueSyncError: body.error || syncLockedMessage,
                 githubIssueSyncPendingSince: syncStartedAt,
@@ -188,11 +214,11 @@ export function useTaskGitHubSyncCommand({
           }
           const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
           if (retryableMessage) {
-            const previousTask = previousTasks.get(task.id) || task;
             setData((current) => ({
               ...current,
               tasks: current.tasks.map((item) => (item.id === task.id ? {
-                ...previousTask,
+                ...item,
+                ...serverTaskPatch,
                 githubIssueSyncStatus: "not_synced",
                 githubIssueSyncError: retryableMessage,
                 githubIssueSyncPendingSince: "",
@@ -215,11 +241,11 @@ export function useTaskGitHubSyncCommand({
           commentDelivery.failed += Number(body.commentDelivery?.failed || 0);
         } catch (error) {
           const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
-          const previousTask = previousTasks.get(task.id) || task;
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? {
-              ...previousTask,
+              ...item,
+              ...serverTaskPatch,
               githubIssueSyncStatus: "failed",
               githubIssueSyncError: message,
               githubIssueSyncPendingSince: "",

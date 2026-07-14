@@ -1,5 +1,5 @@
 import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
-import { normalizeStatus, taskStatuses } from "@/lib/status";
+import { isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 export type TaskRouteDbUpdate = Record<string, string | number | boolean | null>;
@@ -15,6 +15,23 @@ type RouteGuardResult = { ok: true } | { ok: false; error: string; status: numbe
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
+
+export function withoutUnchangedTaskStatus(
+  currentTask: CurrentTaskForRoute,
+  payload: TaskUpdatePayload,
+) {
+  if (
+    !payload.status
+    || !taskStatuses.includes(payload.status as (typeof taskStatuses)[number])
+    || isTaskStatusChange(currentTask.status || "", payload.status)
+  ) {
+    return { payload, statusNoop: false };
+  }
+  return {
+    payload: { ...payload, status: undefined },
+    statusNoop: true,
+  };
+}
 
 export function rejectClientGitHubSyncStatusUpdate(payload: unknown): RouteGuardResult {
   if (
@@ -63,12 +80,16 @@ export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
 }
 
 export function validateTaskStatusUpdate({
+  canCompleteSubIssue = false,
+  canReopenSubIssue = false,
   currentTask,
   isOperationalLead,
   isCeo,
   payload,
   profile,
 }: {
+  canCompleteSubIssue?: boolean;
+  canReopenSubIssue?: boolean;
   currentTask: CurrentTaskForRoute;
   isOperationalLead: boolean;
   isCeo: boolean;
@@ -79,28 +100,67 @@ export function validateTaskStatusUpdate({
   if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
     return { ok: false, error: "Ungültiger Status.", status: 400 };
   }
-  if (!isOperationalLead && !taskAssignedToProfile(currentTask, profile)) {
+  const currentStatus = normalizeStatus(currentTask.status || "");
+  const completesSubIssue = currentTask.task_type === "sub_issue"
+    && currentStatus !== "Erledigt"
+    && payload.status === "Erledigt"
+    && canCompleteSubIssue;
+  const reopensSubIssue = currentTask.task_type === "sub_issue"
+    && currentStatus === "Erledigt"
+    && payload.status === "Offen"
+    && canReopenSubIssue;
+  const roleBasedFinalTransition = completesSubIssue || reopensSubIssue;
+
+  if (!isOperationalLead && !roleBasedFinalTransition && !taskAssignedToProfile(currentTask, profile)) {
     return { ok: false, error: "Founder können nur den Status ihrer eigenen Aufgaben ändern.", status: 403 };
   }
-  if (!isCeo && normalizeStatus(currentTask.status || "") === "Erledigt" && payload.status !== "Erledigt") {
+  if (!isCeo && currentStatus === "Erledigt" && payload.status !== "Erledigt" && !reopensSubIssue) {
     return { ok: false, error: "Diese Aufgabe ist final erledigt. Nur CEO kann sie wieder öffnen.", status: 403 };
   }
-  if (!isCeo && payload.status === "Erledigt") {
+  if (!isCeo && payload.status === "Erledigt" && !completesSubIssue) {
     return { ok: false, error: "Founder können Aufgaben nur in Review geben. Final erledigt wird im CEO-Review gesetzt.", status: 403 };
   }
-  if (!isOperationalLead && currentTask.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
+  if (!isOperationalLead && !roleBasedFinalTransition && currentTask.status === "Nacharbeit" && !["In Arbeit", "Review", "Blockiert"].includes(payload.status)) {
     return { ok: false, error: "Nacharbeit kann nur wieder bearbeitet, blockiert oder erneut in Review gegeben werden.", status: 403 };
   }
   return { ok: true };
+}
+
+export function validateSubIssueStatusParentApproval({
+  currentTask,
+  parentApprovalStatus,
+  payload,
+}: {
+  currentTask: Pick<CurrentTaskForRoute, "task_type">;
+  parentApprovalStatus?: string | null;
+  payload: TaskUpdatePayload;
+}): RouteGuardResult {
+  if (!payload.status || currentTask.task_type !== "sub_issue") return { ok: true };
+  if (parentApprovalStatus === "approved") return { ok: true };
+  return {
+    ok: false,
+    error: "Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.",
+    status: 409,
+  };
 }
 
 export function applyTaskStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
   if (payload.status) update.status = payload.status;
 }
 
-export function applyFinalStatusReopen(update: TaskRouteDbUpdate, currentTask: CurrentTaskForRoute, payload: TaskUpdatePayload, isCeo: boolean) {
-  if (!isCeo || !payload.status) return;
+export function applyFinalStatusReopen(
+  update: TaskRouteDbUpdate,
+  currentTask: CurrentTaskForRoute,
+  payload: TaskUpdatePayload,
+  isCeo: boolean,
+  canReopenSubIssue = false,
+) {
+  if (!payload.status) return;
   if (normalizeStatus(currentTask.status || "") !== "Erledigt" || payload.status === "Erledigt") return;
+  const reopensSubIssue = currentTask.task_type === "sub_issue"
+    && payload.status === "Offen"
+    && canReopenSubIssue;
+  if (!isCeo && !reopensSubIssue) return;
   update.score_final = false;
   if (payload.status === "Review") {
     update.review_status = "requested";

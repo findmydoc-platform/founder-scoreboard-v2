@@ -14,6 +14,10 @@ export function normalizeStatus(status: string): TaskStatus {
   return "Offen";
 }
 
+export function isTaskStatusChange(currentStatus: string, nextStatus: string) {
+  return normalizeStatus(currentStatus) !== normalizeStatus(nextStatus);
+}
+
 export function statusBadgeTone(status: string): UiTone {
   switch (normalizeStatus(status)) {
     case "Erledigt":
