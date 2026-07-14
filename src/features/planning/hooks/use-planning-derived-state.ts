@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePlanningHeaderPrimaryAction } from "@/features/planning/hooks/use-planning-header-primary-action";
+import { usePlanningHeaderActions } from "@/features/planning/hooks/use-planning-header-actions";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import type { PlanningFilters, usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { planningWorkspaces } from "@/features/planning/model/planning-app-model";
@@ -18,7 +18,9 @@ type UsePlanningDerivedStateOptions = {
   data: PlanningData;
   filters: PlanningFilters;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
+  setMilestoneDialogDefaults: PlanningViewState["setMilestoneDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
+  source: "seed" | "supabase";
   setWorkspace: (workspace: AppWorkspace) => void;
   statusGuardTaskId: string | null;
   workspace: AppWorkspace;
@@ -31,7 +33,9 @@ export function usePlanningDerivedState({
   data,
   filters,
   setInitiativeDialogDefaults,
+  setMilestoneDialogDefaults,
   setTaskDialogDefaults,
+  source,
   setWorkspace,
   statusGuardTaskId,
   workspace,
@@ -45,17 +49,21 @@ export function usePlanningDerivedState({
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);
-  const headerPrimaryAction = usePlanningHeaderPrimaryAction({
+  const headerActions = usePlanningHeaderActions({
     activeSprint,
+    currentProfile,
+    data,
     setInitiativeDialogDefaults,
+    setMilestoneDialogDefaults,
     setTaskDialogDefaults,
+    source,
     workspace,
   });
   const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;
 
   return {
     filtersAvailable,
-    headerPrimaryAction,
+    headerActions,
     metrics,
     statusGuardTask,
     visibleTasks,

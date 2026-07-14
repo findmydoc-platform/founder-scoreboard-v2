@@ -58,6 +58,7 @@ export type DbMilestone = {
   target_date: string | null;
   status: Milestone["status"];
   sort_order: number;
+  updated_at: string | null;
 };
 
 export type DbTask = {

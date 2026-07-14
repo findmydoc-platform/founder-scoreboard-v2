@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify:migrations": "node scripts/verify-supabase-migrations.mjs",
+    "verify:milestone-crud": "node scripts/verify-milestone-crud.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:task-mutations": "node scripts/verify-task-update-transaction.mjs",
     "verify:task-deletion": "node scripts/verify-task-deletion-transaction.mjs",

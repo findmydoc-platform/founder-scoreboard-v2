@@ -2,6 +2,8 @@
 
 import { useCallback, useState, type SetStateAction } from "react";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
+import type { MilestoneDeleteTarget } from "@/features/projects/organisms/milestone-delete-dialog";
+import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
@@ -59,6 +61,8 @@ export function usePlanningViewState({
   const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
+  const [milestoneDialogDefaults, setMilestoneDialogDefaults] = useState<Partial<MilestoneDraft> | null>(null);
+  const [milestoneDeleteTarget, setMilestoneDeleteTarget] = useState<MilestoneDeleteTarget | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -79,6 +83,8 @@ export function usePlanningViewState({
     focusedReviewTaskId,
     hasPlanningFilterUrlState,
     initiativeDialogDefaults,
+    milestoneDeleteTarget,
+    milestoneDialogDefaults,
     mobileNavOpen,
     resetFilters,
     selectedReviewDetailTaskId,
@@ -86,6 +92,8 @@ export function usePlanningViewState({
     setFilters,
     setFocusedReviewTaskId,
     setInitiativeDialogDefaults,
+    setMilestoneDeleteTarget,
+    setMilestoneDialogDefaults,
     setMobileNavOpen,
     setSelectedTaskId,
     setShowFilters,

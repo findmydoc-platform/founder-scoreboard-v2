@@ -23,6 +23,8 @@ export function useProfilePlanningItemsTokens({
   const [tokens, setTokens] = useState<TeamPlanningItemTokenRecord[]>([]);
   const [label, setLabel] = useState("");
   const [allowUpdates, setAllowUpdates] = useState(false);
+  const [allowEmptyMilestoneDeletes, setAllowEmptyMilestoneDeletes] = useState(false);
+  const [canIssueEmptyMilestoneDeletes, setCanIssueEmptyMilestoneDeletes] = useState(false);
   const [visibleToken, setVisibleToken] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
@@ -56,6 +58,7 @@ export function useProfilePlanningItemsTokens({
       if (!response.ok || !body?.tokens) throw new Error(body?.error || "Planning-API-Tokens konnten nicht geladen werden.");
       if (!mounted.current) return;
       setTokens(body.tokens);
+      setCanIssueEmptyMilestoneDeletes(Boolean(body.capabilities?.canIssueEmptyMilestoneDeletes));
       setLoaded(true);
     } catch (error) {
       if (!mounted.current) return;
@@ -77,12 +80,18 @@ export function useProfilePlanningItemsTokens({
     setMessage("");
     setVisibleToken("");
     try {
-      const { response, body } = await createPlanningItemsToken(apiClient, label.trim(), allowUpdates);
+      const { response, body } = await createPlanningItemsToken(
+        apiClient,
+        label.trim(),
+        allowUpdates,
+        canIssueEmptyMilestoneDeletes && allowEmptyMilestoneDeletes,
+      );
       if (!response.ok || !body?.token || !body.tokenRecord) throw new Error(body?.error || "Planning-API-Token konnte nicht erstellt werden.");
       setTokens((current) => [body.tokenRecord!, ...current]);
       setVisibleToken(body.token);
       setLabel("");
       setAllowUpdates(false);
+      setAllowEmptyMilestoneDeletes(false);
       setMessageTone("success");
       setMessage("Token erstellt. Kopiere ihn jetzt; er wird nicht erneut angezeigt.");
     } catch (error) {
@@ -125,7 +134,9 @@ export function useProfilePlanningItemsTokens({
 
   return {
     activeTokenCount: activeTokens.length,
+    allowEmptyMilestoneDeletes,
     allowUpdates,
+    canIssueEmptyMilestoneDeletes,
     canCreate,
     copyToken,
     createToken,
@@ -138,6 +149,7 @@ export function useProfilePlanningItemsTokens({
     pending,
     revokeToken,
     setAllowUpdates,
+    setAllowEmptyMilestoneDeletes,
     setLabel,
     tokens,
     visibleToken,

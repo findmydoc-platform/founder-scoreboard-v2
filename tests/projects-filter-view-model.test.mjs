@@ -78,3 +78,37 @@ test("deliverable filters combine with AND and keep table sorting stable", async
   assert.equal(model.totalCount, 5);
   assert.equal(buildProjectsFilterViewModel({ data, tasks, filters: { ...filters, query: "missing" } }).hierarchy.length, 0);
 });
+
+test("project hierarchy distinguishes true empty data from orphan initiatives", async () => {
+  const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await loadTranspiledModule(
+    "src/features/projects/model/projects-filter-view-model.ts",
+    {
+      "@/lib/status": { normalizeStatus: (status) => status },
+      "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
+      "@/lib/platform": { hasGitHubIssue: () => true },
+    },
+  );
+
+  const empty = buildProjectsFilterViewModel({
+    data: { milestones: [], packages: [] },
+    tasks: [],
+    filters: DEFAULT_PROJECTS_FILTERS,
+  });
+  assert.deepEqual(empty.hierarchy, []);
+  assert.equal(empty.totalCount, 0);
+
+  const withOrphan = buildProjectsFilterViewModel({
+    data: {
+      milestones: [{ id: "m1", title: "Real", description: "", targetDate: "", status: "planned", sortOrder: 1 }],
+      packages: [
+        { id: "i1", milestoneId: "m1", title: "Assigned", goal: "", priority: "P1", sortOrder: 1 },
+        { id: "i2", milestoneId: "missing", title: "Orphan", goal: "", priority: "P2", sortOrder: 2 },
+      ],
+    },
+    tasks: [],
+    filters: DEFAULT_PROJECTS_FILTERS,
+  });
+  assert.deepEqual(withOrphan.hierarchy.map((entry) => entry.milestone.title), ["Real", "Ohne Epic"]);
+  assert.equal(withOrphan.hierarchy[1].initiatives[0].initiative.id, "i2");
+  assert.equal(withOrphan.totalCount, 4);
+});

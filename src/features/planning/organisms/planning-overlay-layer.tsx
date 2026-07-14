@@ -47,6 +47,14 @@ const InitiativeDialog = dynamic(
   () => import("@/features/projects/organisms/initiative-dialog").then((module) => module.InitiativeDialog),
   { loading: () => <OverlayLoadingFallback label="Initiativenformular wird geladen …" surface="dialog" /> },
 );
+const MilestoneDialog = dynamic(
+  () => import("@/features/projects/organisms/milestone-dialog").then((module) => module.MilestoneDialog),
+  { loading: () => <OverlayLoadingFallback label="Meilensteinformular wird geladen …" surface="dialog" /> },
+);
+const MilestoneDeleteDialog = dynamic(
+  () => import("@/features/projects/organisms/milestone-delete-dialog").then((module) => module.MilestoneDeleteDialog),
+  { loading: () => <OverlayLoadingFallback label="Löschdialog wird geladen …" surface="dialog" /> },
+);
 const NewTaskDialog = dynamic(
   () => import("@/features/tasks/organisms/new-task-dialog").then((module) => module.NewTaskDialog),
   { loading: () => <OverlayLoadingFallback label="Aufgabenformular wird geladen …" surface="dialog" /> },
@@ -69,12 +77,16 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     data,
     importGitHubComments,
     initiativeDialogDefaults,
+    milestoneDeleteTarget,
+    milestoneDialogDefaults,
     isPending,
     openTaskPanel,
     openReviewSheet,
     removeTaskRelation,
     reportTaskBlocker,
     saveInitiative,
+    saveMilestone,
+    deleteMilestone,
     selectedPackage,
     selectedTask,
     selectedTaskActivity,
@@ -85,6 +97,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskExternalComments,
     selectedTaskSubIssues,
     setInitiativeDialogDefaults,
+    setMilestoneDeleteTarget,
+    setMilestoneDialogDefaults,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
@@ -171,6 +185,20 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           pending={isPending}
           onClose={() => setInitiativeDialogDefaults(null)}
           onSave={saveInitiative}
+        />
+      )}
+      {milestoneDialogDefaults && (
+        <MilestoneDialog
+          defaults={milestoneDialogDefaults}
+          onClose={() => setMilestoneDialogDefaults(null)}
+          onSave={saveMilestone}
+        />
+      )}
+      {milestoneDeleteTarget && (
+        <MilestoneDeleteDialog
+          target={milestoneDeleteTarget}
+          onClose={() => setMilestoneDeleteTarget(null)}
+          onConfirm={deleteMilestone}
         />
       )}
     </>

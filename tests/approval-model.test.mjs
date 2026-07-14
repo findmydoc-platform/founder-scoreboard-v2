@@ -182,7 +182,7 @@ test("planning items publish an approval-aware repository contract", async () =>
   assert.equal(openapi.paths["/api/team/task-intake/v2/commit"], undefined);
   assert.match(previewRoute, /buildPlanningItemCreatePreview/);
   assert.match(commitRoute, /create_team_planning_items_transaction/);
-  assert.match(intakeDocs, /itemType = initiative \| deliverable \| sub_issue/);
+  assert.match(intakeDocs, /itemType = milestone \| initiative \| deliverable \| sub_issue/);
   assert.match(intakeDocs, /Only Sub-Issues may select an allowed technical/);
 });
 

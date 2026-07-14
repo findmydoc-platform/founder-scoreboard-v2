@@ -123,7 +123,7 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   const loading = await readFile("src/app/(workspaces)/backlog/loading.tsx", "utf8");
   const model = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
   const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
-  const headerAction = await readFile("src/features/planning/hooks/use-planning-header-primary-action.ts", "utf8");
+  const headerActions = await readFile("src/features/planning/hooks/use-planning-header-actions.ts", "utf8");
 
   assert.match(routes, /"backlog"/);
   assert.match(routes, /href: "\/backlog"/);
@@ -137,8 +137,8 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   assert.match(renderer, /workspace === "backlog"/);
   assert.match(renderer, /onProposeDeliverable/);
   assert.match(renderer, /setTaskDialogDefaults\(\{ taskType: "deliverable" \}\)/);
-  assert.doesNotMatch(headerAction, /workspace === "backlog"/);
-  assert.doesNotMatch(headerAction, /Deliverable vorschlagen/);
+  assert.doesNotMatch(headerActions, /workspace === "backlog"/);
+  assert.doesNotMatch(headerActions, /Deliverable vorschlagen/);
 });
 
 test("backlog view model sorts by rank not priority and keeps sprint as assignment", async () => {

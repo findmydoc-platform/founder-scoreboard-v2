@@ -31,7 +31,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     githubReauthFailed,
     githubSyncQueueOpen,
     headerData,
-    headerPrimaryAction,
+    headerActions,
     importDemoSeed,
     mobileNavOpen,
     openNotification,
@@ -67,6 +67,28 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
     : workspaceDescriptions[workspace];
   const startFeatureTour = () => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour"));
+  const actionButtons = headerActions.map((action) => (
+    <button
+      key={action.id}
+      type="button"
+      onClick={() => {
+        if (!action.disabled) action.onClick();
+      }}
+      aria-disabled={action.disabled || undefined}
+      title={action.disabledReason}
+      aria-label={action.disabledReason ? `${action.label}. ${action.disabledReason}` : action.label}
+      className={`inline-flex h-9 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-semibold transition ${
+        action.disabled
+          ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
+          : action.variant === "primary"
+          ? "border border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
+          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      <Plus size={16} aria-hidden="true" />
+      <span className="truncate">{action.label}</span>
+    </button>
+  ));
 
   return (
     <AppHeader
@@ -232,33 +254,15 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:justify-end">
-              {headerPrimaryAction && (
-                <button
-                  type="button"
-                  onClick={headerPrimaryAction.onClick}
-                  className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-                >
-                  <Plus size={16} />
-                  {headerPrimaryAction.label}
-                </button>
-              )}
+            <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap md:shrink-0 md:justify-end">
+              {actionButtons}
             </div>
           </div>
         </div>
       )}
-      {!filtersAvailable && headerPrimaryAction && workspace !== "notifications" && (
+      {!filtersAvailable && headerActions.length > 0 && workspace !== "notifications" && (
         <div className="flex justify-end border-t border-slate-100 px-4 py-3 lg:px-6">
-          {headerPrimaryAction && (
-            <button
-              type="button"
-              onClick={headerPrimaryAction.onClick}
-              className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
-            >
-              <Plus size={16} />
-              {headerPrimaryAction.label}
-            </button>
-          )}
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">{actionButtons}</div>
         </div>
       )}
     </AppHeader>

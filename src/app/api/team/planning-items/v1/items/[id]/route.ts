@@ -2,6 +2,10 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/features/planning-items/model/planning-items-contract";
 import {
+  parsePlanningItemDeletePayload,
+  planningItemMilestoneDeleteHash,
+} from "@/features/planning-items/model/planning-item-delete";
+import {
   buildPlanningItemUpdatePreview,
   mapPlanningItemDatabaseRow,
   parsePlanningItemPatchPayload,
@@ -12,10 +16,16 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
+import {
+  isMilestoneNotEmptyDatabaseError,
+  loadMilestoneChildCounts,
+  loadProjectMilestone,
+  milestoneNotEmptyError,
+} from "@/features/projects/model/milestone-server";
 
 type UpdateTransactionResult = {
   replayed?: boolean;
-  itemType?: "initiative" | "deliverable" | "sub_issue";
+  itemType?: "milestone" | "initiative" | "deliverable" | "sub_issue";
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
@@ -26,8 +36,15 @@ type StoredUpdateRequest = {
   response: UpdateTransactionResult | null;
 };
 
-function itemLink(request: NextRequest, itemType: "initiative" | "deliverable" | "sub_issue", itemId: string) {
-  if (itemType === "initiative") return `${request.nextUrl.origin}/?workspace=projects`;
+type DeleteTransactionResult = {
+  replayed?: boolean;
+  itemType?: "milestone";
+  item?: Record<string, unknown>;
+  children?: { initiatives?: number; tasks?: number };
+};
+
+function itemLink(request: NextRequest, itemType: "milestone" | "initiative" | "deliverable" | "sub_issue", itemId: string) {
+  if (itemType === "milestone" || itemType === "initiative") return `${request.nextUrl.origin}/?workspace=projects`;
   return `${request.nextUrl.origin}/tasks/${encodeURIComponent(itemId)}`;
 }
 
@@ -35,7 +52,7 @@ function updateResponse(
   request: NextRequest,
   fallbackItemId: string,
   transaction: UpdateTransactionResult,
-  fallbackItemType: "initiative" | "deliverable" | "sub_issue",
+  fallbackItemType: "milestone" | "initiative" | "deliverable" | "sub_issue",
   fallbackChangedFields: string[] = [],
   fallbackSystemEffects: unknown[] = [],
 ) {
@@ -75,6 +92,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const storedResponse = (stored: StoredUpdateRequest) => {
       const itemType = stored.response?.itemType;
       if (!itemType) throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
+      if (itemType === "milestone" && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
+        return planningItemsError("Nur CEO oder Deputy können Meilensteine bearbeiten.", 403);
+      }
       const requestHash = planningItemUpdateHash({
         itemId,
         itemType,
@@ -146,4 +166,70 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!transaction) throw new Error("Planning-Items-Update lieferte kein Ergebnis zurück.");
     return updateResponse(request, itemId, transaction, preview.itemType, preview.changedFields, preview.systemEffects);
   });
+}
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  return handlePlanningItemsRequest(
+    request,
+    "write:planning-items:delete-empty",
+    "Planning-Items-Löschung konnte nicht gespeichert werden.",
+    async (permission) => {
+      const { id } = await context.params;
+      const itemId = id.trim();
+      if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
+      if (!["ceo", "deputy"].includes(permission.profile.platformRole)) {
+        return planningItemsError("Nur CEO oder Deputy können Meilensteine löschen.", 403);
+      }
+
+      const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+      if (!isUuid(idempotencyKey)) return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
+
+      const parsed = parsePlanningItemDeletePayload(await request.json().catch(() => null));
+      if (!parsed.ok) return planningItemsError(parsed.error, 400);
+
+      const metadata = auditRequestMetadata(request);
+      const { data, error } = await permission.supabase.rpc("delete_team_planning_milestone_transaction", {
+        p_token_id: permission.tokenId,
+        p_profile_id: permission.profile.id,
+        p_milestone_id: itemId,
+        p_expected_updated_at: parsed.expectedUpdatedAt,
+        p_idempotency_key: idempotencyKey,
+        p_request_hash: planningItemMilestoneDeleteHash({ itemId, expectedUpdatedAt: parsed.expectedUpdatedAt }),
+        p_request_ip: metadata.request_ip,
+        p_user_agent: metadata.user_agent || null,
+      });
+
+      if (error && isMilestoneNotEmptyDatabaseError(error)) {
+        const [freshTarget, freshChildren] = await Promise.all([
+          loadProjectMilestone(permission.supabase, itemId),
+          loadMilestoneChildCounts(permission.supabase, itemId),
+        ]);
+        if (!freshTarget.error && freshTarget.data && freshChildren.ok) {
+          const children = freshChildren.counts;
+          if (children.initiatives > 0 || children.tasks > 0) {
+            return planningItemsJson({
+              ok: false,
+              ...milestoneNotEmptyError(children),
+            }, 409);
+          }
+        }
+      }
+      if (error) throw Object.assign(new Error(error.message), { code: error.code });
+
+      const transaction = data as DeleteTransactionResult | null;
+      if (!transaction?.item) throw new Error("Planning-Items-Löschung lieferte kein Ergebnis zurück.");
+      const item = mapPlanningItemDatabaseRow("milestone", transaction.item);
+      return planningItemsJson({
+        ok: true,
+        replayed: Boolean(transaction.replayed),
+        itemType: "milestone",
+        item,
+        children: {
+          initiatives: Number(transaction.children?.initiatives || 0),
+          tasks: Number(transaction.children?.tasks || 0),
+        },
+        itemLink: itemLink(request, "milestone", String(item.id || itemId)),
+      });
+    },
+  );
 }

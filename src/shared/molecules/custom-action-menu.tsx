@@ -109,13 +109,13 @@ export function CustomActionMenu({
   }, [availableIndices]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !position) return;
     const frame = requestAnimationFrame(() => {
       actionRefs.current[activeIndex]?.focus();
       if (activeIndex < 0) popoverRef.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeIndex, open, popoverRef]);
+  }, [activeIndex, open, popoverRef, position]);
 
   const selectAction = (action: CustomActionMenuItem) => {
     if (action.disabled) return;

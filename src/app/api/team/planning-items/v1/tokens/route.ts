@@ -11,6 +11,7 @@ import { TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT } from "@/features/planning-ite
 type CreateTokenPayload = {
   label?: unknown;
   allowUpdates?: unknown;
+  allowEmptyMilestoneDeletes?: unknown;
 };
 
 type TokenRecordRow = Parameters<typeof mapTeamPlanningItemsTokenRecord>[0];
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
   const { permission, supabase } = context;
   const profileId = permission.profile?.id || "";
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
+  const canIssueEmptyMilestoneDeletes = permission.profile?.platformRole === "ceo"
+    || permission.profile?.platformRole === "deputy";
 
   const now = new Date().toISOString();
   const [activeResult, historyResult] = await Promise.all([
@@ -47,12 +50,17 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[]).map(mapTeamPlanningItemsTokenRecord),
+    capabilities: { canIssueEmptyMilestoneDeletes },
+    tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[])
+      .map(mapTeamPlanningItemsTokenRecord)
+      .map((token) => canIssueEmptyMilestoneDeletes
+        ? token
+        : { ...token, scopes: token.scopes.filter((scope) => scope !== "write:planning-items:delete-empty") }),
   });
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<CreateTokenPayload>(request, requirePlanningContributor, {}, {
+  const context = await requireJsonApiContext<CreateTokenPayload | null>(request, requirePlanningContributor, {}, {
     supabaseUnavailableMessage: "Supabase ist für Planning-API-Tokens erforderlich.",
   });
   if (!context.ok) return context.response;
@@ -60,25 +68,44 @@ export async function POST(request: NextRequest) {
   const { payload, permission, supabase } = context;
   const profileId = permission.profile?.id || "";
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return apiError("Token-Payload muss ein JSON-Objekt sein.", 400);
+  }
+  const unknownField = Object.keys(payload).find((key) => ![
+    "label",
+    "allowUpdates",
+    "allowEmptyMilestoneDeletes",
+  ].includes(key));
+  if (unknownField) return apiError(`Token-Payload enthält das unbekannte Feld ${unknownField}.`, 400);
 
   const label = cleanText(payload.label, 80);
   if (!label) return apiError("Token-Bezeichnung ist erforderlich.", 400);
   if (payload.allowUpdates !== undefined && typeof payload.allowUpdates !== "boolean") {
     return apiError("allowUpdates muss wahr oder falsch sein.", 400);
   }
+  if (payload.allowEmptyMilestoneDeletes !== undefined && typeof payload.allowEmptyMilestoneDeletes !== "boolean") {
+    return apiError("allowEmptyMilestoneDeletes muss wahr oder falsch sein.", 400);
+  }
+  const canIssueEmptyMilestoneDeletes = permission.profile?.platformRole === "ceo"
+    || permission.profile?.platformRole === "deputy";
+  if (payload.allowEmptyMilestoneDeletes === true && !canIssueEmptyMilestoneDeletes) {
+    return apiError("Nur CEO oder Deputy können Tokens zum Löschen leerer Meilensteine erstellen.", 403);
+  }
 
   const generated = createTeamPlanningItemsToken();
-  const { data, error } = await supabase.rpc("create_team_planning_items_token", {
+  const { data, error } = await supabase.rpc("create_team_planning_items_token_v2", {
     p_profile_id: profileId,
     p_label: label,
     p_token_hash: generated.tokenHash,
     p_token_hint: generated.tokenHint,
     p_allow_updates: payload.allowUpdates === true,
+    p_allow_empty_milestone_deletes: payload.allowEmptyMilestoneDeletes === true,
   });
 
   if (error) {
     if (error.code === "P0003") return apiError("Maximal drei aktive Planning-API-Tokens sind erlaubt.", 409);
     if (error.code === "P0002") return apiError("Operatives Profil wurde nicht gefunden.", 403);
+    if (error.code === "P0006") return apiError("Nur CEO oder Deputy können den Delete-Scope erhalten.", 403);
     if (error.code === "22023") return apiError("Token-Daten sind ungültig.", 400);
     return apiError(error.code === "PGRST202" || error.code === "42883" ? "Planning-API-Schema ist noch nicht verfügbar." : "Planning-API-Token konnte nicht erstellt werden.", error.code === "PGRST202" || error.code === "42883" ? 503 : 500);
   }

@@ -5,6 +5,7 @@ import type { getServerSupabase } from "@/lib/supabase";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import {
+  FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
   type TeamPlanningItemPatchField,
   type TeamPlanningItemType,
@@ -14,6 +15,7 @@ import {
   normalizePatchDate,
   normalizePatchHours,
   normalizePatchId,
+  normalizePatchMilestoneStatus,
   normalizePatchPriority,
   normalizePatchStringList,
   normalizePatchText,
@@ -50,6 +52,7 @@ type TargetLoadResult =
 
 const patchFields = new Set<string>(TEAM_PLANNING_ITEM_PATCH_FIELDS);
 const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>> = {
+  milestone: new Set(["title", "description", "targetDate", "status"]),
   initiative: new Set([
     "title", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "milestoneId", "ownerId",
     "accountableProfileId", "responsibleProfileIds", "consultedProfileIds", "informedProfileIds", "priority",
@@ -141,7 +144,22 @@ function publicTask(row: DatabaseRow): UnknownRecord {
   };
 }
 
+function publicMilestone(row: DatabaseRow): UnknownRecord {
+  return {
+    id: String(row.id || ""),
+    itemType: "milestone",
+    title: String(row.title || ""),
+    description: String(row.description || ""),
+    targetDate: String(row.target_date || ""),
+    status: String(row.status || "planned"),
+    sortOrder: Number(row.sort_order || 0),
+    updatedAt: String(row.updated_at || ""),
+    approvalStatus: null,
+  };
+}
+
 export function mapPlanningItemDatabaseRow(itemType: TeamPlanningItemType, row: DatabaseRow) {
+  if (itemType === "milestone") return publicMilestone(row);
   return itemType === "initiative" ? publicPackage(row) : publicTask(row);
 }
 
@@ -192,12 +210,20 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
 }
 
 async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<TargetLoadResult> {
-  const [initiativeResult, taskResult] = await Promise.all([
+  const [milestoneResult, initiativeResult, taskResult] = await Promise.all([
+    supabase
+      .from("milestones")
+      .select("id,project_id,title,description,target_date,status,sort_order,updated_at")
+      .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
+      .eq("id", itemId)
+      .maybeSingle(),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,goal,scope_constraints,success_criteria,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,priority,approval_status,approval_revision,updated_at").eq("id", itemId).maybeSingle(),
     supabase.from(ACTIVE_TASKS_TABLE).select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,package_id,milestone_id,owner,assignee,priority,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,score_points,score_final,score_relevant,updated_at").eq("id", itemId).maybeSingle(),
   ]);
+  if (milestoneResult.error) throw new Error(milestoneResult.error.message);
   if (initiativeResult.error) throw new Error(initiativeResult.error.message);
   if (taskResult.error) throw new Error(taskResult.error.message);
+  if (milestoneResult.data) return { ok: true, itemType: "milestone", row: milestoneResult.data as DatabaseRow };
   if (initiativeResult.data) return { ok: true, itemType: "initiative", row: initiativeResult.data as DatabaseRow };
   if (taskResult.data) {
     const itemType = taskResult.data.task_type === "sub_issue" ? "sub_issue" : "deliverable";
@@ -224,6 +250,11 @@ function validatePermission(
 ) {
   const errors: string[] = [];
   if (["ceo", "deputy"].includes(actor.platformRole)) return errors;
+
+  if (itemType === "milestone") {
+    errors.push("Nur CEO oder Deputy können Meilensteine bearbeiten.");
+    return errors;
+  }
 
   if (actor.platformRole !== "founder") {
     errors.push("Nur CEO, Deputy oder Founder dürfen Planungselemente bearbeiten.");
@@ -295,10 +326,12 @@ function normalizePatch(
       case "evidenceRequired": result = normalizePatchText(value, 4_000); break;
       case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
       case "priority": result = normalizePatchPriority(value); break;
+      case "status": result = normalizePatchMilestoneStatus(value); break;
       case "workstream": result = normalizePatchText(value, 120); break;
       case "startDate":
       case "endDate":
-      case "deadline": result = normalizePatchDate(value); break;
+      case "deadline":
+      case "targetDate": result = normalizePatchDate(value); break;
       case "hours": result = normalizePatchHours(value); break;
       case "responsibleProfileIds": result = normalizePatchStringList(value, true); break;
       case "consultedProfileIds":
@@ -320,6 +353,16 @@ function normalizePatch(
 function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], resultingItem: UnknownRecord) {
   const dbPatch: UnknownRecord = {};
   const changed = new Set(changedFields);
+  if (itemType === "milestone") {
+    const maps: Array<[string, string]> = [
+      ["title", "title"],
+      ["description", "description"],
+      ["targetDate", "target_date"],
+      ["status", "status"],
+    ];
+    for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
+    return dbPatch;
+  }
   if (itemType === "initiative") {
     const maps: Array<[string, string]> = [
       ["title", "title"],
@@ -375,9 +418,12 @@ export async function buildPlanningItemUpdatePreview({
   itemId: string;
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   supabase: SupabaseServer;
-}): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 404 | 409; error: string }> {
+}): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
   const target = await loadTarget(supabase, itemId);
   if (!target.ok) return target;
+  if (target.itemType === "milestone" && !["ceo", "deputy"].includes(actor.platformRole)) {
+    return { ok: false, status: 403, error: "Nur CEO oder Deputy können Meilensteine bearbeiten." };
+  }
 
   const currentItem = mapPlanningItemDatabaseRow(target.itemType, target.row);
   if (String(currentItem.updatedAt || "") !== parsed.expectedUpdatedAt) {
@@ -386,7 +432,7 @@ export async function buildPlanningItemUpdatePreview({
 
   const [profilesResult, milestonesResult, initiativesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id"),
-    supabase.from("milestones").select("id"),
+    supabase.from("milestones").select("id").eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,approval_status"),
     supabase.from(ACTIVE_TASKS_TABLE).select("id,task_type,package_id,milestone_id,approval_status"),
   ]);
@@ -482,7 +528,7 @@ export async function buildPlanningItemUpdatePreview({
     resultingItem.scoreFinal = false;
     resultingItem.scoreRelevant = false;
   }
-  if (target.itemType !== "initiative" && changedFields.length) {
+  if ((target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length) {
     appendSystemEffect(systemEffects, "githubIssueSyncStatus", currentItem.githubIssueSyncStatus, "not_synced", "Planungsänderung markiert die GitHub-Projektion als erneut zu synchronisieren.");
     resultingItem.githubIssueSyncStatus = "not_synced";
   }
