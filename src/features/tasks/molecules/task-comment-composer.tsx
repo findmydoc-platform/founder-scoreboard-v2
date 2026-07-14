@@ -58,7 +58,8 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
   }
 
   function insertMention(profile: Profile) {
-    const mention = `@${profile.name.split(/\s+/u)[0] || profile.id}`;
+    if (!profile.githubLogin) return;
+    const mention = `@${profile.githubLogin}`;
     setNewComment((current) => current.replace(/(^|\s)@[\p{L}\p{N}._-]{0,30}$/u, `$1${mention} `));
   }
 
@@ -76,10 +77,11 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
             <button
               key={profile.id}
               type="button"
+              disabled={!profile.githubLogin}
               onClick={() => insertMention(profile)}
-              className="h-7 rounded-md border border-blue-200 bg-white px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+              className="h-7 rounded-md border border-blue-200 bg-white px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
             >
-              @{profile.name}
+              {profile.name}{profile.githubLogin ? ` · @${profile.githubLogin}` : " · GitHub fehlt"}
             </button>
           ))}
         </div>
