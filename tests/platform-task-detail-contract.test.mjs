@@ -31,6 +31,7 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(panelHeader, /Große Ansicht/);
   assert.match(panelHeader, /href=\{`\/tasks\/\$\{task\.id\}`\}/);
   assert.match(surface, /TaskDetailOperationalHeader/);
+  assert.match(surface, /milestone=\{currentMilestone\}/);
   assert.match(surface, /TaskDetailTabs/);
   assert.match(surface, /TaskOverviewPanel/);
   assert.match(surface, /TaskRelationshipsSection/);
@@ -40,6 +41,7 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(surface, /TaskCommentThread/);
   assert.match(operationalHeader, /Wartet auf/);
   assert.match(operationalHeader, /Andere warten hierauf/);
+  assert.match(operationalHeader, /Epic \/ Meilenstein/);
   assert.match(tabs, /role="tablist"/);
   assert.match(tabs, /aria-selected/);
   assert.match(controller, /useTaskDetailController/);

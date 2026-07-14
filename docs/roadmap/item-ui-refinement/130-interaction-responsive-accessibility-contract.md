@@ -1,8 +1,8 @@
 # Item Detail — Interaction, Responsive, and Accessibility Contract
 
-Status: normative pre-implementation contract  
-Applies to: full-page Item UI, 920-pixel modal, and viewports below 768 pixels  
-Visual baseline: Operational Command Strip and the eight development screens  
+Status: normative pre-implementation contract
+Applies to: full-page Item UI, 920-pixel modal, and viewports below 768 pixels
+Visual baseline: Operational Command Strip and the eight development screens
 Scope: presentation and interaction behavior only
 
 ## Authority and Normative Language

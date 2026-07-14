@@ -1,8 +1,8 @@
 # Selected Direction Refinement — Operational Command Strip
 
-Status: confirmed visual direction, temporary design document  
-Selected source: first displayed ideation result  
-Date anchor: 2026-07-14  
+Status: confirmed visual direction, temporary design document
+Selected source: first displayed ideation result
+Date anchor: 2026-07-14
 Scope: presentation only; no repository implementation
 
 ## Confirmed Direction

@@ -1,9 +1,10 @@
 # Item Detail — Normative Development Specification
 
-Status: normative UI implementation contract  
-Visual direction: Operational Command Strip with two-direction dependency band  
-Product baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`  
-Target surfaces: desktop full page, 920-pixel side-panel modal, constrained one-column layouts  
+Status: normative UI implementation contract
+Visual direction: Operational Command Strip with two-direction dependency band
+Initial review baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`
+Integration baseline: `origin/main@1bbe36f`
+Target surfaces: desktop full page, 920-pixel side-panel modal, constrained one-column layouts
 Date anchor: 2026-07-14
 
 ## Purpose
@@ -91,7 +92,7 @@ Every surface preserves:
 Render in this semantic order:
 
 1. container navigation: Back on full page; Back history, `Große Ansicht`, and Close in the modal;
-2. identity line: Item type plus Initiative or Parent context;
+2. identity line: Item type plus resolved Epic / Meilenstein and Initiative or Parent context; omit the Epic / Meilenstein segment when no milestone is assigned;
 3. one authoritative Item title;
 4. existing Item action `Bearbeiten` when at least one Overview field is editable;
 5. operational facts: work status, `Zuständig`, priority, target date, and Sub-Issue progress;

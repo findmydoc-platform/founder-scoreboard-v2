@@ -1,7 +1,8 @@
 # Item UI Refinement — Temporary Product Spec
 
-Status: temporary Product Spec / Roadmap handoff  
-Baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`  
+Status: temporary Product Spec / Roadmap handoff
+Initial review baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`
+Integration baseline: `origin/main@1bbe36f`
 Scope: Item-detail presentation for the full-page and modal surfaces
 
 This directory records the approved design direction, implementation contract, and implementation evidence for the Item UI refinement. It is a temporary roadmap artifact, not permanent product documentation and not a replacement for repository rules, domain documentation, tests, or the implemented UI.

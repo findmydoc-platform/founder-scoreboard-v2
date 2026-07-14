@@ -1,8 +1,9 @@
 # Existing Capability Placement — Item Detail
 
-Status: binding implementation bridge for the approved Item UI direction  
-Baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`  
-Applies to: active Deliverable and Sub-Issue detail, full page and modal  
+Status: binding implementation bridge for the approved Item UI direction
+Initial review baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`
+Integration baseline: `origin/main@1bbe36f`
+Applies to: active Deliverable and Sub-Issue detail, full page and modal
 Scope: placement and presentation of existing capabilities only
 
 ## Purpose
@@ -36,7 +37,7 @@ It is normative for the capabilities listed below. Implementations must preserve
 | Work status | `task.status` | Operational header | Relevant Activity event |
 | Primary owner | `task.assigneeId` / `task.assignee` | Operational header | Relevant Activity event |
 | Priority | `task.priority` | Operational header | Relevant Activity event |
-| Initiative, Sprint, Milestone, period | Task planning fields plus referenced entities | Secondary rail / `Weitere Details` | Relevant Activity event |
+| Initiative, Sprint, Milestone, period | Task planning fields plus referenced entities | Resolved Epic / Meilenstein in the identity line; controls in secondary rail / `Weitere Details` | Relevant Activity event |
 | GitHub comment import | `TaskExternalComment[]` plus import state | `Aktivität` | Compact local notice inside Activity |
 | GitHub Issue sync | GitHub Issue and sync fields on `Task` | Secondary rail / `Weitere Details` | GitHub-related Activity where already recorded |
 | Withdraw to trash | approval/trash state plus current permission predicate | Last action in secondary rail / `Weitere Details` | Redirect or modal close after success |
@@ -321,13 +322,14 @@ Operational header:
 1. work status;
 2. `Zuständig`;
 3. priority when present;
-4. `Ziel` from `task.deadline` when present.
+4. `Ziel` from `task.deadline` when present;
+5. resolved Epic / Meilenstein as read-only hierarchy context when one exists.
 
 Secondary rail / `Weitere Details`:
 
 - Initiative;
 - Sprint;
-- Epic / Milestone;
+- Epic / Milestone controls;
 - start/end period;
 - Parent-Deliverable and inherited planning context for a Sub-Issue;
 - Initiative-RACI as contextual information, not an Item owner.
@@ -336,7 +338,7 @@ The rail must not repeat status, owner, priority, or deadline as read-only facts
 
 ### Read behavior
 
-- Header facts use text-first, compact presentation.
+- Header facts use text-first, compact presentation. A resolved Epic / Meilenstein is hierarchy context, not a second planning control.
 - Missing optional priority or deadline is omitted.
 - Missing owner is visible as `Zuständig · Nicht zugewiesen` because it is actionable work state.
 - Planning values use compact definition rows; expected empty values such as no Sprint or no Epic remain visible only when they explain the item's planning position.

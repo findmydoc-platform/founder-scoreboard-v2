@@ -7,7 +7,7 @@ import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
 import { formatDate, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Milestone, Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
@@ -20,6 +20,7 @@ export type TaskDetailRelationshipRow = {
 export type TaskDetailOperationalHeaderProps = {
   task: Task;
   initiative?: Package;
+  milestone?: Milestone;
   parentTask?: Task;
   profiles: Profile[];
   subIssues: Task[];
@@ -219,6 +220,7 @@ export function TaskDetailDependencyBand({
 export function TaskDetailOperationalHeader({
   task,
   initiative,
+  milestone,
   parentTask,
   profiles,
   subIssues,
@@ -240,6 +242,7 @@ export function TaskDetailOperationalHeader({
   const hierarchyLabel = task.taskType === "sub_issue"
     ? parentTask?.title
     : initiative?.title;
+  const milestoneLabel = milestone?.title;
   const directSubIssues = subIssues.filter((subIssue) => subIssue.parentTaskId === task.id);
   const completedSubIssues = directSubIssues.filter((subIssue) => normalizeStatus(subIssue.status) === "Erledigt").length;
   const showDeadline = canManageTaskMeta || Boolean(task.deadline);
@@ -250,6 +253,14 @@ export function TaskDetailOperationalHeader({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <span>{itemTypeLabel}</span>
+            {milestoneLabel && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="normal-case tracking-normal text-slate-600">
+                  Epic / Meilenstein: {milestoneLabel}
+                </span>
+              </>
+            )}
             {hierarchyLabel && (
               <>
                 <span aria-hidden="true">·</span>

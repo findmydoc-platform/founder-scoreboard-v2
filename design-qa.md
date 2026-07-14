@@ -1,8 +1,9 @@
 # Item Detail UI — Design QA
 
-Status: final implementation QA  
-Date: 2026-07-14  
+Status: final implementation QA
+Date: 2026-07-14
 Browser: Codex in-app browser
+Integration baseline: `origin/main@1bbe36f`
 
 ## Evidence
 
@@ -39,6 +40,7 @@ The source mock uses canonical example content (`2/4` Sub-Issues, authored outco
 - Mobile modal has no horizontal overflow (`dialogScrollWidth === dialogClientWidth`).
 - No unsupported archive, direct-delete, reply, row-menu, Initiative-target, or remote-document-metadata affordance is present.
 - Existing Approval, Review, blocker reporting, planning edits, GitHub actions, Activity import, and trash workflow retain a defined placement.
+- A resolved Epic / Meilenstein is visible in the Item identity line while its existing permission-gated control remains under `Weitere Details`.
 
 ## Remaining severity
 

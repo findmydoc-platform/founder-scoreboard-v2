@@ -1,7 +1,8 @@
 # Deferred Capability Register — Item Detail
 
-Status: temporary deferred-capability register; negative scope only  
-Baseline reviewed: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`  
+Status: temporary deferred-capability register; negative scope only
+Initial review baseline: `origin/main@66bf53945c5b999512df09ab6cfd2b2e40414c4d`
+Integration baseline: `origin/main@1bbe36f`
 Applies to: active Deliverable and Sub-Issue detail, full page and modal
 
 > **Every capability in this register is NOT PART OF THE CURRENT UI IMPLEMENTATION.**

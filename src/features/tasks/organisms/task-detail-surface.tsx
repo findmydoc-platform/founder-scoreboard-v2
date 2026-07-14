@@ -124,6 +124,8 @@ export function TaskDetailSurface({
     onOverviewDirtyChange,
   });
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
+  const currentMilestoneId = task.milestoneId || currentPackage?.milestoneId || "";
+  const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
   const relationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: source === "seed" });
@@ -330,6 +332,7 @@ export function TaskDetailSurface({
     <TaskDetailOperationalHeader
       task={task}
       initiative={currentPackage}
+      milestone={currentMilestone}
       parentTask={parentTask}
       profiles={teamProfiles}
       subIssues={subIssues}
