@@ -250,6 +250,7 @@ for (const marker of [
   "--no-wait",
   "--target=preview",
   "--prod",
+  "promote",
   "inspect",
   "readyStateReason",
   "errorMessage",
