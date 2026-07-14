@@ -87,6 +87,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(previewWorkflow, /Validate preview secrets/);
   assert.match(previewWorkflow, /preview_guard/);
   assert.match(previewWorkflow, /pull --yes --environment=preview/);
+  assert.match(previewWorkflow, /EXPECTED_VERCEL_PROJECT_ID/);
+  assert.match(previewWorkflow, /assert-vercel-project-binding\.sh/);
   assert.match(previewWorkflow, /Build Vercel Output/);
   assert.match(previewWorkflow, /build --target=preview/);
   assert.match(previewWorkflow, /vercel-deploy-prebuilt\.sh preview/);
@@ -94,6 +96,8 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(productionWorkflow, /url: \$\{\{ steps\.vercel_production\.outputs\.deploymentUrl \}\}/);
   assert.match(productionWorkflow, /refs\/heads\/main/);
   assert.match(productionWorkflow, /pull --yes --environment=production/);
+  assert.match(productionWorkflow, /EXPECTED_VERCEL_PROJECT_ID/);
+  assert.match(productionWorkflow, /assert-vercel-project-binding\.sh/);
   assert.match(productionWorkflow, /Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_URL: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_URL \}\}/);
   assert.match(productionWorkflow, /Build Vercel Output[\s\S]*NEXT_PUBLIC_SUPABASE_ANON_KEY: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_ANON_KEY \}\}/);
   assert.match(productionWorkflow, /build --prod/);
@@ -128,7 +132,10 @@ test("repo readiness includes the GitHub Actions deployment pipeline gates", asy
   assert.match(deployScript, /--no-wait/);
   assert.match(deployScript, /--target=preview/);
   assert.match(deployScript, /--prod/);
+  assert.match(deployScript, /assert-vercel-project-binding\.sh/);
   assert.match(deployScript, /promote/);
+  assert.match(deployScript, /already the current production deployment/);
+  assert.match(deployScript, /already-current/);
   assert.match(deployScript, /if \[\[ "\$\{target\}" == "production" \]\][\s\S]*promote_command=/);
   assert.match(deployScript, /--timeout=3m/);
   assert.match(deployScript, /Production promotion failed/);

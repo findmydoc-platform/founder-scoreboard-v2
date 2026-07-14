@@ -99,6 +99,7 @@ Production deploys start automatically on every push to `main`, which includes m
 GitHub Actions executes the production flow in this order:
 
 - Verify the timestamp migration history and immutable production baseline.
+- Assert that the configured Vercel organization and project IDs match the FounderOps production project before contacting Vercel.
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job.
 - Run `pnpm run deploy:supabase-migrations`, guarded by `SCHEMA_DEPLOY_TARGET=production`. The deploy refuses a missing baseline ledger or an active GitHub issue sync lock, performs a CLI dry run, and pushes only pending migrations.
@@ -106,6 +107,7 @@ GitHub Actions executes the production flow in this order:
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Explicitly promote the ready production deployment so the configured production domains receive the deployment. The `--prod` prebuilt upload alone is not treated as the domain cutover contract.
+- Treat Vercel's exact `409` response for an already-current production deployment as an idempotent success; unexpected promotion errors still fail the workflow.
 - Reconcile the existing comment outbox idempotently through the protected canonical production endpoint. Do not call the Vercel deployment URL because deployment protection redirects that URL to Vercel SSO.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
