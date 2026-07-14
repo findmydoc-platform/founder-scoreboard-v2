@@ -40,16 +40,38 @@ export function relationLabel(type: TaskRelationType) {
   return "Verknüpft mit";
 }
 
+export type EffectiveTaskRelation = {
+  direction: "waitsOn" | "blocks" | "related";
+  linkedTaskId: string;
+};
+
+export function effectiveTaskRelation(taskId: string, relation: TaskRelation): EffectiveTaskRelation | null {
+  const outgoing = relation.taskId === taskId;
+  const incoming = relation.relatedTaskId === taskId;
+  if (!outgoing && !incoming) return null;
+
+  const linkedTaskId = outgoing ? relation.relatedTaskId : relation.taskId;
+  if (!linkedTaskId || linkedTaskId === taskId) return null;
+
+  if (relation.relationType === "relates_to") return { direction: "related", linkedTaskId };
+  if (relation.relationType === "blocked_by") {
+    return { direction: outgoing ? "waitsOn" : "blocks", linkedTaskId };
+  }
+  return { direction: outgoing ? "blocks" : "waitsOn", linkedTaskId };
+}
+
 export function taskRelationsFor(taskId: string, relations: TaskRelation[]) {
-  const waitsOn = relations.filter((relation) => relation.taskId === taskId && relation.relationType === "blocked_by");
-  const blocks = relations.filter((relation) =>
-    (relation.taskId === taskId && relation.relationType === "blocks") ||
-    (relation.relatedTaskId === taskId && relation.relationType === "blocked_by")
-  );
-  const related = relations.filter((relation) =>
-    relation.relationType === "relates_to" &&
-    (relation.taskId === taskId || relation.relatedTaskId === taskId)
-  );
+  const waitsOn: TaskRelation[] = [];
+  const blocks: TaskRelation[] = [];
+  const related: TaskRelation[] = [];
+
+  relations.forEach((relation) => {
+    const effective = effectiveTaskRelation(taskId, relation);
+    if (!effective) return;
+    if (effective.direction === "waitsOn") waitsOn.push(relation);
+    else if (effective.direction === "blocks") blocks.push(relation);
+    else related.push(relation);
+  });
 
   return { waitsOn, blocks, related };
 }
@@ -57,7 +79,8 @@ export function taskRelationsFor(taskId: string, relations: TaskRelation[]) {
 export function hasOpenWaitingRelation(taskId: string, tasks: Task[], relations: TaskRelation[]) {
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   return taskRelationsFor(taskId, relations).waitsOn.some((relation) => {
-    const blockingTask = taskById.get(relation.relatedTaskId);
+    const blockingTaskId = effectiveTaskRelation(taskId, relation)?.linkedTaskId;
+    const blockingTask = blockingTaskId ? taskById.get(blockingTaskId) : undefined;
     return blockingTask && blockingTask.status !== "Erledigt";
   });
 }

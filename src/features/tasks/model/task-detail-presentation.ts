@@ -103,11 +103,13 @@ export function partitionSubIssues(subIssues: Task[]) {
 }
 
 export function uniqueRelationshipCount(
-  ...groups: Array<Array<{ relation: TaskRelation; task?: Task }>>
+  groups: {
+    waitsOn: Array<{ relation: TaskRelation; linkedTaskId: string; task?: Task }>;
+    blocks: Array<{ relation: TaskRelation; linkedTaskId: string; task?: Task }>;
+    related: Array<{ relation: TaskRelation; linkedTaskId: string; task?: Task }>;
+  },
 ) {
-  const ids = new Set<number>();
-  groups.flat().forEach(({ relation }) => ids.add(relation.id));
-  return ids.size;
+  return groups.waitsOn.length + groups.blocks.length + groups.related.length;
 }
 
 export function repairTaskActivityText(value: string) {

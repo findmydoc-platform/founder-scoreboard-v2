@@ -1,6 +1,7 @@
 "use client";
 
 import { Lock } from "lucide-react";
+import { useId } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { isTaskStatusChange, normalizeStatus, statusBadgeTone } from "@/lib/status";
 import type { TaskStatus } from "@/lib/types";
@@ -44,6 +45,8 @@ export function TaskStatusControl({
   selectClassName = "h-9 text-sm",
   status,
 }: TaskStatusControlProps) {
+  const generatedId = useId().replaceAll(":", "");
+  const reasonId = `task-status-locked-reason-${generatedId}`;
   const normalized = normalizeStatus(status);
   const doneLocked = normalized === "Erledigt" && !canChange;
   const reason = lockedReason || (doneLocked ? "Nur CEO kann wieder öffnen." : "Status ist geschützt.");
@@ -65,20 +68,26 @@ export function TaskStatusControl({
 
   return (
     <div
+      role="group"
+      aria-label="Status gesperrt"
+      aria-describedby={reasonId}
       className={classNames(
         "flex min-h-8 min-w-0 items-center gap-2 rounded-md border px-2.5",
         doneLocked ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-600",
-        compact ? "w-fit" : "w-full justify-between",
+        compact ? "w-fit max-w-full" : "w-full justify-between",
         className,
       )}
-      title={reason}
     >
-      <TaskStatusBadge status={normalized} locked={doneLocked} size="xs" />
-      {!compact && (
-        <span className="min-w-0 truncate text-xs font-medium">
-          {reason}
-        </span>
-      )}
+      <TaskStatusBadge status={normalized} locked size="xs" />
+      <span
+        id={reasonId}
+        className={classNames(
+          "min-w-0 whitespace-normal text-xs font-medium leading-4",
+          compact ? "max-w-56" : "text-right",
+        )}
+      >
+        {reason}
+      </span>
     </div>
   );
 }

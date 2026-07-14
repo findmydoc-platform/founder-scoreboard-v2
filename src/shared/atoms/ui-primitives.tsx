@@ -103,6 +103,7 @@ export function UiButton({ variant = "secondary", size = "md", className, type =
 type UiLinkButtonProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & UiButtonStyleProps & {
   href: LinkProps["href"];
   children: ReactNode;
+  onNavigate?: LinkProps["onNavigate"];
 };
 
 export function UiLinkButton({ variant = "secondary", size = "md", className, href, children, ...props }: UiLinkButtonProps) {

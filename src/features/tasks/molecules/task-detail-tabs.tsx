@@ -1,23 +1,29 @@
 "use client";
 
 import {
+  useEffect,
   useId,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import {
+  normalizeTaskDetailTabs,
+  resolveTaskDetailTab,
+  type TaskDetailTabId,
+} from "@/features/tasks/model/task-detail-tabs-model";
 import { classNames } from "@/shared/atoms/ui-primitives";
 
-export const taskDetailTabOrder = ["overview", "subIssues", "relationships", "activity"] as const;
-
-export type TaskDetailTabId = (typeof taskDetailTabOrder)[number];
+export { taskDetailTabOrder } from "@/features/tasks/model/task-detail-tabs-model";
+export type { TaskDetailTabId } from "@/features/tasks/model/task-detail-tabs-model";
 export type TaskDetailTabCount = number | string;
 
 export type TaskDetailTabsProps = {
   value: TaskDetailTabId;
   onValueChange: (value: TaskDetailTabId) => void;
   panels: Readonly<Record<TaskDetailTabId, ReactNode>>;
+  availableTabs?: readonly TaskDetailTabId[];
   counts?: Partial<Record<TaskDetailTabId, TaskDetailTabCount>>;
   ariaLabel?: string;
   className?: string;
@@ -49,6 +55,7 @@ export function TaskDetailTabs({
   value,
   onValueChange,
   panels,
+  availableTabs,
   counts,
   ariaLabel = "Item-Bereiche",
   className,
@@ -58,37 +65,57 @@ export function TaskDetailTabs({
 }: TaskDetailTabsProps) {
   const generatedId = useId();
   const resolvedIdBase = idBase || `task-detail-tabs-${generatedId.replaceAll(":", "")}`;
+  const renderedTabs = normalizeTaskDetailTabs(availableTabs);
+  const renderedTabsKey = renderedTabs.join(":");
+  const resolvedValue = resolveTaskDetailTab(value, renderedTabs);
   const tabRefs = useRef<Partial<Record<TaskDetailTabId, HTMLButtonElement | null>>>({});
+  const announcementRef = useRef<HTMLDivElement | null>(null);
   const [rovingState, setRovingState] = useState(() => ({
-    value,
-    focusedValue: value,
+    value: resolvedValue,
+    focusedValue: resolvedValue,
   }));
-  const focusedValue = rovingState.value === value ? rovingState.focusedValue : value;
+  const focusedValue = rovingState.value === resolvedValue && renderedTabs.includes(rovingState.focusedValue)
+    ? rovingState.focusedValue
+    : resolvedValue;
+
+  useEffect(() => {
+    if (value === resolvedValue) return;
+    if (announcementRef.current) announcementRef.current.textContent = "";
+    onValueChange(resolvedValue);
+    window.requestAnimationFrame(() => {
+      if (announcementRef.current) announcementRef.current.textContent = "Übersicht geöffnet.";
+      const tab = tabRefs.current[resolvedValue];
+      tab?.focus();
+      tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }, [onValueChange, renderedTabsKey, resolvedValue, value]);
 
   const setFocusedValue = (nextValue: TaskDetailTabId) => {
-    setRovingState({ value, focusedValue: nextValue });
+    setRovingState({ value: resolvedValue, focusedValue: nextValue });
   };
 
   const focusTab = (nextValue: TaskDetailTabId) => {
     setFocusedValue(nextValue);
-    tabRefs.current[nextValue]?.focus();
+    const tab = tabRefs.current[nextValue];
+    tab?.focus();
+    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentValue: TaskDetailTabId) => {
-    const currentIndex = taskDetailTabOrder.indexOf(currentValue);
+    const currentIndex = renderedTabs.indexOf(currentValue);
     let nextValue: TaskDetailTabId | null = null;
 
     if (event.key === "ArrowLeft") {
-      nextValue = taskDetailTabOrder[Math.max(0, currentIndex - 1)];
+      nextValue = renderedTabs[Math.max(0, currentIndex - 1)];
     } else if (event.key === "ArrowRight") {
-      nextValue = taskDetailTabOrder[Math.min(taskDetailTabOrder.length - 1, currentIndex + 1)];
+      nextValue = renderedTabs[Math.min(renderedTabs.length - 1, currentIndex + 1)];
     } else if (event.key === "Home") {
-      nextValue = taskDetailTabOrder[0];
+      nextValue = renderedTabs[0];
     } else if (event.key === "End") {
-      nextValue = taskDetailTabOrder[taskDetailTabOrder.length - 1];
+      nextValue = renderedTabs[renderedTabs.length - 1];
     } else if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
       event.preventDefault();
-      if (value !== currentValue) onValueChange(currentValue);
+      if (resolvedValue !== currentValue) onValueChange(currentValue);
       return;
     } else {
       return;
@@ -110,12 +137,12 @@ export function TaskDetailTabs({
         )}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setRovingState({ value, focusedValue: value });
+            setRovingState({ value: resolvedValue, focusedValue: resolvedValue });
           }
         }}
       >
-        {taskDetailTabOrder.map((tabValue) => {
-          const active = tabValue === value;
+        {renderedTabs.map((tabValue) => {
+          const active = tabValue === resolvedValue;
           const count = counts?.[tabValue];
           const hasCount = count !== undefined && count !== "";
           const label = tabLabels[tabValue];
@@ -141,7 +168,10 @@ export function TaskDetailTabs({
                   ? "border-blue-600 text-blue-700"
                   : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-950",
               )}
-              onFocus={() => setFocusedValue(tabValue)}
+              onFocus={(event) => {
+                setFocusedValue(tabValue);
+                event.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
+              }}
               onClick={() => {
                 if (!active) onValueChange(tabValue);
               }}
@@ -165,17 +195,18 @@ export function TaskDetailTabs({
       </div>
 
       <div
-        id={panelId(resolvedIdBase, value)}
+        id={panelId(resolvedIdBase, resolvedValue)}
         role="tabpanel"
-        aria-labelledby={tabId(resolvedIdBase, value)}
+        aria-labelledby={tabId(resolvedIdBase, resolvedValue)}
         tabIndex={0}
         className={classNames(
           "min-w-0 pt-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
           panelClassName,
         )}
       >
-        {panels[value]}
+        {panels[resolvedValue]}
       </div>
+      <div ref={announcementRef} className="sr-only" aria-live="polite" />
     </div>
   );
 }

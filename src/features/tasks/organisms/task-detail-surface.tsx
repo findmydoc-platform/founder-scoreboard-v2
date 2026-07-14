@@ -9,9 +9,12 @@ import {
   isTaskPlanningActive,
 } from "@/features/planning/model/approval-domain";
 import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
-import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
+import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
-import { TaskDetailOperationalHeader } from "@/features/tasks/molecules/task-detail-operational-header";
+import {
+  TaskDetailDependencyBand,
+  TaskDetailOperationalHeader,
+} from "@/features/tasks/molecules/task-detail-operational-header";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
 import { TaskDetailTabs, type TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
@@ -22,6 +25,7 @@ import {
 } from "@/features/tasks/model/task-detail-presentation";
 import { taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
+import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
 import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
@@ -55,22 +59,21 @@ type TaskDetailSurfaceProps = {
   commentImportPending?: boolean;
   githubInstallationAvailable: boolean;
   onOverviewDirtyChange?: (dirty: boolean) => void;
+  onRequestDiscardAction: (action: () => void, force?: boolean) => void;
   onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
-  onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
+  onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
   onCreateSubIssue: () => void;
   onOpenTask: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
-
-const discardMessage = "Ungespeicherte Änderungen verwerfen?";
 
 export function TaskDetailSurface({
   surface = "page",
@@ -97,6 +100,7 @@ export function TaskDetailSurface({
   commentImportPending = false,
   githubInstallationAvailable,
   onOverviewDirtyChange,
+  onRequestDiscardAction,
   onUpdate,
   onAddComment,
   onUploadAttachment,
@@ -147,7 +151,20 @@ export function TaskDetailSurface({
       : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
   const { completed: completedSubIssues } = partitionSubIssues(subIssues);
   const detailDataKnown = !detailDataLoading && !detailDataError;
+  const detailDataUnavailable = Boolean(detailDataError);
   const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
+  const relationshipCount = uniqueRelationshipCount(relationshipGroups);
+  const activityCount = visibleTaskActivityCount({ comments, externalComments, activities });
+  const availableTabs = taskDetailAvailableTabs({
+    activityCount,
+    activityKnown: detailDataKnown,
+    canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
+    canComment: controller.permissions.canComment,
+    canCreateSubIssue: controller.permissions.canCreateSubIssue,
+    relationshipCount,
+    relationshipsKnown: detailDataKnown,
+    subIssueCount: subIssues.length,
+  });
 
   useEffect(() => {
     if (!controller.overviewDirty) return;
@@ -159,25 +176,32 @@ export function TaskDetailSurface({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [controller.overviewDirty]);
 
-  const confirmDiscard = () => !controller.overviewDirty || window.confirm(discardMessage);
+  const requestDiscardAction = (action: () => void) => {
+    if (!controller.overviewDirty) {
+      action();
+      return;
+    }
+    onRequestDiscardAction(action, true);
+  };
   const cancelOverview = () => {
-    if (!confirmDiscard()) return;
-    controller.cancelOverview();
+    requestDiscardAction(controller.cancelOverview);
   };
   const changeTab = (nextTab: TaskDetailTabId) => {
     if (nextTab === activeTab) return;
-    if (!confirmDiscard()) return;
-    if (controller.overviewEditing) controller.cancelOverview();
-    setActiveTab(nextTab);
+    requestDiscardAction(() => {
+      if (controller.overviewEditing) controller.cancelOverview();
+      setActiveTab(nextTab);
+    });
   };
   const startOverviewEditing = () => {
     setActiveTab("overview");
     controller.startOverviewEditing();
   };
   const openTask = (taskId: string) => {
-    if (!confirmDiscard()) return;
-    if (controller.overviewEditing) controller.cancelOverview();
-    onOpenTask(taskId);
+    requestDiscardAction(() => {
+      if (controller.overviewEditing) controller.cancelOverview();
+      onOpenTask(taskId);
+    });
   };
 
   const secondaryDetails = (
@@ -216,6 +240,7 @@ export function TaskDetailSurface({
     overview: (
       <TaskOverviewPanel
         task={task}
+        baseline={controller.overviewBaselineDraft}
         draft={controller.overviewDraft}
         permissions={controller.overviewPermissions}
         editing={controller.overviewEditing}
@@ -225,18 +250,17 @@ export function TaskDetailSurface({
         onCancel={cancelOverview}
         onSave={controller.saveOverview}
         onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
-        riskContent={!controller.overviewEditing ? (
+        riskContent={!controller.overviewEditing && (detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker) ? (
           <TaskDetailPanelBlockerSection
             canReport={controller.permissions.canReportBlocker}
             blockers={blockers}
             blockerDraft={controller.blockerDraft}
+            loading={detailDataLoading}
+            unavailable={detailDataUnavailable}
             pending={pending}
             profileName={profileName}
             onBlockerDraftChange={(patch) => controller.setBlockerDraft((current) => ({ ...current, ...patch }))}
-            onReportBlocker={(draft) => {
-              onReportBlocker(draft);
-              controller.setBlockerDraft({ reason: "", impact: "", needsHelpFrom: "" });
-            }}
+            onReportBlocker={onReportBlocker}
           />
         ) : null}
       />
@@ -245,8 +269,6 @@ export function TaskDetailSurface({
       <TaskDetailPanelSubIssuesSection
         canCreate={controller.permissions.canCreateSubIssue}
         subIssues={subIssues}
-        loading={detailDataLoading}
-        error={detailDataError}
         onCreateSubIssue={onCreateSubIssue}
         onOpenTask={openTask}
       />
@@ -262,14 +284,23 @@ export function TaskDetailSurface({
         relationTargetOptions={relationTargetOptions}
         allowedRelationTypes={relationshipAccess.allowedRelationTypes}
         pending={pending}
-        error={detailDataError}
+        loading={detailDataLoading}
+        unavailable={detailDataUnavailable}
         onOpenTask={openTask}
         onRemoveRelation={onRemoveRelation}
         canRemoveRelation={relationshipAccess.canRemoveRelation}
+        canEditLegacyDependsOn={controller.permissions.canEditNotes}
+        onUpdateLegacyDependsOn={async (value) => {
+          const result = await onUpdate({ dependsOn: value });
+          return result || { ok: true, task: { dependsOn: value } };
+        }}
         onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
-        onAddRelation={() => {
-          onAddRelation(controller.relationDraft);
-          controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
+        onAddRelation={async () => {
+          const result = await onAddRelation(controller.relationDraft);
+          if (result.ok) {
+            controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
+          }
+          return result;
         }}
       />
     ),
@@ -281,6 +312,8 @@ export function TaskDetailSurface({
         notice={commentImportNotice}
         profiles={teamProfiles}
         currentProfileId={currentProfile?.id || ""}
+        loading={detailDataLoading}
+        unavailable={detailDataUnavailable}
         pending={pending}
         importPending={commentImportPending}
         readOnly={!controller.permissions.canComment}
@@ -293,43 +326,48 @@ export function TaskDetailSurface({
     ),
   } satisfies Record<TaskDetailTabId, ReactNode>;
 
-  return (
-    <div className="min-w-0">
-      <TaskDetailOperationalHeader
-        task={task}
-        initiative={currentPackage}
-        parentTask={parentTask}
-        profiles={teamProfiles}
-        subIssues={subIssues}
-        subIssuesKnown={detailDataKnown}
+  const operationalHeader = (
+    <TaskDetailOperationalHeader
+      task={task}
+      initiative={currentPackage}
+      parentTask={parentTask}
+      profiles={teamProfiles}
+      subIssues={subIssues}
+      statusOptions={statusOptions}
+      canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
+      statusLockedReason={statusLockedReason}
+      canManageTaskMeta={controller.permissions.canManageTaskMeta}
+      canEditOverview={canEditOverview && !controller.overviewEditing}
+      pending={pending}
+      titleId={surface === "modal" ? "task-detail-panel-title" : "task-detail-page-title"}
+      onEditOverview={startOverviewEditing}
+      onUpdate={onUpdate}
+    />
+  );
+
+  const bodyContent = (
+    <>
+      <TaskDetailDependencyBand
         waitsOn={relationshipGroups.waitsOn}
         blocks={relationshipGroups.blocks}
-        relationshipsKnown={detailDataKnown}
-        statusOptions={statusOptions}
-        canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
-        statusLockedReason={statusLockedReason}
-        canManageTaskMeta={controller.permissions.canManageTaskMeta}
-        canEditOverview={canEditOverview && !controller.overviewEditing}
-        pending={pending}
-        titleId={surface === "modal" ? "task-detail-panel-title" : "task-detail-page-title"}
-        onEditOverview={startOverviewEditing}
+        loading={detailDataLoading}
+        error={detailDataError}
         onOpenTask={openTask}
-        onUpdate={onUpdate}
       />
 
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
-      {detailDataLoading ? <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">Zusätzliche Item-Daten werden geladen …</div> : null}
 
       <div className={surface === "page" ? "xl:grid xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start xl:gap-6" : undefined}>
         <TaskDetailTabs
           value={activeTab}
           onValueChange={changeTab}
+          availableTabs={availableTabs}
           className="mt-5"
           tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
           counts={{
-            subIssues: detailDataKnown ? `${completedSubIssues.length}/${subIssues.length}` : "",
-            relationships: detailDataKnown ? uniqueRelationshipCount(relationshipGroups.waitsOn, relationshipGroups.blocks, relationshipGroups.related) : "",
-            activity: detailDataKnown ? visibleTaskActivityCount({ comments, externalComments, activities }) : "",
+            subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
+            relationships: detailDataKnown && relationshipCount > 0 ? relationshipCount : "",
+            activity: detailDataKnown && activityCount > 0 ? activityCount : "",
           }}
           panels={panels}
           panelClassName="pt-5"
@@ -337,25 +375,34 @@ export function TaskDetailSurface({
         {surface === "page" ? <aside aria-label="Weitere Item-Details" className="mt-5 hidden xl:block">{secondaryDetails}</aside> : null}
       </div>
 
-      {surface === "page" ? (
-        <>
-          <details className="group mt-5 rounded-xl border border-slate-200 bg-white xl:hidden">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400">
-              Weitere Details
-              <ChevronDown size={17} className="transition group-open:rotate-180" aria-hidden="true" />
-            </summary>
-            <div className="border-t border-slate-200 p-4">{secondaryDetails}</div>
-          </details>
-        </>
-      ) : (
-        <details className="group mt-5 rounded-xl border border-slate-200 bg-white">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400">
-            Weitere Details
-            <ChevronDown size={17} className="transition group-open:rotate-180" aria-hidden="true" />
-          </summary>
-          <div className="border-t border-slate-200 p-4">{secondaryDetails}</div>
-        </details>
-      )}
+      <details className={surface === "page"
+        ? "group mt-5 rounded-xl border border-slate-200 bg-white xl:hidden"
+        : "group mt-5 rounded-xl border border-slate-200 bg-white"}
+      >
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          Weitere Details
+          <ChevronDown size={17} className="transition group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="border-t border-slate-200 p-4">{secondaryDetails}</div>
+      </details>
+    </>
+  );
+
+  if (surface === "modal") {
+    return (
+      <div className="flex h-full min-h-0 min-w-0 flex-col bg-white">
+        <div className="shrink-0 px-4 pt-4 sm:px-5">{operationalHeader}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5">
+          {bodyContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      {operationalHeader}
+      {bodyContent}
     </div>
   );
 }

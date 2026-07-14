@@ -28,6 +28,7 @@ export function useTaskDetailController({
   onOverviewDirtyChange?: (dirty: boolean) => void;
 }) {
   const [overviewEditing, setOverviewEditing] = useState(false);
+  const [overviewBaseline, setOverviewBaseline] = useState<Task>(() => task);
   const [overviewDraft, setOverviewDraft] = useState<TaskOverviewDraft>(() => buildTaskOverviewDraft(task));
   const [overviewSaving, setOverviewSaving] = useState(false);
   const [overviewError, setOverviewError] = useState("");
@@ -40,7 +41,7 @@ export function useTaskDetailController({
     canEditEvidence: permissions.canEditEvidence,
     canEditNotes: permissions.canEditNotes,
   }), [permissions.canEditBrief, permissions.canEditChecklist, permissions.canEditEvidence, permissions.canEditNotes]);
-  const overviewDirty = overviewEditing && taskOverviewIsDirty(task, overviewDraft, overviewPermissions);
+  const overviewDirty = overviewEditing && taskOverviewIsDirty(overviewBaseline, overviewDraft, overviewPermissions);
 
   useEffect(() => {
     onOverviewDirtyChange?.(overviewDirty);
@@ -54,6 +55,7 @@ export function useTaskDetailController({
   };
 
   const startOverviewEditing = () => {
+    setOverviewBaseline(task);
     setOverviewDraft(buildTaskOverviewDraft(task));
     setOverviewError("");
     setOverviewEditing(true);
@@ -61,7 +63,7 @@ export function useTaskDetailController({
 
   const saveOverview = async () => {
     if (!overviewDirty || overviewSaving) return false;
-    const patch = taskOverviewPatch(task, overviewDraft, overviewPermissions);
+    const patch = taskOverviewPatch(overviewBaseline, overviewDraft, overviewPermissions);
     if (!Object.keys(patch).length) return false;
 
     setOverviewSaving(true);
@@ -85,6 +87,7 @@ export function useTaskDetailController({
   return {
     blockerDraft,
     cancelOverview,
+    overviewBaselineDraft: buildTaskOverviewDraft(overviewBaseline),
     overviewDraft: overviewEditing ? overviewDraft : buildTaskOverviewDraft(task),
     overviewDirty,
     overviewEditing,

@@ -24,9 +24,6 @@ export type TaskDetailOperationalHeaderProps = {
   profiles: Profile[];
   subIssues: Task[];
   subIssuesKnown?: boolean;
-  waitsOn: TaskDetailRelationshipRow[];
-  blocks: TaskDetailRelationshipRow[];
-  relationshipsKnown?: boolean;
   statusOptions: TaskStatus[];
   canChangeStatus: boolean;
   statusLockedReason?: string;
@@ -36,8 +33,16 @@ export type TaskDetailOperationalHeaderProps = {
   titleId?: string;
   className?: string;
   onEditOverview?: () => void;
-  onOpenTask: (taskId: string) => void;
   onUpdate: (patch: Partial<Task>) => void;
+};
+
+export type TaskDetailDependencyBandProps = {
+  blocks: TaskDetailRelationshipRow[];
+  className?: string;
+  error?: string;
+  loading?: boolean;
+  onOpenTask: (taskId: string) => void;
+  waitsOn: TaskDetailRelationshipRow[];
 };
 
 function OperationalFact({
@@ -150,6 +155,67 @@ function activeDependencyRows(rows: TaskDetailRelationshipRow[]): Array<TaskDeta
   ));
 }
 
+export function TaskDetailDependencyBand({
+  blocks,
+  className,
+  error = "",
+  loading = false,
+  onOpenTask,
+  waitsOn,
+}: TaskDetailDependencyBandProps) {
+  const activeWaitsOn = activeDependencyRows(waitsOn);
+  const activeBlocks = activeDependencyRows(blocks);
+
+  if (error) {
+    return (
+      <section
+        role="alert"
+        aria-label="Item-Daten"
+        className={classNames("mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700", className)}
+      >
+        Zusätzliche Item-Daten konnten nicht geladen werden. {error}
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <section
+        aria-label="Abhängigkeiten werden geladen"
+        aria-busy="true"
+        className={classNames("mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-3", className)}
+      >
+        <div className="h-12 animate-pulse rounded-md bg-slate-100" />
+      </section>
+    );
+  }
+
+  if (!activeWaitsOn.length && !activeBlocks.length) return null;
+
+  return (
+    <section className={classNames(
+      "mt-4 overflow-hidden rounded-lg border",
+      activeWaitsOn.length > 0 ? "border-amber-200" : "border-slate-200",
+      className,
+    )} aria-label="Abhängigkeiten">
+      <DependencyBandRow
+        label="Wartet auf"
+        rows={activeWaitsOn}
+        tone="primary"
+        icon={<Hourglass size={17} aria-hidden="true" />}
+        onOpenTask={onOpenTask}
+      />
+      <DependencyBandRow
+        label="Andere warten hierauf"
+        rows={activeBlocks}
+        tone="secondary"
+        icon={<Flag size={17} aria-hidden="true" />}
+        onOpenTask={onOpenTask}
+      />
+    </section>
+  );
+}
+
 export function TaskDetailOperationalHeader({
   task,
   initiative,
@@ -157,9 +223,6 @@ export function TaskDetailOperationalHeader({
   profiles,
   subIssues,
   subIssuesKnown = true,
-  waitsOn,
-  blocks,
-  relationshipsKnown = true,
   statusOptions,
   canChangeStatus,
   statusLockedReason,
@@ -169,7 +232,6 @@ export function TaskDetailOperationalHeader({
   titleId,
   className,
   onEditOverview,
-  onOpenTask,
   onUpdate,
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
@@ -180,9 +242,6 @@ export function TaskDetailOperationalHeader({
     : initiative?.title;
   const directSubIssues = subIssues.filter((subIssue) => subIssue.parentTaskId === task.id);
   const completedSubIssues = directSubIssues.filter((subIssue) => normalizeStatus(subIssue.status) === "Erledigt").length;
-  const activeWaitsOn = relationshipsKnown ? activeDependencyRows(waitsOn) : [];
-  const activeBlocks = relationshipsKnown ? activeDependencyRows(blocks) : [];
-  const showDependencyBand = relationshipsKnown && (activeWaitsOn.length > 0 || activeBlocks.length > 0);
   const showDeadline = canManageTaskMeta || Boolean(task.deadline);
 
   return (
@@ -276,28 +335,6 @@ export function TaskDetailOperationalHeader({
           <SubIssueProgress completed={completedSubIssues} total={directSubIssues.length} />
         )}
       </div>
-
-      {showDependencyBand && (
-        <section className={classNames(
-          "mt-4 overflow-hidden rounded-lg border",
-          activeWaitsOn.length > 0 ? "border-amber-200" : "border-slate-200",
-        )} aria-label="Abhängigkeiten">
-          <DependencyBandRow
-            label="Wartet auf"
-            rows={activeWaitsOn}
-            tone="primary"
-            icon={<Hourglass size={17} aria-hidden="true" />}
-            onOpenTask={onOpenTask}
-          />
-          <DependencyBandRow
-            label="Andere warten hierauf"
-            rows={activeBlocks}
-            tone="secondary"
-            icon={<Flag size={17} aria-hidden="true" />}
-            onOpenTask={onOpenTask}
-          />
-        </section>
-      )}
     </header>
   );
 }

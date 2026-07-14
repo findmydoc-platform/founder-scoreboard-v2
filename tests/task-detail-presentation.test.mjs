@@ -145,18 +145,18 @@ test("partitionSubIssues separates normalized completed statuses and preserves o
   });
 });
 
-test("uniqueRelationshipCount deduplicates relation ids across groups", () => {
-  const relation = (id) => ({ relation: { id } });
+test("uniqueRelationshipCount counts the normalized rendered relationship groups", () => {
+  const relation = (id, linkedTaskId) => ({ relation: { id }, linkedTaskId });
 
   assert.equal(
-    uniqueRelationshipCount(
-      [relation(1), relation(2)],
-      [relation(2), relation(3)],
-      [relation(1)],
-    ),
+    uniqueRelationshipCount({
+      waitsOn: [relation(1, "task-a"), relation(2, "task-b")],
+      blocks: [relation(3, "task-c")],
+      related: [],
+    }),
     3,
   );
-  assert.equal(uniqueRelationshipCount([], []), 0);
+  assert.equal(uniqueRelationshipCount({ waitsOn: [], blocks: [], related: [] }), 0);
 });
 
 test("activity helpers repair text, filter noise, and count visible entries", () => {

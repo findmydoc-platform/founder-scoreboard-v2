@@ -14,6 +14,9 @@ type Props = {
   activities?: TaskActivity[];
   profiles: Profile[];
   currentProfileId?: string;
+  error?: string;
+  loading?: boolean;
+  unavailable?: boolean;
   pending?: boolean;
   importPending?: boolean;
   notice?: string;
@@ -74,6 +77,9 @@ export function TaskCommentThread({
   activities = [],
   profiles,
   currentProfileId = "",
+  error = "",
+  loading = false,
+  unavailable = false,
   pending = false,
   importPending = false,
   notice = "",
@@ -109,7 +115,7 @@ export function TaskCommentThread({
               {importPending ? "Aktualisiert..." : "GitHub aktualisieren"}
             </button>
           )}
-          <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{timeline.length} Einträge</span>
+          {!loading && !error && !unavailable ? <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{timeline.length} Einträge</span> : null}
         </div>
       </div>
 
@@ -133,7 +139,14 @@ export function TaskCommentThread({
           renderPreview={(value) => <CommentBody value={value} />}
         />
       )}
-      <TaskCommentTimeline items={timeline} profiles={profiles} currentProfileId={currentProfileId} />
+      <TaskCommentTimeline
+        items={timeline}
+        profiles={profiles}
+        currentProfileId={currentProfileId}
+        error={error}
+        loading={loading}
+        unavailable={unavailable}
+      />
     </section>
   );
 }

@@ -145,12 +145,33 @@ function deliveryHint(status?: GitHubCommentDeliveryStatus) {
   return "";
 }
 
-export function TaskCommentTimeline({ items, profiles, currentProfileId = "" }: { items: TaskCommentTimelineItem[]; profiles: Profile[]; currentProfileId?: string }) {
+type TaskCommentTimelineProps = {
+  currentProfileId?: string;
+  error?: string;
+  items: TaskCommentTimelineItem[];
+  loading?: boolean;
+  profiles: Profile[];
+  unavailable?: boolean;
+};
+
+export function TaskCommentTimeline({
+  items,
+  profiles,
+  currentProfileId = "",
+  error = "",
+  loading = false,
+  unavailable = false,
+}: TaskCommentTimelineProps) {
   const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const profileById = (profileId: string) => profiles.find((profile) => profile.id === profileId);
 
   return (
-    <div className="mt-3 grid min-w-0 gap-2">
+    <div className="mt-3 grid min-w-0 gap-2" aria-busy={loading}>
+      {error ? (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      ) : null}
       {items.map((item) => (
         item.type === "comment" ? (
           <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
@@ -167,7 +188,7 @@ export function TaskCommentTimeline({ items, profiles, currentProfileId = "" }: 
                 </div>
               )}
               {item.profileId === currentProfileId && item.githubDeliveryStatus === "delivered" && item.githubCommentUrl && (
-                <a href={item.githubCommentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
+                <a href={item.githubCommentUrl} target="_blank" rel="noreferrer" aria-label="Kommentar in GitHub öffnen (öffnet in neuem Tab)" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
                   In GitHub öffnen
                 </a>
               )}
@@ -193,7 +214,7 @@ export function TaskCommentTimeline({ items, profiles, currentProfileId = "" }: 
               </div>
               <CommentBody value={item.comment} />
               {item.htmlUrl && (
-                <a href={item.htmlUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
+                <a href={item.htmlUrl} target="_blank" rel="noreferrer" aria-label="Kommentar in GitHub öffnen (öffnet in neuem Tab)" className="mt-2 inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700">
                   In GitHub öffnen
                 </a>
               )}
@@ -218,7 +239,14 @@ export function TaskCommentTimeline({ items, profiles, currentProfileId = "" }: 
           );
         })()
       ))}
-      {!items.length && (
+      {loading ? (
+        <div className="grid gap-2" aria-label="Aktivitäten werden geladen">
+          <div className="h-16 animate-pulse rounded-md bg-slate-100" />
+          <div className="h-16 animate-pulse rounded-md bg-slate-100" />
+          <div className="h-16 animate-pulse rounded-md bg-slate-100" />
+        </div>
+      ) : null}
+      {!items.length && !loading && !error && !unavailable && (
         <UiEmptyState>
           Noch keine Kommentare, Nachfragen oder relevante Aktivitäten.
         </UiEmptyState>

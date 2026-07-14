@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowLeft, Maximize2, X } from "lucide-react";
-import type { MouseEvent } from "react";
 import type { Task } from "@/lib/types";
 import { UiButton, UiLinkButton } from "@/shared/atoms/ui-primitives";
 
@@ -10,14 +9,10 @@ type Props = {
   previousTask?: Task | null;
   onBack?: () => void;
   onClose: () => void;
-  onRequestFullPage?: () => boolean;
+  onRequestFullPage?: (href: string) => boolean;
 };
 
 export function TaskDetailPanelHeader({ task, previousTask = null, onBack, onClose, onRequestFullPage }: Props) {
-  const handleFullPage = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (onRequestFullPage && !onRequestFullPage()) event.preventDefault();
-  };
-
   return (
     <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
       <div className="flex items-center justify-between gap-3">
@@ -36,7 +31,14 @@ export function TaskDetailPanelHeader({ task, previousTask = null, onBack, onClo
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Item-Detail</div>
         )}
         <div className="flex shrink-0 items-center gap-2">
-          <UiLinkButton href={`/tasks/${task.id}`} size="lg" data-autofocus={!previousTask || undefined} onClick={handleFullPage}>
+          <UiLinkButton
+            href={`/tasks/${task.id}`}
+            size="lg"
+            data-autofocus={!previousTask || undefined}
+            onNavigate={onRequestFullPage ? (event) => {
+              if (!onRequestFullPage(`/tasks/${task.id}`)) event.preventDefault();
+            } : undefined}
+          >
             <Maximize2 size={15} aria-hidden="true" />
             <span className="hidden sm:inline">Große Ansicht</span>
           </UiLinkButton>

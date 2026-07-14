@@ -7,7 +7,9 @@ import { usePlanningAppController } from "@/features/planning/hooks/use-planning
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
+import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
 import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header";
+import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 
@@ -34,6 +36,7 @@ export function TaskDetailPage({
 }: Props) {
   const router = useRouter();
   const [overviewDirty, setOverviewDirty] = useState(false);
+  const discardGuard = useTaskDiscardGuard(overviewDirty);
   const controller = usePlanningAppController({
     initialData,
     initialHeaderData: headerData,
@@ -53,7 +56,12 @@ export function TaskDetailPage({
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
-      <AppSidebar activeWorkspace="planning" source={source} currentPlatformRole={controller.currentProfile?.platformRole || ""} />
+      <AppSidebar
+        activeWorkspace="planning"
+        source={source}
+        currentPlatformRole={controller.currentProfile?.platformRole || ""}
+        onRequestNavigation={(href) => discardGuard.request(() => router.push(href))}
+      />
       <TaskDetailHeader
         title={task.title}
         headerData={controller.headerData}
@@ -61,10 +69,7 @@ export function TaskDetailPage({
         onToggleNotifications={() => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox()}
         onOpenNotification={controller.openNotification}
         onDismissNotification={controller.dismissNotification}
-        onBack={() => {
-          if (overviewDirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
-          router.push("/planning");
-        }}
+        onBack={() => discardGuard.request(() => router.push("/planning"))}
         actions={(
           <GitHubConnectionStatus
             authenticated={Boolean(controller.authUser)}
@@ -101,6 +106,7 @@ export function TaskDetailPage({
           error={controller.saveError}
           detailDataError={initialDetailDataError}
           onOverviewDirtyChange={setOverviewDirty}
+          onRequestDiscardAction={discardGuard.request}
           commentImportNotice={controller.commentImportNotice}
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}
@@ -123,6 +129,11 @@ export function TaskDetailPage({
       </div>
 
       <PlanningOverlayLayer controller={controller} />
+      <TaskDiscardChangesDialog
+        open={discardGuard.open}
+        onDiscard={discardGuard.discard}
+        onKeepEditing={discardGuard.keepEditing}
+      />
     </main>
   );
 }

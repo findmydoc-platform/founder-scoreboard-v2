@@ -60,8 +60,15 @@ export function useTaskDetailDataLoader({
     };
   }, [apiClient, applyPlanningDataUpdate, selectedTaskId, source, startTransition]);
 
+  const selectedStateMatches = loadState.taskId === selectedTaskId;
+  const selectedTaskNeedsLoad = Boolean(
+    selectedTaskId
+    && source === "supabase"
+    && !loadedTaskIdsRef.current.has(selectedTaskId),
+  );
+
   return {
-    selectedTaskDetailError: loadState.taskId === selectedTaskId ? loadState.error : "",
-    selectedTaskDetailLoading: Boolean(selectedTaskId && loadState.taskId === selectedTaskId && loadState.loading),
+    selectedTaskDetailError: selectedStateMatches ? loadState.error : "",
+    selectedTaskDetailLoading: selectedTaskNeedsLoad && (!selectedStateMatches || loadState.loading),
   };
 }

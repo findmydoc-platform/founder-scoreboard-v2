@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
+import type { TaskRelationshipRow } from "@/features/tasks/model/task-detail-state";
 import { taskAssigneeLabel } from "@/lib/display";
 import { relationshipBadgeFor, relationshipBadgeToneClass } from "@/lib/relationship-view-model";
 import { normalizeStatus } from "@/lib/status";
@@ -16,7 +17,7 @@ export function RelationshipList({
 }: {
   title: string;
   currentTask: Task;
-  rows: Array<{ relation: TaskRelation; task?: Task }>;
+  rows: TaskRelationshipRow[];
   empty: string;
   canRemove?: (relation: TaskRelation) => boolean;
   onRemove?: (relation: TaskRelation) => void;
@@ -29,11 +30,11 @@ export function RelationshipList({
         <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">{rows.length}</span>
       </div>
       <div className="mt-3 grid gap-2">
-        {rows.map(({ relation, task }) => {
+        {rows.map(({ relation, linkedTaskId, task }) => {
           const badge = relationshipBadgeFor(currentTask, relation, task);
 
           return (
-            <div key={`${relation.id}-${task?.id || "unknown"}`} className="flex min-h-14 items-start justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 text-xs shadow-sm">
+            <div key={`${relation.id}-${linkedTaskId}`} className="flex min-h-14 items-start justify-between gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 text-xs shadow-sm">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {task ? (
@@ -41,7 +42,7 @@ export function RelationshipList({
                       {task.title}
                     </TaskReferenceLink>
                   ) : (
-                    <span className="break-words font-semibold text-slate-800">{relation.relatedTaskId}</span>
+                    <span className="break-words font-semibold text-slate-800">{linkedTaskId}</span>
                   )}
                   <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${relationshipBadgeToneClass(badge.tone)}`}>
                     {badge.label}
@@ -55,7 +56,7 @@ export function RelationshipList({
                   type="button"
                   onClick={() => onRemove(relation)}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                  aria-label={`Beziehung zu ${task?.title || relation.relatedTaskId} entfernen`}
+                  aria-label={`Beziehung zu ${task?.title || linkedTaskId} entfernen`}
                 >
                   <X size={15} />
                 </button>

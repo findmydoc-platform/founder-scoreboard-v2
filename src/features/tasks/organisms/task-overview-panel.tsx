@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ExternalLink, Save, X } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   safeEvidenceHost,
   type TaskOverviewDraft,
@@ -52,6 +52,7 @@ function ReadSection({ label, value, checklist = false }: { label: string; value
 
 type Props = {
   task: Task;
+  baseline: TaskOverviewDraft;
   draft: TaskOverviewDraft;
   permissions: TaskOverviewEditPermissions;
   editing: boolean;
@@ -66,6 +67,7 @@ type Props = {
 
 export function TaskOverviewPanel({
   task,
+  baseline,
   draft,
   permissions,
   editing,
@@ -78,15 +80,27 @@ export function TaskOverviewPanel({
   riskContent,
 }: Props) {
   const [announcement, setAnnouncement] = useState("");
+  const previousEditingRef = useRef(editing);
   const evidenceHost = safeEvidenceHost(draft.evidenceLink);
-  const evidenceInvalid = Boolean(draft.evidenceLink.trim() && !evidenceHost);
+  const evidenceValue = draft.evidenceLink.trim();
+  const baselineEvidenceValue = baseline.evidenceLink.replaceAll("\r\n", "\n").trimEnd();
+  const normalizedEvidenceValue = draft.evidenceLink.replaceAll("\r\n", "\n").trimEnd();
+  const evidenceIsLegacyText = Boolean(evidenceValue && !evidenceHost);
+  const evidenceInvalid = evidenceIsLegacyText && normalizedEvidenceValue !== baselineEvidenceValue;
   const hasReadContent = overviewFields.some(({ key }) => draft[key].trim()) || Boolean(draft.evidenceLink.trim()) || Boolean(riskContent);
 
   useEffect(() => {
-    if (!editing) return;
+    const wasEditing = previousEditingRef.current;
+    previousEditingRef.current = editing;
+    if (!editing && !wasEditing) return;
+
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById("task-overview-title")?.focus();
-      setAnnouncement("Bearbeitungsmodus geöffnet.");
+      if (editing) {
+        document.querySelector<HTMLElement>("[data-task-overview-field]")?.focus();
+        setAnnouncement("Bearbeitungsmodus geöffnet.");
+      } else {
+        document.getElementById("task-detail-edit")?.focus();
+      }
     });
     return () => window.cancelAnimationFrame(frame);
   }, [editing]);
@@ -100,7 +114,6 @@ export function TaskOverviewPanel({
     const saved = await onSave();
     if (saved) {
       setAnnouncement("Änderungen gespeichert.");
-      window.requestAnimationFrame(() => document.getElementById("task-detail-edit")?.focus());
     } else {
       window.requestAnimationFrame(() => document.getElementById("task-overview-error")?.focus());
     }
@@ -128,6 +141,7 @@ export function TaskOverviewPanel({
               Titel
               <UiTextInput
                 id="task-overview-title"
+                data-task-overview-field
                 value={draft.title}
                 disabled={saving}
                 onChange={(event) => onChange({ title: event.target.value })}
@@ -142,6 +156,7 @@ export function TaskOverviewPanel({
             <UiField key={key}>
               {label}
               <UiTextArea
+                data-task-overview-field
                 value={draft[key]}
                 disabled={saving}
                 onChange={(event) => onChange({ [key]: event.target.value })}
@@ -158,7 +173,12 @@ export function TaskOverviewPanel({
               Nachweis-Link
               <UiTextInput
                 id="task-evidence-link"
-                type="url"
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                data-task-overview-field
                 value={draft.evidenceLink}
                 disabled={saving}
                 aria-invalid={evidenceInvalid}
@@ -172,7 +192,13 @@ export function TaskOverviewPanel({
               {evidenceInvalid ? (
                 <span id="task-evidence-error" className="font-normal text-red-700">Bitte eine vollständige http- oder https-URL eingeben.</span>
               ) : (
-                <span id="task-evidence-help" className="font-normal text-slate-500">{evidenceHost ? `Vorschau: ${evidenceHost}` : "Link zu Drive, GitHub oder einem anderen Nachweis."}</span>
+                <span id="task-evidence-help" className="font-normal text-slate-500">
+                  {evidenceHost
+                    ? `Vorschau: ${evidenceHost}`
+                    : evidenceIsLegacyText
+                      ? "Bestehender Hinweis; beim nächsten Ändern durch eine vollständige URL ersetzen."
+                      : "Link zu Drive, GitHub oder einem anderen Nachweis."}
+                </span>
               )}
             </UiField>
           ) : null}
@@ -196,10 +222,16 @@ export function TaskOverviewPanel({
           <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
           <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
           <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
-          {draft.evidenceLink.trim() && evidenceHost ? (
+          {evidenceValue && evidenceHost ? (
             <section className="border-b border-slate-100 py-5">
               <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-              <a href={draft.evidenceLink} target="_blank" rel="noreferrer" className="mt-2 flex min-h-14 items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-blue-800 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <a
+                href={draft.evidenceLink}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Nachweis öffnen: ${draft.evidenceLink} (öffnet in neuem Tab)`}
+                className="mt-2 flex min-h-14 items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-blue-800 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              >
                 <span>
                   <span className="block text-sm font-semibold">Nachweis öffnen</span>
                   <span className="mt-0.5 block text-xs text-blue-700">{evidenceHost}</span>
@@ -207,7 +239,7 @@ export function TaskOverviewPanel({
                 <ExternalLink size={17} aria-hidden="true" />
               </a>
             </section>
-          ) : null}
+          ) : evidenceValue ? <ReadSection label="Nachweis" value={draft.evidenceLink} /> : null}
           <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
           {riskContent}
           <ReadSection label="Interne Notiz" value={draft.note} />
