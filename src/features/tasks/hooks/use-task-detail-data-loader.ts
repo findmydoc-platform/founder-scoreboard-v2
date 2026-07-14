@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type TransitionStartFunction } from "react";
-import { requestTaskDetailData, mergeTaskDetailData } from "@/features/tasks/model/task-api-client";
+import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
+import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Task } from "@/lib/types";
 
