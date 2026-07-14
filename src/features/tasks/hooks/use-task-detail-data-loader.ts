@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type TransitionStartFunction } from "react";
+import { useEffect, useState, type TransitionStartFunction } from "react";
 import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
 import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -21,13 +21,13 @@ export function useTaskDetailDataLoader({
   source,
   startTransition,
 }: UseTaskDetailDataLoaderOptions) {
-  const loadedTaskIdsRef = useRef<Set<string>>(new Set());
+  const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set());
   const [loadState, setLoadState] = useState({ taskId: "", loading: false, error: "" });
   const selectedTaskId = selectedTask?.id || "";
 
   useEffect(() => {
     if (!selectedTaskId) return;
-    if (source !== "supabase" || loadedTaskIdsRef.current.has(selectedTaskId)) {
+    if (source !== "supabase" || loadedTaskIds.has(selectedTaskId)) {
       return;
     }
 
@@ -43,7 +43,12 @@ export function useTaskDetailDataLoader({
         if (!response.ok || !body?.detailData) throw new Error(body?.error || "Task-Details konnten nicht geladen werden.");
 
         applyPlanningDataUpdate((current) => mergeTaskDetailData(current, selectedTaskId, body.detailData!));
-        loadedTaskIdsRef.current.add(selectedTaskId);
+        setLoadedTaskIds((current) => {
+          if (current.has(selectedTaskId)) return current;
+          const next = new Set(current);
+          next.add(selectedTaskId);
+          return next;
+        });
         setLoadState({ taskId: selectedTaskId, loading: false, error: "" });
       } catch (caught) {
         if (!active) return;
@@ -58,13 +63,13 @@ export function useTaskDetailDataLoader({
     return () => {
       active = false;
     };
-  }, [apiClient, applyPlanningDataUpdate, selectedTaskId, source, startTransition]);
+  }, [apiClient, applyPlanningDataUpdate, loadedTaskIds, selectedTaskId, source, startTransition]);
 
   const selectedStateMatches = loadState.taskId === selectedTaskId;
   const selectedTaskNeedsLoad = Boolean(
     selectedTaskId
     && source === "supabase"
-    && !loadedTaskIdsRef.current.has(selectedTaskId),
+    && !loadedTaskIds.has(selectedTaskId),
   );
 
   return {
