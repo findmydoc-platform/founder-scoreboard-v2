@@ -202,6 +202,7 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
         commentId: comment.id,
         authorLogin: profile.github_login,
         body: await resolveGitHubCommentBody(comment.comment),
+        legacyBodies: [comment.comment],
       });
       if (existing) preview.existing += 1;
       else preview.missing += 1;
@@ -292,6 +293,7 @@ export async function deliverPendingGitHubComments({
         commentId: comment.id,
         authorLogin: profile.github_login,
         body: githubCommentBody,
+        legacyBodies: [comment.comment],
       });
 
       if (existing) {

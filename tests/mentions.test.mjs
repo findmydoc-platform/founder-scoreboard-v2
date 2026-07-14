@@ -61,10 +61,41 @@ test("preserves mentions inside Markdown code, links, autolinks, and URLs", () =
   );
 });
 
+test("does not notify profiles mentioned inside Markdown code, links, autolinks, or URLs", () => {
+  const comment = [
+    "Normal @volkan",
+    "`@sebastian`",
+    "```text",
+    "@sebastian",
+    "```",
+    "[@sebastian](https://example.test/@sebastian)",
+    "[@sebastian][profile]",
+    "<https://example.test/@sebastian>",
+    "https://example.test/@sebastian",
+  ].join("\n");
+
+  assert.deepEqual(
+    mentionedProfileIds(comment, profiles),
+    ["volkan"],
+  );
+});
+
 test("keeps app notification matching aligned with canonical GitHub logins", () => {
   assert.deepEqual(
     mentionedProfileIds("Ping @SebastianSchuetze", profiles, "volkan"),
     ["sebastian"],
+  );
+});
+
+test("preserves hyphens when matching exact GitHub logins", () => {
+  const distinctProfiles = [
+    { id: "hyphenated", name: "Hyphenated", githubLogin: "foo-bar" },
+    { id: "plain", name: "Plain", githubLogin: "foobar" },
+  ];
+
+  assert.deepEqual(
+    mentionedProfileIds("Ping @foo-bar and @foobar", distinctProfiles),
+    ["hyphenated", "plain"],
   );
 });
 

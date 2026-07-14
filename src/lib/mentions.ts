@@ -12,12 +12,17 @@ function mentionKey(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function githubLoginKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
 function resolveMentionProfile(token: string, profiles: MentionProfile[]) {
   const tokenKey = mentionKey(token);
+  const tokenGitHubLoginKey = githubLoginKey(token);
   const exactGitHubLoginMatches = profiles.filter((profile) => (
     profile.id
     && profile.githubLogin
-    && mentionKey(profile.githubLogin) === tokenKey
+    && githubLoginKey(profile.githubLogin) === tokenGitHubLoginKey
   ));
   if (exactGitHubLoginMatches.length === 1) return exactGitHubLoginMatches[0];
   if (exactGitHubLoginMatches.length > 1) return null;
@@ -34,7 +39,14 @@ function resolveMentionProfile(token: string, profiles: MentionProfile[]) {
 }
 
 export function mentionedProfileIds(comment: string, profiles: MentionProfile[], actorProfileId = "") {
-  const tokens = new Set([...comment.matchAll(/@([\p{L}\p{N}._-]{2,40})/gu)].map((match) => mentionKey(match[1] || "")));
+  const tokens = new Set<string>();
+  mapMarkdownText(comment, (segment) => {
+    for (const match of segment.matchAll(/@([\p{L}\p{N}._-]{2,40})/gu)) {
+      const token = githubLoginKey(match[1] || "");
+      if (token) tokens.add(token);
+    }
+    return segment;
+  });
   if (!tokens.size) return [];
 
   const matches = new Set<string>();

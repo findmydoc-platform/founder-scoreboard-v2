@@ -23,15 +23,18 @@ function normalizedCommentBody(value: string) {
 
 export function findExistingGitHubComment(
   comments: GitHubCommentCandidate[],
-  input: { commentId: number; authorLogin: string; body: string },
+  input: { commentId: number; authorLogin: string; body: string; legacyBodies?: string[] },
 ) {
   const marked = comments.find((comment) => hasGitHubCommentMarker(comment.body || "", input.commentId));
   if (marked) return { comment: marked, reason: "marker_reconciled" as const };
 
+  const acceptedLegacyBodies = new Set(
+    [input.body, ...(input.legacyBodies || [])].map(normalizedCommentBody),
+  );
   const legacy = comments.find((comment) => (
     !hasAnyGitHubCommentMarker(comment.body || "")
     && (comment.user?.login || "").toLowerCase() === input.authorLogin.toLowerCase()
-    && normalizedCommentBody(comment.body || "") === normalizedCommentBody(input.body)
+    && acceptedLegacyBodies.has(normalizedCommentBody(comment.body || ""))
   ));
   return legacy ? { comment: legacy, reason: "legacy_content_reconciled" as const } : null;
 }

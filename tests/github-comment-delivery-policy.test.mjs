@@ -35,6 +35,25 @@ test("legacy comment reconciliation requires issue-local exact author and conten
   assert.equal(existing?.reason, "legacy_content_reconciled");
 });
 
+test("legacy reconciliation accepts the pre-canonicalized body after a lost success response", () => {
+  const existing = policy.findExistingGitHubComment([
+    {
+      id: 4,
+      body: "Ping @sebastian",
+      html_url: "four",
+      user: { login: "original-author" },
+    },
+  ], {
+    commentId: 100,
+    authorLogin: "original-author",
+    body: "Ping @SebastianSchuetze",
+    legacyBodies: ["Ping @sebastian"],
+  });
+
+  assert.equal(existing?.comment.id, 4);
+  assert.equal(existing?.reason, "legacy_content_reconciled");
+});
+
 test("legacy reconciliation never reuses a comment carrying another FounderOps marker", () => {
   const existing = policy.findExistingGitHubComment([
     {
