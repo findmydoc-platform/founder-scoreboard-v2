@@ -109,7 +109,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning derived state",
       source: derivedState,
-      matches: [/usePlanningHeaderPrimaryAction/, /usePlanningTaskViewModel/],
+      matches: [/usePlanningHeaderActions/, /usePlanningTaskViewModel/],
     },
     {
       label: "planning command registry",
@@ -117,6 +117,7 @@ test("planning app controller delegates command domains and stays a thin compose
       matches: [
         /useTaskMutationCommands/,
         /useTaskCollaborationCommands/,
+        /useMilestoneCommands/,
         /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,

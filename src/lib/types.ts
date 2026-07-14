@@ -1,3 +1,5 @@
+import type { MilestoneDto } from "@/features/projects/model/milestone-contract";
+
 export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
@@ -72,14 +74,7 @@ export type Package = {
   trashRevision?: number;
 };
 
-export type Milestone = {
-  id: string;
-  title: string;
-  description: string;
-  targetDate: string;
-  status: "planned" | "active" | "done";
-  sortOrder: number;
-};
+export type Milestone = MilestoneDto;
 
 export type Task = {
   id: string;

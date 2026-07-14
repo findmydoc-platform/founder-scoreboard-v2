@@ -2,6 +2,8 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { ApprovalDecisionAction, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { MilestoneDeleteRequest, MilestoneNotEmptyError, MilestoneResponse } from "@/features/projects/model/milestone-contract";
+import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
@@ -30,6 +32,24 @@ export function saveInitiativeRequest(apiClient: BrowserApiClient, draft: { id?:
     method: draft.id ? "PATCH" : "POST",
     json: draft,
   });
+}
+
+export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: MilestoneDraft) {
+  const { id, expectedUpdatedAt, ...fields } = draft;
+  return apiClient.requestJson<MilestoneResponse | MilestoneNotEmptyError | { error?: string; code?: string }>(
+    id ? `/api/milestones/${encodeURIComponent(id)}` : "/api/milestones",
+    {
+      method: id ? "PATCH" : "POST",
+      json: id ? { ...fields, expectedUpdatedAt } : fields,
+    },
+  );
+}
+
+export function deleteMilestoneRequest(apiClient: BrowserApiClient, milestoneId: string, payload: MilestoneDeleteRequest) {
+  return apiClient.requestJson<MilestoneResponse | MilestoneNotEmptyError | { error?: string; code?: string }>(
+    `/api/milestones/${encodeURIComponent(milestoneId)}`,
+    { method: "DELETE", json: payload },
+  );
 }
 
 export function decideInitiativeApprovalRequest(apiClient: BrowserApiClient, initiativeId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {

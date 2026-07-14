@@ -4,8 +4,10 @@ import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-m
 import type { getServerSupabase } from "@/lib/supabase";
 import { defaultGitHubRepository, resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import {
+  FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
   TEAM_PLANNING_ITEM_CREATE_FIELDS,
+  TEAM_PLANNING_MILESTONE_STATUSES,
   TEAM_PLANNING_ITEM_TYPES,
   type TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
@@ -44,6 +46,8 @@ export type PlanningItemCreateInput = {
   deadline?: unknown;
   hours?: unknown;
   githubRepo?: unknown;
+  targetDate?: unknown;
+  status?: unknown;
 };
 
 export type PlanningItemCreatePreviewItem = {
@@ -51,35 +55,43 @@ export type PlanningItemCreatePreviewItem = {
   itemType: TeamPlanningItemType;
   title: string;
   description: string;
-  problemStatement: string;
-  intendedOutcome: string;
-  scopeConstraints: string;
-  acceptanceCriteria: string;
-  evidenceRequired: string;
-  definitionOfDone: string;
-  parentTaskId: string;
-  packageId: string;
-  milestoneId: string;
-  ownerId: string;
-  accountableProfileId: string;
-  responsibleProfileIds: string[];
-  consultedProfileIds: string[];
-  informedProfileIds: string[];
-  priority: string;
-  workstream: string;
-  startDate: string;
-  endDate: string;
-  deadline: string;
-  hours: number;
-  githubRepo: string;
+  problemStatement?: string;
+  intendedOutcome?: string;
+  scopeConstraints?: string;
+  acceptanceCriteria?: string;
+  evidenceRequired?: string;
+  definitionOfDone?: string;
+  parentTaskId?: string;
+  packageId?: string;
+  milestoneId?: string;
+  ownerId?: string;
+  accountableProfileId?: string;
+  responsibleProfileIds?: string[];
+  consultedProfileIds?: string[];
+  informedProfileIds?: string[];
+  priority?: string;
+  workstream?: string;
+  startDate?: string;
+  endDate?: string;
+  deadline?: string;
+  hours?: number;
+  githubRepo?: string;
+  targetDate?: string;
+  status?: string;
   approvalStatus: "proposed" | null;
-  scoreRelevant: false;
+  scoreRelevant?: false;
   errors: string[];
   warnings: string[];
 };
 
 const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
 const inputKeys = new Set<string>(TEAM_PLANNING_ITEM_CREATE_FIELDS);
+const milestoneStatuses = new Set<string>(TEAM_PLANNING_MILESTONE_STATUSES);
+const milestoneCreateFields = new Set(["itemType", "title", "description", "targetDate", "status"]);
+
+export function planningItemCreateRequiresOperationalLead(items: PlanningItemCreateInput[]) {
+  return items.some((item) => intakeText(item.itemType, 40) === "milestone");
+}
 
 export function parsePlanningItemCreatePayload(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -112,7 +124,7 @@ export async function buildPlanningItemCreatePreview(
   const [profilesResult, initiativesResult, milestonesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,milestone_id,approval_status"),
-    supabase.from("milestones").select("id"),
+    supabase.from("milestones").select("id").eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
     supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type,package_id,milestone_id,approval_status"),
   ]);
   if (profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error) {
@@ -132,7 +144,7 @@ export async function buildPlanningItemCreatePreview(
       ? requestedType as TeamPlanningItemType
       : "deliverable";
     if (!itemTypes.has(requestedType as TeamPlanningItemType)) {
-      errors.push("itemType muss initiative, deliverable oder sub_issue sein.");
+      errors.push("itemType muss milestone, initiative, deliverable oder sub_issue sein.");
     }
 
     const title = intakeText(raw.title, 240);
@@ -144,6 +156,17 @@ export async function buildPlanningItemCreatePreview(
 
     if (itemType === "initiative" && !["ceo", "deputy"].includes(actor.platformRole)) {
       errors.push("Nur CEO oder Deputy können Initiativen vorschlagen.");
+    }
+    if (itemType === "milestone" && !["ceo", "deputy"].includes(actor.platformRole)) {
+      errors.push("Nur CEO oder Deputy können Meilensteine anlegen.");
+    }
+    if (itemType === "milestone") {
+      for (const field of Object.keys(raw)) {
+        if (!milestoneCreateFields.has(field)) errors.push(`${field} ist für milestone nicht zulässig.`);
+      }
+    } else {
+      if (raw.targetDate !== undefined) errors.push(`targetDate ist für ${itemType} nicht zulässig.`);
+      if (raw.status !== undefined) errors.push(`status ist für ${itemType} nicht zulässig.`);
     }
     if (itemType === "initiative" && (!milestoneId || !milestoneIds.has(milestoneId))) {
       errors.push("Initiative braucht einen gültigen Meilenstein.");
@@ -158,6 +181,29 @@ export async function buildPlanningItemCreatePreview(
       if (!parent || parent.task_type !== "deliverable") errors.push("Sub-Issue braucht ein gültiges Parent-Deliverable.");
       packageId = parent?.package_id || "";
       milestoneId = parent?.milestone_id || "";
+    }
+
+    const targetDate = intakeDate(raw.targetDate);
+    if (raw.targetDate !== undefined && raw.targetDate !== null && intakeText(raw.targetDate, 20) && !targetDate) {
+      errors.push("targetDate muss ein gültiges Datum im Format YYYY-MM-DD sein.");
+    }
+    const requestedStatus = intakeText(raw.status, 40);
+    const status = requestedStatus || "planned";
+    if (itemType === "milestone" && !milestoneStatuses.has(status)) {
+      errors.push("status muss planned, active oder done sein.");
+    }
+    if (itemType === "milestone") {
+      return {
+        clientId: `planning-items-create-${index + 1}`,
+        itemType,
+        title,
+        description: intakeText(raw.description, 4_000),
+        targetDate,
+        status,
+        approvalStatus: null,
+        errors,
+        warnings,
+      };
     }
 
     const ownerId = intakeText(raw.ownerId, 120) || (itemType === "sub_issue" ? actor.id : "");
@@ -183,7 +229,6 @@ export async function buildPlanningItemCreatePreview(
     if (startDate && endDate && startDate > endDate) {
       errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
     }
-
     return {
       clientId: `planning-items-create-${index + 1}`,
       itemType,

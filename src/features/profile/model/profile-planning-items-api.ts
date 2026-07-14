@@ -5,6 +5,9 @@ type TokenListResponse = {
   ok?: boolean;
   error?: string;
   tokens?: TeamPlanningItemTokenRecord[];
+  capabilities?: {
+    canIssueEmptyMilestoneDeletes?: boolean;
+  };
 };
 
 type TokenCreateResponse = {
@@ -20,10 +23,15 @@ export function loadPlanningItemsTokens(apiClient: BrowserApiClient) {
   return apiClient.requestJson<TokenListResponse>(tokensEndpoint);
 }
 
-export function createPlanningItemsToken(apiClient: BrowserApiClient, label: string, allowUpdates: boolean) {
+export function createPlanningItemsToken(
+  apiClient: BrowserApiClient,
+  label: string,
+  allowUpdates: boolean,
+  allowEmptyMilestoneDeletes: boolean,
+) {
   return apiClient.requestJson<TokenCreateResponse>(tokensEndpoint, {
     method: "POST",
-    json: { label, allowUpdates },
+    json: { label, allowUpdates, allowEmptyMilestoneDeletes },
   });
 }
 

@@ -59,6 +59,20 @@ export function ProfilePlanningItemsTokens({
                   onChange={tokens.setAllowUpdates}
                 />
               </div>
+              {tokens.canIssueEmptyMilestoneDeletes && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">Leere Meilensteine löschen</div>
+                    <div className="text-xs leading-5 text-slate-500">Erlaubt nur das Löschen eines Meilensteins ohne zugeordnete Initiativen oder Aufgaben.</div>
+                  </div>
+                  <ToggleSwitch
+                    checked={tokens.allowEmptyMilestoneDeletes}
+                    disabled={tokens.pending || tokens.activeTokenCount >= TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS}
+                    label="Leere Meilensteine löschen"
+                    onChange={tokens.setAllowEmptyMilestoneDeletes}
+                  />
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-slate-500">{tokens.activeTokenCount} von {TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS} aktiven Tokens</span>
                 <UiButton onClick={tokens.createToken} disabled={!tokens.canCreate} variant="primary">
@@ -93,7 +107,7 @@ export function ProfilePlanningItemsTokens({
 
           <SettingsRow
             label="Persönliche Tokens"
-            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen oder aktualisieren darf."
+            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen, aktualisieren oder leere Meilensteine löschen darf."
             align="start"
           >
             <div className="grid min-w-0 gap-2 text-left md:min-w-[32rem]">

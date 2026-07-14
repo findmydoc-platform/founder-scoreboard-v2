@@ -6,15 +6,17 @@ await loadLocalEnv();
 
 const password = process.env.SUPABASE_DB_PASSWORD;
 const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const port = Number(process.env.SUPABASE_DB_PORT || 5432);
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
+const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
 
 if (!password) {
   console.error("Missing SUPABASE_DB_PASSWORD.");
   process.exit(1);
 }
 
-const client = new pg.Client({ host, port: 5432, user, password, database, ssl: { rejectUnauthorized: false } });
+const client = new pg.Client({ host, port, user, password, database, ssl });
 
 function hash(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -72,7 +74,7 @@ try {
   if (created?.replayed !== false || !taskId) throw new Error("Planning Items create was not committed atomically.");
 
   const persisted = await client.query(
-    "select title, updated_at, task_type, approval_status, sprint_id, score_relevant from public.tasks where id = $1",
+    "select title, updated_at::text as updated_at, task_type, approval_status, sprint_id, score_relevant from public.tasks where id = $1",
     [taskId],
   );
   const task = persisted.rows[0];

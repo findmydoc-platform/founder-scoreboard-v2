@@ -5,7 +5,7 @@ import { taskRowSelect, type DbMilestone, type DbPackage, type DbTask } from "@/
 import type { Milestone, Package, Profile, Task, TrashCause, TrashRootType } from "@/lib/types";
 
 const packageDetailSelect = "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,trashed_at,trashed_by,trash_reason,trash_cause,purge_after,trash_root_type,trash_root_id,trash_revision";
-const milestoneDetailSelect = "id,title,description,target_date,status,sort_order";
+const milestoneDetailSelect = "id,title,description,target_date,status,sort_order,updated_at";
 
 type DetailLoadError = { ok: false; status: 404 | 500; error: string };
 

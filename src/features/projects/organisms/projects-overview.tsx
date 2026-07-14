@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -10,15 +10,17 @@ import { PlanningTrashActionDialog } from "@/features/planning/molecules/plannin
 import { canDecideInitiativeApproval, canReturnInitiativeForRevision, isProposedDeliverable } from "@/features/planning/model/approval-domain";
 import { canWithdrawPlanningRoot, isWithdrawableApprovalStatus } from "@/features/planning/model/planning-trash-contract";
 import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRiskFilter, type ProjectsSort, type ProjectsTableFilters } from "@/features/projects/model/projects-filter-view-model";
+import type { MilestoneChildCounts } from "@/features/projects/model/milestone-contract";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { ApprovalDecisionAction, Package, PlanningData, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, Milestone, Package, PlanningData, Profile, Task } from "@/lib/types";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
+import { CustomActionMenu } from "@/shared/molecules/custom-action-menu";
 import { dateUrlField, enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
 
 const projectsFilterSchema: TableUrlSchema<ProjectsTableFilters> = {
@@ -35,14 +37,24 @@ const projectsFilterSchema: TableUrlSchema<ProjectsTableFilters> = {
   direction: enumUrlField("asc", ["asc", "desc"] as const),
 };
 
+const milestoneStatusMeta = {
+  planned: { label: "Geplant", tone: "slate" as const },
+  active: { label: "Aktiv", tone: "blue" as const },
+  done: { label: "Erledigt", tone: "emerald" as const },
+};
+
 export function ProjectsOverview({
   data,
   tasks,
   currentProfile,
   source,
   canManageInitiatives,
+  canManageMilestones,
   pending,
+  onCreateMilestone,
+  onDeleteMilestone,
   onEditInitiative,
+  onEditMilestone,
   onOpenTask,
   onDecideInitiative,
   onWithdrawInitiative,
@@ -52,8 +64,12 @@ export function ProjectsOverview({
   currentProfile?: Profile | null;
   source: "seed" | "supabase";
   canManageInitiatives: boolean;
+  canManageMilestones: boolean;
   pending: boolean;
+  onCreateMilestone: () => void;
+  onDeleteMilestone: (milestone: Milestone, children: MilestoneChildCounts) => void;
   onEditInitiative: (initiative: Package) => void;
+  onEditMilestone: (milestone: Milestone) => void;
   onOpenTask: (taskId: string) => void;
   onDecideInitiative: (initiative: Package, action: ApprovalDecisionAction, note?: string) => void;
   onWithdrawInitiative: (initiative: Package, reason: string) => void;
@@ -87,6 +103,23 @@ export function ProjectsOverview({
   const riskOptions = (Object.keys(riskLabels) as ProjectsRiskFilter[]).map((value) => ({ value, label: riskLabels[value] }));
   const pendingInitiatives = data.packages.filter((initiative) => isWithdrawableApprovalStatus(initiative.approvalStatus));
   const proposedDeliverables = tasks.filter(isProposedDeliverable);
+
+  useEffect(() => {
+    const milestoneIds = new Set(data.milestones.map((milestone) => milestone.id));
+    const hasOrphans = data.packages.some((initiative) => !initiative.milestoneId || !milestoneIds.has(initiative.milestoneId));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setOpenMilestoneIds((current) => {
+        const next = new Set(Array.from(current).filter((id) => milestoneIds.has(id) || id === "without-epic" && hasOrphans));
+        return next.size === current.size && Array.from(next).every((id) => current.has(id)) ? current : next;
+      });
+      if (filters.milestone !== "Alle" && !milestoneIds.has(filters.milestone)) {
+        updateFilters({ milestone: "Alle" }, "replace");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [data.milestones, data.packages, filters.milestone, updateFilters]);
 
   return (
     <div className="grid gap-4">
@@ -168,34 +201,64 @@ export function ProjectsOverview({
           const isMilestoneOpen = filtersActive || openMilestoneIds.has(milestoneKey);
           const blocked = milestoneTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
           const effort = milestoneTasks.reduce((sum, task) => sum + task.hours, 0);
+          const contentId = `milestone-content-${milestoneKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+          const childCounts = {
+            initiatives: data.packages.filter((initiative) => initiative.milestoneId === milestone.id).length,
+            tasks: tasks.filter((task) => task.milestoneId === milestone.id).length,
+          };
+          const statusMeta = milestoneStatusMeta[milestone.status];
 
           return (
             <UiPanel key={milestoneKey} as="article" padding="none" className="overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setOpenMilestoneIds((current) => toggleSetValue(current, milestoneKey))}
-                className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left hover:bg-slate-50"
-                aria-expanded={isMilestoneOpen}
-              >
-                <span className="flex min-w-0 gap-3">
-                  <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500">
-                    {isMilestoneOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+              <div className="flex items-start border-b border-transparent">
+                <button
+                  type="button"
+                  onClick={() => setOpenMilestoneIds((current) => toggleSetValue(current, milestoneKey))}
+                  className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-4 text-left hover:bg-slate-50 sm:flex-row sm:items-start sm:justify-between"
+                  aria-expanded={isMilestoneOpen}
+                  aria-controls={contentId}
+                >
+                  <span className="flex min-w-0 gap-3">
+                    <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500">
+                      {isMilestoneOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Epic / Meilenstein</span>
+                      <span className="mt-1 block truncate text-base font-semibold text-slate-950">{milestone.title}</span>
+                      <span className="mt-1 block text-sm leading-6 text-slate-600">{milestone.description}</span>
+                      <span className="mt-2 flex flex-wrap items-center gap-2">
+                        <UiBadge size="xs" tone={statusMeta.tone}>{statusMeta.label}</UiBadge>
+                        <span className="text-xs font-medium text-slate-500">
+                          Zieltermin: {milestone.targetDate ? formatDate(milestone.targetDate) : "nicht gesetzt"}
+                        </span>
+                      </span>
+                    </span>
                   </span>
-                  <span className="min-w-0">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Epic / Meilenstein</span>
-                    <span className="mt-1 block truncate text-base font-semibold text-slate-950">{milestone.title}</span>
-                    <span className="mt-1 block text-sm leading-6 text-slate-600">{milestone.description}</span>
+                  <span className="grid w-full shrink-0 grid-cols-2 gap-3 text-left text-xs text-slate-500 sm:w-auto sm:grid-cols-4 sm:text-right">
+                    <span><span className="block font-semibold text-slate-900">{groups.length}</span> Initiativen</span>
+                    <span><span className="block font-semibold text-slate-900">{milestoneTasks.length}</span> Deliverables</span>
+                    <span><span className="block font-semibold text-slate-900">{blocked}</span> Blockiert</span>
+                    <span><span className="block font-semibold text-slate-900">{effort}h</span> Aufwand</span>
                   </span>
-                </span>
-                <span className="grid shrink-0 grid-cols-4 gap-3 text-right text-xs text-slate-500">
-                  <span><span className="block font-semibold text-slate-900">{groups.length}</span> Initiativen</span>
-                  <span><span className="block font-semibold text-slate-900">{milestoneTasks.length}</span> Deliverables</span>
-                  <span><span className="block font-semibold text-slate-900">{blocked}</span> Blockiert</span>
-                  <span><span className="block font-semibold text-slate-900">{effort}h</span> Aufwand</span>
-                </span>
-              </button>
+                </button>
+                {milestone.id && canManageMilestones && (
+                  <div className="shrink-0 px-3 py-4">
+                    <CustomActionMenu
+                      label={`Aktionen für ${milestone.title}`}
+                      triggerAriaLabel={`Aktionen für Meilenstein ${milestone.title}`}
+                      groups={[{
+                        id: "milestone-actions",
+                        items: [
+                          { id: "edit", label: "Bearbeiten", icon: <Pencil size={15} aria-hidden="true" />, onSelect: () => onEditMilestone(milestone) },
+                          { id: "delete", label: "Löschen", tone: "danger", icon: <Trash2 size={15} aria-hidden="true" />, onSelect: () => onDeleteMilestone(milestone, childCounts) },
+                        ],
+                      }]}
+                    />
+                  </div>
+                )}
+              </div>
               {isMilestoneOpen && (
-                <div className="grid gap-3 border-t border-slate-100 bg-slate-50 p-3">
+                <div id={contentId} className="grid gap-3 border-t border-slate-100 bg-slate-50 p-3">
                   {groups.map(({ initiative: pack, tasks: initiativeTasks }) => (
                     <InitiativeTreeItem
                       key={pack.id}
@@ -227,7 +290,14 @@ export function ProjectsOverview({
         })}
         {!filterViewModel.hierarchy.length && (
           <UiEmptyState>
-            {filterViewModel.totalCount ? "Keine Meilensteine, Initiativen oder Deliverables für diese Filter." : "Noch keine Meilensteine, Initiativen oder Deliverables vorhanden."}
+            {filterViewModel.totalCount ? (
+              "Keine Meilensteine, Initiativen oder Deliverables für diese Filter."
+            ) : (
+              <span className="grid justify-items-center gap-3">
+                <span>Noch keine Meilensteine vorhanden.</span>
+                {canManageMilestones && <UiButton variant="primary" onClick={onCreateMilestone}>Ersten Meilenstein anlegen</UiButton>}
+              </span>
+            )}
           </UiEmptyState>
         )}
       </section>

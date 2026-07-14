@@ -26,7 +26,7 @@ async function health() {
 async function pageSmoke() {
   const response = await fetch(appUrl, { cache: "no-store" });
   const html = await response.text();
-  const markers = ["Founder Planning", "Sprint &amp; Score", "Weekly Updates", "Board"];
+  const markers = ["Planung", "Backlog", "Reviews", "Sprint &amp; Score", "Meilensteine"];
   const authGateEnabled = process.env.REQUIRE_SUPABASE_AUTH === "true";
   const markerResults = Object.fromEntries(markers.map((marker) => [marker, html.includes(marker)]));
 

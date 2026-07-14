@@ -146,6 +146,7 @@ export function mapMilestone(row: DbMilestone): Milestone {
     targetDate: row.target_date || "",
     status: row.status,
     sortOrder: row.sort_order,
+    updatedAt: row.updated_at || "",
   };
 }
 

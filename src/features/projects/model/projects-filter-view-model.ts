@@ -57,6 +57,7 @@ const withoutEpic: Milestone = {
   targetDate: "",
   status: "planned",
   sortOrder: 999,
+  updatedAt: "",
 };
 
 function includesQuery(values: Array<string | undefined>, query: string) {
@@ -72,7 +73,10 @@ export function buildProjectsFilterViewModel({
   tasks: Task[];
   filters: ProjectsTableFilters;
 }): ProjectsFilterViewModel {
-  const milestones = data.milestones.length ? data.milestones : [withoutEpic];
+  const milestoneIds = new Set(data.milestones.map((milestone) => milestone.id));
+  const isOrphanInitiative = (initiative: Package) => !initiative.milestoneId || !milestoneIds.has(initiative.milestoneId);
+  const hasOrphanInitiatives = data.packages.some(isOrphanInitiative);
+  const milestones = hasOrphanInitiatives ? [...data.milestones, withoutEpic] : data.milestones;
   const deliverables = tasks.filter((task) => task.taskType !== "sub_issue");
   const normalizedQuery = filters.query.trim().toLocaleLowerCase("de");
   const filtersActive = Object.entries(filters).some(([key, value]) => key !== "sort" && key !== "direction" && value !== DEFAULT_PROJECTS_FILTERS[key as keyof ProjectsTableFilters]);
@@ -81,7 +85,9 @@ export function buildProjectsFilterViewModel({
 
   const filteredTasks = deliverables.filter((task) => {
     const initiative = data.packages.find((pack) => pack.id === task.packageId);
-    const milestone = milestones.find((item) => item.id === (initiative?.milestoneId || ""));
+    const milestone = initiative
+      ? data.milestones.find((item) => item.id === initiative.milestoneId) || withoutEpic
+      : undefined;
     const queryMatches = includesQuery([
       task.title,
       task.description,
@@ -121,7 +127,7 @@ export function buildProjectsFilterViewModel({
   const hierarchy = milestones.flatMap((milestone) => {
     const milestoneQueryMatches = includesQuery([milestone.title, milestone.description], normalizedQuery);
     const initiatives = data.packages
-      .filter((initiative) => milestone.id ? initiative.milestoneId === milestone.id : !initiative.milestoneId)
+      .filter((initiative) => milestone.id ? initiative.milestoneId === milestone.id : isOrphanInitiative(initiative))
       .flatMap((initiative) => {
         const initiativeTasks = filteredTasks.filter((task) => task.packageId === initiative.id);
         const hierarchyQueryMatches = includesQuery([

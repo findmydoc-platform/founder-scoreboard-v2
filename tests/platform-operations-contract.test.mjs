@@ -390,7 +390,11 @@ test("health is slim while verification scripts detect operational migrations", 
   assert.match(schemaChecks, /notification_events\.dedupe_key/);
   assert.match(verify, /pnpm run db:reset/);
   assert.match(verify, /notificationDeliveries/);
-  assert.match(operational, /Founder Planning/);
+  assert.match(operational, /Planung/);
+  assert.match(operational, /Backlog/);
+  assert.match(operational, /Reviews/);
+  assert.match(operational, /Sprint &amp; Score/);
+  assert.match(operational, /Meilensteine/);
   assert.match(operational, /githubMappedProfiles/);
   assert.match(operational, /googleChatConfigured/);
   assert.match(operational, /googleChatDeliveryEnabled/);
@@ -686,7 +690,7 @@ test("header actions are workspace aware", async () => {
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const model = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
 
-  assert.match(ui, /type HeaderPrimaryAction/);
+  assert.match(ui, /type HeaderAction/);
   assert.match(ui, /filtersAvailable = planningWorkspaces\.includes\(workspace\)/);
   assert.match(header, /description: string/);
   assert.doesNotMatch(header, /subtitle/);
@@ -698,6 +702,8 @@ test("header actions are workspace aware", async () => {
   assert.doesNotMatch(model, /workspaceSubtitles/);
   assert.match(ui, /label: "Neue Aufgabe"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
+  assert.match(ui, /label: "Neuer Meilenstein"/);
+  assert.match(ui, /label: "Neue Initiative"/);
   assert.match(ui, /data-tour-id="planning-task-scope"/);
   assert.doesNotMatch(ui, /label: "Neue Decision"|decision-create/);
   assert.doesNotMatch(ui, /planningWorkspaces\.includes\(workspace\) \? "" : "hidden"/);

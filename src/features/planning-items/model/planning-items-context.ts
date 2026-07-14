@@ -2,6 +2,7 @@ import { normalizeStatus } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import {
+  FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_TYPES,
   TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES,
   TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
@@ -89,7 +90,13 @@ export function relationStatsByTask(rows: Array<{ task_id: string; related_task_
 export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
   const [profiles, milestones, initiatives, sprints, tasks, blockers, relations, comments, externalComments] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
-    loadAllSupabaseRows((from, to) => supabase.from("milestones").select("id,title,status,target_date,sort_order").order("sort_order").order("id").range(from, to)),
+    loadAllSupabaseRows((from, to) => supabase
+      .from("milestones")
+      .select("id,title,description,status,target_date,sort_order,updated_at")
+      .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
+      .order("sort_order")
+      .order("id")
+      .range(from, to)),
     loadAllSupabaseRows<PlanningItemsContextInitiativeRow>((from, to) => supabase.from(ACTIVE_PACKAGES_TABLE).select(PLANNING_ITEMS_CONTEXT_INITIATIVE_SELECT).order("sort_order").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
@@ -112,7 +119,9 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
   return {
     actor: { id: actor.id, name: actor.name, platformRole: actor.platformRole },
     constraints: {
-      allowedItemTypes: TEAM_PLANNING_ITEM_TYPES,
+      allowedItemTypes: ["ceo", "deputy"].includes(actor.platformRole)
+        ? TEAM_PLANNING_ITEM_TYPES
+        : TEAM_PLANNING_ITEM_TYPES.filter((itemType) => itemType !== "milestone"),
       maxBatchSize: TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
       forbiddenWrites: TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES,
       subIssuePolicy: "any-deliverable",
@@ -121,8 +130,11 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     milestones: milestones.map((milestone) => ({
       id: milestone.id,
       title: milestone.title,
+      description: milestone.description || "",
       status: milestone.status,
       targetDate: milestone.target_date || "",
+      sortOrder: milestone.sort_order || 0,
+      updatedAt: milestone.updated_at || "",
     })),
     initiatives: initiatives.map(mapPlanningItemsContextInitiative),
     sprints: sprints.map((sprint) => ({

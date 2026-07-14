@@ -2,13 +2,16 @@ export const TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE = 30;
 export const TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS = 3;
 export const TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT = 20;
 export const TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS = 90;
+export const FOUNDEROPS_PLANNING_PROJECT_ID = "findmydoc-founder-execution";
 
-export const TEAM_PLANNING_ITEM_TYPES = ["initiative", "deliverable", "sub_issue"] as const;
+export const TEAM_PLANNING_ITEM_TYPES = ["milestone", "initiative", "deliverable", "sub_issue"] as const;
 export const TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES = ["deliverable", "sub_issue"] as const;
+export const TEAM_PLANNING_MILESTONE_STATUSES = ["planned", "active", "done"] as const;
 export const TEAM_PLANNING_ITEM_SCOPES = [
   "read:planning-context",
   "write:planning-items:create",
   "write:planning-items:update",
+  "write:planning-items:delete-empty",
 ] as const;
 export const TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES = [
   "approval",
@@ -41,7 +44,8 @@ export const PLANNING_ITEM_FIELD_RULES = {
   consultedProfileIds: { kind: "string-array", maxLength: 120 },
   informedProfileIds: { kind: "string-array", maxLength: 120 },
   priority: { kind: "enum", values: ["P0", "P1", "P2", "P3", "P4"] },
-  status: { kind: "string", maxLength: 40 },
+  status: { kind: "enum", values: TEAM_PLANNING_MILESTONE_STATUSES },
+  targetDate: { kind: "date" },
   workstream: { kind: "string", maxLength: 120 },
   startDate: { kind: "date" },
   endDate: { kind: "date" },
@@ -75,6 +79,8 @@ export const TEAM_PLANNING_ITEM_CREATE_FIELDS = [
   "deadline",
   "hours",
   "githubRepo",
+  "targetDate",
+  "status",
 ] as const;
 
 export const TEAM_PLANNING_ITEM_PATCH_FIELDS = TEAM_PLANNING_ITEM_CREATE_FIELDS.filter(

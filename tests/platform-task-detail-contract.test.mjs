@@ -54,10 +54,12 @@ test("task detail loading avoids server waterfalls and defers inactive client fe
 
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/planning\/organisms\/status-guard-dialog"\)/);
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/projects\/organisms\/initiative-dialog"\)/);
+  assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/projects\/organisms\/milestone-dialog"\)/);
+  assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/projects\/organisms\/milestone-delete-dialog"\)/);
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/tasks\/organisms\/new-task-dialog"\)/);
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/tasks\/organisms\/task-detail-panel"\)/);
   assert.doesNotMatch(overlays, /^import \{ (?:StatusGuardDialog|InitiativeDialog|NewTaskDialog|TaskDetailPanel) \}/m);
-  assert.equal((overlays.match(/loading: \(\) => <OverlayLoadingFallback/g) || []).length, 4);
+  assert.equal((overlays.match(/loading: \(\) => <OverlayLoadingFallback/g) || []).length, 6);
   assert.match(overlays, /role="status"/);
   assert.match(overlays, /aria-live="polite"/);
   assert.match(overlays, /Aufgabendetails werden geladen …/);

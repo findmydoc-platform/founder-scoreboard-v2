@@ -7,6 +7,7 @@ import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
+import { canManageMilestones } from "@/features/projects/model/milestone-policy";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -69,6 +70,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
+    setMilestoneDeleteTarget,
+    setMilestoneDialogDefaults,
     setTaskDialogDefaults,
     setSprintPlanningOptions,
     sprintLockMessage,
@@ -89,6 +92,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
+  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole, source);
   const canManageNotificationsOutbox = source === "seed" || !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
@@ -123,7 +127,18 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           currentProfile={currentProfile}
           source={source}
           canManageInitiatives={canManageTaskMeta}
+          canManageMilestones={canManageProjectMilestones}
           pending={isPending}
+          onCreateMilestone={() => setMilestoneDialogDefaults({})}
+          onEditMilestone={(milestone) => setMilestoneDialogDefaults({
+            id: milestone.id,
+            title: milestone.title,
+            description: milestone.description,
+            targetDate: milestone.targetDate,
+            status: milestone.status,
+            expectedUpdatedAt: milestone.updatedAt,
+          })}
+          onDeleteMilestone={(milestone, children) => setMilestoneDeleteTarget({ milestone, children })}
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onWithdrawInitiative={withdrawInitiative}

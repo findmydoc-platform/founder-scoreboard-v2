@@ -55,7 +55,7 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
     supabase.from("projects").select("id,name,range_label").eq("id", founderProjectId).single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
     shouldLoad(scope, "packages") ? supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,trashed_at,trashed_by,trash_reason,trash_cause,purge_after,trash_root_type,trash_root_id,trash_revision").order("sort_order") : Promise.resolve(skippedListResult<DbPackage>()),
-    shouldLoad(scope, "milestones") ? supabase.from("milestones").select("id,title,description,target_date,status,sort_order").eq("project_id", founderProjectId).order("sort_order") : Promise.resolve(skippedListResult<DbMilestone>()),
+    shouldLoad(scope, "milestones") ? supabase.from("milestones").select("id,title,description,target_date,status,sort_order,updated_at").eq("project_id", founderProjectId).order("sort_order").order("id") : Promise.resolve(skippedListResult<DbMilestone>()),
     shouldLoad(scope, "tasks") ? supabase
       .from(ACTIVE_TASKS_TABLE)
       .select(taskRowSelect)

@@ -201,6 +201,7 @@ test("custom controls keep keyboard and aria contracts", async () => {
   assert.match(actionMenu, /Home/);
   assert.match(actionMenu, /End/);
   assert.match(actionMenu, /Escape/);
+  assert.match(actionMenu, /if \(!open \|\| !position\) return/);
   assert.match(actionMenu, /triggerRef\.current\?\.focus\(\)/);
 });
 
