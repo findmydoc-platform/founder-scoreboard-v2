@@ -256,7 +256,8 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(panel, /TaskDetailSurface/);
   assert.match(relationshipSection, /RelationshipList/);
   assert.match(relationshipSection, /Wartet auf/);
-  assert.match(relationshipUi, /relationshipHelpText/);
+  assert.doesNotMatch(relationshipUi, /relationshipHelpText/);
+  assert.match(relationshipSection, /Andere warten hierauf/);
   assert.match(relationshipUi, /relationshipBadgeFor/);
   assert.match(relationshipUi, /relationshipBadgeToneClass/);
   assert.match(detail, /TaskDetailSurface/);

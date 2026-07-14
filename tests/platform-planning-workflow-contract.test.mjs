@@ -353,7 +353,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
-  const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
+  const overviewPanel = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
   assert.match(migration, /problem_statement/);
@@ -367,11 +367,13 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(dataRowTypes, /problem_statement/);
   assert.match(newTaskUi, /Aufgabenbrief/);
   assert.match(detail, /TaskDetailSurface/);
-  assert.match(detailSurface, /TaskBriefSection/);
-  assert.match(briefSection, /Aufgabenbrief/);
-  assert.match(briefSection, /Abnahmekriterien/);
-  assert.match(briefSection, /Nachweis/);
-  assert.match(briefSection, /Qualitätsstandard/);
+  assert.match(detailSurface, /TaskOverviewPanel/);
+  assert.match(overviewPanel, /Problem/);
+  assert.match(overviewPanel, /Zielbild/);
+  assert.match(overviewPanel, /Abnahmekriterien/);
+  assert.match(overviewPanel, /Erforderlicher Nachweis/);
+  assert.match(overviewPanel, /Nachweis/);
+  assert.match(overviewPanel, /Qualitätsstandard/);
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 

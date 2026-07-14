@@ -2,6 +2,7 @@
 
 import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
@@ -18,6 +19,7 @@ type Props = {
   authRequired?: boolean;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
+  initialDetailDataError?: string;
 };
 
 export function TaskDetailPage({
@@ -28,8 +30,10 @@ export function TaskDetailPage({
   authRequired = false,
   initialAuthUser = null,
   initialCurrentProfile = null,
+  initialDetailDataError = "",
 }: Props) {
   const router = useRouter();
+  const [overviewDirty, setOverviewDirty] = useState(false);
   const controller = usePlanningAppController({
     initialData,
     initialHeaderData: headerData,
@@ -57,6 +61,10 @@ export function TaskDetailPage({
         onToggleNotifications={() => controller.showNotifications ? controller.setShowNotifications(false) : controller.openNotificationInbox()}
         onOpenNotification={controller.openNotification}
         onDismissNotification={controller.dismissNotification}
+        onBack={() => {
+          if (overviewDirty && !window.confirm("Ungespeicherte Änderungen verwerfen?")) return;
+          router.push("/planning");
+        }}
         actions={(
           <GitHubConnectionStatus
             authenticated={Boolean(controller.authUser)}
@@ -73,6 +81,7 @@ export function TaskDetailPage({
 
       <div className="mx-auto max-w-7xl px-6 py-6">
         <TaskDetailSurface
+          surface="page"
           task={task}
           pack={currentPackage}
           comments={controller.data.taskComments.filter((comment) => comment.taskId === task.id)}
@@ -90,6 +99,8 @@ export function TaskDetailPage({
           source={source}
           pending={controller.isPending}
           error={controller.saveError}
+          detailDataError={initialDetailDataError}
+          onOverviewDirtyChange={setOverviewDirty}
           commentImportNotice={controller.commentImportNotice}
           commentImportPending={controller.commentImportPendingTaskIds.has(task.id)}
           githubInstallationAvailable={controller.githubInstallationAvailable}

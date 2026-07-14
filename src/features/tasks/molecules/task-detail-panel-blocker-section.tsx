@@ -1,7 +1,9 @@
 "use client";
 
+import { AlertTriangle, Plus, X } from "lucide-react";
+import { useState } from "react";
 import type { TaskBlocker } from "@/lib/types";
-import { UiBadge, UiButton, UiEmptyState, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { UiBadge, UiButton, UiEmptyState, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 type BlockerDraft = {
   reason: string;
@@ -28,16 +30,30 @@ export function TaskDetailPanelBlockerSection({
   onBlockerDraftChange,
   onReportBlocker,
 }: Props) {
+  const [formOpen, setFormOpen] = useState(false);
+  const openBlockers = blockers.filter((blocker) => blocker.status === "open");
+
   return (
-    <section className="rounded-lg border border-slate-200 p-4">
+    <section className="border-b border-slate-100 py-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-slate-950">Blocker</h3>
-          <p className="mt-1 text-xs text-slate-500">Blocker früh melden, damit der Sprint planbar bleibt.</p>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+            <AlertTriangle size={16} className="text-amber-600" aria-hidden="true" />
+            Gemeldete Blocker
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">Operative Hindernisse mit Auswirkung und benötigter Hilfe.</p>
         </div>
-        <UiBadge tone="white">{blockers.filter((blocker) => blocker.status === "open").length} offen</UiBadge>
+        <div className="flex items-center gap-2">
+          <UiBadge tone={openBlockers.length ? "amber" : "white"}>{openBlockers.length} offen</UiBadge>
+          {canReport && !formOpen ? (
+            <UiButton size="lg" className="h-11" onClick={() => setFormOpen(true)} aria-expanded="false" aria-controls="task-blocker-form">
+              <Plus size={15} aria-hidden="true" />
+              Blocker melden
+            </UiButton>
+          ) : null}
+        </div>
       </div>
-      {canReport && <div className="mt-3 grid gap-2">
+      <div className="mt-3 grid gap-2">
         {blockers.map((blocker) => (
           <article key={blocker.id} className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-orange-950">
             <div className="flex items-center justify-between gap-2">
@@ -49,37 +65,57 @@ export function TaskDetailPanelBlockerSection({
             {blocker.needsHelpFrom && <p className="mt-1 text-xs text-orange-800">Braucht Hilfe von: {blocker.needsHelpFrom}</p>}
           </article>
         ))}
-        {!blockers.length && <UiEmptyState>Noch kein Blocker gemeldet.</UiEmptyState>}
-      </div>}
-      <div className="mt-3 grid gap-2">
-        <UiTextArea
-          value={blockerDraft.reason}
-          onChange={(event) => onBlockerDraftChange({ reason: event.target.value })}
-          className="min-h-20 w-full p-3 leading-6"
-          placeholder="Was blockiert dich konkret?"
-        />
-        <UiTextInput
-          value={blockerDraft.impact}
-          onChange={(event) => onBlockerDraftChange({ impact: event.target.value })}
-          className="px-3"
-          placeholder="Auswirkung auf Sprint oder Review"
-        />
-        <UiTextInput
-          value={blockerDraft.needsHelpFrom}
-          onChange={(event) => onBlockerDraftChange({ needsHelpFrom: event.target.value })}
-          className="px-3"
-          placeholder="Braucht Hilfe von"
-        />
-        <div className="flex justify-end">
-          <UiButton
-            disabled={pending || blockerDraft.reason.trim().length < 5}
-            onClick={() => onReportBlocker(blockerDraft)}
-            variant="orange"
-          >
-            Blocker melden
-          </UiButton>
-        </div>
+        {!blockers.length ? <UiEmptyState tone="muted">Kein Blocker gemeldet.</UiEmptyState> : null}
       </div>
+      {canReport && formOpen ? (
+        <form
+          id="task-blocker-form"
+          className="mt-4 grid gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (blockerDraft.reason.trim().length < 5) return;
+            onReportBlocker(blockerDraft);
+            setFormOpen(false);
+          }}
+        >
+          <UiField>
+            Grund
+            <UiTextArea
+              value={blockerDraft.reason}
+              onChange={(event) => onBlockerDraftChange({ reason: event.target.value })}
+              className="min-h-20 w-full p-3 leading-6"
+              placeholder="Was blockiert die Arbeit konkret?"
+            />
+          </UiField>
+          <UiField>
+            Auswirkung
+            <UiTextInput
+              value={blockerDraft.impact}
+              onChange={(event) => onBlockerDraftChange({ impact: event.target.value })}
+              className="h-11 px-3"
+              placeholder="Auswirkung auf Sprint oder Review"
+            />
+          </UiField>
+          <UiField>
+            Benötigte Hilfe
+            <UiTextInput
+              value={blockerDraft.needsHelpFrom}
+              onChange={(event) => onBlockerDraftChange({ needsHelpFrom: event.target.value })}
+              className="h-11 px-3"
+              placeholder="Wer oder was wird gebraucht?"
+            />
+          </UiField>
+          <div className="flex flex-wrap justify-end gap-2">
+            <UiButton type="button" size="lg" disabled={pending} onClick={() => setFormOpen(false)}>
+              <X size={15} aria-hidden="true" />
+              Abbrechen
+            </UiButton>
+            <UiButton type="submit" size="lg" disabled={pending || blockerDraft.reason.trim().length < 5} variant="amberPrimary">
+              {pending ? "Meldet …" : "Blocker melden"}
+            </UiButton>
+          </div>
+        </form>
+      ) : null}
     </section>
   );
 }

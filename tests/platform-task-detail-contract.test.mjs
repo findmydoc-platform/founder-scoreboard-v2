@@ -12,6 +12,8 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const controller = await readFile("src/features/tasks/hooks/use-task-detail-controller.ts", "utf8");
   const panelHeader = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
+  const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
+  const tabs = await readFile("src/features/tasks/molecules/task-detail-tabs.tsx", "utf8");
   const ui = await readPlanningSurface();
 
   assert.match(route, /loadTaskDetailData\(supabase, id\)/);
@@ -28,18 +30,22 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(panel, /bg-slate-950\/20/);
   assert.match(panelHeader, /Große Ansicht/);
   assert.match(panelHeader, /href=\{`\/tasks\/\$\{task\.id\}`\}/);
-  assert.match(surface, /TaskBriefSection/);
-  assert.match(surface, /TaskEvidenceLinkSection/);
+  assert.match(surface, /TaskDetailOperationalHeader/);
+  assert.match(surface, /TaskDetailTabs/);
+  assert.match(surface, /TaskOverviewPanel/);
   assert.match(surface, /TaskRelationshipsSection/);
   assert.match(surface, /TaskDetailPanelSubIssuesSection/);
   assert.match(surface, /TaskDetailPanelBlockerSection/);
-  assert.match(surface, /TaskDetailPanelNotesSection/);
   assert.match(surface, /TaskDetailPanelSidebar/);
   assert.match(surface, /TaskCommentThread/);
+  assert.match(operationalHeader, /Wartet auf/);
+  assert.match(operationalHeader, /Andere warten hierauf/);
+  assert.match(tabs, /role="tablist"/);
+  assert.match(tabs, /aria-selected/);
   assert.match(controller, /useTaskDetailController/);
-  assert.match(controller, /saveBrief/);
-  assert.match(controller, /saveEvidence/);
-  assert.match(controller, /saveNote/);
+  assert.match(controller, /saveOverview/);
+  assert.match(controller, /taskOverviewPatch/);
+  assert.match(controller, /overviewDirty/);
   assert.match(ui, /TaskDetailPanel/);
 });
 
@@ -75,24 +81,22 @@ test("task detail loading avoids server waterfalls and defers inactive client fe
 test("shared task detail surface keeps github-like field saves and role gates", async () => {
   const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const sidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
-  const evidence = await readFile("src/features/tasks/molecules/task-evidence-link-section.tsx", "utf8");
-  const notes = await readFile("src/features/tasks/molecules/task-detail-panel-notes-section.tsx", "utf8");
-  const brief = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
+  const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
+  const overview = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const permissions = await readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
 
   assert.match(surface, /useTaskDetailController/);
-  assert.match(surface, /permissions\.canEditBrief/);
-  assert.match(surface, /permissions\.canEditEvidence/);
-  assert.match(surface, /permissions\.canEditNotes/);
+  assert.match(surface, /overviewPermissions/);
+  assert.match(overview, /permissions\.canEditBrief/);
+  assert.match(overview, /permissions\.canEditEvidence/);
+  assert.match(overview, /permission: "canEditNotes"/);
   assert.match(surface, /permissions\.canComment/);
-  assert.match(brief, /Bearbeiten/);
-  assert.match(brief, /Speichern/);
-  assert.match(evidence, /onBlur=\{onEvidenceLinkSave\}/);
-  assert.match(evidence, /event\.key === "Enter"/);
-  assert.match(notes, /onBlur=\{onSave\}/);
-  assert.match(sidebar, /onUpdate\(\{ priority: value \}\)/);
+  assert.match(operationalHeader, /Bearbeiten/);
+  assert.match(overview, /Speichern/);
+  assert.doesNotMatch(overview, /onBlur=/);
+  assert.match(operationalHeader, /onUpdate\(\{ priority: value \}\)/);
   assert.match(sidebar, /onUpdate\(\{ sprintId: value \}\)/);
   assert.match(sidebar, /canManageReviewOwner/);
   assert.match(sidebar, /canManageFinalTaskStatus/);

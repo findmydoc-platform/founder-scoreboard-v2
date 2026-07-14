@@ -54,10 +54,12 @@ test("drawer focus navigation and full-page overlay remain available", async () 
   const reviewShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
 
   assert.match(header, /data-autofocus/);
-  assert.match(header, /titleRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(header, /titleRef\.current\?\.focus\(\)/);
   assert.match(header, /Zurück zu/);
   assert.match(header, /Große Ansicht/);
   assert.match(panel, /aria-labelledby="task-detail-panel-title"/);
+  assert.match(panel, /overflow-y-auto/);
+  assert.match(panel, /onOverviewDirtyChange/);
   assert.match(taskPage, /PlanningOverlayLayer/);
   assert.match(reviewShell, /ReviewDetailPage/);
   assert.match(reviewShell, /PlanningOverlayLayer/);

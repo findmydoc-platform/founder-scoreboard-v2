@@ -1,7 +1,7 @@
 "use client";
 
 import { Paperclip } from "lucide-react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Profile } from "@/lib/types";
 import { UiButton } from "@/shared/atoms/ui-primitives";
@@ -15,6 +15,7 @@ type Props = {
 };
 
 export function TaskCommentComposer({ pending = false, profiles = [], onAddComment, onUploadAttachment, renderPreview }: Props) {
+  const textareaId = useId();
   const [newComment, setNewComment] = useState("");
   const [uploadPending, setUploadPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
@@ -64,12 +65,14 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
   }
 
   return (
-    <>
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <label htmlFor={textareaId} className="text-sm font-semibold text-slate-900">Kommentar oder Update</label>
       <textarea
+        id={textareaId}
         value={newComment}
         onChange={(event) => setNewComment(event.target.value)}
-        className="mt-3 min-h-24 w-full resize-y rounded-md border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-blue-400"
-        placeholder="Kommentar, Nachfrage oder kurzes Arbeitsupdate"
+        className="mt-2 min-h-28 w-full resize-y rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        placeholder="Zum Beispiel: Entscheidung, Nachfrage oder Arbeitsfortschritt"
       />
       {mentionOptions.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2 rounded-md border border-blue-100 bg-blue-50 p-2">
@@ -79,7 +82,7 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
               type="button"
               disabled={!profile.githubLogin}
               onClick={() => insertMention(profile)}
-              className="h-7 rounded-md border border-blue-200 bg-white px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
+              className="h-11 rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
             >
               {profile.name}{profile.githubLogin ? ` · @${profile.githubLogin}` : " · GitHub fehlt"}
             </button>
@@ -110,23 +113,26 @@ export function TaskCommentComposer({ pending = false, profiles = [], onAddComme
               />
               <UiButton
                 type="button"
+                size="lg"
                 disabled={pending || uploadPending}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={15} />
-                {uploadPending ? "Lädt hoch..." : "Anhang"}
+                {uploadPending ? "Lädt hoch …" : "Datei anhängen"}
               </UiButton>
             </>
           )}
         </div>
         <UiButton
           type="button"
+          size="lg"
+          variant="primary"
           disabled={pending || submitPending || uploadPending || newComment.trim().length < 2}
           onClick={() => void submitComment()}
         >
-          {submitPending ? "Speichert..." : "Kommentieren"}
+          {submitPending ? "Kommentiert …" : "Kommentieren"}
         </UiButton>
       </div>
-    </>
+    </div>
   );
 }

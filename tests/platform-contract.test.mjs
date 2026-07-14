@@ -12,7 +12,7 @@ test("working status stays ownership-bound while Sub-Issue final transitions are
   const detailPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const detailPermissions = await readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8");
-  const detailSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
   const statusControl = await readFile("src/features/tasks/atoms/task-status-control.tsx", "utf8");
 
   assert.match(routePolicy, /taskAssignedToProfile/);
@@ -30,8 +30,8 @@ test("working status stays ownership-bound while Sub-Issue final transitions are
   assert.match(detailSurface, /permissions\.canReopenSubIssue/);
   assert.match(detailPermissions, /taskOwnedByProfile/);
   assert.match(detailPermissions, /canContributorManageSubIssueFinalStatus/);
-  assert.match(detailSidebar, /TaskStatusControl/);
-  assert.match(detailSidebar, /taskStatusOptionsForPermissions/);
+  assert.match(operationalHeader, /TaskStatusControl/);
+  assert.match(detailSurface, /taskStatusOptionsForPermissions/);
   assert.match(statusControl, /lockedReason/);
   assert.match(statusControl, /isTaskStatusChange/);
 });

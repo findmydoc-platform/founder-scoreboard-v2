@@ -3,8 +3,9 @@
 import { MessageSquare, RefreshCw } from "lucide-react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
-import { isUsefulActivity, TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
+import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
+import { isUsefulTaskActivity } from "@/features/tasks/model/task-detail-presentation";
 import type { Profile, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
 type Props = {
@@ -25,7 +26,7 @@ type Props = {
 };
 
 function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[]): TaskCommentTimelineItem[] {
-  const visibleActivities = activities.filter((activity) => isUsefulActivity(activity.message));
+  const visibleActivities = activities.filter((activity) => isUsefulTaskActivity(activity.message));
   return [
     ...visibleActivities.map((activity) => ({
       id: `activity-${activity.id}`,
@@ -64,7 +65,7 @@ function buildTimeline(comments: TaskComment[], externalComments: TaskExternalCo
       githubDeliveryStatus: "delivered" as const,
       githubCommentUrl: comment.htmlUrl,
     })),
-  ].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 }
 
 export function TaskCommentThread({
@@ -83,9 +84,7 @@ export function TaskCommentThread({
   onImportGitHubComments,
   onUploadAttachment,
 }: Props) {
-  const visibleActivities = activities.filter((activity) => isUsefulActivity(activity.message));
-  const commentCount = comments.length + externalComments.length;
-  const activityCount = visibleActivities.length;
+  const visibleActivities = activities.filter((activity) => isUsefulTaskActivity(activity.message));
   const timeline = buildTimeline(comments, externalComments, visibleActivities);
 
   return (
@@ -110,14 +109,7 @@ export function TaskCommentThread({
               {importPending ? "Aktualisiert..." : "GitHub aktualisieren"}
             </button>
           )}
-          <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
-            {commentCount} Kommentare
-          </span>
-          {activityCount > 0 && (
-            <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
-              {activityCount} Aktivitäten
-            </span>
-          )}
+          <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{timeline.length} Einträge</span>
         </div>
       </div>
 
@@ -132,7 +124,6 @@ export function TaskCommentThread({
         </div>
       )}
 
-      <TaskCommentTimeline items={timeline} profiles={profiles} currentProfileId={currentProfileId} />
       {!readOnly && (
         <TaskCommentComposer
           pending={pending}
@@ -142,6 +133,7 @@ export function TaskCommentThread({
           renderPreview={(value) => <CommentBody value={value} />}
         />
       )}
+      <TaskCommentTimeline items={timeline} profiles={profiles} currentProfileId={currentProfileId} />
     </section>
   );
 }
