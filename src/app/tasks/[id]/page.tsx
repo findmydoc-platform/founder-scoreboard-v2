@@ -5,6 +5,7 @@ import { PlanningDataUnavailablePage } from "@/features/planning/templates/plann
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { SeedTaskDetailPage } from "@/features/tasks/templates/seed-task-detail-page";
 import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
+import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
 import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
@@ -12,7 +13,6 @@ import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import { emptyTaskDetailData, loadTaskDetailData } from "@/lib/task-detail-data";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
-import { mergeTaskDetailData } from "@/features/tasks/model/task-api-client";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 type Props = {
