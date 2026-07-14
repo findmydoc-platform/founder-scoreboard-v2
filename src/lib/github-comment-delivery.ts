@@ -7,6 +7,7 @@ import { findExistingGitHubComment, githubCommentMarker } from "@/features/tasks
 import { createGitHubIssueComment, GitHubApiError, listGitHubIssueComments } from "./github";
 import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "./github-app";
 import { resolveGitHubIssueNumber } from "./github-issue-reference";
+import { canonicalizeProfileMentionsForGitHub } from "./mentions";
 import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
 
 type ClaimedDelivery = {
@@ -80,6 +81,31 @@ function retryAt(attempts: number) {
   return new Date(Date.now() + delaySeconds * 1000).toISOString();
 }
 
+function createGitHubCommentBodyResolver(supabase: SupabaseClient) {
+  let profilesPromise: Promise<ProfileRow[]> | null = null;
+
+  return async (comment: string) => {
+    if (!comment.includes("@")) return comment;
+    profilesPromise ||= (async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,name,platform_role,github_login");
+      if (error) throw new Error(`GitHub-Erwähnungen konnten nicht aufgelöst werden: ${error.message}`);
+      return (data || []) as ProfileRow[];
+    })();
+
+    const profiles = await profilesPromise;
+    return canonicalizeProfileMentionsForGitHub(
+      comment,
+      profiles.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        githubLogin: profile.github_login,
+      })),
+    );
+  };
+}
+
 async function finalizeDelivery(
   supabase: SupabaseClient,
   lockToken: string,
@@ -144,6 +170,7 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
   if (error) throw new Error(`GitHub-Kommentarbestand konnte nicht gelesen werden: ${error.message}`);
 
   const commentsByAuthorAndIssue = new Map<string, Awaited<ReturnType<typeof listGitHubIssueComments>>>();
+  const resolveGitHubCommentBody = createGitHubCommentBodyResolver(supabase);
   for (const delivery of (data || []) as ClaimedDelivery[]) {
     try {
       const { comment, task, profile } = await loadDeliveryContext(supabase, delivery);
@@ -174,7 +201,7 @@ export async function previewPendingGitHubComments(supabase: SupabaseClient, lim
       const existing = findExistingGitHubComment(githubComments, {
         commentId: comment.id,
         authorLogin: profile.github_login,
-        body: comment.comment,
+        body: await resolveGitHubCommentBody(comment.comment),
       });
       if (existing) preview.existing += 1;
       else preview.missing += 1;
@@ -212,6 +239,7 @@ export async function deliverPendingGitHubComments({
   });
   if (error) throw new Error(`GitHub-Kommentarzustellungen konnten nicht reserviert werden: ${error.message}`);
 
+  const resolveGitHubCommentBody = createGitHubCommentBodyResolver(supabase);
   for (const delivery of (data || []) as ClaimedDelivery[]) {
     try {
       const { comment, task, profile } = await loadDeliveryContext(supabase, delivery);
@@ -259,10 +287,11 @@ export async function deliverPendingGitHubComments({
       }
 
       const githubComments = await listGitHubIssueComments(targetIssueNumber, authorToken, task.github_repo);
+      const githubCommentBody = await resolveGitHubCommentBody(comment.comment);
       const existing = findExistingGitHubComment(githubComments, {
         commentId: comment.id,
         authorLogin: profile.github_login,
-        body: comment.comment,
+        body: githubCommentBody,
       });
 
       if (existing) {
@@ -277,7 +306,7 @@ export async function deliverPendingGitHubComments({
         continue;
       }
 
-      const created = await createGitHubIssueComment(targetIssueNumber, comment.comment, authorToken, githubCommentMarker(comment.id), task.github_repo);
+      const created = await createGitHubIssueComment(targetIssueNumber, githubCommentBody, authorToken, githubCommentMarker(comment.id), task.github_repo);
       await finalizeDelivery(supabase, lockToken, comment.id, "delivered", {
         statusReason: "created",
         issueNumber: targetIssueNumber,
