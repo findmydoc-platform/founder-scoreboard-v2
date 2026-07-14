@@ -3,7 +3,7 @@ import { readPlanningSurface } from "./helpers/planning-surface.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("founders can only move or change status for their own tasks", async () => {
+test("working status stays ownership-bound while Sub-Issue final transitions are role-based", async () => {
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const routePolicy = `${route}\n${routeHelpers}`;
@@ -17,7 +17,8 @@ test("founders can only move or change status for their own tasks", async () => 
 
   assert.match(routePolicy, /taskAssignedToProfile/);
   assert.match(routePolicy, /Founder können nur den Status ihrer eigenen Aufgaben ändern/);
-  assert.match(routePolicy, /Nur CEO kann sie wieder öffnen/);
+  assert.match(routePolicy, /roleBasedFinalTransition/);
+  assert.match(routePolicy, /validateSubIssueStatusParentApproval/);
   assert.match(app, /canChangeTaskStatus/);
   assert.match(app, /canManageFinalTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
@@ -25,9 +26,14 @@ test("founders can only move or change status for their own tasks", async () => 
   assert.match(taskCard, /statusDisabled/);
   assert.match(detailPanel, /TaskDetailSurface/);
   assert.match(detailSurface, /permissions\.canUpdateStatus/);
+  assert.match(detailSurface, /permissions\.canCompleteSubIssue/);
+  assert.match(detailSurface, /permissions\.canReopenSubIssue/);
   assert.match(detailPermissions, /taskOwnedByProfile/);
+  assert.match(detailPermissions, /canContributorManageSubIssueFinalStatus/);
   assert.match(detailSidebar, /TaskStatusControl/);
-  assert.match(statusControl, /Nur CEO kann wieder öffnen/);
+  assert.match(detailSidebar, /taskStatusOptionsForPermissions/);
+  assert.match(statusControl, /lockedReason/);
+  assert.match(statusControl, /isTaskStatusChange/);
 });
 
 test("header overlays close on outside click and escape", async () => {

@@ -79,6 +79,8 @@ Approval is separate from work status. Initiatives and Deliverables use `draft`,
 - Material brief or Initiative changes create a new approval revision and reset an approved Deliverable to proposed.
 - Sprint, work status, Evidence, comments, and GitHub sync metadata do not reset approval.
 - Proposed or rejected Deliverables cannot enter Sprint planning, Review, scoring, or GitHub projection.
+- While the parent Deliverable is approved, any CEO, Deputy, or Founder may close a Sub-Issue and reopen it to `Offen`, regardless of assignee, owner, or Initiative RACI. Viewers remain read-only, and all other work-status transitions retain their existing ownership and role rules.
+- No Sub-Issue status may change while its parent Deliverable is not approved.
 - A Sub-Issue may be moved to another Deliverable by the CEO, a Deputy, or its current owner or assignee. It immediately inherits the target Initiative, Milestone, and effective approval state; the next explicit GitHub sync replaces the native parent relationship.
 
 ## GitHub item repositories

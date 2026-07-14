@@ -6,9 +6,9 @@ import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-d
 import { PlanningTrashActionDialog } from "@/features/planning/molecules/planning-trash-action-dialog";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { currentApprovalDecisionReason, isApprovedDeliverable, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
-import { statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
+import { taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { dateRange, formatDate, taskAssigneeLabel } from "@/lib/display";
@@ -35,13 +35,16 @@ type Props = {
   parentDeliverables: Task[];
   sprints: Sprint[];
   milestones: Milestone[];
+  canCompleteSubIssue: boolean;
   canManageFinalTaskStatus: boolean;
   canManageTaskMeta: boolean;
   canReparentSubIssue: boolean;
   canManageReviewOwner: boolean;
   canOpenReview: boolean;
+  canReopenSubIssue: boolean;
   canWithdrawTask: boolean;
   canChangeTaskStatus?: boolean;
+  canUpdateWorkingTaskStatus: boolean;
   canApprove: boolean;
   canReject: boolean;
   canReturnToDraft: boolean;
@@ -62,13 +65,16 @@ export function TaskDetailPanelSidebar({
   parentDeliverables,
   sprints,
   milestones,
+  canCompleteSubIssue,
   canManageFinalTaskStatus,
   canManageTaskMeta,
   canReparentSubIssue,
   canManageReviewOwner,
   canOpenReview,
+  canReopenSubIssue,
   canWithdrawTask,
   canChangeTaskStatus = canManageTaskMeta,
+  canUpdateWorkingTaskStatus,
   canApprove,
   canReject,
   canReturnToDraft,
@@ -96,8 +102,23 @@ export function TaskDetailPanelSidebar({
   const externalSyncPending = task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task);
   const externalSyncProblem = task.githubIssueSyncStatus === "failed" || Boolean(task.githubIssueSyncError);
   const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-  const statusOptions = statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus);
+  const statusOptions = taskStatusOptionsForPermissions(task.status, {
+    canCompleteSubIssue,
+    canManageFinalStatus: canManageFinalTaskStatus,
+    canReopenSubIssue,
+    canUpdateWorkingStatus: canUpdateWorkingTaskStatus,
+  });
   const effectivelyApproved = isTaskPlanningActive(task);
+  const canSelectNextStatus = statusOptions.some((status) => status !== normalizeStatus(task.status));
+  const statusLockedReason = !effectivelyApproved
+    ? task.taskType === "sub_issue"
+      ? "Parent-Deliverable ist noch nicht freigegeben."
+      : "Deliverable ist noch nicht freigegeben."
+    : !canChangeTaskStatus
+      ? "Deine Rolle darf diesen Status nicht ändern."
+      : !canSelectNextStatus
+        ? "Für deine Rolle ist kein weiterer Status verfügbar."
+        : undefined;
   const decisionReason = currentApprovalDecisionReason(task);
 
   const updatePackage = (packageId: string) => {
@@ -154,7 +175,8 @@ export function TaskDetailPanelSidebar({
             <div className="text-xs font-semibold text-slate-500">Status</div>
             <TaskStatusControl
               status={task.status}
-              canChange={canChangeTaskStatus && effectivelyApproved}
+              canChange={canChangeTaskStatus && effectivelyApproved && canSelectNextStatus}
+              lockedReason={statusLockedReason}
               onChange={(status) => onUpdate({ status })}
               options={statusOptions}
               className="mt-1"

@@ -190,6 +190,8 @@ export function useTaskDetailWorkflow({
               ...(body.task?.status ? { status: body.task.status } : {}),
               ...(body.task?.reviewStatus ? { reviewStatus: body.task.reviewStatus } : {}),
               ...(body.task?.reviewOwnerProfileId !== undefined ? { reviewOwnerProfileId: body.task.reviewOwnerProfileId || "" } : {}),
+              ...(body.task?.reviewRequestedAt !== undefined ? { reviewRequestedAt: body.task.reviewRequestedAt || "" } : {}),
+              ...(body.task?.scoreFinal !== undefined ? { scoreFinal: body.task.scoreFinal } : {}),
             }));
           }
         }
@@ -224,6 +226,7 @@ export function useTaskDetailWorkflow({
     startTransition(async () => {
       try {
         const { response, body } = await syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
+        if (body?.task?.updatedAt) updatedAtRef.current = body.task.updatedAt;
         if (response.status === 409 && body?.code === "github_sync_locked") {
           setGithubState((current) => ({
             ...current,

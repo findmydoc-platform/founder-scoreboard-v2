@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { normalizeStatus, statusBadgeTone } from "@/lib/status";
+import { isTaskStatusChange, normalizeStatus, statusBadgeTone } from "@/lib/status";
 import type { TaskStatus } from "@/lib/types";
 import { classNames, UiBadge } from "@/shared/atoms/ui-primitives";
 
@@ -52,7 +52,10 @@ export function TaskStatusControl({
     return (
       <CustomSelect
         value={normalized}
-        onChange={(value) => onChange(value as TaskStatus)}
+        onChange={(value) => {
+          if (!isTaskStatusChange(normalized, value)) return;
+          onChange(normalizeStatus(value));
+        }}
         className={selectClassName}
         options={options.map((option) => ({ value: option, label: option }))}
         aria-label="Status ändern"

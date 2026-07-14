@@ -11,7 +11,9 @@ import {
 import { applyDeliverableApprovalPatch } from "@/features/planning/model/approval-domain";
 import type { TaskSyncCommand, TaskUpdateCommand, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
+import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
+import { taskServerRevision, type TaskServerRevisionStore } from "@/features/tasks/model/task-server-revision";
 import { hasGitHubIssue } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Task, TaskStatus } from "@/lib/types";
@@ -23,6 +25,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "canChangeTaskStatus"
   | "canManageFinalTaskStatus"
   | "canManageTaskMeta"
+  | "currentProfile"
   | "data"
   | "githubInstallationAvailable"
   | "setData"
@@ -33,6 +36,7 @@ type UseTaskUpdateCommandOptions = Pick<
   refreshPlanningData: () => Promise<void>;
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
+  serverUpdatedAtByTask: TaskServerRevisionStore;
   syncTaskToGitHub: TaskSyncCommand;
 };
 
@@ -42,6 +46,7 @@ export function useTaskUpdateCommand({
   canChangeTaskStatus,
   canManageFinalTaskStatus,
   canManageTaskMeta,
+  currentProfile,
   data,
   githubInstallationAvailable,
   refreshPlanningData,
@@ -49,6 +54,7 @@ export function useTaskUpdateCommand({
   setSaveError,
   setStatusGuardNotice,
   setStatusGuardTaskId,
+  serverUpdatedAtByTask,
   source,
   startTransition,
   syncTaskToGitHub,
@@ -56,7 +62,6 @@ export function useTaskUpdateCommand({
   const latestMutationByTask = useRef(new Map<string, symbol>());
   const mutationEpochByTask = useRef(new Map<string, number>());
   const mutationQueueByTask = useRef(new Map<string, Promise<TaskUpdateResult>>());
-  const serverUpdatedAtByTask = useRef(new Map<string, string>());
 
   const updateTask: TaskUpdateCommand = (task: Task, patch: Partial<Task>) => {
     setSaveError("");
@@ -68,14 +73,30 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: normalized.error, status: 400 });
     }
     const normalizedPatch = normalized.patch;
+    const currentStatus = normalizeStatus(task.status);
+    const targetStatus = normalizedPatch.status ? normalizeStatus(normalizedPatch.status) : null;
+    const detailPermissions = taskDetailPermissions({
+      task,
+      profile: currentProfile,
+      unrestricted: source === "seed",
+    });
+    const completesSubIssue = task.taskType === "sub_issue"
+      && currentStatus !== "Erledigt"
+      && targetStatus === "Erledigt"
+      && detailPermissions.canCompleteSubIssue;
+    const reopensSubIssue = task.taskType === "sub_issue"
+      && currentStatus === "Erledigt"
+      && targetStatus === "Offen"
+      && detailPermissions.canReopenSubIssue;
+    const roleBasedFinalTransition = completesSubIssue || reopensSubIssue;
 
-    if (normalizedPatch.status && !canManageFinalTaskStatus && normalizeStatus(normalizedPatch.status) === "Erledigt") {
+    if (targetStatus === "Erledigt" && !canManageFinalTaskStatus && !roleBasedFinalTransition) {
       setStatusGuardNotice(founderStatusGuardMessage(normalizedPatch.status as TaskStatus));
       setStatusGuardTaskId(task.id);
       return Promise.resolve({ ok: false, error: founderStatusGuardMessage(normalizedPatch.status as TaskStatus), status: 403 });
     }
 
-    if (normalizedPatch.status && !canManageTaskMeta) {
+    if (normalizedPatch.status && !canManageTaskMeta && !roleBasedFinalTransition) {
       const guardedMessage = founderStatusGuardMessage(normalizedPatch.status as TaskStatus, task.status);
       if (guardedMessage) {
         setStatusGuardNotice(guardedMessage);
@@ -84,13 +105,13 @@ export function useTaskUpdateCommand({
       }
     }
 
-    if (normalizedPatch.status && normalizeStatus(task.status) === "Erledigt" && !canManageFinalTaskStatus) {
+    if (normalizedPatch.status && currentStatus === "Erledigt" && !canManageFinalTaskStatus && !roleBasedFinalTransition) {
       setStatusGuardNotice(founderCompletedTaskGuardMessage());
       setStatusGuardTaskId(task.id);
       return Promise.resolve({ ok: false, error: founderCompletedTaskGuardMessage(), status: 403 });
     }
 
-    if (normalizedPatch.status && !canChangeTaskStatus(task)) {
+    if (normalizedPatch.status && !canChangeTaskStatus(task) && !roleBasedFinalTransition) {
       setStatusGuardNotice(founderTaskAssignmentGuardMessage());
       setStatusGuardTaskId(task.id);
       return Promise.resolve({ ok: false, error: founderTaskAssignmentGuardMessage(), status: 403 });
@@ -99,7 +120,13 @@ export function useTaskUpdateCommand({
     applyPlanningDataUpdate((current) => {
       const nextData = {
         ...current,
-        tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...normalizedPatch, githubIssueSyncStatus: "not_synced" as const, githubIssueSyncError: "" } : item)),
+        tasks: current.tasks.map((item) => (item.id === task.id ? {
+          ...item,
+          ...normalizedPatch,
+          githubIssueSyncStatus: "not_synced" as const,
+          githubIssueSyncError: "",
+          githubIssueSyncPendingSince: "",
+        } : item)),
       };
 
       if (source === "seed") {
@@ -130,7 +157,7 @@ export function useTaskUpdateCommand({
           task.id,
           taskUpdateRequestPayload(
             normalizedPatch,
-            serverUpdatedAtByTask.current.get(task.id) || task.updatedAt || "",
+            taskServerRevision(serverUpdatedAtByTask, task),
           ),
         );
         if (response.status === 409) {

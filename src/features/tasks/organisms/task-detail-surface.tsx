@@ -210,13 +210,16 @@ export function TaskDetailSurface({
           parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
           sprints={sprints}
           milestones={milestones}
+          canCompleteSubIssue={controller.permissions.canCompleteSubIssue}
           canManageFinalTaskStatus={controller.permissions.canManageFinalStatus}
           canManageTaskMeta={controller.permissions.canManageTaskMeta}
           canReparentSubIssue={controller.permissions.canReparentSubIssue}
           canManageReviewOwner={controller.permissions.canManageReviewOwner}
           canOpenReview={controller.permissions.canOpenReview}
+          canReopenSubIssue={controller.permissions.canReopenSubIssue}
           canWithdrawTask={canWithdrawTask}
           canChangeTaskStatus={controller.permissions.canUpdateStatus}
+          canUpdateWorkingTaskStatus={controller.permissions.canUpdateWorkingStatus}
           canApprove={canApprove}
           canReject={canReject}
           canReturnToDraft={canReturnToDraft}
