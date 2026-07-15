@@ -11,6 +11,10 @@ export type TaskUpdateResult =
   | { ok: true; task: Partial<Task> }
   | { ok: false; error: string; status?: number };
 
+export type TaskActionResult =
+  | { ok: true }
+  | { ok: false; error: string; status?: number };
+
 export type TaskUpdateCommand = (task: Task, patch: Partial<Task>) => Promise<TaskUpdateResult>;
 export type TaskUpdateHandler = (task: Task, patch: Partial<Task>) => void | Promise<TaskUpdateResult>;
 

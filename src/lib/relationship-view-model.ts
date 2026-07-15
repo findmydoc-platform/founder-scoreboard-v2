@@ -1,4 +1,5 @@
 import { normalizeStatus } from "@/lib/status";
+import { effectiveTaskRelation } from "@/lib/platform";
 import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
 export type RelationshipBadgeTone = "red" | "emerald" | "blue" | "slate";
@@ -15,17 +16,15 @@ export function relationshipBadgeFor(
 ): RelationshipBadge {
   const currentDone = normalizeStatus(currentTask.status) === "Erledigt";
   const relatedDone = relatedTask ? normalizeStatus(relatedTask.status) === "Erledigt" : false;
+  const effective = effectiveTaskRelation(currentTask.id, relation);
 
-  if (relation.relationType === "blocked_by" && relation.taskId === currentTask.id) {
+  if (effective?.direction === "waitsOn") {
     return relatedDone
       ? { label: "Blocker erledigt", tone: "emerald" }
       : { label: "Blockiert aktuell", tone: "red" };
   }
 
-  if (
-    (relation.relationType === "blocked_by" && relation.relatedTaskId === currentTask.id) ||
-    (relation.relationType === "blocks" && relation.taskId === currentTask.id)
-  ) {
+  if (effective?.direction === "blocks") {
     return currentDone
       ? { label: "Abhängigkeit erfüllt", tone: "emerald" }
       : { label: "Blockiert andere", tone: "blue" };
@@ -46,9 +45,18 @@ export function relationMatchesDraft(
   relation: TaskRelation,
   draft: { relationType: TaskRelationType; relatedTaskId: string },
 ) {
-  return (
-    relation.taskId === taskId &&
-    relation.relatedTaskId === draft.relatedTaskId &&
-    relation.relationType === draft.relationType
+  const existing = effectiveTaskRelation(taskId, relation);
+  const candidate = effectiveTaskRelation(taskId, {
+    ...relation,
+    taskId,
+    relatedTaskId: draft.relatedTaskId,
+    relationType: draft.relationType,
+  });
+
+  return Boolean(
+    existing
+    && candidate
+    && existing.direction === candidate.direction
+    && existing.linkedTaskId === candidate.linkedTaskId,
   );
 }

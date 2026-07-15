@@ -80,6 +80,7 @@ export default async function TaskPage({ params }: Props) {
       authRequired={authRequired}
       initialAuthUser={authUser}
       initialCurrentProfile={authProfile}
+      initialDetailDataError={taskDetailResult.ok ? "" : taskDetailResult.error}
     />
   );
 }

@@ -46,7 +46,7 @@ test("project header exposes ordered milestone actions only to allowed roles", a
   }), []);
 });
 
-test("milestone UI exposes disabled reasons, title validation, and saved schedule metadata", async () => {
+test("milestone UI exposes the bounded creation contract and saved schedule metadata", async () => {
   const [header, dialog, overview] = await Promise.all([
     read("src/features/planning/organisms/planning-header.tsx"),
     read("src/features/projects/organisms/milestone-dialog.tsx"),
@@ -58,6 +58,13 @@ test("milestone UI exposes disabled reasons, title validation, and saved schedul
   assert.match(dialog, /required/);
   assert.match(dialog, /minLength=\{3\}/);
   assert.match(dialog, /Der Titel benötigt mindestens 3 Zeichen/);
+  assert.match(dialog, /titleError &&/);
+  assert.match(dialog, /Pflichtfeld/);
+  assert.match(dialog, /aria-label="Meilenstein-Dialog schließen"/);
+  assert.match(dialog, /h-11 w-11/);
+  assert.match(dialog, /overflow-y-auto/);
+  assert.match(dialog, /Meilenstein erstellen/);
+  assert.ok(dialog.indexOf("Zieltermin") < dialog.indexOf("Status</span>"));
   assert.match(overview, /milestoneStatusMeta/);
   assert.match(overview, /Zieltermin:/);
 });

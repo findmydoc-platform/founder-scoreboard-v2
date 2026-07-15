@@ -2,14 +2,15 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
+import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
 import {
   profileForAssigneeValue,
   reviewOwnerForTask,
 } from "@/features/planning/model/planning-app-model";
 import * as taskApi from "@/features/tasks/model/task-api-client";
-import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
-import type { Task } from "@/lib/types";
+import { resolveTaskCreationHierarchy } from "@/features/tasks/model/task-creation-draft";
+import type { NewTaskCreateCallbacks, NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
+import type { Task, TaskRelation } from "@/lib/types";
 
 type UseTaskCreateCommandOptions = Pick<
   PlanningCommandContext,
@@ -34,61 +35,63 @@ export function useTaskCreateCommand({
   source,
   startTransition,
 }: UseTaskCreateCommandOptions) {
-  const createTask = (draft: NewTaskDraft) => {
+  const createTask = (draft: NewTaskDraft, callbacks: NewTaskCreateCallbacks = {}) => {
     setSaveError("");
 
-    const assigneeProfile = profileForAssigneeValue(data.profiles, draft.assignee || currentProfile?.id || "");
+    const creationDraft = resolveTaskCreationHierarchy(draft, data.tasks);
+
+    const assigneeProfile = profileForAssigneeValue(data.profiles, creationDraft.assignee || currentProfile?.id || "");
     const assigneeId = assigneeProfile?.id || "";
     const assignee = assigneeId ? assigneeProfile?.name || "" : "";
     const localTask: Task = {
       id: `local-${Date.now()}`,
       order: data.tasks.length + 1,
-      title: draft.title,
-      description: draft.description,
-      problemStatement: draft.problemStatement,
-      intendedOutcome: draft.intendedOutcome,
-      scopeConstraints: draft.scopeConstraints,
-      acceptanceCriteria: draft.acceptanceCriteria,
-      evidenceRequired: draft.evidenceRequired,
+      title: creationDraft.title,
+      description: creationDraft.description,
+      problemStatement: creationDraft.problemStatement,
+      intendedOutcome: creationDraft.intendedOutcome,
+      scopeConstraints: creationDraft.scopeConstraints,
+      acceptanceCriteria: creationDraft.acceptanceCriteria,
+      evidenceRequired: creationDraft.evidenceRequired,
       dodTemplateVersion: "founder-deliverable-v2",
-      status: draft.status || "Offen",
-      priority: draft.priority || "P2",
+      status: creationDraft.status || "Offen",
+      priority: creationDraft.priority || "P2",
       assigneeId,
       assignee,
       ownerId: assigneeId,
       owner: assignee,
       createdById: currentProfile?.id || "",
-      workstream: draft.workstream,
-      packageId: draft.packageId,
-      milestoneId: draft.milestoneId,
-      deadline: draft.deadline,
-      definitionOfDone: draft.definitionOfDone,
+      workstream: creationDraft.workstream,
+      packageId: creationDraft.packageId,
+      milestoneId: creationDraft.milestoneId,
+      deadline: creationDraft.deadline,
+      definitionOfDone: creationDraft.definitionOfDone,
       dependsOn: "",
       evidenceLink: "",
       issueNumber: "",
       issueUrl: "",
       note: "",
       watched: false,
-      hours: draft.hours,
-      startDate: draft.startDate,
-      endDate: draft.endDate,
+      hours: creationDraft.hours,
+      startDate: creationDraft.startDate,
+      endDate: creationDraft.endDate,
       sprintId: "",
       reviewStatus: "not_requested",
-      reviewOwnerProfileId: reviewOwnerForTask({ packageId: draft.packageId }, data.packages),
+      reviewOwnerProfileId: reviewOwnerForTask({ packageId: creationDraft.packageId }, data.packages),
       scorePoints: 0,
       scoreFinal: false,
-      githubRepo: draft.githubRepo,
+      githubRepo: creationDraft.githubRepo,
       githubIssueNumber: null,
       githubIssueUrl: "",
       githubIssueSyncStatus: "not_synced",
       githubIssueLastSyncedAt: "",
       githubIssueSyncError: "",
-      taskType: draft.taskType,
-      parentTaskId: draft.parentTaskId,
-      approvalStatus: draft.taskType === "sub_issue" ? null : draft.approveNow ? "approved" : "proposed",
+      taskType: creationDraft.taskType,
+      parentTaskId: creationDraft.parentTaskId,
+      approvalStatus: creationDraft.taskType === "sub_issue" ? null : creationDraft.approveNow ? "approved" : "proposed",
       approvalRevision: 1,
-      parentApprovalStatus: draft.taskType === "sub_issue"
-        ? data.tasks.find((task) => task.id === draft.parentTaskId)?.approvalStatus || null
+      parentApprovalStatus: creationDraft.taskType === "sub_issue"
+        ? data.tasks.find((task) => task.id === creationDraft.parentTaskId)?.approvalStatus || null
         : null,
       scoreRelevant: false,
       selfDodChecked: false,
@@ -97,14 +100,27 @@ export function useTaskCreateCommand({
       selfBlockersChecked: false,
     };
 
+    const localRelation: TaskRelation | null = creationDraft.relatedTaskId
+      ? {
+          id: Date.now(),
+          taskId: localTask.id,
+          relatedTaskId: creationDraft.relatedTaskId,
+          relationType: creationDraft.relationType,
+          note: creationDraft.relationNote,
+          createdBy: currentProfile?.id || "",
+          createdAt: new Date().toISOString(),
+        }
+      : null;
+
     if (source !== "supabase") {
       applyPlanningDataUpdate((current) => {
         const nextData = {
           ...current,
           tasks: [...current.tasks, localTask],
+          taskRelations: localRelation ? [localRelation, ...current.taskRelations] : current.taskRelations,
         };
         try {
-          persistLocalPlanningTasks(nextData.tasks);
+          persistLocalPlanningData(nextData);
         } catch {
           // Local development remains usable when browser storage is unavailable.
         }
@@ -115,8 +131,9 @@ export function useTaskCreateCommand({
     }
 
     startTransition(async () => {
+      let creationCompleted = false;
       try {
-        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...draft, assignee: assigneeId || draft.assignee });
+        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...creationDraft, assignee: assigneeId || creationDraft.assignee });
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
         applyPlanningDataUpdate((current) => {
@@ -133,9 +150,10 @@ export function useTaskCreateCommand({
               : current.taskRelations,
           };
         });
+        creationCompleted = true;
         setTaskDialogDefaults(null);
 
-        if (draft.createGitHubIssue && body.task.taskType === "deliverable") {
+        if (creationDraft.createGitHubIssue && body.task.taskType === "deliverable") {
           const { response: syncResponse, body: syncBody } = await taskApi.syncTaskToGitHubRequest(apiClient, body.task.id, { createIfMissing: true });
           if (!syncResponse.ok || !syncBody?.task) {
             if (syncBody?.task) {
@@ -154,7 +172,9 @@ export function useTaskCreateCommand({
           }));
         }
       } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.");
+        const message = error instanceof Error ? error.message : "Aufgabe konnte nicht erstellt werden.";
+        setSaveError(message);
+        if (!creationCompleted) callbacks.onError?.(message);
       }
     });
   };

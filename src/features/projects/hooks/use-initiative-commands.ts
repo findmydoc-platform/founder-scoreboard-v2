@@ -47,15 +47,39 @@ export function useInitiativeCommands({
     };
     const isEdit = Boolean(draft.id);
 
-    setData((current) => ({
-      ...current,
-      packages: isEdit
-        ? current.packages.map((pack) => (pack.id === draft.id ? { ...pack, ...localInitiative } : pack))
-        : [...current.packages, localInitiative],
-    }));
-    setInitiativeDialogDefaults(null);
+    if (source !== "supabase" || isEdit) {
+      setData((current) => ({
+        ...current,
+        packages: isEdit
+          ? current.packages.map((pack) => (pack.id === draft.id ? { ...pack, ...localInitiative } : pack))
+          : [...current.packages, localInitiative],
+      }));
+      setInitiativeDialogDefaults(null);
+    }
 
     if (source !== "supabase") return;
+
+    if (!isEdit) {
+      return new Promise<void>((resolve, reject) => {
+        startTransition(async () => {
+          try {
+            const { response, body } = await planningApi.saveInitiativeRequest(apiClient, draft);
+            if (!response.ok || !body?.initiative) throw new Error(body?.error || "Initiative konnte nicht gespeichert werden.");
+
+            setData((current) => ({
+              ...current,
+              packages: [...current.packages, body.initiative!],
+            }));
+            setInitiativeDialogDefaults(null);
+            resolve();
+          } catch (error) {
+            const failure = error instanceof Error ? error : new Error("Initiative konnte nicht gespeichert werden.");
+            setSaveError(failure.message);
+            reject(failure);
+          }
+        });
+      });
+    }
 
     startTransition(async () => {
       try {
@@ -64,16 +88,12 @@ export function useInitiativeCommands({
 
         setData((current) => ({
           ...current,
-          packages: isEdit
-            ? current.packages.map((pack) => (pack.id === draft.id ? body.initiative! : pack))
-            : current.packages.map((pack) => (pack.id === localInitiative.id ? body.initiative! : pack)),
+          packages: current.packages.map((pack) => (pack.id === draft.id ? body.initiative! : pack)),
         }));
       } catch (error) {
         setData((current) => ({
           ...current,
-          packages: isEdit
-            ? current.packages.map((pack) => (pack.id === draft.id ? data.packages.find((original) => original.id === draft.id) || pack : pack))
-            : current.packages.filter((pack) => pack.id !== localInitiative.id),
+          packages: current.packages.map((pack) => (pack.id === draft.id ? data.packages.find((original) => original.id === draft.id) || pack : pack)),
         }));
         setSaveError(error instanceof Error ? error.message : "Initiative konnte nicht gespeichert werden.");
       }

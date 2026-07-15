@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
-import { buildTaskBriefDraft, type TaskBriefDraft } from "@/features/tasks/model/task-detail-state";
+import {
+  buildTaskOverviewDraft,
+  taskOverviewIsDirty,
+  taskOverviewPatch,
+  type TaskOverviewDraft,
+} from "@/features/tasks/model/task-detail-presentation";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import type { AuthenticatedProfile, Profile, Task } from "@/lib/types";
 
 type TaskDetailProfile = Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | Pick<Profile, "id" | "name" | "platformRole">;
@@ -13,87 +19,87 @@ export function useTaskDetailController({
   currentProfile,
   unrestricted = false,
   onUpdate,
+  onOverviewDirtyChange,
 }: {
   task: Task;
   currentProfile?: TaskDetailProfile | null;
   unrestricted?: boolean;
-  onUpdate: (patch: Partial<Task>) => void;
+  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
+  onOverviewDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [briefEditing, setBriefEditing] = useState(false);
-  const [briefDraft, setBriefDraft] = useState<TaskBriefDraft>(() => buildTaskBriefDraft(task));
-  const [evidenceDraft, setEvidenceDraft] = useState(task.evidenceLink || "");
-  const [evidenceDirty, setEvidenceDirty] = useState(false);
-  const [dependsOnDraft, setDependsOnDraft] = useState(task.dependsOn || "");
-  const [dependsOnDirty, setDependsOnDirty] = useState(false);
-  const [noteDraft, setNoteDraft] = useState(task.note || "");
-  const [noteDirty, setNoteDirty] = useState(false);
+  const [overviewEditing, setOverviewEditing] = useState(false);
+  const [overviewBaseline, setOverviewBaseline] = useState<Task>(() => task);
+  const [overviewDraft, setOverviewDraft] = useState<TaskOverviewDraft>(() => buildTaskOverviewDraft(task));
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [overviewError, setOverviewError] = useState("");
   const [blockerDraft, setBlockerDraft] = useState({ reason: "", impact: "", needsHelpFrom: "" });
   const [relationDraft, setRelationDraft] = useState<TaskRelationshipDraft>({ relationType: "blocked_by", relatedTaskId: "", note: "" });
   const permissions = taskDetailPermissions({ task, profile: currentProfile, unrestricted });
+  const overviewPermissions = useMemo(() => ({
+    canEditBrief: permissions.canEditBrief,
+    canEditChecklist: permissions.canEditChecklist,
+    canEditEvidence: permissions.canEditEvidence,
+    canEditNotes: permissions.canEditNotes,
+  }), [permissions.canEditBrief, permissions.canEditChecklist, permissions.canEditEvidence, permissions.canEditNotes]);
+  const overviewDirty = overviewEditing && taskOverviewIsDirty(overviewBaseline, overviewDraft, overviewPermissions);
 
-  const cancelBrief = () => {
-    setBriefDraft(buildTaskBriefDraft(task));
-    setBriefEditing(false);
+  useEffect(() => {
+    onOverviewDirtyChange?.(overviewDirty);
+    return () => onOverviewDirtyChange?.(false);
+  }, [onOverviewDirtyChange, overviewDirty]);
+
+  const cancelOverview = () => {
+    setOverviewDraft(buildTaskOverviewDraft(task));
+    setOverviewError("");
+    setOverviewEditing(false);
   };
 
-  const startBriefEditing = () => {
-    setBriefDraft(buildTaskBriefDraft(task));
-    setBriefEditing(true);
+  const startOverviewEditing = () => {
+    setOverviewBaseline(task);
+    setOverviewDraft(buildTaskOverviewDraft(task));
+    setOverviewError("");
+    setOverviewEditing(true);
   };
 
-  const saveBrief = () => {
-    if (!permissions.canEditBrief) return;
-    onUpdate(briefDraft);
-    setBriefEditing(false);
-  };
+  const saveOverview = async () => {
+    if (!overviewDirty || overviewSaving) return false;
+    const patch = taskOverviewPatch(overviewBaseline, overviewDraft, overviewPermissions);
+    if (!Object.keys(patch).length) return false;
 
-  const saveEvidence = () => {
-    if (!permissions.canEditEvidence || !evidenceDirty) return;
-    onUpdate({ evidenceLink: evidenceDraft });
-    setEvidenceDirty(false);
-  };
-
-  const saveNote = () => {
-    if (!permissions.canEditNotes || !noteDirty) return;
-    onUpdate({ note: noteDraft });
-    setNoteDirty(false);
-  };
-
-  const saveDependsOn = () => {
-    if (!permissions.canEditNotes || !dependsOnDirty) return;
-    onUpdate({ dependsOn: dependsOnDraft });
-    setDependsOnDirty(false);
+    setOverviewSaving(true);
+    setOverviewError("");
+    try {
+      const result = await onUpdate(patch);
+      if (result && !result.ok) {
+        setOverviewError(result.error || "Änderungen konnten nicht gespeichert werden.");
+        return false;
+      }
+      setOverviewEditing(false);
+      return true;
+    } catch (error) {
+      setOverviewError(error instanceof Error ? error.message : "Änderungen konnten nicht gespeichert werden.");
+      return false;
+    } finally {
+      setOverviewSaving(false);
+    }
   };
 
   return {
     blockerDraft,
-    briefDraft: briefEditing ? briefDraft : buildTaskBriefDraft(task),
-    briefEditing,
-    cancelBrief,
-    dependsOnDraft: dependsOnDirty ? dependsOnDraft : task.dependsOn || "",
-    evidenceDraft: evidenceDirty ? evidenceDraft : task.evidenceLink || "",
-    noteDraft: noteDirty ? noteDraft : task.note || "",
+    cancelOverview,
+    overviewBaselineDraft: buildTaskOverviewDraft(overviewBaseline),
+    overviewDraft: overviewEditing ? overviewDraft : buildTaskOverviewDraft(task),
+    overviewDirty,
+    overviewEditing,
+    overviewError,
+    overviewPermissions,
+    overviewSaving,
     permissions,
     relationDraft,
-    saveBrief,
-    saveDependsOn,
-    saveEvidence,
-    saveNote,
-    setBriefDraft,
-    startBriefEditing,
+    saveOverview,
     setBlockerDraft,
-    setEvidenceDraft: (value: string) => {
-      setEvidenceDraft(value);
-      setEvidenceDirty(true);
-    },
-    setDependsOnDraft: (value: string) => {
-      setDependsOnDraft(value);
-      setDependsOnDirty(true);
-    },
-    setNoteDraft: (value: string) => {
-      setNoteDraft(value);
-      setNoteDirty(true);
-    },
+    setOverviewDraft,
     setRelationDraft,
+    startOverviewEditing,
   };
 }

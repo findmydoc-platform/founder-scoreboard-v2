@@ -1,13 +1,19 @@
 import { taskAssigneeLabel } from "@/lib/display";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
-import { hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
+import { effectiveTaskRelation, hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskRelation } from "@/lib/types";
 
+export type TaskRelationshipRow = {
+  relation: TaskRelation;
+  linkedTaskId: string;
+  task?: Task;
+};
+
 export type TaskRelationshipRows = {
-  waitsOn: Array<{ relation: TaskRelation; task?: Task }>;
-  blocks: Array<{ relation: TaskRelation; task?: Task }>;
-  related: Array<{ relation: TaskRelation; task?: Task }>;
+  waitsOn: TaskRelationshipRow[];
+  blocks: TaskRelationshipRow[];
+  related: TaskRelationshipRow[];
 };
 
 export type EditableTaskState = Pick<
@@ -122,12 +128,33 @@ export function buildTaskDetailGitHubState(task: Task): TaskDetailGitHubState {
 export function buildTaskRelationshipRows(task: Task, tasks: Task[], relations: TaskRelation[]): TaskRelationshipRows {
   const taskById = new Map(tasks.map((item) => [item.id, item]));
   const relationGroups = taskRelationsFor(task.id, relations);
-  const relatedTask = (relation: TaskRelation) => taskById.get(relation.taskId === task.id ? relation.relatedTaskId : relation.taskId);
+  const toRow = (relation: TaskRelation): TaskRelationshipRow | null => {
+    const effective = effectiveTaskRelation(task.id, relation);
+    if (!effective) return null;
+    return {
+      relation,
+      linkedTaskId: effective.linkedTaskId,
+      task: taskById.get(effective.linkedTaskId),
+    };
+  };
+  const uniqueRows = (group: TaskRelation[]) => {
+    const seen = new Set<string>();
+    return group.flatMap((relation) => {
+      const row = toRow(relation);
+      if (!row || seen.has(row.linkedTaskId)) return [];
+      seen.add(row.linkedTaskId);
+      return [row];
+    });
+  };
+  const waitsOn = uniqueRows(relationGroups.waitsOn);
+  const blocks = uniqueRows(relationGroups.blocks);
+  const directionalTaskIds = new Set([...waitsOn, ...blocks].map((row) => row.linkedTaskId));
+  const related = uniqueRows(relationGroups.related).filter((row) => !directionalTaskIds.has(row.linkedTaskId));
 
   return {
-    waitsOn: relationGroups.waitsOn.map((relation) => ({ relation, task: taskById.get(relation.relatedTaskId) })),
-    blocks: relationGroups.blocks.map((relation) => ({ relation, task: relatedTask(relation) })),
-    related: relationGroups.related.map((relation) => ({ relation, task: relatedTask(relation) })),
+    waitsOn,
+    blocks,
+    related,
   };
 }
 

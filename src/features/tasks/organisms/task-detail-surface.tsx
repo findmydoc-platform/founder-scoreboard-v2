@@ -1,25 +1,43 @@
 "use client";
 
-import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   canApproveDeliverableApproval,
   canRejectDeliverableApproval,
   canReturnDeliverableForRevision,
+  isTaskPlanningActive,
 } from "@/features/planning/model/approval-domain";
 import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
-import { TaskBriefSection } from "@/features/tasks/molecules/task-brief-section";
+import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
+import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
+import { TaskDetailHeaderActions } from "@/features/tasks/molecules/task-detail-header-actions";
+import { TaskDetailHistorySummary } from "@/features/tasks/molecules/task-detail-history-summary";
+import {
+  TaskDetailDependencyBand,
+  TaskDetailOperationalHeader,
+} from "@/features/tasks/molecules/task-detail-operational-header";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
-import { TaskDetailPanelNotesSection } from "@/features/tasks/molecules/task-detail-panel-notes-section";
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
-import { TaskEvidenceLinkSection } from "@/features/tasks/molecules/task-evidence-link-section";
-import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
-import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
-import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
+import { TaskDetailPlanningSection } from "@/features/tasks/molecules/task-detail-planning-section";
+import { TaskDetailTabs, type TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
+import { TaskDetailWorkflowStrips } from "@/features/tasks/molecules/task-detail-workflow-strips";
+import {
+  partitionSubIssues,
+  uniqueRelationshipCount,
+  visibleTaskActivityCount,
+} from "@/features/tasks/model/task-detail-presentation";
+import { taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
+import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
+import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
+import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
+import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
+import { normalizeStatus } from "@/lib/status";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
 
 type TaskDetailSurfaceProps = {
+  surface?: "page" | "modal";
   task: Task;
   pack?: Package;
   comments: TaskComment[];
@@ -42,22 +60,25 @@ type TaskDetailSurfaceProps = {
   commentImportNotice?: string;
   commentImportPending?: boolean;
   githubInstallationAvailable: boolean;
-  onUpdate: (patch: Partial<Task>) => void;
+  onOverviewDirtyChange?: (dirty: boolean) => void;
+  onRequestDiscardAction: (action: () => void, force?: boolean) => void;
+  onUpdate: (patch: Partial<Task>) => Promise<TaskUpdateResult> | void;
   onAddComment: (comment: string) => Promise<void> | void;
   onUploadAttachment: (file: File) => Promise<string>;
   onImportGitHubComments: () => void;
-  onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => void;
+  onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
   onCreateSubIssue: () => void;
   onOpenTask: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
   onOpenReview: () => void;
   onWithdraw: (reason: string) => void;
-  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => void;
+  onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
 export function TaskDetailSurface({
+  surface = "page",
   task,
   pack,
   comments,
@@ -80,6 +101,8 @@ export function TaskDetailSurface({
   commentImportNotice = "",
   commentImportPending = false,
   githubInstallationAvailable,
+  onOverviewDirtyChange,
+  onRequestDiscardAction,
   onUpdate,
   onAddComment,
   onUploadAttachment,
@@ -94,20 +117,21 @@ export function TaskDetailSurface({
   onRemoveRelation,
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
+  const [activeTab, setActiveTab] = useState<TaskDetailTabId>("overview");
+  const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const controller = useTaskDetailController({
     task,
     currentProfile,
     unrestricted: source === "seed",
     onUpdate,
+    onOverviewDirtyChange,
   });
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
+  const currentMilestoneId = task.milestoneId || currentPackage?.milestoneId || "";
+  const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
+  const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
-  const relationshipAccess = taskRelationshipAccess({
-    task,
-    initiative: currentPackage,
-    profile: currentProfile,
-    unrestricted: source === "seed",
-  });
+  const relationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: source === "seed" });
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const canApprove = canApproveDeliverableApproval(task, currentPackage, currentProfile);
@@ -118,140 +142,269 @@ export function TaskDetailSurface({
     approvalStatus: task.approvalStatus,
     proposedById: task.proposedById,
   }, currentProfile, source === "seed");
+  const statusOptions = taskStatusOptionsForPermissions(task.status, {
+    canCompleteSubIssue: controller.permissions.canCompleteSubIssue,
+    canManageFinalStatus: controller.permissions.canManageFinalStatus,
+    canReopenSubIssue: controller.permissions.canReopenSubIssue,
+    canUpdateWorkingStatus: controller.permissions.canUpdateWorkingStatus,
+  });
+  const effectivelyApproved = isTaskPlanningActive(task);
+  const canSelectNextStatus = statusOptions.some((status) => status !== normalizeStatus(task.status));
+  const statusLockedReason = !effectivelyApproved
+    ? task.taskType === "sub_issue" ? "Parent-Deliverable ist noch nicht freigegeben." : "Deliverable ist noch nicht freigegeben."
+    : !controller.permissions.canUpdateStatus ? "Deine Rolle darf diesen Status nicht ändern."
+      : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
+  const { completed: completedSubIssues } = partitionSubIssues(subIssues);
+  const detailDataKnown = !detailDataLoading && !detailDataError;
+  const detailDataUnavailable = Boolean(detailDataError);
+  const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
+  const relationshipCount = uniqueRelationshipCount(relationshipGroups);
+  const activityCount = visibleTaskActivityCount({ comments, externalComments, activities });
+  const availableTabs = taskDetailAvailableTabs({
+    activityCount,
+    activityKnown: detailDataKnown,
+    canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
+    canComment: controller.permissions.canComment,
+    canCreateSubIssue: controller.permissions.canCreateSubIssue,
+    relationshipCount,
+    relationshipsKnown: detailDataKnown,
+    subIssueCount: subIssues.length,
+  });
 
-  return (
-    <>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="grid min-w-0 gap-4">
-          <TaskBriefSection
-            brief={controller.briefDraft}
-            canEdit={controller.permissions.canEditBrief}
-            editing={controller.briefEditing}
-            onEdit={controller.startBriefEditing}
-            onCancel={controller.cancelBrief}
-            onSave={controller.saveBrief}
-            onBriefChange={(patch) => controller.setBriefDraft((current) => ({ ...current, ...patch }))}
-            onChecklistChange={(patch) => {
-              if (controller.permissions.canEditChecklist) onUpdate(patch);
-            }}
-          >
-            <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
-              <TaskEvidenceLinkSection
-                canEdit={controller.permissions.canEditEvidence}
-                evidenceLink={controller.evidenceDraft}
-                pending={pending}
-                onEvidenceLinkChange={controller.setEvidenceDraft}
-                onEvidenceLinkSave={controller.saveEvidence}
-              />
-              <TaskRelationshipsSection
-                task={task}
-                waitsOn={relationshipGroups.waitsOn}
-                blocks={relationshipGroups.blocks}
-                related={relationshipGroups.related}
-                dependsOn={controller.dependsOnDraft}
-                relationDraft={controller.relationDraft}
-                relationTargetOptions={relationTargetOptions}
-                allowedRelationTypes={relationshipAccess.allowedRelationTypes}
-                pending={pending}
-                onOpenTask={onOpenTask}
-                onRemoveRelation={onRemoveRelation}
-                canRemoveRelation={relationshipAccess.canRemoveRelation}
-                onDependsOnChange={controller.setDependsOnDraft}
-                onDependsOnSave={controller.saveDependsOn}
-                onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
-                onAddRelation={() => {
-                  onAddRelation(controller.relationDraft);
-                  controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
-                }}
-              />
-            </div>
-          </TaskBriefSection>
+  useEffect(() => {
+    if (!controller.overviewDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [controller.overviewDirty]);
 
-          <TaskDetailPanelSubIssuesSection
-            canCreate={controller.permissions.canCreateSubIssue}
-            subIssues={subIssues}
-            onCreateSubIssue={onCreateSubIssue}
-            onOpenTask={onOpenTask}
-          />
+  const requestDiscardAction = (action: () => void) => {
+    if (!controller.overviewDirty) {
+      action();
+      return;
+    }
+    onRequestDiscardAction(action, true);
+  };
+  const cancelOverview = () => {
+    requestDiscardAction(controller.cancelOverview);
+  };
+  const changeTab = (nextTab: TaskDetailTabId) => {
+    if (nextTab === activeTab) return;
+    requestDiscardAction(() => {
+      if (controller.overviewEditing) controller.cancelOverview();
+      setActiveTab(nextTab);
+    });
+  };
+  const startOverviewEditing = () => {
+    setActiveTab("overview");
+    controller.startOverviewEditing();
+  };
+  const openTask = (taskId: string) => {
+    requestDiscardAction(() => {
+      if (controller.overviewEditing) controller.cancelOverview();
+      onOpenTask(taskId);
+    });
+  };
 
-          {(detailDataLoading || detailDataError) && (
-            <div className={detailDataError ? "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700" : "rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600"}>
-              {detailDataError || "Kommentare, Blocker und Verlauf werden geladen..."}
-            </div>
-          )}
-
+  const panels = {
+    overview: (
+      <TaskOverviewPanel
+        task={task}
+        baseline={controller.overviewBaselineDraft}
+        draft={controller.overviewDraft}
+        permissions={controller.overviewPermissions}
+        editing={controller.overviewEditing}
+        dirty={controller.overviewDirty}
+        saving={controller.overviewSaving}
+        error={controller.overviewError}
+        onCancel={cancelOverview}
+        onSave={controller.saveOverview}
+        onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
+        riskContent={!controller.overviewEditing && (detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker) ? (
           <TaskDetailPanelBlockerSection
             canReport={controller.permissions.canReportBlocker}
             blockers={blockers}
             blockerDraft={controller.blockerDraft}
+            loading={detailDataLoading}
+            unavailable={detailDataUnavailable}
             pending={pending}
             profileName={profileName}
             onBlockerDraftChange={(patch) => controller.setBlockerDraft((current) => ({ ...current, ...patch }))}
-            onReportBlocker={(draft) => {
-              onReportBlocker(draft);
-              controller.setBlockerDraft({ reason: "", impact: "", needsHelpFrom: "" });
-            }}
+            onReportBlocker={onReportBlocker}
           />
+        ) : null}
+      />
+    ),
+    subIssues: (
+      <TaskDetailPanelSubIssuesSection
+        canCreate={controller.permissions.canCreateSubIssue}
+        subIssues={subIssues}
+        onCreateSubIssue={onCreateSubIssue}
+        onOpenTask={openTask}
+      />
+    ),
+    relationships: (
+      <TaskRelationshipsSection
+        task={task}
+        waitsOn={relationshipGroups.waitsOn}
+        blocks={relationshipGroups.blocks}
+        related={relationshipGroups.related}
+        legacyDependsOn={task.dependsOn}
+        relationDraft={controller.relationDraft}
+        relationTargetOptions={relationTargetOptions}
+        allowedRelationTypes={relationshipAccess.allowedRelationTypes}
+        pending={pending}
+        loading={detailDataLoading}
+        unavailable={detailDataUnavailable}
+        onOpenTask={openTask}
+        onRemoveRelation={onRemoveRelation}
+        canRemoveRelation={relationshipAccess.canRemoveRelation}
+        canEditLegacyDependsOn={controller.permissions.canEditNotes}
+        onUpdateLegacyDependsOn={async (value) => {
+          const result = await onUpdate({ dependsOn: value });
+          return result || { ok: true, task: { dependsOn: value } };
+        }}
+        onRelationDraftChange={(patch) => controller.setRelationDraft((current) => ({ ...current, ...patch }))}
+        onAddRelation={async () => {
+          const result = await onAddRelation(controller.relationDraft);
+          if (result.ok) {
+            controller.setRelationDraft({ relationType: "blocked_by", relatedTaskId: "", note: "" });
+          }
+          return result;
+        }}
+      />
+    ),
+    activity: (
+      <TaskCommentThread
+        comments={comments}
+        externalComments={externalComments}
+        activities={activities}
+        notice={commentImportNotice}
+        profiles={teamProfiles}
+        currentProfileId={currentProfile?.id || ""}
+        loading={detailDataLoading}
+        unavailable={detailDataUnavailable}
+        pending={pending}
+        importPending={commentImportPending}
+        readOnly={!controller.permissions.canComment}
+        onImportGitHubComments={onImportGitHubComments}
+        onUploadAttachment={onUploadAttachment}
+        onAddComment={onAddComment}
+        title="Aktivität"
+        description="Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline."
+        footer={<TaskDetailHistorySummary task={task} profiles={teamProfiles} />}
+      />
+    ),
+  } satisfies Record<TaskDetailTabId, ReactNode>;
 
-          <TaskDetailPanelNotesSection
-            canEdit={controller.permissions.canEditNotes}
-            note={controller.noteDraft}
-            pending={pending}
-            onChange={controller.setNoteDraft}
-            onSave={controller.saveNote}
-          />
-        </main>
-
-        <TaskDetailPanelSidebar
+  const operationalHeader = (
+    <TaskDetailOperationalHeader
+      task={task}
+      initiative={currentPackage}
+      milestone={currentMilestone}
+      parentTask={parentTask}
+      profiles={teamProfiles}
+      subIssues={subIssues}
+      statusOptions={statusOptions}
+      canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
+      statusLockedReason={statusLockedReason}
+      canManageTaskMeta={controller.permissions.canManageTaskMeta}
+      pending={pending}
+      titleId={surface === "modal" ? "task-detail-panel-title" : "task-detail-page-title"}
+      actions={(
+        <TaskDetailHeaderActions
           task={task}
-          pack={pack}
-          teamProfiles={teamProfiles}
-          packages={packages}
-          parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
-          sprints={sprints}
-          milestones={milestones}
-          canCompleteSubIssue={controller.permissions.canCompleteSubIssue}
-          canManageFinalTaskStatus={controller.permissions.canManageFinalStatus}
-          canManageTaskMeta={controller.permissions.canManageTaskMeta}
-          canReparentSubIssue={controller.permissions.canReparentSubIssue}
+          canEditOverview={canEditOverview && !controller.overviewEditing}
           canManageReviewOwner={controller.permissions.canManageReviewOwner}
-          canOpenReview={controller.permissions.canOpenReview}
-          canReopenSubIssue={controller.permissions.canReopenSubIssue}
           canWithdrawTask={canWithdrawTask}
-          canChangeTaskStatus={controller.permissions.canUpdateStatus}
-          canUpdateWorkingTaskStatus={controller.permissions.canUpdateWorkingStatus}
-          canApprove={canApprove}
-          canReject={canReject}
-          canReturnToDraft={canReturnToDraft}
-          pending={pending}
           githubInstallationAvailable={githubInstallationAvailable}
-          onUpdate={onUpdate}
-          onSyncGitHub={onSyncGitHub}
-          onOpenReview={onOpenReview}
-          onWithdraw={onWithdraw}
-          onDecideApproval={onDecideApproval}
-        />
-      </div>
-
-      <div className="mt-5 min-w-0">
-        <TaskCommentThread
-          comments={comments}
-          externalComments={externalComments}
-          activities={activities}
-          notice={commentImportNotice}
-          profiles={teamProfiles}
-          currentProfileId={currentProfile?.id || ""}
           pending={pending}
-          importPending={commentImportPending}
-          readOnly={!controller.permissions.canComment}
-          onImportGitHubComments={onImportGitHubComments}
-          onUploadAttachment={onUploadAttachment}
-          onAddComment={onAddComment}
-          title="Kommentare"
-          description="Laufende Abstimmungen, Nachfragen und Updates zur Aufgabe."
+          onEditOverview={startOverviewEditing}
+          onShowReviewSetup={() => setReviewSetupOpen(true)}
+          onSyncGitHub={onSyncGitHub}
+          onWithdraw={onWithdraw}
         />
-      </div>
-      {error && <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
+      )}
+      onUpdate={onUpdate}
+    />
+  );
+
+  const bodyContent = (
+    <>
+      <TaskDetailPlanningSection
+        task={task}
+        pack={currentPackage}
+        teamProfiles={teamProfiles}
+        packages={packages}
+        parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
+        sprints={sprints}
+        milestones={milestones}
+        canManageTaskMeta={controller.permissions.canManageTaskMeta}
+        canReparentSubIssue={controller.permissions.canReparentSubIssue}
+        pending={pending}
+        onUpdate={onUpdate}
+      />
+
+      <TaskDetailDependencyBand
+        waitsOn={relationshipGroups.waitsOn}
+        blocks={relationshipGroups.blocks}
+        loading={detailDataLoading}
+        error={detailDataError}
+        onOpenTask={openTask}
+      />
+
+      <TaskDetailWorkflowStrips
+        task={task}
+        teamProfiles={teamProfiles}
+        canApprove={canApprove}
+        canReject={canReject}
+        canReturnToDraft={canReturnToDraft}
+        canManageReviewOwner={controller.permissions.canManageReviewOwner}
+        canOpenReview={controller.permissions.canOpenReview}
+        forceReviewSetup={reviewSetupOpen}
+        pending={pending}
+        onUpdate={onUpdate}
+        onOpenReview={onOpenReview}
+        onDecideApproval={onDecideApproval}
+      />
+
+      {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
+
+      <TaskDetailTabs
+        value={activeTab}
+        onValueChange={changeTab}
+        availableTabs={availableTabs}
+        className="mt-5"
+        tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
+        counts={{
+          subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
+          relationships: detailDataKnown && relationshipCount > 0 ? relationshipCount : "",
+          activity: detailDataKnown && activityCount > 0 ? activityCount : "",
+        }}
+        panels={panels}
+        panelClassName="pt-5"
+      />
     </>
+  );
+
+  if (surface === "modal") {
+    return (
+      <div className="flex h-full min-h-0 min-w-0 flex-col bg-white">
+        <div className="shrink-0 px-4 pt-4 sm:px-5">{operationalHeader}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5">
+          {bodyContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      {operationalHeader}
+      {bodyContent}
+    </div>
   );
 }

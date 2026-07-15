@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
+import type { TaskActionResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskRelation, TaskRelationType } from "@/lib/types";
@@ -149,10 +150,10 @@ export function useTaskCollaborationCommands({
     importGitHubComments(selectedTask, { silent: true });
   }, [githubInstallationAvailable, importGitHubComments, selectedTask, source]);
 
-  const reportTaskBlocker = (task: Task, payload: { reason: string; impact: string; needsHelpFrom: string }) => {
+  const reportTaskBlocker = async (task: Task, payload: { reason: string; impact: string; needsHelpFrom: string }): Promise<TaskActionResult> => {
     if (!currentProfile) {
-      setSaveError("GitHub-User ist keinem Teamprofil zugeordnet.");
-      return;
+      const error = "GitHub-User ist keinem Teamprofil zugeordnet.";
+      return { ok: false, error };
     }
 
     setSaveError("");
@@ -176,31 +177,38 @@ export function useTaskCollaborationCommands({
       taskBlockers: [localBlocker, ...current.taskBlockers],
     }));
 
-    if (source !== "supabase") return;
+    if (source !== "supabase") return { ok: true };
 
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.reportTaskBlockerRequest(apiClient, task.id, payload);
-        if (!response.ok || !body?.blocker) throw new Error(body?.error || "Blocker konnte nicht gespeichert werden.");
+    return new Promise<TaskActionResult>((resolve) => {
+      startTransition(async () => {
+        try {
+          const { response, body } = await taskApi.reportTaskBlockerRequest(apiClient, task.id, payload);
+          if (!response.ok || !body?.blocker) throw new Error(body?.error || "Blocker konnte nicht gespeichert werden.");
 
-        setData((current) => ({
-          ...current,
-          taskBlockers: [body.blocker!, ...current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id)],
-        }));
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
-          taskBlockers: current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id),
-        }));
-        setSaveError(error instanceof Error ? error.message : "Blocker konnte nicht gespeichert werden.");
-      }
+          setData((current) => ({
+            ...current,
+            taskBlockers: [body.blocker!, ...current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id)],
+          }));
+          resolve({ ok: true });
+        } catch (caught) {
+          const error = caught instanceof Error ? caught.message : "Blocker konnte nicht gespeichert werden.";
+          setData((current) => ({
+            ...current,
+            tasks: current.tasks.map((item) => (item.id === task.id ? previousTask : item)),
+            taskBlockers: current.taskBlockers.filter((blocker) => blocker.id !== localBlocker.id),
+          }));
+          resolve({ ok: false, error });
+        }
+      });
     });
   };
 
-  const addTaskRelation = (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => {
+  const addTaskRelation = async (task: Task, payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }): Promise<TaskActionResult> => {
     setSaveError("");
-    if (!payload.relatedTaskId || payload.relatedTaskId === task.id) return;
+    if (!payload.relatedTaskId || payload.relatedTaskId === task.id) {
+      const error = "Bitte eine andere Aufgabe auswählen.";
+      return { ok: false, error };
+    }
 
     const localRelation: TaskRelation = {
       id: Date.now(),
@@ -221,24 +229,28 @@ export function useTaskCollaborationCommands({
           : item,
       ),
     }));
-    if (source !== "supabase") return;
+    if (source !== "supabase") return { ok: true };
 
-    startTransition(async () => {
-      try {
-        const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
-        if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
+    return new Promise<TaskActionResult>((resolve) => {
+      startTransition(async () => {
+        try {
+          const { response, body } = await taskApi.addTaskRelationshipRequest(apiClient, task.id, payload);
+          if (!response.ok || !body?.relation) throw new Error(body?.error || "Abhängigkeit konnte nicht gespeichert werden.");
 
-        setData((current) => ({
-          ...current,
-          taskRelations: current.taskRelations.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)),
-        }));
-      } catch (error) {
-        setData((current) => ({
-          ...current,
-          taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
-        }));
-        setSaveError(error instanceof Error ? error.message : "Abhängigkeit konnte nicht gespeichert werden.");
-      }
+          setData((current) => ({
+            ...current,
+            taskRelations: current.taskRelations.map((relation) => (relation.id === localRelation.id ? body.relation! : relation)),
+          }));
+          resolve({ ok: true });
+        } catch (caught) {
+          const error = caught instanceof Error ? caught.message : "Abhängigkeit konnte nicht gespeichert werden.";
+          setData((current) => ({
+            ...current,
+            taskRelations: current.taskRelations.filter((relation) => relation.id !== localRelation.id),
+          }));
+          resolve({ ok: false, error });
+        }
+      });
     });
   };
 

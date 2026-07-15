@@ -353,7 +353,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
-  const briefSection = await readFile("src/features/tasks/molecules/task-brief-section.tsx", "utf8");
+  const overviewPanel = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const docs = await readFile("docs/task-template-v2.md", "utf8");
 
   assert.match(migration, /problem_statement/);
@@ -367,11 +367,13 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   assert.match(dataRowTypes, /problem_statement/);
   assert.match(newTaskUi, /Aufgabenbrief/);
   assert.match(detail, /TaskDetailSurface/);
-  assert.match(detailSurface, /TaskBriefSection/);
-  assert.match(briefSection, /Aufgabenbrief/);
-  assert.match(briefSection, /Abnahmekriterien/);
-  assert.match(briefSection, /Nachweis/);
-  assert.match(briefSection, /Qualitätsstandard/);
+  assert.match(detailSurface, /TaskOverviewPanel/);
+  assert.match(overviewPanel, /Problem/);
+  assert.match(overviewPanel, /Zielbild/);
+  assert.match(overviewPanel, /Abnahmekriterien/);
+  assert.match(overviewPanel, /Erforderlicher Nachweis/);
+  assert.match(overviewPanel, /Nachweis/);
+  assert.match(overviewPanel, /Qualitätsstandard/);
   assert.match(docs, /Nicht mit Acceptance Criteria vermischen/);
 });
 
@@ -685,7 +687,7 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const routeContract = `${route}\n${taskInsertRow}`;
   const ui = await readPlanningSurface();
-  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const historySummary = await readFile("src/features/tasks/molecules/task-detail-history-summary.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /original_sprint_id/);
@@ -700,7 +702,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(finalizationMigration, /accepted_carryover/);
   assert.match(finalizationMigration, /insert into public\.tasks/);
   assert.match(route, /sprint\.task_carried_over/);
-  assert.match(panelSidebar, /Sprint-Verlauf/);
+  assert.match(historySummary, /carriedFromSprintId/);
+  assert.match(historySummary, /Aus Sprint/);
   assert.match(ui, /Carry-over/);
   assert.match(types, /carryoverReason/);
 });

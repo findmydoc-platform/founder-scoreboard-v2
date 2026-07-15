@@ -50,14 +50,18 @@ test("non-interactive task text stays static in intent-free contexts", async () 
 test("drawer focus navigation and full-page overlay remain available", async () => {
   const header = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const taskPage = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const reviewShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
 
   assert.match(header, /data-autofocus/);
-  assert.match(header, /titleRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(header, /titleRef\.current\?\.focus\(\)/);
   assert.match(header, /Zurück zu/);
   assert.match(header, /Große Ansicht/);
   assert.match(panel, /aria-labelledby="task-detail-panel-title"/);
+  assert.match(panel, /overflow-hidden/);
+  assert.match(surface, /overflow-y-auto overscroll-contain/);
+  assert.match(panel, /onOverviewDirtyChange/);
   assert.match(taskPage, /PlanningOverlayLayer/);
   assert.match(reviewShell, /ReviewDetailPage/);
   assert.match(reviewShell, /PlanningOverlayLayer/);
@@ -67,7 +71,7 @@ test("FounderOps tasks and GitHub issues use unambiguous labels", async () => {
   const files = [
     "src/features/tasks/molecules/task-card.tsx",
     "src/features/tasks/organisms/task-github-sync-queue.tsx",
-    "src/features/tasks/organisms/task-detail-panel-sidebar.tsx",
+    "src/features/tasks/molecules/task-detail-header-actions.tsx",
   ];
 
   const source = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");

@@ -19,6 +19,7 @@ type AppSidebarProps = {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   onMouseLeave?: () => void;
+  onRequestNavigation?: (href: string) => void;
 };
 
 function AccessCard({
@@ -50,6 +51,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
   mobileOpen = false,
   onMobileClose,
   onMouseLeave,
+  onRequestNavigation,
 }, ref) {
   useEffect(() => {
     if (!mobileOpen) return;
@@ -77,7 +79,18 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       </>
     );
     return (
-      <Link key={item.id} href={item.href} title={item.label} className={className} data-tour-id={`workspace-nav-${item.id}`} onClick={variant === "mobile" ? onMobileClose : undefined}>
+      <Link
+        key={item.id}
+        href={item.href}
+        title={item.label}
+        className={className}
+        data-tour-id={`workspace-nav-${item.id}`}
+        onNavigate={onRequestNavigation ? (event) => {
+          event.preventDefault();
+          onRequestNavigation(item.href);
+        } : undefined}
+        onClick={variant === "mobile" && !onRequestNavigation ? onMobileClose : undefined}
+      >
         {content}
       </Link>
     );

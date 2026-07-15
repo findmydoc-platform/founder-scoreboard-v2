@@ -19,6 +19,10 @@ type CustomSelectProps = {
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
+  "aria-required"?: boolean;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+  "data-autofocus"?: boolean;
   className?: string;
   menuClassName?: string;
 };
@@ -30,6 +34,10 @@ export function CustomSelect({
   disabled = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
+  "aria-required": ariaRequired,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "data-autofocus": dataAutofocus,
   className = "",
   menuClassName = "",
 }: CustomSelectProps) {
@@ -80,11 +88,16 @@ export function CustomSelect({
         ref={triggerRef}
         type="button"
         disabled={disabled}
+        role="combobox"
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={id}
+        data-autofocus={dataAutofocus ? "true" : undefined}
         onClick={() => {
           if (open) {
             closeMenu();

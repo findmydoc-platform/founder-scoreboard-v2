@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Profile } from "@/lib/types";
 
 export function ProfileMultiSelect({
@@ -9,12 +9,27 @@ export function ProfileMultiSelect({
   profiles,
   onChange,
   placeholder = "Profile wählen",
+  disabled = false,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-required": ariaRequired,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "data-autofocus": dataAutofocus,
 }: {
   value: string[];
   profiles: Profile[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  disabled?: boolean;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-required"?: boolean;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+  "data-autofocus"?: boolean;
 }) {
+  const listboxId = useId();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedProfiles = profiles.filter((profile) => value.includes(profile.id));
@@ -44,10 +59,19 @@ export function ProfileMultiSelect({
     <div ref={containerRef} className="relative">
       <button
         type="button"
+        role="combobox"
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-900 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className="flex min-h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-900 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-60"
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={listboxId}
+        data-autofocus={dataAutofocus ? "true" : undefined}
       >
         <span className={`truncate ${selectedProfiles.length ? "" : "text-slate-400"}`}>{selectedLabel}</span>
         <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -59,6 +83,7 @@ export function ProfileMultiSelect({
               <span className="truncate">{profile.name}</span>
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => onChange(value.filter((item) => item !== profile.id))}
                 className="grid h-4 w-4 shrink-0 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"
                 aria-label={`${profile.name} entfernen`}
@@ -70,7 +95,7 @@ export function ProfileMultiSelect({
         </div>
       )}
       {open && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg" role="listbox" aria-multiselectable="true">
+        <div id={listboxId} className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg" role="listbox" aria-multiselectable="true">
           {profiles.map((profile) => {
             const checked = value.includes(profile.id);
             return (

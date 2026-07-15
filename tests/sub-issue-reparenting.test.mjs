@@ -45,9 +45,9 @@ test("database transaction inherits hierarchy and audits the old and new parent"
 });
 
 test("task detail uses a custom Parent control and GitHub replaces the native parent", async () => {
-  const [surface, sidebar, customSelect, syncRoute, github, docs] = await Promise.all([
+  const [surface, planningSection, customSelect, syncRoute, github, docs] = await Promise.all([
     readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8"),
-    readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8"),
+    readFile("src/features/tasks/molecules/task-detail-planning-section.tsx", "utf8"),
     readFile("src/shared/atoms/custom-select.tsx", "utf8"),
     readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),
     readFile("src/lib/github.ts", "utf8"),
@@ -55,10 +55,10 @@ test("task detail uses a custom Parent control and GitHub replaces the native pa
   ]);
 
   assert.match(surface, /canReparentSubIssue=\{controller\.permissions\.canReparentSubIssue\}/);
-  assert.match(sidebar, /label="Parent-Deliverable"/);
-  assert.match(sidebar, /parentDeliverableOptions\(parentDeliverables, packages\)/);
-  assert.match(sidebar, /Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv/);
-  assert.doesNotMatch(sidebar, /<select\b|<option\b/);
+  assert.match(planningSection, /label="Parent-Deliverable"/);
+  assert.match(planningSection, /parentDeliverableOptions\(parentDeliverables, packages\)/);
+  assert.match(planningSection, /Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv/);
+  assert.doesNotMatch(planningSection, /<select\b|<option\b/);
   assert.match(customSelect, /role="listbox"/);
   assert.match(syncRoute, /connectGitHubSubIssue/);
   assert.match(github, /replaceParent: true/);
