@@ -17,6 +17,8 @@ This directory records the approved design direction, implementation contract, a
 
 The eight files in `development-screens/` are visual references. `implementation-screens/` contains the delivered full-page, modal, mobile, and source-comparison evidence. The repository-root `design-qa.md` records the final visual QA. When sample data, counts, labels, or controls conflict with the normative documents, the normative documents win.
 
+The latest placement refinement is evidenced by `implementation-modal-refined.png`, `implementation-modal-refined-mobile.png`, `implementation-workflow-strip-refined.png`, and the two `comparison-modal-refined*.png` files. These replace the earlier generic secondary-rail / `Weitere Details` direction with semantic inline placement.
+
 ## Boundaries
 
 - Presentation and information hierarchy only.

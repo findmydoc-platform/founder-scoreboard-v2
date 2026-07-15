@@ -19,7 +19,7 @@ It is normative for the capabilities listed below. Implementations must preserve
 3. **Governance stays secondary.** Approval and Review remain available but do not compete with work status or `Zuständig`.
 4. **Narrative blockers are not relationship edges.** A reported `TaskBlocker` remains distinct from `Wartet auf` and `Andere warten hierauf`.
 5. **Existing permission helpers are authoritative.** Do not copy or reinterpret role matrices inside new UI components.
-6. **The modal and full page use the same semantic content.** Only the rail-to-disclosure transformation and container chrome differ.
+6. **The modal and full page use the same semantic content and one-column hierarchy.** Only container chrome and scroll ownership differ.
 7. **Visible state is routine success feedback.** Do not add a success toast when the saved value, new row, imported comment, or sync status is already visible.
 8. **Failure is placed with the affected capability.** Do not route all item errors to one page-bottom message.
 9. **Empty optional read content is omitted.** Editing may reveal an empty field when the current user is allowed to populate it.
@@ -31,16 +31,17 @@ It is normative for the capabilities listed below. Implementations must preserve
 |---|---|---|---|
 | Evidence Required | `task.evidenceRequired` | `Übersicht` authored content | Activity after a saved change, using existing activity behavior |
 | Evidence Link | `task.evidenceLink` | `Übersicht` proof card / edit field | GitHub import may update it through the existing workflow |
-| Approval | approval fields on `Task` | Secondary rail / `Weitere Details`; policy note near header only when work is locked | Activity and existing decision history |
-| Review | review fields on `Task` | Secondary rail / `Weitere Details` | Relevant Review activity in `Aktivität` |
+| Approval | approval fields on `Task` | Conditional workflow strip above the tabs | Activity and existing decision history |
+| Review | review fields on `Task` | Conditional workflow strip; dormant setup opens from the Item action menu | Relevant Review activity in `Aktivität` |
 | Reported Task Blocker | `TaskBlocker[]` | `Übersicht` operational-risk section | Header work status and Activity event |
 | Work status | `task.status` | Operational header | Relevant Activity event |
 | Primary owner | `task.assigneeId` / `task.assignee` | Operational header | Relevant Activity event |
 | Priority | `task.priority` | Operational header | Relevant Activity event |
-| Initiative, Sprint, Milestone, period | Task planning fields plus referenced entities | Resolved Epic / Meilenstein in the identity line; controls in secondary rail / `Weitere Details` | Relevant Activity event |
+| Initiative, Sprint, Milestone, period | Task planning fields plus referenced entities | Compact Planning summary and inline disclosure | Relevant Activity event |
 | GitHub comment import | `TaskExternalComment[]` plus import state | `Aktivität` | Compact local notice inside Activity |
-| GitHub Issue sync | GitHub Issue and sync fields on `Task` | Secondary rail / `Weitere Details` | GitHub-related Activity where already recorded |
-| Withdraw to trash | approval/trash state plus current permission predicate | Last action in secondary rail / `Weitere Details` | Redirect or modal close after success |
+| GitHub Issue sync | GitHub Issue and sync fields on `Task` | Linked Issue in title actions; sync/create in Item action menu | GitHub-related Activity where already recorded |
+| Creator, update, carryover | Task provenance and sprint carryover fields | Compact footer in `Aktivität` | Existing activity events |
+| Withdraw to trash | approval/trash state plus current permission predicate | Destructive group in Item action menu | Redirect or modal close after success |
 
 ## 1. Evidence Required and Evidence Link
 
@@ -115,7 +116,7 @@ Visible German labels:
 
 - The same section order and link representation appear in both surfaces.
 - Full page keeps the readable main-column measure.
-- Modal keeps the same content inside the active `Übersicht` panel; it must not move Evidence into `Weitere Details`.
+- Modal keeps the same content inside the active `Übersicht` panel; Evidence never moves into operational metadata.
 
 ### Non-goals
 
@@ -131,15 +132,15 @@ Visible German labels:
 
 - Data: `approvalStatus`, `approvalRevision`, proposal/decision actor and time fields, `decisionNote`, and inherited `parentApprovalStatus` on `Task`.
 - Policy: `approval-domain.ts`, including `isTaskPlanningActive`, `canApproveDeliverableApproval`, `canRejectDeliverableApproval`, `canReturnDeliverableForRevision`, and `currentApprovalDecisionReason`.
-- Current UI: `TaskDetailPanelSidebar`, `ApprovalDecisionDialog`.
+- UI: `TaskDetailWorkflowStrips`, `ApprovalDecisionDialog`.
 - Mutation: existing `POST /api/tasks/[id]/approval` flow through the Planning controller.
 
 ### New UI placement
 
-- Routine Approval state belongs in a rail group labelled `Freigabe`.
-- In the modal or constrained layout, the same group appears inside `Weitere Details`.
+- Non-active Approval state belongs in a compact workflow strip labelled with its actual state.
+- The strip appears in the same place on full page and modal and is omitted after routine approval.
 - Approval never replaces `task.status` in the operational header.
-- When lack of Approval currently prevents work, show one compact persistent policy note directly below the operational facts. The full status, revision, reason, and actions stay in the secondary group.
+- When lack of Approval currently prevents work, the strip shows status, revision, reason, and permitted actions without duplicating work status.
 
 ### Read behavior
 
@@ -170,8 +171,7 @@ Visible German labels:
 
 ### Full-page and modal treatment
 
-- Full page: compact rail definition rows and actions.
-- Modal: same group inside `Weitere Details`; a work-locking policy note remains above the tabs and is never hidden in the disclosure.
+- Full page and modal use the same strip above the tabs; it is never hidden in a generic disclosure.
 
 ### Non-goals
 
@@ -186,13 +186,13 @@ Visible German labels:
 
 - Data: `reviewStatus`, `reviewOwnerProfileId`, `reviewRequestedAt`, `scoreFinal`, and `scorePoints` on `Task`.
 - Permission projection: `taskDetailPermissions`, plus existing Review and final-status policies.
-- Current UI: Review block in `TaskDetailPanelSidebar`; detailed workflow in `TaskReviewSheet`.
+- UI: `TaskDetailWorkflowStrips`; detailed workflow in `TaskReviewSheet`.
 - Mutations: existing Review, reopen, Task update, and review-sheet endpoints/controllers.
 
 ### New UI placement
 
-- Place Review in the secondary rail below Planning and above GitHub.
-- Use `Weitere Details` in the modal.
+- Place active, configured, or completed Review in a compact workflow strip above the tabs.
+- When Review is dormant and unassigned, `Review-Verantwortung festlegen` in the Item action menu opens that strip without introducing a new workflow.
 - Show Review Owner only here; it never competes with primary `Zuständig` in the header.
 - Review-related events remain part of `Aktivität` when already present in `taskActivity`.
 
@@ -227,7 +227,7 @@ Visible German labels:
 ### Full-page and modal treatment
 
 - Content and actions are identical.
-- Full page uses the rail; modal uses `Weitere Details`.
+- Full page and modal use the same conditional strip.
 - An open Review sheet remains its existing overlay/workflow and is not embedded into the Item tab content.
 
 ### Non-goals
@@ -295,7 +295,7 @@ It is not a `blocked_by` relationship. A Task may have a reported blocker, a `Wa
 ### Full-page and modal treatment
 
 - Both surfaces use the same Overview section.
-- Modal does not move blocker content into `Weitere Details` because it is operational work state.
+- Modal keeps blocker content in Overview because it is operational work state.
 - Long blocker text wraps inside the main content measure; no nested card stack is introduced.
 
 ### Non-goals
@@ -312,7 +312,7 @@ It is not a `blocked_by` relationship. A Task may have a reported blocker, a `Wa
 - Work facts: `status`, assignee/owner fields, `priority`, and `deadline` on `Task`.
 - Planning: `packageId`, `sprintId`, `milestoneId`, `startDate`, `endDate`, and for Sub-Issues `parentTaskId` plus inherited values.
 - Referenced data: `Package[]`, `Sprint[]`, `Milestone[]`, `Profile[]`, and direct Parent Tasks.
-- Current UI: `TaskStatusControl` plus controls in `TaskDetailPanelSidebar`.
+- UI: `TaskStatusControl` plus `TaskDetailPlanningSection`.
 - Client normalization/mutation: `buildClientTaskUpdatePatch`, `taskUpdateRequestPayload`, Planning update commands, and `PATCH /api/tasks/[id]`.
 
 ### New UI placement
@@ -325,7 +325,7 @@ Operational header:
 4. `Ziel` from `task.deadline` when present;
 5. resolved Epic / Meilenstein as read-only hierarchy context when one exists.
 
-Secondary rail / `Weitere Details`:
+Inline Planning disclosure:
 
 - Initiative;
 - Sprint;
@@ -334,7 +334,7 @@ Secondary rail / `Weitere Details`:
 - Parent-Deliverable and inherited planning context for a Sub-Issue;
 - Initiative-RACI as contextual information, not an Item owner.
 
-The rail must not repeat status, owner, priority, or deadline as read-only facts.
+The Planning disclosure must not repeat status, owner, priority, or deadline as read-only facts.
 
 ### Read behavior
 
@@ -349,7 +349,7 @@ The rail must not repeat status, owner, priority, or deadline as read-only facts
 - Work status retains the existing direct `TaskStatusControl` behavior and lock explanation. It is not delayed behind Overview Save.
 - Header `Bearbeiten` enters only the local Overview edit mode defined in `100-development-screen-spec.md` and `130-interaction-responsive-accessibility-contract.md`; it does not establish a page-wide Item edit context.
 - Owner, priority, and deadline retain their own permission-gated in-place controls in the operational header.
-- Initiative, Sprint, Milestone, period, Parent, and Review Owner retain their own permission-gated in-place controls in the secondary rail / `Weitere Details`.
+- Initiative, Sprint, Milestone, period, and Parent retain their own permission-gated controls in the inline Planning disclosure. Review Owner stays in the Review strip.
 - Each direct control submits its smallest valid Task patch through the existing update flow. Existing coupled patches for Initiative/Milestone and Parent inheritance remain permitted.
 - These direct changes do not participate in the Overview dirty state and are not reverted by Overview `Abbrechen`.
 - Overview `Speichern` submits only the permitted dirty Overview fields listed in `100-development-screen-spec.md`; Overview `Abbrechen` restores only that local draft.
@@ -375,15 +375,14 @@ The rail must not repeat status, owner, priority, or deadline as read-only facts
 ### Full-page and modal treatment
 
 - The same values, options, permission decisions, and edit state apply to both surfaces.
-- Full page keeps planning controls in the rail.
-- Modal keeps direct Planning controls in `Weitere Details`; using one does not enter or leave Overview edit mode.
+- Full page and modal keep direct Planning controls in the same inline disclosure; using one does not enter or leave Overview edit mode.
 - The modal header may wrap controls but must keep status and owner first.
 
 ### Non-goals
 
 - No new status, priority, planning field, overdue rule, or role.
 - No owner inference from creator, Review Owner, or RACI.
-- No status/owner duplication between header and rail.
+- No status/owner duplication between the header and inline sections.
 - No automatic reparenting, sprint assignment, or approval bypass.
 
 ## 6. GitHub Comment Import and GitHub Issue Sync
@@ -406,22 +405,22 @@ Comment import:
 Issue sync:
 
 - Data: `githubRepo`, `githubIssueNumber`, `githubIssueUrl`, `githubIssueSyncStatus`, `githubIssueLastSyncedAt`, `githubIssueSyncError`, and `githubIssueSyncPendingSince`.
-- UI/hooks: current GitHub group in `TaskDetailPanelSidebar`, GitHub sync command and queue helpers.
+- UI/hooks: `TaskDetailHeaderActions`, GitHub sync command and queue helpers.
 - Mutation: `POST /api/tasks/[id]/sync-github`.
 
 ### New UI placement
 
 - `GitHub aktualisieren` for comment import belongs in the `Aktivität` panel toolbar.
 - Imported GitHub comments appear in the same Activity timeline with their GitHub source and open-link affordance.
-- Issue link, sync state, `Sync`, and `GitHub Issue anlegen` belong in one compact `GitHub` group in the secondary rail / `Weitere Details`.
+- A linked Issue appears as a compact 44-pixel title action with its Issue number. Sync/create belongs in the Item action menu.
 - Global installation/user-connection state remains application chrome and must not interrupt the Item header.
 
 ### Read behavior
 
 - Activity renders local comments, imported GitHub comments, and useful activity records without duplicating them in Overview.
 - GitHub comments keep author login/avatar, timestamp, body, and `In GitHub öffnen` when available.
-- The GitHub rail group shows one state sentence, one Issue link when present, and at most one primary action.
-- When no Issue exists, show `Noch kein GitHub Issue` once. Do not repeat it as a card, caption, and disabled action message.
+- The title action shows the Issue number and external-open affordance. A small amber attention marker is permitted only for a real sync failure.
+- When no Issue exists, omit the empty title action. The menu exposes `GitHub Issue anlegen` through the current eligibility contract.
 
 ### Edit/action behavior
 
@@ -449,14 +448,13 @@ Comment import:
 Issue sync:
 
 - Pending state replaces the action label with `Sync...` or `Anlegen...` and keeps the last known Issue link visible.
-- A stale, locked, reconnect, or persistence failure appears inside the GitHub rail group using the existing classified message.
+- A stale, locked, reconnect, or persistence failure supplies the menu action's adjacent disabled reason; a compact attention marker may remain on the linked Issue.
 - Success updates the Issue link, sync state, and last-synced information. No toast is needed.
 
 ### Full-page and modal treatment
 
 - Activity content is identical in both surfaces.
-- Full page shows the GitHub group in the rail.
-- Modal shows it inside `Weitere Details`; a sync error remains visible when that disclosure is opened and may contribute one compact attention marker on the disclosure label.
+- Full page and modal use the same compact title action and Item action menu.
 - Neither surface moves GitHub sync into the operational work-status row.
 
 ### Non-goals
@@ -471,15 +469,14 @@ Issue sync:
 ### Data source and current code path
 
 - Eligibility: `canWithdrawPlanningRoot` evaluated for a Deliverable with its Approval and proposer state.
-- Current UI: `TaskDetailPanelSidebar` plus `PlanningTrashActionDialog`.
+- UI: `TaskDetailHeaderActions` plus `PlanningTrashActionDialog`.
 - Client workflow: `useTaskWithdrawCommand` and Planning controller state removal/rollback.
 - Mutation: existing `POST /api/tasks/[id]/withdraw`.
 - Direct `DELETE /api/tasks/[id]` intentionally returns `410` and is not an available Item action.
 
 ### New UI placement
 
-- Place the action last in `Weitere Aktionen` at the bottom of the secondary rail.
-- In the modal, place it last inside `Weitere Details`, visually separated from routine metadata and GitHub actions.
+- Place the action in the final destructive group of the Item action menu, visually separated from routine workflow and GitHub actions.
 - Use the existing label `Deliverable zurückziehen` and explanatory trash-retention copy.
 - Do not use the mockup labels `Archivieren` or `Löschen`.
 
@@ -507,8 +504,7 @@ Issue sync:
 ### Full-page and modal treatment
 
 - The same eligibility, explanation, dialog, and mutation apply.
-- Full page: action is last in the rail.
-- Modal: action is last in `Weitere Details`; the confirmation remains a separate accessible dialog above the Item modal.
+- Full page and modal: action is last in the Item action menu; the confirmation remains a separate accessible dialog above the Item surface.
 
 ### Non-goals
 
@@ -530,7 +526,7 @@ Implementation must preserve these distinctions:
 | Comments, external comments, Activity | Task detail data | `Aktivität` panel |
 | Reported blockers | Task detail data | Overview blocker section / one partial-data notice |
 | Relationship edges | Task detail data and current planning state | Relationship summary plus `Beziehungen` panel |
-| GitHub connection/sync state | Task plus current auth snapshot | GitHub rail group or application utility when connection-wide |
+| GitHub connection/sync state | Task plus current auth snapshot | Item title action/menu or application utility when connection-wide |
 
 Required implementation correction:
 
@@ -552,23 +548,21 @@ Both surfaces consume one Item-detail presentation model containing:
 - direct Sub-Issues;
 - relationship groups;
 - comments/external comments/Activity;
-- secondary Approval, Planning, Review, GitHub, provenance, and withdraw groups.
+- inline Planning, conditional Approval/Review, compact GitHub actions, Activity provenance, and withdraw action.
 
 The full-page and modal wrappers may provide different chrome, but they must not calculate independent capability visibility or counts.
 
 ### Full page
 
-- Operational header and tabs span the main content grid.
-- Active content occupies the main readable column.
-- Secondary capability groups remain in the compact rail.
-- Permission-gated rail controls keep their existing independent direct-update behavior.
+- Operational header, inline sections, and tabs span the readable Item width.
+- Permission-gated controls keep their existing independent direct-update behavior.
 
 ### Modal
 
 - Use an explicit modal surface variant or container-aware layout. Do not rely only on viewport `lg:` rules inside the 920-pixel panel.
 - Keep container Back, `Große Ansicht`, and Close separate from Item actions.
 - Keep the operational header and tabs available in the modal scroll contract.
-- Replace the rail with `Weitere Details` after the active content panel.
+- Use the same inline Planning and workflow placement as the full page; do not add a generic details collection.
 - Preserve active tab and dirty edit state when using `Große Ansicht` only if an existing safe routing/state mechanism is implemented; otherwise require an explicit unsaved-change decision before leaving.
 
 ## Screen Artifacts That Must Not Drive Implementation
@@ -588,10 +582,10 @@ The capability placement is preserved only if all statements are true:
 
 1. Evidence Required and Evidence Link remain separately readable and editable.
 2. Status and `Zuständig` appear once in the header and keep current permissions.
-3. Approval and Review remain usable from the rail / `Weitere Details` without competing with work ownership.
+3. Approval and Review remain usable from conditional workflow strips without competing with work ownership.
 4. Reported blocker reason, impact, and requested help remain readable and reportable outside the relationship view.
 5. Planning edits, reparenting, and status locks preserve existing server and client policy.
-6. GitHub comment import stays in Activity; GitHub Issue sync stays in secondary details.
+6. GitHub comment import stays in Activity; GitHub Issue sync stays in the Item action menu.
 7. Withdraw uses the existing trash workflow, wording, confirmation, permission, and rollback behavior.
 8. Full page and modal expose the same capabilities and error truth.
 9. No current capability disappears merely because it is absent from the eight mockups.

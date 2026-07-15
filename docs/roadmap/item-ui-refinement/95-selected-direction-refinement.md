@@ -1,9 +1,9 @@
 # Selected Direction Refinement — Operational Command Strip
 
 Status: confirmed visual direction, temporary design document
-Selected source: first displayed ideation result
+Selected source: refined Variant 1 placement result
 Date anchor: 2026-07-14
-Scope: presentation only; no repository implementation
+Scope: presentation only; implemented by the Item-detail refinement
 
 ## Confirmed Direction
 
@@ -14,7 +14,7 @@ Preserve the selected Operational Command Strip composition:
 - status, primary owner, priority, target date, and Sub-Issue progress in one facts row;
 - dependency information immediately below the facts row;
 - visible text-labelled tabs;
-- one continuous authored-content surface plus a compact secondary rail.
+- one continuous authored-content surface with Planning, workflow, GitHub, and history placed in their semantic slots instead of a secondary rail.
 
 Do not reinterpret the direction or introduce a relationship canvas, new workflow, new status, or new data field.
 
@@ -87,9 +87,9 @@ Preserve the selected view while correcting visible ambiguity:
 - Keep one title and one owner/status presentation.
 - Keep all core tabs visible with a clear active state.
 - Keep the two dependency rows above the tabs.
-- Keep body content and secondary rail in their selected positions.
+- Keep body content full-width and preserve the inline Planning/workflow hierarchy.
 - Preserve realistic German copy and real UTF-8 umlauts.
-- Avoid typographic artifacts in right-rail labels such as misspelled `Zieltermin`.
+- Avoid typographic artifacts in operational labels such as misspelled `Zieltermin`.
 - Keep empty GitHub, relationship, and optional-content messages suppressed.
 - Do not add a toast to the static frame.
 
@@ -102,9 +102,10 @@ Preserve the selected view while correcting visible ambiguity:
 5. The linked prerequisite exposes title, status, and owner.
 6. The downstream impact exposes count, first affected item, and `+N weitere`.
 7. The dependency group does not push the text-labelled tabs below the first 1024-pixel viewport.
-8. Everything outside the dependency band remains materially faithful to the selected source image.
+8. Everything outside the dependency band remains materially faithful to the refined Variant 1 source image and semantic placement contract.
 
 ## Generated Preview
 
 - Refined preview: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-365b6a3a-8fb8-427b-a997-0917db24395d.png`
-- Visual review: both directions are visible in one grouped band; incoming waiting remains primary; downstream impact is quantified and adjacent; the selected header, tabs, authored content, and secondary rail remain materially unchanged.
+- Placement refinement: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-6ab9f9dc-298f-4680-85ff-efad07545581.png`
+- Visual review: both dependency directions remain visible in one grouped band; incoming waiting remains primary; Planning, workflow, GitHub, and history now use semantic inline placement without a generic secondary rail.

@@ -1,51 +1,64 @@
-# Item Detail UI — Design QA
+# Item Detail UI — Refined Placement Design QA
 
 Status: final implementation QA
-Date: 2026-07-14
+Date: 2026-07-15
 Browser: Codex in-app browser
-Integration baseline: `origin/main@1bbe36f`
+Viewport baseline: 1440 × 1024
+Responsive check: 390 × 844
 
 ## Evidence
 
-- Source mock: `docs/roadmap/item-ui-refinement/development-screens/01-overview-upper-read.png`
-- Full-page implementation: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-full-page.jpg`
-- Modal implementation: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-modal.jpg`
-- Mobile modal implementation: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-mobile-modal.jpg`
-- Combined same-input comparison: `docs/roadmap/item-ui-refinement/implementation-screens/comparison-overview.png`
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-6ab9f9dc-298f-4680-85ff-efad07545581.png`
+- Browser-rendered modal: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-modal-refined.png`
+- Browser-rendered mobile modal: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-modal-refined-mobile.png`
+- Browser-rendered Approval strip: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-workflow-strip-refined.png`
+- Full-view same-input comparison: `docs/roadmap/item-ui-refinement/implementation-screens/comparison-modal-refined.png`
+- Focused header/operational comparison: `docs/roadmap/item-ui-refinement/implementation-screens/comparison-modal-refined-focus.png`
 
-## Viewports and states
+The source mock shows a proposed Deliverable, while the active Planning board intentionally contains only active/approved Items. The modal comparison therefore uses the same canonical Item content with an approved state; the shared Approval-strip implementation is additionally proven on the full-page surface with the proposed state. Layout judgments avoid treating that domain-state difference as visual drift.
 
-| Surface | Viewport | State |
-|---|---:|---|
-| Full page | 1440 × 1024 | Overview read; one active prerequisite and one downstream dependent |
-| Modal | 1440 × 1024 | Overview read; downstream dependency visible; secondary details collapsed |
-| Mobile modal | 390 × 844 | Overview read; compact facts wrap; no horizontal overflow |
+## Required Fidelity Surfaces
 
-## Comparison history
+- **Fonts and typography:** The implementation uses the existing application font stack and preserves the mock's hierarchy: compact uppercase identity, one dominant title, small operational labels, and text-labelled tabs. Weight and wrapping remain readable at desktop and mobile sizes.
+- **Spacing and layout rhythm:** Identity, actions, operational facts, Planning summary, workflow state, tabs, and content use one stable vertical order. The existing 920-pixel modal is intentionally wider than the illustrative generated drawer; this preserves the binding product contract and direct controls without crowding.
+- **Colors and tokens:** White/slate surfaces, blue interaction accents, restrained amber attention, and subtle dividers match the selected direction. Routine metadata is no longer presented as competing cards.
+- **Image quality and assets:** The Item UI contains no target imagery. Lucide icons remain vector UI icons and no image or logo was replaced by CSS art, emoji, or placeholder graphics.
+- **Copy and content:** `Zuständig` remains the primary Item responsibility. `Accountable` is read-only Initiative context. `Wartet auf Freigabe`, `Planung bearbeiten`, Review responsibility, GitHub sync/create, and `Deliverable zurückziehen` use existing domain language and capabilities.
 
-1. The first implementation pass rendered operational facts as large cards and the two dependency directions as unrelated cards. This reduced fidelity to the selected command-strip direction.
-2. Operational facts were changed to one compact text-first strip using existing controls. The dependency directions were changed to two rows inside one bordered group, with `Wartet auf` retaining the stronger amber treatment.
-3. The mobile pass exposed vertical separators at wrapped row starts. Separators are now applied only from the small breakpoint upward.
-4. The final combined comparison confirmed the same dominant title, compact operational facts, grouped dependency chain, visible text-labelled tabs, readable primary content, and secondary details rail.
+## Primary Interactions Tested
 
-The source mock uses canonical example content (`2/4` Sub-Issues, authored outcome/criteria/evidence, and two downstream dependents). The runtime screenshot intentionally uses the available seed Item and therefore omits empty authored sections and reports its real counts. These are data-state differences, not unresolved presentation mismatches.
+- Open and close the Item modal from Planning.
+- Open the compact linked GitHub Issue action.
+- Open the keyboard-accessible Item action menu and verify its disabled reason.
+- Reveal dormant Review responsibility from the Item action menu.
+- Expand and collapse Planning controls in place.
+- Verify Initiative, Sprint, Epic / Meilenstein, period, and Initiative-Team disclosure placement.
+- Open `Aktivität` and verify creator/update/carryover metadata at the end of the timeline.
+- Verify the conditional Approval strip with existing decision actions on a proposed Deliverable.
+- Resize the open modal from 1440 × 1024 to 390 × 844.
+- Check browser console errors: none.
 
-## Functional visual checks
+## Comparison History
 
-- One authoritative `h1` on the full-page surface.
-- `Wartet auf` remains visually primary; `Andere warten hierauf` remains adjacent and explicit.
-- Tab focus moves independently from selection; Enter activates the focused tab.
-- Dirty Overview edits guard tab changes and surface exit.
-- Modal uses one internal scroll surface and retains a clear close and full-page action.
-- Mobile modal has no horizontal overflow (`dialogScrollWidth === dialogClientWidth`).
-- No unsupported archive, direct-delete, reply, row-menu, Initiative-target, or remote-document-metadata affordance is present.
-- Existing Approval, Review, blocker reporting, planning edits, GitHub actions, Activity import, and trash workflow retain a defined placement.
-- A resolved Epic / Meilenstein is visible in the Item identity line while its existing permission-gated control remains under `Weitere Details`.
+### Pass 1
 
-## Remaining severity
+- **[P1] Mobile title collapsed beside header actions.** At 390 pixels the action group retained 304 pixels and reduced the title column to 37 pixels, producing a vertically stacked title and pushing operational facts far below the fold.
+- **Fix:** The title/actions row now stacks below the small breakpoint. Header actions use full-width, left-aligned wrapping on mobile and return to compact right alignment from `sm` upward.
+- **Post-fix evidence:** `implementation-modal-refined-mobile.png` shows the identity and title at full available width, followed by one intact 44-pixel action row and normally wrapped operational facts.
+
+- **[P2] Planning action lacked the source's explicit edit signal.** The first implementation used muted ghost copy plus only a disclosure chevron.
+- **Fix:** The action now uses the blue interaction token, a Pencil icon, its clear `Planung bearbeiten` label, and the disclosure chevron.
+- **Post-fix evidence:** `implementation-modal-refined.png` and the focused comparison show the revised action in the Planning summary row.
+
+### Pass 2
+
+- No actionable P0, P1, or P2 differences remained. The modal width, direct operational controls, and separate Approval-state evidence are intentional existing-product constraints rather than unresolved design drift.
+
+## Findings
 
 - P0: none.
 - P1: none.
 - P2: none.
+- P3: The generated source uses a narrower illustrative drawer than the binding 920-pixel modal. No change is recommended because the wider modal materially improves direct-control and long-content usability.
 
 final result: passed

@@ -19,6 +19,37 @@ export function dateRange(task: Pick<Task, "startDate" | "endDate" | "deadline">
   return `${formatDate(task.startDate, options)} - ${formatDate(task.endDate, options)}`;
 }
 
+function parseDisplayDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function compactDateRange(
+  value: Pick<Task, "startDate" | "endDate" | "deadline">,
+) {
+  const startValue = value.startDate || value.endDate || value.deadline;
+  const endValue = value.endDate || value.startDate || value.deadline;
+  if (!startValue || !endValue) return "Zeitraum offen";
+
+  const start = parseDisplayDate(startValue);
+  const end = parseDisplayDate(endValue);
+  if (!start || !end) return startValue === endValue ? startValue : `${startValue}–${endValue}`;
+
+  const day = new Intl.DateTimeFormat("de-DE", { day: "2-digit" });
+  const month = new Intl.DateTimeFormat("de-DE", { month: "long" });
+  const full = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "long", year: "numeric" });
+  const sameDay = start.getFullYear() === end.getFullYear()
+    && start.getMonth() === end.getMonth()
+    && start.getDate() === end.getDate();
+  if (sameDay) return `${day.format(start)}. ${month.format(start)}`;
+
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  if (sameMonth) return `${day.format(start)}.–${day.format(end)}. ${month.format(end)}`;
+  if (sameYear) return `${day.format(start)}. ${month.format(start)}–${day.format(end)}. ${month.format(end)}`;
+  return `${full.format(start)}–${full.format(end)}`;
+}
+
 export function taskAssigneeLabel(task: Pick<Task, "assignee"> | { assignee: string }) {
   return task.assignee || unassignedAssigneeLabel;
 }

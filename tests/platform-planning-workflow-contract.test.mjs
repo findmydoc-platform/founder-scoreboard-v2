@@ -687,7 +687,7 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const routeContract = `${route}\n${taskInsertRow}`;
   const ui = await readPlanningSurface();
-  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const historySummary = await readFile("src/features/tasks/molecules/task-detail-history-summary.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /original_sprint_id/);
@@ -702,7 +702,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(finalizationMigration, /accepted_carryover/);
   assert.match(finalizationMigration, /insert into public\.tasks/);
   assert.match(route, /sprint\.task_carried_over/);
-  assert.match(panelSidebar, /Sprint-Verlauf/);
+  assert.match(historySummary, /carriedFromSprintId/);
+  assert.match(historySummary, /Aus Sprint/);
   assert.match(ui, /Carry-over/);
   assert.match(types, /carryoverReason/);
 });

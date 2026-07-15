@@ -1,16 +1,16 @@
 "use client";
 
-import { CalendarDays, CircleDot, Flag, Hourglass, ListChecks, Pencil, UserRound } from "lucide-react";
+import { CalendarDays, CircleDot, Flag, Hourglass, ListChecks, UserRound } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { TaskStatusControl, TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
-import { formatDate, taskAssigneeLabel } from "@/lib/display";
+import { formatDate, profileNameById, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Milestone, Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
-import { classNames, UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
+import { classNames, UiBadge } from "@/shared/atoms/ui-primitives";
 
 export type TaskDetailRelationshipRow = {
   relation: TaskRelation;
@@ -29,11 +29,10 @@ export type TaskDetailOperationalHeaderProps = {
   canChangeStatus: boolean;
   statusLockedReason?: string;
   canManageTaskMeta: boolean;
-  canEditOverview?: boolean;
   pending?: boolean;
   titleId?: string;
   className?: string;
-  onEditOverview?: () => void;
+  actions?: ReactNode;
   onUpdate: (patch: Partial<Task>) => void;
 };
 
@@ -229,11 +228,10 @@ export function TaskDetailOperationalHeader({
   canChangeStatus,
   statusLockedReason,
   canManageTaskMeta,
-  canEditOverview = false,
   pending = false,
   titleId,
   className,
-  onEditOverview,
+  actions,
   onUpdate,
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
@@ -243,29 +241,32 @@ export function TaskDetailOperationalHeader({
     ? parentTask?.title
     : initiative?.title;
   const milestoneLabel = milestone?.title;
+  const accountableLabel = initiative
+    ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
+    : "";
   const directSubIssues = subIssues.filter((subIssue) => subIssue.parentTaskId === task.id);
   const completedSubIssues = directSubIssues.filter((subIssue) => normalizeStatus(subIssue.status) === "Erledigt").length;
   const showDeadline = canManageTaskMeta || Boolean(task.deadline);
 
   return (
     <header aria-labelledby={resolvedTitleId} className={classNames("bg-white", className)}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <span>{itemTypeLabel}</span>
-            {milestoneLabel && (
+            {(milestoneLabel || hierarchyLabel) && (
               <>
                 <span aria-hidden="true">·</span>
                 <span className="normal-case tracking-normal text-slate-600">
-                  Epic / Meilenstein: {milestoneLabel}
+                  {task.taskType === "sub_issue" ? `Parent: ${hierarchyLabel || "Nicht gesetzt"}` : milestoneLabel || hierarchyLabel}
                 </span>
               </>
             )}
-            {hierarchyLabel && (
+            {accountableLabel && (
               <>
                 <span aria-hidden="true">·</span>
                 <span className="normal-case tracking-normal text-slate-600">
-                  {task.taskType === "sub_issue" ? "Parent" : "Initiative"}: {hierarchyLabel}
+                  Accountable: {accountableLabel}
                 </span>
               </>
             )}
@@ -274,12 +275,7 @@ export function TaskDetailOperationalHeader({
             {task.title}
           </h1>
         </div>
-        {canEditOverview && onEditOverview && (
-          <UiButton id="task-detail-edit" type="button" size="lg" onClick={onEditOverview} disabled={pending}>
-            <Pencil size={16} aria-hidden="true" />
-            Bearbeiten
-          </UiButton>
-        )}
+        {actions}
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-slate-200 py-3">

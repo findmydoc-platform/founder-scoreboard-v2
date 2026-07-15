@@ -69,13 +69,13 @@ test("only the current rejection or return reason is exposed by the approval vie
 });
 
 test("approval routes and UI share the reason contract", async () => {
-  const [api, initiativeRoute, taskRoute, dialog, projects, taskSidebar] = await Promise.all([
+  const [api, initiativeRoute, taskRoute, dialog, projects, taskWorkflow] = await Promise.all([
     readFile("src/lib/approval-api.ts", "utf8"),
     readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8"),
     readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8"),
     readFile("src/features/planning/molecules/approval-decision-dialog.tsx", "utf8"),
     readFile("src/features/projects/organisms/projects-overview.tsx", "utf8"),
-    readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8"),
+    readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8"),
   ]);
 
   assert.match(api, /validateApprovalDecisionNote/);
@@ -87,9 +87,9 @@ test("approval routes and UI share the reason contract", async () => {
   assert.match(dialog, /required/);
   assert.match(projects, /canReturnInitiativeForRevision/);
   assert.match(projects, /action: "return_to_draft"/);
-  assert.match(taskSidebar, /<ApprovalDecisionDialog/);
-  assert.doesNotMatch(taskSidebar, /onDecideApproval\("reject"\)/);
-  assert.doesNotMatch(taskSidebar, /onDecideApproval\("return_to_draft"\)/);
+  assert.match(taskWorkflow, /<ApprovalDecisionDialog/);
+  assert.doesNotMatch(taskWorkflow, /onDecideApproval\("reject"\)/);
+  assert.doesNotMatch(taskWorkflow, /onDecideApproval\("return_to_draft"\)/);
 });
 
 test("approval RPCs enforce proposed state, roles, CAS, notes, and atomic return notifications", async () => {

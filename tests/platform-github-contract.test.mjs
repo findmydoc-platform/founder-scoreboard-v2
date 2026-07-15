@@ -113,7 +113,7 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
   const deletionMigration = await readSupabaseSchemaContract();
   const github = await readFile("src/lib/github.ts", "utf8");
-  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
 
   assert.match(taskRoute, /export async function DELETE/);
   assert.match(taskRoute, /Direktes Löschen ist nicht mehr verfügbar/);
@@ -135,16 +135,16 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   assert.match(github, /export async function archiveGitHubIssue/);
   assert.match(github, /state_reason: "not_planned"/);
   assert.match(github, /test\/deleted/);
-  assert.match(panelSidebar, /Papierkorb/);
-  assert.match(panelSidebar, /Deliverable zurückziehen/);
-  assert.doesNotMatch(panelSidebar, /Aufgabe löschen/);
+  assert.match(headerActions, /PlanningTrashActionDialog/);
+  assert.match(headerActions, /Deliverable zurückziehen/);
+  assert.doesNotMatch(headerActions, /Aufgabe löschen/);
 });
 
 test("github issue export includes only the task brief and FounderOps source", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
   const issueReferences = await readFile("src/lib/github-issue-reference.ts", "utf8");
   const ui = await readPlanningSurface();
-  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
 
@@ -178,8 +178,8 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.match(issueReferences, /issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
   assert.match(ui, /syncTaskToGitHub/);
-  assert.match(panelSidebar, /GitHub Issue/);
-  assert.match(panelSidebar, /Sync/);
+  assert.match(headerActions, /GitHub Issue/);
+  assert.match(headerActions, /GitHub synchronisieren/);
   assert.match(ui, /NotificationsOverview/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHubSyncQueueSection/);
   assert.doesNotMatch(notificationsOverviewUi, /SystemStatusSection|settings-readiness/);
@@ -383,7 +383,7 @@ test("production deploy verifies the ledger, builds, migrates with lock guard, v
 test("app-only tasks are visibly marked without creating github issues", async () => {
   const ui = await readPlanningSurface();
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
-  const panelSidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
@@ -403,16 +403,16 @@ test("app-only tasks are visibly marked without creating github issues", async (
   assert.match(queue, /onlyFailed: true/);
   assert.match(queue, /Sync läuft bereits/);
   assert.match(panel, /TaskDetailSurface/);
-  assert.match(panelSidebar, /GitHub Issue anlegen/);
+  assert.match(headerActions, /GitHub Issue anlegen/);
   assert.match(ui, /createIfMissing: true/);
   assert.doesNotMatch(notificationsOverviewUi, /onCreateGitHubIssue/);
-  assert.match(detailSurface, /TaskDetailPanelSidebar/);
-  assert.match(panelSidebar, /Noch kein GitHub Issue/);
-  assert.match(panelSidebar, /GitHub Issue anlegen/);
+  assert.match(detailSurface, /TaskDetailHeaderActions/);
+  assert.doesNotMatch(headerActions, /Noch kein GitHub Issue/);
+  assert.match(headerActions, /GitHub Issue anlegen/);
   assert.match(detail, /onSyncGitHub=\{\(options\) => controller\.syncTaskToGitHub\(task, options\)\}/);
   assert.match(detail, /task=\{task\}/);
-  assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
-  assert.match(panelSidebar, /GitHub Issue nur bewusst anlegen/);
+  assert.match(headerActions, /createIfMissing: true/);
+  assert.match(headerActions, /syncDisabledReason/);
 });
 
 test("github app connect persists reload-stable user tokens without browser token headers", async () => {
@@ -424,7 +424,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
-  const detailGitHubSyncCard = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const detailGitHubActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const planningShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
   const githubStatus = await readFile("src/features/planning/molecules/github-connection-status.tsx", "utf8");
   const planningHeader = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -501,8 +501,8 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubStatus, /waitingCommentCount/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
-  assert.doesNotMatch(detailGitHubSyncCard, /GitHub-Verbindung .*erneuern/);
-  assert.doesNotMatch(detailGitHubSyncCard, /frische Autorisierung/);
+  assert.doesNotMatch(detailGitHubActions, /GitHub-Verbindung .*erneuern/);
+  assert.doesNotMatch(detailGitHubActions, /frische Autorisierung/);
   assert.match(commentBody, /GitHubCommentImage/);
   assert.match(thread, /TaskCommentComposer/);
   assert.match(taskDetailWorkflow, /useTaskComments/);
@@ -522,7 +522,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.equal(existsSync("src/lib/github-provider-token.ts"), false);
   assert.equal(existsSync("src/lib/github-provider-auth.ts"), false);
   assert.doesNotMatch(notificationsOverviewUi, /onReconnectGitHub/);
-  assert.doesNotMatch(detailGitHubSyncCard, /onReconnectGitHub/);
+  assert.doesNotMatch(detailGitHubActions, /onReconnectGitHub/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-App/);
   assert.match(syncRoute, /getGitHubAppInstallationToken/);
   assert.doesNotMatch(syncRoute, /requireMatchingGitHubProviderToken|x-github-provider-token|provider_token/);

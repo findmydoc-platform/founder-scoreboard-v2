@@ -13,6 +13,9 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   const controller = await readFile("src/features/tasks/hooks/use-task-detail-controller.ts", "utf8");
   const panelHeader = await readFile("src/features/tasks/molecules/task-detail-panel-header.tsx", "utf8");
   const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
+  const planningSection = await readFile("src/features/tasks/molecules/task-detail-planning-section.tsx", "utf8");
+  const workflowStrips = await readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8");
   const tabs = await readFile("src/features/tasks/molecules/task-detail-tabs.tsx", "utf8");
   const ui = await readPlanningSurface();
 
@@ -37,11 +40,18 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(surface, /TaskRelationshipsSection/);
   assert.match(surface, /TaskDetailPanelSubIssuesSection/);
   assert.match(surface, /TaskDetailPanelBlockerSection/);
-  assert.match(surface, /TaskDetailPanelSidebar/);
+  assert.match(surface, /TaskDetailPlanningSection/);
+  assert.match(surface, /TaskDetailWorkflowStrips/);
+  assert.match(surface, /TaskDetailHeaderActions/);
+  assert.doesNotMatch(surface, /Weitere Details/);
   assert.match(surface, /TaskCommentThread/);
   assert.match(operationalHeader, /Wartet auf/);
   assert.match(operationalHeader, /Andere warten hierauf/);
-  assert.match(operationalHeader, /Epic \/ Meilenstein/);
+  assert.match(operationalHeader, /Accountable:/);
+  assert.match(headerActions, /GitHub Issue/);
+  assert.match(headerActions, /Deliverable zurückziehen/);
+  assert.match(planningSection, /Planung bearbeiten/);
+  assert.match(workflowStrips, /Wartet auf Freigabe/);
   assert.match(tabs, /role="tablist"/);
   assert.match(tabs, /aria-selected/);
   assert.match(controller, /useTaskDetailController/);
@@ -82,8 +92,10 @@ test("task detail loading avoids server waterfalls and defers inactive client fe
 
 test("shared task detail surface keeps github-like field saves and role gates", async () => {
   const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
-  const sidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
   const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
+  const planningSection = await readFile("src/features/tasks/molecules/task-detail-planning-section.tsx", "utf8");
+  const workflowStrips = await readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8");
   const overview = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const permissions = await readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8");
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
@@ -95,13 +107,13 @@ test("shared task detail surface keeps github-like field saves and role gates", 
   assert.match(overview, /permissions\.canEditEvidence/);
   assert.match(overview, /permission: "canEditNotes"/);
   assert.match(surface, /permissions\.canComment/);
-  assert.match(operationalHeader, /Bearbeiten/);
+  assert.match(headerActions, /Bearbeiten/);
   assert.match(overview, /Speichern/);
   assert.doesNotMatch(overview, /onBlur=/);
   assert.match(operationalHeader, /onUpdate\(\{ priority: value \}\)/);
-  assert.match(sidebar, /onUpdate\(\{ sprintId: value \}\)/);
-  assert.match(sidebar, /canManageReviewOwner/);
-  assert.match(sidebar, /canManageFinalTaskStatus/);
+  assert.match(planningSection, /onUpdate\(\{ sprintId \}\)/);
+  assert.match(workflowStrips, /canManageReviewOwner/);
+  assert.match(workflowStrips, /reviewOwnerProfileId/);
   assert.match(permissions, /taskOwnedByProfile/);
   assert.match(permissions, /role !== "viewer"/);
   assert.match(route, /taskDetailPermissions/);

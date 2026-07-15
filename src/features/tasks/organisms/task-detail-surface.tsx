@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   canApproveDeliverableApproval,
@@ -11,13 +10,17 @@ import {
 import { canWithdrawPlanningRoot } from "@/features/planning/model/planning-trash-contract";
 import type { TaskActionResult, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import { useTaskDetailController } from "@/features/tasks/hooks/use-task-detail-controller";
+import { TaskDetailHeaderActions } from "@/features/tasks/molecules/task-detail-header-actions";
+import { TaskDetailHistorySummary } from "@/features/tasks/molecules/task-detail-history-summary";
 import {
   TaskDetailDependencyBand,
   TaskDetailOperationalHeader,
 } from "@/features/tasks/molecules/task-detail-operational-header";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
 import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
+import { TaskDetailPlanningSection } from "@/features/tasks/molecules/task-detail-planning-section";
 import { TaskDetailTabs, type TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
+import { TaskDetailWorkflowStrips } from "@/features/tasks/molecules/task-detail-workflow-strips";
 import {
   partitionSubIssues,
   uniqueRelationshipCount,
@@ -28,7 +31,6 @@ import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/featu
 import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-thread";
-import { TaskDetailPanelSidebar } from "@/features/tasks/organisms/task-detail-panel-sidebar";
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
@@ -116,6 +118,7 @@ export function TaskDetailSurface({
   onDecideApproval,
 }: TaskDetailSurfaceProps) {
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>("overview");
+  const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const controller = useTaskDetailController({
     task,
     currentProfile,
@@ -206,38 +209,6 @@ export function TaskDetailSurface({
     });
   };
 
-  const secondaryDetails = (
-    <TaskDetailPanelSidebar
-      task={task}
-      pack={currentPackage}
-      teamProfiles={teamProfiles}
-      packages={packages}
-      parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
-      sprints={sprints}
-      milestones={milestones}
-      canCompleteSubIssue={controller.permissions.canCompleteSubIssue}
-      canManageFinalTaskStatus={controller.permissions.canManageFinalStatus}
-      canManageTaskMeta={controller.permissions.canManageTaskMeta}
-      canReparentSubIssue={controller.permissions.canReparentSubIssue}
-      canManageReviewOwner={controller.permissions.canManageReviewOwner}
-      canOpenReview={controller.permissions.canOpenReview}
-      canReopenSubIssue={controller.permissions.canReopenSubIssue}
-      canWithdrawTask={canWithdrawTask}
-      canChangeTaskStatus={controller.permissions.canUpdateStatus}
-      canUpdateWorkingTaskStatus={controller.permissions.canUpdateWorkingStatus}
-      canApprove={canApprove}
-      canReject={canReject}
-      canReturnToDraft={canReturnToDraft}
-      pending={pending}
-      githubInstallationAvailable={githubInstallationAvailable}
-      onUpdate={onUpdate}
-      onSyncGitHub={onSyncGitHub}
-      onOpenReview={onOpenReview}
-      onWithdraw={onWithdraw}
-      onDecideApproval={onDecideApproval}
-    />
-  );
-
   const panels = {
     overview: (
       <TaskOverviewPanel
@@ -324,6 +295,7 @@ export function TaskDetailSurface({
         onAddComment={onAddComment}
         title="Aktivität"
         description="Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline."
+        footer={<TaskDetailHistorySummary task={task} profiles={teamProfiles} />}
       />
     ),
   } satisfies Record<TaskDetailTabId, ReactNode>;
@@ -340,16 +312,42 @@ export function TaskDetailSurface({
       canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
       statusLockedReason={statusLockedReason}
       canManageTaskMeta={controller.permissions.canManageTaskMeta}
-      canEditOverview={canEditOverview && !controller.overviewEditing}
       pending={pending}
       titleId={surface === "modal" ? "task-detail-panel-title" : "task-detail-page-title"}
-      onEditOverview={startOverviewEditing}
+      actions={(
+        <TaskDetailHeaderActions
+          task={task}
+          canEditOverview={canEditOverview && !controller.overviewEditing}
+          canManageReviewOwner={controller.permissions.canManageReviewOwner}
+          canWithdrawTask={canWithdrawTask}
+          githubInstallationAvailable={githubInstallationAvailable}
+          pending={pending}
+          onEditOverview={startOverviewEditing}
+          onShowReviewSetup={() => setReviewSetupOpen(true)}
+          onSyncGitHub={onSyncGitHub}
+          onWithdraw={onWithdraw}
+        />
+      )}
       onUpdate={onUpdate}
     />
   );
 
   const bodyContent = (
     <>
+      <TaskDetailPlanningSection
+        task={task}
+        pack={currentPackage}
+        teamProfiles={teamProfiles}
+        packages={packages}
+        parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
+        sprints={sprints}
+        milestones={milestones}
+        canManageTaskMeta={controller.permissions.canManageTaskMeta}
+        canReparentSubIssue={controller.permissions.canReparentSubIssue}
+        pending={pending}
+        onUpdate={onUpdate}
+      />
+
       <TaskDetailDependencyBand
         waitsOn={relationshipGroups.waitsOn}
         blocks={relationshipGroups.blocks}
@@ -358,36 +356,37 @@ export function TaskDetailSurface({
         onOpenTask={openTask}
       />
 
+      <TaskDetailWorkflowStrips
+        task={task}
+        teamProfiles={teamProfiles}
+        canApprove={canApprove}
+        canReject={canReject}
+        canReturnToDraft={canReturnToDraft}
+        canManageReviewOwner={controller.permissions.canManageReviewOwner}
+        canOpenReview={controller.permissions.canOpenReview}
+        forceReviewSetup={reviewSetupOpen}
+        pending={pending}
+        onUpdate={onUpdate}
+        onOpenReview={onOpenReview}
+        onDecideApproval={onDecideApproval}
+      />
+
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
 
-      <div className={surface === "page" ? "xl:grid xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start xl:gap-6" : undefined}>
-        <TaskDetailTabs
-          value={activeTab}
-          onValueChange={changeTab}
-          availableTabs={availableTabs}
-          className="mt-5"
-          tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
-          counts={{
-            subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
-            relationships: detailDataKnown && relationshipCount > 0 ? relationshipCount : "",
-            activity: detailDataKnown && activityCount > 0 ? activityCount : "",
-          }}
-          panels={panels}
-          panelClassName="pt-5"
-        />
-        {surface === "page" ? <aside aria-label="Weitere Item-Details" className="mt-5 hidden xl:block">{secondaryDetails}</aside> : null}
-      </div>
-
-      <details className={surface === "page"
-        ? "group mt-5 rounded-xl border border-slate-200 bg-white xl:hidden"
-        : "group mt-5 rounded-xl border border-slate-200 bg-white"}
-      >
-        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400">
-          Weitere Details
-          <ChevronDown size={17} className="transition group-open:rotate-180" aria-hidden="true" />
-        </summary>
-        <div className="border-t border-slate-200 p-4">{secondaryDetails}</div>
-      </details>
+      <TaskDetailTabs
+        value={activeTab}
+        onValueChange={changeTab}
+        availableTabs={availableTabs}
+        className="mt-5"
+        tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
+        counts={{
+          subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
+          relationships: detailDataKnown && relationshipCount > 0 ? relationshipCount : "",
+          activity: detailDataKnown && activityCount > 0 ? activityCount : "",
+        }}
+        panels={panels}
+        panelClassName="pt-5"
+      />
     </>
   );
 

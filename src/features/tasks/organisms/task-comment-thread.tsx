@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageSquare, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
@@ -23,6 +24,7 @@ type Props = {
   readOnly?: boolean;
   title?: string;
   description?: string;
+  footer?: ReactNode;
   onAddComment: (comment: string) => Promise<void> | void;
   onImportGitHubComments?: () => void;
   onUploadAttachment?: (file: File) => Promise<string>;
@@ -86,6 +88,7 @@ export function TaskCommentThread({
   readOnly = false,
   title = "Kommunikation",
   description = "Fragen, Updates und Abstimmungen zur Aufgabe bleiben hier nachvollziehbar.",
+  footer,
   onAddComment,
   onImportGitHubComments,
   onUploadAttachment,
@@ -147,6 +150,7 @@ export function TaskCommentThread({
         loading={loading}
         unavailable={unavailable}
       />
+      {footer}
     </section>
   );
 }

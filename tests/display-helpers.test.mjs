@@ -32,4 +32,16 @@ test("display helpers preserve shared labels and date formatting", async () => {
   assert.match(range, /09/);
   assert.match(range, /10/);
   assert.equal(display.dateRange({ startDate: "", endDate: "", deadline: "2026-06-30" }), "2026-06-30");
+  assert.equal(
+    display.compactDateRange({ startDate: "2026-06-02", endDate: "2026-06-04", deadline: "" }),
+    "02.–04. Juni",
+  );
+  assert.equal(
+    display.compactDateRange({ startDate: "2026-05-30", endDate: "2026-06-02", deadline: "" }),
+    "30. Mai–02. Juni",
+  );
+  assert.equal(
+    display.compactDateRange({ startDate: "", endDate: "", deadline: "" }),
+    "Zeitraum offen",
+  );
 });

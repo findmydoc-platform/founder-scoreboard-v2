@@ -71,7 +71,7 @@ test("FounderOps tasks and GitHub issues use unambiguous labels", async () => {
   const files = [
     "src/features/tasks/molecules/task-card.tsx",
     "src/features/tasks/organisms/task-github-sync-queue.tsx",
-    "src/features/tasks/organisms/task-detail-panel-sidebar.tsx",
+    "src/features/tasks/molecules/task-detail-header-actions.tsx",
   ];
 
   const source = (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("\n");

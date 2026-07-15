@@ -72,7 +72,7 @@ All mockup states represent the same Item. Implementation fixtures and visual te
 | Relationship tab count | `3` unique visible linked Items |
 | Activity tab count | `4` visible timeline entries after filtering |
 
-The right rail must not repeat the target date. The visible mockup value `Zieltermin · Sprint 1` is invalid and must not be implemented.
+The inline Planning section must not repeat the target date. The visible mockup value `Zieltermin · Sprint 1` is invalid and must not be implemented.
 
 ## Shared Visual Invariants
 
@@ -310,33 +310,32 @@ The following current capabilities remain in the new UI and must not disappear:
 |---|---|
 | Evidence Required | Overview authored section and Overview edit form |
 | Evidence Link | Overview link object and Overview edit URL field |
-| Approval state and decisions | secondary rail; `Weitere Details` in modal/constrained layouts |
-| Review status, owner, and Review action | secondary rail; `Weitere Details` in modal/constrained layouts |
+| Approval state and decisions | compact conditional workflow strip above the tabs |
+| Review status, owner, and Review action | compact conditional workflow strip; dormant setup is opened from the Item action menu |
 | Reported Task Blockers | Overview `Gemeldete Blocker` section with existing report behavior |
 | Status | operational header using existing control and lock reason |
 | Owner and priority | operational header; editable only under existing task-meta permissions |
-| Initiative, Sprint, Milestone, period, target date, RACI | Planning group in secondary rail; `Weitere Details` when constrained |
-| GitHub Issue sync | secondary GitHub group |
+| Initiative, Sprint, Milestone, period, target date, RACI | calm Planning summary below the operational facts; direct controls in its inline disclosure |
+| GitHub Issue sync | compact linked-Issue action in the title row; sync/create in the Item action menu |
 | GitHub comment import | Activity tab action |
-| Creator and update timestamp | History group |
-| Deliverable withdrawal | final `Papierkorb` group; existing confirmation and permissions |
+| Creator and update timestamp | compact footer in `Aktivität` |
+| Deliverable withdrawal | Item action menu; existing confirmation and permissions |
 
 The detailed data, permission, feedback, and cross-surface contract is in `120-existing-capability-placement.md`.
 
-## Secondary Rail and `Weitere Details`
+## Distributed Operational Placement
 
-Wide full page uses a compact secondary rail in this order:
+The full page and modal use the same one-column semantic order. There is no secondary rail and no generic `Weitere Details` collection.
 
-1. `Planung`;
-2. `Freigabe`;
-3. `Review`;
-4. `GitHub`;
-5. `Historie`;
-6. `Papierkorb`, only when the existing withdrawal permission allows it.
+1. Header: hierarchy, Accountable context, title, linked GitHub Issue, edit, and Item action menu.
+2. Operational facts: status, `Zuständig`, priority, target date, and Sub-Issue progress.
+3. Planning summary: Sprint and compact period; direct Planning controls expand in place.
+4. Dependencies: `Wartet auf` before `Andere warten hierauf`.
+5. Conditional workflow strips: Freigabe and active/configured Review only.
+6. Tabs and active panel.
+7. Creator, update time, and carryover metadata at the end of `Aktivität`.
 
-The rail does not repeat status, owner, priority, target date, Sub-Issue progress, or relationships already shown above the tabs.
-
-In the modal and constrained layouts, the same groups move after the active panel into one collapsed `Weitere Details` disclosure. Destructive withdrawal remains the last group. DOM and focus order stay consistent with the visual order.
+The Item action menu contains low-frequency direct actions, including GitHub sync/create, Review responsibility setup, and the existing withdrawal workflow when permitted. It is not a generic metadata drawer.
 
 `Archivieren` and direct `Löschen` from the generated Overview-lower mockup are invalid for the current implementation. Use only the existing `Deliverable zurückziehen` workflow.
 
@@ -344,7 +343,7 @@ In the modal and constrained layouts, the same groups move after the active pane
 
 ### Wide full page
 
-- readable main column plus compact secondary rail;
+- readable main column using the same inline operational hierarchy as the modal;
 - document scroll is the single primary scroll container;
 - operational header need not be sticky;
 - tab bar may stick below application chrome;
@@ -356,13 +355,13 @@ In the modal and constrained layouts, the same groups move after the active pane
 - sticky modal header and tab bar;
 - one modal scroll container;
 - one content column regardless of viewport `lg` breakpoint;
-- secondary rail becomes collapsed `Weitere Details` after the active panel;
+- no secondary rail or generic details disclosure;
 - Close and `Große Ansicht` remain reachable;
 - dirty-state navigation uses the Overview edit contract.
 
 ### Below 768 pixels or equivalent constrained container
 
-- order: identity, title, operational facts, dependency band, horizontally scrollable tabs, active panel, `Weitere Details`;
+- order: identity, title/actions, operational facts, Planning summary, dependency band, conditional workflow strips, horizontally scrollable tabs, active panel;
 - status and owner remain ahead of optional facts;
 - core labels never collapse to unexplained icons;
 - interactive targets are at least 44 by 44 CSS pixels where the control is not an inline text link;

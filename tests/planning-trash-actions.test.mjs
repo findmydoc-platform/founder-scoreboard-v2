@@ -76,7 +76,7 @@ test("paper-bin routes share centralized RPC and fail-closed permission contract
 
 test("paper-bin UI replaces hard-delete controls with an accessible reason dialog", async () => {
   const dialog = await readFile("src/features/planning/molecules/planning-trash-action-dialog.tsx", "utf8");
-  const sidebar = await readFile("src/features/tasks/organisms/task-detail-panel-sidebar.tsx", "utf8");
+  const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const projects = await readFile("src/features/projects/organisms/projects-overview.tsx", "utf8");
   const taskClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
 
@@ -85,13 +85,13 @@ test("paper-bin UI replaces hard-delete controls with an accessible reason dialo
   assert.match(dialog, /PLANNING_TRASH_REASON_MAX_LENGTH/);
   assert.match(dialog, /In den Papierkorb verschieben/);
   assert.match(dialog, /Aus dem Papierkorb wiederherstellen/);
-  assert.match(sidebar, /PlanningTrashActionDialog/);
-  assert.match(sidebar, /Deliverable zurückziehen/);
+  assert.match(headerActions, /PlanningTrashActionDialog/);
+  assert.match(headerActions, /Deliverable zurückziehen/);
   assert.match(projects, /onWithdrawInitiative/);
   assert.match(projects, /Zurückziehen/);
   assert.match(taskClient, /method: "POST"/);
   assert.doesNotMatch(taskClient, /deleteTaskRequest/);
-  assert.doesNotMatch(`${sidebar}\n${projects}`, /window\.confirm/);
+  assert.doesNotMatch(`${headerActions}\n${projects}`, /window\.confirm/);
 });
 
 test("approval decisions drain lifecycle jobs and rejected roots leave active UI state", async () => {

@@ -1,6 +1,6 @@
 # Item Detail — Interaction, Responsive, and Accessibility Contract
 
-Status: normative pre-implementation contract
+Status: normative implementation contract
 Applies to: full-page Item UI, 920-pixel modal, and viewports below 768 pixels
 Visual baseline: Operational Command Strip and the eight development screens
 Scope: presentation and interaction behavior only
@@ -17,23 +17,23 @@ Where screenshot text or example counts conflict with this document, this docume
 
 ## Shared Information and DOM Order
 
-Every surface MUST preserve this semantic order, even when CSS places secondary information beside the main content:
+Every surface MUST preserve this semantic order:
 
 1. container navigation and exit controls;
 2. item identity and hierarchy context;
 3. one `h1` item title;
 4. existing item actions;
 5. operational facts: status, primary owner, priority, target date, Sub-Issue progress;
-6. grouped dependency summary;
-7. local Item tabs;
-8. active tab panel;
-9. secondary metadata or `Weitere Details`;
-10. destructive actions inside the secondary area.
+6. Planning summary and its inline controls;
+7. grouped dependency summary;
+8. conditional Approval and Review workflow strips;
+9. local Item tabs;
+10. active tab panel; Activity ends with compact history metadata.
 
 Rules:
 
 - Status, primary owner, hierarchy, active waits-on state, and Sub-Issue progress MUST remain above long-form content.
-- Secondary metadata MUST NOT duplicate authoritative header values.
+- Planning and workflow metadata MUST NOT duplicate authoritative header values.
 - Only the active tab panel is exposed to assistive technology.
 - Visual reordering MUST NOT change keyboard or screen-reader order.
 - The page MUST have one `h1`. Active tab panels use `h2`; groups inside a panel use `h3`.
@@ -42,17 +42,15 @@ Rules:
 
 ### Profile A — Wide Full Page
 
-Applies when the available Item content width supports the selected two-column layout, normally at 1280 pixels and wider.
+Applies when the available Item content width is normally 1280 pixels or wider.
 
 - The application shell and collapsed navigation retain their existing behavior.
-- The Item uses one document scroll. The main content and secondary rail MUST NOT create independent vertical scroll regions.
+- The Item uses one document scroll. Inline operational sections MUST NOT create independent vertical scroll regions.
 - The operational header and dependency band scroll with the document.
 - The local tab list becomes sticky at the top of the Item content viewport when it reaches that position.
 - The sticky tab list MUST remain below persistent application chrome and MUST NOT cover focused content.
 - A subtle bottom divider MAY appear while the tab list is sticky. It MUST NOT become a floating card.
-- The active panel is the primary column. The compact secondary rail is the secondary column.
-- The rail scrolls with the document and MUST NOT be independently sticky when its height can exceed the viewport.
-- The rail is read after the active panel in DOM order, regardless of its visual position.
+- The active panel uses the full readable Item width; no secondary metadata rail is rendered.
 - Main authored text maintains an approximate 60–65-character reading measure.
 - No horizontal page scroll is permitted at 200% zoom.
 
@@ -63,8 +61,7 @@ This profile applies to full-page layouts from 768 to 1279 pixels and to the mod
 #### Constrained full page
 
 - The main content becomes one column before the reading measure or action layout becomes cramped.
-- The secondary rail is removed as a visual column and rendered once as `Weitere Details` after the active tab panel.
-- `Weitere Details` is collapsed by default and uses a native disclosure or equivalent button with `aria-expanded` and `aria-controls`.
+- Planning controls expand in place from the Planning summary with `aria-expanded` and `aria-controls`.
 - The operational facts may wrap to two rows. Status and primary owner remain first.
 - The dependency rows may wrap internally but retain their text labels, linked title, status, and owner.
 - The full page continues to use the document as its only vertical scroll container.
@@ -76,11 +73,10 @@ This profile applies to full-page layouts from 768 to 1279 pixels and to the mod
 - The dialog height is at most the viewport height minus a 16-pixel gutter at the top and bottom.
 - The dialog shell remains fixed. The modal body is the only vertical scroll container.
 - The modal container controls and operational header remain sticky at the top of the dialog.
-- The grouped dependency summary is the first body content and scrolls away; it is not added to the sticky header height.
+- The Planning summary is the first body content; Planning, dependencies, and workflow strips scroll away.
 - The local tab list appears after the dependency summary and becomes sticky directly below the modal header when reached.
 - The sticky header and sticky tabs MUST NOT overlap, obscure focus indicators, or reduce the active panel to an unusable height.
-- The active panel and `Weitere Details` use the same modal-body scroll. No nested panel or rail scroll is allowed.
-- Secondary metadata is rendered once in `Weitere Details`; the modal never shows a separate right rail.
+- The active panel and inline operational sections use the same modal-body scroll. No nested panel or rail scroll is allowed.
 - Close remains visible at every scroll position.
 - Closing the dialog returns focus to the control that opened it, if that control still exists.
 
@@ -95,7 +91,7 @@ This profile applies to full-page layouts from 768 to 1279 pixels and to the mod
 - The dependency band becomes a single-column two-row group. Long linked titles wrap to two lines before truncation.
 - The tab list remains horizontal and text-labelled. It scrolls horizontally when necessary and MUST NOT become icon-only navigation.
 - Activating a partly hidden tab scrolls that tab fully into view without moving the document vertically.
-- The active panel, `Weitere Details`, and destructive actions form one content column.
+- The active panel and inline operational sections form one content column.
 - Linked-item rows stack secondary metadata below the title before truncating essential title, status, or owner text.
 - No viewport-wide horizontal scrolling is permitted at 320 CSS pixels or at 400% zoom.
 
@@ -103,11 +99,11 @@ This profile applies to full-page layouts from 768 to 1279 pixels and to the mod
 
 | Surface | Vertical scroll owner | Sticky regions | Non-sticky regions |
 |---|---|---|---|
-| Wide full page | Document | Local tab list after it reaches the shell offset | Operational header, dependency band, content, rail |
-| 768–1279 full page | Document | Local tab list after it reaches the shell offset | Operational header, dependency band, content, `Weitere Details` |
-| 920-pixel modal | Modal body | Dialog header; local tab list below it after the dependency band passes | Dependency band, active panel, `Weitere Details` |
-| Below-768 full page | Document | Local tab list | Operational header, dependency band, panel, details |
-| Below-768 modal | Modal body | Dialog header; local tab list | Dependency band, panel, details |
+| Wide full page | Document | Local tab list after it reaches the shell offset | Operational header, Planning, workflow, dependency band, content |
+| 768–1279 full page | Document | Local tab list after it reaches the shell offset | Operational header, Planning, workflow, dependency band, content |
+| 920-pixel modal | Modal body | Dialog header; local tab list below it after operational sections pass | Planning, workflow, dependency band, active panel |
+| Below-768 full page | Document | Local tab list | Operational header, Planning, workflow, dependency band, panel |
+| Below-768 modal | Modal body | Dialog header; local tab list | Planning, workflow, dependency band, panel |
 
 Additional rules:
 
@@ -421,7 +417,7 @@ Implementation is ready for visual and interaction QA only when all of the follo
 - [ ] Full-page, 920-pixel modal, and below-768 layouts follow the same information and DOM order.
 - [ ] Each surface has exactly one intended vertical scroll owner.
 - [ ] Sticky tabs never cover focused content or the modal header.
-- [ ] The right rail becomes one `Weitere Details` disclosure in constrained and modal layouts.
+- [ ] No right rail or generic `Weitere Details` collection remains; Planning controls expand in their semantic slot.
 - [ ] Tabs implement the defined semantics, keyboard model, focus behavior, and horizontal overflow.
 - [ ] Dirty edit, save, cancel, close, and navigation protection behave consistently.
 - [ ] Sub-Issue and relationship add forms follow the focus, validation, and focus-return contract.
@@ -429,7 +425,7 @@ Implementation is ready for visual and interaction QA only when all of the follo
 - [ ] Core controls provide a 44-pixel hit area and specific accessible names.
 - [ ] Dynamic outcomes and blocking errors follow the live-announcement contract without duplication.
 - [ ] Counts derive from the normative formulas and show current mock values `2/4`, `3`, and `4`.
-- [ ] Screen-reader order remains correct when the rail collapses and at 400% zoom.
+- [ ] Screen-reader order remains correct across the shared inline hierarchy and at 400% zoom.
 - [ ] No screenshot correction is implemented as a new workflow, field, permission, or data source.
 
 ## Non-Goals

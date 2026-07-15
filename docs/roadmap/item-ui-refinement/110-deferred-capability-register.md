@@ -47,7 +47,7 @@ There is no generic archived state for planning Items.
 
 - `src/lib/status.ts:4` defines only the active work statuses `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, and `Erledigt`.
 - `supabase/migrations/20260713120959_production_baseline.sql:4793-4871` defines `active_tasks` by `trashed_at is null`; it has no archive predicate or archive metadata.
-- `src/features/tasks/organisms/task-detail-panel-sidebar.tsx:425-453` exposes only the existing planning-trash action `Deliverable zurückziehen`.
+- `src/features/tasks/molecules/task-detail-header-actions.tsx` exposes only the existing planning-trash action `Deliverable zurückziehen` through the Item action menu.
 - `src/features/planning/model/planning-trash-contract.ts:45-61` limits withdrawal to eligible draft/proposed roots and the existing proposer/operational-lead policy.
 - `src/app/api/tasks/[id]/withdraw/route.ts` and `src/lib/planning-trash-api.ts:114-170` implement withdrawal, revision checks, audit metadata, and GitHub lifecycle handling.
 - `src/lib/github.ts` contains a provider-level `archiveGitHubIssue` helper, but it is not an Item archive capability and is not wired to the active Task DELETE or detail UI.
