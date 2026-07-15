@@ -159,7 +159,7 @@ export function MilestoneDialog({
             </UiField>
 
             <UiField>
-              Beschreibung
+              Gemeinsames Ziel
               <UiTextArea
                 value={draft.description}
                 maxLength={4000}

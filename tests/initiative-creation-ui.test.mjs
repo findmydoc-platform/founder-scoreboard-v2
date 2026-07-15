@@ -91,8 +91,8 @@ test("initiative creation shell keeps header and footer fixed around one bounded
 test("initiative creation keeps authored outcome before classification and responsibility", async () => {
   const dialog = await readFile(dialogPath, "utf8");
   const authoredGroup = dialog.indexOf("Ziel &amp; Wirkung");
-  const goal = dialog.indexOf("Ziel / Outcome *");
-  const constraints = dialog.indexOf("\n                Constraints\n", goal);
+  const goal = dialog.indexOf("Zielbild *");
+  const constraints = dialog.indexOf("\n                Umfang &amp; Grenzen\n", goal);
   const contextGroup = dialog.indexOf("Einordnung &amp; Verantwortung");
   const milestone = dialog.indexOf("Epic / Meilenstein *");
   const accountable = dialog.indexOf("Accountable *");

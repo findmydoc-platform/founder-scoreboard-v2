@@ -47,7 +47,7 @@ function initiativeValidationErrors(draft: InitiativeDraft): InitiativeValidatio
     title: draft.title.trim().length >= 3 ? "" : "Der Titel benötigt mindestens 3 Zeichen.",
     goal: draft.goal.trim().length >= 3 ? "" : "Das Ziel benötigt mindestens 3 Zeichen.",
     milestoneId: draft.milestoneId ? "" : "Bitte ein Epic oder einen Meilenstein wählen.",
-    ownerId: draft.ownerId ? "" : "Bitte einen Owner wählen.",
+    ownerId: draft.ownerId ? "" : "Bitte einen Initiative-Owner wählen.",
     accountableProfileId: draft.accountableProfileId ? "" : "Bitte eine accountable Person wählen.",
     responsibleProfileIds: draft.responsibleProfileIds.length > 0 ? "" : "Bitte mindestens eine responsible Person wählen.",
   };
@@ -272,7 +272,7 @@ export function InitiativeDialog({
               </UiField>
 
               <UiField>
-                <span>Ziel / Outcome *</span>
+                <span>Zielbild *</span>
                 <UiTextArea
                   id={goalInputId}
                   required
@@ -303,7 +303,7 @@ export function InitiativeDialog({
               </UiField>
 
               <UiField>
-                Constraints
+                Umfang &amp; Grenzen
                 <UiTextArea
                   value={draft.scopeConstraints}
                   onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))}
@@ -342,7 +342,7 @@ export function InitiativeDialog({
                 onBlur={() => touchValidationField("ownerId")}
                 className="grid gap-1 text-xs font-semibold text-slate-500"
               >
-                <span id={ownerLabelId}>Owner *</span>
+                <span id={ownerLabelId}>Initiative-Owner *</span>
                 <CustomSelect
                   value={draft.ownerId}
                   onChange={(value) => setDraft((current) => ({
@@ -401,8 +401,8 @@ export function InitiativeDialog({
 
               <section className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4" aria-labelledby={`${titleId}-raci-group`}>
                 <div>
-                  <h4 id={`${titleId}-raci-group`} className="text-xs font-semibold uppercase tracking-wide text-blue-700">RACI / Verantwortung</h4>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">Deliverables übernehmen diesen Verantwortungskontext.</p>
+                  <h4 id={`${titleId}-raci-group`} className="text-xs font-semibold uppercase tracking-wide text-blue-700">RACI-Verantwortung</h4>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Deliverables übernehmen diesen RACI-Kontext.</p>
                 </div>
 
                 <div

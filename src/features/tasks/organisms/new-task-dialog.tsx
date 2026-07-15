@@ -199,13 +199,13 @@ function PlanningFields({ accent = false, draft, setDraft }: { accent?: boolean;
         </UiField>
       </div>
       <UiField>
-        Bereich
+        Arbeitsbereich
         <UiTextInput
           value={draft.workstream}
           onChange={(event) => setDraft((current) => ({ ...current, workstream: event.target.value }))}
           inputPadding="md"
           textTone="muted"
-          placeholder="Bereich (optional)"
+          placeholder="z. B. Produkt, Vertrieb oder Recht"
         />
       </UiField>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -230,7 +230,7 @@ function RelationshipFields({ accent = false, draft, data, setDraft }: { accent?
           options={taskRelationTypeOptions}
         />
         <UiSelectField
-          label="Aufgabe"
+          label="Verknüpfte Aufgabe"
           value={draft.relatedTaskId}
           onChange={(value) => setDraft((current) => ({ ...current, relatedTaskId: value }))}
           options={relatedTaskOptions(data.tasks)}
@@ -346,7 +346,7 @@ function DeliverableForm({
           />
           {selectedInitiative ? (
             <div className="rounded-md border border-slate-200 bg-white p-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Initiative-RACI</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">RACI-Kontext</div>
               <InitiativeRaciList initiative={selectedInitiative} profiles={data.profiles} className="mt-2 grid gap-1 text-xs text-slate-600" />
             </div>
           ) : null}
@@ -371,7 +371,7 @@ function DeliverableForm({
               onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
               className="mt-0.5 h-4 w-4 rounded border-slate-300"
             />
-            <span>Zusätzlich extern anlegen</span>
+            <span>Zusätzlich als GitHub Issue anlegen</span>
           </label>
           <p id={githubHelpId} className="text-xs leading-5 text-slate-500">
             {draft.approveNow ? `GitHub Issue wird in ${defaultGitHubRepository} angelegt.` : "Verfügbar, sobald Erstellen und freigeben ausgewählt ist."}
@@ -428,7 +428,7 @@ function SubIssueForm({
               <div className="mt-1 text-xs font-semibold text-slate-800">{inheritedMilestone?.title || (parentTask ? "Ohne Epic" : "Wird übernommen")}</div>
             </div>
             <div className="border-slate-200 sm:border-l sm:pl-3">
-              <div className="text-[11px] font-semibold text-slate-500">RACI-Kontext</div>
+              <div className="text-[11px] font-semibold text-slate-500">Geerbter RACI-Kontext</div>
               <div className="mt-1 text-xs font-semibold text-slate-800">{inheritedInitiative ? "Vom Deliverable übernommen" : "Wird übernommen"}</div>
             </div>
           </div>
@@ -457,7 +457,7 @@ function SubIssueForm({
         </UiField>
 
         <UiField>
-          Beschreibung / zusätzlicher Kontext
+          Zusätzlicher Kontext
           <UiTextArea
             value={draft.description}
             onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
@@ -482,7 +482,7 @@ function SubIssueForm({
         <div className="rounded-lg border border-slate-200 bg-white p-4"><PlanningFields accent draft={draft} setDraft={setDraft} /></div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <section className="grid gap-3">
-            <SectionHeading accent>GitHub-Ziel</SectionHeading>
+            <SectionHeading accent>GitHub-Repository</SectionHeading>
             <UiSelectField
               label="Repository"
               value={draft.githubRepo}
