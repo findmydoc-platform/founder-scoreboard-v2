@@ -31,6 +31,10 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.equal((panel.match(/<TaskDetailSurface/g) || []).length, 1);
   assert.match(panel, /role="dialog"/);
   assert.match(panel, /bg-slate-950\/20/);
+  assert.match(panel, /<div ref=\{dialogRef\}/);
+  assert.match(panel, /tabIndex=\{-1\}/);
+  assert.match(panel, /onClick=\{requestClose\}/);
+  assert.match(panel, /<aside className="absolute inset-y-0 right-0 z-10/);
   assert.match(panelHeader, /Große Ansicht/);
   assert.match(panelHeader, /href=\{`\/tasks\/\$\{task\.id\}`\}/);
   assert.match(surface, /TaskDetailOperationalHeader/);
