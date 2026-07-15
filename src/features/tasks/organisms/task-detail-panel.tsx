@@ -59,7 +59,7 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
   const { discard, keepEditing, open: discardDialogOpen, request: requestDiscard } = discardGuard;
   const requestClose = () => requestDiscard(onClose);
   const requestBack = () => requestDiscard(() => onBack?.());
-  const dialogRef = useModalDialog({ open: true, onClose: requestClose, closeDisabled: discardDialogOpen });
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardDialogOpen });
 
   useEffect(() => {
     if (!overviewDirty) return;
@@ -77,34 +77,37 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        className="fixed inset-0 z-30 cursor-default bg-slate-950/20 backdrop-blur-[1px]"
-        aria-label="Detailpanel schließen"
-        onClick={requestClose}
-      />
-      <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="task-detail-panel-title" className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[920px] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
-        <TaskDetailPanelHeader
-          task={taskSurfaceProps.task}
-          previousTask={previousTask}
-          onBack={onBack ? requestBack : undefined}
-          onClose={requestClose}
-          onRequestFullPage={(href) => {
-            if (!overviewDirty) return true;
-            requestDiscard(() => router.push(href));
-            return false;
-          }}
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="task-detail-panel-title" className="fixed inset-0 z-30">
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute inset-0 cursor-default bg-slate-950/20 backdrop-blur-[1px]"
+          aria-label="Detailpanel schließen"
+          onClick={requestClose}
         />
-        <div className="min-h-0 flex-1">
-          <TaskDetailSurface
-            key={taskSurfaceProps.task.id}
-            {...taskSurfaceProps}
-            surface="modal"
-            onOverviewDirtyChange={setOverviewDirty}
-            onRequestDiscardAction={requestDiscard}
+        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[920px] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
+          <TaskDetailPanelHeader
+            task={taskSurfaceProps.task}
+            previousTask={previousTask}
+            onBack={onBack ? requestBack : undefined}
+            onClose={requestClose}
+            onRequestFullPage={(href) => {
+              if (!overviewDirty) return true;
+              requestDiscard(() => router.push(href));
+              return false;
+            }}
           />
-        </div>
-      </aside>
+          <div className="min-h-0 flex-1">
+            <TaskDetailSurface
+              key={taskSurfaceProps.task.id}
+              {...taskSurfaceProps}
+              surface="modal"
+              onOverviewDirtyChange={setOverviewDirty}
+              onRequestDiscardAction={requestDiscard}
+            />
+          </div>
+        </aside>
+      </div>
       <TaskDiscardChangesDialog
         open={discardDialogOpen}
         onDiscard={discard}
