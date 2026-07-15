@@ -274,7 +274,7 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.match(ui, /NewTaskDialog/);
   assert.match(newTaskUi, /taskAssigneeOptions\(draft\.taskType, data\.profiles\)/);
   assert.match(newTaskUi, /Sub-Issues/);
-  assert.match(newTaskUi, /starten als vorgeschlagen/);
+  assert.match(newTaskUi, /Deliverable vorschlagen/);
   assert.match(newTaskUi, /Zusätzlich extern anlegen/);
   assert.match(newTaskUi, /Erstellen und freigeben/);
   assert.match(newTaskUi, /createGitHubIssue/);

@@ -1,64 +1,91 @@
-# Item Detail UI — Refined Placement Design QA
+# Item Creation UI — Design QA
 
 Status: final implementation QA
 Date: 2026-07-15
 Browser: Codex in-app browser
-Viewport baseline: 1440 × 1024
-Responsive check: 390 × 844
 
-## Evidence
+## Scope
 
-- Source visual truth: `/Users/razorspoint/.codex/generated_images/019f603e-092f-7e61-80dc-16362dd518aa/exec-6ab9f9dc-298f-4680-85ff-efad07545581.png`
-- Browser-rendered modal: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-modal-refined.png`
-- Browser-rendered mobile modal: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-modal-refined-mobile.png`
-- Browser-rendered Approval strip: `docs/roadmap/item-ui-refinement/implementation-screens/implementation-workflow-strip-refined.png`
-- Full-view same-input comparison: `docs/roadmap/item-ui-refinement/implementation-screens/comparison-modal-refined.png`
-- Focused header/operational comparison: `docs/roadmap/item-ui-refinement/implementation-screens/comparison-modal-refined-focus.png`
+- Deliverable creation drawer
+- Sub-Issue creation drawer
+- Initiative creation dialog
+- Milestone creation dialog
+- Shared modal, select, date, and profile-selection behavior
 
-The source mock shows a proposed Deliverable, while the active Planning board intentionally contains only active/approved Items. The modal comparison therefore uses the same canonical Item content with an approved state; the shared Approval-strip implementation is additionally proven on the full-page surface with the proposed state. Layout judgments avoid treating that domain-state difference as visual drift.
+## Visual Evidence
 
-## Required Fidelity Surfaces
+Approved references:
 
-- **Fonts and typography:** The implementation uses the existing application font stack and preserves the mock's hierarchy: compact uppercase identity, one dominant title, small operational labels, and text-labelled tabs. Weight and wrapping remain readable at desktop and mobile sizes.
-- **Spacing and layout rhythm:** Identity, actions, operational facts, Planning summary, workflow state, tabs, and content use one stable vertical order. The existing 920-pixel modal is intentionally wider than the illustrative generated drawer; this preserves the binding product contract and direct controls without crowding.
-- **Colors and tokens:** White/slate surfaces, blue interaction accents, restrained amber attention, and subtle dividers match the selected direction. Routine metadata is no longer presented as competing cards.
-- **Image quality and assets:** The Item UI contains no target imagery. Lucide icons remain vector UI icons and no image or logo was replaced by CSS art, emoji, or placeholder graphics.
-- **Copy and content:** `Zuständig` remains the primary Item responsibility. `Accountable` is read-only Initiative context. `Wartet auf Freigabe`, `Planung bearbeiten`, Review responsibility, GitHub sync/create, and `Deliverable zurückziehen` use existing domain language and capabilities.
+- `docs/roadmap/item-creation-ui-refinement/mockups/01-new-deliverable.png`
+- `docs/roadmap/item-creation-ui-refinement/mockups/02-new-sub-issue.png`
+- `docs/roadmap/item-creation-ui-refinement/mockups/03-new-initiative-constrained.png`
+- `docs/roadmap/item-creation-ui-refinement/mockups/03b-new-initiative-constrained-scrolled.png`
+- `docs/roadmap/item-creation-ui-refinement/mockups/04-new-milestone.png`
 
-## Primary Interactions Tested
+Browser-rendered implementation:
 
-- Open and close the Item modal from Planning.
-- Open the compact linked GitHub Issue action.
-- Open the keyboard-accessible Item action menu and verify its disabled reason.
-- Reveal dormant Review responsibility from the Item action menu.
-- Expand and collapse Planning controls in place.
-- Verify Initiative, Sprint, Epic / Meilenstein, period, and Initiative-Team disclosure placement.
-- Open `Aktivität` and verify creator/update/carryover metadata at the end of the timeline.
-- Verify the conditional Approval strip with existing decision actions on a proposed Deliverable.
-- Resize the open modal from 1440 × 1024 to 390 × 844.
-- Check browser console errors: none.
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/01-new-deliverable-implemented.jpg`
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/02-new-sub-issue-implemented.jpg`
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03-new-initiative-implemented.jpg`
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03b-new-initiative-scrolled-implemented.jpg`
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03c-new-initiative-mobile-implemented.jpg`
+- `docs/roadmap/item-creation-ui-refinement/implementation-screens/04-new-milestone-implemented.jpg`
+
+Each desktop implementation was compared with its approved reference in the same visual inspection input. Initiative and Sub-Issue were additionally checked at 375 × 720.
+
+## States and Interactions Tested
+
+- Open and close all four creation surfaces.
+- Fill authored fields and select dates, hierarchy, ownership, and relationship values.
+- Verify inherited Initiative, Milestone, and RACI context for Sub-Issues.
+- Verify independent Milestone selection and approval-aware GitHub gating for Deliverables.
+- Scroll Initiative content while header and footer remain fixed.
+- Verify a single-column mobile reflow without horizontal overflow.
+- Verify body and root scroll locking while a modal is open and restoration after close.
+- Verify focus trapping, focus return, and nested modal stacking.
+- Press Escape with a custom select open: the select closes while the creation form remains open.
+- Check browser console: no errors or warnings.
 
 ## Comparison History
 
 ### Pass 1
 
-- **[P1] Mobile title collapsed beside header actions.** At 390 pixels the action group retained 304 pixels and reduced the title column to 37 pixels, producing a vertically stacked title and pushing operational facts far below the fold.
-- **Fix:** The title/actions row now stacks below the small breakpoint. Header actions use full-width, left-aligned wrapping on mobile and return to compact right alignment from `sm` upward.
-- **Post-fix evidence:** `implementation-modal-refined-mobile.png` shows the identity and title at full available width, followed by one intact 44-pixel action row and normally wrapped operational facts.
-
-- **[P2] Planning action lacked the source's explicit edit signal.** The first implementation used muted ghost copy plus only a disclosure chevron.
-- **Fix:** The action now uses the blue interaction token, a Pencil icon, its clear `Planung bearbeiten` label, and the disclosure chevron.
-- **Post-fix evidence:** `implementation-modal-refined.png` and the focused comparison show the revised action in the Planning summary row.
+- **[P1] Deliverable and Sub-Issue used a wide floating modal instead of the approved right-edge drawer.**
+  - Fixed with a full-height, right-aligned drawer capped at 64rem, fixed header/footer, and one scrollable body.
+- **[P1] Escape on an expanded custom select closed the entire dialog.**
+  - Fixed by letting the expanded control consume Escape before the modal stack handler.
+- **[P1] Task creation had a second scroll-lock implementation.**
+  - Removed; shared modal locking now owns body and root overflow consistently.
+- **[P2] Custom select and date labels were not programmatically connected to their controls.**
+  - Fixed with stable generated IDs and `aria-labelledby`.
 
 ### Pass 2
 
-- No actionable P0, P1, or P2 differences remained. The modal width, direct operational controls, and separate Approval-state evidence are intentional existing-product constraints rather than unresolved design drift.
+- **[P2] Sub-Issue context-card headings did not carry the approved accent hierarchy.**
+  - Fixed with compact blue uppercase headings.
+- **[P2] Initiative dialog was wider and taller than the approved reference.**
+  - Fixed with a 5xl width cap and a four-rem viewport gutter while preserving the internal scroll region.
+- **[P2] Mobile Initiative and Sub-Issue layouts required explicit overflow verification.**
+  - Confirmed at 375 × 720 with no horizontal overflow and correct fixed action placement.
 
-## Findings
+### Pass 3
 
-- P0: none.
-- P1: none.
-- P2: none.
-- P3: The generated source uses a narrower illustrative drawer than the binding 920-pixel modal. No change is recommended because the wider modal materially improves direct-control and long-content usability.
+- No actionable P0, P1, or P2 visual or interaction differences remained.
+- Remaining differences are limited to realistic seed content, background page state, and native component text values; they do not alter hierarchy, layout, or behavior.
+
+### Pass 4 — final Product Design audit
+
+- **[P2] Untouched Deliverable, Sub-Issue, and Initiative forms showed error-like validation copy.**
+  - Fixed with field-level validation that appears after blur or a submission attempt. Pristine forms keep the disabled primary action without presenting missing input as an error.
+- **[P3] Sub-Issue inherited RACI and editable Item ownership used overlapping responsibility language.**
+  - Fixed with `RACI-Kontext` and `Vom Deliverable übernommen`; editable ownership remains under `Verantwortung`.
+- **[P3] Initiative internal scrolling was functional but initially subtle.**
+  - Fixed with a stable scrollbar gutter while preserving fixed header/footer and the single scroll owner.
+
+## Automated Verification
+
+- `pnpm test`: 422 passed, 0 failed
+- `pnpm run lint`: passed
+- `pnpm run build`: passed
 
 final result: passed

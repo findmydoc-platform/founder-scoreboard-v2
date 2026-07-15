@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect, type CustomSelectOption } from "@/shared/atoms/custom-select";
 import { UiField } from "@/shared/atoms/ui-primitives";
@@ -15,6 +15,10 @@ type UiSelectFieldProps = {
   selectClassName?: string;
   menuClassName?: string;
   "aria-label"?: string;
+  "aria-required"?: boolean;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+  "data-autofocus"?: boolean;
   children?: ReactNode;
 };
 
@@ -28,12 +32,31 @@ export function UiSelectField({
   selectClassName = "h-9 text-sm",
   menuClassName,
   "aria-label": ariaLabel,
+  "aria-required": ariaRequired,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  "data-autofocus": dataAutofocus,
   children,
 }: UiSelectFieldProps) {
+  const labelId = useId();
+
   return (
-    <UiField className={className}>
-      {label}
-      <CustomSelect value={value} onChange={onChange} disabled={disabled} className={selectClassName} menuClassName={menuClassName} options={options} aria-label={ariaLabel} />
+    <UiField as="div" className={className}>
+      <span id={labelId}>{label}</span>
+      <CustomSelect
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={selectClassName}
+        menuClassName={menuClassName}
+        options={options}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? undefined : labelId}
+        aria-required={ariaRequired}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        data-autofocus={dataAutofocus}
+      />
       {children}
     </UiField>
   );
@@ -58,10 +81,19 @@ export function UiDateField({
   pickerClassName = "h-9 text-sm",
   "aria-label": ariaLabel,
 }: UiDateFieldProps) {
+  const labelId = useId();
+
   return (
-    <UiField className={className}>
-      {label}
-      <CustomDatePicker value={value} onChange={onChange} disabled={disabled} className={pickerClassName} aria-label={ariaLabel} />
+    <UiField as="div" className={className}>
+      <span id={labelId}>{label}</span>
+      <CustomDatePicker
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={pickerClassName}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? undefined : labelId}
+      />
     </UiField>
   );
 }
