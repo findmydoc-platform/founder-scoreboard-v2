@@ -128,6 +128,29 @@ test("rejects a title-only legacy match after the task was synced before", async
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
+test("repairs a previously synced legacy issue carrying the exact FounderOps task link", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  process.env.APP_URL = "https://founder-ops.findmydoc.eu";
+
+  try {
+    const task = sourceTask({ githubIssueLastSyncedAt: "2026-07-13T12:00:00.000Z" });
+    const { github, requests } = await loadGitHub({
+      number: 42,
+      html_url: task.githubIssueUrl,
+      title: "Title changed after the original sync",
+      body: `Planning context: [Open in FounderOps](${process.env.APP_URL}/tasks/${task.id}). GitHub issue sync keeps the working issue aligned.`,
+    });
+
+    await github.upsertGitHubIssue(task, "installation-token");
+
+    assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+    assert.equal(requests[1].body.body.includes(githubMarker(task.id)), true);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
+});
+
 test("rejects a loaded issue from another repository before patching", async () => {
   const task = sourceTask();
   const { github, requests } = await loadGitHub({

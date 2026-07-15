@@ -166,6 +166,11 @@ function sourceLine(task: Task) {
   return `Planning context: ${source}. GitHub issue sync keeps the working issue aligned.`;
 }
 
+function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
+  const taskUrl = founderOpsTaskUrl(task.id);
+  return Boolean(taskUrl && body?.includes(`](${taskUrl})`));
+}
+
 export function taskIssueMarker(taskId: string) {
   return `<!-- founderops-task-id:${taskId} -->`;
 }
@@ -296,6 +301,7 @@ export function assertGitHubIssueUpdateTarget(
   const expectedMarker = taskIssueMarker(task.id);
   if (issue.body?.includes(expectedMarker)) return;
   const containsFounderOpsMarker = /<!--\s*founderops-task-id:[^>]+-->/i.test(issue.body || "");
+  if (!containsFounderOpsMarker && hasMatchingLegacyFounderOpsTaskLink(task, issue.body)) return;
   const isBeforeFirstSync = !task.githubIssueLastSyncedAt;
   if (isBeforeFirstSync && !containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
   throw new Error("Das verknüpfte GitHub Issue gehört nicht zu dieser FounderOps-Aufgabe.");
