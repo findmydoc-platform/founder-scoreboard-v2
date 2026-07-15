@@ -26,7 +26,6 @@
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
     "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",
-    "verify:hierarchy": "node scripts/verify-hierarchy.mjs",
     "verify:github-sync": "node scripts/verify-github-sync.mjs",
     "verify:google-chat": "node scripts/verify-google-chat-rollout.mjs",
     "verify:task-utf8": "node scripts/verify-task-utf8.mjs",

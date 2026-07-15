@@ -87,14 +87,6 @@ Nach dem Eintragen der `.env.local` prüft dieser Befehl, ob die wichtigsten Tab
 pnpm run verify:supabase
 ```
 
-Die Hierarchie aus Epic / Meilenstein, Group Commitment, Deliverable und Sub-Issue prüft:
-
-```bash
-pnpm run verify:hierarchy
-```
-
-Erwartet werden aktuell 5 Profile, 5 Packages und mindestens die 14 Demo-Tasks aus `src/lib/seed/source.json`.
-
 Die Auth-Zuordnung prüft dieser Befehl:
 
 ```bash
