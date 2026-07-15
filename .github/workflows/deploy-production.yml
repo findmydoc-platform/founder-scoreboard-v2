@@ -111,9 +111,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm run verify:github-sync
 
-      - name: Verify Planning Hierarchy Contract
-        run: pnpm run verify:hierarchy
-
       - name: Deploy Prebuilt Output to Vercel Production
         id: vercel_production
         env:

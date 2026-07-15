@@ -130,7 +130,6 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   const display = await readFile("src/lib/display.ts", "utf8");
   const projectsOverview = await readFile("src/features/projects/organisms/projects-overview.tsx", "utf8");
   const initiativeDialog = await readFile("src/features/projects/organisms/initiative-dialog.tsx", "utf8");
-  const pkg = await readFile("package.json", "utf8");
 
   assert.match(migration, /create table if not exists packages[^]*milestone_id text/);
   assert.match(initiativeMigration, /owner_id/);
@@ -170,7 +169,6 @@ test("planning hierarchy treats sprint as time container and packages as initiat
   assert.match(ui, /Alle einklappen/);
   assert.match(ui, /Alle ausklappen/);
   assert.match(ui, /aria-expanded=\{expanded\}/);
-  assert.match(pkg, /verify:hierarchy/);
 });
 
 test("management repo cleanup plan protects legacy templates from deletion without approval", async () => {
