@@ -65,6 +65,7 @@ export function TaskGitHubSyncQueue({
   waitingGitHubCommentCount,
   githubReauthFailed,
   authBusy,
+  localMode = false,
   notice,
   onClose,
   onOpenTask,
@@ -82,6 +83,7 @@ export function TaskGitHubSyncQueue({
   waitingGitHubCommentCount: number;
   githubReauthFailed: boolean;
   authBusy: boolean;
+  localMode?: boolean;
   notice?: string;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
@@ -121,8 +123,6 @@ export function TaskGitHubSyncQueue({
 
   const bulkRunnableRows = rows.filter((row) => row.state !== "running" && row.state !== "locked");
   const canRunLinkedSync = githubInstallationAvailable && !pending && bulkRunnableRows.length > 0;
-  const neutralConnectionState = githubConnectionState === "checking" || githubConnectionState === "unknown";
-  const connectionNeedsAttention = (!neutralConnectionState && !githubInstallationAvailable) || githubConnectionState === "missing" || githubConnectionState === "reconnect_required";
   const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked" || row.state === "waiting_for_parent" || row.state === "parent_failed";
 
   return (
@@ -143,6 +143,7 @@ export function TaskGitHubSyncQueue({
                   waitingCommentCount={waitingGitHubCommentCount}
                   failed={githubReauthFailed}
                   busy={authBusy}
+                  localMode={localMode}
                   state={githubConnectionState}
                   open={connectionInfoOpen}
                   onOpenChange={setConnectionInfoOpen}
@@ -168,7 +169,7 @@ export function TaskGitHubSyncQueue({
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
-          <h3 className={`border-b border-slate-100 pt-4 text-base font-semibold text-slate-950 ${connectionInfoOpen ? connectionNeedsAttention ? "pb-40" : "pb-16" : "pb-4"}`}>
+          <h3 className="border-b border-slate-100 py-4 text-base font-semibold text-slate-950">
             {rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "Aktion" : "Aktionen"} erforderlich` : "GitHub ist aktuell"}
           </h3>
           <div>
@@ -236,13 +237,6 @@ export function TaskGitHubSyncQueue({
                   ? "Keine ausführbaren Aktionen"
                 : "GitHub ist aktuell"}
           </UiButton>
-          <button
-            type="button"
-            onClick={() => setConnectionInfoOpen(true)}
-            className="mt-3 inline-flex min-h-8 items-center text-sm font-semibold text-blue-700 transition hover:text-blue-800 focus:outline-none focus:underline"
-          >
-            Verbindung verwalten
-          </button>
         </footer>
       </aside>
     </div>

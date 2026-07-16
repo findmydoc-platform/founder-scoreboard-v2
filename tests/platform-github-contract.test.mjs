@@ -505,6 +505,10 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubStatus, /GitHub App nicht verfügbar/);
   assert.match(githubStatus, /Autorenkonto nicht verbunden/);
   assert.match(githubStatus, /waitingCommentCount/);
+  assert.match(githubStatus, /GitHub App lokal nicht konfiguriert/);
+  assert.match(githubStatus, /Autorenkonto lokal nicht verfügbar/);
+  assert.match(githubStatus, /Administratoraktion erforderlich/);
+  assert.match(githubStatus, /ChevronDown/);
   assert.match(githubStatus, /state === "checking" \|\| state === "unknown"/);
   assert.match(githubStatus, /closeOnEscape/);
   assert.match(githubStatus, /stopPropagation/);
@@ -512,7 +516,11 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.match(githubTrigger, /count > 0/);
   assert.match(githubTrigger, /isNeutral/);
   assert.match(githubQueue, /projectGitHubSyncQueue\(tasks, comments\)/);
+  assert.doesNotMatch(githubQueue, /connectionInfoOpen \? connectionNeedsAttention/);
+  assert.doesNotMatch(githubQueue, /Verbindung verwalten/);
   assert.match(planningHeader, /projectGitHubSyncQueue\(data\.tasks, data\.taskComments\)/);
+  assert.doesNotMatch(planningHeader, /showGitHubSyncTrigger/);
+  assert.match(planningHeader, /localMode=\{source === "seed"\}/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
   assert.doesNotMatch(detailGitHubActions, /GitHub-Verbindung .*erneuern/);
