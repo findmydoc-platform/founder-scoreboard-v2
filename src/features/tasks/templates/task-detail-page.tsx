@@ -6,10 +6,12 @@ import { useState } from "react";
 import { usePlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
-import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-guard";
+import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
+import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header";
 import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
+import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 
@@ -53,6 +55,7 @@ export function TaskDetailPage({
 
   const currentPackage = controller.data.packages.find((pack) => pack.id === task.packageId);
   const selectedRelations = controller.data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id);
+  const githubSyncQueue = projectGitHubSyncQueue(controller.data.tasks, controller.data.taskComments);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
@@ -71,16 +74,16 @@ export function TaskDetailPage({
         onDismissNotification={controller.dismissNotification}
         onBack={() => discardGuard.request(() => router.push("/planning"))}
         actions={(
-          <GitHubConnectionStatus
-            authenticated={Boolean(controller.authUser)}
-            installationAvailable={controller.githubInstallationAvailable}
-            userConnected={controller.githubUserConnected}
-            waitingCommentCount={controller.waitingGitHubCommentCount}
-            failed={controller.githubReauthFailed}
-            busy={controller.authBusy}
-            state={controller.githubConnectionState}
-            onReconnect={() => controller.signIn({ githubReconnect: true, clearReconnectGuard: true })}
-          />
+          source === "supabase" && controller.authUser ? (
+            <GitHubSyncTrigger
+              count={githubSyncQueue.count}
+              failedCount={githubSyncQueue.failedCount}
+              installationAvailable={controller.githubInstallationAvailable}
+              connectionState={controller.githubConnectionState}
+              open={controller.githubSyncQueueOpen}
+              onOpen={() => controller.setGithubSyncQueueOpen(true)}
+            />
+          ) : null
         )}
       />
 
@@ -128,6 +131,24 @@ export function TaskDetailPage({
         />
       </div>
 
+      <TaskGitHubSyncQueue
+        open={controller.githubSyncQueueOpen}
+        tasks={controller.data.tasks}
+        comments={controller.data.taskComments}
+        pending={controller.isPending}
+        githubInstallationAvailable={controller.githubInstallationAvailable}
+        githubUserConnected={controller.githubUserConnected}
+        githubConnectionState={controller.githubConnectionState}
+        waitingGitHubCommentCount={controller.waitingGitHubCommentCount}
+        githubReauthFailed={controller.githubReauthFailed}
+        authBusy={controller.authBusy}
+        notice={controller.githubSyncNotice}
+        onClose={() => controller.setGithubSyncQueueOpen(false)}
+        onOpenTask={controller.openTaskPanel}
+        onReconnect={() => controller.signIn({ githubReconnect: true, clearReconnectGuard: true })}
+        onSyncLinkedGitHubTasks={controller.syncLinkedGitHubTasks}
+        onSyncTaskToGitHub={controller.syncTaskToGitHub}
+      />
       <PlanningOverlayLayer controller={controller} />
       <TaskDiscardChangesDialog
         open={discardGuard.open}

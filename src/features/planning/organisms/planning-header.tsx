@@ -1,12 +1,12 @@
-import { GitBranch, HelpCircle, Import, Plus, X } from "lucide-react";
+import { HelpCircle, Import, Plus, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
-import { GitHubConnectionStatus } from "@/features/planning/molecules/github-connection-status";
 import { PlanningHeaderDataActions } from "@/features/planning/molecules/planning-header-data-actions";
 import { viewTabs, workspaceDescriptions, workspaceLabels } from "@/features/planning/model/planning-app-model";
 import { AuthControl } from "@/features/settings/organisms/auth-control";
-import { hasGitHubIssue } from "@/lib/platform";
+import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
+import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
 
 export function PlanningHeader({ controller }: { controller: PlanningAppController }) {
   const {
@@ -26,9 +26,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     filtersAvailable,
     githubConnectionState,
     githubInstallationAvailable,
-    githubUserConnected,
-    waitingGitHubCommentCount,
-    githubReauthFailed,
     githubSyncQueueOpen,
     headerData,
     headerActions,
@@ -54,14 +51,8 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     view,
     workspace,
   } = controller;
-  const showGitHubSyncTrigger = source === "supabase" && workspace === "planning";
-  const githubSyncDeliverables = data.tasks.filter((task) => task.taskType === "deliverable");
-  const openCommentTaskIds = new Set(data.taskComments.filter((comment) => comment.githubDeliveryStatus !== "delivered").map((comment) => comment.taskId));
-  const failedCommentTaskIds = new Set(data.taskComments.filter((comment) => comment.githubDeliveryStatus === "failed").map((comment) => comment.taskId));
-  const linkedGitHubQueue = githubSyncDeliverables.filter((task) => hasGitHubIssue(task) && (task.githubIssueSyncStatus !== "synced" || openCommentTaskIds.has(task.id)));
-  const failedGitHubSyncs = linkedGitHubQueue.filter((task) => task.githubIssueSyncStatus === "failed" || failedCommentTaskIds.has(task.id));
-  const missingGitHubIssues = githubSyncDeliverables.filter((task) => !hasGitHubIssue(task));
-  const githubSyncQueueCount = linkedGitHubQueue.length + missingGitHubIssues.length;
+  const showGitHubSyncTrigger = source === "supabase" && Boolean(authUser);
+  const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
   const description = workspace === "planning"
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
@@ -155,34 +146,15 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           >
             <HelpCircle size={16} />
           </button>
-          <GitHubConnectionStatus
-            authenticated={Boolean(authUser)}
-            installationAvailable={githubInstallationAvailable}
-            userConnected={githubUserConnected}
-            waitingCommentCount={waitingGitHubCommentCount}
-            failed={githubReauthFailed}
-            busy={authBusy}
-            state={githubConnectionState}
-            onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
-          />
           {showGitHubSyncTrigger && (
-            <button
-              type="button"
-              onClick={() => setGithubSyncQueueOpen(true)}
-              disabled={!githubInstallationAvailable}
-              aria-expanded={githubSyncQueueOpen}
-              className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <GitBranch size={16} />
-              GitHub-Sync
-              {githubSyncQueueCount ? (
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${failedGitHubSyncs.length ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
-                  {githubSyncQueueCount}
-                </span>
-              ) : (
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">aktuell</span>
-              )}
-            </button>
+            <GitHubSyncTrigger
+              count={githubSyncQueue.count}
+              failedCount={githubSyncQueue.failedCount}
+              installationAvailable={githubInstallationAvailable}
+              connectionState={githubConnectionState}
+              open={githubSyncQueueOpen}
+              onOpen={() => setGithubSyncQueueOpen(true)}
+            />
           )}
           {authAvailable && (
             <AuthControl

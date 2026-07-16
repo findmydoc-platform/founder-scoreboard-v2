@@ -32,6 +32,7 @@ type PlanningWorkspaceRendererProps = {
 
 export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorkspaceRendererProps) {
   const {
+    authBusy,
     canManageTaskMeta,
     canUseCeoIntake,
     createFounderEvent,
@@ -49,9 +50,12 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     fmdToolMessage,
     fmdToolPending,
     googleChatStatus,
+    githubConnectionState,
     githubInstallationAvailable,
+    githubReauthFailed,
     githubSyncNotice,
     githubSyncQueueOpen,
+    githubUserConnected,
     isPending,
     lockSprint,
     notificationDispatchMessage,
@@ -74,6 +78,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     setMilestoneDialogDefaults,
     setTaskDialogDefaults,
     setSprintPlanningOptions,
+    signIn,
     sprintLockMessage,
     sprintPlanningOptions,
     createFmdTool,
@@ -87,6 +92,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateSprint,
     updateSprintCommitment,
     updateTask,
+    waitingGitHubCommentCount,
     withdrawInitiative,
     view,
     workspace,
@@ -278,9 +284,15 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         comments={data.taskComments}
         pending={isPending}
         githubInstallationAvailable={githubInstallationAvailable}
+        githubUserConnected={githubUserConnected}
+        githubConnectionState={githubConnectionState}
+        waitingGitHubCommentCount={waitingGitHubCommentCount}
+        githubReauthFailed={githubReauthFailed}
+        authBusy={authBusy}
         notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}
+        onReconnect={() => signIn({ githubReconnect: true, clearReconnectGuard: true })}
         onSyncLinkedGitHubTasks={syncLinkedGitHubTasks}
         onSyncTaskToGitHub={syncTaskToGitHub}
       />
