@@ -1,17 +1,20 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Info, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, RefreshCw } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import { UiButton } from "@/shared/atoms/ui-primitives";
 
 export function githubConnectionLabel({
   installationAvailable,
+  localMode = false,
   state,
 }: {
   installationAvailable: boolean;
+  localMode?: boolean;
   state: GitHubUserConnectionState;
 }) {
+  if (localMode && !installationAvailable) return "GitHub App lokal nicht verfügbar";
   if (state === "checking" || state === "unknown") return "Verbindung wird geprüft";
   if (!installationAvailable) return "GitHub App nicht verfügbar";
   if (state === "connected") return "Vollständig verbunden";
@@ -26,6 +29,7 @@ export function GitHubConnectionInfo({
   waitingCommentCount,
   failed,
   busy,
+  localMode = false,
   state,
   open,
   onOpenChange,
@@ -36,6 +40,7 @@ export function GitHubConnectionInfo({
   waitingCommentCount: number;
   failed: boolean;
   busy: boolean;
+  localMode?: boolean;
   state?: GitHubUserConnectionState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,11 +48,11 @@ export function GitHubConnectionInfo({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const effectiveState: GitHubUserConnectionState = state || (userConnected ? "connected" : failed ? "reconnect_required" : "missing");
-  const isNeutral = effectiveState === "checking" || effectiveState === "unknown";
-  const authorConnected = effectiveState === "connected";
-  const authorNeedsAction = effectiveState === "missing" || effectiveState === "reconnect_required";
+  const isNeutral = !localMode && (effectiveState === "checking" || effectiveState === "unknown");
+  const authorConnected = !localMode && effectiveState === "connected";
+  const authorNeedsAction = !localMode && (effectiveState === "missing" || effectiveState === "reconnect_required");
   const installationProblem = !isNeutral && !installationAvailable;
-  const label = githubConnectionLabel({ installationAvailable, state: effectiveState });
+  const label = githubConnectionLabel({ installationAvailable, localMode, state: effectiveState });
   const statusDotClass = isNeutral
     ? "bg-slate-300"
     : installationProblem
@@ -78,20 +83,24 @@ export function GitHubConnectionInfo({
   }, [onOpenChange, open]);
 
   return (
-    <div ref={rootRef} className="relative mt-1 flex items-center gap-1.5">
-      <span className={`h-2 w-2 rounded-full ${statusDotClass}`} aria-hidden="true" />
-      <span className={`text-sm font-medium ${installationProblem ? "text-red-700" : authorNeedsAction ? "text-amber-700" : authorConnected ? "text-emerald-700" : "text-slate-500"}`}>
-        {label}
-      </span>
+    <div ref={rootRef} className="relative mt-0.5">
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
         aria-expanded={open}
         aria-controls="github-connection-details"
-        className="grid h-6 w-6 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label="Verbindungsstatus erklären"
+        className="group flex min-h-7 max-w-full items-center gap-1.5 rounded-md pr-1 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+        aria-label={`${label}. Verbindungsdetails anzeigen`}
       >
-        <Info size={15} aria-hidden="true" />
+        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass}`} aria-hidden="true" />
+        <span className={`truncate text-sm font-medium ${installationProblem ? "text-red-700" : authorNeedsAction ? "text-amber-700" : authorConnected ? "text-emerald-700" : "text-slate-500"}`}>
+          {label}
+        </span>
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-slate-400 transition-transform group-hover:text-slate-600 ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
       </button>
 
       {open && (
@@ -100,7 +109,7 @@ export function GitHubConnectionInfo({
           aria-label="Verbindungsstatus"
           className="fixed inset-x-4 top-24 z-[60] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-xl sm:absolute sm:inset-x-auto sm:left-0 sm:top-8 sm:w-[310px]"
         >
-          <div className="px-4 py-3 font-semibold text-slate-950">Verbindungsstatus</div>
+          <div className="px-4 py-3 font-semibold text-slate-950">GitHub-Verbindung</div>
           <div className="grid gap-3 border-t border-slate-100 px-4 py-3">
             <div className="grid grid-cols-[18px_minmax(0,1fr)] gap-2">
               {isNeutral ? (
@@ -112,11 +121,19 @@ export function GitHubConnectionInfo({
               )}
               <div>
                 <div className="font-medium text-slate-800">
-                  {isNeutral ? "GitHub App wird geprüft" : installationAvailable ? "GitHub App installiert" : "GitHub App nicht verfügbar"}
+                  {isNeutral
+                    ? "GitHub App wird geprüft"
+                    : installationAvailable
+                      ? "GitHub App installiert"
+                      : localMode
+                        ? "GitHub App lokal nicht konfiguriert"
+                        : "GitHub App nicht verfügbar"}
                 </div>
                 {installationProblem && (
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Issue-Sync ist gesperrt. Aktion: GitHub-App-Konfiguration und Installation prüfen.
+                    {localMode
+                      ? "Issue-Sync ist in der lokalen Umgebung deaktiviert."
+                      : "Issue-Sync ist gesperrt. Administratoraktion erforderlich."}
                   </p>
                 )}
               </div>
@@ -129,26 +146,34 @@ export function GitHubConnectionInfo({
               )}
               <div>
                 <div className="font-medium text-slate-800">
-                  {authorConnected ? "Autorenkonto verbunden" : authorNeedsAction ? "Autorenkonto nicht verbunden" : "Autorenkonto wird geprüft"}
+                  {localMode
+                    ? "Autorenkonto lokal nicht verfügbar"
+                    : authorConnected
+                      ? "Autorenkonto verbunden"
+                      : authorNeedsAction
+                        ? "Autorenkonto nicht verbunden"
+                        : "Autorenkonto wird geprüft"}
                 </div>
-                {authorNeedsAction && (
+                {localMode ? (
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Erst nach der GitHub-App-Konfiguration verfügbar.
+                  </p>
+                ) : authorNeedsAction ? (
+                  <>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     {waitingCommentCount > 0
                       ? `${waitingCommentCount} ${waitingCommentCount === 1 ? "Kommentar wartet" : "Kommentare warten"} auf deine Verbindung.`
                       : "Kommentare und Anhänge können nicht unter deinem Namen veröffentlicht werden."}
                   </p>
-                )}
+                    <UiButton className="mt-3" size="sm" variant="blueOutline" disabled={busy} onClick={onReconnect}>
+                      <RefreshCw size={14} aria-hidden="true" />
+                      {busy ? "GitHub wird geöffnet..." : effectiveState === "reconnect_required" ? "Verbindung erneuern" : "GitHub verbinden"}
+                    </UiButton>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
-          {authorNeedsAction && (
-            <div className="border-t border-slate-100 px-4 py-3">
-              <UiButton size="sm" variant="blueOutline" disabled={busy} onClick={onReconnect}>
-                <RefreshCw size={14} aria-hidden="true" />
-                {busy ? "GitHub wird geöffnet..." : effectiveState === "reconnect_required" ? "Verbindung erneuern" : "GitHub verbinden"}
-              </UiButton>
-            </div>
-          )}
         </section>
       )}
     </div>

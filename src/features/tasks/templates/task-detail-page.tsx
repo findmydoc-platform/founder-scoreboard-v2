@@ -74,16 +74,15 @@ export function TaskDetailPage({
         onDismissNotification={controller.dismissNotification}
         onBack={() => discardGuard.request(() => router.push("/planning"))}
         actions={(
-          source === "supabase" && controller.authUser ? (
-            <GitHubSyncTrigger
-              count={githubSyncQueue.count}
-              failedCount={githubSyncQueue.failedCount}
-              installationAvailable={controller.githubInstallationAvailable}
-              connectionState={controller.githubConnectionState}
-              open={controller.githubSyncQueueOpen}
-              onOpen={() => controller.setGithubSyncQueueOpen(true)}
-            />
-          ) : null
+          <GitHubSyncTrigger
+            count={githubSyncQueue.count}
+            failedCount={githubSyncQueue.failedCount}
+            installationAvailable={controller.githubInstallationAvailable}
+            localMode={source === "seed"}
+            connectionState={controller.githubConnectionState}
+            open={controller.githubSyncQueueOpen}
+            onOpen={() => controller.setGithubSyncQueueOpen(true)}
+          />
         )}
       />
 
@@ -142,6 +141,7 @@ export function TaskDetailPage({
         waitingGitHubCommentCount={controller.waitingGitHubCommentCount}
         githubReauthFailed={controller.githubReauthFailed}
         authBusy={controller.authBusy}
+        localMode={source === "seed"}
         notice={controller.githubSyncNotice}
         onClose={() => controller.setGithubSyncQueueOpen(false)}
         onOpenTask={controller.openTaskPanel}

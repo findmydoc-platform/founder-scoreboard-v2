@@ -7,6 +7,7 @@ export function GitHubSyncTrigger({
   count,
   failedCount,
   installationAvailable,
+  localMode = false,
   connectionState,
   open,
   onOpen,
@@ -14,11 +15,12 @@ export function GitHubSyncTrigger({
   count: number;
   failedCount: number;
   installationAvailable: boolean;
+  localMode?: boolean;
   connectionState: GitHubUserConnectionState;
   open: boolean;
   onOpen: () => void;
 }) {
-  const isNeutral = connectionState === "checking" || connectionState === "unknown";
+  const isNeutral = !localMode && (connectionState === "checking" || connectionState === "unknown");
   const connectionNeedsAction = connectionState === "missing" || connectionState === "reconnect_required";
   const statusDotClass = isNeutral
     ? "bg-slate-300"
@@ -32,7 +34,9 @@ export function GitHubSyncTrigger({
   const badgeClass = failedCount > 0
     ? "border-red-200 bg-red-50 text-red-700"
     : "border-amber-200 bg-amber-50 text-amber-700";
-  const statusText = isNeutral
+  const statusText = localMode && !installationAvailable
+    ? "GitHub App lokal nicht verfügbar"
+    : isNeutral
     ? "Verbindung wird geprüft"
     : !installationAvailable
       ? "GitHub App nicht verfügbar"

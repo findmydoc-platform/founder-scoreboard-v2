@@ -51,7 +51,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     view,
     workspace,
   } = controller;
-  const showGitHubSyncTrigger = source === "supabase" && Boolean(authUser);
   const githubSyncQueue = projectGitHubSyncQueue(data.tasks, data.taskComments);
   const title = workspace === "planning" ? data.project.name : workspaceLabels[workspace];
   const description = workspace === "planning"
@@ -146,16 +145,15 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           >
             <HelpCircle size={16} />
           </button>
-          {showGitHubSyncTrigger && (
-            <GitHubSyncTrigger
-              count={githubSyncQueue.count}
-              failedCount={githubSyncQueue.failedCount}
-              installationAvailable={githubInstallationAvailable}
-              connectionState={githubConnectionState}
-              open={githubSyncQueueOpen}
-              onOpen={() => setGithubSyncQueueOpen(true)}
-            />
-          )}
+          <GitHubSyncTrigger
+            count={githubSyncQueue.count}
+            failedCount={githubSyncQueue.failedCount}
+            installationAvailable={githubInstallationAvailable}
+            localMode={source === "seed"}
+            connectionState={githubConnectionState}
+            open={githubSyncQueueOpen}
+            onOpen={() => setGithubSyncQueueOpen(true)}
+          />
           {authAvailable && (
             <AuthControl
               user={authUser}

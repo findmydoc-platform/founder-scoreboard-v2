@@ -289,6 +289,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         waitingGitHubCommentCount={waitingGitHubCommentCount}
         githubReauthFailed={githubReauthFailed}
         authBusy={authBusy}
+        localMode={source === "seed"}
         notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}
