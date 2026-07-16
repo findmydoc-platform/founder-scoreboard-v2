@@ -1,11 +1,15 @@
 "use client";
 
-import { GitBranch, Link2, RefreshCw, X } from "lucide-react";
+import { CircleAlert, Link2, X } from "lucide-react";
+import Image from "next/image";
+import { useCallback, useState } from "react";
+import type { GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
-import { isExpiredGitHubSyncPending, isGitHubSyncEligible, sortGitHubSyncTasks, taskNeedsGitHubSync } from "@/features/tasks/model/github-sync-queue";
+import { GitHubConnectionInfo } from "@/features/tasks/molecules/github-connection-info";
+import { isExpiredGitHubSyncPending, projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task, TaskComment } from "@/lib/types";
-import { UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
+import { UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 type LinkedSyncCommand = (options?: { onlyFailed?: boolean }) => void;
@@ -16,7 +20,7 @@ type QueueRow = {
   hasIssue: boolean;
   issueLabel: string;
   parent?: Task;
-  state: "open" | "comments_waiting" | "running" | "locked" | "failed" | "missing" | "waiting_for_parent" | "parent_failed";
+  state: "open" | "comments_waiting" | "comments_failed" | "running" | "locked" | "failed" | "missing" | "waiting_for_parent" | "parent_failed";
 };
 
 function issueLabel(task: Task) {
@@ -25,7 +29,7 @@ function issueLabel(task: Task) {
   return "GitHub Issue";
 }
 
-function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, hasOpenComments: boolean): QueueRow["state"] {
+function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, hasOpenComments: boolean, hasFailedComments: boolean): QueueRow["state"] {
   if (task.taskType === "sub_issue" && parent?.githubIssueSyncStatus === "failed") return "parent_failed";
   if (task.taskType === "sub_issue" && (!parent || !hasGitHubIssue(parent))) return "waiting_for_parent";
   if (!hasIssue) return "missing";
@@ -33,19 +37,21 @@ function queueState(task: Task, parent: Task | undefined, hasIssue: boolean, has
   if (task.githubIssueSyncStatus === "pending" && task.githubIssueSyncError.includes("läuft bereits")) return "locked";
   if (task.githubIssueSyncStatus === "pending") return "running";
   if (task.githubIssueSyncStatus === "failed") return "failed";
+  if (hasFailedComments) return "comments_failed";
   if (hasOpenComments) return "comments_waiting";
   return "open";
 }
 
-function stateBadge(row: QueueRow) {
-  if (row.state === "missing") return <UiBadge tone="amber" size="xs">Kein GitHub Issue</UiBadge>;
-  if (row.state === "locked") return <UiBadge tone="amber" size="xs">gesperrt</UiBadge>;
-  if (row.state === "running") return <UiBadge tone="amber" size="xs">läuft</UiBadge>;
-  if (row.state === "failed") return <UiBadge tone="red" size="xs">fehlgeschlagen</UiBadge>;
-  if (row.state === "parent_failed") return <UiBadge tone="red" size="xs">Parent fehlgeschlagen</UiBadge>;
-  if (row.state === "waiting_for_parent") return <UiBadge tone="amber" size="xs">wartet auf Parent</UiBadge>;
-  if (row.state === "comments_waiting") return <UiBadge tone="blue" size="xs">Kommentare offen</UiBadge>;
-  return <UiBadge tone="blue" size="xs">offen</UiBadge>;
+function stateDescription(row: QueueRow) {
+  if (row.state === "locked") return "Sync läuft bereits";
+  if (row.state === "failed") return row.task.githubIssueSyncError || "GitHub-Sync fehlgeschlagen";
+  if (row.state === "parent_failed") return "Parent-Sync fehlgeschlagen; Sub-Issue wird übersprungen";
+  if (row.state === "waiting_for_parent") return "Sub-Issue wartet auf Parent-Deliverable";
+  if (row.state === "missing") return "GitHub Issue fehlt";
+  if (row.state === "comments_failed") return "Kommentarzustellung fehlgeschlagen";
+  if (row.state === "comments_waiting") return "Kommentare warten auf Zustellung";
+  if (row.state === "running") return "GitHub-Sync läuft";
+  return "Änderungen offen";
 }
 
 export function TaskGitHubSyncQueue({
@@ -54,9 +60,15 @@ export function TaskGitHubSyncQueue({
   comments,
   pending,
   githubInstallationAvailable,
+  githubUserConnected,
+  githubConnectionState,
+  waitingGitHubCommentCount,
+  githubReauthFailed,
+  authBusy,
   notice,
   onClose,
   onOpenTask,
+  onReconnect,
   onSyncLinkedGitHubTasks,
   onSyncTaskToGitHub,
 }: {
@@ -65,69 +77,89 @@ export function TaskGitHubSyncQueue({
   comments: TaskComment[];
   pending: boolean;
   githubInstallationAvailable: boolean;
+  githubUserConnected: boolean;
+  githubConnectionState: GitHubUserConnectionState;
+  waitingGitHubCommentCount: number;
+  githubReauthFailed: boolean;
+  authBusy: boolean;
   notice?: string;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
+  onReconnect: () => void;
   onSyncLinkedGitHubTasks: LinkedSyncCommand;
   onSyncTaskToGitHub: TaskSyncCommand;
 }) {
-  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose });
+  const [connectionInfoOpen, setConnectionInfoOpen] = useState(false);
+  const closeQueue = useCallback(() => {
+    setConnectionInfoOpen(false);
+    onClose();
+  }, [onClose]);
+  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: closeQueue });
+
   if (!open) return null;
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));
-  const openCommentTaskIds = new Set(comments
-    .filter((comment) => comment.githubDeliveryStatus !== "delivered")
-    .map((comment) => comment.taskId));
-  const rows = sortGitHubSyncTasks(tasks.filter((task) => isGitHubSyncEligible(task) && taskNeedsGitHubSync(task, openCommentTaskIds)), tasks)
+  const queue = projectGitHubSyncQueue(tasks, comments);
+  const rows = queue.tasks
     .map((task) => {
       const linked = hasGitHubIssue(task);
       const parent = task.taskType === "sub_issue" ? taskById.get(task.parentTaskId) : undefined;
-      return { task, parent, hasIssue: linked, issueLabel: issueLabel(task), state: queueState(task, parent, linked, openCommentTaskIds.has(task.id)) } satisfies QueueRow;
-    })
-  const linkedRows = rows.filter((row) => row.hasIssue && (row.task.githubIssueSyncStatus !== "synced" || row.state === "comments_waiting"));
-  const failedCommentTaskIds = new Set(comments.filter((comment) => comment.githubDeliveryStatus === "failed").map((comment) => comment.taskId));
-  const failedRows = rows.filter((row) => row.state === "failed" || failedCommentTaskIds.has(row.task.id));
-  const missingRows = rows.filter((row) => row.state === "missing");
-  const openRows = rows.filter((row) => row.state === "open");
+      return {
+        task,
+        parent,
+        hasIssue: linked,
+        issueLabel: issueLabel(task),
+        state: queueState(
+          task,
+          parent,
+          linked,
+          queue.openCommentTaskIds.has(task.id),
+          queue.failedCommentTaskIds.has(task.id),
+        ),
+      } satisfies QueueRow;
+    });
 
-  const canRunLinkedSync = githubInstallationAvailable && !pending && rows.length > 0;
+  const bulkRunnableRows = rows.filter((row) => row.state !== "running" && row.state !== "locked");
+  const canRunLinkedSync = githubInstallationAvailable && !pending && bulkRunnableRows.length > 0;
+  const neutralConnectionState = githubConnectionState === "checking" || githubConnectionState === "unknown";
+  const connectionNeedsAttention = (!neutralConnectionState && !githubInstallationAvailable) || githubConnectionState === "missing" || githubConnectionState === "reconnect_required";
   const rowActionDisabled = (row: QueueRow) => pending || !githubInstallationAvailable || row.state === "running" || row.state === "locked" || row.state === "waiting_for_parent" || row.state === "parent_failed";
 
   return (
     <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="GitHub-Sync">
-      <button type="button" className="absolute inset-0 bg-slate-950/20" aria-label="GitHub-Sync schließen" onClick={onClose} />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-[560px] flex-col border-l border-slate-200 bg-white shadow-2xl">
-        <header className="border-b border-slate-200 px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-950">
-                <GitBranch size={18} />
-                GitHub-Sync
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {linkedRows.length} offen · {failedRows.length} Fehler · {missingRows.length} ohne GitHub Issue
-              </p>
+      <button type="button" className="absolute inset-0 bg-slate-950/[0.02]" aria-label="GitHub-Sync schließen" onClick={closeQueue} />
+      <aside className="absolute inset-y-0 right-0 flex w-full max-w-[520px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+        <header className="relative z-20 border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white">
+                <Image src="/github-mark.svg" width={22} height={22} alt="" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-6 text-slate-950">GitHub</h2>
+                <GitHubConnectionInfo
+                  installationAvailable={githubInstallationAvailable}
+                  userConnected={githubUserConnected}
+                  waitingCommentCount={waitingGitHubCommentCount}
+                  failed={githubReauthFailed}
+                  busy={authBusy}
+                  state={githubConnectionState}
+                  open={connectionInfoOpen}
+                  onOpenChange={setConnectionInfoOpen}
+                  onReconnect={onReconnect}
+                />
+              </div>
             </div>
-            <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="GitHub-Sync schließen">
-              <X size={17} />
+            <button
+              type="button"
+              onClick={closeQueue}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="GitHub schließen"
+            >
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <UiButton disabled={!canRunLinkedSync} onClick={() => onSyncLinkedGitHubTasks()} variant="primary">
-              <RefreshCw size={15} />
-              Offene GitHub Issues syncen
-            </UiButton>
-            <UiButton disabled={!githubInstallationAvailable || pending || !failedRows.length} onClick={() => onSyncLinkedGitHubTasks({ onlyFailed: true })}>
-              Fehler erneut versuchen
-            </UiButton>
-          </div>
         </header>
-
-        {!githubInstallationAvailable && (
-          <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm font-medium text-amber-800">
-            Die technische GitHub-App-Installation ist nicht verfügbar.
-          </div>
-        )}
 
         {notice && (
           <div className="border-b border-blue-100 bg-blue-50 px-5 py-3 text-sm font-medium text-blue-800">
@@ -135,74 +167,83 @@ export function TaskGitHubSyncQueue({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="grid gap-2">
-            {rows.map((row) => (
-              <article key={row.task.id} className="grid min-h-20 grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md border border-slate-200 bg-white px-3 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5">
+          <h3 className={`border-b border-slate-100 pt-4 text-base font-semibold text-slate-950 ${connectionInfoOpen ? connectionNeedsAttention ? "pb-40" : "pb-16" : "pb-4"}`}>
+            {rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "Aktion" : "Aktionen"} erforderlich` : "GitHub ist aktuell"}
+          </h3>
+          <div>
+            {rows.map((row) => {
+              const hasError = row.state === "failed" || row.state === "parent_failed" || row.state === "comments_failed";
+              return (
+              <article key={row.task.id} className="grid grid-cols-[24px_minmax(0,1fr)] gap-3 border-b border-slate-100 py-5 sm:grid-cols-[24px_minmax(0,1fr)_auto] sm:items-center">
+                <CircleAlert
+                  size={20}
+                  className={`mt-0.5 ${hasError ? "text-red-500" : "text-amber-500"}`}
+                  aria-hidden="true"
+                />
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {stateBadge(row)}
+                  <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} showIcon={false} className="max-w-full text-left text-sm font-semibold leading-5 text-slate-950">
+                    {row.task.title}
+                  </TaskReferenceLink>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                     {row.hasIssue ? (
-                      <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} showIcon={false} className="text-xs font-semibold text-slate-500">
+                      <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} showIcon={false} className="font-semibold text-blue-700">
                         {row.issueLabel}
                       </TaskReferenceLink>
                     ) : (
-                      <span className="text-xs font-semibold text-slate-500">Noch kein GitHub Issue</span>
+                      <span className="font-semibold text-slate-500">Noch kein GitHub Issue</span>
                     )}
+                    <span className={hasError ? "text-red-600" : "text-slate-500"}>
+                      {stateDescription(row)}
+                    </span>
                   </div>
-                  <TaskReferenceLink task={row.task} onOpenTask={onOpenTask} className="mt-1 max-w-full text-left text-sm font-semibold text-slate-950">
-                    {row.task.title}
-                  </TaskReferenceLink>
                   {row.parent && <p className="mt-1 text-xs text-slate-500">Sub-Issue von: {row.parent.title}</p>}
-                  <p className="mt-1 line-clamp-1 text-xs text-slate-500">
-                    {row.state === "locked"
-                      ? "Sync läuft bereits."
-                      : row.state === "failed"
-                        ? row.task.githubIssueSyncError || "GitHub-Sync fehlgeschlagen."
-                        : row.state === "parent_failed"
-                          ? "Parent-Sync fehlgeschlagen; Sub-Issue wird übersprungen."
-                          : row.state === "waiting_for_parent"
-                            ? "Parent-Issue wird im Sammel-Sync zuerst angelegt."
-                        : row.state === "missing"
-                          ? "GitHub Issue bewusst anlegen."
-                          : row.state === "comments_waiting"
-                            ? "Issue aktuell · Kommentare warten auf Zustellung."
-                          : row.state === "running"
-                            ? "GitHub-Sync läuft."
-                            : "GitHub-Sync offen."}
-                  </p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
+                <div className="col-start-2 flex shrink-0 items-center gap-2 sm:col-start-auto sm:justify-end">
                   {row.hasIssue ? (
-                    <UiButton size="xs" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task)}>
-                      {row.state === "failed" ? "Erneut versuchen" : "Sync"}
+                    <UiButton size="xs" variant="blueOutline" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task)}>
+                      {row.state === "failed" || row.state === "comments_failed" ? "Erneut versuchen" : row.state === "running" || row.state === "locked" ? "Läuft" : "Synchronisieren"}
                     </UiButton>
                   ) : (
-                    <UiButton size="xs" variant="amber" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task, { createIfMissing: true })}>
-                      GitHub Issue anlegen
+                    <UiButton size="xs" variant="blueOutline" disabled={rowActionDisabled(row)} onClick={() => onSyncTaskToGitHub(row.task, { createIfMissing: true })}>
+                      Issue anlegen
                     </UiButton>
                   )}
                   {row.task.githubIssueUrl && (
-                    <a href={row.task.githubIssueUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
-                      <Link2 size={12} />
-                      Issue öffnen
+                    <a href={row.task.githubIssueUrl} target="_blank" rel="noreferrer" className="grid h-8 w-8 place-items-center rounded-md text-slate-400 transition hover:bg-slate-50 hover:text-blue-700" aria-label={`${row.issueLabel} in GitHub öffnen`}>
+                      <Link2 size={15} aria-hidden="true" />
                     </a>
                   )}
                 </div>
               </article>
-            ))}
+              );
+            })}
             {!rows.length && (
-              <UiEmptyState tone="muted" minHeight="md">
-                GitHub ist aktuell.
+              <UiEmptyState tone="muted" minHeight="md" className="my-5">
+                Alle freigegebenen Aufgaben sind mit GitHub abgeglichen.
               </UiEmptyState>
             )}
           </div>
-          {openRows.length > 0 && (
-            <p className="mt-3 text-xs text-slate-500">
-              {openRows.length} verknüpfte Issues warten auf Aktualisierung.
-            </p>
-          )}
         </div>
+
+        <footer className="border-t border-slate-200 bg-white px-5 py-4">
+          <UiButton className="w-full" size="lg" variant="primary" disabled={!canRunLinkedSync} onClick={() => onSyncLinkedGitHubTasks()}>
+            {pending
+              ? "Aktionen werden ausgeführt..."
+              : bulkRunnableRows.length > 0
+                ? `${bulkRunnableRows.length} ${bulkRunnableRows.length === 1 ? "Aktion" : "Aktionen"} ausführen`
+                : rows.length > 0
+                  ? "Keine ausführbaren Aktionen"
+                : "GitHub ist aktuell"}
+          </UiButton>
+          <button
+            type="button"
+            onClick={() => setConnectionInfoOpen(true)}
+            className="mt-3 inline-flex min-h-8 items-center text-sm font-semibold text-blue-700 transition hover:text-blue-800 focus:outline-none focus:underline"
+          >
+            Verbindung verwalten
+          </button>
+        </footer>
       </aside>
     </div>
   );

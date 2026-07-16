@@ -1,91 +1,61 @@
-# Item Creation UI — Design QA
+# GitHub Panel Design QA
 
-Status: final implementation QA
-Date: 2026-07-15
-Browser: Codex in-app browser
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/exec-f042a384-b941-4afa-9281-4b14764b09b0.png`
+- Implementation screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-final.png`
+- Problem-state screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-problem-state-final.png`
+- Full-view comparison: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-comparison-final.png`
+- Focused panel comparison: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-focused-comparison-final.png`
+- Viewport: `1488 x 1058`
+- State: right-side GitHub panel open, two queued actions, connection info popover open; an additional simulated missing-author connection state was captured.
+- Fixture note: the local seed data and connection state were temporarily adapted only for browser capture, then reverted. The captured component code and layout match the final implementation.
 
-## Scope
+## Full-view comparison evidence
 
-- Deliverable creation drawer
-- Sub-Issue creation drawer
-- Initiative creation dialog
-- Milestone creation dialog
-- Shared modal, select, date, and profile-selection behavior
+The implementation preserves the selected direction: a narrow right-side GitHub surface, one compact header trigger, a compact panel header, semantic green/amber status colors, two lightweight action rows, and one full-width bulk action in the footer. The surrounding application header and workspace remain unchanged.
 
-## Visual Evidence
+The implementation intentionally moves the panel title to the top of the drawer and removes the large global-header-height spacer visible in the generated mock. This implements the explicit refinement request to reduce the excessive space above the GitHub content.
 
-Approved references:
+## Focused region comparison evidence
 
-- `docs/roadmap/item-creation-ui-refinement/mockups/01-new-deliverable.png`
-- `docs/roadmap/item-creation-ui-refinement/mockups/02-new-sub-issue.png`
-- `docs/roadmap/item-creation-ui-refinement/mockups/03-new-initiative-constrained.png`
-- `docs/roadmap/item-creation-ui-refinement/mockups/03b-new-initiative-constrained-scrolled.png`
-- `docs/roadmap/item-creation-ui-refinement/mockups/04-new-milestone.png`
+The focused comparison confirms that the GitHub mark, title, status dot, status label, info control, action count, row actions, dividers, and footer hierarchy match the visual direction. The implementation uses the existing application typography and token palette instead of reproducing image-generated font artifacts.
 
-Browser-rendered implementation:
+## Required fidelity surfaces
 
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/01-new-deliverable-implemented.jpg`
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/02-new-sub-issue-implemented.jpg`
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03-new-initiative-implemented.jpg`
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03b-new-initiative-scrolled-implemented.jpg`
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/03c-new-initiative-mobile-implemented.jpg`
-- `docs/roadmap/item-creation-ui-refinement/implementation-screens/04-new-milestone-implemented.jpg`
+- Fonts and typography: Existing application typography is preserved. Title, status, row titles, metadata, and footer action have matching hierarchy, readable line heights, and no clipping in the final captures.
+- Spacing and layout rhythm: The panel is `520px` wide with a compact header, consistent `20px` horizontal padding, restrained row spacing, and state-aware clearance below the info popover. No header-height change was made outside the GitHub surface.
+- Colors and visual tokens: Existing slate, blue, emerald, amber, and red tokens are used. The backdrop was reduced to two percent opacity to stay close to the bright mock.
+- Image quality and asset fidelity: The GitHub mark is a dedicated vector asset reused by the trigger and panel. It remains sharp at both rendered sizes and is not recreated with CSS or text glyphs.
+- Copy and content: Healthy state explains both connection layers. Problem states identify the failing layer, explain the impact, and expose the available corrective action. Queue and badge use the same projection, so the displayed count matches the visible rows.
 
-Each desktop implementation was compared with its approved reference in the same visual inspection input. Initiative and Sub-Issue were additionally checked at 375 × 720.
+## Comparison history
 
-## States and Interactions Tested
+1. Initial finding `[P2]`: the first implementation dimmed the workspace more strongly than the source. Fix: backdrop opacity reduced from ten percent to two percent. Post-fix evidence: `github-panel-comparison-final.png`.
+2. Initial finding `[P2]`: the open info popover could overlap the first queue row, especially in a problem state with explanatory copy and a reconnect action. Fix: the queue heading now reserves state-aware vertical clearance only while the popover is open. Post-fix evidence: `github-panel-final.png` and `github-panel-problem-state-final.png`.
 
-- Open and close all four creation surfaces.
-- Fill authored fields and select dates, hierarchy, ownership, and relationship values.
-- Verify inherited Initiative, Milestone, and RACI context for Sub-Issues.
-- Verify independent Milestone selection and approval-aware GitHub gating for Deliverables.
-- Scroll Initiative content while header and footer remain fixed.
-- Verify a single-column mobile reflow without horizontal overflow.
-- Verify body and root scroll locking while a modal is open and restoration after close.
-- Verify focus trapping, focus return, and nested modal stacking.
-- Press Escape with a custom select open: the select closes while the creation form remains open.
-- Check browser console: no errors or warnings.
+## Findings
 
-## Comparison History
+No actionable P0, P1, or P2 mismatch remains.
 
-### Pass 1
+One acceptable P3 difference remains: the mock shows an extra row chevron and repeats a management link inside the healthy info popover. The implementation omits the chevron and keeps `Verbindung verwalten` once in the panel footer to reduce density and avoid duplicate affordances.
 
-- **[P1] Deliverable and Sub-Issue used a wide floating modal instead of the approved right-edge drawer.**
-  - Fixed with a full-height, right-aligned drawer capped at 64rem, fixed header/footer, and one scrollable body.
-- **[P1] Escape on an expanded custom select closed the entire dialog.**
-  - Fixed by letting the expanded control consume Escape before the modal stack handler.
-- **[P1] Task creation had a second scroll-lock implementation.**
-  - Removed; shared modal locking now owns body and root overflow consistently.
-- **[P2] Custom select and date labels were not programmatically connected to their controls.**
-  - Fixed with stable generated IDs and `aria-labelledby`.
+## Interaction and browser checks
 
-### Pass 2
+- Opened the panel through the compact GitHub trigger.
+- Opened and closed the connection info popover.
+- Verified healthy, missing-author, and missing-installation content.
+- Closed the panel through its close control.
+- Confirmed the badge count and visible queue rows use the same data projection.
+- Checked the browser console: no warnings or errors.
+- Verified the page title is `findmydoc Planning`.
 
-- **[P2] Sub-Issue context-card headings did not carry the approved accent hierarchy.**
-  - Fixed with compact blue uppercase headings.
-- **[P2] Initiative dialog was wider and taller than the approved reference.**
-  - Fixed with a 5xl width cap and a four-rem viewport gutter while preserving the internal scroll region.
-- **[P2] Mobile Initiative and Sub-Issue layouts required explicit overflow verification.**
-  - Confirmed at 375 × 720 with no horizontal overflow and correct fixed action placement.
+## Implementation checklist
 
-### Pass 3
-
-- No actionable P0, P1, or P2 visual or interaction differences remained.
-- Remaining differences are limited to realistic seed content, background page state, and native component text values; they do not alter hierarchy, layout, or behavior.
-
-### Pass 4 — final Product Design audit
-
-- **[P2] Untouched Deliverable, Sub-Issue, and Initiative forms showed error-like validation copy.**
-  - Fixed with field-level validation that appears after blur or a submission attempt. Pristine forms keep the disabled primary action without presenting missing input as an error.
-- **[P3] Sub-Issue inherited RACI and editable Item ownership used overlapping responsibility language.**
-  - Fixed with `RACI-Kontext` and `Vom Deliverable übernommen`; editable ownership remains under `Verantwortung`.
-- **[P3] Initiative internal scrolling was functional but initially subtle.**
-  - Fixed with a stable scrollbar gutter while preserving fixed header/footer and the single scroll owner.
-
-## Automated Verification
-
-- `pnpm test`: 422 passed, 0 failed
-- `pnpm run lint`: passed
-- `pnpm run build`: passed
+- [x] Single compact GitHub trigger across authenticated Supabase workspaces.
+- [x] Same trigger on the full task detail route.
+- [x] Shared queue projection for header badge and panel rows.
+- [x] Compact panel header and footer action.
+- [x] Healthy and problem connection explanations with corrective action.
+- [x] Keyboard/focus-compatible dialog and popover controls.
+- [x] Responsive full-width mobile drawer behavior.
 
 final result: passed

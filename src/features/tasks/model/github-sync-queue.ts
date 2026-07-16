@@ -1,5 +1,5 @@
 import { hasGitHubIssue } from "@/lib/platform";
-import type { Task } from "@/lib/types";
+import type { Task, TaskComment } from "@/lib/types";
 
 export const githubSyncLockTtlMs = 10 * 60 * 1000;
 
@@ -35,6 +35,30 @@ export function sortGitHubSyncTasks(tasks: Task[], allTasks: Task[] = tasks) {
   });
 }
 
+export function projectGitHubSyncQueue(tasks: Task[], comments: TaskComment[]) {
+  const openCommentTaskIds = new Set(comments
+    .filter((comment) => comment.githubDeliveryStatus !== "delivered")
+    .map((comment) => comment.taskId));
+  const failedCommentTaskIds = new Set(comments
+    .filter((comment) => comment.githubDeliveryStatus === "failed")
+    .map((comment) => comment.taskId));
+  const queueTasks = sortGitHubSyncTasks(
+    tasks.filter((task) => isGitHubSyncEligible(task) && taskNeedsGitHubSync(task, openCommentTaskIds)),
+    tasks,
+  );
+  const failedTaskCount = queueTasks.filter((task) => (
+    task.githubIssueSyncStatus === "failed" || failedCommentTaskIds.has(task.id)
+  )).length;
+
+  return {
+    tasks: queueTasks,
+    count: queueTasks.length,
+    failedCount: failedTaskCount,
+    openCommentTaskIds,
+    failedCommentTaskIds,
+  };
+}
+
 export function githubBulkSyncTasks({
   tasks,
   openCommentTaskIds,
@@ -52,6 +76,7 @@ export function githubBulkSyncTasks({
 
   const selected = tasks.filter((task) => {
     if (!isGitHubSyncEligible(task) || !taskNeedsGitHubSync(task, openCommentTaskIds)) return false;
+    if (task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task)) return false;
     if (!onlyFailed) return true;
     return failedTaskIds.has(task.id) || (task.taskType === "sub_issue" && failedTaskIds.has(task.parentTaskId));
   });
