@@ -4,6 +4,7 @@ export const unassignedAssigneeLabel = "Nicht zugeordnet";
 
 export function formatDate(value: string, options: { includeYear?: boolean } = {}) {
   if (!value) return "ohne Datum";
+  if (!/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value)) return value;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("de-DE", {

@@ -3,6 +3,7 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
+import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, MAX_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
 import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
@@ -10,8 +11,19 @@ import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode
 type Workspace = AppWorkspace;
 
 export function normalizePlanningData(data: PlanningData): PlanningData {
+  const storedReviewWindowHours = Number(data.project?.reviewObjectionWindowHours);
+  const reviewObjectionWindowHours = Number.isInteger(storedReviewWindowHours)
+    && storedReviewWindowHours >= 1
+    && storedReviewWindowHours <= MAX_REVIEW_OBJECTION_WINDOW_HOURS
+    ? storedReviewWindowHours
+    : DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS;
+
   return {
     ...data,
+    project: {
+      ...data.project,
+      reviewObjectionWindowHours,
+    },
     profiles: data.profiles || [],
     packages: data.packages || [],
     milestones: data.milestones || [],
@@ -27,6 +39,7 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     taskBlockers: data.taskBlockers || [],
     taskRelations: data.taskRelations || [],
     taskActivity: data.taskActivity || [],
+    taskReviews: data.taskReviews || [],
     taskFocusItems: data.taskFocusItems || [],
     notificationEvents: data.notificationEvents || [],
     notificationDeliveries: data.notificationDeliveries || [],
@@ -53,7 +66,6 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   backlog: "Backlog",
-  reviews: "Reviews",
   events: "Events",
   sprint: "Sprint & Score",
   projects: "Meilensteine & Initiativen",
@@ -67,7 +79,6 @@ export const workspaceLabels: Record<Workspace, string> = {
 export const workspaceDescriptions: Record<Workspace, string> = {
   planning: "Zeigt die Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor und ordnet freigegebene Deliverables Sprints zu.",
-  reviews: "Zeigt offene, abgeschlossene und wieder geöffnete Reviews.",
   events: "Zeigt wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Zeigt Weekly Updates, Punkte, Review-Reife und Sprintabschluss.",
   projects: "Zeigt Epics, Meilensteine, Initiativen und deren Fortschritt.",
@@ -81,6 +92,7 @@ export const workspaceDescriptions: Record<Workspace, string> = {
 export const planningWorkspaces: Workspace[] = ["planning"];
 
 export const quickFilters = [
+  { id: "my-reviews", label: "Meine Reviews" },
   { id: "open", label: "Offen" },
   { id: "critical", label: "Kritisch" },
   { id: "blocked", label: "Blockiert" },
@@ -133,7 +145,12 @@ export function packageById(packages: Package[], id: string) {
   return packages.find((item) => item.id === id);
 }
 
-export function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOptions, protectedSprintIds = new Set<string>()) {
+export function futureSprintDrafts(
+  sprints: Sprint[],
+  options: SprintPlanningOptions,
+  protectedSprintIds = new Set<string>(),
+  reviewObjectionWindowHours = DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS,
+) {
   const rhythmWeeks = Math.min(Math.max(Number(options.rhythmWeeks) || 2, 1), 12);
   const horizonWeeks = Math.min(Math.max(Number(options.horizonWeeks) || 6, 1), 52);
   const targetSprintNumber = Math.max(Number(options.targetSprintNumber) || 0, 0);
@@ -162,7 +179,7 @@ export function futureSprintDrafts(sprints: Sprint[], options: SprintPlanningOpt
       status: existing?.status || "planning",
       startDate: nextStart,
       endDate,
-      reviewDueAt: `${addDaysIso(endDate, -2)}T12:00`,
+      reviewDueAt: sprintReviewDueAt(endDate, reviewObjectionWindowHours),
       scoreLocked: existing?.scoreLocked || false,
     } satisfies Sprint;
     const changed = existing && (
@@ -246,7 +263,8 @@ export function founderTaskAssignmentGuardMessage() {
   return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
 }
 
-export function reviewOwnerForTask(task: Pick<Task, "packageId">, packages: Package[]) {
+export function reviewOwnerForTask(task: Pick<Task, "packageId"> & Pick<Partial<Task>, "reviewOwnerProfileId">, packages: Package[]) {
+  if (task.reviewOwnerProfileId) return task.reviewOwnerProfileId;
   const initiative = packages.find((item) => item.id === task.packageId);
   return initiative?.accountableProfileId || initiative?.ownerId || "";
 }

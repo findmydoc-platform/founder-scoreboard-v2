@@ -7,8 +7,13 @@ const protectedPages = [
   "src/app/(workspaces)/workspace-page.tsx",
   "src/app/tasks/[id]/page.tsx",
   "src/app/initiatives/[id]/page.tsx",
-  "src/app/reviews/[id]/page.tsx",
 ];
+
+test("legacy review detail links redirect into the protected task detail page", async () => {
+  const source = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
+  assert.match(source, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.doesNotMatch(source, /requiresSupabaseAuth|ReviewDetailPage/);
+});
 
 test("strict auth pages gate only on REQUIRE_SUPABASE_AUTH", async () => {
   const sources = await Promise.all(protectedPages.map((path) => readFile(path, "utf8")));

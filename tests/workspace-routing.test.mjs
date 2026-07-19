@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -9,13 +10,20 @@ const workspaceRoutes = await loadTranspiledModule(
 const { rootWorkspaceFromPreference } = workspaceRoutes;
 
 test("root workspace preferences normalize legacy values without accepting route queries", () => {
-  assert.equal(rootWorkspaceFromPreference("reviews", "founder"), "reviews");
+  assert.equal(rootWorkspaceFromPreference("reviews", "founder"), "planning");
   assert.equal(rootWorkspaceFromPreference("profile", "viewer"), "profile");
   assert.equal(rootWorkspaceFromPreference("mine", "founder"), "planning");
   assert.equal(rootWorkspaceFromPreference("execution", "founder"), "planning");
   assert.equal(rootWorkspaceFromPreference("settings", "founder"), "notifications");
   assert.equal(rootWorkspaceFromPreference("unknown", "ceo"), "planning");
   assert.equal(rootWorkspaceFromPreference(undefined, "ceo"), "planning");
+});
+
+test("legacy review URLs use permanent incoming redirects", async () => {
+  const nextConfig = await readFile("next.config.ts", "utf8");
+
+  assert.match(nextConfig, /source: "\/reviews"[\s\S]*destination: "\/planning\?tasks\.review=requested"[\s\S]*permanent: true/);
+  assert.match(nextConfig, /source: "\/reviews\/:id"[\s\S]*destination: "\/tasks\/:id"[\s\S]*permanent: true/);
 });
 
 test("CEO intake can only be selected as a root workspace by a CEO", () => {
@@ -85,7 +93,7 @@ test("home workspace is loaded for the authenticated mapped profile", async () =
     },
   });
 
-  assert.equal(await planningAuth.getServerPlanningHomeWorkspace(), "reviews");
+  assert.equal(await planningAuth.getServerPlanningHomeWorkspace(), "planning");
   assert.deepEqual(supabase.calls, [
     ["from", "profile_ui_preferences"],
     ["select", "default_workspace"],

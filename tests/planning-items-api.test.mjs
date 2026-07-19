@@ -161,6 +161,9 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
       },
       "@/features/planning-items/model/planning-items-contract": contract,
       "@/features/planning-items/model/planning-item-normalization": normalization,
+      "@/features/reviews/model/task-review-state": {
+        REVIEW_LOCKED_MESSAGE: "Review locked",
+      },
     },
   );
   const deletion = await loadTranspiledModule(

@@ -17,7 +17,6 @@ type Props = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
-  initialReviewTaskId?: string;
 };
 
 export function PlanningApp({
@@ -31,7 +30,6 @@ export function PlanningApp({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
-  initialReviewTaskId = "",
 }: Props) {
   const controller = usePlanningAppController({
     initialData,
@@ -44,7 +42,6 @@ export function PlanningApp({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
-    initialReviewTaskId,
   });
 
   return <PlanningAppShell authRequired={authRequired} controller={controller} source={source} />;

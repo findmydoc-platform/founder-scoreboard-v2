@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskRelation } from "@/lib/planning-data-mappers";
-import type { DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskRelation } from "@/lib/planning-data-row-types";
+import { mapTaskActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskRelation, mapTaskReview } from "@/lib/planning-data-mappers";
+import type { DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskRelation, DbTaskReview } from "@/lib/planning-data-row-types";
 import type { PlanningData } from "@/lib/types";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 export type TaskDetailData = Pick<
   PlanningData,
-  "taskComments" | "taskExternalComments" | "taskBlockers" | "taskRelations" | "taskActivity"
+  "taskComments" | "taskExternalComments" | "taskBlockers" | "taskRelations" | "taskActivity" | "taskReviews"
 >;
 
 export const emptyTaskDetailData: TaskDetailData = {
@@ -15,6 +15,7 @@ export const emptyTaskDetailData: TaskDetailData = {
   taskBlockers: [],
   taskRelations: [],
   taskActivity: [],
+  taskReviews: [],
 };
 
 type TaskDetailDataResult =
@@ -46,6 +47,7 @@ export async function loadTaskDetailData(supabase: SupabaseClient, taskId: strin
     activityResult,
     outgoingRelationResult,
     incomingRelationResult,
+    reviewResult,
   ] = await Promise.all([
     supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,task_comment_github_deliveries(status,github_comment_url)").eq("task_id", taskId).order("created_at", { ascending: false }).limit(200),
     supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(300),
@@ -53,6 +55,7 @@ export async function loadTaskDetailData(supabase: SupabaseClient, taskId: strin
     supabase.from("task_activity").select("id,task_id,message,created_at").eq("task_id", taskId).order("created_at", { ascending: true }).limit(500),
     supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(250),
     supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").eq("related_task_id", taskId).order("created_at", { ascending: false }).limit(250),
+    supabase.from("task_reviews").select("id,task_id,sprint_id,reviewer_profile_id,decision,points,comment,checklist,created_at").eq("task_id", taskId).order("created_at", { ascending: false }).limit(100),
   ]);
 
   const queryError = firstQueryError([
@@ -62,6 +65,7 @@ export async function loadTaskDetailData(supabase: SupabaseClient, taskId: strin
     activityResult,
     outgoingRelationResult,
     incomingRelationResult,
+    reviewResult,
   ]);
   if (queryError) return { ok: false, status: 500, error: queryError.message || "Task detail data could not be loaded." };
 
@@ -77,6 +81,7 @@ export async function loadTaskDetailData(supabase: SupabaseClient, taskId: strin
       taskExternalComments: ((externalCommentResult.data || []) as DbTaskExternalComment[]).map(mapTaskExternalComment),
       taskBlockers: ((blockerResult.data || []) as DbTaskBlocker[]).map(mapTaskBlocker),
       taskRelations: relationRows.map(mapTaskRelation),
+      taskReviews: ((reviewResult.data || []) as DbTaskReview[]).map(mapTaskReview),
       taskActivity: ((activityResult.data || []) as DbTaskActivity[]).map(mapTaskActivity),
     },
   };

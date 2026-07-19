@@ -1,11 +1,10 @@
 "use client";
 
-import { BadgeCheck, ChevronRight, ClipboardCheck, UserCheck } from "lucide-react";
+import { BadgeCheck, ClipboardCheck, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { ApprovalDecisionDialog } from "@/features/planning/molecules/approval-decision-dialog";
 import { currentApprovalDecisionReason, isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { reviewLabel } from "@/lib/platform";
-import { normalizeStatus } from "@/lib/status";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import type { ApprovalDecisionAction, Profile, Task } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
@@ -18,11 +17,9 @@ type Props = {
   canReject: boolean;
   canReturnToDraft: boolean;
   canManageReviewOwner: boolean;
-  canOpenReview: boolean;
   forceReviewSetup?: boolean;
   pending: boolean;
   onUpdate: (patch: Partial<Task>) => void;
-  onOpenReview: () => void;
   onDecideApproval: (action: ApprovalDecisionAction, note?: string) => void;
 };
 
@@ -40,23 +37,20 @@ export function TaskDetailWorkflowStrips({
   canReject,
   canReturnToDraft,
   canManageReviewOwner,
-  canOpenReview,
   forceReviewSetup = false,
   pending,
   onUpdate,
-  onOpenReview,
   onDecideApproval,
 }: Props) {
   const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
   const effectivelyApproved = isTaskPlanningActive(task);
-  const showApproval = !effectivelyApproved;
+  const reviewOpen = task.reviewStatus === "requested";
+  const showApproval = !effectivelyApproved && !reviewOpen;
   const decisionReason = currentApprovalDecisionReason(task);
-  const reviewOpen = !task.scoreFinal && (normalizeStatus(task.status) === "Review" || task.reviewStatus === "requested");
-  const showReview = forceReviewSetup
-    || reviewOpen
-    || task.reviewStatus !== "not_requested"
-    || Boolean(task.reviewOwnerProfileId)
-    || task.scoreFinal;
+  const showReview = !reviewOpen
+    && !task.scoreFinal
+    && task.reviewStatus === "not_requested"
+    && (forceReviewSetup || Boolean(task.reviewOwnerProfileId));
   const reviewOwnerProfile = teamProfiles.find((profile) => profile.id === task.reviewOwnerProfileId);
   const selfReview = Boolean(task.reviewOwnerProfileId && (task.assigneeId === task.reviewOwnerProfileId || task.assignee === task.reviewOwnerProfileId));
 
@@ -71,7 +65,7 @@ export function TaskDetailWorkflowStrips({
             <div className="min-w-0">
               <div className="text-sm font-semibold text-blue-950">{approvalTitle(task)}</div>
               <div className="mt-0.5 text-xs text-slate-600">
-                {task.taskType === "deliverable" ? `Revision ${task.approvalRevision}` : "Das Sub-Issue wird mit dem Parent aktiv."}
+                {task.taskType === "deliverable" ? `Revision ${task.approvalRevision || 1}` : "Das Sub-Issue wird mit dem Parent aktiv."}
                 {decisionReason ? ` · ${decisionReason}` : ""}
               </div>
             </div>
@@ -111,7 +105,7 @@ export function TaskDetailWorkflowStrips({
                 disabled={pending}
                 className="h-9 w-48 text-sm"
                 aria-label="Review-Verantwortung festlegen"
-                options={[{ value: "", label: "Ohne Review-Verantwortung" }, ...teamProfiles.map((profile) => ({ value: profile.id, label: profile.name }))]}
+                options={[{ value: "", label: "Ohne Review-Verantwortung" }, ...teamProfiles.filter((profile) => profile.platformRole !== "viewer").map((profile) => ({ value: profile.id, label: profile.name }))]}
               />
             ) : (
               <span className="text-sm font-medium text-slate-700">
@@ -119,12 +113,6 @@ export function TaskDetailWorkflowStrips({
                 {selfReview ? <span className="ml-2 text-xs font-semibold text-amber-700">Self-Review</span> : null}
               </span>
             )}
-            {reviewOpen && canOpenReview && effectivelyApproved ? (
-              <UiButton size="sm" variant="blue" disabled={pending} onClick={onOpenReview}>
-                Review öffnen
-                <ChevronRight size={15} aria-hidden="true" />
-              </UiButton>
-            ) : null}
           </div>
         </section>
       ) : null}

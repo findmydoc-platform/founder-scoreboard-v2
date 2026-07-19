@@ -43,8 +43,7 @@ export function scoreRelevantDeliverables(tasks: Task[], profile: Profile) {
 function deliveryPoints(tasks: Task[]) {
   if (!tasks.length) return 0;
   const raw = tasks.reduce((sum, task) => {
-    if (task.reviewStatus === "accepted") return sum + 1;
-    if (task.reviewStatus === "partial") return sum + 0.5;
+    if (task.reviewStatus === "accepted" && task.scoreFinal) return sum + 1;
     return sum;
   }, 0);
   return clamp((raw / tasks.length) * 12, 0, 12);
@@ -56,8 +55,8 @@ function formPoints(tasks: Task[]) {
     const checks = [
       task.definitionOfDone.trim(),
       task.evidenceLink.trim() || task.githubIssueUrl.trim() || task.issueUrl.trim(),
-      task.reviewStatus !== "not_requested" || task.status === "Review" || task.status === "Erledigt",
-      task.sprintOutcome === "communicated_blocker" || task.reviewStatus === "accepted" || task.reviewStatus === "partial",
+      task.reviewStatus === "requested" || task.reviewStatus === "accepted" || task.reviewStatus === "partial" || task.status === "Review" || task.status === "Erledigt",
+      task.sprintOutcome === "communicated_blocker" || (task.scoreFinal && task.reviewStatus === "accepted"),
     ].filter(Boolean).length;
     return sum + checks / 4;
   }, 0);

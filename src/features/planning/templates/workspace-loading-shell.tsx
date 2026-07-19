@@ -5,7 +5,7 @@ import { BacklogContentSkeleton } from "@/features/backlog/organisms/backlog-con
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { UiSkeletonChips, UiSkeletonPulse as Pulse } from "@/shared/atoms/skeleton-primitives";
 
-export type WorkspaceLoadingVariant = AppWorkspace | "review-detail" | "task-detail" | "generic";
+export type WorkspaceLoadingVariant = AppWorkspace | "task-detail" | "generic";
 
 type WorkspaceLoadingShellProps = {
   workspace?: AppWorkspace;
@@ -15,7 +15,6 @@ type WorkspaceLoadingShellProps = {
 const loadingTitles: Record<AppWorkspace, string> = {
   planning: "Projekt wird geladen",
   backlog: "Backlog wird geladen",
-  reviews: "Reviews werden geladen",
   events: "Events werden geladen",
   sprint: "Sprint & Score wird geladen",
   projects: "Meilensteine werden geladen",
@@ -110,51 +109,6 @@ function PlanningContentSkeleton() {
   );
 }
 
-function ReviewContentSkeleton() {
-  return (
-    <div className="grid gap-4">
-      <UiPanel as="div">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <Pulse className="h-5 w-36" />
-            <Pulse className="mt-3 h-4 w-64 bg-slate-100" />
-          </div>
-          <div className="flex gap-2">
-            <Pulse className="h-9 w-16 bg-slate-100" />
-            <Pulse className="h-9 w-40 bg-slate-100" />
-          </div>
-        </div>
-        <div className="mt-4">
-          <ChipSkeleton count={5} />
-        </div>
-      </UiPanel>
-      <UiPanel as="div" padding="none" className="overflow-hidden">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <Pulse className="h-5 w-24" />
-          <Pulse className="mt-2 h-3 w-20 bg-slate-100" />
-        </div>
-        <div className="overflow-hidden">
-          <div className="grid min-w-[760px] grid-cols-[2fr_1fr_1fr_1fr_120px] border-b border-slate-200 bg-slate-50 px-4 py-3">
-            {Array.from({ length: 5 }).map((_, index) => <Pulse key={index} className="h-3 w-20" />)}
-          </div>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="grid min-w-[760px] grid-cols-[2fr_1fr_1fr_1fr_120px] items-center gap-3 border-b border-slate-100 px-4 py-4">
-              <div>
-                <Pulse className="h-4 w-64" />
-                <Pulse className="mt-2 h-3 w-44 bg-slate-100" />
-              </div>
-              <Pulse className="h-4 w-28 bg-slate-100" />
-              <Pulse className="h-4 w-28 bg-slate-100" />
-              <Pulse className="h-4 w-20 bg-slate-100" />
-              <Pulse className="h-8 w-28 bg-slate-100" />
-            </div>
-          ))}
-        </div>
-      </UiPanel>
-    </div>
-  );
-}
-
 function EventsContentSkeleton() {
   return (
     <div className="grid gap-4">
@@ -218,18 +172,17 @@ function GenericWorkspaceSkeleton() {
   );
 }
 
-function DetailContentSkeleton({ variant }: { variant: "review-detail" | "task-detail" }) {
-  const reviewDetail = variant === "review-detail";
+function DetailContentSkeleton() {
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{reviewDetail ? "Review" : "Aufgabe"}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aufgabe</div>
           <Pulse className="mt-2 h-6 w-[min(70vw,520px)]" />
         </div>
         <Pulse className="h-9 w-36 bg-slate-100" />
       </div>
-      <div className={reviewDetail ? "grid gap-5" : "grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]"}>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid min-w-0 gap-5">
           <UiPanel as="div" padding="lg" className="grid gap-4">
             <Pulse className="h-5 w-36" />
@@ -242,17 +195,15 @@ function DetailContentSkeleton({ variant }: { variant: "review-detail" | "task-d
             {[0, 1, 2].map((item) => <Pulse key={item} className="h-12 bg-slate-100" />)}
           </UiPanel>
         </div>
-        {!reviewDetail && (
-          <aside className="grid content-start gap-5">
-            {[0, 1, 2].map((item) => (
-              <UiPanel key={item} as="div" padding="lg" className="grid gap-3">
-                <Pulse className="h-5 w-32" />
-                <Pulse className="h-4 w-full bg-slate-100" />
-                <Pulse className="h-4 w-2/3 bg-slate-100" />
-              </UiPanel>
-            ))}
-          </aside>
-        )}
+        <aside className="grid content-start gap-5">
+          {[0, 1, 2].map((item) => (
+            <UiPanel key={item} as="div" padding="lg" className="grid gap-3">
+              <Pulse className="h-5 w-32" />
+              <Pulse className="h-4 w-full bg-slate-100" />
+              <Pulse className="h-4 w-2/3 bg-slate-100" />
+            </UiPanel>
+          ))}
+        </aside>
       </div>
     </div>
   );
@@ -261,14 +212,13 @@ function DetailContentSkeleton({ variant }: { variant: "review-detail" | "task-d
 export function WorkspaceContentSkeleton({ variant = "generic" }: { variant?: WorkspaceLoadingVariant }) {
   if (variant === "planning") return <PlanningContentSkeleton />;
   if (variant === "backlog") return <BacklogContentSkeleton />;
-  if (variant === "reviews") return <ReviewContentSkeleton />;
   if (variant === "events") return <EventsContentSkeleton />;
-  if (variant === "review-detail" || variant === "task-detail") return <DetailContentSkeleton variant={variant} />;
+  if (variant === "task-detail") return <DetailContentSkeleton />;
   return <GenericWorkspaceSkeleton />;
 }
 
 export function WorkspaceLoadingShell({ workspace = "planning", variant = workspace }: WorkspaceLoadingShellProps) {
-  const detailVariant = variant === "review-detail" || variant === "task-detail";
+  const detailVariant = variant === "task-detail";
 
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">

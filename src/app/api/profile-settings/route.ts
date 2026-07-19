@@ -56,7 +56,6 @@ const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
 const allowedWorkspaces = new Set([
   "planning",
   "mine",
-  "reviews",
   "events",
   "sprint",
   "projects",
@@ -72,6 +71,7 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   assignee: "Alle",
   status: "Alle",
   priority: "Alle",
+  review: "Alle",
   packageId: "Alle",
   quick: [],
   sprintId: "Alle",
@@ -100,6 +100,7 @@ function cleanFilters(value: unknown): PlanningFilterPreferences {
     assignee: typeof candidate.assignee === "string" ? candidate.assignee.slice(0, 120) : typeof candidate.owner === "string" ? candidate.owner.slice(0, 120) : defaultPlanningFilters.assignee,
     status: typeof candidate.status === "string" ? candidate.status.slice(0, 80) : defaultPlanningFilters.status,
     priority: typeof candidate.priority === "string" ? candidate.priority.slice(0, 20) : defaultPlanningFilters.priority,
+    review: typeof candidate.review === "string" ? candidate.review.slice(0, 40) : defaultPlanningFilters.review,
     packageId: typeof candidate.packageId === "string" ? candidate.packageId.slice(0, 160) : defaultPlanningFilters.packageId,
     quick: Array.isArray(candidate.quick)
       ? candidate.quick.filter((item): item is string => typeof item === "string").map((item) => item.slice(0, 80)).slice(0, 12)
@@ -127,6 +128,7 @@ function cleanPackageIds(value: unknown) {
 
 function cleanDefaultWorkspace(value: unknown) {
   if (value === "settings") return "notifications";
+  if (value === "reviews") return "planning";
   return typeof value === "string" && allowedWorkspaces.has(value) ? value : "planning";
 }
 

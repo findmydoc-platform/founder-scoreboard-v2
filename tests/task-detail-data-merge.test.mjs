@@ -26,6 +26,10 @@ test("task detail data merge replaces only data for the selected task", () => {
       { id: "old-target-activity", taskId: "target" },
       { id: "other-activity", taskId: "other" },
     ],
+    taskReviews: [
+      { id: "old-target-review", taskId: "target" },
+      { id: "other-review", taskId: "other" },
+    ],
     taskRelations: [
       { id: "old-outgoing", taskId: "target", relatedTaskId: "other" },
       { id: "old-incoming", taskId: "other", relatedTaskId: "target" },
@@ -37,6 +41,7 @@ test("task detail data merge replaces only data for the selected task", () => {
     taskExternalComments: [{ id: "new-target-external", taskId: "target" }],
     taskBlockers: [{ id: "new-target-blocker", taskId: "target" }],
     taskActivity: [{ id: "new-target-activity", taskId: "target" }],
+    taskReviews: [{ id: "new-target-review", taskId: "target" }],
     taskRelations: [{ id: "new-target-relation", taskId: "target", relatedTaskId: "fourth" }],
   };
 
@@ -47,6 +52,7 @@ test("task detail data merge replaces only data for the selected task", () => {
   assert.deepEqual(merged.taskExternalComments.map(({ id }) => id), ["new-target-external", "other-external"]);
   assert.deepEqual(merged.taskBlockers.map(({ id }) => id), ["new-target-blocker", "other-blocker"]);
   assert.deepEqual(merged.taskActivity.map(({ id }) => id), ["new-target-activity", "other-activity"]);
+  assert.deepEqual(merged.taskReviews.map(({ id }) => id), ["new-target-review", "other-review"]);
   assert.deepEqual(merged.taskRelations.map(({ id }) => id), ["new-target-relation", "unrelated"]);
 });
 

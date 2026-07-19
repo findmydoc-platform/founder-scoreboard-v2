@@ -256,7 +256,6 @@ test("badge tone policy stays semantic and primitive based", async () => {
 test("shared data surfaces centralize table shells without domain columns", async () => {
   const dataSurface = await readFile("src/shared/molecules/data-surface.tsx", "utf8");
   const migratedFiles = [
-    "src/features/reviews/organisms/review-workspace-overview.tsx",
     "src/features/backlog/molecules/backlog-rank-table.tsx",
     "src/features/projects/organisms/projects-overview.tsx",
     "src/features/sprint/organisms/sprint-task-tables.tsx",

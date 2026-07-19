@@ -13,6 +13,7 @@ import { TaskDetailHeader } from "@/features/tasks/molecules/task-detail-header"
 import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
+import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 
 type Props = {
@@ -56,9 +57,15 @@ export function TaskDetailPage({
   const currentPackage = controller.data.packages.find((pack) => pack.id === task.packageId);
   const selectedRelations = controller.data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id);
   const githubSyncQueue = projectGitHubSyncQueue(controller.data.tasks, controller.data.taskComments);
+  const discardChanges = () => {
+    if (task.reviewStatus === "requested") {
+      clearTaskReviewDraft(task.id, task.reviewRequestedAt || "", controller.currentProfile?.id || "");
+    }
+    discardGuard.discard();
+  };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
+    <main className="min-h-screen bg-white text-slate-950 lg:pl-16">
       <AppSidebar
         activeWorkspace="planning"
         source={source}
@@ -86,7 +93,7 @@ export function TaskDetailPage({
         )}
       />
 
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="mx-auto max-w-[1392px] px-6 py-6 sm:px-8">
         <TaskDetailSurface
           surface="page"
           task={task}
@@ -94,6 +101,7 @@ export function TaskDetailPage({
           comments={controller.data.taskComments.filter((comment) => comment.taskId === task.id)}
           externalComments={controller.data.taskExternalComments.filter((comment) => comment.taskId === task.id)}
           activities={controller.data.taskActivity.filter((activity) => activity.taskId === task.id)}
+          reviews={controller.data.taskReviews.filter((review) => review.taskId === task.id)}
           blockers={controller.data.taskBlockers.filter((blocker) => blocker.taskId === task.id)}
           subIssues={controller.data.tasks.filter((item) => item.parentTaskId === task.id)}
           teamProfiles={controller.data.profiles}
@@ -120,7 +128,9 @@ export function TaskDetailPage({
           onCreateSubIssue={() => controller.setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: task.id, milestoneId: task.milestoneId, packageId: task.packageId, assignee: task.assigneeId || task.assignee, status: "Offen" })}
           onOpenTask={controller.openTaskPanel}
           onSyncGitHub={(options) => controller.syncTaskToGitHub(task, options)}
-          onOpenReview={() => controller.openReviewSheet(task)}
+          onReview={controller.reviewTask}
+          onReopenReview={controller.reopenReviewTask}
+          onWithdrawReview={controller.withdrawReviewTask}
           onWithdraw={(reason) => {
             if (controller.withdrawTask(task, reason)) router.replace("/planning");
           }}
@@ -152,7 +162,7 @@ export function TaskDetailPage({
       <PlanningOverlayLayer controller={controller} />
       <TaskDiscardChangesDialog
         open={discardGuard.open}
-        onDiscard={discardGuard.discard}
+        onDiscard={discardChanges}
         onKeepEditing={discardGuard.keepEditing}
       />
     </main>

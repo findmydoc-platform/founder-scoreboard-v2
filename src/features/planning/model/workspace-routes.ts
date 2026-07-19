@@ -2,7 +2,6 @@ import {
   Archive,
   Bell,
   CalendarClock,
-  ClipboardCheck,
   GanttChart,
   LayoutDashboard,
   Link2,
@@ -14,7 +13,7 @@ import {
 } from "lucide-react";
 import type { PlatformRole } from "@/lib/types";
 
-export type AppWorkspace = "planning" | "backlog" | "reviews" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
+export type AppWorkspace = "planning" | "backlog" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
 export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
 
 type WorkspaceRoute = {
@@ -33,7 +32,6 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
   { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
-  { id: "reviews", label: "Reviews", icon: ClipboardCheck, href: "/reviews" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
@@ -55,6 +53,7 @@ export function workspacePath(workspace: AppWorkspace) {
 
 export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
   if (value === "mine" || value === "execution") return "planning";
+  if (value === "reviews") return "planning";
   if (value === "settings") return "notifications";
   return appWorkspaceIds.find((id) => id === value) || null;
 }

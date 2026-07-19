@@ -1,7 +1,6 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
@@ -29,7 +28,6 @@ export type PlanningBootstrapStateOptions = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
-  initialReviewTaskId?: string;
 };
 
 export function usePlanningBootstrapState({
@@ -42,9 +40,7 @@ export function usePlanningBootstrapState({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
-  initialReviewTaskId = "",
 }: PlanningBootstrapStateOptions) {
-  const searchParams = useSearchParams();
   const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
@@ -54,8 +50,6 @@ export function usePlanningBootstrapState({
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
-    initialFocusedReviewTaskId: searchParams.get("reviewTask") || "",
-    initialReviewTaskId,
   });
   const { setSelectedTaskId } = viewState;
   const [isPending, startTransition] = useTransition();
@@ -109,6 +103,8 @@ export function usePlanningBootstrapState({
   const canManageTaskMeta = source === "seed" || requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canManageFinalTaskStatus = source === "seed" || requestContext.currentProfile?.platformRole === "ceo";
   const canChangeTaskStatus = useCallback((task: Task) => (
+    task.reviewStatus !== "requested"
+    &&
     (normalizeStatus(task.status) !== "Erledigt" || canManageFinalTaskStatus)
     && (canManageTaskMeta || taskBelongsToProfile(task, requestContext.currentProfile))
   ), [canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);

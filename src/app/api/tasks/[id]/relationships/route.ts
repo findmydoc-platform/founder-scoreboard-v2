@@ -7,6 +7,7 @@ import type { AuthenticatedProfile, Task, TaskRelation, TaskRelationType } from 
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import { taskIdsHaveReviewLock } from "@/lib/task-review-lock";
 
 type RelationPayload = {
   relationType?: TaskRelationType;
@@ -30,6 +31,7 @@ type RelationshipTaskRow = {
   assignee: string | null;
   owner: string | null;
   package_id: string | null;
+  review_status: Task["reviewStatus"] | null;
 };
 
 type RelationshipInitiativeRow = {
@@ -44,7 +46,7 @@ async function loadRelationshipAccess(
 ) {
   const { data: task, error: taskError } = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,task_type,assignee,owner,package_id")
+    .select("id,title,task_type,assignee,owner,package_id,review_status")
     .eq("id", taskId)
     .single<RelationshipTaskRow>();
   if (taskError || !task) return { ok: false as const, response: apiError("Aufgabe wurde nicht gefunden.", 404) };
@@ -101,6 +103,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
   if (!accessResult.ok) return accessResult.response;
+  const reviewLock = await taskIdsHaveReviewLock(supabase, [id, relatedTaskId]);
+  if (reviewLock.error) return apiError(reviewLock.error, 500);
+  if (reviewLock.locked) return apiError(reviewLock.message, 409);
   if (!accessResult.access.allowedRelationTypes.includes(relationType)) {
     return apiError("Nur Owner, Accountable, CEO oder Deputy können diese Blocker-Abhängigkeit verwalten.", 403);
   }
@@ -190,6 +195,9 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   const accessResult = await loadRelationshipAccess(supabase, id, permission.profile);
   if (!accessResult.ok) return accessResult.response;
+  const reviewLock = await taskIdsHaveReviewLock(supabase, [id, otherTaskId]);
+  if (reviewLock.error) return apiError(reviewLock.error, 500);
+  if (reviewLock.locked) return apiError(reviewLock.message, 409);
   const mappedRelation: TaskRelation = {
     id: relation.id,
     taskId: relation.task_id,

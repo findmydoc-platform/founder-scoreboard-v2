@@ -12,6 +12,7 @@ import { applyDeliverableApprovalPatch } from "@/features/planning/model/approva
 import type { TaskSyncCommand, TaskUpdateCommand, TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import { taskServerRevision, type TaskServerRevisionStore } from "@/features/tasks/model/task-server-revision";
 import { hasGitHubIssue } from "@/lib/platform";
@@ -73,6 +74,11 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: normalized.error, status: 400 });
     }
     const normalizedPatch = normalized.patch;
+    if (isTaskReviewLocked(task) && hasReviewLockedTaskChanges(normalizedPatch, { allowReviewOwnerChange: isTaskReviewActive(task) })) {
+      const message = reviewLockMessage(task);
+      setSaveError(message);
+      return Promise.resolve({ ok: false, error: message, status: 409 });
+    }
     const currentStatus = normalizeStatus(task.status);
     const targetStatus = normalizedPatch.status ? normalizeStatus(normalizedPatch.status) : null;
     const detailPermissions = taskDetailPermissions({

@@ -1,5 +1,11 @@
 [
   {
+    "name": "projects.founderops_process_settings",
+    "table": "projects",
+    "select": "id,review_objection_window_hours",
+    "health": true
+  },
+  {
     "name": "profiles.google_chat",
     "table": "profiles",
     "select": "id,google_chat_user_id,google_chat_dm_space,notifications_enabled",

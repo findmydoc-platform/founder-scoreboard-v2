@@ -88,12 +88,16 @@ export function buildClientTaskUpdatePatch(
       return { ok: false, error: "Final bewertete Aufgaben können nicht erneut in Review gegeben werden." };
     }
     const nextTask = { ...task, ...normalizedPatch };
+    const reviewOwnerProfileId = reviewOwnerForTask(nextTask, packages);
+    if (!reviewOwnerProfileId) {
+      return { ok: false, error: "Lege vor der Review-Anfrage eine Review-Verantwortung fest." };
+    }
     normalizedPatch = {
       ...normalizedPatch,
       status: "Review",
       reviewStatus: "requested",
       scoreFinal: false,
-      reviewOwnerProfileId: reviewOwnerForTask(nextTask, packages),
+      reviewOwnerProfileId,
       reviewRequestedAt,
     };
   }

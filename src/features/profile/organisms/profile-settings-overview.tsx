@@ -6,6 +6,7 @@ import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-m
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
+import { ProfileProcessSettingsSection } from "@/features/profile/molecules/profile-process-settings-section";
 import { ProfilePlanningItemsTokens } from "@/features/profile/organisms/profile-planning-items-tokens";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
 import {
@@ -33,6 +34,7 @@ type ProfileSettingsOverviewProps = {
   view: ViewMode;
   workspace: AppWorkspace;
   onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
+  onSaveFounderOpsReviewWindow: (hours: number) => Promise<void>;
 };
 
 export function ProfileSettingsOverview(props: ProfileSettingsOverviewProps) {
@@ -68,6 +70,7 @@ function ProfileSettingsForm({
   view,
   workspace,
   onSaveOwnProfileSettings,
+  onSaveFounderOpsReviewWindow,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null }) {
   const initialDraft = buildInitialDraft({ currentProfile, data, expandedPackages, filters, profileUiPreference, view, workspace });
@@ -77,7 +80,11 @@ function ProfileSettingsForm({
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
   const operationalProfile = currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy" || currentProfile.platformRole === "founder";
-  const visibleSections = profileSettingsSections.filter((section) => section.id !== "api" || operationalProfile);
+  const visibleSections = profileSettingsSections.filter((section) => {
+    if (section.id === "process") return currentProfile.platformRole === "ceo";
+    if (section.id === "api") return operationalProfile;
+    return true;
+  });
   const draftSnapshot = serializeDraft(draft);
   const isDirty = draftSnapshot !== savedSnapshot;
 
@@ -222,22 +229,31 @@ function ProfileSettingsForm({
               onPlanningFiltersChange={updatePlanningFilters}
             />
           )}
+          {activeSection === "process" && currentProfile.platformRole === "ceo" && (
+            <ProfileProcessSettingsSection
+              reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
+              pending={pending}
+              onSave={onSaveFounderOpsReviewWindow}
+            />
+          )}
           {activeSection === "api" && operationalProfile && (
             <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />
           )}
         </div>
       </div>
 
-      {(isDirty || message) && (
+      {(isDirty || (activeSection !== "process" && message)) && (
         <div className="sticky bottom-4 z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur" data-profile-save-bar>
           <div className="text-sm font-semibold text-slate-700">
-            {isDirty ? "Ungespeicherte Änderungen" : message}
+            {isDirty
+              ? activeSection === "process" ? "Ungespeicherte persönliche Einstellungen" : "Ungespeicherte Änderungen"
+              : message}
           </div>
           <div className="flex items-center gap-2">
-            {isDirty && message && <UiNotice tone="success" size="compact">{message}</UiNotice>}
+            {isDirty && message && activeSection !== "process" && <UiNotice tone="success" size="compact">{message}</UiNotice>}
             {isDirty && (
               <UiButton onClick={save} disabled={pending} variant="primary">
-                Speichern
+                {activeSection === "process" ? "Persönliche Änderungen speichern" : "Speichern"}
               </UiButton>
             )}
           </div>

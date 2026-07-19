@@ -12,7 +12,7 @@ Google Chat soll nicht zum Einzelspam werden. Die App sammelt operative Ereignis
 
 - Aufgaben: neue Zuweisung, Statusänderung, Kommentar/Nachfrage, Blocker.
 - Review: Founder reicht Aufgabe zur Review ein, CEO wird informiert.
-- Review-Ergebnis: Founder wird über Punkte, Teilannahme oder Nacharbeit informiert.
+- Review outcome: the Founder is informed about acceptance, minor rework, or fundamental rework.
 - Sprint-Ende: Founder werden rechtzeitig an offene Deliverables erinnert.
 - Review-Deadline: Founder werden vor Sprintende erinnert, Review rechtzeitig einzureichen oder Blocker zu melden.
 - Weekly Updates: Teilnahme, Abmeldung, schriftliches Update und Punkte lösen ebenfalls Benachrichtigungen aus.

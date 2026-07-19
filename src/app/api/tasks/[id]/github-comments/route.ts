@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,review_owner_profile_id,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type")
+    .select("id,title,assignee,owner,review_owner_profile_id,review_status,score_final,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type")
     .eq("id", id)
     .single();
 
@@ -77,6 +77,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       owner: task.owner || "",
       ownerId: task.owner || "",
       reviewOwnerProfileId: task.review_owner_profile_id || "",
+      reviewStatus: task.review_status || "not_requested",
+      scoreFinal: Boolean(task.score_final),
       taskType: task.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,

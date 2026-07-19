@@ -12,14 +12,12 @@ import { canManageMilestones } from "@/features/projects/model/milestone-policy"
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
 const EventsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="events" />;
-const ReviewsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="reviews" />;
 
 const CeoTaskIntake = dynamic(() => import("@/features/intake/organisms/ceo-task-intake").then((mod) => mod.CeoTaskIntake), { loading: GenericWorkspacePanelLoading });
 const BacklogOverview = dynamic(() => import("@/features/backlog/organisms/backlog-overview").then((mod) => mod.BacklogOverview), { loading: BacklogWorkspacePanelLoading });
 const EventsOverview = dynamic(() => import("@/features/events/organisms/events-overview").then((mod) => mod.EventsOverview), { loading: EventsWorkspacePanelLoading });
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
-const ReviewWorkspaceOverview = dynamic(() => import("@/features/reviews/organisms/review-workspace-overview").then((mod) => mod.ReviewWorkspaceOverview), { loading: ReviewsWorkspacePanelLoading });
 const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
@@ -46,7 +44,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     eventMessage,
     expandedPackages,
     filters,
-    focusedReviewTaskId,
     fmdToolMessage,
     fmdToolPending,
     googleChatStatus,
@@ -61,17 +58,15 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     notificationDispatchMessage,
     openNotification,
     openTaskPanel,
-    reopenReviewTask,
     refreshPlanningData,
     apiClient,
     retryNotificationDelivery,
     reviewScoreObjection,
-    reviewTask,
     saveProfileSettings,
     saveOwnProfileSettings,
+    saveFounderOpsReviewWindow,
     sendGoogleChatTest,
     setData,
-    setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setMilestoneDeleteTarget,
@@ -182,13 +177,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           source={source}
         />
       )}
-      {workspace === "reviews" && (
-        <ReviewWorkspaceOverview
-          data={data}
-          currentProfile={currentProfile}
-          onOpenTask={openTaskPanel}
-        />
-      )}
       {workspace === "events" && (
         <EventsOverview
           events={data.events}
@@ -234,6 +222,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           view={view}
           workspace={workspace}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
+          onSaveFounderOpsReviewWindow={saveFounderOpsReviewWindow}
         />
       )}
       {workspace === "sprint" && (
@@ -241,8 +230,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           data={data}
           pending={isPending}
           onOpenTask={openTaskPanel}
-          onReview={reviewTask}
-          onReopenReview={reopenReviewTask}
           onRequestReview={(task) => updateTask(task, { status: "Review", reviewStatus: "requested", scoreFinal: false })}
           onChangeStatus={(task, status) => updateTask(task, { status })}
           onLockSprint={lockSprint}
@@ -253,14 +240,17 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           onReviewScoreObjection={reviewScoreObjection}
           onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
           sprintPlanningOptions={sprintPlanningOptions}
-          plannedSprintCount={futureSprintDrafts(data.sprints, sprintPlanningOptions, new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId))).length}
+          plannedSprintCount={futureSprintDrafts(
+            data.sprints,
+            sprintPlanningOptions,
+            new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId)),
+            data.project.reviewObjectionWindowHours,
+          ).length}
           onUpdateSprintPlanning={setSprintPlanningOptions}
           onCreateSprintPlan={createSprintPlan}
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
-          focusedReviewTaskId={focusedReviewTaskId}
-          onFocusedReviewTaskHandled={() => setFocusedReviewTaskId("")}
         />
       )}
       {workspace === "notifications" && (

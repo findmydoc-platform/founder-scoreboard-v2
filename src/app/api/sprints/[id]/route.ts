@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { data: current, error: currentError } = await supabase
     .from("sprints")
-    .select("id,name,status,start_date,end_date,review_due_at,score_locked")
+    .select("id,project_id,name,status,start_date,end_date,review_due_at,score_locked,updated_at")
     .eq("id", id)
     .single();
 
@@ -56,7 +56,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (payload.reviewDueAt !== undefined) {
-    update.review_due_at = payload.reviewDueAt || null;
+    return apiError("Die Review-Frist wird automatisch aus dem Sprint-Ende abgeleitet.", 400);
   }
 
   const startDate = update.start_date ?? current.start_date;
@@ -67,8 +67,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const timelineChanged = (update.name !== undefined && update.name !== current.name)
     || (update.start_date !== undefined && update.start_date !== current.start_date)
-    || (update.end_date !== undefined && update.end_date !== current.end_date)
-    || (update.review_due_at !== undefined && update.review_due_at !== current.review_due_at);
+    || (update.end_date !== undefined && update.end_date !== current.end_date);
 
   if (timelineChanged) {
     const { count, error: taskCountError } = await supabase
@@ -99,37 +98,45 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     });
   }
 
-  update.updated_at = new Date().toISOString();
-
-  const { data: updated, error: updateError } = await supabase
-    .from("sprints")
-    .update(update)
-    .eq("id", id)
-    .select("id,name,status,start_date,end_date,review_due_at,score_locked")
-    .single();
-
-  if (updateError || !updated) return apiError(updateError?.message || "Sprint konnte nicht gespeichert werden.", 500);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "sprint.update",
-    entity_type: "sprint",
-    entity_id: id,
-    before_data: current,
-    after_data: updated,
-    ...auditRequestMetadata(request),
+  const metadata = auditRequestMetadata(request);
+  const { data: updated, error: updateError } = await supabase.rpc("update_sprint_schedule_transaction", {
+    p_sprint_id: id,
+    p_expected_updated_at: current.updated_at,
+    p_sprint_patch: update,
+    p_actor_profile_id: permission.profile?.id || null,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
+  if (updateError) {
+    if (updateError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);
+    if (updateError.code === "P0002") return apiError("Sprint oder FounderOps-Prozesseinstellung wurde nicht gefunden.", 404);
+    if (updateError.code === "P0003") return apiError("Gelockte Sprints können nicht mehr geändert werden.", 409);
+    if (updateError.code === "P0004") return apiError("Dieser Sprint ist durch zugeordnete Aufgaben geschützt.", 409);
+    if (updateError.code === "22023") return apiError("Sprint-Daten sind ungültig.", 400);
+    return apiError("Sprint konnte nicht gespeichert werden.", 500);
+  }
+  if (!updated) return apiError("Sprint konnte nicht vollständig gespeichert werden.", 500);
+
+  const updatedSprint = updated as {
+    id: string;
+    name: string;
+    status: string;
+    start_date: string | null;
+    end_date: string | null;
+    review_due_at: string | null;
+    score_locked: boolean;
+  };
 
   return NextResponse.json({
     ok: true,
     sprint: {
-      id: updated.id,
-      name: updated.name,
-      status: updated.status,
-      startDate: updated.start_date || "",
-      endDate: updated.end_date || "",
-      reviewDueAt: updated.review_due_at || "",
-      scoreLocked: updated.score_locked,
+      id: updatedSprint.id,
+      name: updatedSprint.name,
+      status: updatedSprint.status,
+      startDate: updatedSprint.start_date || "",
+      endDate: updatedSprint.end_date || "",
+      reviewDueAt: updatedSprint.review_due_at || "",
+      scoreLocked: updatedSprint.score_locked,
     },
   });
 }

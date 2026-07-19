@@ -40,6 +40,26 @@ test("review request payload omits protected score and review owner fields", asy
   assert.equal(payload.reviewOwnerProfileId, undefined);
 });
 
+test("review requests require an assigned review owner", async () => {
+  const { buildClientTaskUpdatePatch } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": {
+      ...planningAppModelMock,
+      reviewOwnerForTask: () => "",
+    },
+    "@/lib/slug": slugMock,
+  });
+
+  assert.deepEqual(
+    buildClientTaskUpdatePatch(
+      { id: "task-1", status: "In Arbeit", scoreFinal: false, packageId: "initiative-1" },
+      { status: "Review" },
+      [],
+      [],
+    ),
+    { ok: false, error: "Lege vor der Review-Anfrage eine Review-Verantwortung fest." },
+  );
+});
+
 test("score and review owner payload fields remain available outside review requests", async () => {
   const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
@@ -185,6 +205,28 @@ test("task route guard allows only the implicit score reset for review requests"
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", scoreFinal: true }), ["Score"]);
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", scorePoints: 8 }), ["Score"]);
   assert.deepEqual(restrictedTaskUpdateFields({ scoreFinal: false }), ["Score"]);
+});
+
+test("generic task updates may request a review but cannot write review outcomes", async () => {
+  const { applyReviewStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
+    "@/lib/status": { taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
+  });
+
+  const update = {};
+  assert.deepEqual(applyReviewStatusUpdate(update, { reviewStatus: "requested" }), { ok: true });
+  assert.deepEqual(update, { review_status: "requested", score_final: false });
+
+  for (const reviewStatus of ["accepted", "partial", "changes_requested", "not_requested"]) {
+    assert.deepEqual(
+      applyReviewStatusUpdate({}, { reviewStatus }),
+      {
+        ok: false,
+        error: "Review-Entscheidungen und Übergänge müssen über den jeweiligen Review-Vorgang erfolgen.",
+        status: 409,
+      },
+    );
+  }
 });
 
 test("task route guard limits role-based final transitions to Sub-Issues", async () => {

@@ -5,6 +5,7 @@ import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import { taskIdsHaveReviewLock } from "@/lib/task-review-lock";
 
 type BlockerPayload = {
   reason?: string;
@@ -30,11 +31,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,status,task_type")
+    .select("id,title,assignee,owner,status,task_type,review_status,score_final")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  const reviewLock = await taskIdsHaveReviewLock(supabase, [id]);
+  if (reviewLock.error) return apiError(reviewLock.error, 500);
+  if (reviewLock.locked) return apiError(reviewLock.message, 409);
   const detailPermissions = taskDetailPermissions({
     task: {
       assignee: task.assignee || "",
@@ -42,6 +46,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       owner: task.owner || "",
       ownerId: task.owner || "",
       reviewOwnerProfileId: "",
+      reviewStatus: task.review_status || "not_requested",
+      scoreFinal: Boolean(task.score_final),
       taskType: task.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,

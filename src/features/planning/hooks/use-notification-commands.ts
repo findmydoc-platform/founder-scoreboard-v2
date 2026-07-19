@@ -32,7 +32,7 @@ type UseNotificationCommandsOptions = PlanningCommandContext & {
   workspace: AppWorkspace;
 };
 
-const taskOverlayWorkspaces = new Set<AppWorkspace>(["planning", "backlog", "reviews", "sprint", "projects"]);
+const taskOverlayWorkspaces = new Set<AppWorkspace>(["planning", "backlog", "sprint", "projects"]);
 
 export function useNotificationCommands({
   apiClient,

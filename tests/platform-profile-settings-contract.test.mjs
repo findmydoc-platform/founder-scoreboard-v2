@@ -189,9 +189,52 @@ test("profile settings use slim section navigation and dirty-only save UX", asyn
   assert.match(profileUi, /useState\(false\)/);
   assert.match(profileBoard, /data-profile-advanced-board-defaults=\{advancedBoardOpen \? "open" : "closed"\}/);
   assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
-  assert.match(profileUi, /\(isDirty \|\| message\) &&/);
+  assert.match(profileUi, /\(isDirty \|\| \(activeSection !== "process" && message\)\) &&/);
   assert.match(profileUi, /data-profile-save-bar/);
   assert.match(profileUi, /Ungespeicherte Änderungen/);
+});
+
+test("CEO configures the global review and objection window from the settings panel", async () => {
+  const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
+  const processUi = await readFile("src/features/profile/molecules/profile-process-settings-section.tsx", "utf8");
+  const settingsRoute = await readFile("src/app/api/founderops-settings/route.ts", "utf8");
+  const planningModel = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
+  const settingsCommands = await readFile("src/features/settings/hooks/use-founderops-settings-commands.ts", "utf8");
+  const sprintCreateRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
+  const sprintUpdateRoute = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
+  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const migration = await readSupabaseSchemaContract();
+
+  assert.match(profileUi, /section\.id === "process".*currentProfile\.platformRole === "ceo"/s);
+  assert.match(processUi, /Review- und Einspruchsfrist/);
+  assert.match(processUi, /Gelockte Sprints bleiben unverändert/);
+  assert.match(processUi, /MAX_REVIEW_OBJECTION_WINDOW_HOURS/);
+  assert.match(processUi, /aria-errormessage/);
+  assert.match(processUi, /role=\{message\.tone === "danger" \? "alert" : "status"\}/);
+  assert.match(profileUi, /Ungespeicherte persönliche Einstellungen/);
+  assert.match(settingsRoute, /requireCEO/);
+  assert.match(settingsRoute, /update_founderops_review_window_transaction/);
+  assert.match(loader, /review_objection_window_hours/);
+  assert.match(planningModel, /storedReviewWindowHours[\s\S]*DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS/);
+  assert.match(sprintCreateRoute, /sprintReviewDueAt\(endDate, reviewObjectionWindowHours\)/);
+  assert.match(sprintCreateRoute, /create_sprint_plan_with_review_window_transaction/);
+  assert.match(sprintUpdateRoute, /update_sprint_schedule_transaction/);
+  assert.match(settingsCommands, /applyPlanningDataUpdate/);
+  assert.doesNotMatch(settingsCommands, /setData\(|previousData|setSaveError\(error/);
+  assert.match(migration, /add column if not exists review_objection_window_hours integer not null default 48/);
+  assert.match(migration, /review_objection_window_hours between 1 and 336/);
+  assert.match(migration, /score_locked is false/);
+  assert.match(migration, /founderops\.review_window\.update/);
+  assert.match(migration, /only CEO may update FounderOps process settings/);
+  assert.match(migration, /pg_advisory_xact_lock\(hashtextextended\('founderops-review-window:' \|\| p_project_id/);
+  assert.match(migration, /create or replace function public\.create_sprint_plan_with_review_window_transaction/);
+  assert.match(migration, /create or replace function public\.update_sprint_schedule_transaction/);
+  assert.match(migration, /create or replace function public\.create_score_objection_transaction/);
+  assert.match(migration, /create or replace function public\.lock_sprint_with_review_window_transaction/);
+  assert.match(migration, /revoke update on table public\.projects from authenticated/);
+  assert.match(migration, /grant update \(id, name, range_label\) on table public\.projects to authenticated/);
+  assert.match(migration, /revoke insert, update on table public\.sprints from authenticated/);
+  assert.match(migration, /revoke all on function public\.update_founderops_review_window_transaction[^]*from public/);
 });
 
 test("team overview no longer edits personal self-service settings", async () => {

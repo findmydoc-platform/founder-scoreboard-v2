@@ -17,6 +17,7 @@ export const DEFAULT_PLANNING_FILTERS: PlanningFilters = {
   assignee: "Alle",
   status: "Alle",
   priority: "Alle",
+  review: "Alle",
   packageId: "Alle",
   quick: [],
   sprintId: "Alle",
@@ -33,8 +34,9 @@ const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
   assignee: stringUrlField("Alle"),
   status: stringUrlField("Alle"),
   priority: stringUrlField("Alle"),
+  review: enumUrlField<string>("Alle", ["Alle", "requested", "changes_requested", "accepted", "partial", "not_requested"]),
   packageId: stringUrlField("Alle"),
-  quick: multiEnumUrlField<string>([], ["mine", "open", "critical", "blocked", "week", "high", "evidence"]),
+  quick: multiEnumUrlField<string>([], ["mine", "my-reviews", "open", "critical", "blocked", "week", "high", "evidence"]),
   sprintId: stringUrlField("Alle"),
   workstream: stringUrlField("Alle"),
   risk: stringUrlField("Alle"),
@@ -46,19 +48,13 @@ const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
 
 type UsePlanningViewStateOptions = {
   initialData: PlanningData;
-  initialFocusedReviewTaskId: string;
-  initialReviewTaskId: string;
 };
 
 export function usePlanningViewState({
   initialData,
-  initialFocusedReviewTaskId,
-  initialReviewTaskId,
 }: UsePlanningViewStateOptions) {
   const [view, setView] = useState<ViewMode>("board");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [focusedReviewTaskId, setFocusedReviewTaskId] = useState(initialFocusedReviewTaskId);
-  const [selectedReviewDetailTaskId] = useState(initialReviewTaskId);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [milestoneDialogDefaults, setMilestoneDialogDefaults] = useState<Partial<MilestoneDraft> | null>(null);
@@ -80,17 +76,14 @@ export function usePlanningViewState({
 
   return {
     filters,
-    focusedReviewTaskId,
     hasPlanningFilterUrlState,
     initiativeDialogDefaults,
     milestoneDeleteTarget,
     milestoneDialogDefaults,
     mobileNavOpen,
     resetFilters,
-    selectedReviewDetailTaskId,
     selectedTaskId,
     setFilters,
-    setFocusedReviewTaskId,
     setInitiativeDialogDefaults,
     setMilestoneDeleteTarget,
     setMilestoneDialogDefaults,

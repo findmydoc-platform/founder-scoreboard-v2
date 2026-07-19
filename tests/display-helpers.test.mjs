@@ -27,6 +27,7 @@ test("display helpers preserve shared labels and date formatting", async () => {
   assert.match(dateWithYear, /2026/);
   assert.equal(display.formatDate(""), "ohne Datum");
   assert.equal(display.formatDate("not-a-date"), "not-a-date");
+  assert.equal(display.formatDate("Sprint 1", { includeYear: true }), "Sprint 1");
 
   const range = display.dateRange({ startDate: "2026-06-09", endDate: "2026-06-10", deadline: "" });
   assert.match(range, /09/);

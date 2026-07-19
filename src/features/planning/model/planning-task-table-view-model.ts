@@ -31,6 +31,7 @@ export function buildPlanningTaskTableViewModel({
     const matchesAssignee = filters.assignee === "Alle" || task.assignee === filters.assignee || task.assigneeId === filters.assignee;
     const matchesStatus = filters.status === "Alle" || normalized === filters.status;
     const matchesPriority = filters.priority === "Alle" || task.priority === filters.priority;
+    const matchesReview = !filters.review || filters.review === "Alle" || task.reviewStatus === filters.review;
     const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
     const matchesSprint = filters.sprintId === "Alle" || task.sprintId === filters.sprintId;
     const matchesWorkstream = filters.workstream === "Alle" || task.workstream === filters.workstream;
@@ -44,6 +45,7 @@ export function buildPlanningTaskTableViewModel({
       || filters.risk === "github" && !hasGitHubIssue(task);
     const matchesQuick = !filters.quick.length || filters.quick.some((quickFilter) => (
       quickFilter === "mine" && taskBelongsToProfile(task, currentProfile)
+      || quickFilter === "my-reviews" && task.reviewStatus === "requested" && !task.scoreFinal && Boolean(currentProfile?.id) && task.reviewOwnerProfileId === currentProfile?.id
       || quickFilter === "open" && normalized === "Offen"
       || quickFilter === "critical" && taskHasCriticalAttention(task, data)
       || quickFilter === "blocked" && (normalized === "Blockiert" || Boolean(task.dependsOn) || hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations))
@@ -52,7 +54,7 @@ export function buildPlanningTaskTableViewModel({
       || quickFilter === "evidence" && taskHasMissingEvidenceAttention(task)
     ));
 
-    return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesPackage
+    return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesReview && matchesPackage
       && matchesSprint && matchesWorkstream && matchesTargetFrom && matchesTargetTo && matchesRisk && matchesQuick;
   }));
 

@@ -7,6 +7,7 @@ export const notificationCatalog = {
   "task.proposed": { lifecycle: "actionable", label: "Vorschlag", eventLabel: "Aufgabe vorgeschlagen", tone: "amber", digest: true, directDm: false },
   "task.review_requested": { lifecycle: "actionable", label: "Review", eventLabel: "Review angefragt", tone: "blue", digest: true, directDm: true },
   "task.review_reopened": { lifecycle: "informational", label: "Review wieder offen", eventLabel: "Review wieder geöffnet", tone: "blue", digest: true, directDm: false },
+  "task.review_withdrawn": { lifecycle: "informational", label: "Review zurückgezogen", eventLabel: "Review zurückgezogen", tone: "slate", digest: true, directDm: false },
   "task.review_rework": { lifecycle: "actionable", label: "Nacharbeit", eventLabel: "Nacharbeit erforderlich", tone: "amber", digest: true, directDm: true },
   "task.review_completed": { lifecycle: "informational", label: "Review erledigt", eventLabel: "Review abgeschlossen", tone: "emerald", digest: true, directDm: false },
   "task.deadline_overdue": { lifecycle: "actionable", label: "Überfällig", eventLabel: "Überfällig", tone: "red", digest: true, directDm: true },

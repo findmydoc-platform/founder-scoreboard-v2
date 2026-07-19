@@ -7,8 +7,9 @@ import { useTaskDiscardGuard } from "@/features/tasks/hooks/use-task-discard-gua
 import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discard-changes-dialog";
 import { TaskDetailPanelHeader } from "@/features/tasks/molecules/task-detail-panel-header";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
+import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
-import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
 type Props = {
   task: Task;
@@ -16,6 +17,7 @@ type Props = {
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
+  reviews: TaskReview[];
   detailDataError: string;
   detailDataLoading: boolean;
   commentImportNotice: string;
@@ -44,7 +46,9 @@ type Props = {
   onReportBlocker: (payload: { reason: string; impact: string; needsHelpFrom: string }) => Promise<TaskActionResult>;
   onCreateSubIssue: () => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
-  onOpenReview: () => void;
+  onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
+  onReopenReview: (task: Task) => void;
+  onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -59,6 +63,12 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
   const { discard, keepEditing, open: discardDialogOpen, request: requestDiscard } = discardGuard;
   const requestClose = () => requestDiscard(onClose);
   const requestBack = () => requestDiscard(() => onBack?.());
+  const discardChanges = () => {
+    if (taskSurfaceProps.task.reviewStatus === "requested") {
+      clearTaskReviewDraft(taskSurfaceProps.task.id, taskSurfaceProps.task.reviewRequestedAt || "", taskSurfaceProps.currentProfile?.id || "");
+    }
+    discard();
+  };
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose: requestClose, closeDisabled: discardDialogOpen });
 
   useEffect(() => {
@@ -81,17 +91,18 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
         <button
           type="button"
           tabIndex={-1}
-          className="absolute inset-0 cursor-default bg-slate-950/20 backdrop-blur-[1px]"
+          className="absolute inset-0 cursor-default bg-slate-950/25 backdrop-blur-[1px]"
           aria-label="Detailpanel schließen"
           onClick={requestClose}
         />
-        <aside className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[920px] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
+        <aside className={`${taskSurfaceProps.task.reviewStatus === "requested" ? "max-w-[1060px]" : "max-w-[920px]"} absolute inset-y-0 right-0 z-10 flex w-full flex-col overflow-hidden border-l border-slate-200 bg-white shadow-xl transition-[max-width] duration-200`}>
           <TaskDetailPanelHeader
             task={taskSurfaceProps.task}
             previousTask={previousTask}
             onBack={onBack ? requestBack : undefined}
             onClose={requestClose}
             onRequestFullPage={(href) => {
+              if (taskSurfaceProps.task.reviewStatus === "requested") return true;
               if (!overviewDirty) return true;
               requestDiscard(() => router.push(href));
               return false;
@@ -110,7 +121,7 @@ export function TaskDetailPanel({ onClose, ...surfaceProps }: Props) {
       </div>
       <TaskDiscardChangesDialog
         open={discardDialogOpen}
-        onDiscard={discard}
+        onDiscard={discardChanges}
         onKeepEditing={keepEditing}
       />
     </>

@@ -441,6 +441,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   const planningAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
+  const legacyReviewsPage = await readFile("src/app/(workspaces)/reviews/page.tsx", "utf8");
   const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const planningData = await readFile("src/lib/planning-data.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
@@ -449,7 +450,6 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
-    "reviews",
     "events",
     "ceo-intake",
     "sprint",
@@ -465,7 +465,9 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.doesNotMatch(`${sidebar}\n${routes}`, /\/\?workspace=/);
   assert.match(routes, /href: "\/planning"/);
   assert.doesNotMatch(routes, /href: "\/execution"|id: "execution"/);
-  assert.match(routes, /href: "\/reviews"/);
+  assert.doesNotMatch(routes, /href: "\/reviews"|id: "reviews"/);
+  assert.match(routes, /value === "reviews"\) return "planning"/);
+  assert.match(legacyReviewsPage, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
   assert.match(routes, /href: "\/events"/);
   assert.match(routes, /href: "\/ceo-intake"/);
   assert.match(routes, /href: "\/sprint"/);

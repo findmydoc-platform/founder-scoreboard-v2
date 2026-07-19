@@ -43,20 +43,20 @@ Erwartung:
 - Deliverable ist score-relevant.
 - Sub-Issues erscheinen nur im Detailpanel, nicht als eigene Board-Karte.
 
-## Kommentare, Blocker und Review
+## Comments, blockers, and review
 
-1. Task öffnen.
-2. Kommentar erfassen.
-3. Blocker melden.
-4. Review anfragen.
-5. Als CEO über die Review-Checkliste akzeptieren, teilweise akzeptieren oder Nacharbeit setzen.
+1. Open a task.
+2. Add a comment.
+3. Report a blocker.
+4. Request a review.
+5. As CEO, choose `Accepted`, `Minor rework`, or `Fundamental rework` from the review checklist.
 
-Erwartung:
-- Kommentare und Blocker bleiben nach Reload sichtbar.
-- Blocker setzt den Status auf `Blockiert`.
-- Review-Anfrage setzt Status `Review`.
-- Nacharbeit setzt Status `Nacharbeit`.
-- Punkte werden erst nach Review final.
+Expected:
+- Comments and blockers remain visible after a reload.
+- A blocker sets the task status to `Blockiert`.
+- A review request sets the task status to `Review`.
+- Both rework decisions set the task status to `Nacharbeit` and keep the score open.
+- Only `Accepted` completes the task and finalizes its score.
 
 ## Sprint & Score
 

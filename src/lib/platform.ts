@@ -9,8 +9,8 @@ export function reviewLabel(status: Task["reviewStatus"]) {
     not_requested: "Nicht angefragt",
     requested: "Review angefragt",
     accepted: "Akzeptiert",
-    partial: "Teilweise akzeptiert",
-    changes_requested: "Änderungen angefordert",
+    partial: "Kleine Nacharbeit",
+    changes_requested: "Grundlegend überarbeiten",
   };
   return labels[status];
 }
@@ -93,9 +93,8 @@ export function roleLabel(profile: Profile) {
 }
 
 export function calculateTaskScore(task: Task) {
-  if (task.reviewStatus === "accepted") return Math.max(task.scorePoints, 3);
-  if (task.reviewStatus === "partial") return Math.max(task.scorePoints, 1);
-  return task.scoreFinal ? task.scorePoints : 0;
+  if (task.scoreFinal && task.reviewStatus === "accepted") return task.scorePoints;
+  return 0;
 }
 
 export function taskBelongsToProfile(task: Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId">, profile?: Pick<Profile, "id" | "name"> | null) {

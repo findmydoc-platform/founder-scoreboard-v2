@@ -179,8 +179,8 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "planning task selection hook",
       path: "src/features/planning/hooks/use-planning-task-selection.ts",
-      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /openReviewSheet/, /setSelectedTaskId\(nextTaskId\)/, /addEventListener\("keydown"/, /pushTaskPanelHistory/, /backTaskPanelHistory/],
-      excludes: [/window\.history\.length|router\.back\(\)|router\.push\(`\/tasks/],
+      matches: [/selectedTaskSubIssues/, /openTaskPanel/, /setSelectedTaskId\(nextTaskId\)/, /addEventListener\("keydown"/, /pushTaskPanelHistory/, /backTaskPanelHistory/],
+      excludes: [/openReviewSheet/, /window\.history\.length|router\.back\(\)|router\.push\(`\/tasks/],
     },
     {
       label: "planning data refresh hook",
@@ -197,9 +197,17 @@ test("planning app controller delegates command domains and stays a thin compose
     { label: "profile commands", path: "src/features/team/hooks/use-profile-settings-commands.ts", matches: [/updateProfileRequest/] },
     { label: "weekly attendance commands", path: "src/features/sprint/hooks/use-weekly-attendance-commands.ts", matches: [/updateMeetingAttendanceRequest/] },
     { label: "event commands", path: "src/features/events/hooks/use-founder-event-commands.ts", matches: [/createFounderEventRequest/] },
-    { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/] },
+    { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/, /withdrawTaskReviewRequest/, /reviewDecisionTaskState/, /persistLocalPlanningTasks/] },
     { label: "notification commands", path: "src/features/planning/hooks/use-notification-commands.ts", matches: [/runNotificationDeliveryRequest/] },
   ]);
+});
+
+test("local planning persistence preserves active review metadata", async () => {
+  const localPlanningState = await readFile("src/features/planning/hooks/use-local-planning-state.ts", "utf8");
+
+  assert.match(localPlanningState, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
+  assert.match(localPlanningState, /reviewRequestedAt: task\.reviewRequestedAt/);
+  assert.match(localPlanningState, /scoreFinal: task\.scoreFinal/);
 });
 
 test("task mutation contract centralizes update normalization and route patches", async () => {
@@ -427,7 +435,6 @@ test("workspace loading shells are route-specific and data-free", async () => {
   const groupLoading = await readFile("src/app/(workspaces)/loading.tsx", "utf8");
   const backlogLoading = await readFile("src/app/(workspaces)/backlog/loading.tsx", "utf8");
   const planningLoading = await readFile("src/app/(workspaces)/planning/loading.tsx", "utf8");
-  const reviewsLoading = await readFile("src/app/(workspaces)/reviews/loading.tsx", "utf8");
   const eventsLoading = await readFile("src/app/(workspaces)/events/loading.tsx", "utf8");
   const sprintLoading = await readFile("src/app/(workspaces)/sprint/loading.tsx", "utf8");
   const projectsLoading = await readFile("src/app/(workspaces)/projects/loading.tsx", "utf8");
@@ -436,7 +443,6 @@ test("workspace loading shells are route-specific and data-free", async () => {
   const notificationsLoading = await readFile("src/app/(workspaces)/notifications/loading.tsx", "utf8");
   const ceoIntakeLoading = await readFile("src/app/(workspaces)/ceo-intake/loading.tsx", "utf8");
   const profileLoading = await readFile("src/app/(workspaces)/profile/loading.tsx", "utf8");
-  const reviewDetailLoading = await readFile("src/app/reviews/[id]/loading.tsx", "utf8");
   const taskDetailLoading = await readFile("src/app/tasks/[id]/loading.tsx", "utf8");
 
   assert.match(shell, /export function WorkspaceLoadingShell/);
@@ -446,17 +452,16 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(backlogSkeleton, /export function BacklogContentSkeleton/);
   assert.match(backlogSkeleton, /overflow-x-auto/);
   assert.doesNotMatch(backlogSkeleton, /overflow-x-scroll/);
-  assert.match(shell, /function ReviewContentSkeleton/);
+  assert.doesNotMatch(shell, /function ReviewContentSkeleton|review-detail/);
   assert.match(shell, /function EventsContentSkeleton/);
   assert.match(shell, /function GenericWorkspaceSkeleton/);
   assert.match(shell, /function DetailContentSkeleton/);
-  assert.match(shell, /variant === "review-detail" \|\| variant === "task-detail"/);
+  assert.match(shell, /variant === "task-detail"/);
   assert.doesNotMatch(shell, /PlanningData|getPlanningData|emptyPlanningData|data\.tasks|authUser|provider_token/);
 
   assert.match(groupLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
   assert.match(backlogLoading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
   assert.match(planningLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
-  assert.match(reviewsLoading, /WorkspaceLoadingShell workspace="reviews" variant="reviews"/);
   assert.match(eventsLoading, /WorkspaceLoadingShell workspace="events" variant="events"/);
   assert.match(sprintLoading, /WorkspaceLoadingShell workspace="sprint" variant="sprint"/);
   assert.match(projectsLoading, /WorkspaceLoadingShell workspace="projects" variant="projects"/);
@@ -465,13 +470,12 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(notificationsLoading, /WorkspaceLoadingShell workspace="notifications" variant="notifications"/);
   assert.match(ceoIntakeLoading, /WorkspaceLoadingShell workspace="ceo-intake" variant="ceo-intake"/);
   assert.match(profileLoading, /WorkspaceLoadingShell workspace="profile" variant="profile"/);
-  assert.match(reviewDetailLoading, /WorkspaceLoadingShell workspace="reviews" variant="review-detail"/);
   assert.match(taskDetailLoading, /WorkspaceLoadingShell workspace="planning" variant="task-detail"/);
 
   assert.match(renderer, /WorkspaceContentSkeleton/);
   assert.match(renderer, /BacklogWorkspacePanelLoading/);
   assert.match(renderer, /EventsWorkspacePanelLoading/);
-  assert.match(renderer, /ReviewsWorkspacePanelLoading/);
+  assert.doesNotMatch(renderer, /ReviewsWorkspacePanelLoading|ReviewWorkspaceOverview/);
   assert.match(renderer, /GenericWorkspacePanelLoading/);
   assert.doesNotMatch(renderer, /function WorkspacePanelLoading|const WorkspacePanelLoading/);
 });
@@ -488,7 +492,9 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const plannedOwnerBackfillMigration = await readSupabaseSchemaContract();
   const reviewTransactionMigration = await readSupabaseSchemaContract();
   const sprintUi = await readFeatureSurface("src/features/sprint");
-  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const sprintTaskTables = await readFile("src/features/sprint/organisms/sprint-task-tables.tsx", "utf8");
+  const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
+  const taskSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const appUi = await readPlanningSurface();
   const sprintViewModel = await readFile("src/features/sprint/model/sprint-score-view-model.ts", "utf8");
 
@@ -509,13 +515,13 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(taskRoute, /task\.review_requested/);
   assert.match(taskRoute, /recipientProfileId: recipient\.id/);
   assert.match(taskRoute, /deine Accountable-Review/);
-  assert.match(appUi, /openReviewSheet/);
-  assert.match(sprintUi, /focusedReviewTaskId/);
-  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
-  assert.match(sprintUi, /accountable-review-sheet/);
-  assert.match(sprintUi, /scrollIntoView/);
-  assert.match(sprintUi, /TaskReviewSheet/);
-  assert.match(sprintUi, /onReopenReview/);
+  assert.doesNotMatch(appUi, /openReviewSheet|ReviewWorkspaceOverview/);
+  assert.match(taskSurface, /TaskReviewRail/);
+  assert.match(sprintUi, /Review öffnen/);
+  assert.match(sprintUi, /onOpenReviewTask/);
+  assert.match(sprintTaskTables, /task\.reviewStatus === "requested" \|\| normalizeStatus\(task\.status\) === "Review"/);
+  assert.doesNotMatch(sprintTaskTables, /task\.reviewStatus !== "not_requested"/);
+  assert.doesNotMatch(sprintUi, /TaskReviewSheet|focusedReviewTaskId|accountable-review-sheet/);
   assert.match(route, /review_owner_profile_id/);
   assert.doesNotMatch(route, /review_owner_profile_id: null/);
   assert.doesNotMatch(route, /reviewOwnerProfileId: ""/);
@@ -529,10 +535,10 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(reviewTransactionMigration, /revoke all on function public\.review_task_transaction[^]*from public/);
   assert.match(reviewTransactionMigration, /grant all on function public\.review_task_transaction[^]*to service_role/);
   assert.doesNotMatch(route, /from\("task_reviews"\)\.insert/);
-  assert.match(route, /scoreFinal = decision !== "changes_requested"/);
+  assert.match(route, /reviewDecisionTaskState\(decision\)/);
   assert.match(route, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.match(route, /github_issue_sync_status: "not_synced"/);
-  assert.match(route, /Nacharbeit/);
+  assert.match(route, /isReviewReworkDecision\(decision\)/);
   assert.match(route, /checklist/);
   assert.match(route, /acceptanceCriteriaMet/);
   assert.match(sprintViewModel, /Abnahmekriterien erfüllt/);
@@ -540,64 +546,115 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(sprintUi, /Score/);
   assert.match(sprintUi, /Risiko/);
   assert.match(appUi, /Nächster Schritt/);
-  assert.match(reviewSheet, /Nachweis \/ Abhängigkeiten/);
-  assert.match(reviewSheet, /Qualitätsstandard/);
+  assert.match(reviewRail, /Abnahmekriterien erfüllt/);
+  assert.match(reviewRail, /Nachweis vollständig/);
+  assert.match(reviewRail, /Ergebnis klar nachvollziehbar/);
+  assert.match(reviewRail, /Abhängigkeiten geklärt/);
+  assert.match(reviewRail, /reviewDecisionLabels/);
   assert.match(route, /Sprint-Score ist bereits gelockt/);
 });
 
-test("review workspace has direct review detail routes filters and reopen guard", async () => {
+test("reviews live in task detail while legacy review links remain compatible", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const app = await readPlanningSurface();
-  const workspace = await readFile("src/features/reviews/organisms/review-workspace-overview.tsx", "utf8");
-  const detail = await readFile("src/features/reviews/templates/review-detail-page.tsx", "utf8");
-  const sheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
-  const model = await readFile("src/features/reviews/model/review-workspace-view-model.ts", "utf8");
+  const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
+  const reviewSummary = await readFile("src/features/reviews/molecules/task-review-summary.tsx", "utf8");
+  const reviewState = await readFile("src/features/reviews/model/task-review-state.ts", "utf8");
+  const reviewDraft = await readFile("src/features/reviews/hooks/use-task-review-draft.ts", "utf8");
+  const platform = await readFile("src/lib/platform.ts", "utf8");
+  const taskSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
+  const taskPanel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
+  const taskOverview = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
+  const dependencyBand = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
+  const workflowStrips = await readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8");
+  const planningFilters = await readFile("src/features/planning/hooks/use-planning-view-state.ts", "utf8");
+  const planningFilterUi = await readFile("src/features/planning/organisms/planning-filters.tsx", "utf8");
+  const planningModel = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
+  const planningViewModel = await readFile("src/features/planning/model/planning-task-table-view-model.ts", "utf8");
+  const legacyReviewsRoute = await readFile("src/app/(workspaces)/reviews/page.tsx", "utf8");
   const reviewRoute = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
+  const withdrawRoute = await readFile("src/app/api/tasks/[id]/review/withdraw/route.ts", "utf8");
+  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const blockerRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
+  const relationshipRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const planningTrashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
+  const reviewLock = await readFile("src/lib/task-review-lock.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
+  const reviewMigration = await readFile("supabase/migrations/20260717175618_integrate_reviews_into_tasks.sql", "utf8");
 
-  assert.match(routes, /id: "reviews"/);
-  assert.match(routes, /label: "Reviews"/);
-  assert.match(routes, /href: "\/reviews"/);
-  assert.match(app, /workspace === "reviews"/);
-  assert.match(app, /ReviewWorkspaceOverview/);
-  assert.match(workspace, /namespace: "reviews"/);
-  assert.match(workspace, /DEFAULT_REVIEW_FILTERS/);
-  assert.match(workspace, /FilterToolbar/);
-  assert.match(workspace, /DataTableFrame/);
-  assert.match(app, /initialReviewTaskId/);
-  assert.match(app, /ReviewDetailPage/);
+  assert.doesNotMatch(routes, /id: "reviews"|label: "Reviews"|href: "\/reviews"/);
+  assert.match(routes, /value === "reviews"\) return "planning"/);
+  assert.doesNotMatch(app, /workspace === "reviews"|ReviewWorkspaceOverview|ReviewDetailPage|initialReviewTaskId/);
+  assert.match(legacyReviewsRoute, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
+  assert.match(reviewRoute, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.match(taskSurface, /TaskReviewRail/);
+  assert.match(taskSurface, /TaskReviewSummary/);
+  assert.match(taskSurface, /xl:grid-cols-\[minmax\(0,1fr\)_460px\]/);
+  assert.match(taskSurface, /xl:grid-cols-\[minmax\(0,3fr\)_minmax\(420px,2fr\)\]/);
+  assert.match(taskSurface, /panelAside=\{reviewRail\}/);
+  assert.match(taskPanel, /max-w-\[1060px\]/);
+  assert.match(reviewRail, /xl:sticky xl:top-5/);
+  assert.match(reviewRail, /min-\[420px\]:grid-cols-3/);
+  assert.match(reviewRail, /Ansehen/);
+  assert.match(reviewRail, /aria-label=\{`\$\{item\.targetLabel\} im Issue ansehen`\}/);
+  assert.match(reviewRail, /className="mt-2 w-full bg-white"/);
+  assert.doesNotMatch(reviewRail, /Schließen|onClose/);
+  assert.match(taskSurface, /if \(!controller\.overviewDirty\)/);
+  assert.match(taskSurface, /onJumpToSection=\{jumpToReviewSection\}/);
+  assert.match(taskSurface, /<TaskReviewRail[\s\S]*key=\{`\$\{task\.id\}:\$\{task\.reviewRequestedAt/);
+  assert.match(taskSurface, /variant="review"/);
+  assert.match(taskOverview, /Kein Zielbild hinterlegt\./);
+  assert.match(taskOverview, /Keine Abnahmekriterien hinterlegt\./);
+  assert.match(taskOverview, /Noch kein Nachweis-Link hinterlegt\./);
+  assert.match(dependencyBand, /Keine offene Abhängigkeit erfasst\./);
+  assert.match(workflowStrips, /const showApproval = !effectivelyApproved && !reviewOpen/);
+  assert.match(reviewState, /partial: "Kleine Nacharbeit"/);
+  assert.match(reviewState, /changes_requested: "Grundlegend überarbeiten"/);
+  assert.match(reviewState, /if \(decision === "accepted"\) return \{ status: "Erledigt", scoreFinal: true \}/);
+  assert.match(reviewState, /return \{ status: "Nacharbeit", scoreFinal: false \}/);
+  assert.match(platform, /partial: "Kleine Nacharbeit"/);
+  assert.match(platform, /changes_requested: "Grundlegend überarbeiten"/);
+  assert.match(reviewRail, /Review abschließen/);
+  assert.doesNotMatch(reviewRail, /value: "", label: "Noch nicht zugewiesen"/);
+  assert.match(reviewRail, /profile\.platformRole !== "viewer"/);
+  assert.match(workflowStrips, /profile\.platformRole !== "viewer"/);
+  assert.match(taskRoute, /Ein aktives Review braucht eine Review-Verantwortung/);
+  assert.match(taskRoute, /Lege vor der Review-Anfrage eine Review-Verantwortung fest/);
+  assert.match(taskRoute, /Die Review-Verantwortung braucht eine beitragende Rolle/);
+  assert.match(taskRoute, /Final bewertete Aufgaben müssen über „Review erneut öffnen“/);
+  assert.match(taskRoute, /if \(reviewSprint\?\.score_locked\) return apiError\("Sprint-Score ist bereits gelockt\.", 409\)/);
+  assert.match(reopenRoute, /Lege vor dem erneuten Review eine Review-Verantwortung fest/);
+  assert.match(reviewDraft, /founderops:task-review-draft:v2:\$\{taskId\}:\$\{encodeURIComponent\(reviewRequestedAt/);
+  assert.match(reviewSummary, /Review-Zusammenfassung/);
+  assert.match(reviewSummary, /displayedReviews\.length > 1/);
+  assert.match(planningFilters, /review: enumUrlField<string>\("Alle", \["Alle", "requested", "changes_requested", "accepted", "partial", "not_requested"\]\)/);
+  assert.match(planningFilters, /"my-reviews"/);
+  assert.match(planningFilterUi, /Review-Status/);
+  assert.match(planningModel, /id: "my-reviews", label: "Meine Reviews"/);
+  assert.match(planningModel, /if \(task\.reviewOwnerProfileId\) return task\.reviewOwnerProfileId/);
+  assert.match(planningViewModel, /quickFilter === "my-reviews"[^]*task\.reviewStatus === "requested"/);
   assert.match(app, /reopenReviewTask/);
   assert.match(taskApiClient, /\/api\/tasks\/\$\{taskId\}\/review\/reopen/);
-  assert.match(model, /label: "Meine"/);
-  assert.match(model, /label: "Offen"/);
-  assert.match(model, /label: "Abgeschlossen"/);
-  assert.match(model, /label: "Nacharbeit"/);
-  assert.match(model, /label: "Geblockt"/);
-  assert.match(workspace, /metrics\.total \? "Keine Reviews für diese Filter\."/);
-  assert.match(workspace, /Noch keine Reviews/);
-  assert.match(workspace, /href="\/sprint"/);
-  assert.match(workspace, /\/reviews\/\$\{encodeURIComponent\(task\.id\)\}/);
-  assert.match(detail, /TaskReviewSheet/);
-  assert.match(detail, /PlanningHeaderDataActions/);
-  assert.match(detail, /Review nicht gefunden/);
-  assert.match(detail, /href="\/reviews"/);
-  assert.doesNotMatch(detail, /\/\?workspace=reviews/);
-  assert.match(sheet, /Review wieder öffnen/);
-  assert.match(model, /isOpenReviewTask/);
-  assert.match(model, /isCompletedReviewTask/);
-  assert.match(model, /isReworkReviewTask/);
-  assert.match(model, /isBlockedReviewTask/);
-  assert.match(model, /hasOpenWaitingRelation/);
-  assert.match(model, /owner === "mine"/);
-  assert.match(reviewRoute, /initialReviewTaskId=\{id\}/);
-  assert.match(reviewRoute, /requiresSupabaseAuth/);
   assert.match(reopenRoute, /requireTaskReviewer/);
-  assert.match(reopenRoute, /review_status: "requested"/);
-  assert.match(reopenRoute, /score_final: false/);
+  assert.match(reopenRoute, /transition_task_review_transaction/);
+  assert.match(reopenRoute, /p_action: "reopen"/);
   assert.match(reopenRoute, /status: "Review"/);
   assert.match(reopenRoute, /task\.review_owner_profile_id/);
-  assert.match(reopenRoute, /task\.review\.reopen/);
+  assert.match(reviewMigration, /task\.review\.reopen/);
+  assert.match(withdrawRoute, /Ein Grund für das Zurückziehen ist erforderlich/);
+  assert.match(withdrawRoute, /status: "In Arbeit"/);
+  assert.match(withdrawRoute, /p_action: "withdraw"/);
+  assert.match(reviewMigration, /task\.review\.withdraw/);
+  assert.match(taskApiClient, /\/api\/tasks\/\$\{taskId\}\/review\/withdraw/);
+  assert.match(taskRoute, /isTaskReviewLocked\(currentReviewState\).*hasReviewLockedTaskChanges\(payload/s);
+  assert.match(taskRoute, /isTaskReviewLocked\(parentReviewTask\)/);
+  assert.match(blockerRoute, /taskIdsHaveReviewLock\(supabase, \[id\]\)/);
+  assert.match(relationshipRoute, /taskIdsHaveReviewLock\(supabase, \[id, relatedTaskId\]\)/);
+  assert.match(relationshipRoute, /taskIdsHaveReviewLock\(supabase, \[id, otherTaskId\]\)/);
+  assert.match(reviewLock, /parent_task_id/);
+  assert.match(reviewLock, /isReviewStateLocked/);
+  assert.match(planningTrashApi, /isReviewStateLocked\(root\.review_status, root\.score_final\)/);
 });
 
 test("founderops v2.1 computes 20 point sprint scores strikes and objections", async () => {
@@ -625,18 +682,18 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(migration, /create table if not exists score_objections/);
   assert.match(route, /computeFounderSprintScore/);
   assert.match(route, /computeStrikeTransition/);
-  assert.match(route, /Offene Score-Einwände/);
-  assert.match(route, /Reviewfrist läuft noch/);
-  assert.match(route, /lock_sprint_transaction/);
+  assert.match(route, /Offene oder ausstehende Score-Einwände/);
+  assert.match(route, /Review- und Einwandfrist läuft noch/);
+  assert.match(route, /lock_sprint_with_review_window_transaction/);
   assert.match(finalizationMigration, /founder_sprint_scores/);
   assert.match(finalizationMigration, /founder_strike_state/);
   assert.match(finalizationMigration, /strike_events/);
-  assert.match(objectionRoute, /resolve_score_objection_transaction/);
+  assert.match(objectionRoute, /process_score_objection_transaction/);
   assert.match(objectionResolutionMigration, /insert into public\.founder_sprint_scores/);
   assert.match(objectionResolutionMigration, /on conflict \(sprint_id, profile_id\) do update/);
-  assert.match(objectionResolutionMigration, /second reviewer must differ from first reviewer/);
+  assert.match(objectionResolutionMigration, /second reviewer must be independent/);
   assert.match(objectionResolutionMigration, /second review is already complete/);
-  assert.match(objectionResolutionMigration, /revoke all on function public\.resolve_score_objection_transaction[^]*from public/);
+  assert.match(objectionResolutionMigration, /revoke all on function public\.process_score_objection_transaction[^]*from public/);
   assert.match(route, /acceptedAdjustmentByProfile/);
   assert.match(route, /Korrigiert nach angenommenem Score-Einwand/);
   assert.match(ui, /FounderOps Score v2\.1/);
@@ -647,8 +704,8 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(ui, /Strike/);
   assert.match(ui, /Score-Einwände/);
   assert.match(ui, /Annehmen & Score aktualisieren/);
-  assert.match(ui, /Zweitreview speichern/);
-  assert.match(ui, /anderen CEO oder Deputy/);
+  assert.match(ui, /Zweitreview einreichen/);
+  assert.match(ui, /zugewiesene Zweitreview/);
   assert.match(meetingUi, /Weekly Updates/);
   assert.match(meetingUi, /max\. 2 je Weekly, 4 je Sprint/);
   assert.doesNotMatch(meetingUi, /Biweekly/);
@@ -665,19 +722,24 @@ test("sprint lock freezes open scores and closes the sprint", async () => {
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const commands = await readFile("src/features/sprint/hooks/use-sprint-commands.ts", "utf8");
 
-  assert.match(route, /requireOperationalLead/);
-  assert.match(route, /score_points: preserveScore \? Number\(task\.score_points \|\| 0\) : 0/);
+  assert.match(route, /requireCEO/);
+  assert.match(route, /&& !task\.score_final/);
+  assert.match(route, /score_points: 0/);
   assert.match(route, /score_final: true/);
-  assert.match(route, /lock_sprint_transaction/);
+  assert.match(route, /lock_sprint_with_review_window_transaction/);
+  assert.match(migration, /score objections are still unresolved/);
+  assert.match(migration, /review and objection window is still open/);
   assert.match(migration, /sprint\.lock_score/);
   assert.match(migration, /lock_result/);
   assert.match(migration, /'replayed', true/);
   assert.match(migration, /revoke all on function public\.lock_sprint_transaction[^]*from public/);
   assert.match(migration, /grant all on function public\.lock_sprint_transaction[^]*to service_role/);
-  assert.match(apiClient, /json: \{ finalizeNow \}/);
-  assert.doesNotMatch(apiClient, /json: \{ finalizeNow: true \}/);
-  assert.match(commands, /Reviewfrist läuft noch\. Sprint trotzdem jetzt finalisieren/);
-  assert.match(commands, /lockSprintRequest\(apiClient, sprintId, finalizeNow\)/);
+  assert.match(migration, /revoke all on function public\.lock_sprint_with_review_window_transaction[^]*from public/);
+  assert.match(migration, /grant all on function public\.lock_sprint_with_review_window_transaction[^]*to service_role/);
+  assert.match(apiClient, /lockSprintRequest\(apiClient: BrowserApiClient, sprintId: string\)/);
+  assert.match(apiClient, /json: \{\}/);
+  assert.doesNotMatch(commands, /finalizeNow|Sprint trotzdem jetzt finalisieren/);
+  assert.match(commands, /lockSprintRequest\(apiClient, sprintId\)/);
 });
 
 test("sprint lock creates carryover for unfinished deliverables", async () => {
@@ -694,8 +756,8 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(migration, /carried_from_task_id/);
   assert.match(migration, /sprint_outcome/);
   assert.match(route, /communicated_blocker/);
-  assert.match(route, /review_status === "partial"/);
-  assert.match(route, /preserveScore/);
+  assert.doesNotMatch(route, /review_status === "partial"|preserveScore/);
+  assert.match(route, /&& !task\.score_final/);
   assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
   assert.match(routeContract, /github_issue_number: input\.githubIssueNumber \|\| null/);
   assert.match(route, /missed_uncommunicated/);
@@ -722,12 +784,14 @@ test("sprint configuration is operational-lead only and audited", async () => {
   assert.match(route, /Gelockte Sprints können nicht mehr geändert werden/);
   assert.match(route, /Sprint-Start darf nicht nach dem Sprint-Ende liegen/);
   assert.match(route, /Zeitraum, Name und Review-Datum dürfen nur bei leeren Sprints geändert werden/);
-  assert.match(route, /sprint.update/);
+  assert.match(route, /update_sprint_schedule_transaction/);
+  assert.match(batchMigration, /'sprint.update'/);
   assert.match(planRoute, /protectedSprintIds/);
-  assert.match(planRoute, /create_sprint_plan_transaction/);
+  assert.match(planRoute, /create_sprint_plan_with_review_window_transaction/);
   assert.match(planRoute, /expected_updated_at/);
   assert.doesNotMatch(planRoute, /from\("sprints"\)\.upsert/);
   assert.match(batchMigration, /create or replace function public\.create_sprint_plan_transaction/);
+  assert.match(batchMigration, /create or replace function public\.create_sprint_plan_with_review_window_transaction/);
   assert.match(batchMigration, /insert into public\.meetings/);
   assert.match(batchMigration, /sprint\.plan_create/);
   assert.match(sprintUi, /findCurrentSprint/);
@@ -912,18 +976,18 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
   const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/sprint-commitments/route.ts", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
-  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
 
   assert.match(status, /Nacharbeit/);
   assert.doesNotMatch(status, /Vorschlag/);
   assert.match(migration, /create table if not exists sprint_commitments/);
   assert.match(route, /Founder können nur ihr eigenes Commitment ändern/);
-  assert.match(reviewSheet, /Accountable Review-Blatt/);
+  assert.match(reviewRail, /Review durchführen/);
+  assert.match(reviewRail, /Review zurückziehen/);
   assert.match(sprintUi, /Review anfragen/);
-  assert.match(sprintUi, /focusedReviewTaskId/);
-  assert.match(sprintUi, /selectReviewTask\(focusedReviewTaskId\)/);
-  assert.match(sprintUi, /accountable-review-sheet/);
-  assert.match(sprintUi, /scrollIntoView/);
+  assert.match(sprintUi, /Review öffnen/);
+  assert.match(sprintUi, /onOpenReviewTask/);
+  assert.doesNotMatch(sprintUi, /focusedReviewTaskId|accountable-review-sheet|TaskReviewSheet/);
 });
 
 test("founder self checklist is separate from CEO scoring", async () => {
@@ -933,7 +997,8 @@ test("founder self checklist is separate from CEO scoring", async () => {
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const sprintUi = await readFeatureSurface("src/features/sprint");
-  const reviewSheet = await readFile("src/features/reviews/organisms/task-review-sheet.tsx", "utf8");
+  const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
+  const reviewState = await readFile("src/features/reviews/model/task-review-state.ts", "utf8");
 
   assert.match(migration, /self_dod_checked/);
   assert.match(taskRoutePolicy, /self_dod_checked/);
@@ -941,12 +1006,12 @@ test("founder self checklist is separate from CEO scoring", async () => {
   assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.doesNotMatch(sprintUi, /Founder-Arbeitsstand/);
   assert.doesNotMatch(sprintUi, /Selbstkontrolle ohne Punkte/);
-  assert.match(reviewSheet, /Review-Blatt/);
-  assert.match(reviewSheet, /Accountable Review-Blatt/);
-  assert.match(reviewSheet, /Aus erfüllten Kriterien berechnet/);
-  assert.match(reviewSheet, /reviewChecklistScore/);
+  assert.match(reviewRail, /Review durchführen/);
+  assert.match(reviewRail, /abgeleitete Punkte/);
+  assert.match(reviewRail, /reviewChecklistScore/);
+  assert.match(reviewState, /reviewChecklistScore/);
   assert.match(sprintUi, /20 Punkte/);
   assert.match(sprintUi, /Form \/ Review-Reife/);
-  assert.match(reviewRoute, /checklistPoints/);
+  assert.match(reviewRoute, /const points = reviewDecisionPoints\(decision, checklist\)/);
   assert.match(reviewRoute, /acceptanceCriteriaMet/);
 });

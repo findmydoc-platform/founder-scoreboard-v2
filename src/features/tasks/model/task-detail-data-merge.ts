@@ -20,6 +20,10 @@ export function mergeTaskDetailData(current: PlanningData, taskId: string, detai
       ...detailData.taskActivity,
       ...current.taskActivity.filter((activity) => activity.taskId !== taskId),
     ],
+    taskReviews: [
+      ...detailData.taskReviews,
+      ...current.taskReviews.filter((review) => review.taskId !== taskId),
+    ],
     taskRelations: [
       ...detailData.taskRelations,
       ...current.taskRelations.filter((relation) => relation.taskId !== taskId && relation.relatedTaskId !== taskId),

@@ -8,7 +8,6 @@ import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
-import { ReviewDetailPage } from "@/features/reviews/templates/review-detail-page";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
@@ -25,28 +24,18 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     authUser,
     currentProfile,
     data,
-    dismissNotification,
     filters,
     filtersAvailable,
-    isPending,
     localStateLoaded,
     mobileNavOpen,
-    openNotification,
-    openNotificationInbox,
-    openTaskPanel,
     protectedDataLoaded,
     releaseSidebarFocus,
-    reopenReviewTask,
-    reviewTask,
-    selectedReviewDetailTask,
-    selectedReviewDetailTaskId,
     setFilters,
     setMobileNavOpen,
     setWorkspace,
     signIn,
     signOut,
     showFilters,
-    showNotifications,
     sidebarRef,
     workspace,
   } = controller;
@@ -85,29 +74,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         onSignIn={signIn}
         onSignOut={signOut}
       />
-    );
-  }
-
-  if (selectedReviewDetailTaskId) {
-    return (
-      <>
-        <ReviewDetailPage
-          data={data}
-          headerData={controller.headerData}
-          task={selectedReviewDetailTask}
-          currentProfile={currentProfile}
-          pending={isPending}
-          source={source}
-          onReview={reviewTask}
-          onReopen={reopenReviewTask}
-          onOpenTask={openTaskPanel}
-          notificationsOpen={showNotifications}
-          onToggleNotifications={() => showNotifications ? controller.setShowNotifications(false) : openNotificationInbox()}
-          onOpenNotification={openNotification}
-          onDismissNotification={dismissNotification}
-        />
-        <PlanningOverlayLayer controller={controller} />
-      </>
     );
   }
 

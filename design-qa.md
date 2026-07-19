@@ -1,75 +1,103 @@
-# GitHub Panel Design QA
+---
+result: passed
+---
 
-- Source visual truth: `/Users/razorspoint/.codex/generated_images/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/exec-f042a384-b941-4afa-9281-4b14764b09b0.png`
-- Source interaction evidence: user-provided Microsoft Edge screenshots from 2026-07-16 showing the production panel before and after opening the connection popover.
-- Implementation screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-final.png`
-- Problem-state screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-problem-state-final.png`
-- Local unconfigured screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-local-unconfigured.png`
-- Local connection-details screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-local-connection-details.png`
-- Full-view comparison: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-comparison-final.png`
-- Focused panel comparison: `/Users/razorspoint/.codex/visualizations/2026/07/16/019f6b0b-05a9-7f10-9a71-ac4fceb0de3f/github-panel-focused-comparison-final.png`
-- Viewports: `1488 x 1058` for the selected design comparison and `1280 x 720` for the local unconfigured-state verification.
-- State: right-side GitHub panel open. Healthy, missing-author, missing-installation, and local-unconfigured states were captured. The final local capture has the connection popover open.
-- Fixture note: the local seed data and connection state were temporarily adapted only for browser capture, then reverted. The captured component code and layout match the final implementation.
+# Review in Issue - Design QA
 
-## Full-view comparison evidence
+## Sources and implementation
 
-The implementation preserves the selected direction: a narrow right-side GitHub surface, one compact header trigger, a compact panel header, semantic green/amber/red status colors, lightweight action rows, and one full-width bulk action in the footer. The surrounding application header and workspace remain unchanged.
+- Reference sidepanel: `/Users/razorspoint/.codex/generated_images/019f67a4-cfed-73e0-99b2-ba6cd39f3d18/exec-534a077b-e079-4ad5-89de-71fd5354b42e.png`
+- Implementation sidepanel: `/Users/razorspoint/.codex/visualizations/2026/07/18/review-decision-semantics/20-sidepanel-major-rework-traffic-1440.png`
+- Sidepanel comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/18/review-decision-semantics/22-compare-sidepanel-traffic.png`
+- Reference full page: `/Users/razorspoint/.codex/generated_images/019f67a4-cfed-73e0-99b2-ba6cd39f3d18/exec-7a603821-8f8d-40d9-9cd6-dfa8c5c2e7a9.png`
+- Implementation full page: `/Users/razorspoint/.codex/visualizations/2026/07/18/review-decision-semantics/18-fullscreen-major-rework-traffic-1440.png`
+- Full-page comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/18/review-decision-semantics/23-compare-fullscreen-traffic.png`
+- Responsive evidence: `/Users/razorspoint/.codex/visualizations/2026/07/18/review-decision-semantics/21-sidepanel-mobile-traffic.png`
+- Primary implementation: `src/features/tasks/organisms/task-detail-surface.tsx`, `src/features/tasks/molecules/task-detail-tabs.tsx`, `src/features/reviews/organisms/task-review-rail.tsx`
+- Shared shells: `src/features/tasks/organisms/task-detail-panel.tsx`, `src/features/tasks/templates/task-detail-page.tsx`
 
-The local unconfigured state now keeps the GitHub trigger visible, identifies the missing local GitHub App configuration in red, and explains why both issue sync and the author connection are unavailable. Opening the details popover does not change the queue heading position: the measured top position remains `87px` before and after opening (`0px` delta).
+## Comparison setup
 
-The implementation intentionally moves the panel title to the top of the drawer and removes the large global-header-height spacer visible in the generated mock. This implements the explicit refinement request to reduce the excessive space above the GitHub content.
-
-## Focused region comparison evidence
-
-The focused comparison confirms that the GitHub mark, title, status dot, status label, disclosure chevron, action count, row actions, dividers, and footer hierarchy match the visual direction. The implementation uses the existing application typography and token palette instead of reproducing image-generated font artifacts. The local status details remain readable without pushing the queue content downward.
-
-## Required fidelity surfaces
-
-- Fonts and typography: Existing application typography is preserved. Title, status, row titles, metadata, and footer action have matching hierarchy, readable line heights, and no clipping in the final captures.
-- Spacing and layout rhythm: The panel is `520px` wide with a compact header, consistent `20px` horizontal padding, restrained row spacing, and an overlaid connection popover. The queue heading keeps a constant height and position in every popover state. No header-height change was made outside the GitHub surface.
-- Colors and visual tokens: Existing slate, blue, emerald, amber, and red tokens are used. The backdrop was reduced to two percent opacity to stay close to the bright mock.
-- Image quality and asset fidelity: The GitHub mark is a dedicated vector asset reused by the trigger and panel. It remains sharp at both rendered sizes and is not recreated with CSS or text glyphs.
-- Copy and content: Healthy state explains both connection layers. Problem states identify the failing layer, explain the impact, and expose only actions that actually exist. The local state explicitly says that the GitHub App is not configured and does not offer an ineffective OAuth or management action. Queue and badge use the same projection, so the displayed count matches the visible rows.
+- Viewport: 1440 x 1000 pixels for both implementation screenshots; references were proportionally fitted to the same comparison canvas.
+- State: active requested review, zero of four checks selected, derived score 0/10, `Grundlegend überarbeiten` selected, and a required draft comment present.
+- Each reference and implementation pair was emitted together in one comparison input after the final code change.
+- A separate crop was unnecessary: the full-resolution pairs keep header, content boundary, checklist, comment, decision bar, and primary action readable together.
 
 ## Comparison history
 
-1. Initial finding `[P2]`: the first implementation dimmed the workspace more strongly than the source. Fix: backdrop opacity reduced from ten percent to two percent. Post-fix evidence: `github-panel-comparison-final.png`.
-2. Initial finding `[P2]`: the open info popover could overlap the first queue row, especially in a problem state with explanatory copy and a reconnect action. Fix: the queue heading now reserves state-aware vertical clearance only while the popover is open. Post-fix evidence: `github-panel-final.png` and `github-panel-problem-state-final.png`.
-3. Production finding `[P1]`: that state-aware clearance visibly moved the queue content whenever the connection popover opened. Fix: the popover remains in the header layer while the queue heading uses constant `py-4` spacing. Post-fix evidence: `github-panel-local-unconfigured.png` and `github-panel-local-connection-details.png`; measured heading movement is `0px`.
-4. Local-state finding `[P1]`: the GitHub trigger was restricted to authenticated Supabase mode, so local users could not open the panel or see that the GitHub App was unavailable. Fix: the trigger is rendered in every workspace mode, local mode receives an explicit unconfigured state, the full status line opens connection details, and the duplicate `Verbindung verwalten` footer link was removed. Post-fix evidence: both local screenshots above.
+### Pass 1
 
-## Findings
+- P1: the review UI introduced a second card-like surface inside the issue and weakened the original two-column composition.
+- P1: the rail started next to the planning and tab rows, creating broken horizontal lines.
+- P1: the locked status repeated a long explanation in the metadata row.
+- P2: the 1180-pixel drawer and 380-pixel rail proportions differed visibly from the supplied sidepanel reference.
 
-No actionable P0, P1, or P2 mismatch remains.
+### Pass 2
 
-One acceptable P3 difference remains: the mock shows an extra row chevron. The implementation omits that secondary navigation affordance because task titles and issue references already provide the relevant destinations.
+- Flattened the issue content and review rail onto one white canvas.
+- Kept planning and tabs full-width; the two-column split now begins below the tabs.
+- Replaced nested borders with one stable vertical divider and restrained section rules.
+- Reduced the active-review drawer to 1060 pixels and widened the rail to 460 pixels.
+- Reduced the locked status to a compact, accessible status field.
 
-## Interaction and browser checks
+### Pass 3
 
-- Opened the panel through the compact GitHub trigger.
-- Opened and closed the connection info popover.
-- Verified the GitHub trigger remains visible in local seed mode without a configured GitHub App.
-- Verified the local panel reports the installation and author connection as unavailable without exposing a dead management action.
-- Measured identical queue-heading position before and after opening connection details.
-- Verified first Escape closes connection details and the second Escape closes the panel.
-- Verified healthy, missing-author, and missing-installation content.
-- Closed the panel through its close control.
-- Confirmed the badge count and visible queue rows use the same data projection.
-- Checked the browser console: no warnings or errors.
-- Verified the page title is `findmydoc Planning`.
+- Added a visible label for the derived score while retaining the existing scoring logic.
+- Re-ran sidepanel and full-page comparisons at the reference viewport and state.
+- No unresolved P0, P1, or P2 fidelity findings remain.
 
-## Implementation checklist
+### Pass 4 - consistency audit
 
-- [x] Single compact GitHub trigger across authenticated Supabase workspaces.
-- [x] Same trigger on the full task detail route.
-- [x] Shared queue projection for header badge and panel rows.
-- [x] Compact panel header and footer action.
-- [x] Healthy and problem connection explanations with corrective action.
-- [x] Keyboard/focus-compatible dialog and popover controls.
-- [x] Always-visible local trigger with explicit unconfigured status.
-- [x] One connection-details disclosure instead of duplicate info and footer controls.
-- [x] No panel-content movement when connection details open.
-- [x] Responsive full-width mobile drawer behavior.
+- P1: all four `Ansehen` links could target zero-height sections when the corresponding issue data was empty.
+- P1: a review jump from `Aktivität` did not reveal the target in `Übersicht`.
+- P1: switching issue tabs incorrectly treated the review draft as disposable and opened the discard dialog.
+- P1: an active review could still show the approval strip, including `Revision undefined`, and push the review action below the reference viewport.
+- P2: the review comment field used only part of the available rail width.
+- Added explicit empty-state sections for Zielbild, Abnahmekriterien, Nachweis, Abhängigkeiten, and Qualitätsstandard while the review is active.
+- Review jumps now switch to `Übersicht`, scroll to and focus the original section, and keep the client-side review draft intact.
+- Active reviews suppress the contradictory approval strip; the comment field now fills the rail width.
+- Repeated the sidepanel and full-page reference comparisons at 1487 x 1058 after the fixes. No unresolved P0, P1, or P2 finding remains.
 
-final result: passed
+### Pass 5 - workflow invariant audit
+
+- P1: changing tasks could reuse the mounted review rail and momentarily carry the previous task's draft into the next task.
+- P1: the active-review owner control allowed clearing the reviewer or assigning a Viewer who cannot submit a review.
+- P1: a reviewer selected before the request could be overwritten by the Initiative fallback when the Review started.
+- P2: the same `changes_requested` state appeared as both `Nacharbeit` and `Änderungen angefordert`.
+- The review rail now remounts per task, keeps an explicitly selected reviewer, rejects ownerless requests and reopens, and limits reviewer choices to contributing roles.
+- Both rework decisions consistently set the task status to `Nacharbeit`; their decision labels are refined separately below.
+- Re-captured and compared both desktop views after these changes. The owner selector contains only eligible named profiles and no empty option; the browser reports no warning or error.
+
+### Pass 6 - rework semantics
+
+- Replaced the misleading final-sounding `Mit Abweichung akzeptiert` decision with `Kleine Nacharbeit` while keeping the compatible internal `partial` value.
+- Renamed the stronger rework decision from the generic `Nacharbeit` label to `Grundlegend überarbeiten` while retaining the internal `changes_requested` value.
+- Both rework decisions now keep the task in `Nacharbeit`, keep the score open, require a comment, and unlock the issue for editing; only `Akzeptiert` completes the task and finalizes its score.
+- The Sprint table shows `Review öffnen` only for an active requested review; rework rows expose the next action `Review anfragen` without a duplicate historical-review action.
+- The three decision buttons use restrained green, amber, and red outlines as a persistent traffic-light cue. The selected state adds only a pale tint and stronger outline, avoiding a saturated alarm surface.
+- Verified that validation stays hidden until submission; an invalid submission then explains the missing decision, checklist state, or required comment next to the action.
+- Verified that the selected decision and comment survive Sidepanel to full-page navigation and reopening the Sidepanel without server persistence.
+- Re-captured Sidepanel, full-page, and 390-pixel responsive evidence. The final comparison inputs place each supplied reference and implementation screenshot side by side. No unresolved P0, P1, or P2 finding remains.
+
+## Required fidelity surfaces
+
+- Typography: existing product font, weights, and type hierarchy retained; heading and body scale align with the references.
+- Spacing and layout: issue content appears once; one vertical divider separates the 3:2 full-page columns and the modal content from its review rail.
+- Colors and tokens: existing white, slate, blue, emerald, amber, and red design tokens reused; no new visual language introduced.
+- Image and icon quality: the target contains no raster content; existing Lucide icons are reused without custom or approximate artwork.
+- Copy: `Kleine Nacharbeit` and `Grundlegend überarbeiten` explicitly distinguish limited from fundamental rework without presenting either outcome as accepted. Owner, timestamp, and derived-score labels implement the approved functional requirements.
+- Validation state: the primary action remains available for a validation attempt, and errors appear only after submission as requested.
+
+## Responsive and interaction checks
+
+- At 768 pixels, issue and review stack without horizontal overflow.
+- At 420 pixels and wider, the three decision buttons remain horizontal, equal-height, and fully contained; long labels wrap inside their selection surface.
+- At 390 pixels, the decisions stack vertically with equal widths.
+- The selected `Grundlegend überarbeiten` decision and its comment survive Sidepanel → full page → Sprint → reopened Sidepanel as a client-side draft.
+- Review links have target-specific accessible names; jumps place focus on the original issue section.
+- Review links, controls, and native semantic inputs remain keyboard reachable.
+- The final browser pass reports no warnings or errors.
+
+## Final result
+
+passed

@@ -28,7 +28,9 @@ export type TaskDetailTabsProps = {
   ariaLabel?: string;
   className?: string;
   idBase?: string;
+  panelAside?: ReactNode;
   panelClassName?: string;
+  panelLayoutClassName?: string;
   tabListClassName?: string;
 };
 
@@ -60,7 +62,9 @@ export function TaskDetailTabs({
   ariaLabel = "Item-Bereiche",
   className,
   idBase,
+  panelAside,
   panelClassName,
+  panelLayoutClassName,
   tabListClassName,
 }: TaskDetailTabsProps) {
   const generatedId = useId();
@@ -124,6 +128,21 @@ export function TaskDetailTabs({
     event.preventDefault();
     focusTab(nextValue);
   };
+
+  const renderedPanel = (
+    <div
+      id={panelId(resolvedIdBase, resolvedValue)}
+      role="tabpanel"
+      aria-labelledby={tabId(resolvedIdBase, resolvedValue)}
+      tabIndex={0}
+      className={classNames(
+        "min-w-0 pt-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+        panelClassName,
+      )}
+    >
+      {panels[resolvedValue]}
+    </div>
+  );
 
   return (
     <div className={classNames("min-w-0", className)}>
@@ -194,18 +213,12 @@ export function TaskDetailTabs({
         })}
       </div>
 
-      <div
-        id={panelId(resolvedIdBase, resolvedValue)}
-        role="tabpanel"
-        aria-labelledby={tabId(resolvedIdBase, resolvedValue)}
-        tabIndex={0}
-        className={classNames(
-          "min-w-0 pt-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
-          panelClassName,
-        )}
-      >
-        {panels[resolvedValue]}
-      </div>
+      {panelAside ? (
+        <div className={classNames("min-w-0", panelLayoutClassName)}>
+          {renderedPanel}
+          {panelAside}
+        </div>
+      ) : renderedPanel}
       <div ref={announcementRef} className="sr-only" aria-live="polite" />
     </div>
   );
