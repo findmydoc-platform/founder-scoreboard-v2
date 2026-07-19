@@ -115,6 +115,30 @@ async function verifyProfileWriteRpcs() {
   return results;
 }
 
+async function verifyFounderOpsReviewWindowRpc() {
+  const missingProfileId = `verify-missing-ceo-${Date.now()}`;
+  const params = {
+    p_project_id: "findmydoc-founder-execution",
+    p_expected_hours: 48,
+    p_review_objection_window_hours: 48,
+    p_actor_profile_id: missingProfileId,
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("update_founderops_review_window_transaction", params),
+    anonSupabase.rpc("update_founderops_review_window_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0005" && Boolean(anonError),
+    error: error?.code !== "P0005"
+      ? error?.message || "FounderOps settings RPC unexpectedly accepted a missing CEO profile"
+      : !anonError
+        ? "FounderOps settings RPC unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 async function verifyTaskUpdateRpc() {
   const { error } = await supabase.rpc("update_task_transaction", {
     p_task_id: `verify-missing-task-${Date.now()}`,
@@ -342,15 +366,15 @@ async function verifySprintFinalizationRpc() {
     p_user_agent: null,
   };
   const [{ error }, { error: anonError }] = await Promise.all([
-    supabase.rpc("lock_sprint_transaction", params),
-    anonSupabase.rpc("lock_sprint_transaction", params),
+    supabase.rpc("lock_sprint_with_review_window_transaction", params),
+    anonSupabase.rpc("lock_sprint_with_review_window_transaction", params),
   ]);
   return {
     ok: error?.code === "P0002" && Boolean(anonError),
     error: error?.code !== "P0002"
-      ? error?.message || "lock_sprint_transaction unexpectedly accepted a missing sprint"
+      ? error?.message || "lock_sprint_with_review_window_transaction unexpectedly accepted a missing sprint"
       : !anonError
-        ? "lock_sprint_transaction unexpectedly allowed anonymous execution"
+        ? "lock_sprint_with_review_window_transaction unexpectedly allowed anonymous execution"
         : "",
   };
 }
@@ -361,7 +385,7 @@ async function verifyTaskReviewRpc() {
     p_sprint_id: null,
     p_expected_updated_at: new Date().toISOString(),
     p_task_patch: {},
-    p_reviewer_profile_id: null,
+    p_reviewer_profile_id: "verify-reviewer",
     p_decision: "accepted",
     p_points: 10,
     p_comment: "Verification",
@@ -386,6 +410,33 @@ async function verifyTaskReviewRpc() {
   };
 }
 
+async function verifyTaskReviewTransitionRpc() {
+  const params = {
+    p_task_id: `verify-missing-task-review-transition-${Date.now()}`,
+    p_expected_updated_at: new Date().toISOString(),
+    p_action: "withdraw",
+    p_actor_profile_id: null,
+    p_reason: "Verification",
+    p_activity_message: "Verification",
+    p_notifications: [],
+    p_audit_after_data: {},
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("transition_task_review_transaction", params),
+    anonSupabase.rpc("transition_task_review_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0002" && Boolean(anonError),
+    error: error?.code !== "P0002"
+      ? error?.message || "transition_task_review_transaction unexpectedly accepted a missing task"
+      : !anonError
+        ? "transition_task_review_transaction unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 async function verifyScoreObjectionRpc() {
   const params = {
     p_sprint_id: `verify-missing-score-objection-${Date.now()}`,
@@ -397,20 +448,34 @@ async function verifyScoreObjectionRpc() {
     p_delivery_points: null,
     p_form_points: null,
     p_weekly_points: null,
+    p_second_reviewer_profile_id: null,
     p_second_review_decision: null,
     p_request_ip: null,
     p_user_agent: null,
   };
-  const [{ error }, { error: anonError }] = await Promise.all([
-    supabase.rpc("resolve_score_objection_transaction", params),
-    anonSupabase.rpc("resolve_score_objection_transaction", params),
+  const createParams = {
+    p_sprint_id: `verify-missing-score-objection-create-${Date.now()}`,
+    p_profile_id: `verify-missing-score-objection-profile-${Date.now()}`,
+    p_comment: "Verification",
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }, { error: createError }, { error: anonCreateError }] = await Promise.all([
+    supabase.rpc("process_score_objection_transaction", params),
+    anonSupabase.rpc("process_score_objection_transaction", params),
+    supabase.rpc("create_score_objection_transaction", createParams),
+    anonSupabase.rpc("create_score_objection_transaction", createParams),
   ]);
   return {
-    ok: error?.code === "P0002" && Boolean(anonError),
+    ok: error?.code === "P0002" && Boolean(anonError) && createError?.code === "P0005" && Boolean(anonCreateError),
     error: error?.code !== "P0002"
-      ? error?.message || "resolve_score_objection_transaction unexpectedly accepted a missing sprint"
+      ? error?.message || "process_score_objection_transaction unexpectedly accepted a missing sprint"
       : !anonError
-        ? "resolve_score_objection_transaction unexpectedly allowed anonymous execution"
+        ? "process_score_objection_transaction unexpectedly allowed anonymous execution"
+        : createError?.code !== "P0005"
+          ? createError?.message || "create_score_objection_transaction unexpectedly accepted a missing contributor"
+          : !anonCreateError
+            ? "create_score_objection_transaction unexpectedly allowed anonymous execution"
         : "",
   };
 }
@@ -635,7 +700,7 @@ async function verifyPlanningTrashPurgeRpc() {
 
 const { data: project, error: projectError } = await supabase
   .from("projects")
-  .select("id,name,range_label")
+  .select("id,name,range_label,review_objection_window_hours")
   .eq("id", "findmydoc-founder-execution")
   .single();
 
@@ -644,6 +709,7 @@ if (projectError) throw new Error(`projects: ${projectError.message}`);
 const result = {
   project: project.name,
   range: project.range_label,
+  reviewObjectionWindowHours: project.review_objection_window_hours,
   profiles: await count("profiles"),
   githubAppConnections: await count("github_app_user_tokens"),
   packages: await count("packages"),
@@ -679,6 +745,7 @@ const result = {
   schema: await Promise.all(schemaChecks.map(checkSchema)),
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
   profileWriteRpcs: await verifyProfileWriteRpcs(),
+  founderOpsReviewWindowRpc: await verifyFounderOpsReviewWindowRpc(),
   taskUpdateRpc: await verifyTaskUpdateRpc(),
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
@@ -686,6 +753,7 @@ const result = {
   planningBatchRpcs: await verifyPlanningBatchRpcs(),
   sprintFinalizationRpc: await verifySprintFinalizationRpc(),
   taskReviewRpc: await verifyTaskReviewRpc(),
+  taskReviewTransitionRpc: await verifyTaskReviewTransitionRpc(),
   scoreObjectionRpc: await verifyScoreObjectionRpc(),
   planningItemsRpcs: await verifyPlanningItemsRpcs(),
   approvalDecisionRpcs: await verifyApprovalDecisionRpcs(),
@@ -709,6 +777,11 @@ if (!result.githubSyncLockRpc.ok) {
 const missingProfileWriteRpc = result.profileWriteRpcs.find((check) => !check.ok);
 if (missingProfileWriteRpc) {
   console.error(`Profile write RPC check failed for ${missingProfileWriteRpc.name}: ${missingProfileWriteRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.founderOpsReviewWindowRpc.ok) {
+  console.error(`FounderOps review-window RPC check failed: ${result.founderOpsReviewWindowRpc.error}`);
   process.exit(1);
 }
 

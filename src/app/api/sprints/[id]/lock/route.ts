@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { requireOperationalLead } from "@/lib/authz";
+import { requireCEO } from "@/lib/authz";
 import { computeFounderSprintScore, computeStrikeTransition } from "@/lib/founderops-scoring";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
 import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 
 type TaskRow = {
   id: string;
@@ -61,7 +62,6 @@ function normalizeStatus(value: string) {
 }
 
 function sprintOutcome(task: TaskRow, hasOpenBlocker: boolean) {
-  if (task.review_status === "partial") return "partial";
   if (task.review_status === "changes_requested" || normalizeStatus(task.status).includes("nacharbeit")) return "rework";
   if (hasOpenBlocker || normalizeStatus(task.status).includes("block")) return "communicated_blocker";
   if (task.review_status === "requested" || normalizeStatus(task.status).includes("review")) return "missed_no_review";
@@ -70,7 +70,6 @@ function sprintOutcome(task: TaskRow, hasOpenBlocker: boolean) {
 
 function carryoverReason(outcome: string) {
   const reasons: Record<string, string> = {
-    partial: "Teilweise akzeptiert, Restarbeit wird in den nächsten Sprint übertragen.",
     rework: "Nacharbeit aus Review wird in den nächsten Sprint übertragen.",
     communicated_blocker: "Blocker wurde kommuniziert; Deliverable wird planbar übertragen.",
     missed_no_review: "Review war offen oder nicht abgeschlossen; Deliverable wird übertragen.",
@@ -80,16 +79,16 @@ function carryoverReason(outcome: string) {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<{ finalizeNow?: boolean }>(request, requireOperationalLead, {});
+  const apiContext = await requireJsonApiContext<Record<string, never>>(request, requireCEO, {});
   if (!apiContext.ok) return apiContext.response;
 
-  const { payload, permission, supabase } = apiContext;
+  const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
 
   const { data: sprint, error: sprintError } = await supabase
     .from("sprints")
-    .select("id,name,start_date,end_date,review_due_at,score_locked,updated_at,lock_result")
+    .select("id,project_id,name,start_date,end_date,review_due_at,score_locked,updated_at,lock_result")
     .eq("id", id)
     .single();
 
@@ -100,14 +99,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError("Sprint ist bereits gelockt.", 409);
   }
 
-  const { count: openObjections, error: objectionError } = await supabase
+  const { data: blockingObjections, error: objectionError } = await supabase
     .from("score_objections")
-    .select("*", { count: "exact", head: true })
-    .eq("sprint_id", id)
-    .eq("status", "open");
+    .select("id,status,second_reviewer_profile_id,second_reviewed_at")
+    .eq("sprint_id", id);
   if (objectionError) return apiError(objectionError.message, 500);
-  if ((openObjections || 0) > 0) {
-    return apiError("Offene Score-Einwände müssen vor dem Sprint-Lock geprüft werden.", 409);
+  const unresolvedObjection = (blockingObjections || []).find((objection) =>
+    objection.status === "open" || Boolean(objection.second_reviewer_profile_id && !objection.second_reviewed_at)
+  );
+  if (unresolvedObjection) {
+    return apiError("Offene oder ausstehende Score-Einwände müssen vor dem Sprint-Lock abgeschlossen werden.", 409);
   }
 
   const { data: acceptedAdjustments, error: acceptedAdjustmentError } = await supabase
@@ -134,8 +135,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
   }
 
-  if (sprint.review_due_at && new Date(sprint.review_due_at).getTime() > Date.now() && !payload.finalizeNow) {
-    return apiError("Reviewfrist läuft noch. Operational Lead muss die Finalisierung explizit bestätigen.", 409);
+  let reviewDueAt = sprint.review_due_at || "";
+  if (!reviewDueAt) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("review_objection_window_hours")
+      .eq("id", sprint.project_id)
+      .single();
+    if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
+    reviewDueAt = sprintReviewDueAt(
+      sprint.end_date || "",
+      Number(project.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS),
+    );
+  }
+  if (!reviewDueAt) return apiError("Reviewfrist konnte nicht aus dem Sprint-Ende abgeleitet werden.", 409);
+  if (new Date(reviewDueAt).getTime() > Date.now()) {
+    return apiError("Die Review- und Einwandfrist läuft noch. Der Sprint kann erst danach finalisiert werden.", 409);
   }
 
   const { data: nextSprint, error: nextSprintError } = await supabase
@@ -160,7 +175,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     task.task_type === "deliverable"
     && task.approval_status === "approved"
     && task.score_relevant !== false
-    && (!task.score_final || task.review_status === "partial")
+    && !task.score_final
   );
   const taskIds = carryoverTasks.map((task) => task.id);
 
@@ -179,11 +194,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   for (const task of carryoverTasks) {
     const outcome = sprintOutcome(task, openBlockerTaskIds.has(task.id));
     const reason = carryoverReason(outcome);
-    const preserveScore = outcome === "partial";
-
     taskUpdates.push({
       id: task.id,
-      score_points: preserveScore ? Number(task.score_points || 0) : 0,
+      score_points: 0,
       score_final: true,
       sprint_outcome: outcome,
       carryover_reason: reason,
@@ -406,7 +419,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     },
   };
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("lock_sprint_transaction", {
+  const { data: transactionData, error: transactionError } = await supabase.rpc("lock_sprint_with_review_window_transaction", {
     p_sprint_id: id,
     p_expected_updated_at: sprint.updated_at,
     p_task_updates: taskUpdates,
@@ -425,6 +438,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (transactionError) {
     if (transactionError.code === "P0001") return apiError("Sprint wurde parallel geändert. Bitte neu laden.", 409);
     if (transactionError.code === "P0002") return apiError("Sprint wurde nicht gefunden.", 404);
+    if (transactionError.code === "P0004") return apiError("Offene Score-Einwände müssen vor dem Lock abgeschlossen werden.", 409);
+    if (transactionError.code === "P0006") return apiError("Die Review- und Einspruchsfrist ist noch offen.", 409);
     if (transactionError.code === "22023") return apiError("Sprint-Finalisierung ist ungültig.", 400);
     if (transactionError.code === "23505") return apiError("Carry-over wurde bereits angelegt. Bitte neu laden.", 409);
     return apiError(transactionError.message, 500);

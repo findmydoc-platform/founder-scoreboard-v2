@@ -79,6 +79,7 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningData {
     taskBlockers: emptySeedCollections.taskBlockers,
     taskRelations: emptySeedCollections.taskRelations,
     taskActivity: emptySeedCollections.taskActivity,
+    taskReviews: emptySeedCollections.taskReviews || [],
     taskFocusItems: emptySeedCollections.taskFocusItems,
     notificationEvents: emptySeedCollections.notificationEvents,
     notificationDeliveries: emptySeedCollections.notificationDeliveries,

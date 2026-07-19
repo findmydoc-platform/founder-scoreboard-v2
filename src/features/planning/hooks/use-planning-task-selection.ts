@@ -11,33 +11,22 @@ import {
   startTaskPanelHistory,
   type TaskPanelOpenMode,
 } from "@/features/tasks/model/task-panel-selection";
-import type { PlanningData, Task } from "@/lib/types";
-
-type PlanningTaskSelectionRouter = {
-  push: (href: string) => void;
-};
+import type { PlanningData } from "@/lib/types";
 
 type UsePlanningTaskSelectionOptions = {
   data: PlanningData;
-  router: PlanningTaskSelectionRouter;
-  selectedReviewDetailTaskId: string;
   selectedTaskId: string | null;
-  setFocusedReviewTaskId: (taskId: string) => void;
   setSelectedTaskId: (taskId: string | null) => void;
 };
 
 export function usePlanningTaskSelection({
   data,
-  router,
-  selectedReviewDetailTaskId,
   selectedTaskId,
-  setFocusedReviewTaskId,
   setSelectedTaskId,
 }: UsePlanningTaskSelectionOptions) {
   const [taskPanelHistory, setTaskPanelHistory] = useState<string[]>([]);
   const availableTaskIds = useMemo(() => new Set(data.tasks.map((task) => task.id)), [data.tasks]);
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
-  const selectedReviewDetailTask = data.tasks.find((task) => task.id === selectedReviewDetailTaskId) || null;
   const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
   const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
   const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
@@ -70,12 +59,6 @@ export function usePlanningTaskSelection({
     setSelectedTaskId(nextTaskId);
   }, [availableTaskIds, setSelectedTaskId, taskPanelHistory]);
 
-  const openReviewSheet = useCallback((task: Task) => {
-    closeTaskPanel();
-    setFocusedReviewTaskId(task.id);
-    router.push(`/reviews/${encodeURIComponent(task.id)}`);
-  }, [closeTaskPanel, router, setFocusedReviewTaskId]);
-
   useEffect(() => {
     if (!selectedTaskId) return;
 
@@ -100,10 +83,8 @@ export function usePlanningTaskSelection({
   return {
     backTaskPanel,
     closeTaskPanel,
-    openReviewSheet,
     openTaskPanel,
     selectedPackage,
-    selectedReviewDetailTask,
     selectedTask,
     selectedTaskActivity,
     selectedTaskBlockers,

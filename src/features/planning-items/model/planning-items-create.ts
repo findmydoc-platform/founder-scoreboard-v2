@@ -3,6 +3,7 @@ import type { AuthenticatedProfile } from "@/lib/types";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import type { getServerSupabase } from "@/lib/supabase";
 import { defaultGitHubRepository, resolveTaskGitHubRepository } from "@/lib/github-repositories";
+import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
@@ -125,7 +126,7 @@ export async function buildPlanningItemCreatePreview(
     supabase.from("profiles").select("id,name"),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,milestone_id,approval_status"),
     supabase.from("milestones").select("id").eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type,package_id,milestone_id,approval_status"),
+    supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type,package_id,milestone_id,approval_status,review_status,score_final"),
   ]);
   if (profilesResult.error || initiativesResult.error || milestonesResult.error || parentsResult.error) {
     throw new Error("Planning-Items-Kontext konnte nicht geladen werden.");
@@ -179,6 +180,7 @@ export async function buildPlanningItemCreatePreview(
     }
     if (itemType === "sub_issue") {
       if (!parent || parent.task_type !== "deliverable") errors.push("Sub-Issue braucht ein gültiges Parent-Deliverable.");
+      else if (isReviewStateLocked(parent.review_status, parent.score_final)) errors.push(reviewStateLockMessage(parent.review_status, parent.score_final));
       packageId = parent?.package_id || "";
       milestoneId = parent?.milestone_id || "";
     }

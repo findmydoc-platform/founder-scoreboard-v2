@@ -1,24 +1,32 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata } from "@/lib/api-input";
 import { requirePlanningContributor, requireTaskReviewer } from "@/lib/authz";
-import { getServerSupabase } from "@/lib/supabase";
-import { apiError, authzError, supabaseUnavailable } from "@/lib/api-response";
+import { apiError, authzError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const supabase = getServerSupabase();
-  if (!supabase) return supabaseUnavailable();
+type ReopenPayload = {
+  expectedUpdatedAt?: string;
+};
 
-  const founderPermission = await requirePlanningContributor(request);
-  if (!founderPermission.ok) return authzError(founderPermission);
+type ReopenTransactionResult = {
+  task?: { updated_at?: string; review_requested_at?: string };
+};
+
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const apiContext = await requireJsonApiContext<ReopenPayload>(request, requirePlanningContributor, {});
+  if (!apiContext.ok) return apiContext.response;
+  const { payload, permission: founderPermission, supabase } = apiContext;
+  if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
+    return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);
+  }
 
   const { id } = await context.params;
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,task_type,approval_status,title,assignee,owner,review_owner_profile_id,sprint_id,score_final")
+    .select("id,task_type,approval_status,title,assignee,owner,review_status,review_owner_profile_id,sprint_id,score_final,updated_at")
     .eq("id", id)
     .single();
 
@@ -26,8 +34,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (task.task_type !== "deliverable" || task.approval_status !== "approved") {
     return apiError("Nur freigegebene Deliverables können erneut in Review gegeben werden.", 409);
   }
+  if (!task.score_final || task.review_status !== "accepted") {
+    return apiError("Nur ein final akzeptiertes Review kann erneut geöffnet werden.", 409);
+  }
+  if (!task.review_owner_profile_id) {
+    return apiError("Lege vor dem erneuten Review eine Review-Verantwortung fest.", 409);
+  }
+  const { data: reviewOwner, error: reviewOwnerError } = await supabase
+    .from("profiles")
+    .select("id,platform_role")
+    .eq("id", task.review_owner_profile_id)
+    .maybeSingle();
+  if (reviewOwnerError) return apiError(reviewOwnerError.message, 500);
+  if (!reviewOwner || !reviewOwner.platform_role || reviewOwner.platform_role === "viewer") {
+    return apiError("Die Review-Verantwortung braucht eine beitragende Rolle.", 409);
+  }
 
-  const permission = await requireTaskReviewer(request, task, founderPermission);
+  const permission = await requireTaskReviewer(request, task, { ok: true, profile: founderPermission.profile });
   if (!permission.ok) return authzError(permission);
 
   if (task.sprint_id) {
@@ -39,27 +62,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (sprintError) return apiError(sprintError.message, 500);
     if (sprint?.score_locked) return apiError("Sprint-Score ist bereits gelockt.", 409);
   }
-
-  const reviewRequestedAt = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("tasks")
-    .update({
-      status: "Review",
-      review_status: "requested",
-      score_final: false,
-      score_points: 0,
-      review_requested_at: reviewRequestedAt,
-      github_issue_sync_status: "not_synced",
-      github_issue_sync_error: null,
-    })
-    .eq("id", id);
-
-  if (updateError) return apiError(updateError.message, 500);
-
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: "Review wieder geöffnet",
-  });
 
   const notifications: ReturnType<typeof createNotificationPayload>[] = [];
   if (task.review_owner_profile_id) {
@@ -83,16 +85,31 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       body: "Die Aufgabe wurde zur erneuten Review geöffnet.",
     }));
   }
-  if (notifications.length) await supabase.from("notification_events").insert(notifications);
-
-  await supabase.from("audit_log").insert({
-    actor_profile_id: permission.profile?.id || null,
-    action: "task.review.reopen",
-    entity_type: "task",
-    entity_id: id,
-    after_data: { status: "Review", reviewStatus: "requested", scoreFinal: false, reviewOwnerProfileId: task.review_owner_profile_id },
-    ...auditRequestMetadata(request),
+  const metadata = auditRequestMetadata(request);
+  const afterData = { status: "Review", reviewStatus: "requested", scoreFinal: false, reviewOwnerProfileId: task.review_owner_profile_id };
+  const { data: transactionData, error: transactionError } = await supabase.rpc("transition_task_review_transaction", {
+    p_task_id: id,
+    p_expected_updated_at: payload.expectedUpdatedAt,
+    p_action: "reopen",
+    p_actor_profile_id: permission.profile?.id || null,
+    p_reason: null,
+    p_activity_message: "Review wieder geöffnet",
+    p_notifications: notifications,
+    p_audit_after_data: afterData,
+    p_request_ip: metadata.request_ip,
+    p_user_agent: metadata.user_agent || null,
   });
+  if (transactionError) {
+    if (transactionError.code === "P0001") return apiError("Aufgabe wurde parallel geändert. Bitte neu laden.", 409);
+    if (transactionError.code === "P0002") return apiError("Aufgabe wurde nicht gefunden.", 404);
+    if (transactionError.code === "P0004") return apiError("Dieses Review kann nicht erneut geöffnet werden.", 409);
+    return apiError(transactionError.message, 500);
+  }
+
+  const transition = transactionData as ReopenTransactionResult | null;
+  const reviewRequestedAt = transition?.task?.review_requested_at || "";
+  const updatedAt = transition?.task?.updated_at || "";
+  if (!updatedAt || !reviewRequestedAt) return apiError("Review konnte nicht vollständig wieder geöffnet werden.", 500);
 
   return NextResponse.json({
     ok: true,
@@ -105,6 +122,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       reviewOwnerProfileId: task.review_owner_profile_id || "",
       reviewRequestedAt,
       githubIssueSyncStatus: "not_synced",
+      updatedAt,
     },
   });
 }

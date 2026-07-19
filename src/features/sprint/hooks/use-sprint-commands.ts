@@ -43,7 +43,6 @@ export function useSprintCommands({
           status: patch.status,
           startDate: patch.startDate,
           endDate: patch.endDate,
-          reviewDueAt: patch.reviewDueAt,
         });
 
         if (!response.ok) {
@@ -69,7 +68,7 @@ export function useSprintCommands({
 
   const createSprintPlanAsync = async (options: SprintPlanningOptions, silent = false) => {
     const protectedSprintIds = new Set(data.tasks.filter((task) => task.sprintId).map((task) => task.sprintId));
-    const drafts = futureSprintDrafts(data.sprints, options, protectedSprintIds);
+    const drafts = futureSprintDrafts(data.sprints, options, protectedSprintIds, data.project.reviewObjectionWindowHours);
     if (!drafts.length) {
       if (!silent) setSprintLockMessage("Die Sprint-Zeiträume entsprechen bereits der aktuellen Logik. Sprints mit Aufgabenbezug werden nicht automatisch umgeplant.");
       return 0;
@@ -235,21 +234,30 @@ export function useSprintCommands({
         } : null;
         return {
           ...current,
-          scoreObjections: current.scoreObjections.map((item) => item.id !== objectionId ? item : input.action === "second_review" ? {
-            ...item,
-            secondReviewerProfileId: currentProfile.id,
-            secondReviewDecision: input.secondReviewDecision || "",
-            secondReviewedAt: now,
-          } : {
-            ...item,
-            status: input.status || "reviewed",
-            resolutionComment: input.resolutionComment || "",
-            reviewedBy: currentProfile.id,
-            reviewedAt: now,
-            resolvedDeliveryPoints: deliveryPoints,
-            resolvedFormPoints: formPoints,
-            resolvedWeeklyPoints: weeklyPoints,
-            founderSprintScoreId: correctedScore?.id || item.founderSprintScoreId,
+          scoreObjections: current.scoreObjections.map((item) => {
+            if (item.id !== objectionId) return item;
+            if (input.action === "assign_second_review") return {
+              ...item,
+              secondReviewerProfileId: input.secondReviewerProfileId || "",
+              secondReviewDecision: "",
+              secondReviewedAt: "",
+            };
+            if (input.action === "second_review") return {
+              ...item,
+              secondReviewDecision: input.secondReviewDecision || "",
+              secondReviewedAt: now,
+            };
+            return {
+              ...item,
+              status: input.status || "reviewed",
+              resolutionComment: input.resolutionComment || "",
+              reviewedBy: currentProfile.id,
+              reviewedAt: now,
+              resolvedDeliveryPoints: deliveryPoints,
+              resolvedFormPoints: formPoints,
+              resolvedWeeklyPoints: weeklyPoints,
+              founderSprintScoreId: correctedScore?.id || item.founderSprintScoreId,
+            };
           }),
           founderSprintScores: correctedScore
             ? existingScore
@@ -286,15 +294,6 @@ export function useSprintCommands({
     setSaveError("");
     setSprintLockMessage("");
 
-    const sprint = data.sprints.find((item) => item.id === sprintId);
-    const reviewDeadlineActive = Boolean(
-      sprint?.reviewDueAt && new Date(sprint.reviewDueAt).getTime() > Date.now(),
-    );
-    const finalizeNow = reviewDeadlineActive
-      ? window.confirm("Die Reviewfrist läuft noch. Sprint trotzdem jetzt finalisieren?")
-      : false;
-    if (reviewDeadlineActive && !finalizeNow) return;
-
     const previousData = data;
     setData((current) => ({
       ...current,
@@ -306,7 +305,7 @@ export function useSprintCommands({
 
     startTransition(async () => {
       try {
-        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId, finalizeNow);
+        const { response, body } = await planningApi.lockSprintRequest(apiClient, sprintId);
         if (!response.ok) throw new Error(body?.error || "Sprint konnte nicht gelockt werden.");
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);

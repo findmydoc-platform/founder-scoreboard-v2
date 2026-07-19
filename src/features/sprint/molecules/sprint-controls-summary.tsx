@@ -1,4 +1,7 @@
+"use client";
+
 import { Lock } from "lucide-react";
+import { useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { formatDate } from "@/lib/display";
@@ -16,6 +19,7 @@ export function SprintControlsSummary({
   sprintHasTasks,
   sprintIsCurrent,
   sprintControlsDisabled,
+  canFinalizeSprintScore,
   sprintLockMessage,
   openObjectionsCount,
   onSelectedSprintChange,
@@ -33,15 +37,26 @@ export function SprintControlsSummary({
   sprintHasTasks: boolean;
   sprintIsCurrent: boolean;
   sprintControlsDisabled: boolean;
+  canFinalizeSprintScore: boolean;
   sprintLockMessage: string;
   openObjectionsCount: number;
   onSelectedSprintChange: (sprintId: string) => void;
   onUpdateSprint: (sprint: Sprint, patch: Partial<Sprint>) => void;
   onLockSprint: (sprintId: string) => void;
 }) {
+  const [renderedAt] = useState(() => Date.now());
   const reviewDueLabel = sprint.reviewDueAt
     ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt))
     : "ohne Datum";
+  const reviewWindowOpen = Boolean(sprint.reviewDueAt && new Date(sprint.reviewDueAt).getTime() > renderedAt);
+  const lockBlocked = sprintControlsDisabled || !canFinalizeSprintScore || sprint.scoreLocked || reviewWindowOpen || openObjectionsCount > 0;
+  const lockTitle = !canFinalizeSprintScore
+    ? "Nur der CEO kann Sprint-Scores finalisieren."
+    : reviewWindowOpen
+      ? `Finalisierung erst nach der Review- und Einwandfrist am ${reviewDueLabel}.`
+      : openObjectionsCount > 0
+        ? "Offene Score-Einwände müssen zuerst abgeschlossen werden."
+        : undefined;
   const summaryItems = [
     { label: "Aufgaben", value: sprintTasks.length },
     { label: "Review", value: reviewTasksCount },
@@ -113,7 +128,8 @@ export function SprintControlsSummary({
           </label>
           <UiButton
             type="button"
-            disabled={sprintControlsDisabled || sprint.scoreLocked}
+            disabled={lockBlocked}
+            title={lockTitle}
             onClick={() => onLockSprint(sprint.id)}
             className="h-9"
           >
@@ -137,6 +153,11 @@ export function SprintControlsSummary({
       {openObjectionsCount > 0 && (
         <UiNotice tone="warning" radius="none" className="!border-x-0 !border-b-0 border-t-amber-100 px-4 py-3 font-medium">
           {openObjectionsCount} offener Score-Einwand blockiert den Sprint-Lock bis zur Prüfung.
+        </UiNotice>
+      )}
+      {!sprint.scoreLocked && reviewWindowOpen && (
+        <UiNotice tone="info" radius="none" className="!border-x-0 !border-b-0 border-t-blue-100 px-4 py-3 font-medium">
+          Score-Finalisierung ist nach dem {reviewDueLabel} möglich.
         </UiNotice>
       )}
     </UiPanel>

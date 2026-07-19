@@ -127,6 +127,21 @@ export function updateOwnProfileSettingsRequest(apiClient: BrowserApiClient, pay
   });
 }
 
+export function updateFounderOpsReviewWindowRequest(
+  apiClient: BrowserApiClient,
+  expectedReviewObjectionWindowHours: number,
+  reviewObjectionWindowHours: number,
+) {
+  return apiClient.requestJson<{
+    error?: string;
+    project?: { id: string; reviewObjectionWindowHours: number };
+    sprints?: Array<{ id: string; reviewDueAt: string }>;
+  }>("/api/founderops-settings", {
+    method: "PATCH",
+    json: { expectedReviewObjectionWindowHours, reviewObjectionWindowHours },
+  });
+}
+
 export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, tourId: string) {
   return apiClient.requestJson<{ error?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
     method: "POST",
@@ -222,9 +237,9 @@ export function reviewScoreObjectionRequest(apiClient: BrowserApiClient, sprintI
   });
 }
 
-export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string, finalizeNow = false) {
+export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string) {
   return apiClient.requestJson<{ error?: string; carryover?: { created?: number; evaluated?: number; nextSprintId?: string }; scoring?: { scores?: number; strikeEvents?: number; governanceReviews?: number } }>(`/api/sprints/${sprintId}/lock`, {
     method: "POST",
-    json: { finalizeNow },
+    json: {},
   });
 }

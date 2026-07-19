@@ -15,6 +15,7 @@ const { loadPlanningDataRows, mapPlanningDataRows } = await loadTranspiledModule
     "./planning-data-mappers": identityMappers,
     "./planning-data-row-types": { taskRowSelect: "id" },
     "./planning-read-model": { ACTIVE_PACKAGES_TABLE: "active_packages", ACTIVE_TASKS_TABLE: "active_tasks" },
+    "./sprint-review-window": { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS: 48 },
   },
 );
 
@@ -46,7 +47,6 @@ function recordingSupabase() {
 const expectedTablesByWorkspace = {
   planning: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   backlog: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "sprint_commitments", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  reviews: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   events: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "founder_events"],
   sprint: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
   projects: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],

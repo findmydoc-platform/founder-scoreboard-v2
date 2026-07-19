@@ -2,7 +2,7 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { TaskDetailData } from "@/lib/task-detail-data";
-import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation, TaskReview } from "@/lib/types";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
   return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
@@ -138,15 +138,23 @@ export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: st
 }
 
 export function reviewTaskRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string }>(`/api/tasks/${taskId}/review`, {
+  return apiClient.requestJson<{ error?: string; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
     method: "POST",
     json: payload,
   });
 }
 
-export function reopenTaskReviewRequest(apiClient: BrowserApiClient, taskId: string) {
+export function withdrawTaskReviewRequest(apiClient: BrowserApiClient, taskId: string, reason: string, expectedUpdatedAt: string) {
+  return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/withdraw`, {
+    method: "POST",
+    json: { reason, expectedUpdatedAt },
+  });
+}
+
+export function reopenTaskReviewRequest(apiClient: BrowserApiClient, taskId: string, expectedUpdatedAt: string) {
   return apiClient.requestJson<{ error?: string; task?: Partial<Task> }>(`/api/tasks/${taskId}/review/reopen`, {
     method: "POST",
+    json: { expectedUpdatedAt },
   });
 }
 

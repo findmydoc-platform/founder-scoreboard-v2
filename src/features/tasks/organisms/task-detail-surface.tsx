@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
+import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
+import { isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   canApproveDeliverableApproval,
   canRejectDeliverableApproval,
@@ -26,7 +29,7 @@ import {
   uniqueRelationshipCount,
   visibleTaskActivityCount,
 } from "@/features/tasks/model/task-detail-presentation";
-import { taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { taskOwnedByProfile, taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
@@ -34,7 +37,8 @@ import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-threa
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
-import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
+import { classNames, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type TaskDetailSurfaceProps = {
   surface?: "page" | "modal";
@@ -43,6 +47,7 @@ type TaskDetailSurfaceProps = {
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
+  reviews: TaskReview[];
   blockers: TaskBlocker[];
   subIssues: Task[];
   teamProfiles: Profile[];
@@ -70,7 +75,9 @@ type TaskDetailSurfaceProps = {
   onCreateSubIssue: () => void;
   onOpenTask: (taskId: string) => void;
   onSyncGitHub: (options?: { createIfMissing?: boolean }) => void;
-  onOpenReview: () => void;
+  onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
+  onReopenReview: (task: Task) => void;
+  onWithdrawReview: (task: Task, reason: string) => Promise<boolean> | boolean | void;
   onWithdraw: (reason: string) => void;
   onAddRelation: (payload: { relationType: TaskRelationType; relatedTaskId: string; note: string }) => Promise<TaskActionResult>;
   onRemoveRelation: (relation: TaskRelation) => void;
@@ -84,6 +91,7 @@ export function TaskDetailSurface({
   comments,
   externalComments,
   activities,
+  reviews,
   blockers,
   subIssues,
   teamProfiles,
@@ -111,7 +119,9 @@ export function TaskDetailSurface({
   onCreateSubIssue,
   onOpenTask,
   onSyncGitHub,
-  onOpenReview,
+  onReview,
+  onReopenReview,
+  onWithdrawReview,
   onWithdraw,
   onAddRelation,
   onRemoveRelation,
@@ -119,29 +129,40 @@ export function TaskDetailSurface({
 }: TaskDetailSurfaceProps) {
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>("overview");
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
+  const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
     task,
     currentProfile,
     unrestricted: source === "seed",
     onUpdate,
-    onOverviewDirtyChange,
   });
+  const reviewActive = isTaskReviewActive(task);
+  const reviewLocked = isTaskReviewLocked(task);
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
   const currentMilestoneId = task.milestoneId || currentPackage?.milestoneId || "";
   const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
-  const relationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: source === "seed" });
+  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: source === "seed" });
+  const relationshipAccess = reviewLocked ? {
+    ...baseRelationshipAccess,
+    allowedRelationTypes: [],
+    canRemoveRelation: () => false,
+  } : baseRelationshipAccess;
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const canApprove = canApproveDeliverableApproval(task, currentPackage, currentProfile);
   const canReject = canRejectDeliverableApproval(task, currentPackage, currentProfile);
   const canReturnToDraft = canReturnDeliverableForRevision(task, currentPackage, currentProfile);
-  const canWithdrawTask = task.taskType === "deliverable" && canWithdrawPlanningRoot({
+  const canWithdrawTask = !reviewLocked && task.taskType === "deliverable" && canWithdrawPlanningRoot({
     rootType: "deliverable",
     approvalStatus: task.approvalStatus,
     proposedById: task.proposedById,
   }, currentProfile, source === "seed");
+  const canWithdrawReview = reviewActive && (source === "seed"
+    || currentProfile?.platformRole === "ceo"
+    || currentProfile?.platformRole === "deputy"
+    || taskOwnedByProfile(task, currentProfile));
   const statusOptions = taskStatusOptionsForPermissions(task.status, {
     canCompleteSubIssue: controller.permissions.canCompleteSubIssue,
     canManageFinalStatus: controller.permissions.canManageFinalStatus,
@@ -150,7 +171,9 @@ export function TaskDetailSurface({
   });
   const effectivelyApproved = isTaskPlanningActive(task);
   const canSelectNextStatus = statusOptions.some((status) => status !== normalizeStatus(task.status));
-  const statusLockedReason = !effectivelyApproved
+  const statusLockedReason = reviewLocked
+    ? reviewLockMessage(task)
+    : !effectivelyApproved
     ? task.taskType === "sub_issue" ? "Parent-Deliverable ist noch nicht freigegeben." : "Deliverable ist noch nicht freigegeben."
     : !controller.permissions.canUpdateStatus ? "Deine Rolle darf diesen Status nicht ändern."
       : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
@@ -171,18 +194,25 @@ export function TaskDetailSurface({
     subIssueCount: subIssues.length,
   });
 
+  const detailDirty = controller.overviewDirty || reviewDraftDirty;
+
   useEffect(() => {
-    if (!controller.overviewDirty) return;
+    onOverviewDirtyChange?.(detailDirty);
+    return () => onOverviewDirtyChange?.(false);
+  }, [detailDirty, onOverviewDirtyChange]);
+
+  useEffect(() => {
+    if (!detailDirty) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [controller.overviewDirty]);
+  }, [detailDirty]);
 
   const requestDiscardAction = (action: () => void) => {
-    if (!controller.overviewDirty) {
+    if (!detailDirty) {
       action();
       return;
     }
@@ -193,10 +223,29 @@ export function TaskDetailSurface({
   };
   const changeTab = (nextTab: TaskDetailTabId) => {
     if (nextTab === activeTab) return;
-    requestDiscardAction(() => {
+    const applyTabChange = () => {
       if (controller.overviewEditing) controller.cancelOverview();
       setActiveTab(nextTab);
-    });
+    };
+    if (!controller.overviewDirty) {
+      applyTabChange();
+      return;
+    }
+    onRequestDiscardAction(applyTabChange, true);
+  };
+  const jumpToReviewSection = (targetId: string) => {
+    const revealTarget = () => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.focus({ preventScroll: true });
+    };
+    if (activeTab === "overview") {
+      revealTarget();
+      return;
+    }
+    setActiveTab("overview");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(revealTarget));
   };
   const startOverviewEditing = () => {
     setActiveTab("overview");
@@ -211,32 +260,55 @@ export function TaskDetailSurface({
 
   const panels = {
     overview: (
-      <TaskOverviewPanel
-        task={task}
-        baseline={controller.overviewBaselineDraft}
-        draft={controller.overviewDraft}
-        permissions={controller.overviewPermissions}
-        editing={controller.overviewEditing}
-        dirty={controller.overviewDirty}
-        saving={controller.overviewSaving}
-        error={controller.overviewError}
-        onCancel={cancelOverview}
-        onSave={controller.saveOverview}
-        onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
-        riskContent={!controller.overviewEditing && (detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker) ? (
-          <TaskDetailPanelBlockerSection
-            canReport={controller.permissions.canReportBlocker}
-            blockers={blockers}
-            blockerDraft={controller.blockerDraft}
-            loading={detailDataLoading}
-            unavailable={detailDataUnavailable}
-            pending={pending}
-            profileName={profileName}
-            onBlockerDraftChange={(patch) => controller.setBlockerDraft((current) => ({ ...current, ...patch }))}
-            onReportBlocker={onReportBlocker}
-          />
+      <>
+        {reviewActive ? (
+          <UiNotice tone="info" className="mb-1 border-blue-200 bg-blue-50/70">
+            Der fachliche Inhalt ist während der Prüfung geschützt. Kommentare und Anhänge bleiben verfügbar.
+          </UiNotice>
         ) : null}
-      />
+        <TaskOverviewPanel
+          task={task}
+          baseline={controller.overviewBaselineDraft}
+          draft={controller.overviewDraft}
+          permissions={controller.overviewPermissions}
+          editing={controller.overviewEditing}
+          dirty={controller.overviewDirty}
+          saving={controller.overviewSaving}
+          error={controller.overviewError}
+          flat={reviewActive}
+          onCancel={cancelOverview}
+          onSave={controller.saveOverview}
+          onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
+          riskContent={!controller.overviewEditing ? (
+            <>
+              {reviewActive ? (
+                <TaskDetailDependencyBand
+                  anchorId="task-review-dependencies"
+                  waitsOn={relationshipGroups.waitsOn}
+                  blocks={relationshipGroups.blocks}
+                  loading={detailDataLoading}
+                  error={detailDataError}
+                  onOpenTask={openTask}
+                  variant="review"
+                />
+              ) : null}
+              {detailDataLoading || detailDataUnavailable || blockers.length > 0 || controller.permissions.canReportBlocker ? (
+                <TaskDetailPanelBlockerSection
+                  canReport={controller.permissions.canReportBlocker}
+                  blockers={blockers}
+                  blockerDraft={controller.blockerDraft}
+                  loading={detailDataLoading}
+                  unavailable={detailDataUnavailable}
+                  pending={pending}
+                  profileName={profileName}
+                  onBlockerDraftChange={(patch) => controller.setBlockerDraft((current) => ({ ...current, ...patch }))}
+                  onReportBlocker={onReportBlocker}
+                />
+              ) : null}
+            </>
+          ) : null}
+        />
+      </>
     ),
     subIssues: (
       <TaskDetailPanelSubIssuesSection
@@ -318,7 +390,7 @@ export function TaskDetailSurface({
         <TaskDetailHeaderActions
           task={task}
           canEditOverview={canEditOverview && !controller.overviewEditing}
-          canManageReviewOwner={controller.permissions.canManageReviewOwner}
+          canManageReviewOwner={!reviewActive && controller.permissions.canManageReviewOwner}
           canWithdrawTask={canWithdrawTask}
           githubInstallationAvailable={githubInstallationAvailable}
           pending={pending}
@@ -332,7 +404,25 @@ export function TaskDetailSurface({
     />
   );
 
-  const bodyContent = (
+  const reviewRail = reviewActive ? (
+    <TaskReviewRail
+      key={`${task.id}:${task.reviewRequestedAt || "unknown"}:${currentProfile?.id || "anonymous"}`}
+      task={task}
+      currentProfileId={currentProfile?.id || ""}
+      profiles={teamProfiles}
+      canReview={controller.permissions.canOpenReview}
+      canWithdraw={canWithdrawReview}
+      canManageReviewOwner={controller.permissions.canManageReviewOwner}
+      pending={pending}
+      onDirtyChange={setReviewDraftDirty}
+      onReview={onReview}
+      onWithdraw={onWithdrawReview}
+      onReviewOwnerChange={(reviewOwnerProfileId) => onUpdate({ reviewOwnerProfileId })}
+      onJumpToSection={jumpToReviewSection}
+    />
+  ) : null;
+
+  const issueContent = (
     <>
       <TaskDetailPlanningSection
         task={task}
@@ -348,13 +438,15 @@ export function TaskDetailSurface({
         onUpdate={onUpdate}
       />
 
-      <TaskDetailDependencyBand
-        waitsOn={relationshipGroups.waitsOn}
-        blocks={relationshipGroups.blocks}
-        loading={detailDataLoading}
-        error={detailDataError}
-        onOpenTask={openTask}
-      />
+      {!reviewActive ? (
+        <TaskDetailDependencyBand
+          waitsOn={relationshipGroups.waitsOn}
+          blocks={relationshipGroups.blocks}
+          loading={detailDataLoading}
+          error={detailDataError}
+          onOpenTask={openTask}
+        />
+      ) : null}
 
       <TaskDetailWorkflowStrips
         task={task}
@@ -363,13 +455,22 @@ export function TaskDetailSurface({
         canReject={canReject}
         canReturnToDraft={canReturnToDraft}
         canManageReviewOwner={controller.permissions.canManageReviewOwner}
-        canOpenReview={controller.permissions.canOpenReview}
         forceReviewSetup={reviewSetupOpen}
         pending={pending}
         onUpdate={onUpdate}
-        onOpenReview={onOpenReview}
         onDecideApproval={onDecideApproval}
       />
+
+      {!reviewActive ? (
+        <TaskReviewSummary
+          task={task}
+          reviews={reviews}
+          profiles={teamProfiles}
+          canReopen={controller.permissions.canOpenReview}
+          pending={pending}
+          onReopen={onReopenReview}
+        />
+      ) : null}
 
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
 
@@ -377,7 +478,7 @@ export function TaskDetailSurface({
         value={activeTab}
         onValueChange={changeTab}
         availableTabs={availableTabs}
-        className="mt-5"
+        className={reviewActive ? "mt-2" : "mt-5"}
         tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
         counts={{
           subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
@@ -385,7 +486,14 @@ export function TaskDetailSurface({
           activity: detailDataKnown && activityCount > 0 ? activityCount : "",
         }}
         panels={panels}
-        panelClassName="pt-5"
+        panelAside={reviewRail}
+        panelClassName={reviewActive ? "xl:pr-8" : undefined}
+        panelLayoutClassName={reviewActive ? classNames(
+          "grid grid-cols-1",
+          surface === "modal"
+            ? "xl:grid-cols-[minmax(0,1fr)_460px]"
+            : "xl:grid-cols-[minmax(0,3fr)_minmax(420px,2fr)]",
+        ) : undefined}
       />
     </>
   );
@@ -393,9 +501,9 @@ export function TaskDetailSurface({
   if (surface === "modal") {
     return (
       <div className="flex h-full min-h-0 min-w-0 flex-col bg-white">
-        <div className="shrink-0 px-4 pt-4 sm:px-5">{operationalHeader}</div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-5">
-          {bodyContent}
+        <div className="shrink-0 px-4 pt-4 sm:px-6">{operationalHeader}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-6">
+          {issueContent}
         </div>
       </div>
     );
@@ -404,7 +512,7 @@ export function TaskDetailSurface({
   return (
     <div className="min-w-0">
       {operationalHeader}
-      {bodyContent}
+      {issueContent}
     </div>
   );
 }

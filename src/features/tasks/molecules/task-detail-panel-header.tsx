@@ -14,7 +14,7 @@ type Props = {
 
 export function TaskDetailPanelHeader({ task, previousTask = null, onBack, onClose, onRequestFullPage }: Props) {
   return (
-    <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+    <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
       <div className="flex items-center justify-between gap-3">
         {previousTask && onBack ? (
           <button

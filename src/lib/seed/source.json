@@ -2,7 +2,8 @@
   "project": {
     "id": "findmydoc-founder-execution",
     "name": "findmydoc Planning",
-    "range": "Sprint 1 / operative Planungsphase"
+    "range": "Sprint 1 / operative Planungsphase",
+    "reviewObjectionWindowHours": 48
   },
   "profiles": [
     {

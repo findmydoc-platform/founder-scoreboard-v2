@@ -16,6 +16,7 @@ import { attemptPlanningGitHubLifecycleDrain } from "@/lib/planning-github-lifec
 import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 import type { ApprovalStatus, TrashRootType } from "@/lib/types";
+import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 
 type PlanningTrashRootRow = {
   id: string;
@@ -23,6 +24,8 @@ type PlanningTrashRootRow = {
   approval_status: ApprovalStatus | null;
   approval_revision: number | null;
   proposed_by: string | null;
+  review_status?: string | null;
+  score_final?: boolean | null;
   trashed_at: string | null;
   trash_revision: number | null;
 };
@@ -52,7 +55,7 @@ function planningTrashRootTable(rootType: TrashRootType) {
 function planningTrashRootSelect(rootType: TrashRootType) {
   return rootType === "initiative"
     ? "id,approval_status,approval_revision,proposed_by,trashed_at,trash_revision"
-    : "id,task_type,approval_status,approval_revision,proposed_by,trashed_at,trash_revision";
+    : "id,task_type,approval_status,approval_revision,proposed_by,review_status,score_final,trashed_at,trash_revision";
 }
 
 function planningTrashTransactionError(
@@ -141,6 +144,9 @@ export async function handlePlanningTrashWithdraw(
     return apiError("Sub-Issues können nicht unabhängig zurückgezogen werden.", 400);
   }
   if (root.trashed_at) return apiError(`${planningTrashRootLabel(rootType)} liegt bereits im Papierkorb.`, 409);
+  if (rootType === "deliverable" && isReviewStateLocked(root.review_status, root.score_final)) {
+    return apiError(reviewStateLockMessage(root.review_status, root.score_final), 409);
+  }
   if (!isWithdrawableApprovalStatus(root.approval_status)) {
     return apiError("Nur Entwürfe oder eingereichte Vorschläge können zurückgezogen werden.", 409);
   }

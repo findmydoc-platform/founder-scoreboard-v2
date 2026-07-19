@@ -81,7 +81,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     milestoneDialogDefaults,
     isPending,
     openTaskPanel,
-    openReviewSheet,
+    reopenReviewTask,
+    reviewTask,
     removeTaskRelation,
     reportTaskBlocker,
     saveInitiative,
@@ -109,6 +110,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     updateTask,
     uploadTaskAttachment,
     withdrawTask,
+    withdrawReviewTask,
     currentProfile,
     source,
     taskPanelPreviousTask,
@@ -133,6 +135,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           comments={selectedTaskComments}
           externalComments={selectedTaskExternalComments}
           activities={selectedTaskActivity}
+          reviews={data.taskReviews.filter((review) => review.taskId === selectedTask.id)}
           detailDataError={selectedTaskDetailError}
           detailDataLoading={selectedTaskDetailLoading}
           commentImportNotice={commentImportNotice}
@@ -160,7 +163,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, assignee: selectedTask.assigneeId || selectedTask.assignee, status: "Offen" })}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
-          onOpenReview={() => openReviewSheet(selectedTask)}
+          onReview={reviewTask}
+          onReopenReview={reopenReviewTask}
+          onWithdrawReview={withdrawReviewTask}
           onWithdraw={(reason) => withdrawTask(selectedTask, reason)}
           onAddRelation={(payload) => addTaskRelation(selectedTask, payload)}
           onRemoveRelation={(relation) => removeTaskRelation(selectedTask, relation)}

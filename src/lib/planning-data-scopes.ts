@@ -58,14 +58,6 @@ export const workspaceDataScopes = {
     sprints: true,
     sprintCommitments: true,
   },
-  reviews: {
-    ...baseWorkspaceDataScope,
-    packages: true,
-    milestones: true,
-    tasks: true,
-    sprints: true,
-    taskRelations: true,
-  },
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
     ...baseWorkspaceDataScope,

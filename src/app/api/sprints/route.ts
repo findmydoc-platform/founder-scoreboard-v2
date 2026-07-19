@@ -4,6 +4,7 @@ import { requireOperationalLead } from "@/lib/authz";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 
 type SprintRow = {
   id: string;
@@ -53,6 +54,14 @@ export async function POST(request: NextRequest) {
     return apiError("Startdatum der Sprint-Planung ist ungültig.", 400);
   }
 
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("review_objection_window_hours")
+    .eq("id", projectId)
+    .single();
+  if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
+  const reviewObjectionWindowHours = Number(project.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS);
+
   const { data: existing, error: existingError } = await supabase
     .from("sprints")
     .select("id,name,status,start_date,end_date,review_due_at,score_locked,updated_at")
@@ -94,7 +103,7 @@ export async function POST(request: NextRequest) {
       status: existingSprint?.status || "planning",
       start_date: nextStart,
       end_date: endDate,
-      review_due_at: `${addDaysIso(endDate, -2)}T12:00:00.000Z`,
+      review_due_at: sprintReviewDueAt(endDate, reviewObjectionWindowHours),
       score_locked: existingSprint?.score_locked || false,
       expected_updated_at: existingSprint?.updated_at || null,
     };
@@ -137,7 +146,8 @@ export async function POST(request: NextRequest) {
   });
 
   const metadata = auditRequestMetadata(request);
-  const { data: transactionData, error: transactionError } = await supabase.rpc("create_sprint_plan_transaction", {
+  const { data: transactionData, error: transactionError } = await supabase.rpc("create_sprint_plan_with_review_window_transaction", {
+    p_project_id: projectId,
     p_sprints: upserts,
     p_meetings: weeklyRows,
     p_audit_data: {
@@ -146,6 +156,7 @@ export async function POST(request: NextRequest) {
       rhythmWeeks,
       horizonWeeks,
       targetSprintNumber,
+      reviewObjectionWindowHours,
       protectedSprintIds: Array.from(protectedSprintIds),
     },
     p_actor_profile_id: permission.profile?.id || null,

@@ -5,6 +5,9 @@ import { requirePlanningContributor, requireTaskReviewer } from "@/lib/authz";
 import { getServerSupabase } from "@/lib/supabase";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import { mapTaskReview } from "@/lib/planning-data-mappers";
+import type { DbTaskReview } from "@/lib/planning-data-row-types";
+import { isReviewReworkDecision, reviewDecisionLabels, reviewDecisionTaskState, reviewDecisionValidation, reviewChecklistScore } from "@/features/reviews/model/task-review-state";
 
 type ReviewPayload = {
   decision?: "accepted" | "partial" | "changes_requested";
@@ -21,18 +24,8 @@ type ReviewPayload = {
 
 const decisions = new Set(["accepted", "partial", "changes_requested"]);
 
-function checklistPoints(checklist: ReviewPayload["checklist"]) {
-  const checked = [
-    checklist?.acceptanceCriteriaMet ?? checklist?.dodMet,
-    checklist?.evidenceProvided,
-    checklist?.communicationClear,
-    checklist?.blockerHandled,
-  ].filter(Boolean).length;
-  return Math.round((checked / 4) * 10);
-}
-
 function reviewDecisionPoints(decision: ReviewPayload["decision"], checklist: ReviewPayload["checklist"]) {
-  if (decision === "accepted" || decision === "partial") return checklistPoints(checklist);
+  if (decision === "accepted" || decision === "partial") return reviewChecklistScore(checklist || {});
   return 0;
 }
 
@@ -56,16 +49,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const checklist = payload.checklist || {};
   const points = reviewDecisionPoints(decision, checklist);
   const comment = cleanText(payload.comment, 2000);
+  const validation = reviewDecisionValidation(decision, checklist, comment);
+  if (!validation.ok) return apiError(validation.message, 400);
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,task_type,approval_status,sprint_id,title,status,assignee,owner,review_owner_profile_id,updated_at")
+    .select("id,task_type,approval_status,sprint_id,title,status,assignee,owner,review_status,review_owner_profile_id,updated_at")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
   if (task.task_type !== "deliverable" || task.approval_status !== "approved") {
     return apiError("Nur freigegebene Deliverables können reviewed werden.", 409);
+  }
+  if (task.review_status !== "requested" || task.status !== "Review") {
+    return apiError("Diese Aufgabe befindet sich nicht in einem aktiven Review.", 409);
   }
   const permission = await requireTaskReviewer(request, task, founderPermission);
   if (!permission.ok) return authzError(permission);
@@ -81,8 +79,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (sprint?.score_locked) return apiError("Sprint-Score ist bereits gelockt.", 409);
   }
 
-  const nextStatus = decision === "accepted" ? "Erledigt" : decision === "changes_requested" ? "Nacharbeit" : "Review";
-  const scoreFinal = decision !== "changes_requested";
+  const { status: nextStatus, scoreFinal } = reviewDecisionTaskState(decision);
 
   const reviewerProfileId = permission.profile?.id || null;
   const taskPatch = {
@@ -95,23 +92,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     github_issue_sync_error: null,
   };
   const assignee = task.assignee || task.owner;
+  const isRework = isReviewReworkDecision(decision);
   const notifications = assignee && assignee !== reviewerProfileId
-    ? [createNotificationPayload(decision === "changes_requested" ? "task.review_rework" : "task.review_completed", {
+    ? [createNotificationPayload(isRework ? "task.review_rework" : "task.review_completed", {
       actorProfileId: reviewerProfileId,
       recipientProfileId: assignee,
       entityType: "task",
       entityId: id,
-      title: decision === "changes_requested" ? `Nacharbeit: ${task.title}` : `Review abgeschlossen: ${task.title}`,
+      title: isRework ? `${reviewDecisionLabels[decision]}: ${task.title}` : `Review abgeschlossen: ${task.title}`,
       body: comment || `${points} Punkte · ${decision}`,
     })]
     : [];
-  const activityMessage = decision === "changes_requested"
-    ? `Nacharbeit angefordert: ${comment || "ohne Kommentar"}`
-    : `Review finalisiert: ${decision}, ${points} Punkte`;
+  const activityMessage = isRework
+    ? `${reviewDecisionLabels[decision]} angefordert: ${comment || "ohne Kommentar"}`
+    : `Review finalisiert: ${reviewDecisionLabels[decision]}, ${points} Punkte`;
   const auditAfterData = { decision, points, status: nextStatus, scoreFinal, checklist };
   const metadata = auditRequestMetadata(request);
 
-  const { error: transactionError } = await supabase.rpc("review_task_transaction", {
+  const { data: transactionData, error: transactionError } = await supabase.rpc("review_task_transaction", {
     p_task_id: id,
     p_sprint_id: task.sprint_id || null,
     p_expected_updated_at: task.updated_at,
@@ -132,12 +130,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (transactionError.code === "P0001") return apiError("Aufgabe wurde parallel geändert. Bitte neu laden.", 409);
     if (transactionError.code === "P0002") return apiError("Aufgabe oder Sprint wurde nicht gefunden.", 404);
     if (transactionError.code === "P0003") return apiError("Sprint-Score ist bereits gelockt.", 409);
+    if (transactionError.code === "P0004") return apiError("Diese Aufgabe befindet sich nicht mehr in einem aktiven Review.", 409);
     if (transactionError.code === "22023") return apiError("Review-Daten sind ungültig.", 400);
     return apiError(transactionError.message, 500);
   }
 
+  const reviewResult = transactionData as { review?: DbTaskReview; task?: { updated_at?: string } } | null;
+  const reviewRow = reviewResult?.review;
+  if (!reviewRow) return apiError("Review konnte nicht vollständig gespeichert werden.", 500);
+
   return NextResponse.json({
     ok: true,
+    review: mapTaskReview(reviewRow),
     task: {
       id,
       status: nextStatus,
@@ -146,6 +150,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       scoreFinal,
       reviewRequestedAt: "",
       githubIssueSyncStatus: "not_synced",
+      updatedAt: reviewResult?.task?.updated_at || task.updated_at,
     },
   });
 }

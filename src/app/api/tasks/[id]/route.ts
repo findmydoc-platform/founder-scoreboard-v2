@@ -31,6 +31,7 @@ import { createNotificationPayload } from "@/lib/notification-catalog";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
+import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 
 type TaskUpdateTransactionResult = {
   parentApprovalStatus?: Task["parentApprovalStatus"];
@@ -83,6 +84,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!currentTask) {
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
+  const currentReviewState = { reviewStatus: currentTask.review_status, scoreFinal: Boolean(currentTask.score_final) } as Pick<Task, "reviewStatus" | "scoreFinal">;
+  if (isTaskReviewLocked(currentReviewState) && hasReviewLockedTaskChanges(payload, { allowReviewOwnerChange: isTaskReviewActive(currentReviewState) })) {
+    return apiError(reviewLockMessage(currentReviewState), 409);
+  }
+  if (currentTask.parent_task_id) {
+    const { data: parentReviewState, error: parentReviewError } = await supabase
+      .from(ACTIVE_TASKS_TABLE)
+      .select("review_status,score_final")
+      .eq("id", currentTask.parent_task_id)
+      .maybeSingle();
+    if (parentReviewError) return apiError(parentReviewError.message, 500);
+    if (parentReviewState) {
+      const parentReviewTask = { reviewStatus: parentReviewState.review_status, scoreFinal: Boolean(parentReviewState.score_final) } as Pick<Task, "reviewStatus" | "scoreFinal">;
+      if (isTaskReviewLocked(parentReviewTask)) return apiError(reviewLockMessage(parentReviewTask), 409);
+    }
+  }
   const normalizedStatusUpdate = withoutUnchangedTaskStatus(currentTask, payload);
   payload = normalizedStatusUpdate.payload;
   const statusNoop = normalizedStatusUpdate.statusNoop;
@@ -99,6 +116,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       owner: currentTask.owner || "",
       ownerId: currentTask.owner || "",
       reviewOwnerProfileId: currentTask.review_owner_profile_id || "",
+      reviewStatus: currentTask.review_status || "not_requested",
+      scoreFinal: Boolean(currentTask.score_final),
       taskType: currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
     },
     profile: permission.profile,
@@ -114,6 +133,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest) {
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
+  }
+  if (currentTask.review_status === "requested" && payload.reviewOwnerProfileId !== undefined && !profileId(payload.reviewOwnerProfileId)) {
+    return apiError("Ein aktives Review braucht eine Review-Verantwortung.", 400);
   }
 
   if (payload.parentTaskId !== undefined) {
@@ -300,7 +322,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
-  const reviewStatusGuard = applyReviewStatusUpdate(update, payload, isOperationalLead);
+  const reviewStatusGuard = applyReviewStatusUpdate(update, payload);
   if (!reviewStatusGuard.ok) return apiError(reviewStatusGuard.error, reviewStatusGuard.status);
   applyTaskScoreUpdateFields(update, payload);
 
@@ -309,10 +331,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (nextReviewOwner) {
       const { data: reviewOwner, error: reviewOwnerError } = await supabase
         .from("profiles")
-        .select("id")
+        .select("id,platform_role")
         .eq("id", nextReviewOwner)
         .single();
       if (reviewOwnerError || !reviewOwner) return apiError("Review Owner wurde nicht gefunden.", 404);
+      if (!reviewOwner.platform_role || reviewOwner.platform_role === "viewer") {
+        return apiError("Die Review-Verantwortung braucht eine beitragende Rolle.", 400);
+      }
     }
     update.review_owner_profile_id = nextReviewOwner || null;
   }
@@ -321,13 +346,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (currentTask.task_type !== "deliverable" || currentTask.approval_status !== "approved") {
       return apiError("Nur freigegebene Deliverables können in Review gegeben werden.", 409);
     }
-    if (currentTask.score_final && !isCeo) {
-      return apiError("Final bewertete Aufgaben können nicht erneut in Review gegeben werden.", 409);
+    if (currentTask.score_final) {
+      return apiError("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.", 409);
+    }
+    if (currentTask.sprint_id) {
+      const { data: reviewSprint, error: reviewSprintError } = await supabase
+        .from("sprints")
+        .select("id,score_locked")
+        .eq("id", currentTask.sprint_id)
+        .maybeSingle();
+      if (reviewSprintError) return apiError(reviewSprintError.message, 500);
+      if (reviewSprint?.score_locked) return apiError("Sprint-Score ist bereits gelockt.", 409);
     }
 
     const reviewPackageId = typeof update.package_id === "string" ? update.package_id : currentTask.package_id || "";
-    let reviewOwnerProfileId = "";
-    if (reviewPackageId) {
+    let reviewOwnerProfileId = currentTask.review_owner_profile_id || "";
+    if (!reviewOwnerProfileId && reviewPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
         .from(ACTIVE_PACKAGES_TABLE)
         .select("owner_id,accountable_profile_id")
@@ -339,9 +373,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     update.status = "Review";
     update.review_status = "requested";
+    update.score_points = 0;
     update.score_final = false;
     const requestedReviewOwnerProfileId = canSetReviewOwner && typeof payload.reviewOwnerProfileId === "string" ? profileId(payload.reviewOwnerProfileId) || null : undefined;
-    update.review_owner_profile_id = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
+    const nextReviewOwnerProfileId = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
+    if (!nextReviewOwnerProfileId) {
+      return apiError("Lege vor der Review-Anfrage eine Review-Verantwortung fest.", 409);
+    }
+    const { data: reviewOwner, error: reviewOwnerError } = await supabase
+      .from("profiles")
+      .select("id,platform_role")
+      .eq("id", nextReviewOwnerProfileId)
+      .maybeSingle();
+    if (reviewOwnerError) return apiError(reviewOwnerError.message, 500);
+    if (!reviewOwner || !reviewOwner.platform_role || reviewOwner.platform_role === "viewer") {
+      return apiError("Die Review-Verantwortung braucht eine beitragende Rolle.", 409);
+    }
+    update.review_owner_profile_id = nextReviewOwnerProfileId;
     update.review_requested_at = new Date().toISOString();
   }
   applyFinalStatusReopen(update, currentTask, payload, isCeo, detailPermissions.canReopenSubIssue);

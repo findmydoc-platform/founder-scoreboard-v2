@@ -8,8 +8,6 @@ const primaryReferenceFiles = [
   "src/features/tasks/organisms/gantt-view.tsx",
   "src/features/backlog/molecules/backlog-rank-table.tsx",
   "src/features/projects/organisms/projects-overview.tsx",
-  "src/features/reviews/organisms/review-workspace-overview.tsx",
-  "src/features/reviews/organisms/task-review-sheet.tsx",
   "src/features/sprint/organisms/sprint-task-tables.tsx",
   "src/features/tasks/organisms/task-github-sync-queue.tsx",
   "src/features/notifications/organisms/notification-inbox.tsx",
@@ -53,6 +51,7 @@ test("drawer focus navigation and full-page overlay remain available", async () 
   const surface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const taskPage = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const reviewShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
+  const legacyReviewDetail = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
 
   assert.match(header, /data-autofocus/);
   assert.doesNotMatch(header, /titleRef\.current\?\.focus\(\)/);
@@ -63,8 +62,9 @@ test("drawer focus navigation and full-page overlay remain available", async () 
   assert.match(surface, /overflow-y-auto overscroll-contain/);
   assert.match(panel, /onOverviewDirtyChange/);
   assert.match(taskPage, /PlanningOverlayLayer/);
-  assert.match(reviewShell, /ReviewDetailPage/);
+  assert.doesNotMatch(reviewShell, /ReviewDetailPage/);
   assert.match(reviewShell, /PlanningOverlayLayer/);
+  assert.match(legacyReviewDetail, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
 });
 
 test("FounderOps tasks and GitHub issues use unambiguous labels", async () => {

@@ -1,7 +1,5 @@
-import { renderWorkspacePage } from "../workspace-page";
+import { permanentRedirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function ReviewsPage() {
-  return renderWorkspacePage("reviews");
+export default function LegacyReviewsPage() {
+  permanentRedirect("/planning?tasks.review=requested");
 }

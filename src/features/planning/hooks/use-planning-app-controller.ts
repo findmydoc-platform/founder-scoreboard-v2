@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { usePlanningBootstrapState, type PlanningBootstrapStateOptions } from "@/features/planning/hooks/use-planning-bootstrap-state";
 import { usePlanningCommandRegistry } from "@/features/planning/hooks/use-planning-command-registry";
@@ -21,9 +20,7 @@ export function usePlanningAppController({
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
   initialAuthError = "",
-  initialReviewTaskId = "",
 }: PlanningAppControllerOptions) {
-  const router = useRouter();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialData,
@@ -36,7 +33,6 @@ export function usePlanningAppController({
     initialCurrentProfile,
     initialProtectedDataLoaded,
     initialAuthError,
-    initialReviewTaskId,
   });
   const {
     actualProfile,
@@ -59,7 +55,6 @@ export function usePlanningAppController({
     devRoleSwitchAvailable,
     filters,
     hasPlanningFilterUrlState,
-    focusedReviewTaskId,
     githubConnectionState,
     githubInstallationAvailable,
     githubUserConnected,
@@ -76,12 +71,10 @@ export function usePlanningAppController({
     protectedDataLoaded,
     refreshPlanningData,
     saveError,
-    selectedReviewDetailTaskId,
     selectedTaskId,
     setData,
     setDevProfileId,
     setFilters,
-    setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setHeaderData,
     setInitiativeDialogDefaults,
@@ -129,16 +122,12 @@ export function usePlanningAppController({
 
   const taskSelection = usePlanningTaskSelection({
     data,
-    router,
-    selectedReviewDetailTaskId,
     selectedTaskId,
-    setFocusedReviewTaskId,
     setSelectedTaskId,
   });
   const {
     backTaskPanel,
     closeTaskPanel,
-    openReviewSheet,
     openTaskPanel,
     selectedTask,
   } = taskSelection;
@@ -221,7 +210,6 @@ export function usePlanningAppController({
     devRoleSwitchAvailable,
     filters,
     filtersAvailable: derivedState.filtersAvailable,
-    focusedReviewTaskId,
     githubConnectionState,
     githubInstallationAvailable,
     githubUserConnected,
@@ -238,7 +226,6 @@ export function usePlanningAppController({
     localStateLoaded,
     metrics: derivedState.metrics,
     mobileNavOpen,
-    openReviewSheet,
     openTaskPanel,
     protectedDataLoaded,
     refreshPlanningData,
@@ -246,8 +233,6 @@ export function usePlanningAppController({
     apiClient,
     saveError,
     selectedPackage: taskSelection.selectedPackage,
-    selectedReviewDetailTask: taskSelection.selectedReviewDetailTask,
-    selectedReviewDetailTaskId,
     selectedTask,
     selectedTaskId,
     selectedTaskActivity: taskSelection.selectedTaskActivity,
@@ -261,7 +246,6 @@ export function usePlanningAppController({
     setData,
     setDevProfileId,
     setFilters,
-    setFocusedReviewTaskId,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setMilestoneDeleteTarget,
@@ -291,6 +275,7 @@ export function usePlanningAppController({
     ...boardState,
     ...commandRegistry.eventCommands,
     ...commandRegistry.fmdToolCommands,
+    ...commandRegistry.founderOpsSettingsCommands,
     ...commandRegistry.initiativeCommands,
     ...commandRegistry.milestoneCommands,
     ...commandRegistry.notificationCommands,

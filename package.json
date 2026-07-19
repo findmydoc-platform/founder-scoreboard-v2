@@ -21,6 +21,7 @@
     "verify:planning-trash-lifecycle": "node scripts/verify-planning-trash-lifecycle-transaction.mjs",
     "verify:sprint-finalization": "node scripts/verify-sprint-finalization-transaction.mjs",
     "verify:score-objection": "node scripts/verify-score-objection-transaction.mjs",
+    "verify:founderops-settings": "node scripts/verify-founderops-settings-transaction.mjs",
     "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",

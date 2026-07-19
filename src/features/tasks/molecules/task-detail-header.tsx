@@ -20,7 +20,7 @@ type Props = {
 export function TaskDetailHeader({ headerData, actions, notificationsOpen, onToggleNotifications, onOpenNotification, onDismissNotification, onBack }: Props) {
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-3">
+      <div className="mx-auto flex min-h-16 max-w-[1392px] flex-wrap items-center justify-between gap-4 px-6 py-3 sm:px-8">
         {onBack ? (
           <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
             <ArrowLeft size={16} aria-hidden="true" />Zur Planung

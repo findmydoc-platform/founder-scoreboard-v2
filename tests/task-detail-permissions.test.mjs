@@ -12,6 +12,10 @@ const { taskDetailPermissions, taskStatusOptionsForPermissions } = await loadTra
       normalizeStatus: (status) => status,
       taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
     },
+    "@/features/reviews/model/task-review-state": {
+      isTaskReviewFinal: (task) => task.scoreFinal && task.reviewStatus === "accepted",
+      isTaskReviewLocked: (task) => task.reviewStatus === "requested" || Boolean(task.scoreFinal && task.reviewStatus === "accepted"),
+    },
   },
 );
 
@@ -21,6 +25,8 @@ const task = {
   owner: "founder-1",
   ownerId: "founder-1",
   reviewOwnerProfileId: "reviewer-1",
+  reviewStatus: "not_requested",
+  scoreFinal: false,
   taskType: "sub_issue",
 };
 
@@ -89,8 +95,30 @@ test("review owner can open review without receiving task edit rights", () => {
   assert.equal(permissions.canEditBrief, false);
 });
 
+test("active and final reviews keep comments open while locking business mutations", () => {
+  for (const reviewTask of [
+    { ...task, reviewStatus: "requested", scoreFinal: false },
+    { ...task, reviewStatus: "accepted", scoreFinal: true },
+  ]) {
+    const permissions = taskDetailPermissions({ task: reviewTask, profile: { id: "founder-1", name: "Founder One", platformRole: "founder" } });
+    assert.equal(permissions.canComment, true);
+    assert.equal(permissions.canEditBrief, false);
+    assert.equal(permissions.canCreateSubIssue, false);
+    assert.equal(permissions.canUpdateStatus, false);
+  }
+});
+
+test("minor rework unlocks the issue for the assignee", () => {
+  const permissions = taskDetailPermissions({
+    task: { ...task, reviewStatus: "partial", scoreFinal: false },
+    profile: { id: "founder-1", name: "Founder One", platformRole: "founder" },
+  });
+  assert.equal(permissions.canEditBrief, true);
+  assert.equal(permissions.canUpdateWorkingStatus, true);
+});
+
 test("Viewer remains fully read-only", () => {
-  const permissions = taskDetailPermissions({ task, profile: { id: "viewer", name: "Viewer", platformRole: "viewer" } });
+  const permissions = taskDetailPermissions({ task, profile: { id: "reviewer-1", name: "Viewer", platformRole: "viewer" } });
   assert.equal(Object.values(permissions).some(Boolean), false);
 });
 

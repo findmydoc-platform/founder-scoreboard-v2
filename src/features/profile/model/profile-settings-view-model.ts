@@ -2,7 +2,7 @@ import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { appWorkspaceFromValue, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 
-export type ProfileSettingsSectionId = "profile" | "notifications" | "board" | "api";
+export type ProfileSettingsSectionId = "profile" | "notifications" | "board" | "process" | "api";
 
 export type ProfileSettingsDraft = {
   focus: string;
@@ -43,6 +43,7 @@ export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilt
     assignee: filters.assignee || "Alle",
     status: filters.status || "Alle",
     priority: filters.priority || "Alle",
+    review: filters.review || "Alle",
     packageId: filters.packageId || "Alle",
     quick: filters.quick || [],
     sprintId: filters.sprintId || "Alle",

@@ -18,6 +18,7 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   assignee: "Alle",
   status: "Alle",
   priority: "Alle",
+  review: "Alle",
   packageId: "Alle",
   quick: [],
   sprintId: "Alle",
@@ -46,6 +47,7 @@ function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
     assignee: filterString(candidate.assignee, filterString(candidate.owner, defaultPlanningFilters.assignee)),
     status: filterString(candidate.status, defaultPlanningFilters.status),
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
+    review: filterString(candidate.review, defaultPlanningFilters.review),
     packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),
     quick: filterStringArray(candidate.quick),
     sprintId: filterString(candidate.sprintId, defaultPlanningFilters.sprintId),
@@ -85,7 +87,7 @@ export function mapProfile(row: DbProfile): Profile {
 export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPreference {
   return {
     profileId: row.profile_id,
-    defaultWorkspace: row.default_workspace || "planning",
+    defaultWorkspace: row.default_workspace === "reviews" ? "planning" : row.default_workspace || "planning",
     defaultTaskView: mapViewMode(row.default_task_view),
     planningFilters: mapPlanningFilters(row.planning_filters),
     expandedPackageIds: row.expanded_package_ids || [],

@@ -36,7 +36,7 @@ export function TaskDiscardChangesDialog({
               Ungespeicherte Änderungen verwerfen?
             </h2>
             <p id="task-discard-changes-description" className="mt-2 text-sm leading-6 text-slate-600">
-              Deine Änderungen an der Übersicht wurden noch nicht gespeichert.
+              Deine Eingaben in diesem Issue wurden noch nicht gespeichert.
             </p>
           </div>
         </div>

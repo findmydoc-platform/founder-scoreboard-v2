@@ -34,14 +34,13 @@ export function SprintTaskTables({
   otherTasks,
   pending,
   canManageFinalTaskStatus,
-  canReviewTask,
   reviewOwnerName,
   isSelfReview,
   onOpenTask,
   onRequestReview,
   onChangeStatus,
   onAssignSprint,
-  onSelectReviewTask,
+  onOpenReviewTask,
 }: {
   data: PlanningData;
   sprint: Sprint;
@@ -49,20 +48,19 @@ export function SprintTaskTables({
   otherTasks: Task[];
   pending: boolean;
   canManageFinalTaskStatus: boolean;
-  canReviewTask: (task: Task) => boolean;
   reviewOwnerName: (task: Task) => string;
   isSelfReview: (task: Task) => boolean;
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task) => void;
   onChangeStatus: (task: Task, status: TaskStatus) => void;
   onAssignSprint: (task: Task, sprintId: string) => void;
-  onSelectReviewTask: (taskId: string) => void;
+  onOpenReviewTask: (taskId: string) => void;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "sprintTasks", schema: sprintTaskFilterSchema });
   const visibleSprintTasks = buildSprintTaskTableRows(sprintTasks, data, filters);
   const visibleOtherTasks = buildSprintTaskTableRows(otherTasks, data, filters);
-  const reviewLabels: Record<SprintTaskReviewFilter, string> = { all: "Alle Reviews", not_requested: "Nicht angefragt", requested: "Angefragt", changes_requested: "Nacharbeit", accepted: "Akzeptiert", partial: "Teilweise" };
+  const reviewLabels: Record<SprintTaskReviewFilter, string> = { all: "Alle Reviews", not_requested: "Nicht angefragt", requested: "Angefragt", accepted: "Akzeptiert", partial: "Kleine Nacharbeit", changes_requested: "Grundlegend überarbeiten" };
   const scoreLabels: Record<SprintTaskScoreFilter, string> = { all: "Alle Scores", open: "Score offen", final: "Score final" };
   const activeFilters: ActiveFilter[] = [
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => updateFilters({ status: "Alle" }) }] : []),
@@ -128,7 +126,7 @@ export function SprintTaskTables({
                   <DataCell>
                     <TaskStatusControl
                       status={task.status}
-                      canChange={!pending && (canManageFinalTaskStatus || normalizeStatus(task.status) !== "Erledigt")}
+                      canChange={!pending && task.reviewStatus !== "requested" && (canManageFinalTaskStatus || normalizeStatus(task.status) !== "Erledigt")}
                       onChange={(status) => onChangeStatus(task, status)}
                       options={canManageFinalTaskStatus ? taskStatuses : taskStatuses.filter((status) => status !== "Erledigt")}
                       selectClassName="h-8 w-32 text-xs font-semibold"
@@ -153,15 +151,15 @@ export function SprintTaskTables({
                       {task.reviewStatus === "not_requested" || normalizeStatus(task.status) === "Nacharbeit" ? (
                         <UiButton type="button" disabled={pending || sprint.scoreLocked} onClick={() => onRequestReview(task)} variant="blue" size="xs">Review anfragen</UiButton>
                       ) : null}
-                      {task.reviewStatus !== "not_requested" || normalizeStatus(task.status) === "Review" ? (
+                      {task.reviewStatus === "requested" || normalizeStatus(task.status) === "Review" ? (
                         <UiButton
                           type="button"
-                          disabled={pending || sprint.scoreLocked || task.scoreFinal || !canReviewTask(task)}
-                          onClick={() => onSelectReviewTask(task.id)}
+                          disabled={pending}
+                          onClick={() => onOpenReviewTask(task.id)}
                           variant="blue"
                           size="xs"
                         >
-                          Review-Blatt
+                          Review öffnen
                         </UiButton>
                       ) : null}
                     </div>

@@ -1,5 +1,5 @@
-import type { Profile, Task } from "./types";
-import type { DbTask } from "./planning-data-row-types";
+import type { Profile, Task, TaskReview } from "./types";
+import type { DbTask, DbTaskReview } from "./planning-data-row-types";
 import { profileNameById } from "./planning-profile-mappers";
 
 export type TaskRowForMapping = Partial<DbTask>;
@@ -104,4 +104,18 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
 
 export function mapTask(row: DbTask, profiles: Profile[]): Task {
   return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1" });
+}
+
+export function mapTaskReview(row: DbTaskReview): TaskReview {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    sprintId: row.sprint_id || "",
+    reviewerProfileId: row.reviewer_profile_id || "",
+    decision: row.decision,
+    points: Number(row.points || 0),
+    comment: row.comment || "",
+    checklist: row.checklist || {},
+    createdAt: row.created_at,
+  };
 }

@@ -166,7 +166,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const taskSignalBadges = await readFile("src/features/tasks/molecules/task-attention-badges.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
   const taskTable = await readFile("src/features/tasks/organisms/task-table-view.tsx", "utf8");
-  const reviewUi = await readFile("src/features/reviews/organisms/review-workspace-overview.tsx", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
@@ -202,7 +201,6 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(taskSignalBadges, /maxVisible = 2/);
   assert.match(taskCard, /TaskCardRiskBadges/);
   assert.match(taskTable, /TaskTableRiskBadges/);
-  assert.match(reviewUi, /ReviewTaskAttentionBadges/);
   assert.doesNotMatch(ui, /Decision-Link entfernen|Decision-Folgearbeit|Folgeaufgabe aus Decision/);
   assert.doesNotMatch(planningApiClient, /api\/decisions\/\$\{decisionId\}\/tasks/);
   assert.match(focusRoute, /Founder können nur eigene Aufgaben in den Fokus nehmen/);

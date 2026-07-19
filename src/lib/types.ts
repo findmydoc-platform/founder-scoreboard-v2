@@ -3,6 +3,7 @@ import type { MilestoneDto } from "@/features/projects/model/milestone-contract"
 export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
+export type ReviewDecision = Exclude<ReviewStatus, "not_requested" | "requested">;
 export type GitHubIssueSyncStatus = "not_synced" | "synced" | "pending" | "failed";
 export type GitHubCommentDeliveryStatus = "pending" | "waiting_for_issue" | "waiting_for_author_connection" | "processing" | "retry_scheduled" | "delivered" | "failed";
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
@@ -39,6 +40,7 @@ export type Project = {
   id: string;
   name: string;
   range: string;
+  reviewObjectionWindowHours: number;
 };
 
 export type Package = {
@@ -231,12 +233,13 @@ export type ScoreObjection = {
 };
 
 export type ScoreObjectionResolutionInput = {
-  action: "resolve" | "second_review";
+  action: "assign_second_review" | "resolve" | "second_review";
   status?: "reviewed" | "dismissed" | "accepted";
   resolutionComment?: string;
   deliveryPoints?: number;
   formPoints?: number;
   weeklyPoints?: number;
+  secondReviewerProfileId?: string;
   secondReviewDecision?: string;
 };
 
@@ -289,6 +292,26 @@ export type TaskActivity = {
   id: number;
   taskId: string;
   message: string;
+  createdAt: string;
+};
+
+export type TaskReviewChecklist = {
+  acceptanceCriteriaMet?: boolean;
+  dodMet?: boolean;
+  evidenceProvided?: boolean;
+  communicationClear?: boolean;
+  blockerHandled?: boolean;
+};
+
+export type TaskReview = {
+  id: number;
+  taskId: string;
+  sprintId: string;
+  reviewerProfileId: string;
+  decision: ReviewDecision;
+  points: number;
+  comment: string;
+  checklist: TaskReviewChecklist;
   createdAt: string;
 };
 
@@ -348,6 +371,7 @@ export type PlanningFilterPreferences = {
   assignee: string;
   status: string;
   priority: string;
+  review: string;
   packageId: string;
   quick: string[];
   sprintId: string;
@@ -485,6 +509,7 @@ export type PlanningData = {
   taskBlockers: TaskBlocker[];
   taskRelations: TaskRelation[];
   taskActivity: TaskActivity[];
+  taskReviews: TaskReview[];
   taskFocusItems: TaskFocusItem[];
   notificationEvents: NotificationEvent[];
   notificationDeliveries: NotificationDelivery[];

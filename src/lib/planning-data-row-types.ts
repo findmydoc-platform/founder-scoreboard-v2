@@ -1,4 +1,4 @@
-import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
+import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskReview } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -132,6 +132,18 @@ export type DbTask = {
   updated_at: string;
   task_dependencies?: { note: string }[];
   task_notes?: { note: string } | null;
+};
+
+export type DbTaskReview = {
+  id: number;
+  task_id: string;
+  sprint_id: string | null;
+  reviewer_profile_id: string | null;
+  decision: TaskReview["decision"];
+  points: number;
+  comment: string | null;
+  checklist: TaskReview["checklist"] | null;
+  created_at: string;
 };
 
 type DbTaskScalarColumn = Exclude<keyof DbTask, "task_dependencies" | "task_notes">;

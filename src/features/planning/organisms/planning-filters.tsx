@@ -2,6 +2,7 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { initiativeOptionLabel } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
+import { reviewLabel } from "@/lib/platform";
 import type { Package, Profile, Sprint } from "@/lib/types";
 import { FilterField, FilterToolbar, FilterToggleGroup, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 import { DEFAULT_PLANNING_FILTERS, type PlanningFilters as PlanningFiltersValue } from "@/features/planning/hooks/use-planning-view-state";
@@ -41,6 +42,7 @@ export function PlanningFilters({
     ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${profileName}`, onRemove: () => onChange({ ...filters, assignee: "Alle" }) }] : []),
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => onChange({ ...filters, status: "Alle" }) }] : []),
     ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, onRemove: () => onChange({ ...filters, priority: "Alle" }) }] : []),
+    ...(filters.review !== "Alle" ? [{ id: "review", label: `Review-Status: ${reviewLabel(filters.review as Parameters<typeof reviewLabel>[0])}`, onRemove: () => onChange({ ...filters, review: "Alle" }) }] : []),
     ...(filters.packageId !== "Alle" ? [{ id: "initiative", label: `Initiative: ${initiativeName}`, onRemove: () => onChange({ ...filters, packageId: "Alle" }) }] : []),
     ...(filters.sprintId !== "Alle" ? [{ id: "sprint", label: `Sprint: ${sprintName}`, onRemove: () => onChange({ ...filters, sprintId: "Alle" }) }] : []),
     ...(filters.workstream !== "Alle" ? [{ id: "workstream", label: `Bereich: ${filters.workstream}`, onRemove: () => onChange({ ...filters, workstream: "Alle" }) }] : []),
@@ -95,6 +97,22 @@ export function PlanningFilters({
             onChange={(priority) => onChange({ ...filters, priority })}
             className="h-10 text-sm"
             options={[{ value: "Alle", label: "Alle Prioritäten" }, ...["P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }))]}
+          />
+        </FilterField>
+        <FilterField label="Review-Status">
+          <CustomSelect
+            aria-label="Nach Review-Status filtern"
+            value={filters.review}
+            onChange={(review) => onChange({ ...filters, review })}
+            className="h-10 text-sm"
+            options={[
+              { value: "Alle", label: "Alle Review-Status" },
+              { value: "requested", label: "Angefragt" },
+              { value: "accepted", label: "Akzeptiert" },
+              { value: "partial", label: "Kleine Nacharbeit" },
+              { value: "changes_requested", label: "Grundlegend überarbeiten" },
+              { value: "not_requested", label: "Nicht angefragt" },
+            ]}
           />
         </FilterField>
         <FilterField label="Initiative">

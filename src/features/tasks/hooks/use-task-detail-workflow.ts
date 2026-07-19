@@ -369,7 +369,6 @@ export function useTaskDetailWorkflow({
     importGitHubComments,
     isPending,
     localCommentImportNotice,
-    openReview: () => router.push(`/reviews/${encodeURIComponent(task.id)}`),
     reconnectGitHub,
     relations,
     removeRelation,

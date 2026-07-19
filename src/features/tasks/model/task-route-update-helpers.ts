@@ -14,8 +14,6 @@ type CurrentTaskForRoute = {
 type RouteGuardResult = { ok: true } | { ok: false; error: string; status: number };
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-const reviewStatuses = new Set(["not_requested", "requested", "accepted", "partial", "changes_requested"]);
-
 export function withoutUnchangedTaskStatus(
   currentTask: CurrentTaskForRoute,
   payload: TaskUpdatePayload,
@@ -201,17 +199,13 @@ export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: T
   if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
 }
 
-export function applyReviewStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload, isOperationalLead: boolean): RouteGuardResult {
+export function applyReviewStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {
   if (!payload.reviewStatus) return { ok: true };
-  if (!reviewStatuses.has(payload.reviewStatus)) {
-    return { ok: false, error: "Ungültiger Review-Status.", status: 400 };
+  if (payload.reviewStatus !== "requested") {
+    return { ok: false, error: "Review-Entscheidungen und Übergänge müssen über den jeweiligen Review-Vorgang erfolgen.", status: 409 };
   }
-  if (!isOperationalLead && payload.reviewStatus !== "requested") {
-    return { ok: false, error: "Founder können Review nur anfragen. Final bewertet wird im CEO-Review.", status: 403 };
-  }
-  update.review_status = payload.reviewStatus;
-  update.score_final = ["accepted", "partial", "changes_requested"].includes(payload.reviewStatus);
-  if (!isOperationalLead) update.score_final = false;
+  update.review_status = "requested";
+  update.score_final = false;
   return { ok: true };
 }
 

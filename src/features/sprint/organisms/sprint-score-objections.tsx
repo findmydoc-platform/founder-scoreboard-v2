@@ -1,12 +1,15 @@
+"use client";
+
+import { useState } from "react";
 import { ScoreObjectionReviewControls } from "@/features/sprint/molecules/score-objection-review-controls";
 import type { FounderSprintScore, PlanningData, Profile, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
+import { sprintObjectionWindowState } from "@/lib/sprint-review-window";
 import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 export function SprintScoreObjections({
   data,
   sprint,
   currentProfile,
-  canManageSprint,
   pending,
   scoreObjectionDraft,
   openObjectionsCount,
@@ -18,7 +21,6 @@ export function SprintScoreObjections({
   data: Pick<PlanningData, "profiles" | "scoreObjections">;
   sprint: Sprint;
   currentProfile: Profile | null;
-  canManageSprint: boolean;
   pending: boolean;
   scoreObjectionDraft: string;
   openObjectionsCount: number;
@@ -27,6 +29,8 @@ export function SprintScoreObjections({
   onCreateScoreObjection: (sprint: Sprint, comment: string) => void;
   onReviewScoreObjection: (sprint: Sprint, objectionId: number, input: ScoreObjectionResolutionInput) => void;
 }) {
+  const [renderedAt] = useState(() => Date.now());
+  const objectionWindow = sprintObjectionWindowState(sprint.endDate, sprint.reviewDueAt, new Date(renderedAt));
   return (
     <UiPanel className="min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -62,12 +66,15 @@ export function SprintScoreObjections({
                 </p>
               )}
               {objection.secondReviewerProfileId && (
-                <p className="text-xs text-slate-500">Zweitreview {secondReviewer?.name || objection.secondReviewerProfileId}: {objection.secondReviewDecision}</p>
+                <p className="text-xs text-slate-500">
+                  Zweitreview {secondReviewer?.name || objection.secondReviewerProfileId}: {objection.secondReviewedAt ? objection.secondReviewDecision : "ausstehend"}
+                </p>
               )}
-              {canManageSprint && (
+              {currentProfile && (
                 <ScoreObjectionReviewControls
                   objection={objection}
                   currentProfile={currentProfile}
+                  profiles={data.profiles}
                   currentScore={score}
                   pending={pending}
                   onSubmit={(input) => onReviewScoreObjection(sprint, objection.id, input)}
@@ -78,7 +85,7 @@ export function SprintScoreObjections({
         })}
         {!data.scoreObjections.some((item) => item.sprintId === sprint.id) && <UiEmptyState>Noch keine Score-Einwände.</UiEmptyState>}
       </div>
-      {!sprint.scoreLocked && currentProfile && (
+      {!sprint.scoreLocked && currentProfile && objectionWindow.open && (
         <form
           className="mt-3 flex flex-col gap-2 sm:flex-row"
           onSubmit={(event) => {
@@ -97,6 +104,13 @@ export function SprintScoreObjections({
           <UiButton type="submit" disabled={pending || !scoreObjectionDraft.trim()}>Einwand speichern</UiButton>
         </form>
       )}
+      {!sprint.scoreLocked && currentProfile && !objectionWindow.open ? (
+        <p className="mt-3 text-xs text-slate-500">
+          {objectionWindow.startsAt && new Date(objectionWindow.startsAt).getTime() >= renderedAt
+            ? "Score-Einwände können nach dem Sprint-Ende eingereicht werden."
+            : "Die konfigurierte Frist für neue Score-Einwände ist geschlossen."}
+        </p>
+      ) : null}
     </UiPanel>
   );
 }

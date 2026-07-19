@@ -1,9 +1,10 @@
 import { isOperationalLeadRole } from "@/lib/platform";
+import { isTaskReviewFinal, isTaskReviewLocked } from "@/features/reviews/model/task-review-state";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile, Profile, Task, TaskStatus } from "@/lib/types";
 
 type TaskPermissionProfile = Pick<AuthenticatedProfile, "id" | "name" | "platformRole">;
-type TaskPermissionTask = Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId" | "reviewOwnerProfileId" | "taskType">;
+type TaskPermissionTask = Pick<Task, "assignee" | "assigneeId" | "owner" | "ownerId" | "reviewOwnerProfileId" | "reviewStatus" | "scoreFinal" | "taskType">;
 
 export type TaskDetailPermissions = {
   canComment: boolean;
@@ -57,24 +58,26 @@ export function taskDetailPermissions({
   profile?: TaskPermissionProfile | Pick<Profile, "id" | "name" | "platformRole"> | null;
   unrestricted?: boolean;
 }): TaskDetailPermissions {
+  const reviewLocked = isTaskReviewLocked(task);
+  const reviewFinal = isTaskReviewFinal(task);
   if (unrestricted) {
     return {
       canComment: true,
-      canCreateSubIssue: true,
-      canEditBrief: true,
-      canEditChecklist: true,
-      canEditEvidence: true,
-      canEditNotes: true,
-      canCompleteSubIssue: task.taskType === "sub_issue",
-      canManageFinalStatus: true,
-      canManageReviewOwner: true,
-      canManageTaskMeta: true,
+      canCreateSubIssue: !reviewLocked,
+      canEditBrief: !reviewLocked,
+      canEditChecklist: !reviewLocked,
+      canEditEvidence: !reviewLocked,
+      canEditNotes: !reviewLocked,
+      canCompleteSubIssue: !reviewLocked && task.taskType === "sub_issue",
+      canManageFinalStatus: !reviewLocked,
+      canManageReviewOwner: !reviewFinal,
+      canManageTaskMeta: !reviewLocked,
       canOpenReview: true,
-      canReopenSubIssue: task.taskType === "sub_issue",
-      canReportBlocker: true,
-      canReparentSubIssue: task.taskType === "sub_issue",
-      canUpdateStatus: true,
-      canUpdateWorkingStatus: true,
+      canReopenSubIssue: !reviewLocked && task.taskType === "sub_issue",
+      canReportBlocker: !reviewLocked,
+      canReparentSubIssue: !reviewLocked && task.taskType === "sub_issue",
+      canUpdateStatus: !reviewLocked,
+      canUpdateWorkingStatus: !reviewLocked,
     };
   }
 
@@ -88,21 +91,21 @@ export function taskDetailPermissions({
 
   return {
     canComment: Boolean(role && role !== "viewer"),
-    canCreateSubIssue: Boolean(role && role !== "viewer"),
-    canEditBrief: canWorkOnTask,
-    canEditChecklist: canWorkOnTask,
-    canEditEvidence: canWorkOnTask,
-    canEditNotes: canWorkOnTask,
-    canCompleteSubIssue: canManageSubIssueFinalStatus,
-    canManageFinalStatus: isCeo,
-    canManageReviewOwner: isCeo,
-    canManageTaskMeta: isOperationalLead,
-    canOpenReview: isOperationalLead || Boolean(profile?.id && task.reviewOwnerProfileId === profile.id),
-    canReopenSubIssue: canManageSubIssueFinalStatus,
-    canReportBlocker: canWorkOnTask,
-    canReparentSubIssue: task.taskType === "sub_issue" && canWorkOnTask,
-    canUpdateStatus: canWorkOnTask || canManageSubIssueFinalStatus,
-    canUpdateWorkingStatus: canWorkOnTask,
+    canCreateSubIssue: !reviewLocked && Boolean(role && role !== "viewer"),
+    canEditBrief: !reviewLocked && canWorkOnTask,
+    canEditChecklist: !reviewLocked && canWorkOnTask,
+    canEditEvidence: !reviewLocked && canWorkOnTask,
+    canEditNotes: !reviewLocked && canWorkOnTask,
+    canCompleteSubIssue: !reviewLocked && canManageSubIssueFinalStatus,
+    canManageFinalStatus: !reviewLocked && isCeo,
+    canManageReviewOwner: isCeo && !reviewFinal,
+    canManageTaskMeta: !reviewLocked && isOperationalLead,
+    canOpenReview: isOperationalLead || Boolean(role && role !== "viewer" && profile?.id && task.reviewOwnerProfileId === profile.id),
+    canReopenSubIssue: !reviewLocked && canManageSubIssueFinalStatus,
+    canReportBlocker: !reviewLocked && canWorkOnTask,
+    canReparentSubIssue: !reviewLocked && task.taskType === "sub_issue" && canWorkOnTask,
+    canUpdateStatus: !reviewLocked && (canWorkOnTask || canManageSubIssueFinalStatus),
+    canUpdateWorkingStatus: !reviewLocked && canWorkOnTask,
   };
 }
 

@@ -9,7 +9,7 @@ import {
 } from "@/features/tasks/model/task-detail-presentation";
 import type { Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
-import { UiButton, UiEmptyState, UiField, UiNotice, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
+import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
 const overviewFields = [
   { key: "problemStatement", label: "Problem", placeholder: "Welches Problem löst diese Aufgabe und warum ist es wichtig?", permission: "canEditBrief" },
@@ -38,13 +38,68 @@ function ChecklistReadValue({ value }: { value: string }) {
   );
 }
 
-function ReadSection({ label, value, checklist = false }: { label: string; value: string; checklist?: boolean }) {
-  if (!value.trim()) return null;
+function ReadSection({
+  label,
+  value,
+  checklist = false,
+  anchorId,
+  emptyValue,
+}: {
+  label: string;
+  value: string;
+  checklist?: boolean;
+  anchorId?: string;
+  emptyValue?: string;
+}) {
+  const hasValue = Boolean(value.trim());
+  if (!hasValue && !emptyValue) return anchorId ? <span id={anchorId} className="block scroll-mt-6" /> : null;
   return (
-    <section className="border-b border-slate-100 py-5 last:border-b-0">
+    <section
+      id={anchorId}
+      tabIndex={anchorId ? -1 : undefined}
+      className="scroll-mt-6 border-b border-slate-100 py-5 outline-none last:border-b-0"
+    >
       <h3 className="text-sm font-semibold text-slate-950">{label}</h3>
-      <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-        {checklist ? <ChecklistReadValue value={value} /> : value}
+      {hasValue ? (
+        <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
+          {checklist ? <ChecklistReadValue value={value} /> : value}
+        </div>
+      ) : <p className="mt-2 text-[15px] leading-7 text-slate-500">{emptyValue}</p>}
+    </section>
+  );
+}
+
+function ReviewEvidenceSection({
+  evidenceHost,
+  evidenceLink,
+  evidenceRequired,
+}: {
+  evidenceHost: string;
+  evidenceLink: string;
+  evidenceRequired: string;
+}) {
+  return (
+    <section id="task-review-evidence" tabIndex={-1} className="scroll-mt-6 border-b border-slate-100 py-5 outline-none">
+      <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
+      <div className="mt-2 grid gap-2 text-[15px] leading-7 text-slate-700">
+        <p>{evidenceRequired.trim() || <span className="text-slate-500">Kein erwarteter Nachweis hinterlegt.</span>}</p>
+        {evidenceLink && evidenceHost ? (
+          <a
+            href={evidenceLink}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Nachweis öffnen: ${evidenceLink} (öffnet in neuem Tab)`}
+            className="flex min-h-12 items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-2.5 text-blue-800 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <span>
+              <span className="block text-sm font-semibold">Nachweis öffnen</span>
+              <span className="mt-0.5 block text-xs text-blue-700">{evidenceHost}</span>
+            </span>
+            <ExternalLink size={17} aria-hidden="true" />
+          </a>
+        ) : evidenceLink ? (
+          <p>{evidenceLink}</p>
+        ) : <p className="text-slate-500">Noch kein Nachweis-Link hinterlegt.</p>}
       </div>
     </section>
   );
@@ -59,6 +114,7 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   error: string;
+  flat?: boolean;
   onCancel: () => void;
   onSave: () => Promise<boolean>;
   onChange: (patch: Partial<TaskOverviewDraft>) => void;
@@ -74,6 +130,7 @@ export function TaskOverviewPanel({
   dirty,
   saving,
   error,
+  flat = false,
   onCancel,
   onSave,
   onChange,
@@ -88,6 +145,7 @@ export function TaskOverviewPanel({
   const evidenceIsLegacyText = Boolean(evidenceValue && !evidenceHost);
   const evidenceInvalid = evidenceIsLegacyText && normalizedEvidenceValue !== baselineEvidenceValue;
   const hasReadContent = overviewFields.some(({ key }) => draft[key].trim()) || Boolean(draft.evidenceLink.trim()) || Boolean(riskContent);
+  const flatReadOnly = flat && !editing;
 
   useEffect(() => {
     const wasEditing = previousEditingRef.current;
@@ -120,13 +178,22 @@ export function TaskOverviewPanel({
   };
 
   return (
-    <section aria-labelledby="task-overview-heading" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
-        <div>
-          <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
-          <p className="mt-1 text-sm text-slate-500">Ziel, Abnahme und notwendige Nachweise für die Umsetzung.</p>
+    <section
+      aria-label={flatReadOnly ? "Übersicht" : undefined}
+      aria-labelledby={flatReadOnly ? undefined : "task-overview-heading"}
+      className={classNames(
+        "bg-white",
+        !flatReadOnly && "overflow-hidden rounded-xl border border-slate-200 shadow-sm",
+      )}
+    >
+      {!flatReadOnly ? (
+        <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+          <div>
+            <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
+            <p className="mt-1 text-sm text-slate-500">Ziel, Abnahme und notwendige Nachweise für die Umsetzung.</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {editing ? (
         <form onSubmit={submit} aria-busy={saving} className="grid gap-5 px-5 py-5 sm:px-6">
@@ -215,14 +282,33 @@ export function TaskOverviewPanel({
           </div>
         </form>
       ) : (
-        <div className="px-5 sm:px-6">
+        <div className={flatReadOnly ? "" : "px-5 sm:px-6"}>
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           <ReadSection label="Problem" value={draft.problemStatement} />
-          <ReadSection label="Zielbild" value={draft.intendedOutcome} />
+          <ReadSection
+            label="Zielbild"
+            value={draft.intendedOutcome}
+            anchorId="task-review-outcome"
+            emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
+          />
           <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
-          <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
-          <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
-          {evidenceValue && evidenceHost ? (
+          <ReadSection
+            label="Abnahmekriterien"
+            value={draft.acceptanceCriteria}
+            checklist
+            anchorId="task-review-acceptance"
+            emptyValue={flatReadOnly ? "Keine Abnahmekriterien hinterlegt." : undefined}
+          />
+          {flatReadOnly ? (
+            <ReviewEvidenceSection
+              evidenceHost={evidenceHost}
+              evidenceLink={evidenceValue}
+              evidenceRequired={draft.evidenceRequired}
+            />
+          ) : (
+            <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
+          )}
+          {!flatReadOnly && evidenceValue && evidenceHost ? (
             <section className="border-b border-slate-100 py-5">
               <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
               <a
@@ -239,9 +325,15 @@ export function TaskOverviewPanel({
                 <ExternalLink size={17} aria-hidden="true" />
               </a>
             </section>
-          ) : evidenceValue ? <ReadSection label="Nachweis" value={draft.evidenceLink} /> : null}
-          <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
-          {riskContent}
+          ) : !flatReadOnly && evidenceValue ? <ReadSection label="Nachweis" value={draft.evidenceLink} /> : null}
+          {flatReadOnly ? riskContent : null}
+          <ReadSection
+            label="Qualitätsstandard"
+            value={draft.definitionOfDone}
+            checklist
+            emptyValue={flatReadOnly ? "Kein Qualitätsstandard hinterlegt." : undefined}
+          />
+          {!flatReadOnly ? riskContent : null}
           <ReadSection label="Interne Notiz" value={draft.note} />
           {task.updatedAt ? <p className="border-t border-slate-100 py-4 text-xs text-slate-400">Zuletzt aktualisiert am {formatDate(task.updatedAt)}</p> : null}
         </div>

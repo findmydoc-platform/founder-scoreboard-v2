@@ -29,6 +29,7 @@ type TaskStatusControlProps = {
   className?: string;
   compact?: boolean;
   lockedReason?: string;
+  showLockedReason?: boolean;
   onChange: (status: TaskStatus) => void;
   options: TaskStatus[];
   selectClassName?: string;
@@ -40,6 +41,7 @@ export function TaskStatusControl({
   className,
   compact = false,
   lockedReason,
+  showLockedReason = true,
   onChange,
   options,
   selectClassName = "h-9 text-sm",
@@ -63,6 +65,24 @@ export function TaskStatusControl({
         options={options.map((option) => ({ value: option, label: option }))}
         aria-label="Status ändern"
       />
+    );
+  }
+
+  if (!showLockedReason) {
+    return (
+      <div
+        role="group"
+        aria-label="Status gesperrt"
+        aria-describedby={reasonId}
+        className={classNames(
+          "flex h-10 min-w-32 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900",
+          className,
+        )}
+      >
+        <span>{normalized}</span>
+        <Lock size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+        <span id={reasonId} className="sr-only">{reason}</span>
+      </div>
     );
   }
 

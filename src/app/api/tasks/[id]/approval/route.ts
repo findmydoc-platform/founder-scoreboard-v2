@@ -6,6 +6,7 @@ import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { attemptPlanningGitHubLifecycleDrain, loadOutstandingPlanningGitHubLifecycleTaskIds } from "@/lib/planning-github-lifecycle-trigger";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<ApprovalDecisionPayload>(request, requirePlanningContributor, {});
@@ -18,6 +19,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!serviceSupabase) return apiError("Server-Service für Freigaben ist nicht konfiguriert.", 503);
   const activeItem = await requireActivePlanningItem(serviceSupabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
+  const { data: taskState, error: taskStateError } = await serviceSupabase
+    .from("tasks")
+    .select("review_status,score_final")
+    .eq("id", id)
+    .single();
+  if (taskStateError || !taskState) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  if (isReviewStateLocked(taskState.review_status, taskState.score_final)) {
+    return apiError(reviewStateLockMessage(taskState.review_status, taskState.score_final), 409);
+  }
   const { data, error } = await serviceSupabase.rpc("decide_deliverable_approval_transaction", {
     p_task_id: id,
     p_expected_revision: decision.expectedRevision,

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import type { AuthenticatedProfile } from "@/lib/types";
+import type { AuthenticatedProfile, Task } from "@/lib/types";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import type { getServerSupabase } from "@/lib/supabase";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
@@ -278,6 +279,8 @@ function validatePermission(
       owner: String(target.owner || ""),
       ownerId: String(target.owner || ""),
       reviewOwnerProfileId: "",
+      reviewStatus: String(target.review_status || "not_requested") as Task["reviewStatus"],
+      scoreFinal: Boolean(target.score_final),
       taskType: itemType,
     },
     profile: actor,
@@ -421,6 +424,9 @@ export async function buildPlanningItemUpdatePreview({
 }): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
   const target = await loadTarget(supabase, itemId);
   if (!target.ok) return target;
+  if ((target.itemType === "deliverable" || target.itemType === "sub_issue") && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
+    return { ok: false, status: 409, error: reviewStateLockMessage(String(target.row.review_status || ""), Boolean(target.row.score_final)) };
+  }
   if (target.itemType === "milestone" && !["ceo", "deputy"].includes(actor.platformRole)) {
     return { ok: false, status: 403, error: "Nur CEO oder Deputy können Meilensteine bearbeiten." };
   }
@@ -434,7 +440,7 @@ export async function buildPlanningItemUpdatePreview({
     supabase.from("profiles").select("id"),
     supabase.from("milestones").select("id").eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,approval_status"),
-    supabase.from(ACTIVE_TASKS_TABLE).select("id,task_type,package_id,milestone_id,approval_status"),
+    supabase.from(ACTIVE_TASKS_TABLE).select("id,task_type,package_id,milestone_id,approval_status,review_status,score_final"),
   ]);
   if (profilesResult.error || milestonesResult.error || initiativesResult.error || parentsResult.error) {
     throw new Error("Planning-Items-Referenzen konnten nicht geladen werden.");
@@ -451,6 +457,10 @@ export async function buildPlanningItemUpdatePreview({
   const milestoneIds = new Set((milestonesResult.data || []).map((milestone) => milestone.id));
   const initiatives = new Map((initiativesResult.data || []).map((initiative) => [initiative.id, initiative]));
   const parents = new Map((parentsResult.data || []).map((task) => [task.id, task]));
+  const currentParent = target.itemType === "sub_issue" ? parents.get(String(target.row.parent_task_id || "")) : undefined;
+  if (currentParent && isReviewStateLocked(currentParent.review_status, currentParent.score_final)) {
+    errors.push(reviewStateLockMessage(currentParent.review_status, currentParent.score_final));
+  }
 
   for (const field of ["ownerId", "accountableProfileId"] as const) {
     const value = normalizedPatch[field];
@@ -474,6 +484,7 @@ export async function buildPlanningItemUpdatePreview({
   if (hasOwn(normalizedPatch, "parentTaskId")) {
     const parent = parents.get(String(normalizedPatch.parentTaskId || ""));
     if (!parent || parent.task_type !== "deliverable") errors.push("parentTaskId muss ein aktives Deliverable sein.");
+    else if (isReviewStateLocked(parent.review_status, parent.score_final)) errors.push(reviewStateLockMessage(parent.review_status, parent.score_final));
   }
   if (hasOwn(normalizedPatch, "githubRepo")) {
     const githubRepository = resolveTaskGitHubRepository("sub_issue", String(normalizedPatch.githubRepo || ""));

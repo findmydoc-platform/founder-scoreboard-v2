@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, CircleDot, Flag, Hourglass, ListChecks, UserRound } from "lucide-react";
+import { CalendarDays, Flag, Hourglass, ListChecks, UserRound } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { TaskStatusControl, TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
@@ -37,11 +37,13 @@ export type TaskDetailOperationalHeaderProps = {
 };
 
 export type TaskDetailDependencyBandProps = {
+  anchorId?: string;
   blocks: TaskDetailRelationshipRow[];
   className?: string;
   error?: string;
   loading?: boolean;
   onOpenTask: (taskId: string) => void;
+  variant?: "band" | "review";
   waitsOn: TaskDetailRelationshipRow[];
 };
 
@@ -155,16 +157,77 @@ function activeDependencyRows(rows: TaskDetailRelationshipRow[]): Array<TaskDeta
   ));
 }
 
+function ReviewDependencyList({
+  icon,
+  label,
+  onOpenTask,
+  rows,
+}: {
+  icon: ReactNode;
+  label: string;
+  onOpenTask: (taskId: string) => void;
+  rows: Array<TaskDetailRelationshipRow & { task: Task }>;
+}) {
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <ul className="mt-2 grid gap-2">
+        {rows.map((row) => (
+          <li key={row.relation.id} className="flex min-h-9 items-center rounded-md bg-slate-50 px-3 py-2">
+            <DependencyLinkedTask task={row.task} onOpenTask={onOpenTask} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function TaskDetailDependencyBand({
+  anchorId,
   blocks,
   className,
   error = "",
   loading = false,
   onOpenTask,
+  variant = "band",
   waitsOn,
 }: TaskDetailDependencyBandProps) {
   const activeWaitsOn = activeDependencyRows(waitsOn);
   const activeBlocks = activeDependencyRows(blocks);
+
+  if (variant === "review") {
+    return (
+      <section id={anchorId} tabIndex={-1} className={classNames("scroll-mt-6 border-b border-slate-100 py-5 outline-none", className)} aria-label="Abhängigkeiten">
+        <h3 className="text-sm font-semibold text-slate-950">Abhängigkeiten</h3>
+        {error ? (
+          <p role="alert" className="mt-2 text-sm font-medium text-red-700">Zusätzliche Item-Daten konnten nicht geladen werden. {error}</p>
+        ) : loading ? (
+          <div className="mt-2 h-12 animate-pulse rounded-md bg-slate-100" aria-label="Abhängigkeiten werden geladen" aria-busy="true" />
+        ) : !activeWaitsOn.length && !activeBlocks.length ? (
+          <p className="mt-2 text-[15px] leading-7 text-slate-500">Keine offene Abhängigkeit erfasst.</p>
+        ) : (
+          <div className="mt-3 grid gap-4">
+            <ReviewDependencyList
+              label="Wartet auf"
+              rows={activeWaitsOn}
+              icon={<Hourglass size={15} aria-hidden="true" />}
+              onOpenTask={onOpenTask}
+            />
+            <ReviewDependencyList
+              label="Andere warten hierauf"
+              rows={activeBlocks}
+              icon={<Flag size={15} aria-hidden="true" />}
+              onOpenTask={onOpenTask}
+            />
+          </div>
+        )}
+      </section>
+    );
+  }
 
   if (error) {
     return (
@@ -279,18 +342,18 @@ export function TaskDetailOperationalHeader({
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-slate-200 py-3">
-        <OperationalFact label="Status" hideLabel icon={<CircleDot size={16} />}>
+        <div className="flex min-h-10 min-w-0 items-center">
           <TaskStatusControl
             status={task.status}
             canChange={canChangeStatus && !pending}
             lockedReason={pending ? "Änderung wird gespeichert." : statusLockedReason}
+            showLockedReason={false}
             options={statusOptions}
-            selectClassName="h-8 w-32 text-sm"
-            className="min-h-8"
+            selectClassName="h-10 w-36 text-sm"
             compact
             onChange={(status) => onUpdate({ status })}
           />
-        </OperationalFact>
+        </div>
 
         {canManageTaskMeta ? (
           <OperationalFact label="Zuständig" emphasized icon={<UserRound size={16} />}>
