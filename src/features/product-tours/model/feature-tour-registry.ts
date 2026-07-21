@@ -73,7 +73,7 @@ export const featureTours = [
         element: "[data-tour-id='task-share-trigger']",
         popover: {
           title: "Issue teilen",
-          description: "Hier bereitest du für jedes Deliverable und Sub-Issue eine Nachricht vor.",
+          description: "Hier bereitest du für jedes Deliverable und Sub-Issue eine Nachricht vor. Der Text greift Vorschlag, Review oder allgemeinen Abstimmungsbedarf auf.",
           side: "bottom",
           align: "end",
         },

@@ -12,12 +12,14 @@ test("task share messages cover every issue type with a stable FounderOps link",
     status: "Offen",
     priority: "P0",
     deadline: "2026-06-04",
+    approvalStatus: "approved",
+    reviewStatus: "not_requested",
   }, taskUrl);
 
   assert.equal(taskUrl, "https://founder-ops.findmydoc.eu/tasks/deliverable-42");
   assert.match(message, /^Contact-404 beheben/m);
   assert.match(message, /Deliverable · Offen · P0 · Ziel: 04\.06\.2026/);
-  assert.match(message, /Bitte prüfen und kurz Rückmeldung geben:/);
+  assert.match(message, /Bitte ansehen und bei Bedarf kurz Rückmeldung geben\./);
   assert.match(message, /https:\/\/founder-ops\.findmydoc\.eu\/tasks\/deliverable-42/);
   assert.equal(share.taskShareTypeLabel("sub_issue"), "Sub-Issue");
   assert.match(share.buildTaskShareMessage({
@@ -26,7 +28,39 @@ test("task share messages cover every issue type with a stable FounderOps link",
     status: "In Arbeit",
     priority: "P2",
     deadline: "Sprint 1",
+    approvalStatus: null,
+    reviewStatus: "not_requested",
   }, taskUrl), /Ziel: Sprint 1/);
+});
+
+test("task share requests reflect proposal and active review states", async () => {
+  const share = await loadTranspiledModule("src/features/tasks/model/task-share-message.ts");
+  const taskUrl = "https://founder-ops.findmydoc.eu/tasks/deliverable-42";
+  const baseTask = {
+    title: "Contact-404 beheben",
+    taskType: "deliverable",
+    status: "Offen",
+    priority: "P0",
+    deadline: "2026-06-04",
+    approvalStatus: "approved",
+    reviewStatus: "not_requested",
+  };
+
+  assert.match(share.buildTaskShareMessage({
+    ...baseTask,
+    approvalStatus: "proposed",
+  }, taskUrl), /Bitte den Vorschlag prüfen und bei Zustimmung freigeben, damit er eingeplant werden kann\./);
+
+  assert.match(share.buildTaskShareMessage({
+    ...baseTask,
+    approvalStatus: null,
+  }, taskUrl), /Bitte den Vorschlag prüfen und bei Zustimmung freigeben, damit er eingeplant werden kann\./);
+
+  assert.match(share.buildTaskShareMessage({
+    ...baseTask,
+    approvalStatus: "proposed",
+    reviewStatus: "requested",
+  }, taskUrl), /Bitte prüfen und den Review freigeben\./);
 });
 
 test("task share UI keeps copy feedback local and closes only after Google Chat opens", async () => {

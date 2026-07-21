@@ -22,7 +22,17 @@ export function buildTaskShareUrl(taskId: string, origin: string) {
   return new URL(`/tasks/${encodeURIComponent(taskId)}`, origin).toString();
 }
 
-export function buildTaskShareMessage(task: Pick<Task, "deadline" | "priority" | "status" | "taskType" | "title">, taskUrl: string) {
+export function taskShareRequestLabel(task: Pick<Task, "approvalStatus" | "reviewStatus" | "status" | "taskType">) {
+  if (task.reviewStatus === "requested" || task.status === "Review") {
+    return "Bitte prüfen und den Review freigeben.";
+  }
+  if (task.taskType === "deliverable" && (task.approvalStatus === "proposed" || !task.approvalStatus)) {
+    return "Bitte den Vorschlag prüfen und bei Zustimmung freigeben, damit er eingeplant werden kann.";
+  }
+  return "Bitte ansehen und bei Bedarf kurz Rückmeldung geben.";
+}
+
+export function buildTaskShareMessage(task: Pick<Task, "approvalStatus" | "deadline" | "priority" | "reviewStatus" | "status" | "taskType" | "title">, taskUrl: string) {
   const metadata = [
     taskShareTypeLabel(task.taskType),
     task.status,
@@ -34,7 +44,7 @@ export function buildTaskShareMessage(task: Pick<Task, "deadline" | "priority" |
     task.title,
     metadata,
     "",
-    "Bitte prüfen und kurz Rückmeldung geben:",
+    taskShareRequestLabel(task),
     taskUrl,
   ].join("\n");
 }

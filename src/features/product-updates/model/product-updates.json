@@ -47,17 +47,17 @@
     "expiresAt": "2026-08-20",
     "featureTourId": "issue-sharing-v1",
     "title": "Issues einfacher abstimmen",
-    "summary": "Aus jedem Issue lässt sich jetzt eine vorbereitete Nachricht für Google Chat mitnehmen.",
+    "summary": "Aus jedem Issue lässt sich jetzt eine vorbereitete, zum Arbeitsstand passende Nachricht für Google Chat mitnehmen.",
     "slides": [
       {
         "id": "share-issue",
         "title": "Nachricht vorbereiten und selbst senden",
-        "description": "Öffne ein Issue und wähle „Teilen“. Du kannst den vorgeschlagenen Text anpassen, kopieren und Google Chat öffnen. Den passenden Chat und das Senden wählst du anschließend selbst.",
+        "description": "Öffne ein Issue und wähle „Teilen“. Der vorgeschlagene Text unterscheidet zwischen Vorschlag, aktivem Review und allgemeiner Abstimmung. Du kannst ihn anpassen, kopieren und Google Chat öffnen; Chat und Versand wählst du selbst.",
         "image": {
           "src": "/product-updates/2026-07-21-issue-sharing/share-issue.png",
           "alt": "Ein geöffnetes Issue mit dem Teilen-Popover und einer bearbeitbaren Nachricht",
           "width": 1440,
-          "height": 900
+          "height": 810
         }
       }
     ]

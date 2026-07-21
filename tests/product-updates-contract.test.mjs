@@ -46,6 +46,7 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(tours, /task-activity-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-clear-task-activity"/);
   assert.match(tours, /productUpdateId: "2026-07-21-issue-sharing"/);
+  assert.match(tours, /Vorschlag, Review oder allgemeinen Abstimmungsbedarf/);
   assert.match(tours, /task-share-trigger/);
   assert.match(tours, /task-share-popover/);
   assert.match(tours, /help-menu-trigger/);
