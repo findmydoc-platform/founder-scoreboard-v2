@@ -34,6 +34,8 @@ test("important task audit classes receive distinct icons and plain-language lab
 
 test("task activity storage is replaced by structured audit rows with a compatibility view", async () => {
   const migration = await readFile(migrationPath, "utf8");
+  const migrationContract = await readFile("scripts/lib/supabase-migrations.mjs", "utf8");
+  const migrationDeploy = await readFile("scripts/deploy-production-migrations.mjs", "utf8");
   const migrationVerifier = await readFile("scripts/verify-supabase-migrations.mjs", "utf8");
 
   assert.match(migration, /insert into public\.audit_log/);
@@ -45,6 +47,8 @@ test("task activity storage is replaced by structured audit rows with a compatib
   assert.match(migration, /task_audit_action_from_legacy_message/);
   assert.match(migration, /instead of insert on public\.task_activity/);
   assert.match(migration, /task\.github_sync_succeeded/);
-  assert.match(migrationVerifier, /20260721120056_replace_task_activity_with_audit_log\.sql/);
-  assert.match(migrationVerifier, /new Set\(\["drop table"\]\)/);
+  assert.match(migrationContract, /20260721120056_replace_task_activity_with_audit_log\.sql/);
+  assert.match(migrationContract, /new Set\(\["drop table"\]\)/);
+  assert.match(migrationDeploy, /findUnapprovedDestructiveDdl\(migration\)/);
+  assert.match(migrationVerifier, /findUnapprovedDestructiveDdl\(migration\)/);
 });

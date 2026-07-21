@@ -8,6 +8,10 @@ export const productionBaseline = {
   sha256: "63421ddef79d60d0a5e117915285297ab48f318348278c42ca748d46183be2a5",
 };
 
+export const approvedDestructiveDdlByMigration = new Map([
+  ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
+]);
+
 export const migrationFilePattern = /^(\d{14})_([a-z0-9_]+)\.sql$/;
 
 export async function listSupabaseMigrations(root = process.cwd()) {
@@ -60,4 +64,10 @@ export function findDestructiveDdl(sql) {
   ];
 
   return patterns.filter(([, pattern]) => pattern.test(sql)).map(([label]) => label);
+}
+
+export function findUnapprovedDestructiveDdl(migration) {
+  const approvedOperations = approvedDestructiveDdlByMigration.get(migration.file) || new Set();
+  return findDestructiveDdl(migration.sql)
+    .filter((operation) => !approvedOperations.has(operation));
 }
