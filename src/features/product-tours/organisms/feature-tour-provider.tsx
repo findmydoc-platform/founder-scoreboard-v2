@@ -19,6 +19,8 @@ type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
   currentProfile: Profile | null;
   data: PlanningData;
+  openTaskPanel: (taskId: string) => void;
+  selectedTaskId: string | null;
   setData: Dispatch<SetStateAction<PlanningData>>;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "seed" | "supabase";
@@ -70,6 +72,8 @@ export function FeatureTourProvider({
   apiClient,
   currentProfile,
   data,
+  openTaskPanel,
+  selectedTaskId,
   setData,
   setWorkspace,
   source,
@@ -86,6 +90,15 @@ export function FeatureTourProvider({
   const [tourRequested, setTourRequested] = useState(false);
   const [tourStatus, setTourStatus] = useState<TourStatus>(null);
   const startedTourRef = useRef("");
+  const openTaskPanelRef = useRef(openTaskPanel);
+  const selectedTaskIdRef = useRef(selectedTaskId);
+  const tasksRef = useRef(data.tasks);
+
+  useEffect(() => {
+    openTaskPanelRef.current = openTaskPanel;
+    selectedTaskIdRef.current = selectedTaskId;
+    tasksRef.current = data.tasks;
+  }, [data.tasks, openTaskPanel, selectedTaskId]);
 
   useEffect(() => {
     const startFeatureTour = (event: Event) => {
@@ -160,11 +173,34 @@ export function FeatureTourProvider({
         setWorkspace(activeTour.startWorkspace);
       }
 
+      if (activeTour.openTaskDetail) {
+        const taskId = selectedTaskIdRef.current || tasksRef.current.find((task) => !task.trashedAt)?.id;
+        if (!taskId) {
+          failTour("Für diese Hilfe-Tour wird mindestens ein Issue benötigt.");
+          return;
+        }
+        openTaskPanelRef.current(taskId);
+      }
+
       const trigger = await waitForElement(activeTour.requiredSelectors[0]);
       if (!runIsActive()) return;
       if (!trigger) {
         failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
         return;
+      }
+
+      if (activeTour.openTaskShare) {
+        if (!(trigger instanceof HTMLElement)) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+        trigger.click();
+        const sharePopover = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!runIsActive()) return;
+        if (!sharePopover) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
       }
 
       if (activeTour.openAccountMenu) {

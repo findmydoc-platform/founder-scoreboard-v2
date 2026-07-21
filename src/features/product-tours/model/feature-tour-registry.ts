@@ -6,6 +6,8 @@ export type FeatureTourDefinition = {
   id: string;
   openAccountMenu?: boolean;
   openHelpMenu?: boolean;
+  openTaskDetail?: boolean;
+  openTaskShare?: boolean;
   productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
@@ -20,6 +22,7 @@ export const backlogTourId = "backlog-prioritization-v1";
 export const productUpdatesTourId = "product-updates-v1";
 export const taskActivityTourId = "task-activity-v1";
 export const decisionLogTourId = "decision-log-workspace-v1";
+export const issueSharingTourId = "issue-sharing-v1";
 
 export const featureTours = [
   {
@@ -52,6 +55,35 @@ export const featureTours = [
           title: "Aktivität einer Aufgabe öffnen",
           description: "Öffne eine Aufgabe und wechsle zu Aktivität. Dort stehen Kommentare einmalig neben den wichtigsten Änderungen mit passenden Symbolen.",
           side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: issueSharingTourId,
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    openTaskShare: true,
+    productUpdateId: "2026-07-21-issue-sharing",
+    requiredSelectors: ["[data-tour-id='task-share-trigger']", "[data-tour-id='task-share-popover']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-share-trigger']",
+        popover: {
+          title: "Issue teilen",
+          description: "Hier bereitest du für jedes Deliverable und Sub-Issue eine Nachricht vor. Der Text greift Vorschlag, Review oder allgemeinen Abstimmungsbedarf auf.",
+          side: "bottom",
+          align: "end",
+        },
+      },
+      {
+        element: "[data-tour-id='task-share-popover']",
+        popover: {
+          title: "Nachricht selbst senden",
+          description: "Passe den Text an. Der blaue Button kopiert ihn und öffnet Google Chat; den Chat und das Senden übernimmst du dort selbst.",
+          side: "left",
           align: "start",
           doneBtnText: "Verstanden",
         },

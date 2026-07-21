@@ -102,6 +102,8 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
           apiClient={controller.apiClient}
           currentProfile={currentProfile}
           data={data}
+          openTaskPanel={controller.openTaskPanel}
+          selectedTaskId={controller.selectedTaskId}
           setData={controller.setData}
           setWorkspace={setWorkspace}
           source={source}

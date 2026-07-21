@@ -7,6 +7,7 @@ test("product updates auto-open, queue unseen releases, and remain available fro
   const selection = await readFile("src/features/product-updates/model/product-update-selection.ts", "utf8");
   const helpMenu = await readFile("src/features/planning/molecules/planning-help-menu.tsx", "utf8");
   const appShell = await readFile("src/features/planning/templates/planning-app-shell.tsx", "utf8");
+  const tourProvider = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
 
   assert.match(provider, /selectUnseenProductUpdates/);
   assert.match(provider, /founderops\.product-updates\.seen/);
@@ -20,6 +21,10 @@ test("product updates auto-open, queue unseen releases, and remain available fro
   assert.match(helpMenu, /product-updates-menu-link/);
   assert.match(helpMenu, /Was ist neu/);
   assert.match(appShell, /ProductUpdatesProvider/);
+  assert.match(appShell, /openTaskPanel=\{controller\.openTaskPanel\}/);
+  assert.match(tourProvider, /activeTour\.openTaskDetail/);
+  assert.match(tourProvider, /activeTour\.openTaskShare/);
+  assert.match(tourProvider, /openTaskPanelRef\.current\(taskId\)/);
 });
 
 test("product update releases require screenshots, expiry, and dedicated tours", async () => {
@@ -36,9 +41,14 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.ok(updates.every((update) => update.slides.every((slide) => slide.featureTourId === undefined)));
   assert.ok(updates.flatMap((update) => update.slides).every((slide) => slide.image?.src.startsWith("/product-updates/") && slide.image.alt));
   assert.match(tours, /product-updates-v1/);
+  assert.match(tours, /issue-sharing-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-whats-new-gallery"/);
   assert.match(tours, /task-activity-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-clear-task-activity"/);
+  assert.match(tours, /productUpdateId: "2026-07-21-issue-sharing"/);
+  assert.match(tours, /Vorschlag, Review oder allgemeinen Abstimmungsbedarf/);
+  assert.match(tours, /task-share-trigger/);
+  assert.match(tours, /task-share-popover/);
   assert.match(tours, /help-menu-trigger/);
   assert.match(tours, /product-updates-menu-link/);
   assert.match(rootInstructions, /Every production deployment with a user-visible change/);

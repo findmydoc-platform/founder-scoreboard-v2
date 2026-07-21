@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PlanningTrashActionDialog } from "@/features/planning/molecules/planning-trash-action-dialog";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
+import { TaskSharePopover } from "@/features/tasks/molecules/task-share-popover";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
 import { classNames, UiButton } from "@/shared/atoms/ui-primitives";
@@ -128,6 +129,8 @@ export function TaskDetailHeaderActions({
             </span>
           )
         ) : null}
+
+        <TaskSharePopover task={task} />
 
         {canEditOverview ? (
           <UiButton id="task-detail-edit" type="button" size="lg" onClick={onEditOverview} disabled={pending}>

@@ -101,3 +101,51 @@ result: passed
 ## Final result
 
 passed
+
+final result: passed
+
+---
+
+# Issue Sharing - Design QA
+
+## Visual sources
+
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019f8492-cc27-77b2-bb5a-4098ef686887/exec-781d3d1a-b68f-4e2d-973f-fc99ee38b045.png`
+- Implementation screenshot: `/Users/razorspoint/.codex/worktrees/4af6/founder-scoreboard/public/product-updates/2026-07-21-issue-sharing/share-issue.png`
+- Desktop viewport: 1440 x 810
+- Mobile viewport checked live: 390 x 844
+- Captured state: task detail open with the share popover open and an editable suggested message.
+
+## Comparison evidence
+
+The source and implementation screenshots were reviewed together at full-view scale. A focused comparison covered the task-header action, popover placement, message editor, action hierarchy, and dismissal control. The source board includes explanatory labels and an enlarged interaction inset; those are design annotations rather than production UI and were intentionally omitted.
+
+## Fidelity surfaces
+
+- Typography: Uses the existing application type scale, weights, and muted-label hierarchy. Passed.
+- Spacing and layout: The popover aligns to the header action on desktop and remains inside the viewport on mobile. Passed.
+- Colors and tokens: Uses the existing surface, border, muted, primary, and destructive tokens. Passed.
+- Image quality and assets: The product-update screenshot is a native 1440 x 900 capture without upscaling or placeholder assets. Passed.
+- Copy and content: The suggested German message contains issue type, title, status, priority, deadline when available, a state-aware request, and a deep link; the text stays editable. Passed.
+
+## Interaction QA
+
+- Opening and closing the share popover works from the task header.
+- Editing the proposed message works in the textarea.
+- `Nur Link kopieren` keeps the popover open and changes its own label temporarily to `Link kopiert`.
+- `Nachricht kopieren & Google Chat öffnen` copies the edited message, opens Google Chat, closes the popover only after success, and shows no copied toast.
+- Copy or popup failures leave the popover open and show an inline error.
+- The dedicated two-step product tour opens an issue when needed, opens the share popover, and highlights the share action followed by the message composer.
+- A clean browser session completed the tour without console errors or warnings.
+
+## Comparison history
+
+1. Pass 1 found mobile overflow because the desktop-aligned popover extended beyond the left viewport edge. Fixed with viewport-safe left alignment below the `sm` breakpoint.
+2. Pass 1 found a content bug where a non-ISO deadline label such as `Sprint 1` was interpreted as a calendar date. Fixed by formatting only ISO date values.
+3. Pass 1 found the guided tour could restart while preparing the task state. Fixed by keeping task-panel inputs in stable refs during the tour run.
+4. Post-fix desktop and mobile checks passed, including the copy states and the complete guided-tour path.
+5. The request sentence now distinguishes an open proposal, an active review, and all other task states. The updated product screenshot verifies the proposal wording; focused tests cover all three branches and review precedence.
+
+## Final result
+
+passed
