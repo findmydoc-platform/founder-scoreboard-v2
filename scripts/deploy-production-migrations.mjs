@@ -4,7 +4,7 @@ import pg from "pg";
 import { loadLocalEnv } from "./lib/env.mjs";
 import { resolveProductionSchemaConnection } from "./lib/production-schema-connection.mjs";
 import {
-  findDestructiveDdl,
+  findUnapprovedDestructiveDdl,
   listSupabaseMigrations,
   productionBaseline,
 } from "./lib/supabase-migrations.mjs";
@@ -23,7 +23,7 @@ if (migrations[0]?.file !== productionBaseline.file) {
   throw new Error(`${productionBaseline.file} must remain the first migration in the ordered history.`);
 }
 for (const migration of migrations) {
-  const destructiveDdl = findDestructiveDdl(migration.sql);
+  const destructiveDdl = findUnapprovedDestructiveDdl(migration);
   if (destructiveDdl.length) {
     throw new Error(`${migration.file} contains destructive DDL (${destructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
   }

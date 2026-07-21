@@ -1,16 +1,13 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import {
-  findDestructiveDdl,
+  findUnapprovedDestructiveDdl,
   listSupabaseMigrations,
   migrationFilePattern,
   productionBaseline,
 } from "./lib/supabase-migrations.mjs";
 
 const failures = [];
-const approvedDestructiveDdl = new Map([
-  ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
-]);
 const migrations = await listSupabaseMigrations();
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const config = await readFile("supabase/config.toml", "utf8");
@@ -28,9 +25,7 @@ for (const migration of migrations) {
   if (versions.has(migration.version)) failures.push(`Duplicate migration version: ${migration.version}`);
   versions.add(migration.version);
 
-  const destructiveDdl = findDestructiveDdl(migration.sql);
-  const approvedForMigration = approvedDestructiveDdl.get(migration.file) || new Set();
-  const unapprovedDestructiveDdl = destructiveDdl.filter((operation) => !approvedForMigration.has(operation));
+  const unapprovedDestructiveDdl = findUnapprovedDestructiveDdl(migration);
   if (unapprovedDestructiveDdl.length) {
     failures.push(`${migration.file} contains destructive DDL (${unapprovedDestructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
   }
