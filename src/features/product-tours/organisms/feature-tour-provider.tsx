@@ -5,7 +5,10 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { featureTours } from "@/features/product-tours/model/feature-tour-registry";
+import {
+  featureTours,
+  type FeatureTourDefinition,
+} from "@/features/product-tours/model/feature-tour-registry";
 import {
   shouldReleaseFeatureTourClaim,
   type FeatureTourRunClaim,
@@ -72,28 +75,41 @@ export function FeatureTourProvider({
   source,
   workspace,
 }: FeatureTourProviderProps) {
-  const tour = useMemo(() => {
+  const nextTour = useMemo(() => {
     if (!currentProfile) return undefined;
     return selectNextFeatureTour(featureTours, workspace, currentProfile.id, data.profileFeatureTourAcknowledgements);
   }, [currentProfile, data.profileFeatureTourAcknowledgements, workspace]);
+  const [requestedTourId, setRequestedTourId] = useState<string | null>(null);
+  const tour: FeatureTourDefinition | undefined = requestedTourId
+    ? featureTours.find((definition) => definition.id === requestedTourId)
+    : nextTour;
   const [tourRequested, setTourRequested] = useState(false);
   const [tourStatus, setTourStatus] = useState<TourStatus>(null);
   const startedTourRef = useRef("");
 
   useEffect(() => {
-    const startFeatureTour = () => {
-      if (!tour) {
+    const startFeatureTour = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail as { tourId?: unknown } | undefined : undefined;
+      const explicitTourId = typeof detail?.tourId === "string" ? detail.tourId : "";
+      const selectedTour: FeatureTourDefinition | undefined = explicitTourId
+        ? featureTours.find((definition) => definition.id === explicitTourId)
+        : nextTour;
+      if (!selectedTour) {
         setTourRequested(false);
-        setTourStatus({ kind: "error", message: "Keine neue Hilfe-Tour verfügbar." });
+        setTourStatus({
+          kind: "error",
+          message: explicitTourId ? "Diese Hilfe-Tour ist nicht verfügbar." : "Keine neue Hilfe-Tour verfügbar.",
+        });
         return;
       }
-      if (startedTourRef.current === tour.id) return;
+      if (startedTourRef.current === selectedTour.id) return;
+      setRequestedTourId(selectedTour.id);
       setTourStatus({ kind: "loading", message: "Hilfe-Tour wird vorbereitet …" });
       setTourRequested(true);
     };
     window.addEventListener("fmd:start-feature-tour", startFeatureTour);
     return () => window.removeEventListener("fmd:start-feature-tour", startFeatureTour);
-  }, [tour]);
+  }, [nextTour]);
 
   useEffect(() => {
     if (tourStatus?.kind !== "error") return;
@@ -102,7 +118,7 @@ export function FeatureTourProvider({
   }, [tourStatus]);
 
   useEffect(() => {
-    if (!tourRequested || !tour || !currentProfile || startedTourRef.current === tour.id) return;
+    if (!tourRequested || !tour || startedTourRef.current === tour.id) return;
     const activeTour = tour;
     let active = true;
     let seenMarked = false;
@@ -117,12 +133,13 @@ export function FeatureTourProvider({
     const failTour = (message: string) => {
       if (!runIsActive()) return;
       if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+      setRequestedTourId(null);
       setTourRequested(false);
       setTourStatus({ kind: "error", message });
     };
 
     const markSeen = async () => {
-      if (seenMarked || !runIsActive()) return;
+      if (seenMarked || !runIsActive() || !currentProfile) return;
       seenMarked = true;
       if (source !== "supabase") {
         setData((current) => upsertAcknowledgement(current, {
@@ -160,6 +177,16 @@ export function FeatureTourProvider({
         }
       }
 
+      if (activeTour.openHelpMenu) {
+        window.dispatchEvent(new CustomEvent("fmd:open-help-menu"));
+        const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!runIsActive()) return;
+        if (!menuItem) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+      }
+
       const { driver } = await import("driver.js");
       if (!runIsActive()) return;
       const driverObject = driver({
@@ -174,6 +201,7 @@ export function FeatureTourProvider({
         stageRadius: 8,
         onDestroyed: () => {
           if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
+          setRequestedTourId(null);
         },
         steps: activeTour.steps.map((step, index) => ({
           ...step,

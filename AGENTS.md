@@ -28,3 +28,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
+
+## Product Update Release Contract
+
+- Every production deployment with a user-visible change must add or extend an entry in `src/features/product-updates/model/product-updates.json` with at least one current screenshot under `public/product-updates/` and short, non-technical German copy that explains the user benefit.
+- Every product update must have its own small, meaningful Driver.js tour in `src/features/product-tours/model/feature-tour-registry.ts`, link it through the update-level `featureTourId`, and keep the gallery action **Lass dich leiten** usable. Do not add a tour that merely repeats the gallery text; guide the user to the changed interaction in as few steps as practical.
+- Every product update must set `expiresAt`. Use 30 days after `releasedAt` by default and never more than 60 days. Expired updates must disappear from automatic display and the help menu.
+- Purely operational deployments must not invent product news. Run `pnpm run verify:product-updates` before handoff.

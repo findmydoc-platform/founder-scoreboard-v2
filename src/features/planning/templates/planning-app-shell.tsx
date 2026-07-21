@@ -8,6 +8,7 @@ import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
+import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
@@ -104,6 +105,8 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           source={source}
           workspace={workspace}
         />
+
+        <ProductUpdatesProvider profileId={currentProfile?.id || null} />
 
         {filtersAvailable && (
           <PlanningFilters

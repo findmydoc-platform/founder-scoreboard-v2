@@ -5,6 +5,8 @@ export type FeatureTourDefinition = {
   doneWorkspace?: AppWorkspace;
   id: string;
   openAccountMenu?: boolean;
+  openHelpMenu?: boolean;
+  productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
   steps: readonly DriveStep[];
@@ -15,8 +17,36 @@ export const workspaceCleanupTourId = "workspace-cleanup-v2";
 export const profileSettingsTourId = "profile-settings-v1";
 export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
 export const backlogTourId = "backlog-prioritization-v1";
+export const productUpdatesTourId = "product-updates-v1";
 
 export const featureTours = [
+  {
+    id: productUpdatesTourId,
+    openHelpMenu: true,
+    productUpdateId: "2026-07-21-whats-new-gallery",
+    requiredSelectors: ["[data-tour-id='help-menu-trigger']", "[data-tour-id='product-updates-menu-link']"],
+    steps: [
+      {
+        element: "[data-tour-id='help-menu-trigger']",
+        popover: {
+          title: "Neuigkeiten wiederfinden",
+          description: "Öffne die Hilfe, wenn du eine Änderung später noch einmal ansehen möchtest.",
+          side: "bottom",
+          align: "end",
+        },
+      },
+      {
+        element: "[data-tour-id='product-updates-menu-link']",
+        popover: {
+          title: "Was ist neu",
+          description: "Hier findest du alle kurzen Bilderklärungen zu sichtbaren Neuerungen.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: backlogTourId,
     workspaceScope: "backlog",
