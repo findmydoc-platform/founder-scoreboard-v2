@@ -474,6 +474,7 @@ export async function connectGitHubSubIssue({
     }
     childRepository: repository(owner: $childOwner, name: $childRepo) {
       issue(number: $childNumber) {
+        id
         number
         url
         repository { nameWithOwner }
@@ -486,6 +487,7 @@ export async function connectGitHubSubIssue({
       parentRepository?: { issue?: { id?: string; number?: number; url?: string } | null } | null;
       childRepository?: {
         issue?: {
+          id?: string;
           number: number;
           url: string;
           repository: { nameWithOwner: string };
@@ -512,10 +514,12 @@ export async function connectGitHubSubIssue({
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht geprüft werden",
   });
   const parentIssue = relationshipResult.data?.parentRepository?.issue;
-  if (!parentIssue?.id) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+  if (!parentIssue) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+  if (!parentIssue.id) throw new Error("GitHub Parent-Issue-Node-ID wurde nicht gefunden.");
 
   const childIssue = relationshipResult.data?.childRepository?.issue;
   if (!childIssue) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Sub-Issue wurde nicht gefunden.");
+  if (!childIssue.id) throw new Error("GitHub Sub-Issue-Node-ID wurde nicht gefunden.");
 
   const currentParent = childIssue.parent;
   const alreadyConnected = currentParent?.number === parentIssueNumber
@@ -532,18 +536,17 @@ export async function connectGitHubSubIssue({
     };
   }
 
-  const mutation = `mutation($parent: ID!, $childUrl: String!) {
-    addSubIssue(input: { issueId: $parent, subIssueUrl: $childUrl, replaceParent: true }) {
+  const mutation = `mutation($parent: ID!, $child: ID!) {
+    addSubIssue(input: { issueId: $parent, subIssueId: $child, replaceParent: true }) {
       issue { number url }
       subIssue { number url repository { nameWithOwner } parent { number url repository { nameWithOwner } } }
     }
   }`;
-  const childUrl = `https://github.com/${child.repository}/issues/${childIssueNumber}`;
   const result = await githubJson<{ data?: unknown; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
     token,
     method: "POST",
     operation: "mutation",
-    body: { query: mutation, variables: { parent: parentIssue.id, childUrl } },
+    body: { query: mutation, variables: { parent: parentIssue.id, child: childIssue.id } },
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht erstellt werden",
   });
   if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));

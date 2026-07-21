@@ -21,6 +21,17 @@ FounderOps treats GitHub mutations as resource-specific reconciliation, not as b
 - Read operations, including GraphQL queries sent through `POST`, may retry once when the server permits a short wait.
 - Mutations never retry automatically. `GitHubApiError` carries the request ID, retry delay, and rate-limit metadata so an outbox or caller can reconcile and schedule later.
 
+## Relationship reconciliation
+
+Sub-issue synchronization follows `observe → compare → apply → reconcile`:
+
+1. Resolve the parent and child issues and validate both global node IDs while reading the child's current parent.
+2. Treat the desired parent as already applied when repository and issue number match.
+3. Otherwise call `addSubIssue` once with `issueId`, `subIssueId`, and the intentional `replaceParent` setting.
+4. After an ambiguous response, start the next sync with the same observation instead of retrying the mutation automatically.
+
+Once the child issue has been resolved, do not rebuild `subIssueUrl` as mutation input. Use the validated child node ID already returned by GitHub.
+
 ## Mutation checklist
 
 Before adding a mutation, answer all of the following in code and tests:
@@ -37,6 +48,6 @@ Before adding a mutation, answer all of the following in code and tests:
 
 - Issue creation uses `<!-- founderops-task-id:... -->`; a retry searches the repository and updates the marker-owned issue instead of creating another one.
 - Comment delivery uses `<!-- fmd-comment-id:... -->`; the outbox reconciles the marker before posting.
-- Sub-issue synchronization queries the child's current parent before `addSubIssue`.
+- Sub-issue synchronization resolves both node IDs and queries the child's current parent before `addSubIssue`.
 - Dependency synchronization lists the managed set, adds missing relationships, and removes only stale managed relationships.
 - Attachment uploads require a durable operation ID and deterministic GitHub path; this contract is implemented separately from the transport foundation.
