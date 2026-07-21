@@ -146,6 +146,10 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
 
 test("github issue export includes only the task brief and FounderOps source", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
+  const taskIssueBodySource = github.slice(
+    github.indexOf("export function taskIssueBody"),
+    github.indexOf("export async function githubUserForToken"),
+  );
   const issueReferences = await readFile("src/lib/github-issue-reference.ts", "utf8");
   const ui = await readPlanningSurface();
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
@@ -175,9 +179,9 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.doesNotMatch(github, /Letzte Kommentare/);
   assert.doesNotMatch(github, /Aktivitätsprotokoll/);
   assert.doesNotMatch(github, /Planning Metadata/);
-  assert.doesNotMatch(github, /Founder Scoreboard v2 Task ID/);
-  assert.doesNotMatch(github, /Sync-Ziel/);
-  assert.doesNotMatch(github, /Bestehendes GitHub Issue/);
+  assert.doesNotMatch(taskIssueBodySource, /Founder Scoreboard v2 Task ID/);
+  assert.doesNotMatch(taskIssueBodySource, /Sync-Ziel/);
+  assert.doesNotMatch(taskIssueBodySource, /Bestehendes GitHub Issue/);
   assert.match(github, /resolveGitHubIssueNumber/);
   assert.match(issueReferences, /issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
