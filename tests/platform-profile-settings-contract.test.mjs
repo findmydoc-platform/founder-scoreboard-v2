@@ -148,9 +148,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(selection, /profileHasSeenTour/);
   assert.match(selection, /selectNextFeatureTour/);
   assert.match(selection, /tours\.find/);
-  assert.match(header, /HelpCircle/);
-  assert.match(header, /fmd:start-feature-tour/);
-  assert.match(header, /Hilfe anzeigen/);
+  assert.match(header, /PlanningHelpMenu/);
   assert.match(provider, /window\.addEventListener\("fmd:start-feature-tour"/);
   assert.match(provider, /tourRequested/);
   assert.match(provider, /if \(!tourRequested \|\| !tour/);

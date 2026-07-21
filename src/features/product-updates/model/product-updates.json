@@ -1,0 +1,34 @@
+[
+  {
+    "id": "2026-07-21-whats-new-gallery",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "product-updates-v1",
+    "title": "Änderungen auf einen Blick",
+    "summary": "FounderOps erklärt sichtbare Neuerungen jetzt direkt dort, wo du arbeitest.",
+    "slides": [
+      {
+        "id": "automatic-gallery",
+        "title": "Was sich geändert hat",
+        "description": "Nach einer sichtbaren Neuerung öffnet sich einmalig eine kurze Galerie. Ein Bild und wenige Sätze zeigen dir sofort, was neu ist und warum es hilfreich ist.",
+        "image": {
+          "src": "/product-updates/2026-07-21-whats-new-gallery/help-menu.png",
+          "alt": "Das Hilfe-Menü mit dem neuen Eintrag Was ist neu",
+          "width": 1440,
+          "height": 900
+        }
+      },
+      {
+        "id": "guided-tour",
+        "title": "Später jederzeit wieder öffnen",
+        "description": "Solange die Neuigkeit aktuell ist, bleibt sie im Hilfe-Menü erreichbar. Mit „Lass dich leiten“ führt dich eine kurze Klick-Tour direkt zur passenden Stelle.",
+        "image": {
+          "src": "/product-updates/2026-07-21-whats-new-gallery/guided-tour.png",
+          "alt": "Eine kurze Hilfe-Tour zeigt den Eintrag Was ist neu im Hilfe-Menü",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  }
+]
