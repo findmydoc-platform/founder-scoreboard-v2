@@ -68,7 +68,19 @@ test("task share UI keeps copy feedback local and closes only after Google Chat 
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
 
   assert.match(headerActions, /<TaskSharePopover task=\{task\} \/>/);
+  assert.match(headerActions, /splitGitHubRepository\(task\.githubRepo\)/);
+  assert.match(headerActions, /\{repositoryLabel\}<\/span>/);
+  assert.match(headerActions, /\{issueLabel\}<\/span>/);
+  assert.match(headerActions, /id="task-detail-edit"/);
+  assert.match(headerActions, /variant="blueOutline"/);
+  assert.match(headerActions, /size="iconLg"/);
+  assert.match(headerActions, /aria-label="Bearbeiten"/);
+  assert.match(headerActions, /title="Bearbeiten"/);
+  assert.doesNotMatch(headerActions, /<Pencil[^>]*\/>\s*Bearbeiten/);
   assert.match(popover, /data-tour-id="task-share-trigger"/);
+  assert.match(popover, /size="iconLg"/);
+  assert.match(popover, /aria-label="Teilen"/);
+  assert.doesNotMatch(popover, /<Share2[^>]*\/>\s*Teilen/);
   assert.match(popover, /data-tour-id="task-share-popover"/);
   assert.match(popover, /Nachricht kopieren & Google Chat öffnen/);
   assert.match(popover, /const chatWindow = window\.open\("", "_blank"\)/);

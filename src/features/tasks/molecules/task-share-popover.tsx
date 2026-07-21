@@ -117,14 +117,15 @@ export function TaskSharePopover({ task }: { task: Task }) {
     <div ref={rootRef} className="relative">
       <UiButton
         type="button"
-        size="lg"
+        size="iconLg"
         onClick={open ? closePopover : openPopover}
+        aria-label="Teilen"
         aria-expanded={open}
         aria-haspopup="dialog"
+        title="Teilen"
         data-tour-id="task-share-trigger"
       >
         <Share2 size={16} aria-hidden="true" />
-        Teilen
       </UiButton>
 
       {open ? (
