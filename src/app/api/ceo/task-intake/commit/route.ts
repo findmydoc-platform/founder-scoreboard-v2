@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       preview,
       actorProfileId: permission.profile?.id || null,
       auditAction: "task_intake.create",
-      activitySource: "CEO Intake",
+      auditSource: "CEO Intake",
     });
 
     return NextResponse.json({ ok: true, tasks });

@@ -18,8 +18,27 @@ export const profileSettingsTourId = "profile-settings-v1";
 export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
 export const backlogTourId = "backlog-prioritization-v1";
 export const productUpdatesTourId = "product-updates-v1";
+export const taskActivityTourId = "task-activity-v1";
 
 export const featureTours = [
+  {
+    id: taskActivityTourId,
+    productUpdateId: "2026-07-21-clear-task-activity",
+    requiredSelectors: ["[data-tour-id='planning-task-scope']"],
+    startWorkspace: "planning",
+    steps: [
+      {
+        element: "[data-tour-id='planning-task-scope']",
+        popover: {
+          title: "Aktivität einer Aufgabe öffnen",
+          description: "Öffne eine Aufgabe und wechsle zu Aktivität. Dort stehen Kommentare einmalig neben den wichtigsten Änderungen mit passenden Symbolen.",
+          side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: productUpdatesTourId,
     openHelpMenu: true,

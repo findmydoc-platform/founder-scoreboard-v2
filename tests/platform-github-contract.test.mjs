@@ -612,7 +612,6 @@ test("github app connect persists reload-stable user tokens without browser toke
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readSupabaseSchemaContract();
   const externalMigration = await readSupabaseSchemaContract();
-  const commentDeliveryMigration = await readSupabaseSchemaContract();
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
@@ -633,6 +632,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
   const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
   const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
+  const activityPresentation = await readFile("src/features/tasks/model/task-activity-presentation.ts", "utf8");
   const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const mentions = await readFile("src/lib/mentions.ts", "utf8");
   const notificationPolicy = await readFile("src/lib/notification-catalog.ts", "utf8");
@@ -650,13 +650,13 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(data, /task_external_comments/);
   assert.match(data, /taskBlockers/);
   assert.match(data, /taskActivity/);
-  assert.match(data, /task_activity/);
+  assert.match(data, /task_audit_timeline/);
+  assert.doesNotMatch(data, /from\("task_activity"\)/);
   assert.match(data, /notificationEvents/);
   assert.match(commentsRoute, /task.comment/);
   assert.match(commentsRoute, /mentionedProfileIds/);
   assert.match(commentsRoute, /task.mention/);
   assert.match(commentsRoute, /Du wurdest erwähnt/);
-  assert.match(commentDeliveryMigration, /Kommentar hinzugefügt/);
   assert.match(mentions, /githubLogin/);
   assert.match(notificationPolicy, /task\.mention/);
   assert.match(notificationPolicy, /Erwähnung/);
@@ -671,7 +671,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(githubCommentsRoute, /listGitHubIssueComments/);
   assert.match(githubCommentsRoute, /getGitHubIssue/);
   assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
-  assert.match(githubCommentsRoute, /Nachweis aus externer Ablage importiert/);
+  assert.doesNotMatch(githubCommentsRoute, /Nachweis aus externer Ablage importiert|GitHub-Kommentare importiert|task_activity/);
   assert.match(githubCommentsRoute, /evidenceLink/);
   assert.match(githubCommentsRoute, /isAppMirroredComment/);
   assert.match(githubCommentsRoute, /task_external_comments/);
@@ -703,12 +703,12 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /github-comment/);
   assert.match(thread, /timeline/);
   assert.match(thread, /TaskCommentTimeline/);
-  assert.match(commentTimeline, /describeActivity/);
-  assert.match(commentTimeline, /repairGermanText/);
+  assert.match(commentTimeline, /describeTaskActivity/);
+  assert.match(commentTimeline, /activityIcons/);
   assert.match(commentTimeline, /activityToneClass/);
-  assert.match(commentTimeline, /Status geändert/);
-  assert.match(commentTimeline, /Review finalisiert/);
-  assert.match(commentTimeline, /Abhängigkeit/);
+  assert.match(activityPresentation, /Status geändert/);
+  assert.match(activityPresentation, /Prüfung abgeschlossen/);
+  assert.match(activityPresentation, /Abhängigkeit hinzugefügt/);
   assert.match(thread, /CommentBody/);
   assert.match(thread, /TaskCommentComposer/);
   assert.match(githubCommentImage, /<img\b/);

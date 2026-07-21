@@ -37,6 +37,8 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.ok(updates.flatMap((update) => update.slides).every((slide) => slide.image?.src.startsWith("/product-updates/") && slide.image.alt));
   assert.match(tours, /product-updates-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-whats-new-gallery"/);
+  assert.match(tours, /task-activity-v1/);
+  assert.match(tours, /productUpdateId: "2026-07-21-clear-task-activity"/);
   assert.match(tours, /help-menu-trigger/);
   assert.match(tours, /product-updates-menu-link/);
   assert.match(rootInstructions, /Every production deployment with a user-visible change/);

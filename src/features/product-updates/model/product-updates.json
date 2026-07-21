@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-21-clear-task-activity",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "task-activity-v1",
+    "title": "Aufgabenaktivität aufgeräumt",
+    "summary": "Kommentare stehen nur noch einmal da. Wichtige Änderungen lassen sich durch eigene Symbole und verständliche Bezeichnungen schneller erfassen.",
+    "slides": [
+      {
+        "id": "clear-activity-timeline",
+        "title": "Kommentare und Änderungen klar getrennt",
+        "description": "Die Aktivität zeigt Kommentare nur als Kommentare. Status, Prüfung, GitHub, Blocker, Abhängigkeiten und Anhänge erhalten passende Symbole und leicht verständliche Bezeichnungen.",
+        "image": {
+          "src": "/product-updates/2026-07-21-clear-task-activity/activity-timeline.png",
+          "alt": "Aufgabenaktivität mit getrennten Kommentaren und unterschiedlich gekennzeichneten Änderungen",
+          "width": 1280,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-21-whats-new-gallery",
     "releasedAt": "2026-07-21",
     "expiresAt": "2026-08-20",

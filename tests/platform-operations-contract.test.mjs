@@ -653,9 +653,10 @@ test("founderops agent api is token guarded and limited to planning intake", asy
   assert.match(commitRoute, /Agent API/);
   assert.match(commitRoute, /Agent Task Intake enthält ungültige Aufgaben/);
   assert.match(commitRoute, /loadCeoActorProfileId/);
-  assert.match(commitHelper, /task_activity/);
+  assert.doesNotMatch(commitHelper, /task_activity/);
   assert.match(commitHelper, /audit_log/);
   assert.match(commitHelper, /auditAction/);
+  assert.match(commitHelper, /auditSource/);
   assert.match(commitHelper, /agent\.task_intake\.create/);
   assert.match(commitHelper, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
   assert.match(taskInsertRow, /review_owner_profile_id: input\.reviewOwnerProfileId \|\| null/);

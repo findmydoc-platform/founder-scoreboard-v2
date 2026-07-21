@@ -221,8 +221,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(focusRoute, /task_focus_items/);
   assert.match(focusRoute, /Heute-Fokus ist auf drei Aufgaben begrenzt/);
   assert.match(focusRoute, /export async function DELETE/);
-  assert.match(focusRoute, /Fokus entfernt/);
-  assert.match(focusRoute, /Fokus aktualisiert/);
+  assert.doesNotMatch(focusRoute, /task_activity|Fokus entfernt|Fokus aktualisiert/);
   assert.match(verify, /planning-schema-checks\.json/);
   assert.doesNotMatch(health, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /task_focus_items/);

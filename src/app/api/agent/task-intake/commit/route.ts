@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       preview,
       actorProfileId: await loadCeoActorProfileId(supabase),
       auditAction: "agent.task_intake.create",
-      activitySource: "Agent API",
+      auditSource: "Agent API",
     });
 
     return NextResponse.json({ ok: true, tasks });
