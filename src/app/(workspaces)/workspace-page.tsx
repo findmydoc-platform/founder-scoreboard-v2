@@ -6,6 +6,7 @@ import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
+import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
 import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -42,9 +43,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
-    const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace, auth.profile, {
-      headerData: "deferred",
-    });
+    const [{ availability, data, headerData, source }, initialDecisionLogResult] = await Promise.all([
+      loadWorkspacePlanningData(initialWorkspace, auth.profile, { headerData: "deferred" }),
+      initialWorkspace === "decision-log" ? loadNotionDecisionLog() : Promise.resolve(undefined),
+    ]);
     if (availability === "unavailable") {
       return <PlanningDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
     }
@@ -59,11 +61,15 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
         initialProtectedDataLoaded
+        initialDecisionLogResult={initialDecisionLogResult}
       />
     );
   }
 
-  const { availability, data, headerData, source } = await loadWorkspacePlanningData(initialWorkspace);
+  const [{ availability, data, headerData, source }, initialDecisionLogResult] = await Promise.all([
+    loadWorkspacePlanningData(initialWorkspace),
+    initialWorkspace === "decision-log" ? loadNotionDecisionLog() : Promise.resolve(undefined),
+  ]);
   if (availability === "unavailable") {
     return <PlanningDataUnavailablePage workspace={initialWorkspace} />;
   }
@@ -75,6 +81,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       source={source}
       authRequired={false}
       demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
+      initialDecisionLogResult={initialDecisionLogResult}
     />
   );
 }

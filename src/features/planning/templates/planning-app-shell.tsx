@@ -9,14 +9,16 @@ import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-ove
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
+import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
   controller: PlanningAppController;
   source: "seed" | "supabase";
+  decisionLogResult?: NotionDecisionLogResult;
 };
 
-export function PlanningAppShell({ authRequired, controller, source }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, source, decisionLogResult }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -124,7 +126,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           />
         )}
 
-        <PlanningWorkspaceRenderer controller={controller} source={source} />
+        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} />
       </main>
 
       <PlanningOverlayLayer controller={controller} />

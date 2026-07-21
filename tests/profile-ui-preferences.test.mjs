@@ -14,6 +14,7 @@ const workspaceRoutes = await loadTranspiledModule(
     "lucide-react": {
       Archive: icon,
       Bell: icon,
+      BookOpenCheck: icon,
       CalendarClock: icon,
       GanttChart: icon,
       LayoutDashboard: icon,
@@ -44,18 +45,21 @@ const currentProfile = {
   notificationsEnabled: true,
 };
 
-test("workspace routes and persisted workspace values share one current contract", () => {
+test("workspace routes include every navigable workspace while persisted defaults stay explicit", () => {
   assert.deepEqual(
     workspaceRoutes.workspaceRoutes.map((route) => route.id),
     [...workspacePreferences.appWorkspaceIds],
   );
 
-  for (const workspace of workspacePreferences.appWorkspaceIds) {
+  for (const workspace of workspacePreferences.persistedWorkspaceIds) {
     assert.equal(
       workspacePreferences.rootWorkspaceFromPreference(workspace, "ceo"),
       workspace,
     );
   }
+
+  assert.equal(workspacePreferences.appWorkspaceFromValue("decision-log"), "decision-log");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("decision-log", "ceo"), "planning");
 });
 
 test("workspace preferences normalize legacy values and role-protected CEO intake", () => {
@@ -128,7 +132,16 @@ test("profile settings API delegates workspace validation to the shared role-awa
   assert.doesNotMatch(route, /allowedWorkspaces/);
 });
 
-test("workspace constraint migration backfills legacy values and allows every current workspace", async () => {
+test("profile settings only offer workspaces supported by the persisted default contract", async () => {
+  const profileSettings = await readFile(
+    "src/features/profile/organisms/profile-settings-overview.tsx",
+    "utf8",
+  );
+
+  assert.match(profileSettings, /isPersistedWorkspace\(route\.id\)/);
+});
+
+test("workspace constraint migration backfills legacy values and allows every persisted workspace", async () => {
   const migration = await readFile(
     "supabase/migrations/20260721121727_align_profile_ui_default_workspaces.sql",
     "utf8",
@@ -146,7 +159,8 @@ test("workspace constraint migration backfills legacy values and allows every cu
     migration.indexOf("update public.profile_ui_preferences") < migration.indexOf("add constraint"),
     "values must be normalized before the current constraint is installed",
   );
-  for (const workspace of workspacePreferences.appWorkspaceIds) {
+  for (const workspace of workspacePreferences.persistedWorkspaceIds) {
     assert.match(migration, new RegExp(`'${workspace}'`));
   }
+  assert.doesNotMatch(migration, /'decision-log'/);
 });

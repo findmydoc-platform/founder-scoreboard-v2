@@ -75,6 +75,7 @@ const failures = [
   healthResult.statusCode !== 200 ? `health status ${healthResult.statusCode}` : "",
   healthResult.body?.status !== "ready" ? `health body status ${healthResult.body?.status}` : "",
   pageResult.statusCode !== 200 ? `page status ${pageResult.statusCode}` : "",
+  !authGateEnabled ? "REQUIRE_SUPABASE_AUTH must be true for operational verification" : "",
   !authGateEnabled && failedMarkers.length ? `missing page markers: ${failedMarkers.join(", ")}` : "",
   result.data.profiles !== expected.profiles ? `expected ${expected.profiles} profiles, got ${result.data.profiles}` : "",
   result.data.ceos !== 1 ? `expected 1 CEO, got ${result.data.ceos}` : "",

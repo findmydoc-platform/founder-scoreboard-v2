@@ -451,6 +451,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
+    "decision-log",
     "events",
     "ceo-intake",
     "sprint",
@@ -465,6 +466,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(ui, /usePlanningWorkspace/);
   assert.doesNotMatch(`${sidebar}\n${routes}`, /\/\?workspace=/);
   assert.match(routes, /href: "\/planning"/);
+  assert.match(routes, /href: "\/decision-log"/);
   assert.doesNotMatch(routes, /href: "\/execution"|id: "execution"/);
   assert.doesNotMatch(routes, /href: "\/reviews"|id: "reviews"/);
   assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);

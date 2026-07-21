@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
-import { workspaceRoutes } from "@/features/planning/model/workspace-routes";
+import {
+  isPersistedWorkspace,
+  workspaceRoutes,
+} from "@/features/planning/model/workspace-routes";
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
@@ -79,7 +82,11 @@ function ProfileSettingsForm({
   const isDirty = draftSnapshot !== savedSnapshot;
 
   const workspaceOptions = workspaceRoutes
-    .filter((route) => !route.ceoOnly || currentProfile.platformRole === "ceo")
+    .filter(
+      (route) =>
+        isPersistedWorkspace(route.id) &&
+        (!route.ceoOnly || currentProfile.platformRole === "ceo"),
+    )
     .map((route) => ({ value: route.id, label: route.label }));
   const viewOptions = viewTabs.map((item) => ({ value: item.id, label: item.label }));
   const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];

@@ -66,6 +66,7 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   backlog: "Backlog",
+  "decision-log": "Decision Log",
   events: "Events",
   sprint: "Sprint & Score",
   projects: "Meilensteine & Initiativen",
@@ -79,6 +80,7 @@ export const workspaceLabels: Record<Workspace, string> = {
 export const workspaceDescriptions: Record<Workspace, string> = {
   planning: "Zeigt die Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor und ordnet freigegebene Deliverables Sprints zu.",
+  "decision-log": "Unternehmensentscheidungen · Notion ist die Quelle der Wahrheit.",
   events: "Zeigt wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Zeigt Weekly Updates, Punkte, Review-Reife und Sprintabschluss.",
   projects: "Zeigt Epics, Meilensteine, Initiativen und deren Fortschritt.",
