@@ -172,8 +172,13 @@ function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
 }
 
 function hasMatchingLegacyFounderOpsTaskId(task: Task, body?: string | null) {
-  const expectedLine = `- Founder Scoreboard v2 Task ID: ${task.id}`;
-  return Boolean(body?.split(/\r?\n/).some((line) => line.trim() === expectedLine));
+  const prefix = "- Founder Scoreboard v2 Task ID: ";
+  const taskIds = new Set((body || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(prefix))
+    .map((line) => line.slice(prefix.length).trim()));
+  return taskIds.size === 1 && taskIds.has(task.id);
 }
 
 export function taskIssueMarker(taskId: string) {
