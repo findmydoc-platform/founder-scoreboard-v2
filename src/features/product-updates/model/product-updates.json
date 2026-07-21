@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-21-decision-log",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "decision-log-workspace-v1",
+    "title": "Entscheidungen im Founder Board",
+    "summary": "Der Decision Log zeigt Notion-Entscheidungen und aktuellen Handlungsbedarf jetzt direkt im Founder Board.",
+    "slides": [
+      {
+        "id": "decision-log-overview",
+        "title": "Entscheidungen und Handlungsbedarf",
+        "description": "Der Decision Log bündelt Entscheidungen aus Notion. Tabs, Suche und Filter zeigen, wo eine Entscheidung, Abstimmung, Bestätigung oder Prüfung offen ist; Details und Quellen bleiben direkt erreichbar.",
+        "image": {
+          "src": "/product-updates/2026-07-21-decision-log/decision-log.png",
+          "alt": "Der Decision Log mit Entscheidungstabelle, Handlungsgründen und geöffnetem Detailbereich",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-21-clear-task-activity",
     "releasedAt": "2026-07-21",
     "expiresAt": "2026-08-20",

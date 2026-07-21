@@ -32,6 +32,8 @@ const requiredEnvKeys = [
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "REQUIRE_SUPABASE_AUTH",
+  "NOTION_DECISION_LOG_TOKEN",
+  "NOTION_DECISION_LOG_DATA_SOURCE_ID",
   "APP_URL",
   "GITHUB_SYNC_OWNER",
   "GITHUB_SYNC_REPO",
@@ -170,8 +172,14 @@ for (const marker of [
 ]) {
   if (!previewWorkflow.includes(marker)) failures.push(`deploy-preview.yml missing: ${marker}`);
 }
+if (!previewWorkflow.includes('REQUIRE_SUPABASE_AUTH: "true"')) {
+  failures.push("deploy-preview.yml must force REQUIRE_SUPABASE_AUTH=true.");
+}
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+if (!productionWorkflow.includes('REQUIRE_SUPABASE_AUTH: "true"')) {
+  failures.push("deploy-production.yml must force REQUIRE_SUPABASE_AUTH=true.");
+}
 const trashPurgeWorkflow = await read(".github/workflows/purge-planning-trash.yml");
 const trashPurgeScript = await read(".github/scripts/maintenance/purge-planning-trash.sh");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");

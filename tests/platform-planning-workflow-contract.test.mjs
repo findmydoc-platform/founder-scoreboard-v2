@@ -819,7 +819,7 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /backlogSprintAssignmentMessage/);
 });
 
-test("decision log routes and data slices stay removed while legacy storage remains in the production baseline", async () => {
+test("Supabase decision log mutations and data slices stay removed while legacy storage remains in the production baseline", async () => {
   const schema = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");

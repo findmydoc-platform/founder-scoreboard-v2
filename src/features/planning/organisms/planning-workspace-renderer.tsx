@@ -8,6 +8,7 @@ import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspac
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageMilestones } from "@/features/projects/model/milestone-policy";
+import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -19,6 +20,7 @@ const EventsOverview = dynamic(() => import("@/features/events/organisms/events-
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
 const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
+const DecisionLogOverview = dynamic(() => import("@/features/decision-log/organisms/decision-log-overview").then((mod) => mod.DecisionLogOverview), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
@@ -26,9 +28,10 @@ const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overvi
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
   source: "seed" | "supabase";
+  decisionLogResult?: NotionDecisionLogResult;
 };
 
-export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult }: PlanningWorkspaceRendererProps) {
   const {
     authBusy,
     canManageTaskMeta,
@@ -95,6 +98,13 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
+      {workspace === "decision-log" && decisionLogResult && <DecisionLogOverview result={decisionLogResult} />}
+      {workspace === "decision-log" && !decisionLogResult && (
+        <UiPanel padding="xl">
+          <h2 className="text-lg font-semibold text-slate-950">Decision Log nicht verfügbar</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Für diesen Seitenaufruf wurden keine Notion-Daten geladen.</p>
+        </UiPanel>
+      )}
       {workspace === "ceo-intake" && canUseCeoIntake && (
         <CeoTaskIntake
           source={source}

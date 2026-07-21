@@ -15,6 +15,7 @@ type WorkspaceLoadingShellProps = {
 const loadingTitles: Record<AppWorkspace, string> = {
   planning: "Projekt wird geladen",
   backlog: "Backlog wird geladen",
+  "decision-log": "Decision Log wird geladen",
   events: "Events werden geladen",
   sprint: "Sprint & Score wird geladen",
   projects: "Meilensteine werden geladen",

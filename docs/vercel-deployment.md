@@ -38,6 +38,9 @@ The workflows intentionally do not pre-validate these secrets. If a required sec
 
 Runtime app environment variables stay in the Vercel project environment and are pulled by the workflow with `vercel pull`.
 
+Preview and Production must set `REQUIRE_SUPABASE_AUTH=true`. The application fails closed when the variable is missing or invalid; `false` disables authentication only for local `next dev` outside Vercel.
+Set `NOTION_DECISION_LOG_TOKEN` and `NOTION_DECISION_LOG_DATA_SOURCE_ID` in both Vercel Preview and Production whenever the Decision Log should be available there.
+
 Set these in Vercel Production:
 
 ```text
@@ -46,6 +49,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 REQUIRE_SUPABASE_AUTH=true
 APP_URL=https://founder-ops.findmydoc.eu
+NOTION_DECISION_LOG_TOKEN=
+NOTION_DECISION_LOG_DATA_SOURCE_ID=
 GITHUB_SYNC_OWNER=findmydoc-platform
 GITHUB_SYNC_REPO=management
 GITHUB_APP_ID=

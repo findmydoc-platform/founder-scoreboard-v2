@@ -46,6 +46,7 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      REQUIRE_SUPABASE_AUTH: "true"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -121,7 +122,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          REQUIRE_SUPABASE_AUTH: ${{ secrets.REQUIRE_SUPABASE_AUTH }}
+          REQUIRE_SUPABASE_AUTH: "true"
           APP_URL: ${{ secrets.APP_URL }}
           GITHUB_SYNC_OWNER: findmydoc-platform
           GITHUB_SYNC_REPO: management

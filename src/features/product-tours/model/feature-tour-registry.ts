@@ -19,8 +19,27 @@ export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
 export const backlogTourId = "backlog-prioritization-v1";
 export const productUpdatesTourId = "product-updates-v1";
 export const taskActivityTourId = "task-activity-v1";
+export const decisionLogTourId = "decision-log-workspace-v1";
 
 export const featureTours = [
+  {
+    id: decisionLogTourId,
+    doneWorkspace: "decision-log",
+    productUpdateId: "2026-07-21-decision-log",
+    requiredSelectors: ["[data-tour-id='workspace-nav-decision-log']"],
+    steps: [
+      {
+        element: "[data-tour-id='workspace-nav-decision-log']",
+        popover: {
+          title: "Decision Log öffnen",
+          description: "Hier findest du Entscheidungen aus Notion, den aktuellen Handlungsbedarf und alle vorhandenen Quellen. Die Ansicht ist ausschließlich lesend.",
+          side: "right",
+          align: "center",
+          doneBtnText: "Decision Log öffnen",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: taskActivityTourId,
     productUpdateId: "2026-07-21-clear-task-activity",

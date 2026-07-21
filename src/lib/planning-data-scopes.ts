@@ -58,6 +58,7 @@ export const workspaceDataScopes = {
     sprints: true,
     sprintCommitments: true,
   },
+  "decision-log": { ...baseWorkspaceDataScope },
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
     ...baseWorkspaceDataScope,

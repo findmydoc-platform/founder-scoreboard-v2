@@ -1,6 +1,7 @@
 import {
   Archive,
   Bell,
+  BookOpenCheck,
   CalendarClock,
   GanttChart,
   LayoutDashboard,
@@ -14,12 +15,20 @@ import {
 import {
   appWorkspaceIds,
   appWorkspaceFromValue,
+  isPersistedWorkspace,
+  persistedWorkspaceIds,
   rootWorkspaceFromPreference,
   type AppWorkspace,
   type VisibleAppWorkspace,
 } from "@/features/planning/model/workspace-preferences";
 
-export { appWorkspaceIds, appWorkspaceFromValue, rootWorkspaceFromPreference };
+export {
+  appWorkspaceIds,
+  appWorkspaceFromValue,
+  isPersistedWorkspace,
+  persistedWorkspaceIds,
+  rootWorkspaceFromPreference,
+};
 export type { AppWorkspace, VisibleAppWorkspace };
 
 type WorkspaceRoute = {
@@ -38,6 +47,7 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
   { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
+  { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
