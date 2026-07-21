@@ -5,6 +5,7 @@ import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from "@
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 import { apiError, requireApiContext } from "@/lib/api-response";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 
 const maxUploadBytes = 10 * 1024 * 1024;
@@ -78,10 +79,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     ? `![${file.name}](${uploaded.rawUrl})`
     : `[${file.name}](${uploaded.rawUrl})`;
 
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: `Anhang hochgeladen: ${file.name}`,
-  });
+  const { data: audit, error: auditError } = await supabase.from("audit_log").insert({
+    entity_type: "task",
+    entity_id: id,
+    action: "task.attachment_uploaded",
+    actor_profile_id: permission.profile?.id || null,
+    after_data: {
+      filename: file.name,
+      contentType: file.type,
+      size: file.size,
+      url: uploaded.rawUrl,
+    },
+    ...auditRequestMetadata(request),
+  }).select("id,entity_id,action,actor_profile_id,before_data,after_data,created_at").single();
+  if (auditError || !audit) return apiError(auditError?.message || "Anhang konnte nicht protokolliert werden.", 500);
   await supabase.from("tasks").update({
     github_issue_sync_status: "not_synced",
     github_issue_sync_error: null,
@@ -97,5 +108,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     htmlUrl: uploaded.htmlUrl,
     markdown,
     githubIssueNumber: resolveGitHubIssueNumber(task, { repository: task.github_repo }) || null,
+    activity: {
+      id: audit.id,
+      taskId: audit.entity_id,
+      action: audit.action,
+      actorProfileId: audit.actor_profile_id || "",
+      message: "",
+      beforeData: audit.before_data,
+      afterData: audit.after_data,
+      createdAt: audit.created_at,
+    },
   });
 }

@@ -307,6 +307,16 @@ export type DbAuditEntry = {
   after_data: Record<string, unknown> | null;
 };
 
+export type DbTaskAuditActivity = {
+  id: number;
+  task_id: string;
+  action: string;
+  actor_profile_id: string | null;
+  message: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export type DbTaskComment = {
   id: number;
   task_id: string;
@@ -354,13 +364,6 @@ export type DbTaskRelation = {
   relation_type: TaskRelation["relationType"];
   note: string | null;
   created_by: string | null;
-  created_at: string;
-};
-
-export type DbTaskActivity = {
-  id: number;
-  task_id: string;
-  message: string;
   created_at: string;
 };
 

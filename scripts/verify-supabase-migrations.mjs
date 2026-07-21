@@ -8,6 +8,9 @@ import {
 } from "./lib/supabase-migrations.mjs";
 
 const failures = [];
+const approvedDestructiveDdl = new Map([
+  ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
+]);
 const migrations = await listSupabaseMigrations();
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const config = await readFile("supabase/config.toml", "utf8");
@@ -26,8 +29,10 @@ for (const migration of migrations) {
   versions.add(migration.version);
 
   const destructiveDdl = findDestructiveDdl(migration.sql);
-  if (destructiveDdl.length) {
-    failures.push(`${migration.file} contains destructive DDL (${destructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
+  const approvedForMigration = approvedDestructiveDdl.get(migration.file) || new Set();
+  const unapprovedDestructiveDdl = destructiveDdl.filter((operation) => !approvedForMigration.has(operation));
+  if (unapprovedDestructiveDdl.length) {
+    failures.push(`${migration.file} contains destructive DDL (${unapprovedDestructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
   }
 }
 

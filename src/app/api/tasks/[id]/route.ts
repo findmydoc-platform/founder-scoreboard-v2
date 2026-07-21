@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
 import { activityMessages, buildTaskUpdateResponsePatch, profileId, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
+import { taskAuditActionFromMessage } from "@/features/tasks/model/task-comment-timeline-policy";
 import {
   applyReviewStatusUpdate,
   applyFinalStatusReopen,
@@ -469,9 +470,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const activities = (result.activities || []).map((activity) => ({
     id: activity.id,
     taskId: activity.task_id,
+    action: taskAuditActionFromMessage(activity.message),
+    actorProfileId: permission.profile?.id || "",
     message: activity.message,
+    beforeData: null,
+    afterData: { message: activity.message },
     createdAt: activity.created_at,
-  }));
+  })).filter((activity) => activity.action);
   const taskPatch = {
     ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest),
     id,

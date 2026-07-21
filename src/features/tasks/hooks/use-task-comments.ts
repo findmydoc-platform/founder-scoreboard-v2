@@ -84,14 +84,7 @@ export function useTaskComments({
 
     const { response, body } = await uploadTaskAttachmentRequest(apiClient, task.id, file);
     if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
-    appendTaskActivities([
-      {
-        id: Date.now(),
-        taskId: task.id,
-        message: `Anhang hochgeladen: ${file.name}`,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    if (body.activity) appendTaskActivities([body.activity]);
     return body.markdown;
   };
 

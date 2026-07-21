@@ -80,15 +80,7 @@ export function useTaskCollaborationCommands({
     setData((current) => ({
       ...current,
       tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, githubIssueSyncStatus: "not_synced", githubIssueSyncError: "" } : item)),
-      taskActivity: [
-        {
-          id: Date.now(),
-          taskId: task.id,
-          message: `Anhang hochgeladen: ${file.name}`,
-          createdAt: new Date().toISOString(),
-        },
-        ...current.taskActivity,
-      ],
+      taskActivity: body.activity ? [body.activity, ...current.taskActivity] : current.taskActivity,
     }));
     return body.markdown;
   };

@@ -18,12 +18,6 @@ type RelationPayload = {
 
 const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
 
-function relationActionLabel(type: TaskRelationType) {
-  if (type === "blocked_by") return "Wartet auf";
-  if (type === "blocks") return "Blockiert";
-  return "Verknüpft mit";
-}
-
 type RelationshipTaskRow = {
   id: string;
   title: string;
@@ -134,11 +128,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError(duplicate ? "Diese Abhängigkeit existiert bereits." : error?.message || "Abhängigkeit konnte nicht gespeichert werden.", duplicate ? 409 : 500);
   }
 
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: `Abhängigkeit hinzugefügt: ${relationActionLabel(relationType)}`,
-  });
-
   await supabase.from("tasks").update({
     github_issue_sync_status: "not_synced",
     github_issue_sync_error: null,
@@ -213,11 +202,6 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
   const { error } = await supabase.from("task_relationship_edges").delete().eq("id", relationId);
   if (error) return apiError(error.message, 500);
-
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: `Abhängigkeit entfernt: ${relationActionLabel(relation.relation_type)}`,
-  });
 
   await supabase.from("tasks").update({
     github_issue_sync_status: "not_synced",

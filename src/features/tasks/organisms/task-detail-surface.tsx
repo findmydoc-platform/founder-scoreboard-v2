@@ -356,6 +356,10 @@ export function TaskDetailSurface({
         activities={activities}
         notice={commentImportNotice}
         profiles={teamProfiles}
+        tasks={allTasks}
+        sprints={sprints}
+        packages={packages}
+        milestones={milestones}
         currentProfileId={currentProfile?.id || ""}
         loading={detailDataLoading}
         unavailable={detailDataUnavailable}
