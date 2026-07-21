@@ -31,7 +31,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Product Update Release Contract
 
-- Every production deployment with a user-visible change must add or extend an entry in `src/features/product-updates/model/product-updates.json` with at least one current screenshot under `public/product-updates/` and short, non-technical German copy that explains the user benefit.
+- Product updates are reserved for new or materially expanded UI functionality with clear relevance and user benefit. Bug fixes, maintenance changes, copy or visual polish, and minor UI or UX improvements must not create or extend a product update.
+- If it is unclear whether a change meets this threshold, ask the user for confirmation before creating or changing product update, screenshot, or tour artifacts, following the same confirmation pattern as reviewer execution.
+- Every qualifying production deployment must add or extend an entry in `src/features/product-updates/model/product-updates.json` with at least one current screenshot under `public/product-updates/` and short, non-technical German copy that explains the user benefit.
 - Every product update must have its own small, meaningful Driver.js tour in `src/features/product-tours/model/feature-tour-registry.ts`, link it through the update-level `featureTourId`, and keep the gallery action **Lass dich leiten** usable. Do not add a tour that merely repeats the gallery text; guide the user to the changed interaction in as few steps as practical.
 - Every product update must set `expiresAt`. Use 30 days after `releasedAt` by default and never more than 60 days. Expired updates must disappear from automatic display and the help menu.
 - Purely operational deployments must not invent product news. Run `pnpm run verify:product-updates` before handoff.
