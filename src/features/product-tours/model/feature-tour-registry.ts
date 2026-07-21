@@ -23,8 +23,27 @@ export const productUpdatesTourId = "product-updates-v1";
 export const taskActivityTourId = "task-activity-v1";
 export const decisionLogTourId = "decision-log-workspace-v1";
 export const issueSharingTourId = "issue-sharing-v1";
+export const modalOverlayStackTourId = "modal-overlay-stack-v1";
 
 export const featureTours = [
+  {
+    id: modalOverlayStackTourId,
+    productUpdateId: "2026-07-21-modal-overlay-stack",
+    requiredSelectors: ["[data-tour-id='github-sync-trigger']"],
+    startWorkspace: "planning",
+    steps: [
+      {
+        element: "[data-tour-id='github-sync-trigger']",
+        popover: {
+          title: "GitHub und Item-Details öffnen",
+          description: "Öffne GitHub und danach ein Item. Das zuletzt geöffnete Fenster bleibt vorn; beim Schließen kehrst du zuverlässig zur vorherigen Ansicht zurück.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: decisionLogTourId,
     doneWorkspace: "decision-log",

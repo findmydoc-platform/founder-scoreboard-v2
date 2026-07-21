@@ -71,17 +71,19 @@ function commandFixture() {
 }
 
 test("initiative creation shell keeps header and footer fixed around one bounded body", async () => {
-  const [dialog, modalHook] = await Promise.all([
+  const [dialog, modalHook, modalStack] = await Promise.all([
     readFile(dialogPath, "utf8"),
     readFile("src/shared/hooks/use-modal-dialog.ts", "utf8"),
+    readFile("src/shared/model/modal-stack.ts", "utf8"),
   ]);
 
   assert.match(dialog, /max-h-\[calc\(100dvh-4rem\)\]/);
   assert.match(dialog, /min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain/);
   assert.match(dialog, /\[scrollbar-gutter:stable\]/);
-  assert.match(modalHook, /document\.body\.style\.overflow = "hidden"/);
-  assert.match(modalHook, /document\.body\.style\.overscrollBehavior = "none"/);
-  assert.match(modalHook, /sibling\.inert = true/);
+  assert.match(modalHook, /registerModal\(dialog\)/);
+  assert.match(modalStack, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(modalStack, /document\.body\.style\.overscrollBehavior = "none"/);
+  assert.match(modalStack, /element\.inert = true/);
   assert.match(dialog, /<header className="[^"]*shrink-0/);
   assert.match(dialog, /<footer className="shrink-0/);
   assert.match(dialog, /aria-modal="true"/);

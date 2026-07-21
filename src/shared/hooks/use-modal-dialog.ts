@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
+import { isTopModal, registerModal, unregisterModal } from "@/shared/model/modal-stack";
 
 const focusableSelector = [
   "a[href]",
@@ -10,12 +11,6 @@ const focusableSelector = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
-
-const modalStack: HTMLElement[] = [];
-
-function isTopModal(dialog: HTMLElement | null) {
-  return Boolean(dialog) && modalStack.at(-1) === dialog;
-}
 
 export function useModalDialog<T extends HTMLElement = HTMLElement>({
   open,
@@ -41,29 +36,7 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
 
     returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
-    const previousRootOverflow = document.documentElement.style.overflow;
-    const inertSiblings: Array<{ element: HTMLElement; inert: boolean }> = [];
-    const previousTopModal = modalStack.at(-1);
-    const previousTopModalInert = previousTopModal?.inert ?? false;
-    let branch: HTMLElement | null = dialog;
-
-    if (dialog) modalStack.push(dialog);
-    if (previousTopModal && dialog && !previousTopModal.contains(dialog)) previousTopModal.inert = true;
-    document.body.style.overflow = "hidden";
-    document.body.style.overscrollBehavior = "none";
-    document.documentElement.style.overflow = "hidden";
-    while (branch?.parentElement) {
-      const parent = branch.parentElement;
-      for (const sibling of Array.from(parent.children)) {
-        if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
-        inertSiblings.push({ element: sibling, inert: sibling.inert });
-        sibling.inert = true;
-      }
-      if (parent === document.body) break;
-      branch = parent;
-    }
+    if (dialog) registerModal(dialog);
 
     const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) || [])
       .filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
@@ -105,25 +78,20 @@ export function useModalDialog<T extends HTMLElement = HTMLElement>({
     document.addEventListener("keydown", handleKeyDown, true);
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
-      if (dialog) {
-        const stackIndex = modalStack.lastIndexOf(dialog);
-        if (stackIndex >= 0) modalStack.splice(stackIndex, 1);
-      }
-      document.body.style.overflow = previousBodyOverflow;
-      document.body.style.overscrollBehavior = previousOverscrollBehavior;
-      document.documentElement.style.overflow = previousRootOverflow;
-      for (const { element, inert } of inertSiblings) element.inert = inert;
-      if (previousTopModal?.isConnected) previousTopModal.inert = previousTopModalInert;
+      const { nextTopModal, wasTopModal } = dialog
+        ? unregisterModal(dialog)
+        : { nextTopModal: null, wasTopModal: false };
+      if (!wasTopModal) return;
       const returnTarget = returnFocusRef.current;
       window.requestAnimationFrame(() => {
         if (returnTarget?.isConnected && !returnTarget.closest("[inert]")) {
           returnTarget.focus();
           return;
         }
-        if (!previousTopModal?.isConnected || previousTopModal.inert) return;
-        const previousPreferred = previousTopModal.querySelector<HTMLElement>("[data-autofocus]");
-        const previousFocusable = previousTopModal.querySelector<HTMLElement>(focusableSelector);
-        (previousPreferred || previousFocusable || previousTopModal).focus();
+        if (!nextTopModal?.isConnected || nextTopModal.inert) return;
+        const previousPreferred = nextTopModal.querySelector<HTMLElement>("[data-autofocus]");
+        const previousFocusable = nextTopModal.querySelector<HTMLElement>(focusableSelector);
+        (previousPreferred || previousFocusable || nextTopModal).focus();
       });
     };
   }, [open]);

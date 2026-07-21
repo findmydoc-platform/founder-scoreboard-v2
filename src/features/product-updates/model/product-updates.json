@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-21-modal-overlay-stack",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "modal-overlay-stack-v1",
+    "title": "Fenster bleiben in der richtigen Reihenfolge",
+    "summary": "Geöffnete Details, GitHub und Bestätigungen reagieren jetzt immer in der sichtbaren Reihenfolge.",
+    "slides": [
+      {
+        "id": "modal-overlay-stack",
+        "title": "Das zuletzt geöffnete Fenster bleibt vorn",
+        "description": "Öffnest du aus GitHub ein Item, liegt dessen Detailansicht eindeutig vorn. Beim Schließen kehrst du zu GitHub zurück; X, Escape und Tastaturfokus reagieren immer auf das sichtbare Fenster.",
+        "image": {
+          "src": "/product-updates/2026-07-21-modal-overlay-stack/modal-overlay-stack.png",
+          "alt": "GitHub mit einer darüber geöffneten Item-Detailansicht",
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-21-decision-log",
     "releasedAt": "2026-07-21",
     "expiresAt": "2026-08-20",
