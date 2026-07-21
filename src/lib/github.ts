@@ -171,6 +171,11 @@ function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
   return Boolean(taskUrl && body?.includes(`](${taskUrl})`));
 }
 
+function hasMatchingLegacyFounderOpsTaskId(task: Task, body?: string | null) {
+  const expectedLine = `- Founder Scoreboard v2 Task ID: ${task.id}`;
+  return Boolean(body?.split(/\r?\n/).some((line) => line.trim() === expectedLine));
+}
+
 export function taskIssueMarker(taskId: string) {
   return `<!-- founderops-task-id:${taskId} -->`;
 }
@@ -301,7 +306,9 @@ export function assertGitHubIssueUpdateTarget(
   const expectedMarker = taskIssueMarker(task.id);
   if (issue.body?.includes(expectedMarker)) return;
   const containsFounderOpsMarker = /<!--\s*founderops-task-id:[^>]+-->/i.test(issue.body || "");
-  if (!containsFounderOpsMarker && hasMatchingLegacyFounderOpsTaskLink(task, issue.body)) return;
+  const hasMatchingLegacyOwnership = hasMatchingLegacyFounderOpsTaskLink(task, issue.body)
+    || hasMatchingLegacyFounderOpsTaskId(task, issue.body);
+  if (!containsFounderOpsMarker && hasMatchingLegacyOwnership) return;
   const isBeforeFirstSync = !task.githubIssueLastSyncedAt;
   if (isBeforeFirstSync && !containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
   throw new Error("Das verknüpfte GitHub Issue gehört nicht zu dieser FounderOps-Aufgabe.");
