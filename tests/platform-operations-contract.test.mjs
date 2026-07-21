@@ -437,6 +437,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const preferenceSync = await readFile("src/features/profile/hooks/use-profile-ui-preference-sync.ts", "utf8");
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const rootPage = await readFile("src/app/page.tsx", "utf8");
   const planningAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
   const taskDetailWorkflow = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
@@ -466,7 +467,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(routes, /href: "\/planning"/);
   assert.doesNotMatch(routes, /href: "\/execution"|id: "execution"/);
   assert.doesNotMatch(routes, /href: "\/reviews"|id: "reviews"/);
-  assert.match(routes, /value === "reviews"\) return "planning"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.match(legacyReviewsPage, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
   assert.match(routes, /href: "\/events"/);
   assert.match(routes, /href: "\/ceo-intake"/);
@@ -490,7 +491,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(planningAuth, /\.from\("profile_ui_preferences"\)/);
   assert.match(planningAuth, /\.eq\("profile_id", auth\.profile\.id\)/);
   assert.match(planningAuth, /rootWorkspaceFromPreference\(data\?\.default_workspace, auth\.profile\.platformRole\)/);
-  assert.match(routes, /value === "settings"\) return "notifications"/);
+  assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
   assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\),/);
   assert.match(dataScopes, /export const workspaceDataScopes/);
   assert.match(dataScopes, /export const taskDetailPageDataScope/);

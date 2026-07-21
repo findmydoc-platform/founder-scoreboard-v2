@@ -86,7 +86,7 @@ export const workspaceDescriptions: Record<Workspace, string> = {
   team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   notifications: "Persönliche Hinweise und Ausgang.",
   "ceo-intake": "Zeigt den CEO-only Import für freigegebene Aufgabenpakete.",
-  profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
+  profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Planungs-Defaults.",
 };
 
 export const planningWorkspaces: Workspace[] = ["planning"];

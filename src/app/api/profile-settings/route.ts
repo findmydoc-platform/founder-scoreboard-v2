@@ -5,7 +5,8 @@ import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@
 import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-data-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
+import { rootWorkspaceFromPreference } from "@/features/planning/model/workspace-preferences";
+import type { PlanningFilterPreferences, PlatformRole, ViewMode } from "@/lib/types";
 
 type UiPreferencesPayload = Partial<{
   defaultWorkspace: string;
@@ -53,18 +54,6 @@ const blockedSelfServiceFields = new Set([
   "googleChatDmSpace",
 ]);
 const allowedEventTypes = new Set<string>(googleChatDigestEventTypes);
-const allowedWorkspaces = new Set([
-  "planning",
-  "mine",
-  "events",
-  "sprint",
-  "projects",
-  "tools",
-  "team",
-  "notifications",
-  "ceo-intake",
-  "profile",
-]);
 const allowedTaskViews = new Set<ViewMode>(["board", "structure", "table", "gantt"]);
 const defaultPlanningFilters: PlanningFilterPreferences = {
   query: "",
@@ -126,10 +115,8 @@ function cleanPackageIds(value: unknown) {
     .slice(0, 200);
 }
 
-function cleanDefaultWorkspace(value: unknown) {
-  if (value === "settings") return "notifications";
-  if (value === "reviews") return "planning";
-  return typeof value === "string" && allowedWorkspaces.has(value) ? value : "planning";
+function cleanDefaultWorkspace(value: unknown, platformRole: PlatformRole | null | undefined) {
+  return rootWorkspaceFromPreference(typeof value === "string" ? value : null, platformRole);
 }
 
 export async function PATCH(request: NextRequest) {
@@ -161,7 +148,7 @@ export async function PATCH(request: NextRequest) {
       return apiError("UI-Einstellungen sind ungültig.", 400);
     }
     const uiPayload = payload.uiPreferences;
-    const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
+    const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace, permission.profile?.platformRole);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
       : "board";

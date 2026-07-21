@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 test("profile workspace is hidden from sidebar but reachable from account menu", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -13,18 +14,19 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
   const profileModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
   const profileRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
-  assert.match(routes, /AppWorkspace = .*"profile"/);
+  assert.match(workspacePreferences, /appWorkspaceIds = \[/);
+  assert.match(workspacePreferences, /"profile"/);
   assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
   assert.match(routes, /href: "\/profile"/);
   assert.match(routes, /id: "profile".*hidden: true/s);
   assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
-  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.match(routes, /rootWorkspaceFromPreference/);
   assert.doesNotMatch(profileSync, /setWorkspace|workspaceFromPathname|appWorkspaceFromValue/);
   assert.match(profileModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
-  assert.match(routes, /value === "settings"\) return "notifications"/);
-  assert.match(profileRoute, /value === "settings"\) return "notifications"/);
+  assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
+  assert.match(profileRoute, /rootWorkspaceFromPreference/);
   assert.doesNotMatch(profileRoute, /"execution",/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
@@ -113,8 +115,7 @@ test("URL filters hydrate without silently changing saved profile defaults", asy
 
   assert.match(profileSync, /if \(!hasPlanningFilterUrlState\)/);
   assert.doesNotMatch(profileSync, /updateProfileUiPreferenceRequest|saveProfileUiPreference|planningFilters:/);
-  assert.match(profileBoard, /onCurrentBoardSave/);
-  assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
+  assert.doesNotMatch(profileBoard, /onCurrentBoardSave|Aktuelle Ansicht|Aktuelle Board-Ansicht/);
 });
 
 test("driver tour waits for rendered targets and acknowledges only after popover render", async () => {
@@ -188,7 +189,12 @@ test("profile settings use slim section navigation and dirty-only save UX", asyn
   assert.match(profileUi, /useState<ProfileSettingsSectionId>\("profile"\)/);
   assert.match(profileUi, /useState\(false\)/);
   assert.match(profileBoard, /data-profile-advanced-board-defaults=\{advancedBoardOpen \? "open" : "closed"\}/);
-  assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
+  assert.match(profileBoard, /Standardansicht für Planung/);
+  assert.match(profileBoard, /aria-label="Startbereich"/);
+  assert.match(profileBoard, /aria-label="Standardansicht für Planung"/);
+  assert.match(profileUi, /workspaceRoutes/);
+  assert.match(profileUi, /viewTabs\.map/);
+  assert.doesNotMatch(profileUi, /saveCurrentBoardDefaults|onCurrentBoardSave/);
   assert.match(profileUi, /\(isDirty \|\| \(activeSection !== "process" && message\)\) &&/);
   assert.match(profileUi, /data-profile-save-bar/);
   assert.match(profileUi, /Ungespeicherte Änderungen/);

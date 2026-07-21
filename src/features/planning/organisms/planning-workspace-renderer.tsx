@@ -42,8 +42,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     dismissNotification,
     dispatchNotifications,
     eventMessage,
-    expandedPackages,
-    filters,
     fmdToolMessage,
     fmdToolPending,
     googleChatStatus,
@@ -89,7 +87,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateTask,
     waitingGitHubCommentCount,
     withdrawInitiative,
-    view,
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
@@ -215,12 +212,8 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           apiClient={apiClient}
           data={data}
           currentProfile={currentProfile}
-          expandedPackages={expandedPackages}
-          filters={filters}
           pending={isPending}
           source={source}
-          view={view}
-          workspace={workspace}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
           onSaveFounderOpsReviewWindow={saveFounderOpsReviewWindow}
         />

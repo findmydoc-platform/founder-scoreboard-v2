@@ -19,7 +19,6 @@ export function BoardSettingsSection({
   viewOptions,
   workspaceOptions,
   onAdvancedBoardOpenChange,
-  onCurrentBoardSave,
   onDefaultTaskViewChange,
   onDefaultWorkspaceChange,
   onPackageToggle,
@@ -36,27 +35,21 @@ export function BoardSettingsSection({
   viewOptions: Array<{ value: string; label: string }>;
   workspaceOptions: Array<{ value: string; label: string }>;
   onAdvancedBoardOpenChange: (open: boolean) => void;
-  onCurrentBoardSave: () => void;
   onDefaultTaskViewChange: (view: ViewMode) => void;
   onDefaultWorkspaceChange: (workspace: AppWorkspace) => void;
   onPackageToggle: (packageId: string) => void;
   onPlanningFiltersChange: (patch: Partial<PlanningFilterPreferences>) => void;
 }) {
   return (
-    <SettingsPane eyebrow="Board" title="Board-Defaults" description="Der Normalfall ist schnell: aktuelle Ansicht übernehmen. Details bleiben optional.">
-      <SettingsRow label="Aktuelle Ansicht" description="Übernimmt Ansicht, Filter und aufgeklappte Initiativen aus dem Board.">
-        <UiButton onClick={onCurrentBoardSave} variant="blueOutline">
-          Aktuelle Board-Ansicht als Standard speichern
-        </UiButton>
+    <SettingsPane eyebrow="Planung" title="Planungs-Defaults" description="Legt fest, wo die App startet und wie die Planung standardmäßig dargestellt wird.">
+      <SettingsRow label="Startbereich" description="Bereich, der beim Öffnen der App startet.">
+        <CustomSelect aria-label="Startbereich" value={draft.defaultWorkspace} onChange={(value) => onDefaultWorkspaceChange(value as AppWorkspace)} options={workspaceOptions} className="h-9 text-sm md:min-w-80" />
       </SettingsRow>
-      <SettingsRow label="Startbereich" description="Wo du nach dem Öffnen der App landen möchtest.">
-        <CustomSelect value={draft.defaultWorkspace} onChange={(value) => onDefaultWorkspaceChange(value as AppWorkspace)} options={workspaceOptions} className="h-9 text-sm md:min-w-80" />
-      </SettingsRow>
-      <SettingsRow label="Standardansicht" description="Die bevorzugte Board-Darstellung.">
-        <CustomSelect value={draft.defaultTaskView} onChange={(value) => onDefaultTaskViewChange(value as ViewMode)} options={viewOptions} className="h-9 text-sm md:min-w-80" />
+      <SettingsRow label="Standardansicht für Planung" description="Darstellung beim Öffnen des Bereichs Planung.">
+        <CustomSelect aria-label="Standardansicht für Planung" value={draft.defaultTaskView} onChange={(value) => onDefaultTaskViewChange(value as ViewMode)} options={viewOptions} className="h-9 text-sm md:min-w-80" />
       </SettingsRow>
       <div data-profile-advanced-board-defaults={advancedBoardOpen ? "open" : "closed"}>
-        <SettingsRow label="Erweiterte Board-Defaults" description="Filter und aufgeklappte Initiativen nur bei Bedarf bearbeiten.">
+        <SettingsRow label="Erweiterte Planungs-Defaults" description="Optionale Filter und aufgeklappte Initiativen für die Planung.">
           <UiButton onClick={() => onAdvancedBoardOpenChange(!advancedBoardOpen)} className="min-w-44 justify-between">
             {advancedBoardOpen ? "Schließen" : "Öffnen"}
             <ChevronDown size={15} className={classNames("transition", advancedBoardOpen && "rotate-180")} />
