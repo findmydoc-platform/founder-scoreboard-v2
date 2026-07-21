@@ -31,13 +31,7 @@ function eventEnabled(data: PlanningData, profileId: string, eventType: string) 
   return preference?.enabled !== false;
 }
 
-export function expandedPackageIds(expandedPackages: Record<string, boolean>) {
-  return Object.entries(expandedPackages)
-    .filter(([, expanded]) => expanded)
-    .map(([packageId]) => packageId);
-}
-
-export function defaultFilters(filters: PlanningFilterPreferences): PlanningFilterPreferences {
+export function defaultFilters(filters: Partial<PlanningFilterPreferences> = {}): PlanningFilterPreferences {
   return {
     query: filters.query || "",
     assignee: filters.assignee || "Alle",
@@ -63,29 +57,21 @@ function normalizedDefaultWorkspace(value: string) {
 export function buildInitialDraft({
   currentProfile,
   data,
-  expandedPackages,
-  filters,
   profileUiPreference,
-  view,
-  workspace,
 }: {
   currentProfile: Profile;
   data: PlanningData;
-  expandedPackages: Record<string, boolean>;
-  filters: PlanningFilterPreferences;
   profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null;
-  view: ViewMode;
-  workspace: AppWorkspace;
 }): ProfileSettingsDraft {
   return {
     focus: currentProfile.focus || "",
     color: currentProfile.color || "#64748b",
     notificationsEnabled: currentProfile.notificationsEnabled !== false,
     notificationEvents: Object.fromEntries(googleChatDigestEventTypes.map((eventType) => [eventType, eventEnabled(data, currentProfile.id, eventType)])),
-    defaultWorkspace: profileUiPreference?.defaultWorkspace ? normalizedDefaultWorkspace(profileUiPreference.defaultWorkspace) : (workspace === "profile" ? "planning" : workspace),
-    defaultTaskView: profileUiPreference?.defaultTaskView || view,
-    planningFilters: defaultFilters(profileUiPreference?.planningFilters || filters),
-    expandedPackageIds: profileUiPreference?.expandedPackageIds || expandedPackageIds(expandedPackages),
+    defaultWorkspace: profileUiPreference?.defaultWorkspace ? normalizedDefaultWorkspace(profileUiPreference.defaultWorkspace) : "planning",
+    defaultTaskView: profileUiPreference?.defaultTaskView || "board",
+    planningFilters: defaultFilters(profileUiPreference?.planningFilters),
+    expandedPackageIds: profileUiPreference?.expandedPackageIds || [],
   };
 }
 

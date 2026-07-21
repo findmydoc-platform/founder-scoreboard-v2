@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-const workspaceRoutes = await loadTranspiledModule(
-  "src/features/planning/model/workspace-routes.ts",
+const workspacePreferences = await loadTranspiledModule(
+  "src/features/planning/model/workspace-preferences.ts",
 );
 
-const { rootWorkspaceFromPreference } = workspaceRoutes;
+const { rootWorkspaceFromPreference } = workspacePreferences;
 
 test("root workspace preferences normalize legacy values without accepting route queries", () => {
   assert.equal(rootWorkspaceFromPreference("reviews", "founder"), "planning");
@@ -69,7 +69,7 @@ function recordingSupabase({ defaultWorkspace = "reviews", preferenceError = nul
 
 async function loadPlanningAuthServer({ supabase, authzResult }) {
   return loadTranspiledModule("src/lib/planning-auth-server.ts", {
-    "@/features/planning/model/workspace-routes": workspaceRoutes,
+    "@/features/planning/model/workspace-routes": workspacePreferences,
     "./authz": {
       async requirePlatformRoleForUser() {
         return authzResult;

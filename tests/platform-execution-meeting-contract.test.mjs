@@ -153,6 +153,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const migration = await readSupabaseSchemaContract();
   const ui = await readPlanningSurface();
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -177,7 +178,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(migration, /create table if not exists task_focus_items/);
   assert.match(migration, /unique \(profile_id, task_id, focus_date\)/);
   assert.doesNotMatch(routes, /label: "Execution"|id: "execution"|href: "\/execution"/);
-  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution"/);
   assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.doesNotMatch(ui, /ExecutionLayerOverview|Heute-Fokus|Hygiene Alerts|Fokus-Kontext|buildHygieneAlerts/);
   assert.match(routes, /rootWorkspaceFromPreference/);

@@ -11,10 +11,16 @@ import {
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
-import type { PlatformRole } from "@/lib/types";
+import {
+  appWorkspaceIds,
+  appWorkspaceFromValue,
+  rootWorkspaceFromPreference,
+  type AppWorkspace,
+  type VisibleAppWorkspace,
+} from "@/features/planning/model/workspace-preferences";
 
-export type AppWorkspace = "planning" | "backlog" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
-export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
+export { appWorkspaceIds, appWorkspaceFromValue, rootWorkspaceFromPreference };
+export type { AppWorkspace, VisibleAppWorkspace };
 
 type WorkspaceRoute = {
   id: AppWorkspace;
@@ -44,24 +50,8 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
 
 export const appNavItems = workspaceRoutes.filter(isVisibleWorkspaceRoute);
 export const hiddenWorkspaceIds = ["profile"] as const satisfies readonly AppWorkspace[];
-export const appWorkspaceIds = workspaceRoutes.map((route) => route.id) as AppWorkspace[];
 export const visibleWorkspaceIds = appNavItems.map((route) => route.id) as VisibleAppWorkspace[];
 
 export function workspacePath(workspace: AppWorkspace) {
   return workspaceRoutes.find((route) => route.id === workspace)?.href || "/planning";
-}
-
-export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
-  if (value === "mine" || value === "execution") return "planning";
-  if (value === "reviews") return "planning";
-  if (value === "settings") return "notifications";
-  return appWorkspaceIds.find((id) => id === value) || null;
-}
-
-export function rootWorkspaceFromPreference(
-  value: string | null | undefined,
-  platformRole: PlatformRole | null | undefined,
-): AppWorkspace {
-  const workspace = appWorkspaceFromValue(value) || "planning";
-  return workspace === "ceo-intake" && platformRole !== "ceo" ? "planning" : workspace;
 }

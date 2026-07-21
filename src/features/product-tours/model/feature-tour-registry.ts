@@ -89,7 +89,7 @@ export const featureTours = [
         element: "[data-tour-id='profile-menu-link']",
         popover: {
           title: "Profil-Einstellungen sind schlanker",
-          description: "Kalender und Verfügbarkeit sind aus dem Profil raus. Übrig bleiben Profil, Benachrichtigungen und Board-Defaults.",
+          description: "Kalender und Verfügbarkeit sind aus dem Profil raus. Übrig bleiben Profil, Benachrichtigungen und Planungs-Defaults.",
           side: "left",
           align: "start",
           doneBtnText: "Profil öffnen",
@@ -132,7 +132,7 @@ export const featureTours = [
         element: "[data-tour-id='profile-menu-link']",
         popover: {
           title: "Mein Profil",
-          description: "Hier öffnest du Profil, Benachrichtigungen und Board-Defaults.",
+          description: "Hier öffnest du Profil, Benachrichtigungen und Planungs-Defaults.",
           side: "left",
           align: "start",
           doneBtnText: "Profil öffnen",
