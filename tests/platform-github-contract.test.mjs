@@ -322,7 +322,7 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.match(syncRoute, /profileGitHubLoginById/);
   assert.match(syncRoute, /const assigneeProfileId = data\.assignee \|\| ""/);
   assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
-  assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
+  assert.match(syncRoute, /const warnings = \[\.\.\.\(issue\.warnings \|\| \[\]\), \.\.\.sprintContext\.warnings, \.\.\.fieldSync\.warnings\]/);
   assert.match(syncRoute, /Warnung:/);
   assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
   assert.match(migration, /github_issue_sync_status = 'synced'/);

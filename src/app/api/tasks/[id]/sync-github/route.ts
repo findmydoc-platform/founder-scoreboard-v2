@@ -4,6 +4,7 @@ import { requireTeamMember } from "@/lib/authz";
 import { connectGitHubSubIssue, githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { ensureFounderOpsGitHubProjectItem } from "@/lib/github-project";
+import { syncFounderOpsGitHubProjectFields, type FounderOpsGitHubSprint } from "@/lib/github-project-fields";
 import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { githubSyncStatePersistFailedMessage, persistGitHubSyncFailure } from "@/lib/github-sync-failure-persistence";
@@ -36,6 +37,25 @@ async function loadGitHubProjectSettings(supabase: SupabaseClient) {
   return {
     owner: data.github_project_owner,
     number: data.github_project_number,
+  };
+}
+
+async function loadGitHubProjectSprint(supabase: SupabaseClient, sprintId: string) {
+  if (!sprintId) return { sprint: null as FounderOpsGitHubSprint | null, warnings: [] as string[] };
+  const { data, error } = await supabase
+    .from("sprints")
+    .select("name,start_date")
+    .eq("id", sprintId)
+    .maybeSingle<{ name: string | null; start_date: string | null }>();
+  if (error || !data?.name || !data.start_date) {
+    return {
+      sprint: undefined,
+      warnings: [`Sprint konnte nicht synchronisiert werden: FounderOps-Sprint ${sprintId} konnte nicht vollständig geladen werden.`],
+    };
+  }
+  return {
+    sprint: { title: data.name, startDate: data.start_date },
+    warnings: [] as string[],
   };
 }
 
@@ -328,13 +348,26 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const githubProject = await loadGitHubProjectSettings(supabase);
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const githubRepo = githubRepoSlug(task.githubRepo);
-    await ensureFounderOpsGitHubProjectItem({
+    const projectItem = await ensureFounderOpsGitHubProjectItem({
       issueNumber: issue.number,
       projectNumber: githubProject.number,
       projectOwner: githubProject.owner,
       repository: githubRepo,
       token: githubInstallationToken,
     });
+    const sprintContext = await loadGitHubProjectSprint(supabase, task.sprintId);
+    const fieldSync = await syncFounderOpsGitHubProjectFields({
+      itemId: projectItem.itemId,
+      projectId: projectItem.projectId,
+      projectNumber: githubProject.number,
+      projectOwner: githubProject.owner,
+      sprint: sprintContext.sprint,
+      task,
+      token: githubInstallationToken,
+    }).catch((error) => ({
+      warnings: [`GitHub Project-Felder konnten nicht synchronisiert werden: ${error instanceof Error ? error.message : "unbekannter Fehler"}`],
+    }));
+    const warnings = [...(issue.warnings || []), ...sprintContext.warnings, ...fieldSync.warnings];
     if (task.taskType === "deliverable") {
       const dependencyContext = await githubDependencyContext(supabase, id, issue.number, githubRepo);
       await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
@@ -348,7 +381,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       });
     }
     const syncedAt = new Date().toISOString();
-    const warnings = issue.warnings || [];
     const activityMessage = [
       `GitHub-Sync ausgeführt: ${githubRepo}#${issue.number}`,
       issue.recovered ? "Vorhandenes FounderOps-Issue wiederverwendet" : "",
