@@ -15,7 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Supabase schema changes are additive by default. Use `.agents/skills/supabase-migrations`, store migrations under `supabase/migrations/`, and ask before drops, truncation, broad deletes, disabling RLS, or removing columns.
 - Production migrations run only through the protected deployment workflow. Local resets are allowed only against the disposable local stack.
 - Decision Log entries are CEO-editable only. Deputies may operate sprint and task workflows but must not edit CEO decisions.
-- Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope. Agent API access remains token-guarded and CEO-scoped.
+- Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope.
 - Never expose database credentials, Supabase service keys, raw GitHub tokens, OpenAI keys, authorization headers, or in-app model access through browser state, logs, API responses, issues, or documentation.
 - GitHub Issues are a one-way backup from the app to `findmydoc-platform/management`; do not make GitHub the source of truth without a new approved plan.
 - Server-side GitHub sync uses GitHub App installation tokens. User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation.

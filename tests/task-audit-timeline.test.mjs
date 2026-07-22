@@ -6,6 +6,7 @@ import { planOutOfOrderMigrations } from "../scripts/lib/supabase-migrations.mjs
 
 const presentation = await loadTranspiledModule("src/features/tasks/model/task-activity-presentation.ts");
 const migrationPath = "supabase/migrations/20260721120056_replace_task_activity_with_audit_log.sql";
+const retiredAgentAuditMigrationPath = "supabase/migrations/20260722113956_remove_retired_agent_api_audit.sql";
 
 function activity(action, overrides = {}) {
   return {
@@ -79,4 +80,12 @@ test("production deployment includes only the approved out-of-order task activit
     { file: "20260721110000_unapproved.sql", version: "20260721110000" },
   ], ["20260721121727"]);
   assert.deepEqual(blockedPlan.unapprovedMigrations.map((migration) => migration.version), ["20260721110000"]);
+});
+
+test("retired Agent API cleanup removes only its audit markers", async () => {
+  const migration = await readFile(retiredAgentAuditMigrationPath, "utf8");
+
+  assert.match(migration, /delete from public\.audit_log/);
+  assert.match(migration, /where action = 'agent\.task_intake\.create'/);
+  assert.doesNotMatch(migration, /delete from public\.tasks|truncate|drop table/i);
 });

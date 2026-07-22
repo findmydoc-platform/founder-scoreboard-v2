@@ -537,6 +537,7 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   const intakeUi = await readFile("src/features/intake/organisms/ceo-task-intake.tsx", "utf8");
   const previewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
+  const commitHelper = await readFile("src/features/intake/model/task-intake-commit.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
@@ -552,6 +553,9 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(ui, /Deputy, Founder, Accountable, Responsible und Zuständige/);
   assert.match(previewRoute, /requireCEO/);
   assert.match(commitRoute, /requireCEO/);
+  assert.match(commitHelper, /task_intake\.create/);
+  assert.match(commitHelper, /source: "CEO Intake"/);
+  assert.match(commitHelper, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
   assert.doesNotMatch(previewRoute, /requireOperationalLead/);
   assert.doesNotMatch(commitRoute, /requireOperationalLead/);
   assert.match(intakeUi, /Aufgaben importieren/);
@@ -561,113 +565,6 @@ test("ceo task intake is ceo-only and separated from team ai work access", async
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
   assert.match(commentsRoute, /requirePlanningContributor/);
-});
-
-test("founderops agent api is token guarded and limited to planning intake", async () => {
-  const envExample = await readFile(".env.example", "utf8");
-  const docs = await readFile("docs/founderops-agent-api.md", "utf8");
-  const openapi = await readFile("public/founderops-agent-openapi.json", "utf8");
-  const agentAuth = await readFile("src/features/agent/model/agent-auth.ts", "utf8");
-  const agentContract = await readFile("src/features/agent/model/agent-contract.ts", "utf8");
-  const agentData = await readFile("src/features/agent/model/agent-data-service.ts", "utf8");
-  const agentProjection = await readFile("src/features/agent/model/agent-planning-projection.ts", "utf8");
-  const agentRouteHandler = await readFile("src/features/agent/model/agent-route-handler.ts", "utf8");
-  const contextRoute = await readFile("src/app/api/agent/context/route.ts", "utf8");
-  const tasksRoute = await readFile("src/app/api/agent/tasks/route.ts", "utf8");
-  const previewRoute = await readFile("src/app/api/agent/task-intake/preview/route.ts", "utf8");
-  const commitRoute = await readFile("src/app/api/agent/task-intake/commit/route.ts", "utf8");
-  const ceoPreviewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
-  const ceoCommitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
-  const commitHelper = await readFile("src/features/intake/model/task-intake-commit.ts", "utf8");
-  const routeHelper = await readFile("src/features/intake/model/task-intake-route.ts", "utf8");
-  const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
-  const intakeContext = await readFile("src/features/intake/model/task-intake-context.ts", "utf8");
-
-  assert.match(envExample, /FOUNDEROPS_AGENT_TOKEN_SHA256=/);
-  assert.match(docs, /FOUNDEROPS_AGENT_TOKEN_SHA256/);
-  assert.match(docs, /keine direkten Datenbank-Credentials/);
-  assert.match(docs, /Keine AI-Funktion innerhalb von FounderOps/);
-  assert.match(openapi, /"\/api\/agent\/context"/);
-  assert.match(openapi, /"\/api\/agent\/tasks"/);
-  assert.match(openapi, /"\/api\/agent\/task-intake\/preview"/);
-  assert.match(openapi, /"\/api\/agent\/task-intake\/commit"/);
-  assert.match(openapi, /"bearerAuth"/);
-  assert.match(openapi, /"scheme": "bearer"/);
-  assert.doesNotMatch(openapi, /FOUNDEROPS_AGENT_TOKEN_SHA256/);
-  assert.doesNotMatch(openapi, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(openapi, /NEXT_PUBLIC_SUPABASE_ANON_KEY/);
-
-  assert.match(agentAuth, /FOUNDEROPS_AGENT_TOKEN_SHA256/);
-  assert.match(agentAuth, /authorization/i);
-  assert.match(agentAuth, /Bearer /);
-  assert.match(agentAuth, /createHash\("sha256"\)/);
-  assert.match(agentAuth, /timingSafeEqual/);
-  assert.match(agentAuth, /status: 401/);
-  assert.match(agentAuth, /status: 403/);
-  assert.match(agentAuth, /Agent token is required/);
-  assert.match(agentAuth, /Agent token is invalid/);
-  assert.match(agentAuth, /missing the required scope/);
-  assert.match(agentContract, /read:planning/);
-  assert.match(agentContract, /write:intake/);
-  assert.doesNotMatch(agentAuth, /requireCEO/);
-  assert.doesNotMatch(agentAuth, /requireOperationalLead/);
-  assert.doesNotMatch(agentAuth, /getServerSupabase/);
-  assert.doesNotMatch(agentAuth, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(agentAuth, /provider_token/);
-
-  assert.match(agentData, /getPlanningData/);
-  assert.match(agentProjection, /agentConstraints/);
-  assert.match(agentContract, /noDirectDatabaseCredentials: true/);
-  assert.match(agentContract, /noAiModelInsideFounderOps: true/);
-  assert.match(agentContract, /forbiddenWrites/);
-  assert.match(agentProjection, /reviewOwnerProfileId/);
-  assert.match(agentProjection, /taskBlockers/);
-  assert.match(agentProjection, /taskComments/);
-  assert.match(agentProjection, /buildAgentPlanningIndex/);
-  assert.match(agentProjection, /commentsByTaskId/);
-  assert.match(agentProjection, /relationCountsByTaskId/);
-  assert.match(agentRouteHandler, /requireAgentScope/);
-  assert.match(agentRouteHandler, /isPlanningDataUnavailableError/);
-
-  for (const route of [contextRoute, tasksRoute]) {
-    assert.match(route, /handleAgentRequest/);
-    assert.match(route, /read:planning/);
-    assert.doesNotMatch(route, /requireCEO/);
-    assert.doesNotMatch(route, /requireOperationalLead/);
-    assert.doesNotMatch(route, /provider_token/);
-    assert.doesNotMatch(route, /SUPABASE_SERVICE_ROLE_KEY/);
-  }
-
-  for (const route of [previewRoute, commitRoute]) {
-    const routeContract = `${route}\n${routeHelper}`;
-    assert.match(route, /handleAgentRequest/);
-    assert.match(route, /write:intake/);
-    assert.match(routeContract, /buildTaskIntakePreview/);
-    assert.match(routeContract, /loadTaskIntakeContext/);
-    assert.doesNotMatch(route, /requireCEO/);
-    assert.doesNotMatch(route, /requireOperationalLead/);
-    assert.doesNotMatch(route, /provider_token/);
-    assert.doesNotMatch(route, /SUPABASE_SERVICE_ROLE_KEY/);
-  }
-
-  assert.match(`${previewRoute}\n${routeHelper}`, /valid: preview\.every/);
-  assert.match(commitRoute, /agent\.task_intake\.create/);
-  assert.match(commitRoute, /Agent API/);
-  assert.match(commitRoute, /Agent Task Intake enthält ungültige Aufgaben/);
-  assert.match(commitRoute, /loadCeoActorProfileId/);
-  assert.doesNotMatch(commitHelper, /task_activity/);
-  assert.match(commitHelper, /audit_log/);
-  assert.match(commitHelper, /auditAction/);
-  assert.match(commitHelper, /auditSource/);
-  assert.match(commitHelper, /agent\.task_intake\.create/);
-  assert.match(commitHelper, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
-  assert.match(taskInsertRow, /review_owner_profile_id: input\.reviewOwnerProfileId \|\| null/);
-  assert.match(intakeContext, /accountable_profile_id/);
-  assert.match(intakeContext, /responsible_profile_ids/);
-  assert.match(`${ceoPreviewRoute}\n${routeHelper}`, /loadTaskIntakeContext/);
-  assert.match(ceoCommitRoute, /commitTaskIntake/);
-  assert.match(ceoPreviewRoute, /requireCEO/);
-  assert.match(ceoCommitRoute, /requireCEO/);
 });
 
 test("local seed state persists task overrides in browser storage", async () => {
