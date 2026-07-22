@@ -128,7 +128,6 @@ const exactPresentations: Record<string, Omit<TaskActivityPresentation, "detail"
   "task.approval_resubmitted": { title: "Erneut zur Freigabe eingereicht", icon: "review", tone: "blue" },
   "task.create": { title: "Aufgabe erstellt", icon: "create", tone: "emerald" },
   "task_intake.create": { title: "Aufgabe erfasst", icon: "create", tone: "emerald" },
-  "agent.task_intake.create": { title: "Aufgabe automatisch erfasst", icon: "create", tone: "emerald" },
   "task.delete": { title: "Aufgabe gelöscht", icon: "delete", tone: "red" },
   "task.withdrawn": { title: "Aufgabe zurückgezogen", icon: "delete", tone: "red" },
   "task.restored": { title: "Aufgabe wiederhergestellt", icon: "restore", tone: "emerald" },

@@ -31,8 +31,6 @@ export async function POST(request: NextRequest) {
       context,
       preview,
       actorProfileId: permission.profile?.id || null,
-      auditAction: "task_intake.create",
-      auditSource: "CEO Intake",
     });
 
     return NextResponse.json({ ok: true, tasks });
