@@ -65,6 +65,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
 
   const document = JSON.parse(openapi);
   assert.equal(document.info.title, "FounderOps Planning Items API");
+  assert.equal(document.info.version, "1.2.0");
   assert.deepEqual(Object.keys(document.paths), publicPaths);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.operationId, "updatePlanningItem");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyMilestone");
@@ -74,11 +75,19 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "milestone");
+  assert.deepEqual(document.components.schemas.TaskStatus.enum, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
+  assert.deepEqual(document.components.schemas.PatchPayload.properties.status.oneOf, [
+    { $ref: "#/components/schemas/MilestoneStatus" },
+    { $ref: "#/components/schemas/TaskStatus" },
+  ]);
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.default, false);
   assert.match(documentation, /PATCH processes only properties that are present/);
   assert.match(documentation, /write:planning-items:delete-empty/);
   assert.match(documentation, /valid: false/);
   assert.match(documentation, /No legacy HTTP aliases are retained/);
+  assert.match(documentation, /Existing update-enabled tokens continue to work without rotation/);
+  assert.match(documentation, /status: "Review"/);
+  assert.match(documentation, /complete any Sub-Issue/);
 });
 
 test("legacy public Team Task Intake routes and source modules are absent", async () => {
@@ -94,10 +103,12 @@ test("legacy public Team Task Intake routes and source modules are absent", asyn
   }
 });
 
-test("PATCH implementation keeps type-specific fields, compare-and-set, and idempotency explicit", async () => {
-  const [updateModel, migration] = await Promise.all([
+test("PATCH implementation keeps type-specific fields, compare-and-set, idempotency, and task status transitions explicit", async () => {
+  const [updateModel, migration, statusMigration, routeContract] = await Promise.all([
     read("src/features/planning-items/model/planning-item-update.ts"),
     read("supabase/migrations/20260713182811_planning_items_api_updates.sql"),
+    read("supabase/migrations/20260722115153_planning_items_task_status_updates.sql"),
+    read("src/features/planning-items/model/planning-items-route.ts"),
   ]);
 
   assert.match(updateModel, /expectedUpdatedAt muss ein gültiger Zeitstempel sein/);
@@ -110,6 +121,21 @@ test("PATCH implementation keeps type-specific fields, compare-and-set, and idem
   assert.match(migration, /planning item was changed concurrently/);
   assert.match(migration, /idempotency key conflict/);
   assert.match(migration, /packages_touch_updated_at/);
+  assert.match(updateModel, /validateTaskStatusUpdate/);
+  assert.match(updateModel, /validateSubIssueStatusParentApproval/);
+  assert.match(updateModel, /startsTaskReviewRequest/);
+  assert.match(updateModel, /Review Owner wird über die Review-Anfrage benachrichtigt/);
+  assert.match(statusMigration, /write:planning-items:update/);
+  assert.match(statusMigration, /deliverable final status requires ceo/);
+  assert.match(statusMigration, /sub-issue parent is not approved/);
+  assert.match(statusMigration, /review requires approved deliverable/);
+  assert.match(statusMigration, /sprint score is locked/);
+  assert.match(statusMigration, /insert into public\.task_activity/);
+  assert.match(statusMigration, /insert into public\.notification_events/);
+  assert.match(statusMigration, /'team\.planning_items\.update'/);
+  assert.match(statusMigration, /github_issue_sync_status', 'not_synced'/);
+  assert.match(statusMigration, /update_team_planning_item_transaction_without_task_status[^]*from public, anon, authenticated, service_role/);
+  assert.match(routeContract, /\["P0008", "P0010"\]/);
 });
 
 test("PATCH normalizers preserve explicit zeroes and clear only fields supplied as null or blank", async () => {
@@ -123,6 +149,7 @@ test("PATCH normalizers preserve explicit zeroes and clear only fields supplied 
       "@/features/planning-items/model/planning-items-contract": {
         PLANNING_ITEM_FIELD_RULES: {},
         TEAM_PLANNING_MILESTONE_STATUSES: ["planned", "active", "done"],
+        TEAM_PLANNING_TASK_STATUSES: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
       },
     },
   );
@@ -137,6 +164,8 @@ test("PATCH normalizers preserve explicit zeroes and clear only fields supplied 
   assert.equal(normalizers.normalizePatchStringList([], true).ok, false);
   assert.deepEqual(normalizers.normalizePatchMilestoneStatus("active"), { ok: true, value: "active" });
   assert.equal(normalizers.normalizePatchMilestoneStatus("archived").ok, false);
+  assert.deepEqual(normalizers.normalizePatchTaskStatus("Review"), { ok: true, value: "Review" });
+  assert.equal(normalizers.normalizePatchTaskStatus("planned").ok, false);
 });
 
 test("Milestone create and delete payload helpers enforce role, version, and stable idempotency input", async () => {
