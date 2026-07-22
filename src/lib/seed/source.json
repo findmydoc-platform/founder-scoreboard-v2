@@ -3,7 +3,9 @@
     "id": "findmydoc-founder-execution",
     "name": "findmydoc Planning",
     "range": "Sprint 1 / operative Planungsphase",
-    "reviewObjectionWindowHours": 48
+    "reviewObjectionWindowHours": 48,
+    "githubProjectOwner": "findmydoc-platform",
+    "githubProjectNumber": 21
   },
   "profiles": [
     {

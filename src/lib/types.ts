@@ -41,6 +41,8 @@ export type Project = {
   name: string;
   range: string;
   reviewObjectionWindowHours: number;
+  githubProjectOwner: string;
+  githubProjectNumber: number;
 };
 
 export type Package = {

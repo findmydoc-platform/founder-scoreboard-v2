@@ -47,3 +47,21 @@ test("FounderOps settings derive only missing unlocked deadlines", () => {
 
   assert.equal(merged.sprints[0].reviewDueAt, "2026-07-31:96");
 });
+
+test("FounderOps settings replace only the GitHub Project target", () => {
+  const data = {
+    project: {
+      id: "project",
+      githubProjectOwner: "findmydoc-platform",
+      githubProjectNumber: 21,
+      reviewObjectionWindowHours: 48,
+    },
+    sprints: [],
+  };
+
+  const merged = settingsState.applyGitHubProjectSettings(data, "another-org", 7);
+
+  assert.equal(merged.project.githubProjectOwner, "another-org");
+  assert.equal(merged.project.githubProjectNumber, 7);
+  assert.equal(merged.project.reviewObjectionWindowHours, 48);
+});

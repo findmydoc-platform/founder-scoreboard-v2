@@ -6,6 +6,7 @@ export type FeatureTourDefinition = {
   id: string;
   openAccountMenu?: boolean;
   openHelpMenu?: boolean;
+  openProfileProcessSettings?: boolean;
   openTaskDetail?: boolean;
   openTaskShare?: boolean;
   productUpdateId?: string;
@@ -24,8 +25,37 @@ export const taskActivityTourId = "task-activity-v1";
 export const decisionLogTourId = "decision-log-workspace-v1";
 export const issueSharingTourId = "issue-sharing-v1";
 export const modalOverlayStackTourId = "modal-overlay-stack-v1";
+export const githubProjectSettingsTourId = "github-project-settings-v1";
 
 export const featureTours = [
+  {
+    id: githubProjectSettingsTourId,
+    productUpdateId: "2026-07-22-github-project-settings",
+    startWorkspace: "profile",
+    openProfileProcessSettings: true,
+    requiredSelectors: ["[data-tour-id='profile-settings-process']", "[data-tour-id='founderops-github-project-settings']"],
+    steps: [
+      {
+        element: "[data-tour-id='profile-settings-process']",
+        popover: {
+          title: "FounderOps-Prozess öffnen",
+          description: "Die globalen Einstellungen bündeln jetzt auch das repositoryübergreifende GitHub Project.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='founderops-github-project-settings']",
+        popover: {
+          title: "Project prüfen und speichern",
+          description: "FounderOps prüft App-Zugriff, alle drei Repository-Verknüpfungen und die erwarteten Felder, bevor das Ziel gespeichert wird.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: modalOverlayStackTourId,
     productUpdateId: "2026-07-21-modal-overlay-stack",

@@ -142,6 +142,33 @@ export function updateFounderOpsReviewWindowRequest(
   });
 }
 
+export function updateFounderOpsGitHubProjectRequest(
+  apiClient: BrowserApiClient,
+  expectedGithubProjectOwner: string,
+  expectedGithubProjectNumber: number,
+  githubProjectOwner: string,
+  githubProjectNumber: number,
+) {
+  return apiClient.requestJson<{
+    error?: string;
+    project?: { id: string; githubProjectOwner: string; githubProjectNumber: number };
+    validation?: {
+      title: string;
+      url: string;
+      repositories: string[];
+      fields: Array<{ name: string; dataType: string }>;
+    };
+  }>("/api/founderops-settings/github-project", {
+    method: "PATCH",
+    json: {
+      expectedGithubProjectOwner,
+      expectedGithubProjectNumber,
+      githubProjectOwner,
+      githubProjectNumber,
+    },
+  });
+}
+
 export function markProfileFeatureTourSeenRequest(apiClient: BrowserApiClient, tourId: string) {
   return apiClient.requestJson<{ error?: string; acknowledgement?: ProfileFeatureTourAcknowledgement }>("/api/profile-feature-tours/seen", {
     method: "POST",

@@ -65,6 +65,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
+    saveFounderOpsGitHubProject,
     saveFounderOpsReviewWindow,
     sendGoogleChatTest,
     setData,
@@ -225,6 +226,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           pending={isPending}
           source={source}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
+          onSaveFounderOpsGitHubProject={saveFounderOpsGitHubProject}
           onSaveFounderOpsReviewWindow={saveFounderOpsReviewWindow}
         />
       )}
