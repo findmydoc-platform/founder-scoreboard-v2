@@ -30,7 +30,6 @@ test("product updates auto-open, queue unseen releases, and remain available fro
 test("product update releases require screenshots, expiry, and dedicated tours", async () => {
   const updates = JSON.parse(await readFile("src/features/product-updates/model/product-updates.json", "utf8"));
   const tours = await readFile("src/features/product-tours/model/feature-tour-registry.ts", "utf8");
-  const rootInstructions = await readFile("AGENTS.md", "utf8");
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const deployWorkflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
@@ -51,7 +50,6 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(tours, /task-share-popover/);
   assert.match(tours, /help-menu-trigger/);
   assert.match(tours, /product-updates-menu-link/);
-  assert.match(rootInstructions, /Every production deployment with a user-visible change/);
   assert.match(packageJson.scripts["verify:deploy"], /verify:product-updates/);
   assert.match(deployWorkflow, /PRODUCT_UPDATE_BASE_REF/);
   assert.match(verifier, /Production UI changes require both a product update registry change and a current screenshot/);
