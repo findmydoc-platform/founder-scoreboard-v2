@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-22-github-project-settings",
+    "releasedAt": "2026-07-22",
+    "expiresAt": "2026-08-21",
+    "featureTourId": "github-project-settings-v1",
+    "title": "GitHub Project zentral verbunden",
+    "summary": "Das repositoryübergreifende GitHub Project lässt sich jetzt in FounderOps prüfen und als gemeinsames Sync-Ziel speichern.",
+    "slides": [
+      {
+        "id": "github-project-settings",
+        "title": "Ein geprüftes Ziel für alle Repositories",
+        "description": "CEO und aktive Deputies sehen Organisation und Project-Nummer in den Prozesseinstellungen. Vor dem Speichern prüft FounderOps App-Zugriff, Repository-Verknüpfungen und Felder.",
+        "image": {
+          "src": "/product-updates/2026-07-22-github-project-settings/github-project-settings.png",
+          "alt": "FounderOps-Prozesseinstellungen mit GitHub-Organisation, Project-Nummer und Prüfaktion",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-21-modal-overlay-stack",
     "releasedAt": "2026-07-21",
     "expiresAt": "2026-08-20",

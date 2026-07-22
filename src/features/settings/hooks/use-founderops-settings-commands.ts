@@ -2,8 +2,9 @@
 
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
-import { updateFounderOpsReviewWindowRequest } from "@/features/planning/model/planning-api-client";
-import { applyReviewWindowHours } from "@/features/settings/model/founderops-settings-state";
+import { updateFounderOpsGitHubProjectRequest, updateFounderOpsReviewWindowRequest } from "@/features/planning/model/planning-api-client";
+import { applyGitHubProjectSettings, applyReviewWindowHours } from "@/features/settings/model/founderops-settings-state";
+import { canManageFounderOpsGitHubProject } from "@/lib/platform";
 
 export function useFounderOpsSettingsCommands({
   apiClient,
@@ -35,5 +36,36 @@ export function useFounderOpsSettingsCommands({
     ));
   };
 
-  return { saveFounderOpsReviewWindow };
+  const saveFounderOpsGitHubProject = async (githubProjectOwner: string, githubProjectNumber: number) => {
+    if (!canManageFounderOpsGitHubProject(currentProfile)) {
+      throw new Error("Nur der CEO oder ein aktuell aktiver Deputy kann das GitHub Project ändern.");
+    }
+
+    setSaveError("");
+    const expectedOwner = data.project.githubProjectOwner;
+    const expectedNumber = data.project.githubProjectNumber;
+
+    if (source !== "supabase") {
+      const localData = applyGitHubProjectSettings(data, githubProjectOwner, githubProjectNumber);
+      applyPlanningDataUpdate(() => localData);
+      persistLocalPlanningData(localData);
+      return;
+    }
+
+    const { response, body } = await updateFounderOpsGitHubProjectRequest(
+      apiClient,
+      expectedOwner,
+      expectedNumber,
+      githubProjectOwner,
+      githubProjectNumber,
+    );
+    if (!response.ok || !body?.project) throw new Error(body?.error || "GitHub Project konnte nicht geprüft und gespeichert werden.");
+    applyPlanningDataUpdate((current) => applyGitHubProjectSettings(
+      current,
+      body.project!.githubProjectOwner,
+      body.project!.githubProjectNumber,
+    ));
+  };
+
+  return { saveFounderOpsGitHubProject, saveFounderOpsReviewWindow };
 }

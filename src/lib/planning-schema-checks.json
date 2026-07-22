@@ -2,7 +2,7 @@
   {
     "name": "projects.founderops_process_settings",
     "table": "projects",
-    "select": "id,review_objection_window_hours",
+    "select": "id,review_objection_window_hours,github_project_owner,github_project_number",
     "health": true
   },
   {

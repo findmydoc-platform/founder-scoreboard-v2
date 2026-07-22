@@ -12,6 +12,8 @@ export const emptyPlanningData: PlanningData = {
     name: "findmydoc Planning",
     range: "Geschützter Teamzugriff",
     reviewObjectionWindowHours: 48,
+    githubProjectOwner: "findmydoc-platform",
+    githubProjectNumber: 21,
   },
   profiles: [],
   packages: [],

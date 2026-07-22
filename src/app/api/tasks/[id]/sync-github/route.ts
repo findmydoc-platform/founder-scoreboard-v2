@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireTeamMember } from "@/lib/authz";
 import { connectGitHubSubIssue, githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
+import { ensureFounderOpsGitHubProjectItem } from "@/lib/github-project";
+import { validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
 import { deliverPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { githubSyncStatePersistFailedMessage, persistGitHubSyncFailure } from "@/lib/github-sync-failure-persistence";
 import { resolveGitHubIssueNumber } from "@/lib/github-issue-reference";
@@ -19,6 +21,23 @@ type SyncRequestBody = {
 };
 
 const staleSyncMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
+const founderOpsProjectId = "findmydoc-founder-execution";
+
+async function loadGitHubProjectSettings(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("github_project_owner,github_project_number")
+    .eq("id", founderOpsProjectId)
+    .single<{ github_project_owner: string | null; github_project_number: number | null }>();
+  if (error || !data) throw new Error("FounderOps GitHub-Project-Konfiguration konnte nicht geladen werden.");
+  if (!validGitHubProjectOwner(data.github_project_owner) || !validGitHubProjectNumber(data.github_project_number)) {
+    throw new Error("FounderOps GitHub-Project-Konfiguration fehlt oder ist ungültig.");
+  }
+  return {
+    owner: data.github_project_owner,
+    number: data.github_project_number,
+  };
+}
 
 function githubSyncStaleResponse() {
   return NextResponse.json({
@@ -306,8 +325,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const pendingUpdatedAt = typeof pendingTask?.updated_at === "string" ? pendingTask.updated_at : "";
     if (!pendingUpdatedAt) throw new Error("GitHub-Sync konnte nicht gestartet werden: Die neue Aufgabenrevision fehlt.");
 
+    const githubProject = await loadGitHubProjectSettings(supabase);
     const issue = await upsertGitHubIssue(task, githubInstallationToken, { login: assigneeLogin });
     const githubRepo = githubRepoSlug(task.githubRepo);
+    await ensureFounderOpsGitHubProjectItem({
+      issueNumber: issue.number,
+      projectNumber: githubProject.number,
+      projectOwner: githubProject.owner,
+      repository: githubRepo,
+      token: githubInstallationToken,
+    });
     if (task.taskType === "deliverable") {
       const dependencyContext = await githubDependencyContext(supabase, id, issue.number, githubRepo);
       await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
