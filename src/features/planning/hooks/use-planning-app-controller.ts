@@ -45,7 +45,6 @@ export function usePlanningAppController({
     canChangeTaskStatus,
     canManageFinalTaskStatus,
     canManageTaskMeta,
-    canUseCeoIntake,
     currentProfile,
     currentProfileId,
     data,
@@ -137,15 +136,12 @@ export function usePlanningAppController({
   });
 
   const derivedState = usePlanningDerivedState({
-    authChecked,
-    canUseCeoIntake,
     currentProfile,
     data,
     filters,
     setInitiativeDialogDefaults,
     setMilestoneDialogDefaults,
     setTaskDialogDefaults,
-    setWorkspace,
     statusGuardTaskId,
     workspace,
   });
@@ -192,7 +188,6 @@ export function usePlanningAppController({
     canChangeTaskStatus,
     canManageFinalTaskStatus,
     canManageTaskMeta,
-    canUseCeoIntake,
     backTaskPanel,
     closeTaskPanel,
     currentProfile,

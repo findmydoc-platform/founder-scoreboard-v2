@@ -37,7 +37,7 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 - `GET` and `POST /api/team/planning-items/v1/tokens` list or create the caller's tokens.
 - `DELETE /api/team/planning-items/v1/tokens/{id}` revokes one active token.
 
-No legacy HTTP aliases are retained. CEO Task Intake is not part of this contract.
+No legacy HTTP aliases or parallel planning-item creation routes are retained. This is the sole supported API contract for automated planning-item creation.
 
 ## Create payload
 

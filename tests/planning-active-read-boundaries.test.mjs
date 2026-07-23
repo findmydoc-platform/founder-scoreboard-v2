@@ -9,7 +9,6 @@ const activeTaskReaders = [
   "src/app/api/sprints/route.ts",
   "src/app/api/sprints/[id]/route.ts",
   "src/app/api/sprints/[id]/lock/route.ts",
-  "src/features/intake/model/task-intake-commit.ts",
   "src/lib/github-comment-delivery.ts",
   "src/lib/notification-resolution.ts",
 ];

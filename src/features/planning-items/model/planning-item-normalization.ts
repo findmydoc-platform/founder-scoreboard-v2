@@ -1,6 +1,5 @@
 import { cleanText } from "@/lib/api-input";
 import { normalizeLookup, slugify } from "@/lib/slug";
-import type { TaskIntakeInput } from "@/features/intake/model/task-intake";
 import {
   PLANNING_ITEM_FIELD_RULES,
   TEAM_PLANNING_MILESTONE_STATUSES,
@@ -187,17 +186,4 @@ export function intakeProfileByValue<T extends IntakeLookupProfile>(profiles: T[
     || normalizeLookup(profile.githubLogin || "") === normalized
     || normalizeLookup(profile.id) === slug
   )) || null;
-}
-
-export function normalizeTaskIntakeBrief(rawTask: TaskIntakeInput) {
-  return {
-    title: intakeText(rawTask.title, 240),
-    description: intakeText(rawTask.description, 4000),
-    problemStatement: intakeText(rawTask.problemStatement, 4000),
-    intendedOutcome: intakeText(rawTask.intendedOutcome, 4000),
-    scopeConstraints: intakeText(rawTask.scopeConstraints, 4000),
-    acceptanceCriteria: intakeText(rawTask.acceptanceCriteria, 6000),
-    evidenceRequired: intakeText(rawTask.evidenceRequired, 4000),
-    definitionOfDone: intakeText(rawTask.definitionOfDone, 4000),
-  };
 }

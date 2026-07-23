@@ -54,7 +54,6 @@ const expectedTablesByWorkspace = {
   tools: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "fmd_tools"],
   team: ["projects", "profiles", "active_tasks", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   notifications: ["projects", "profiles", "active_tasks", "notification_events", "notification_deliveries", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  "ceo-intake": ["projects", "profiles", "active_packages", "sprints", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   profile: ["projects", "profiles", "active_packages", "notification_preferences", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
 };
 

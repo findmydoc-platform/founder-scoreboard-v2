@@ -15,7 +15,7 @@ Every production deployment with a user-visible change must:
 
 Purely operational changes do not create a gallery entry. They must not reuse an old update ID to reopen stale product news.
 
-The production deployment passes the previous `main` revision to the verifier. If user-facing TSX or CSS changed, deployment fails unless both the registry and a screenshot under `public/product-updates/` changed. Manual local verification validates the complete registry without requiring a Git base revision.
+The production deployment passes the previous `main` revision to the verifier. New or expanded user-facing TSX or CSS fails unless both the registry and a screenshot under `public/product-updates/` changed. A removal-only UI change is treated as maintenance only when it deletes at least one UI file and every remaining visible UI diff removes more lines than it adds. Manual local verification validates the complete registry without requiring a Git base revision.
 
 ## Entry contract
 

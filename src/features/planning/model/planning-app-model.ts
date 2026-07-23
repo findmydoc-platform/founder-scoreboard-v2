@@ -82,7 +82,6 @@ export const workspaceLabels: Record<Workspace, string> = {
   tools: "Quicklinks",
   team: "Team",
   notifications: "Notifications",
-  "ceo-intake": "CEO Intake",
   profile: "Mein Profil",
 };
 
@@ -96,7 +95,6 @@ export const workspaceDescriptions: Record<Workspace, string> = {
   tools: "Zeigt kuratierte externe Links und weitere Linkziele für das Team.",
   team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   notifications: "Persönliche Hinweise und Ausgang.",
-  "ceo-intake": "Zeigt den CEO-only Import für freigegebene Aufgabenpakete.",
   profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Planungs-Defaults.",
 };
 

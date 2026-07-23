@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
-import { futureSprintDrafts, sortTasks } from "@/features/planning/model/planning-app-model";
+import { futureSprintDrafts } from "@/features/planning/model/planning-app-model";
 import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning-task-view-renderer";
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
@@ -15,7 +15,6 @@ const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="ge
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
 const EventsWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="events" />;
 
-const CeoTaskIntake = dynamic(() => import("@/features/intake/organisms/ceo-task-intake").then((mod) => mod.CeoTaskIntake), { loading: GenericWorkspacePanelLoading });
 const BacklogOverview = dynamic(() => import("@/features/backlog/organisms/backlog-overview").then((mod) => mod.BacklogOverview), { loading: BacklogWorkspacePanelLoading });
 const EventsOverview = dynamic(() => import("@/features/events/organisms/events-overview").then((mod) => mod.EventsOverview), { loading: EventsWorkspacePanelLoading });
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
@@ -36,7 +35,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
   const {
     authBusy,
     canManageTaskMeta,
-    canUseCeoIntake,
     createFounderEvent,
     createScoreObjection,
     createSprintPlan,
@@ -105,29 +103,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
         <UiPanel padding="xl">
           <h2 className="text-lg font-semibold text-slate-950">Decision Log nicht verfügbar</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">Für diesen Seitenaufruf wurden keine Notion-Daten geladen.</p>
-        </UiPanel>
-      )}
-      {workspace === "ceo-intake" && canUseCeoIntake && (
-        <CeoTaskIntake
-          profiles={data.profiles}
-          packages={data.packages}
-          sprints={data.sprints}
-          apiClient={apiClient}
-          source={source}
-          onTasksCreated={(tasks) => {
-            setData((current) => ({
-              ...current,
-              tasks: sortTasks([...current.tasks, ...tasks]),
-            }));
-          }}
-        />
-      )}
-      {workspace === "ceo-intake" && !canUseCeoIntake && (
-        <UiPanel padding="xl">
-          <h2 className="text-lg font-semibold text-slate-950">CEO Intake ist geschützt</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Dieser Bereich ist ausschließlich für die CEO-Rolle freigeschaltet. Deputy, Founder, Accountable, Responsible und Zuständige haben hier keinen Zugriff.
-          </p>
         </UiPanel>
       )}
       {workspace === "projects" && (

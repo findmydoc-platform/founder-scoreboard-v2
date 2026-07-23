@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { usePlanningHeaderActions } from "@/features/planning/hooks/use-planning-header-actions";
 import { usePlanningTaskViewModel } from "@/features/planning/hooks/use-planning-task-view-model";
 import type { PlanningFilters, usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
@@ -12,38 +11,26 @@ import type { PlanningData, Profile } from "@/lib/types";
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningDerivedStateOptions = {
-  authChecked: boolean;
-  canUseCeoIntake: boolean;
   currentProfile: Profile | null;
   data: PlanningData;
   filters: PlanningFilters;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setMilestoneDialogDefaults: PlanningViewState["setMilestoneDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
-  setWorkspace: (workspace: AppWorkspace) => void;
   statusGuardTaskId: string | null;
   workspace: AppWorkspace;
 };
 
 export function usePlanningDerivedState({
-  authChecked,
-  canUseCeoIntake,
   currentProfile,
   data,
   filters,
   setInitiativeDialogDefaults,
   setMilestoneDialogDefaults,
   setTaskDialogDefaults,
-  setWorkspace,
   statusGuardTaskId,
   workspace,
 }: UsePlanningDerivedStateOptions) {
-  useEffect(() => {
-    if (workspace === "ceo-intake" && authChecked && !canUseCeoIntake) {
-      setWorkspace("planning");
-    }
-  }, [authChecked, canUseCeoIntake, setWorkspace, workspace]);
-
   const { metrics, visibleTasks } = usePlanningTaskViewModel({ currentProfile, data, filters });
   const activeSprint = findCurrentSprint(data.sprints) || data.sprints[0];
   const filtersAvailable = planningWorkspaces.includes(workspace);

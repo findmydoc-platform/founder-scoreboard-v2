@@ -1,11 +1,8 @@
-import type { PlatformRole } from "@/lib/types";
-
 export const appWorkspaceIds = [
   "planning",
   "backlog",
   "decision-log",
   "events",
-  "ceo-intake",
   "sprint",
   "projects",
   "tools",
@@ -21,7 +18,6 @@ export const persistedWorkspaceIds = [
   "planning",
   "backlog",
   "events",
-  "ceo-intake",
   "sprint",
   "projects",
   "tools",
@@ -44,9 +40,8 @@ export function appWorkspaceFromValue(value: string | null | undefined): AppWork
 
 export function rootWorkspaceFromPreference(
   value: string | null | undefined,
-  platformRole: PlatformRole | null | undefined,
 ): AppWorkspace {
   const workspace = appWorkspaceFromValue(value) || "planning";
   if (!isPersistedWorkspace(workspace)) return "planning";
-  return workspace === "ceo-intake" && platformRole !== "ceo" ? "planning" : workspace;
+  return workspace;
 }

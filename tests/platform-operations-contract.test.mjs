@@ -453,7 +453,6 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
     "planning",
     "decision-log",
     "events",
-    "ceo-intake",
     "sprint",
     "projects",
     "tools",
@@ -472,7 +471,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.match(legacyReviewsPage, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
   assert.match(routes, /href: "\/events"/);
-  assert.match(routes, /href: "\/ceo-intake"/);
+  assert.doesNotMatch(routes, /ceo-intake|href: "\/ceo-intake"/);
   assert.match(routes, /href: "\/sprint"/);
   assert.match(routes, /href: "\/projects"/);
   assert.match(routes, /href: "\/tools"/);
@@ -492,7 +491,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(planningAuth, /getServerPlanningAuthContext\(teamMemberRoles\)/);
   assert.match(planningAuth, /\.from\("profile_ui_preferences"\)/);
   assert.match(planningAuth, /\.eq\("profile_id", auth\.profile\.id\)/);
-  assert.match(planningAuth, /rootWorkspaceFromPreference\(data\?\.default_workspace, auth\.profile\.platformRole\)/);
+  assert.match(planningAuth, /rootWorkspaceFromPreference\(data\?\.default_workspace\)/);
   assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
   assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\),/);
   assert.match(dataScopes, /export const workspaceDataScopes/);
@@ -530,37 +529,30 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.doesNotMatch(taskDetailWorkflow, /\/\?workspace=/);
 });
 
-test("ceo task intake is ceo-only and separated from team ai work access", async () => {
+test("Planning Items API is the sole automated planning-item creation contract", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
-  const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
   const ui = await readPlanningSurface();
-  const intakeUi = await readFile("src/features/intake/organisms/ceo-task-intake.tsx", "utf8");
-  const previewRoute = await readFile("src/app/api/ceo/task-intake/preview/route.ts", "utf8");
-  const commitRoute = await readFile("src/app/api/ceo/task-intake/commit/route.ts", "utf8");
-  const commitHelper = await readFile("src/features/intake/model/task-intake-commit.ts", "utf8");
+  const planningItemsRoute = await readFile("src/app/api/team/planning-items/v1/items/route.ts", "utf8");
+  const planningItemsDocumentation = await readFile("docs/team-planning-items-api.md", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
 
-  assert.match(routes, /ceo-intake/);
-  assert.match(routes, /ceoOnly: true/);
-  assert.match(routes, /href: "\/ceo-intake"/);
-  assert.match(sidebar, /currentPlatformRole === "ceo"/);
-  assert.match(ui, /canUseCeoIntake = requestContext\.currentProfile\?\.platformRole === "ceo"/);
-  assert.match(ui, /workspace === "ceo-intake" && authChecked && !canUseCeoIntake/);
-  assert.match(ui, /CeoTaskIntake/);
-  assert.match(ui, /Deputy, Founder, Accountable, Responsible und Zuständige/);
-  assert.match(previewRoute, /requireCEO/);
-  assert.match(commitRoute, /requireCEO/);
-  assert.match(commitHelper, /task_intake\.create/);
-  assert.match(commitHelper, /source: "CEO Intake"/);
-  assert.match(commitHelper, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
-  assert.doesNotMatch(previewRoute, /requireOperationalLead/);
-  assert.doesNotMatch(commitRoute, /requireOperationalLead/);
-  assert.match(intakeUi, /Aufgaben importieren/);
-  assert.match(intakeUi, /Geschützte Felder/);
-  assert.match(intakeUi, /Planung, RACI, Sprint, Review Owner, Punkte und Erledigt werden nicht automatisch überschrieben/);
+  for (const path of [
+    "src/app/(workspaces)/ceo-intake/page.tsx",
+    "src/app/(workspaces)/ceo-intake/loading.tsx",
+    "src/app/api/ceo/task-intake/preview/route.ts",
+    "src/app/api/ceo/task-intake/commit/route.ts",
+    "src/features/intake/organisms/ceo-task-intake.tsx",
+    "src/features/intake/model/task-intake-api-client.ts",
+  ]) {
+    assert.equal(existsSync(path), false, `${path} must stay removed`);
+  }
+  assert.doesNotMatch(routes, /ceo-intake/);
+  assert.doesNotMatch(ui, /CEO Intake|CeoTaskIntake|canUseCeoIntake|\/api\/ceo\/task-intake/);
+  assert.match(planningItemsRoute, /create_team_planning_items_transaction/);
+  assert.match(planningItemsDocumentation, /sole supported API contract for automated planning-item creation/);
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);
