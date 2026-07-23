@@ -29,6 +29,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const syncRenameMigration = await readSupabaseSchemaContract();
   const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
   const reconcileRoute = await readFile("src/app/api/github-comments/reconcile/route.ts", "utf8");
+  const deliveryAuth = await readFile("src/lib/delivery-auth.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
@@ -98,7 +99,9 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(syncRenameMigration, /github_issue_sync_status = 'synced'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'failed'/);
   assert.match(commentDelivery, /waiting_for_author_connection/);
-  assert.match(reconcileRoute, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(reconcileRoute, /validateDeliverySecret/);
+  assert.match(deliveryAuth, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(deliveryAuth, /timingSafeEqual/);
   assert.match(reconcileRoute, /requireOperationalLead/);
   assert.match(reconcileRoute, /export async function GET/);
   assert.match(reconcileRoute, /previewPendingGitHubComments/);

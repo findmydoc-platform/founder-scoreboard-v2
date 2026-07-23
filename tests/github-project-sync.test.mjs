@@ -131,6 +131,37 @@ test("existing Project membership is observed without mutation", async () => {
   assert.equal(mutations, 0);
 });
 
+test("missing Project membership can be observed without mutation", async () => {
+  let mutations = 0;
+  const githubProject = await loadProjectModule(async (_url, options) => {
+    if (options.body.query.includes("FounderOpsProjectMembership")) {
+      return {
+        data: {
+          organization: { projectV2: { id: "project-21", closed: false } },
+          repository: { issue: { id: "issue-76", projectItems: { nodes: [] } } },
+        },
+      };
+    }
+    mutations += 1;
+    throw new Error("mutation must not run");
+  });
+
+  const result = await githubProject.observeFounderOpsGitHubProjectItem({
+    issueNumber: 76,
+    projectNumber: 21,
+    projectOwner: "findmydoc-platform",
+    repository: "findmydoc-platform/management",
+    token: "token",
+  });
+
+  assert.deepEqual(result, {
+    issueId: "issue-76",
+    itemId: null,
+    projectId: "project-21",
+  });
+  assert.equal(mutations, 0);
+});
+
 test("missing Project membership is added once and a lost response is reconciled on replay", async () => {
   let membershipExists = false;
   let mutationCalls = 0;

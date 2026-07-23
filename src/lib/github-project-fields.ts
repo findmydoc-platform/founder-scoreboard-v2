@@ -63,6 +63,7 @@ export type FounderOpsGitHubSprint = {
 };
 
 export type FounderOpsGitHubProjectFieldInput = {
+  dryRun?: boolean;
   itemId: string;
   projectId: string;
   projectNumber: number;
@@ -232,6 +233,7 @@ function warningMessage(field: string, error: unknown) {
 }
 
 export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubProjectFieldInput) {
+  const changes: string[] = [];
   const warnings: string[] = [];
   let data: FieldContextData;
   try {
@@ -241,13 +243,16 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
       itemId: input.itemId,
     }, input.token, "read");
   } catch (error) {
-    return { warnings: [warningMessage("GitHub Project-Felder", error)] };
+    return { changes, warnings: [warningMessage("GitHub Project-Felder", error)] };
   }
 
   const project = data.organization?.projectV2;
   const item = data.node;
   if (!project || project.closed || project.id !== input.projectId || !item || item.project.id !== project.id || !item.content?.id) {
-    return { warnings: ["GitHub Project-Felder konnten nicht synchronisiert werden: Project-Item oder Issue-Kontext ist nicht mehr erreichbar."] };
+    return {
+      changes,
+      warnings: ["GitHub Project-Felder konnten nicht synchronisiert werden: Project-Item oder Issue-Kontext ist nicht mehr erreichbar."],
+    };
   }
 
   const projectFields = new Map(
@@ -268,6 +273,8 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
     if (!field || field.dataType !== expectedType) throw new Error(`Feld ${fieldName} (${expectedType}) fehlt.`);
     if (value === null) {
       if (current === undefined || current === null || current === "") return;
+      changes.push(fieldName);
+      if (input.dryRun) return;
       await githubGraphql(clearProjectFieldMutation, {
         projectId: project.id,
         itemId: item.id,
@@ -277,6 +284,8 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
     }
     const desired = Object.values(value)[0];
     if (current === desired) return;
+    changes.push(fieldName);
+    if (input.dryRun) return;
     await githubGraphql(updateProjectFieldMutation, {
       projectId: project.id,
       itemId: item.id,
@@ -338,6 +347,8 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
     const desired = value ? Object.values(value)[0] : null;
     if (value === null && (current === undefined || current === null || current === "")) return;
     if (value !== null && current === desired) return;
+    changes.push(fieldName);
+    if (input.dryRun) return;
     await githubGraphql(setIssueFieldMutation, {
       issueId: item.content!.id,
       issueFields: [{ fieldId: field.id, ...(value || { delete: true }) }],
@@ -370,5 +381,5 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
   const targetDate = input.task.deadline.trim();
   await reconcileIssue("Target date", "DATE", targetDate ? { dateValue: targetDate } : null, issueValues.get("Target date")?.value);
 
-  return { warnings };
+  return { changes, warnings };
 }
