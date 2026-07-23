@@ -15,8 +15,6 @@ type CommitTaskIntakeOptions = {
   context: TaskIntakeContext;
   preview: TaskIntakePreviewTask[];
   actorProfileId: string | null;
-  auditAction: "task_intake.create" | "agent.task_intake.create";
-  activitySource: "CEO Intake" | "Agent API";
 };
 
 function insertForTask(task: TaskIntakePreviewTask, id: string, sortOrder: number, createdBy: string | null) {
@@ -58,8 +56,6 @@ export async function commitTaskIntake({
   context,
   preview,
   actorProfileId,
-  auditAction,
-  activitySource,
 }: CommitTaskIntakeOptions) {
   const { data: maxRow } = await supabase
     .from(ACTIVE_TASKS_TABLE)
@@ -70,7 +66,7 @@ export async function commitTaskIntake({
 
   const baseSortOrder = Number(maxRow?.sort_order || 0);
   const createdBy = actorProfileId;
-  const idPrefix = actorProfileId || "agent";
+  const idPrefix = actorProfileId || "task-intake";
   const now = Date.now().toString(36);
   const inserts = preview.map((task, index) => {
     const id = `${idPrefix}-${slugify(task.title, { maxLength: 70 }) || "neue-aufgabe"}-${now}-${index + 1}`;
@@ -81,17 +77,12 @@ export async function commitTaskIntake({
   if (insertError || !createdRows) throw new Error(insertError?.message || "Aufgaben konnten nicht erstellt werden.");
 
   const rows = createdRows as (TaskRowForMapping & { id: string; task_type?: Task["taskType"] | null })[];
-  await supabase.from("task_activity").insert(rows.map((task) => ({
-    task_id: task.id,
-    message: task.task_type === "sub_issue" ? `Sub-Issue über ${activitySource} erstellt` : `Deliverable über ${activitySource} erstellt`,
-  })));
-
   await supabase.from("audit_log").insert(rows.map((task) => ({
     actor_profile_id: actorProfileId,
-    action: auditAction,
+    action: "task_intake.create",
     entity_type: "task",
     entity_id: task.id,
-    after_data: { ...task, agentApi: auditAction === "agent.task_intake.create" },
+    after_data: { ...task, source: "CEO Intake" },
     ...auditRequestMetadata(request),
   })));
 

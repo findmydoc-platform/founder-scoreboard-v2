@@ -4,6 +4,7 @@ import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-plann
 import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, MAX_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
+import { DEFAULT_GITHUB_PROJECT_NUMBER, DEFAULT_GITHUB_PROJECT_OWNER, validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
 import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
@@ -17,12 +18,20 @@ export function normalizePlanningData(data: PlanningData): PlanningData {
     && storedReviewWindowHours <= MAX_REVIEW_OBJECTION_WINDOW_HOURS
     ? storedReviewWindowHours
     : DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS;
+  const githubProjectOwner = validGitHubProjectOwner(data.project?.githubProjectOwner)
+    ? data.project.githubProjectOwner
+    : DEFAULT_GITHUB_PROJECT_OWNER;
+  const githubProjectNumber = validGitHubProjectNumber(data.project?.githubProjectNumber)
+    ? data.project.githubProjectNumber
+    : DEFAULT_GITHUB_PROJECT_NUMBER;
 
   return {
     ...data,
     project: {
       ...data.project,
       reviewObjectionWindowHours,
+      githubProjectOwner,
+      githubProjectNumber,
     },
     profiles: data.profiles || [],
     packages: data.packages || [],
@@ -66,6 +75,7 @@ export const viewTabs: Array<{ id: ViewMode; label: string; icon: typeof Columns
 export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   backlog: "Backlog",
+  "decision-log": "Decision Log",
   events: "Events",
   sprint: "Sprint & Score",
   projects: "Meilensteine & Initiativen",
@@ -79,6 +89,7 @@ export const workspaceLabels: Record<Workspace, string> = {
 export const workspaceDescriptions: Record<Workspace, string> = {
   planning: "Zeigt die Gesamtplanung mit Board, Struktur, Tabelle und Gantt.",
   backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor und ordnet freigegebene Deliverables Sprints zu.",
+  "decision-log": "Unternehmensentscheidungen · Notion ist die Quelle der Wahrheit.",
   events: "Zeigt wichtige Termine, Zielgruppen und Erinnerungen.",
   sprint: "Zeigt Weekly Updates, Punkte, Review-Reife und Sprintabschluss.",
   projects: "Zeigt Epics, Meilensteine, Initiativen und deren Fortschritt.",
@@ -86,7 +97,7 @@ export const workspaceDescriptions: Record<Workspace, string> = {
   team: "Zeigt Kapazitäten, Rollen und aktuelle Last pro Teammitglied.",
   notifications: "Persönliche Hinweise und Ausgang.",
   "ceo-intake": "Zeigt den CEO-only Import für freigegebene Aufgabenpakete.",
-  profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Board-Defaults.",
+  profile: "Zeigt deine persönlichen Einstellungen für Profil, Hinweise und Planungs-Defaults.",
 };
 
 export const planningWorkspaces: Workspace[] = ["planning"];

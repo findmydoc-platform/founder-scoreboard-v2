@@ -15,7 +15,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Supabase schema changes are additive by default. Use `.agents/skills/supabase-migrations`, store migrations under `supabase/migrations/`, and ask before drops, truncation, broad deletes, disabling RLS, or removing columns.
 - Production migrations run only through the protected deployment workflow. Local resets are allowed only against the disposable local stack.
 - Decision Log entries are CEO-editable only. Deputies may operate sprint and task workflows but must not edit CEO decisions.
-- Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope. Agent API access remains token-guarded and CEO-scoped.
+- Task Intake, AI-assisted task creation, and bulk planning remain CEO-only unless the CEO explicitly approves a broader product scope.
 - Never expose database credentials, Supabase service keys, raw GitHub tokens, OpenAI keys, authorization headers, or in-app model access through browser state, logs, API responses, issues, or documentation.
 - GitHub Issues are a one-way backup from the app to `findmydoc-platform/management`; do not make GitHub the source of truth without a new approved plan.
 - Server-side GitHub sync uses GitHub App installation tokens. User-authored GitHub comments and attachments use encrypted server-side GitHub App user tokens with refresh rotation.
@@ -28,3 +28,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Keep private execution drafts and sensitive founder analysis outside Git repositories. Do not publish them to shared systems without an explicit publication request.
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
+
+## Product Update Release Contract
+
+- Product updates are reserved for new or materially expanded UI functionality with clear relevance and user benefit. Bug fixes, maintenance changes, copy or visual polish, and minor UI or UX improvements must not create or extend a product update.
+- If it is unclear whether a change meets this threshold, ask the user for confirmation before creating or changing product update, screenshot, or tour artifacts, following the same confirmation pattern as reviewer execution.
+- Every qualifying production deployment must add or extend an entry in `src/features/product-updates/model/product-updates.json` with at least one current screenshot under `public/product-updates/` and short, non-technical German copy that explains the user benefit.
+- Every product update must have its own small, meaningful Driver.js tour in `src/features/product-tours/model/feature-tour-registry.ts`, link it through the update-level `featureTourId`, and keep the gallery action **Lass dich leiten** usable. Do not add a tour that merely repeats the gallery text; guide the user to the changed interaction in as few steps as practical.
+- Every product update must set `expiresAt`. Use 30 days after `releasedAt` by default and never more than 60 days. Expired updates must disappear from automatic display and the help menu.
+- Purely operational deployments must not invent product news. Run `pnpm run verify:product-updates` before handoff.

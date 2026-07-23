@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Planning Items API",
-    "version": "1.1.0",
-    "description": "Personal-token API for safe planning context, approval-aware creation, scoped partial updates, and empty-only Milestone deletion."
+    "version": "1.2.0",
+    "description": "Personal-token API for safe planning context, approval-aware creation, role-guarded task status transitions, scoped partial updates, and empty-only Milestone deletion."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
   "paths": {
@@ -153,7 +153,14 @@
           "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },
           "startDate": { "type": ["string", "null"], "format": "date" }, "endDate": { "type": ["string", "null"], "format": "date" }, "deadline": { "type": ["string", "null"], "format": "date" },
           "hours": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 }, "githubRepo": { "type": ["string", "null"] },
-          "targetDate": { "type": ["string", "null"], "format": "date" }, "status": { "$ref": "#/components/schemas/MilestoneStatus" }
+          "targetDate": { "type": ["string", "null"], "format": "date" },
+          "status": {
+            "description": "Milestones use MilestoneStatus; Deliverables and Sub-Issues use TaskStatus. Initiatives do not accept status.",
+            "oneOf": [
+              { "$ref": "#/components/schemas/MilestoneStatus" },
+              { "$ref": "#/components/schemas/TaskStatus" }
+            ]
+          }
         }
       },
       "DeletePayload": {
@@ -201,6 +208,7 @@
       "ProfileIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
       "Priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
       "MilestoneStatus": { "type": "string", "enum": ["planned", "active", "done"] },
+      "TaskStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
       "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false }, "allowEmptyMilestoneDeletes": { "type": "boolean", "default": false, "description": "CEO and Deputy only; adds write:planning-items:delete-empty." } } },
       "ContextResponse": { "type": "object", "properties": { "ok": { "const": true }, "context": { "type": "object" } }, "required": ["ok", "context"] }
     }

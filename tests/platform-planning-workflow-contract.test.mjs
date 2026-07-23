@@ -556,6 +556,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 
 test("reviews live in task detail while legacy review links remain compatible", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const app = await readPlanningSurface();
   const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
   const reviewSummary = await readFile("src/features/reviews/molecules/task-review-summary.tsx", "utf8");
@@ -584,7 +585,7 @@ test("reviews live in task detail while legacy review links remain compatible", 
   const reviewMigration = await readFile("supabase/migrations/20260717175618_integrate_reviews_into_tasks.sql", "utf8");
 
   assert.doesNotMatch(routes, /id: "reviews"|label: "Reviews"|href: "\/reviews"/);
-  assert.match(routes, /value === "reviews"\) return "planning"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.doesNotMatch(app, /workspace === "reviews"|ReviewWorkspaceOverview|ReviewDetailPage|initialReviewTaskId/);
   assert.match(legacyReviewsRoute, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
   assert.match(reviewRoute, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
@@ -818,7 +819,7 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /backlogSprintAssignmentMessage/);
 });
 
-test("decision log routes and data slices stay removed while legacy storage remains in the production baseline", async () => {
+test("Supabase decision log mutations and data slices stay removed while legacy storage remains in the production baseline", async () => {
   const schema = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");

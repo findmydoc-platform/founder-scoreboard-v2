@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import {
-  findDestructiveDdl,
+  findUnapprovedDestructiveDdl,
   listSupabaseMigrations,
   migrationFilePattern,
   productionBaseline,
@@ -25,9 +25,9 @@ for (const migration of migrations) {
   if (versions.has(migration.version)) failures.push(`Duplicate migration version: ${migration.version}`);
   versions.add(migration.version);
 
-  const destructiveDdl = findDestructiveDdl(migration.sql);
-  if (destructiveDdl.length) {
-    failures.push(`${migration.file} contains destructive DDL (${destructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
+  const unapprovedDestructiveDdl = findUnapprovedDestructiveDdl(migration);
+  if (unapprovedDestructiveDdl.length) {
+    failures.push(`${migration.file} contains destructive DDL (${unapprovedDestructiveDdl.join(", ")}); use the explicitly approved destructive path.`);
   }
 }
 

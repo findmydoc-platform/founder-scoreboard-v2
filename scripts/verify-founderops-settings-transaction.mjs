@@ -5,6 +5,7 @@ await loadLocalEnv();
 
 const password = process.env.SUPABASE_DB_PASSWORD;
 const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const port = Number(process.env.SUPABASE_DB_PORT || "5432");
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
 
@@ -13,11 +14,20 @@ if (!password) {
   process.exit(1);
 }
 
-const client = new pg.Client({ host, port: 5432, user, password, database, ssl: { rejectUnauthorized: false } });
+const client = new pg.Client({
+  host,
+  port,
+  user,
+  password,
+  database,
+  ssl: host === "127.0.0.1" || host === "localhost" ? false : { rejectUnauthorized: false },
+});
 const suffix = Date.now();
 const projectId = `verify-founderops-settings-${suffix}`;
 const ceoId = `${projectId}-ceo`;
 const founderId = `${projectId}-founder`;
+const activeDeputyId = `${projectId}-active-deputy`;
+const inactiveDeputyId = `${projectId}-inactive-deputy`;
 const unlockedSprintId = `${projectId}-unlocked`;
 const lockedSprintId = `${projectId}-locked`;
 const plannedSprintId = `${projectId}-planned`;
@@ -31,6 +41,7 @@ try {
     `with protected_function(signature) as (
       values
         ('public.update_founderops_review_window_transaction(text,integer,integer,text,text,text)'),
+        ('public.update_founderops_github_project_transaction(text,text,integer,text,integer,text,text,text)'),
         ('public.create_sprint_plan_with_review_window_transaction(text,jsonb,jsonb,jsonb,text,text,text)'),
         ('public.update_sprint_schedule_transaction(text,timestamptz,jsonb,text,text,text)'),
         ('public.create_score_objection_transaction(text,text,text,text,text)'),
@@ -49,6 +60,8 @@ try {
   const columnPrivileges = await client.query(
     `select
       has_column_privilege('authenticated', 'public.projects', 'review_objection_window_hours', 'update') as can_update_window,
+      has_column_privilege('authenticated', 'public.projects', 'github_project_owner', 'update') as can_update_github_owner,
+      has_column_privilege('authenticated', 'public.projects', 'github_project_number', 'update') as can_update_github_number,
       has_column_privilege('authenticated', 'public.projects', 'name', 'update') as can_update_existing_project_field,
       has_table_privilege('authenticated', 'public.sprints', 'insert') as can_insert_sprint,
       has_table_privilege('authenticated', 'public.sprints', 'update') as can_update_sprint,
@@ -58,6 +71,8 @@ try {
   );
   if (
     columnPrivileges.rows[0]?.can_update_window
+    || columnPrivileges.rows[0]?.can_update_github_owner
+    || columnPrivileges.rows[0]?.can_update_github_number
     || !columnPrivileges.rows[0]?.can_update_existing_project_field
     || columnPrivileges.rows[0]?.can_insert_sprint
     || columnPrivileges.rows[0]?.can_update_sprint
@@ -81,11 +96,17 @@ try {
   }
 
   await client.query(
-    `insert into public.profiles (id, name, role, platform_role)
+    `insert into public.profiles (id, name, role, platform_role, deputy_for, deputy_active_from, deputy_active_until)
      values
-       ($1, 'FounderOps settings CEO', 'admin', 'ceo'),
-       ($2, 'FounderOps settings founder', 'member', 'founder')`,
-    [ceoId, founderId],
+       ($1, 'FounderOps settings CEO', 'admin', 'ceo', null, null, null),
+       ($2, 'FounderOps settings founder', 'member', 'founder', null, null, null),
+       ($3, 'FounderOps settings active deputy', 'member', 'deputy', $1,
+         ((clock_timestamp() at time zone 'Europe/Berlin')::date - 1),
+         ((clock_timestamp() at time zone 'Europe/Berlin')::date + 1)),
+       ($4, 'FounderOps settings inactive deputy', 'member', 'deputy', $1,
+         ((clock_timestamp() at time zone 'Europe/Berlin')::date - 2),
+         ((clock_timestamp() at time zone 'Europe/Berlin')::date - 1))`,
+    [ceoId, founderId, activeDeputyId, inactiveDeputyId],
   );
   await client.query(
     `insert into public.projects (id, name, range_label, review_objection_window_hours)
@@ -129,6 +150,74 @@ try {
     || persisted.rows[0]?.audit_count !== 1
   ) {
     throw new Error("FounderOps settings and sprint deadlines were not updated atomically.");
+  }
+
+  const deputyGithubProjectUpdate = await client.query(
+    `select public.update_founderops_github_project_transaction(
+      $1, 'findmydoc-platform', 21, 'findmydoc-platform', 22, $2, null,
+      'FounderOps GitHub Project active deputy verifier'
+    ) as result`,
+    [projectId, activeDeputyId],
+  );
+  if (
+    deputyGithubProjectUpdate.rows[0]?.result?.project?.githubProjectOwner !== "findmydoc-platform"
+    || deputyGithubProjectUpdate.rows[0]?.result?.project?.githubProjectNumber !== 22
+  ) {
+    throw new Error("Active Deputy did not save the FounderOps GitHub Project atomically.");
+  }
+
+  await client.query("savepoint stale_github_project_settings");
+  try {
+    await client.query(
+      `select public.update_founderops_github_project_transaction(
+        $1, 'findmydoc-platform', 21, 'findmydoc-platform', 23, $2, null,
+        'FounderOps GitHub Project stale verifier'
+      )`,
+      [projectId, ceoId],
+    );
+    throw new Error("Stale FounderOps GitHub Project update unexpectedly succeeded.");
+  } catch (error) {
+    if (error?.code !== "P0001") throw error;
+    await client.query("rollback to savepoint stale_github_project_settings");
+  }
+
+  for (const [actorId, label] of [[founderId, "Founder"], [inactiveDeputyId, "Inactive Deputy"]]) {
+    await client.query(`savepoint github_project_role_guard`);
+    try {
+      await client.query(
+        `select public.update_founderops_github_project_transaction(
+          $1, 'findmydoc-platform', 22, 'findmydoc-platform', 23, $2, null,
+          'FounderOps GitHub Project role verifier'
+        )`,
+        [projectId, actorId],
+      );
+      throw new Error(`${label} unexpectedly changed the FounderOps GitHub Project.`);
+    } catch (error) {
+      if (error?.code !== "P0005") throw error;
+      await client.query(`rollback to savepoint github_project_role_guard`);
+    }
+  }
+
+  await client.query(
+    `select public.update_founderops_github_project_transaction(
+      $1, 'findmydoc-platform', 22, 'findmydoc-platform', 21, $2, null,
+      'FounderOps GitHub Project CEO verifier'
+    )`,
+    [projectId, ceoId],
+  );
+  const githubProjectPersisted = await client.query(
+    `select github_project_owner, github_project_number,
+      (select count(*)::integer from public.audit_log
+       where entity_id = $1 and action = 'founderops.github_project.update') as audit_count
+     from public.projects where id = $1`,
+    [projectId],
+  );
+  if (
+    githubProjectPersisted.rows[0]?.github_project_owner !== "findmydoc-platform"
+    || githubProjectPersisted.rows[0]?.github_project_number !== 21
+    || githubProjectPersisted.rows[0]?.audit_count !== 2
+  ) {
+    throw new Error("FounderOps GitHub Project settings or audit rows were not persisted atomically.");
   }
 
   await client.query(

@@ -4,6 +4,28 @@ export function isOperationalLeadRole(role?: Profile["platformRole"] | null) {
   return role === "ceo" || role === "deputy";
 }
 
+export function berlinDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+export function isActiveDeputy(profile?: Pick<Profile, "platformRole" | "deputyFor" | "deputyActiveFrom" | "deputyActiveUntil"> | null, today = berlinDate()) {
+  if (profile?.platformRole !== "deputy" || !profile.deputyFor?.trim()) return false;
+  if (profile.deputyActiveFrom && profile.deputyActiveFrom > today) return false;
+  if (profile.deputyActiveUntil && profile.deputyActiveUntil < today) return false;
+  return true;
+}
+
+export function canManageFounderOpsGitHubProject(profile?: Pick<Profile, "platformRole" | "deputyFor" | "deputyActiveFrom" | "deputyActiveUntil"> | null, today = berlinDate()) {
+  return profile?.platformRole === "ceo" || isActiveDeputy(profile, today);
+}
+
 export function reviewLabel(status: Task["reviewStatus"]) {
   const labels: Record<Task["reviewStatus"], string> = {
     not_requested: "Nicht angefragt",

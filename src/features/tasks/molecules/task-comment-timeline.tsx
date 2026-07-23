@@ -1,8 +1,29 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Clock3, GitBranch, GitPullRequestArrow, MessageSquare, Paperclip } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  CalendarClock,
+  CircleDot,
+  CirclePlus,
+  ClipboardCheck,
+  Flag,
+  GitBranch,
+  GitPullRequestArrow,
+  History,
+  Network,
+  OctagonAlert,
+  Paperclip,
+  Pencil,
+  RotateCcw,
+  Trash2,
+  Undo2,
+  Unlink2,
+  UserRoundCog,
+} from "lucide-react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
-import type { GitHubCommentDeliveryStatus, Profile } from "@/lib/types";
+import { describeTaskActivity, type TaskActivityIconKey, type TaskActivityTone } from "@/features/tasks/model/task-activity-presentation";
+import type { GitHubCommentDeliveryStatus, Profile, TaskActivity } from "@/lib/types";
 import { UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export type TaskCommentTimelineItem =
@@ -10,7 +31,7 @@ export type TaskCommentTimelineItem =
       id: string;
       type: "activity";
       createdAt: string;
-      message: string;
+      activity: TaskActivity;
       profileId: string;
       comment: string;
       authorLogin: string;
@@ -70,65 +91,29 @@ function ProfileAvatar({ profile }: { profile?: Profile }) {
   );
 }
 
-export function repairGermanText(value: string) {
-  return value
-    .replace(new RegExp("\u00c3\u00a4", "g"), "ä")
-    .replace(new RegExp("\u00c3\u00b6", "g"), "ö")
-    .replace(new RegExp("\u00c3\u00bc", "g"), "ü")
-    .replace(new RegExp("\u00c3\u0084", "g"), "Ä")
-    .replace(new RegExp("\u00c3\u0096", "g"), "Ö")
-    .replace(new RegExp("\u00c3\u009c", "g"), "Ü")
-    .replace(new RegExp("\u00c3\u009f", "g"), "ß")
-    .replace(new RegExp("\u00c2\u00b7", "g"), "·");
-}
+const activityIcons: Record<TaskActivityIconKey, typeof History> = {
+  approval: BadgeCheck,
+  assignment: UserRoundCog,
+  attachment: Paperclip,
+  blocker: OctagonAlert,
+  create: CirclePlus,
+  delete: Trash2,
+  github: GitBranch,
+  "github-error": AlertTriangle,
+  history: History,
+  priority: Flag,
+  "relationship-add": GitPullRequestArrow,
+  "relationship-remove": Unlink2,
+  restore: RotateCcw,
+  review: ClipboardCheck,
+  "review-rework": Undo2,
+  schedule: CalendarClock,
+  status: CircleDot,
+  structure: Network,
+  update: Pencil,
+};
 
-export function isUsefulActivity(message: string) {
-  const normalized = repairGermanText(message).trim();
-  if (!normalized) return false;
-  if (normalized === "Aufgabe aktualisiert") return false;
-  return [
-    "Status geändert",
-    "Review geändert",
-    "Kommentar hinzugefügt",
-    "GitHub-Sync",
-    "GitHub-Kommentare importiert",
-    "Blocker",
-    "Relationship",
-    "Sprint",
-    "Priorität",
-    "Evidence",
-    "Zuständigkeit",
-    "Assignee",
-    "Owner",
-    "Nacharbeit",
-    "Priorität",
-    "Anhang",
-    "Aufgabenbrief",
-    "Founder-Checkliste",
-    "Fokus",
-  ].some((prefix) => normalized.startsWith(prefix) || normalized.includes(prefix));
-}
-
-function describeActivity(message: string) {
-  const normalized = repairGermanText(message.trim());
-  const [rawTitle, ...detailParts] = normalized.split(":");
-  const detail = detailParts.join(":").trim();
-  const title = rawTitle.trim() || "Aktivität";
-
-  if (normalized.startsWith("Status geändert")) return { title: "Status geändert", detail, tone: "blue" as const, icon: Clock3 };
-  if (normalized.startsWith("Review geändert") || normalized.startsWith("Review finalisiert")) return { title, detail, tone: "emerald" as const, icon: CheckCircle2 };
-  if (normalized.startsWith("Nacharbeit")) return { title, detail, tone: "amber" as const, icon: AlertCircle };
-  if (normalized.startsWith("GitHub")) return { title: "GitHub-Sync", detail, tone: "violet" as const, icon: GitBranch };
-  if (normalized.startsWith("Relationship")) return { title: "Abhängigkeit", detail, tone: "slate" as const, icon: GitPullRequestArrow };
-  if (normalized.startsWith("Blocker")) return { title, detail, tone: "red" as const, icon: AlertCircle };
-  if (normalized.startsWith("Kommentar")) return { title, detail, tone: "slate" as const, icon: MessageSquare };
-  if (normalized.startsWith("Anhang")) return { title, detail, tone: "slate" as const, icon: Paperclip };
-  if (normalized.startsWith("Sprint") || normalized.startsWith("Priorität") || normalized.startsWith("Zuständigkeit") || normalized.startsWith("Assignee") || normalized.startsWith("Owner")) return { title, detail, tone: "blue" as const, icon: Clock3 };
-
-  return { title, detail, tone: "slate" as const, icon: Clock3 };
-}
-
-function activityToneClass(tone: ReturnType<typeof describeActivity>["tone"]) {
+function activityToneClass(tone: TaskActivityTone) {
   if (tone === "blue") return "border-blue-100 bg-blue-50 text-blue-700";
   if (tone === "emerald") return "border-emerald-100 bg-emerald-50 text-emerald-700";
   if (tone === "amber") return "border-amber-100 bg-amber-50 text-amber-700";
@@ -149,6 +134,7 @@ type TaskCommentTimelineProps = {
   currentProfileId?: string;
   error?: string;
   items: TaskCommentTimelineItem[];
+  labelsById?: ReadonlyMap<string, string>;
   loading?: boolean;
   profiles: Profile[];
   unavailable?: boolean;
@@ -157,6 +143,7 @@ type TaskCommentTimelineProps = {
 export function TaskCommentTimeline({
   items,
   profiles,
+  labelsById,
   currentProfileId = "",
   error = "",
   loading = false,
@@ -221,8 +208,11 @@ export function TaskCommentTimeline({
             </div>
           </article>
         ) : (() => {
-          const activity = describeActivity(item.message);
-          const Icon = activity.icon;
+          const activity = describeTaskActivity(item.activity, { labelsById });
+          const Icon = activityIcons[activity.icon];
+          const actorName = item.activity.actorProfileId
+            ? profileById(item.activity.actorProfileId)?.name || "Unbekannte Person"
+            : "System";
           return (
             <article key={item.id} className="flex min-w-0 gap-3 overflow-hidden rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
               <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full border ${activityToneClass(activity.tone)}`}>
@@ -234,6 +224,7 @@ export function TaskCommentTimeline({
                   <span className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</span>
                 </div>
                 {activity.detail && <div className="mt-1 text-sm leading-6 text-slate-600">{activity.detail}</div>}
+                <div className="mt-1 text-xs text-slate-400">durch {actorName}</div>
               </div>
             </article>
           );

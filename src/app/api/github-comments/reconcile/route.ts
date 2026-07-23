@@ -1,23 +1,19 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { authzError, supabaseUnavailable } from "@/lib/api-response";
 import { requireOperationalLead } from "@/lib/authz";
+import {
+  FOUNDEROPS_DELIVERY_SECRET_HEADER,
+  validateDeliverySecret,
+} from "@/lib/delivery-auth";
 import { deliverPendingGitHubComments, previewPendingGitHubComments } from "@/lib/github-comment-delivery";
 import { getServerSupabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-function secretsMatch(provided: string, expected: string) {
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  return providedBuffer.length === expectedBuffer.length && timingSafeEqual(providedBuffer, expectedBuffer);
-}
-
 async function authorizeReconciliation(request: NextRequest) {
-  const providedSecret = request.headers.get("x-founderops-delivery-secret")?.trim() || "";
+  const providedSecret = request.headers.get(FOUNDEROPS_DELIVERY_SECRET_HEADER)?.trim() || "";
   if (providedSecret) {
-    const expectedSecret = process.env.FOUNDEROPS_DELIVERY_SECRET?.trim() || "";
-    if (!expectedSecret || !secretsMatch(providedSecret, expectedSecret)) {
+    if (!validateDeliverySecret(providedSecret)) {
       return { ok: false as const, status: 401, error: "Ungültiger Delivery-Secret." };
     }
     return { ok: true as const };

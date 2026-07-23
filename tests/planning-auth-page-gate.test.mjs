@@ -24,7 +24,7 @@ test("strict auth pages gate only on REQUIRE_SUPABASE_AUTH", async () => {
   }
 });
 
-test("REQUIRE_SUPABASE_AUTH remains fail-closed across Supabase env combinations", async () => {
+test("REQUIRE_SUPABASE_AUTH disables auth only for explicit local development", async () => {
   const supabase = await loadTranspiledModule("src/lib/supabase.ts", {
     "@supabase/ssr": { createBrowserClient: () => ({}) },
     "@supabase/supabase-js": { createClient: () => ({}) },
@@ -35,18 +35,33 @@ test("REQUIRE_SUPABASE_AUTH remains fail-closed across Supabase env combinations
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_URL",
     "SUPABASE_ANON_KEY",
+    "NODE_ENV",
+    "VERCEL",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
   try {
-    for (const configured of [false, true]) {
-      for (const required of [false, true]) {
-        process.env.REQUIRE_SUPABASE_AUTH = required ? "true" : "false";
-        process.env.SUPABASE_URL = configured ? "https://example.supabase.co" : "";
-        process.env.SUPABASE_ANON_KEY = configured ? "anon-key" : "";
-        assert.equal(supabase.requiresSupabaseAuth(), required);
-      }
-    }
+    process.env.NODE_ENV = "development";
+    process.env.VERCEL = "";
+    process.env.REQUIRE_SUPABASE_AUTH = "false";
+    assert.equal(supabase.requiresSupabaseAuth(), false);
+
+    process.env.REQUIRE_SUPABASE_AUTH = "true";
+    assert.equal(supabase.requiresSupabaseAuth(), true);
+
+    delete process.env.REQUIRE_SUPABASE_AUTH;
+    assert.equal(supabase.requiresSupabaseAuth(), true);
+
+    process.env.REQUIRE_SUPABASE_AUTH = "invalid";
+    assert.equal(supabase.requiresSupabaseAuth(), true);
+
+    process.env.REQUIRE_SUPABASE_AUTH = "false";
+    process.env.NODE_ENV = "production";
+    assert.equal(supabase.requiresSupabaseAuth(), true);
+
+    process.env.NODE_ENV = "development";
+    process.env.VERCEL = "1";
+    assert.equal(supabase.requiresSupabaseAuth(), true);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];

@@ -77,6 +77,7 @@ const buttonSizes = {
   mdXs: "h-9 px-3 text-xs",
   iconXs: "h-8 w-8 px-0 text-xs",
   iconMd: "h-9 w-9 px-0 text-sm",
+  iconLg: "h-11 w-11 px-0 text-sm",
   lg: "h-11 px-4 text-sm",
 };
 

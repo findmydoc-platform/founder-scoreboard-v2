@@ -1,0 +1,139 @@
+[
+  {
+    "id": "2026-07-22-github-project-settings",
+    "releasedAt": "2026-07-22",
+    "expiresAt": "2026-08-21",
+    "featureTourId": "github-project-settings-v1",
+    "title": "GitHub Project zentral verbunden",
+    "summary": "Das repositoryübergreifende GitHub Project lässt sich jetzt in FounderOps prüfen und als gemeinsames Sync-Ziel speichern.",
+    "slides": [
+      {
+        "id": "github-project-settings",
+        "title": "Ein geprüftes Ziel für alle Repositories",
+        "description": "CEO und aktive Deputies sehen Organisation und Project-Nummer in den Prozesseinstellungen. Vor dem Speichern prüft FounderOps App-Zugriff, Repository-Verknüpfungen und Felder.",
+        "image": {
+          "src": "/product-updates/2026-07-22-github-project-settings/github-project-settings.png",
+          "alt": "FounderOps-Prozesseinstellungen mit GitHub-Organisation, Project-Nummer und Prüfaktion",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
+    "id": "2026-07-21-modal-overlay-stack",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "modal-overlay-stack-v1",
+    "title": "Fenster bleiben in der richtigen Reihenfolge",
+    "summary": "Geöffnete Details, GitHub und Bestätigungen reagieren jetzt immer in der sichtbaren Reihenfolge.",
+    "slides": [
+      {
+        "id": "modal-overlay-stack",
+        "title": "Das zuletzt geöffnete Fenster bleibt vorn",
+        "description": "Öffnest du aus GitHub ein Item, liegt dessen Detailansicht eindeutig vorn. Beim Schließen kehrst du zu GitHub zurück; X, Escape und Tastaturfokus reagieren immer auf das sichtbare Fenster.",
+        "image": {
+          "src": "/product-updates/2026-07-21-modal-overlay-stack/modal-overlay-stack.png",
+          "alt": "GitHub mit einer darüber geöffneten Item-Detailansicht",
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ]
+  },
+  {
+    "id": "2026-07-21-decision-log",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "decision-log-workspace-v1",
+    "title": "Entscheidungen im Founder Board",
+    "summary": "Der Decision Log zeigt Notion-Entscheidungen und aktuellen Handlungsbedarf jetzt direkt im Founder Board.",
+    "slides": [
+      {
+        "id": "decision-log-overview",
+        "title": "Entscheidungen und Handlungsbedarf",
+        "description": "Der Decision Log bündelt Entscheidungen aus Notion. Tabs, Suche und Filter zeigen, wo eine Entscheidung, Abstimmung, Bestätigung oder Prüfung offen ist; Details und Quellen bleiben direkt erreichbar.",
+        "image": {
+          "src": "/product-updates/2026-07-21-decision-log/decision-log.png",
+          "alt": "Der Decision Log mit Entscheidungstabelle, Handlungsgründen und geöffnetem Detailbereich",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
+    "id": "2026-07-21-clear-task-activity",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "task-activity-v1",
+    "title": "Aufgabenaktivität aufgeräumt",
+    "summary": "Kommentare stehen nur noch einmal da. Wichtige Änderungen lassen sich durch eigene Symbole und verständliche Bezeichnungen schneller erfassen.",
+    "slides": [
+      {
+        "id": "clear-activity-timeline",
+        "title": "Kommentare und Änderungen klar getrennt",
+        "description": "Die Aktivität zeigt Kommentare nur als Kommentare. Status, Prüfung, GitHub, Blocker, Abhängigkeiten und Anhänge erhalten passende Symbole und leicht verständliche Bezeichnungen.",
+        "image": {
+          "src": "/product-updates/2026-07-21-clear-task-activity/activity-timeline.png",
+          "alt": "Aufgabenaktivität mit getrennten Kommentaren und unterschiedlich gekennzeichneten Änderungen",
+          "width": 1280,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
+    "id": "2026-07-21-issue-sharing",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "issue-sharing-v1",
+    "title": "Issues einfacher abstimmen",
+    "summary": "Aus jedem Issue lässt sich jetzt eine vorbereitete, zum Arbeitsstand passende Nachricht für Google Chat mitnehmen.",
+    "slides": [
+      {
+        "id": "share-issue",
+        "title": "Nachricht vorbereiten und selbst senden",
+        "description": "Öffne ein Issue und wähle „Teilen“. Der vorgeschlagene Text unterscheidet zwischen Vorschlag, aktivem Review und allgemeiner Abstimmung. Du kannst ihn anpassen, kopieren und Google Chat öffnen; Chat und Versand wählst du selbst.",
+        "image": {
+          "src": "/product-updates/2026-07-21-issue-sharing/share-issue.png",
+          "alt": "Ein geöffnetes Issue mit dem Teilen-Popover und einer bearbeitbaren Nachricht",
+          "width": 1440,
+          "height": 810
+        }
+      }
+    ]
+  },
+  {
+    "id": "2026-07-21-whats-new-gallery",
+    "releasedAt": "2026-07-21",
+    "expiresAt": "2026-08-20",
+    "featureTourId": "product-updates-v1",
+    "title": "Änderungen auf einen Blick",
+    "summary": "FounderOps erklärt sichtbare Neuerungen jetzt direkt dort, wo du arbeitest.",
+    "slides": [
+      {
+        "id": "automatic-gallery",
+        "title": "Was sich geändert hat",
+        "description": "Nach einer sichtbaren Neuerung öffnet sich einmalig eine kurze Galerie. Ein Bild und wenige Sätze zeigen dir sofort, was neu ist und warum es hilfreich ist.",
+        "image": {
+          "src": "/product-updates/2026-07-21-whats-new-gallery/help-menu.png",
+          "alt": "Das Hilfe-Menü mit dem neuen Eintrag Was ist neu",
+          "width": 1440,
+          "height": 900
+        }
+      },
+      {
+        "id": "guided-tour",
+        "title": "Später jederzeit wieder öffnen",
+        "description": "Solange die Neuigkeit aktuell ist, bleibt sie im Hilfe-Menü erreichbar. Mit „Lass dich leiten“ führt dich eine kurze Klick-Tour direkt zur passenden Stelle.",
+        "image": {
+          "src": "/product-updates/2026-07-21-whats-new-gallery/guided-tour.png",
+          "alt": "Eine kurze Hilfe-Tour zeigt den Eintrag Was ist neu im Hilfe-Menü",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  }
+]

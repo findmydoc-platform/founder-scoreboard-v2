@@ -1,5 +1,5 @@
 import type { AuditEntry, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
-import type { DbAuditEntry, DbTaskActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import type { DbAuditEntry, DbTaskAuditActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
 
 export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
   return {
@@ -70,11 +70,15 @@ export function mapTaskRelation(row: DbTaskRelation): TaskRelation {
   };
 }
 
-export function mapTaskActivity(row: DbTaskActivity): TaskActivity {
+export function mapTaskAuditActivity(row: DbTaskAuditActivity): TaskActivity {
   return {
     id: row.id,
     taskId: row.task_id,
-    message: row.message,
+    action: row.action,
+    actorProfileId: row.actor_profile_id || "",
+    message: row.message || "",
+    beforeData: null,
+    afterData: row.payload,
     createdAt: row.created_at,
   };
 }

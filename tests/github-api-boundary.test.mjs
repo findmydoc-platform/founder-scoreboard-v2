@@ -6,6 +6,8 @@ const transportFile = "src/lib/github-http.ts";
 const approvedAdapters = new Set([
   "src/lib/github.ts",
   "src/lib/github-app.ts",
+  "src/lib/github-project-fields.ts",
+  "src/lib/github-project.ts",
   "src/lib/planning-github-lifecycle-github.ts",
 ]);
 const approvedGitHubApiFiles = new Set([transportFile, ...approvedAdapters]);

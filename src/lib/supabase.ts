@@ -71,5 +71,8 @@ export function getSupabaseForToken(token: string) {
 }
 
 export function requiresSupabaseAuth() {
-  return runtimeEnv("REQUIRE_SUPABASE_AUTH") === "true";
+  const localAuthDisabled = runtimeEnv("NODE_ENV") === "development"
+    && runtimeEnv("VERCEL") !== "1"
+    && runtimeEnv("REQUIRE_SUPABASE_AUTH") === "false";
+  return !localAuthDisabled;
 }

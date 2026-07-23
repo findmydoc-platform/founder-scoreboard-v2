@@ -6,6 +6,14 @@ import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
+  applyFinalStatusReopen,
+  startsTaskReviewRequest,
+  validateSubIssueStatusParentApproval,
+  validateTaskStatusUpdate,
+  type TaskRouteDbUpdate,
+} from "@/features/tasks/model/task-route-update-helpers";
+import { isOperationalLeadRole } from "@/lib/platform";
+import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
   type TeamPlanningItemPatchField,
@@ -19,6 +27,7 @@ import {
   normalizePatchMilestoneStatus,
   normalizePatchPriority,
   normalizePatchStringList,
+  normalizePatchTaskStatus,
   normalizePatchText,
 } from "@/features/planning-items/model/planning-item-normalization";
 
@@ -61,12 +70,12 @@ const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>
   deliverable: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "packageId", "ownerId", "priority", "workstream", "startDate",
-    "endDate", "deadline", "hours",
+    "endDate", "deadline", "hours", "status",
   ]),
   sub_issue: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
     "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "startDate",
-    "endDate", "deadline", "hours", "githubRepo",
+    "endDate", "deadline", "hours", "githubRepo", "status",
   ]),
 };
 
@@ -132,11 +141,14 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     endDate: String(row.end_date || ""),
     deadline: String(row.deadline || ""),
     hours: Number(row.estimate_hours || 0),
+    status: String(row.status || "Offen"),
     githubRepo: String(row.github_repo || ""),
     approvalStatus: row.approval_status || null,
     approvalRevision: Number(row.approval_revision || 1),
     sprintId: String(row.sprint_id || ""),
     reviewStatus: String(row.review_status || "not_requested"),
+    reviewOwnerProfileId: String(row.review_owner_profile_id || ""),
+    reviewRequestedAt: String(row.review_requested_at || ""),
     scorePoints: Number(row.score_points || 0),
     scoreFinal: Boolean(row.score_final),
     scoreRelevant: Boolean(row.score_relevant),
@@ -219,7 +231,7 @@ async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<Tar
       .eq("id", itemId)
       .maybeSingle(),
     supabase.from(ACTIVE_PACKAGES_TABLE).select("id,title,goal,scope_constraints,success_criteria,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,priority,approval_status,approval_revision,updated_at").eq("id", itemId).maybeSingle(),
-    supabase.from(ACTIVE_TASKS_TABLE).select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,package_id,milestone_id,owner,assignee,priority,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,score_points,score_final,score_relevant,updated_at").eq("id", itemId).maybeSingle(),
+    supabase.from(ACTIVE_TASKS_TABLE).select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,package_id,milestone_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,updated_at").eq("id", itemId).maybeSingle(),
   ]);
   if (milestoneResult.error) throw new Error(milestoneResult.error.message);
   if (initiativeResult.error) throw new Error(initiativeResult.error.message);
@@ -278,7 +290,7 @@ function validatePermission(
       assigneeId: String(target.assignee || ""),
       owner: String(target.owner || ""),
       ownerId: String(target.owner || ""),
-      reviewOwnerProfileId: "",
+      reviewOwnerProfileId: String(target.review_owner_profile_id || ""),
       reviewStatus: String(target.review_status || "not_requested") as Task["reviewStatus"],
       scoreFinal: Boolean(target.score_final),
       taskType: itemType,
@@ -289,7 +301,7 @@ function validatePermission(
   if (briefFields.length && !permissions.canEditBrief) {
     errors.push("Founder können den Aufgabenbrief nur bei eigenen oder zugewiesenen Aufgaben bearbeiten.");
   }
-  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field) && field !== "parentTaskId");
+  const protectedFields = presentFields.filter((field) => !founderTaskBriefFields.has(field) && field !== "parentTaskId" && field !== "status");
   if (protectedFields.length) errors.push(`Diese Aufgabenfelder sind geschützt: ${protectedFields.join(", ")}.`);
   if (presentFields.includes("parentTaskId") && !permissions.canReparentSubIssue) {
     errors.push("Dieses Sub-Issue darf nur von CEO, Deputy oder der aktuellen Zuständigkeit verschoben werden.");
@@ -329,7 +341,10 @@ function normalizePatch(
       case "evidenceRequired": result = normalizePatchText(value, 4_000); break;
       case "definitionOfDone": result = normalizePatchText(value, 4_000); break;
       case "priority": result = normalizePatchPriority(value); break;
-      case "status": result = normalizePatchMilestoneStatus(value); break;
+      case "status": result = itemType === "milestone"
+        ? normalizePatchMilestoneStatus(value)
+        : normalizePatchTaskStatus(value);
+        break;
       case "workstream": result = normalizePatchText(value, 120); break;
       case "startDate":
       case "endDate":
@@ -393,6 +408,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["acceptanceCriteria", "acceptance_criteria"],
     ["evidenceRequired", "evidence_required"],
     ["definitionOfDone", "definition_of_done"],
+    ["status", "status"],
     ["packageId", "package_id"],
     ["parentTaskId", "parent_task_id"],
     ["priority", "priority"],
@@ -407,6 +423,13 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
   if (changed.has("ownerId")) {
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;
+  }
+  if (changed.has("status")) {
+    dbPatch.review_status = resultingItem.reviewStatus;
+    dbPatch.review_owner_profile_id = resultingItem.reviewOwnerProfileId || null;
+    dbPatch.review_requested_at = resultingItem.reviewRequestedAt || null;
+    dbPatch.score_points = resultingItem.scorePoints;
+    dbPatch.score_final = resultingItem.scoreFinal;
   }
   return dbPatch;
 }
@@ -424,9 +447,6 @@ export async function buildPlanningItemUpdatePreview({
 }): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
   const target = await loadTarget(supabase, itemId);
   if (!target.ok) return target;
-  if ((target.itemType === "deliverable" || target.itemType === "sub_issue") && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
-    return { ok: false, status: 409, error: reviewStateLockMessage(String(target.row.review_status || ""), Boolean(target.row.score_final)) };
-  }
   if (target.itemType === "milestone" && !["ceo", "deputy"].includes(actor.platformRole)) {
     return { ok: false, status: 403, error: "Nur CEO oder Deputy können Meilensteine bearbeiten." };
   }
@@ -436,13 +456,14 @@ export async function buildPlanningItemUpdatePreview({
     return { ok: false, status: 409, error: "Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };
   }
 
-  const [profilesResult, milestonesResult, initiativesResult, parentsResult] = await Promise.all([
-    supabase.from("profiles").select("id"),
+  const [profilesResult, milestonesResult, initiativesResult, parentsResult, sprintsResult] = await Promise.all([
+    supabase.from("profiles").select("id,platform_role"),
     supabase.from("milestones").select("id").eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,approval_status"),
+    supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,approval_status,owner_id,accountable_profile_id"),
     supabase.from(ACTIVE_TASKS_TABLE).select("id,task_type,package_id,milestone_id,approval_status,review_status,score_final"),
+    supabase.from("sprints").select("id,score_locked"),
   ]);
-  if (profilesResult.error || milestonesResult.error || initiativesResult.error || parentsResult.error) {
+  if (profilesResult.error || milestonesResult.error || initiativesResult.error || parentsResult.error || sprintsResult.error) {
     throw new Error("Planning-Items-Referenzen konnten nicht geladen werden.");
   }
 
@@ -454,13 +475,15 @@ export async function buildPlanningItemUpdatePreview({
   const normalizedPatch = normalization.normalized;
 
   const profileIds = new Set((profilesResult.data || []).map((profile) => profile.id));
+  const profiles = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
   const milestoneIds = new Set((milestonesResult.data || []).map((milestone) => milestone.id));
   const initiatives = new Map((initiativesResult.data || []).map((initiative) => [initiative.id, initiative]));
   const parents = new Map((parentsResult.data || []).map((task) => [task.id, task]));
+  const sprints = new Map((sprintsResult.data || []).map((sprint) => [sprint.id, sprint]));
   const currentParent = target.itemType === "sub_issue" ? parents.get(String(target.row.parent_task_id || "")) : undefined;
-  if (currentParent && isReviewStateLocked(currentParent.review_status, currentParent.score_final)) {
-    errors.push(reviewStateLockMessage(currentParent.review_status, currentParent.score_final));
-  }
+  const statusParent = target.itemType === "sub_issue" && hasOwn(normalizedPatch, "parentTaskId")
+    ? parents.get(String(normalizedPatch.parentTaskId || ""))
+    : currentParent;
 
   for (const field of ["ownerId", "accountableProfileId"] as const) {
     const value = normalizedPatch[field];
@@ -500,6 +523,57 @@ export async function buildPlanningItemUpdatePreview({
     errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
   }
 
+  const requestedChangedFields = parsed.presentFields.filter((field) => !sameValue(currentItem[field], resultingItem[field]));
+  const taskUpdateRequested = (target.itemType === "deliverable" || target.itemType === "sub_issue")
+    && requestedChangedFields.length > 0;
+  if (taskUpdateRequested && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
+    return { ok: false, status: 409, error: reviewStateLockMessage(String(target.row.review_status || ""), Boolean(target.row.score_final)) };
+  }
+  if (taskUpdateRequested && currentParent && isReviewStateLocked(currentParent.review_status, currentParent.score_final)) {
+    return { ok: false, status: 409, error: reviewStateLockMessage(currentParent.review_status, currentParent.score_final) };
+  }
+
+  const statusChanged = requestedChangedFields.includes("status")
+    && (target.itemType === "deliverable" || target.itemType === "sub_issue");
+  const statusPayload = statusChanged ? { status: String(resultingItem.status) as Task["status"] } : {};
+  const statusPermissions = taskDetailPermissions({
+    task: {
+      assignee: String(target.row.assignee || ""),
+      assigneeId: String(target.row.assignee || ""),
+      owner: String(target.row.owner || ""),
+      ownerId: String(target.row.owner || ""),
+      reviewOwnerProfileId: String(target.row.review_owner_profile_id || ""),
+      reviewStatus: String(target.row.review_status || "not_requested") as Task["reviewStatus"],
+      scoreFinal: Boolean(target.row.score_final),
+      taskType: target.itemType === "sub_issue" ? "sub_issue" : "deliverable",
+    },
+    profile: actor,
+  });
+  if (statusChanged) {
+    const statusGuard = validateTaskStatusUpdate({
+      canCompleteSubIssue: statusPermissions.canCompleteSubIssue,
+      canReopenSubIssue: statusPermissions.canReopenSubIssue,
+      currentTask: {
+        assignee: String(target.row.assignee || ""),
+        owner: String(target.row.owner || ""),
+        status: String(target.row.status || ""),
+        task_type: String(target.row.task_type || ""),
+      },
+      isOperationalLead: isOperationalLeadRole(actor.platformRole),
+      isCeo: actor.platformRole === "ceo",
+      payload: statusPayload,
+      profile: actor,
+    });
+    if (!statusGuard.ok) errors.push(statusGuard.error);
+
+    const parentStatusGuard = validateSubIssueStatusParentApproval({
+      currentTask: { task_type: String(target.row.task_type || "") },
+      parentApprovalStatus: statusParent?.approval_status,
+      payload: statusPayload,
+    });
+    if (!parentStatusGuard.ok) errors.push(parentStatusGuard.error);
+  }
+
   const systemEffects: PlanningItemSystemEffect[] = [];
   if (target.itemType === "deliverable" && hasOwn(normalizedPatch, "packageId")) {
     const initiative = initiatives.get(String(resultingItem.packageId || ""));
@@ -518,6 +592,87 @@ export async function buildPlanningItemUpdatePreview({
   }
 
   const changedFields = parsed.presentFields.filter((field) => !sameValue(currentItem[field], resultingItem[field]));
+  if (statusChanged) {
+    const statusMessage = `Status geändert: ${String(currentItem.status)} → ${String(resultingItem.status)}`;
+    systemEffects.push({
+      field: "activity",
+      before: null,
+      after: { action: "task.status_changed", message: statusMessage },
+      reason: "Tatsächliche Statusänderung wird in der Aufgabenaktivität erfasst.",
+    });
+    systemEffects.push({
+      field: "audit",
+      before: null,
+      after: { action: "team.planning_items.update" },
+      reason: "Tatsächliche Statusänderung wird mit Bezug auf das persönliche API-Token auditiert.",
+    });
+    const reopenedPatch: TaskRouteDbUpdate = {};
+    applyFinalStatusReopen(
+      reopenedPatch,
+      { status: String(target.row.status || ""), task_type: String(target.row.task_type || "") },
+      statusPayload,
+      actor.platformRole === "ceo",
+      statusPermissions.canReopenSubIssue,
+    );
+    if (Object.hasOwn(reopenedPatch, "score_final")) {
+      appendSystemEffect(systemEffects, "scoreFinal", currentItem.scoreFinal, reopenedPatch.score_final, "Wiederöffnen setzt den finalen Score zurück.");
+      resultingItem.scoreFinal = reopenedPatch.score_final;
+    }
+    if (Object.hasOwn(reopenedPatch, "review_status")) {
+      appendSystemEffect(systemEffects, "reviewStatus", currentItem.reviewStatus, reopenedPatch.review_status, "Wiederöffnen setzt den Review-Zustand zurück.");
+      resultingItem.reviewStatus = reopenedPatch.review_status;
+    }
+    if (Object.hasOwn(reopenedPatch, "review_requested_at")) {
+      appendSystemEffect(systemEffects, "reviewRequestedAt", currentItem.reviewRequestedAt, reopenedPatch.review_requested_at, "Wiederöffnen aktualisiert den Review-Zeitstempel.");
+      resultingItem.reviewRequestedAt = reopenedPatch.review_requested_at;
+    }
+
+    if (startsTaskReviewRequest(statusPayload)) {
+      if (target.itemType !== "deliverable" || target.row.approval_status !== "approved") {
+        errors.push("Nur freigegebene Deliverables können in Review gegeben werden.");
+      }
+      if (target.row.score_final) {
+        errors.push("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.");
+      }
+      if (requestedChangedFields.some((field) => deliverableMaterialFields.has(field))) {
+        errors.push("Status Review kann nicht mit Änderungen kombiniert werden, die eine neue Freigabe auslösen.");
+      }
+      const sprint = sprints.get(String(target.row.sprint_id || ""));
+      if (sprint?.score_locked) errors.push("Sprint-Score ist bereits gelockt.");
+
+      const initiative = initiatives.get(String(target.row.package_id || ""));
+      const reviewOwnerProfileId = String(
+        target.row.review_owner_profile_id
+        || initiative?.accountable_profile_id
+        || initiative?.owner_id
+        || "",
+      );
+      const reviewOwner = profiles.get(reviewOwnerProfileId);
+      if (!reviewOwnerProfileId) {
+        errors.push("Lege vor der Review-Anfrage eine Review-Verantwortung fest.");
+      } else if (!reviewOwner?.platform_role || reviewOwner.platform_role === "viewer") {
+        errors.push("Die Review-Verantwortung braucht eine beitragende Rolle.");
+      } else {
+        const reviewRequestedAt = new Date().toISOString();
+        appendSystemEffect(systemEffects, "reviewStatus", currentItem.reviewStatus, "requested", "Status Review startet den bestehenden Review-Übergang.");
+        appendSystemEffect(systemEffects, "scorePoints", currentItem.scorePoints, 0, "Review-Anfrage setzt den Score zurück.");
+        appendSystemEffect(systemEffects, "scoreFinal", currentItem.scoreFinal, false, "Review-Anfrage setzt den finalen Score zurück.");
+        appendSystemEffect(systemEffects, "reviewOwnerProfileId", currentItem.reviewOwnerProfileId, reviewOwnerProfileId, "Review Owner aus Aufgabe oder Initiative abgeleitet.");
+        appendSystemEffect(systemEffects, "reviewRequestedAt", currentItem.reviewRequestedAt, reviewRequestedAt, "Review-Anfrage setzt den Zeitstempel.");
+        resultingItem.reviewStatus = "requested";
+        resultingItem.scorePoints = 0;
+        resultingItem.scoreFinal = false;
+        resultingItem.reviewOwnerProfileId = reviewOwnerProfileId;
+        resultingItem.reviewRequestedAt = reviewRequestedAt;
+        systemEffects.push({
+          field: "notification",
+          before: null,
+          after: { type: "task.review_requested", recipientProfileId: reviewOwnerProfileId },
+          reason: "Review Owner wird über die Review-Anfrage benachrichtigt.",
+        });
+      }
+    }
+  }
   if (target.itemType === "initiative" && changedFields.some((field) => initiativeMaterialFields.has(field))) {
     appendSystemEffect(systemEffects, "approvalStatus", currentItem.approvalStatus, "proposed", "Materielle Initiative-Änderung benötigt eine neue Freigabe.");
     appendSystemEffect(systemEffects, "approvalRevision", currentItem.approvalRevision, Number(currentItem.approvalRevision || 1) + 1, "Neue Freigabe-Revision.");

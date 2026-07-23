@@ -24,6 +24,7 @@ function publicCommitError(error: unknown, fallbackError: string) {
   if (code === "P0001") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte erneut laden.", 409);
   if (code === "P0002") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
   if (code === "P0003") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+  if (["P0008", "P0010"].includes(code)) return planningItemsError("Statusübergang ist wegen eines zwischenzeitlich geänderten Planungs- oder Review-Zustands nicht mehr zulässig.", 409);
   if (code === "P0004") return planningItemsError("Planning-API-Token ist nicht mehr aktiv.", 401);
   if (["P0005", "P0006", "P0007"].includes(code)) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
   if (code === "22023") return planningItemsError("Planning-Items-Anfrage ist ungültig.", 400);

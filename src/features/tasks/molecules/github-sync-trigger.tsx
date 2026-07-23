@@ -49,6 +49,7 @@ export function GitHubSyncTrigger({
   return (
     <button
       type="button"
+      data-tour-id="github-sync-trigger"
       onClick={onOpen}
       aria-expanded={open}
       aria-label={`GitHub öffnen, ${count} ${count === 1 ? "Aktion" : "Aktionen"}, ${statusText}`}

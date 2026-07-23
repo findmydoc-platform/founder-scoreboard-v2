@@ -171,6 +171,16 @@ function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
   return Boolean(taskUrl && body?.includes(`](${taskUrl})`));
 }
 
+function hasMatchingLegacyFounderOpsTaskId(task: Task, body?: string | null) {
+  const prefix = "- Founder Scoreboard v2 Task ID: ";
+  const taskIds = new Set((body || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(prefix))
+    .map((line) => line.slice(prefix.length).trim()));
+  return taskIds.size === 1 && taskIds.has(task.id);
+}
+
 export function taskIssueMarker(taskId: string) {
   return `<!-- founderops-task-id:${taskId} -->`;
 }
@@ -301,7 +311,9 @@ export function assertGitHubIssueUpdateTarget(
   const expectedMarker = taskIssueMarker(task.id);
   if (issue.body?.includes(expectedMarker)) return;
   const containsFounderOpsMarker = /<!--\s*founderops-task-id:[^>]+-->/i.test(issue.body || "");
-  if (!containsFounderOpsMarker && hasMatchingLegacyFounderOpsTaskLink(task, issue.body)) return;
+  const hasMatchingLegacyOwnership = hasMatchingLegacyFounderOpsTaskLink(task, issue.body)
+    || hasMatchingLegacyFounderOpsTaskId(task, issue.body);
+  if (!containsFounderOpsMarker && hasMatchingLegacyOwnership) return;
   const isBeforeFirstSync = !task.githubIssueLastSyncedAt;
   if (isBeforeFirstSync && !containsFounderOpsMarker && issue.title === taskIssueTitle(task)) return;
   throw new Error("Das verknüpfte GitHub Issue gehört nicht zu dieser FounderOps-Aufgabe.");
@@ -462,6 +474,7 @@ export async function connectGitHubSubIssue({
     }
     childRepository: repository(owner: $childOwner, name: $childRepo) {
       issue(number: $childNumber) {
+        id
         number
         url
         repository { nameWithOwner }
@@ -474,6 +487,7 @@ export async function connectGitHubSubIssue({
       parentRepository?: { issue?: { id?: string; number?: number; url?: string } | null } | null;
       childRepository?: {
         issue?: {
+          id?: string;
           number: number;
           url: string;
           repository: { nameWithOwner: string };
@@ -500,10 +514,12 @@ export async function connectGitHubSubIssue({
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht geprüft werden",
   });
   const parentIssue = relationshipResult.data?.parentRepository?.issue;
-  if (!parentIssue?.id) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+  if (!parentIssue) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Parent-Issue wurde nicht gefunden.");
+  if (!parentIssue.id) throw new Error("GitHub Parent-Issue-Node-ID wurde nicht gefunden.");
 
   const childIssue = relationshipResult.data?.childRepository?.issue;
   if (!childIssue) throw new Error(relationshipResult.errors?.[0]?.message || "GitHub Sub-Issue wurde nicht gefunden.");
+  if (!childIssue.id) throw new Error("GitHub Sub-Issue-Node-ID wurde nicht gefunden.");
 
   const currentParent = childIssue.parent;
   const alreadyConnected = currentParent?.number === parentIssueNumber
@@ -520,18 +536,17 @@ export async function connectGitHubSubIssue({
     };
   }
 
-  const mutation = `mutation($parent: ID!, $childUrl: String!) {
-    addSubIssue(input: { issueId: $parent, subIssueUrl: $childUrl, replaceParent: true }) {
+  const mutation = `mutation($parent: ID!, $child: ID!) {
+    addSubIssue(input: { issueId: $parent, subIssueId: $child, replaceParent: true }) {
       issue { number url }
       subIssue { number url repository { nameWithOwner } parent { number url repository { nameWithOwner } } }
     }
   }`;
-  const childUrl = `https://github.com/${child.repository}/issues/${childIssueNumber}`;
   const result = await githubJson<{ data?: unknown; errors?: Array<{ message?: string }> }>("https://api.github.com/graphql", {
     token,
     method: "POST",
     operation: "mutation",
-    body: { query: mutation, variables: { parent: parentIssue.id, childUrl } },
+    body: { query: mutation, variables: { parent: parentIssue.id, child: childIssue.id } },
     errorMessage: "GitHub Sub-Issue-Beziehung konnte nicht erstellt werden",
   });
   if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));
