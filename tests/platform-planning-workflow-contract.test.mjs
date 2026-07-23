@@ -435,7 +435,6 @@ test("workspace loading shells are route-specific and data-free", async () => {
   const toolsLoading = await readFile("src/app/(workspaces)/tools/loading.tsx", "utf8");
   const teamLoading = await readFile("src/app/(workspaces)/team/loading.tsx", "utf8");
   const notificationsLoading = await readFile("src/app/(workspaces)/notifications/loading.tsx", "utf8");
-  const ceoIntakeLoading = await readFile("src/app/(workspaces)/ceo-intake/loading.tsx", "utf8");
   const profileLoading = await readFile("src/app/(workspaces)/profile/loading.tsx", "utf8");
   const taskDetailLoading = await readFile("src/app/tasks/[id]/loading.tsx", "utf8");
 
@@ -462,7 +461,6 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(toolsLoading, /WorkspaceLoadingShell workspace="tools" variant="tools"/);
   assert.match(teamLoading, /WorkspaceLoadingShell workspace="team" variant="team"/);
   assert.match(notificationsLoading, /WorkspaceLoadingShell workspace="notifications" variant="notifications"/);
-  assert.match(ceoIntakeLoading, /WorkspaceLoadingShell workspace="ceo-intake" variant="ceo-intake"/);
   assert.match(profileLoading, /WorkspaceLoadingShell workspace="profile" variant="profile"/);
   assert.match(taskDetailLoading, /WorkspaceLoadingShell workspace="planning" variant="task-detail"/);
 

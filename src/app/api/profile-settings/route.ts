@@ -6,7 +6,7 @@ import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from 
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { rootWorkspaceFromPreference } from "@/features/planning/model/workspace-preferences";
-import type { PlanningFilterPreferences, PlatformRole, ViewMode } from "@/lib/types";
+import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
 
 type UiPreferencesPayload = Partial<{
   defaultWorkspace: string;
@@ -115,8 +115,8 @@ function cleanPackageIds(value: unknown) {
     .slice(0, 200);
 }
 
-function cleanDefaultWorkspace(value: unknown, platformRole: PlatformRole | null | undefined) {
-  return rootWorkspaceFromPreference(typeof value === "string" ? value : null, platformRole);
+function cleanDefaultWorkspace(value: unknown) {
+  return rootWorkspaceFromPreference(typeof value === "string" ? value : null);
 }
 
 export async function PATCH(request: NextRequest) {
@@ -148,7 +148,7 @@ export async function PATCH(request: NextRequest) {
       return apiError("UI-Einstellungen sind ungültig.", 400);
     }
     const uiPayload = payload.uiPreferences;
-    const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace, permission.profile?.platformRole);
+    const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
       : "board";

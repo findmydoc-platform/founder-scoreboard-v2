@@ -90,11 +90,6 @@ export const workspaceDataScopes = {
     notificationEvents: true,
     notificationDeliveries: true,
   },
-  "ceo-intake": {
-    ...baseWorkspaceDataScope,
-    packages: true,
-    sprints: true,
-  },
   profile: {
     ...baseWorkspaceDataScope,
     packages: true,

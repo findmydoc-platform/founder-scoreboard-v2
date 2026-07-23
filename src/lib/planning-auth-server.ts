@@ -50,5 +50,5 @@ export async function getServerPlanningHomeWorkspace(): Promise<AppWorkspace> {
     .maybeSingle<ProfileUiPreferenceRow>();
 
   if (error) return "planning";
-  return rootWorkspaceFromPreference(data?.default_workspace, auth.profile.platformRole);
+  return rootWorkspaceFromPreference(data?.default_workspace);
 }

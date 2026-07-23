@@ -10,13 +10,13 @@ const workspacePreferences = await loadTranspiledModule(
 const { rootWorkspaceFromPreference } = workspacePreferences;
 
 test("root workspace preferences normalize legacy values without accepting route queries", () => {
-  assert.equal(rootWorkspaceFromPreference("reviews", "founder"), "planning");
-  assert.equal(rootWorkspaceFromPreference("profile", "viewer"), "profile");
-  assert.equal(rootWorkspaceFromPreference("mine", "founder"), "planning");
-  assert.equal(rootWorkspaceFromPreference("execution", "founder"), "planning");
-  assert.equal(rootWorkspaceFromPreference("settings", "founder"), "notifications");
-  assert.equal(rootWorkspaceFromPreference("unknown", "ceo"), "planning");
-  assert.equal(rootWorkspaceFromPreference(undefined, "ceo"), "planning");
+  assert.equal(rootWorkspaceFromPreference("reviews"), "planning");
+  assert.equal(rootWorkspaceFromPreference("profile"), "profile");
+  assert.equal(rootWorkspaceFromPreference("mine"), "planning");
+  assert.equal(rootWorkspaceFromPreference("execution"), "planning");
+  assert.equal(rootWorkspaceFromPreference("settings"), "notifications");
+  assert.equal(rootWorkspaceFromPreference("unknown"), "planning");
+  assert.equal(rootWorkspaceFromPreference(undefined), "planning");
 });
 
 test("legacy review URLs use permanent incoming redirects", async () => {
@@ -26,11 +26,8 @@ test("legacy review URLs use permanent incoming redirects", async () => {
   assert.match(nextConfig, /source: "\/reviews\/:id"[\s\S]*destination: "\/tasks\/:id"[\s\S]*permanent: true/);
 });
 
-test("CEO intake can only be selected as a root workspace by a CEO", () => {
-  assert.equal(rootWorkspaceFromPreference("ceo-intake", "ceo"), "ceo-intake");
-  assert.equal(rootWorkspaceFromPreference("ceo-intake", "deputy"), "planning");
-  assert.equal(rootWorkspaceFromPreference("ceo-intake", "founder"), "planning");
-  assert.equal(rootWorkspaceFromPreference("ceo-intake", "viewer"), "planning");
+test("retired CEO intake preferences fall back to planning", () => {
+  assert.equal(rootWorkspaceFromPreference("ceo-intake"), "planning");
 });
 
 function recordingSupabase({ defaultWorkspace = "reviews", preferenceError = null } = {}) {

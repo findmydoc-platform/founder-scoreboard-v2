@@ -95,7 +95,6 @@ export function usePlanningBootstrapState({
     setHeaderData: setBaseHeaderData,
     workspace,
   });
-  const canUseCeoIntake = requestContext.currentProfile?.platformRole === "ceo";
   const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
   const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
   const canChangeTaskStatus = useCallback((task: Task) => (
@@ -125,7 +124,6 @@ export function usePlanningBootstrapState({
     canChangeTaskStatus,
     canManageFinalTaskStatus,
     canManageTaskMeta,
-    canUseCeoIntake,
     currentProfileId,
     data,
     headerData,

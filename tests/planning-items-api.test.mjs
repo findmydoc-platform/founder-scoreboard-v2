@@ -84,7 +84,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.match(documentation, /PATCH processes only properties that are present/);
   assert.match(documentation, /write:planning-items:delete-empty/);
   assert.match(documentation, /valid: false/);
-  assert.match(documentation, /No legacy HTTP aliases are retained/);
+  assert.match(documentation, /No legacy HTTP aliases or parallel planning-item creation routes are retained/);
   assert.match(documentation, /Existing update-enabled tokens continue to work without rotation/);
   assert.match(documentation, /status: "Review"/);
   assert.match(documentation, /complete any Sub-Issue/);
@@ -92,10 +92,20 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
 
 test("legacy public Team Task Intake routes and source modules are absent", async () => {
   for (const path of [
+    "src/app/(workspaces)/ceo-intake/page.tsx",
+    "src/app/(workspaces)/ceo-intake/loading.tsx",
+    "src/app/api/ceo/task-intake/preview/route.ts",
+    "src/app/api/ceo/task-intake/commit/route.ts",
     "src/app/api/team/task-context/route.ts",
     "src/app/api/team/task-intake/v2/preview/route.ts",
     "src/app/api/team/task-intake/v2/commit/route.ts",
     "src/app/api/team/task-intake-tokens/route.ts",
+    "src/features/intake/organisms/ceo-task-intake.tsx",
+    "src/features/intake/model/task-intake-api-client.ts",
+    "src/features/intake/model/task-intake-commit.ts",
+    "src/features/intake/model/task-intake-context.ts",
+    "src/features/intake/model/task-intake-route.ts",
+    "src/features/intake/model/task-intake.ts",
     "src/features/intake/model/team-task-intake-contract.ts",
     "src/features/intake/model/team-task-intake-v2.ts",
   ]) {

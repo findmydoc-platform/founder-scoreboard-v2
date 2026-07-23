@@ -35,7 +35,6 @@ test("primary saved task references share the canonical quick-view link", async 
 test("non-interactive task text stays static in intent-free contexts", async () => {
   const files = [
     "src/features/planning/organisms/status-guard-dialog.tsx",
-    "src/features/intake/organisms/ceo-task-intake.tsx",
     "src/features/tasks/organisms/new-task-dialog.tsx",
   ];
 

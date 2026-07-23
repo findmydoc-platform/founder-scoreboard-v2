@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import {
+  parseGitNumstat,
+  requiresProductUpdateForDiff,
+} from "../scripts/lib/product-update-diff.mjs";
 
 test("product updates auto-open, queue unseen releases, and remain available from the help menu", async () => {
   const provider = await readFile("src/features/product-updates/organisms/product-updates-provider.tsx", "utf8");
@@ -52,7 +56,31 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(tours, /product-updates-menu-link/);
   assert.match(packageJson.scripts["verify:deploy"], /verify:product-updates/);
   assert.match(deployWorkflow, /PRODUCT_UPDATE_BASE_REF/);
-  assert.match(verifier, /Production UI changes require both a product update registry change and a current screenshot/);
+  assert.match(verifier, /New or expanded production UI changes require both a product update registry change and a current screenshot/);
   assert.match(verifier, /expiresAt must be 1 to 60 days after releasedAt/);
   assert.match(verifier, /has no dedicated Driver\.js tour linked through productUpdateId/);
+});
+
+test("product update diff classification excludes removal-only UI maintenance", () => {
+  const deletionOnly = parseGitNumstat([
+    "0\t259\tsrc/features/intake/organisms/ceo-task-intake.tsx",
+    "1\t27\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
+    "1\t1\tdocs/team-planning-items-api.md",
+  ].join("\n"));
+  assert.equal(requiresProductUpdateForDiff(deletionOnly), false);
+
+  const refactorWithoutSurfaceRemoval = parseGitNumstat(
+    "1\t27\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
+  );
+  assert.equal(requiresProductUpdateForDiff(refactorWithoutSurfaceRemoval), true);
+
+  const expandedUi = parseGitNumstat(
+    "3\t1\tsrc/features/planning/organisms/planning-workspace-renderer.tsx",
+  );
+  assert.equal(requiresProductUpdateForDiff(expandedUi), true);
+
+  const serverOnly = parseGitNumstat(
+    "10\t0\tsrc/app/api/team/planning-items/v1/items/route.ts",
+  );
+  assert.equal(requiresProductUpdateForDiff(serverOnly), false);
 });

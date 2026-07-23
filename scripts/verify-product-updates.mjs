@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { parseGitNumstat, requiresProductUpdateForDiff } from "./lib/product-update-diff.mjs";
 
 const registryPath = "src/features/product-updates/model/product-updates.json";
 const tourRegistryPath = "src/features/product-tours/model/feature-tour-registry.ts";
@@ -12,19 +13,17 @@ const updates = JSON.parse(await readFile(registryPath, "utf8"));
 const tourRegistry = await readFile(tourRegistryPath, "utf8");
 
 if (baseRef && !/^0+$/.test(baseRef)) {
-  const diff = spawnSync("git", ["diff", "--name-only", baseRef, "HEAD"], { encoding: "utf8" });
+  const diff = spawnSync("git", ["diff", "--numstat", baseRef, "HEAD"], { encoding: "utf8" });
   if (diff.status !== 0) {
     failures.push(`Could not compare product updates with deployment base ${baseRef}.`);
   } else {
-    const changedFiles = diff.stdout.split(/\r?\n/).filter(Boolean);
-    const hasVisibleUiChange = changedFiles.some((file) =>
-      /^src\/(app|features|shared)\/.*\.(tsx|css)$/.test(file)
-      && !file.startsWith("src/app/api/")
-    );
+    const diffEntries = parseGitNumstat(diff.stdout);
+    const changedFiles = diffEntries.map((entry) => entry.path);
+    const requiresProductUpdate = requiresProductUpdateForDiff(diffEntries);
     const hasProductUpdate = changedFiles.includes(registryPath)
       && changedFiles.some((file) => file.startsWith("public/product-updates/"));
-    if (hasVisibleUiChange && !hasProductUpdate) {
-      failures.push("Production UI changes require both a product update registry change and a current screenshot under public/product-updates/.");
+    if (requiresProductUpdate && !hasProductUpdate) {
+      failures.push("New or expanded production UI changes require both a product update registry change and a current screenshot under public/product-updates/.");
     }
   }
 }

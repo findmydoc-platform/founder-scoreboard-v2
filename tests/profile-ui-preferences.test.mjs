@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readSupabaseMigrationCorpus } from "../scripts/lib/supabase-migrations.mjs";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const workspacePreferences = await loadTranspiledModule(
@@ -22,7 +23,6 @@ const workspaceRoutes = await loadTranspiledModule(
       ListOrdered: icon,
       UserCircle: icon,
       Users: icon,
-      WandSparkles: icon,
     },
     "@/features/planning/model/workspace-preferences": workspacePreferences,
   },
@@ -53,24 +53,23 @@ test("workspace routes include every navigable workspace while persisted default
 
   for (const workspace of workspacePreferences.persistedWorkspaceIds) {
     assert.equal(
-      workspacePreferences.rootWorkspaceFromPreference(workspace, "ceo"),
+      workspacePreferences.rootWorkspaceFromPreference(workspace),
       workspace,
     );
   }
 
   assert.equal(workspacePreferences.appWorkspaceFromValue("decision-log"), "decision-log");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("decision-log", "ceo"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("decision-log"), "planning");
 });
 
-test("workspace preferences normalize legacy values and role-protected CEO intake", () => {
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("execution", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("mine", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("reviews", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("decisions", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("meetings", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("settings", "founder"), "notifications");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("ceo-intake", "founder"), "planning");
-  assert.equal(workspacePreferences.rootWorkspaceFromPreference("ceo-intake", "ceo"), "ceo-intake");
+test("workspace preferences normalize every retired workspace", () => {
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("execution"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("mine"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("reviews"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("decisions"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("meetings"), "planning");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("settings"), "notifications");
+  assert.equal(workspacePreferences.rootWorkspaceFromPreference("ceo-intake"), "planning");
 });
 
 test("new profiles start with neutral planning defaults instead of current controller state", () => {
@@ -124,11 +123,11 @@ test("saved profile preferences remain intact while legacy workspaces are normal
   assert.deepEqual(draft.expandedPackageIds, ["initiative-1"]);
 });
 
-test("profile settings API delegates workspace validation to the shared role-aware contract", async () => {
+test("profile settings API delegates workspace validation to the shared workspace contract", async () => {
   const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
-  assert.match(route, /rootWorkspaceFromPreference\(typeof value === "string" \? value : null, platformRole\)/);
-  assert.match(route, /permission\.profile\?\.platformRole/);
+  assert.match(route, /rootWorkspaceFromPreference\(typeof value === "string" \? value : null\)/);
+  assert.doesNotMatch(route, /cleanDefaultWorkspace\(uiPayload\.defaultWorkspace, permission\.profile\?\.platformRole\)/);
   assert.doesNotMatch(route, /allowedWorkspaces/);
 });
 
@@ -163,4 +162,29 @@ test("workspace constraint migration backfills legacy values and allows every pe
     assert.match(migration, new RegExp(`'${workspace}'`));
   }
   assert.doesNotMatch(migration, /'decision-log'/);
+});
+
+test("CEO intake workspace removal migrates saved defaults before tightening the constraint", async () => {
+  const corpus = await readSupabaseMigrationCorpus();
+  const match = corpus.match(
+    /-- Migration: 20260723121623_remove_ceo_intake_workspace\.sql\n([\s\S]*?)(?=\n-- Migration:|$)/,
+  );
+  assert.ok(match, "CEO intake workspace removal migration must be in the ordered corpus");
+  const migration = match[1];
+
+  assert.match(migration, /set default_workspace = 'planning'/);
+  assert.match(migration, /where default_workspace = 'ceo-intake'/);
+  assert.match(migration, /drop constraint if exists profile_ui_preferences_default_workspace_check/);
+  assert.match(migration, /add constraint profile_ui_preferences_default_workspace_check/);
+  assert.ok(
+    migration.indexOf("drop constraint") < migration.indexOf("update public.profile_ui_preferences"),
+  );
+  assert.ok(
+    migration.indexOf("update public.profile_ui_preferences") < migration.indexOf("add constraint"),
+  );
+  const currentConstraint = migration.slice(migration.indexOf("add constraint"));
+  assert.doesNotMatch(currentConstraint, /'ceo-intake'/);
+  for (const workspace of workspacePreferences.persistedWorkspaceIds) {
+    assert.match(currentConstraint, new RegExp(`'${workspace}'`));
+  }
 });

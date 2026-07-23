@@ -9,7 +9,6 @@ import {
   ListOrdered,
   UserCircle,
   Users,
-  WandSparkles,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -49,7 +48,6 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
   { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
-  { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
   { id: "projects", label: "Meilensteine", icon: Archive, href: "/projects" },
   { id: "tools", label: "Quicklinks", icon: Link2, href: "/tools" },
