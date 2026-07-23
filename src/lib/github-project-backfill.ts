@@ -29,6 +29,13 @@ export type FounderOpsGitHubProjectBackfillOptions = {
   repository: string;
 };
 
+type FounderOpsGitHubProjectBackfillActor = {
+  deputy_active_from?: string | null;
+  deputy_active_until?: string | null;
+  deputy_for?: string | null;
+  platform_role?: string | null;
+};
+
 type BackfillTask = {
   id: string;
   issueNumber: number;
@@ -66,6 +73,28 @@ function booleanValue(value: unknown, label: string) {
   if (value === true || value === "true") return true;
   if (value === false || value === "false" || value === undefined) return false;
   throw new Error(`${label} must be true or false.`);
+}
+
+export function founderOpsBerlinDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+  }).formatToParts(now);
+  const values = new Map(parts.map((part) => [part.type, part.value]));
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
+}
+
+export function canRunFounderOpsGitHubProjectBackfill(
+  profile: FounderOpsGitHubProjectBackfillActor | null | undefined,
+  berlinDate = founderOpsBerlinDate(),
+) {
+  if (profile?.platform_role === "ceo") return true;
+  if (profile?.platform_role !== "deputy" || !profile.deputy_for?.trim()) return false;
+  if (profile.deputy_active_from && profile.deputy_active_from > berlinDate) return false;
+  if (profile.deputy_active_until && profile.deputy_active_until < berlinDate) return false;
+  return true;
 }
 
 export function normalizeFounderOpsGitHubProjectBackfillOptions(

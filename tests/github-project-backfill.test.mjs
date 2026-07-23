@@ -84,6 +84,33 @@ test("backfill selects deliverables before sub-issues and supports cursor resume
   assert.deepEqual(resumed.map((task) => task.id), ["deliverable-b"]);
 });
 
+test("backfill allows only the CEO or a currently active Deputy", async () => {
+  const backfill = await loadBackfillModule();
+  const date = "2026-07-23";
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({ platform_role: "ceo" }, date), true);
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({
+    deputy_active_from: "2026-07-01",
+    deputy_active_until: "2026-07-31",
+    deputy_for: "volkan",
+    platform_role: "deputy",
+  }, date), true);
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({
+    deputy_active_from: "2026-07-24",
+    deputy_for: "volkan",
+    platform_role: "deputy",
+  }, date), false);
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({
+    deputy_active_until: "2026-07-22",
+    deputy_for: "volkan",
+    platform_role: "deputy",
+  }, date), false);
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({
+    deputy_for: "",
+    platform_role: "deputy",
+  }, date), false);
+  assert.equal(backfill.canRunFounderOpsGitHubProjectBackfill({ platform_role: "founder" }, date), false);
+});
+
 test("inventory keeps linked sync state and repository counts visible", async () => {
   const backfill = await loadBackfillModule();
   assert.deepEqual(backfill.summarizeFounderOpsGitHubProjectBackfillInventory([
@@ -115,7 +142,7 @@ test("delivery secret validation is fail-closed and timing-safe", async () => {
   }
 });
 
-test("workflow is production-protected, CEO-mapped, and cannot remove legacy Project items", async () => {
+test("workflow is production-protected, operational-lead mapped, and cannot remove legacy Project items", async () => {
   const workflow = await readFile(".github/workflows/backfill-founderops-github-project.yml", "utf8");
   const shell = await readFile(".github/scripts/maintenance/backfill-founderops-github-project.sh", "utf8");
   const route = await readFile("src/app/api/maintenance/github-project-backfill/route.ts", "utf8");
@@ -123,7 +150,7 @@ test("workflow is production-protected, CEO-mapped, and cannot remove legacy Pro
   assert.match(workflow, /environment:\s*\n\s*name: production/);
   assert.match(workflow, /FOUNDEROPS_GITHUB_ACTOR: \$\{\{ github\.actor \}\}/);
   assert.match(shell, /Do not replay blindly/);
-  assert.match(route, /platform_role !== "ceo"/);
+  assert.match(route, /canRunFounderOpsGitHubProjectBackfill/);
   assert.match(route, /validateDeliverySecret/);
   assert.match(backfill, /observeFounderOpsGitHubProjectItem/);
   assert.match(backfill, /ensureFounderOpsGitHubProjectItem/);
