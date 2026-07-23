@@ -43,4 +43,15 @@ if [[ "$head_sha" != "$origin_main_sha" ]]; then
   exit 1
 fi
 
+profile="founder-scoreboard-local"
+if command -v codex-env >/dev/null 2>&1; then
+  if codex-env list | grep -Fqx "$profile"; then
+    codex-env provision-auto "$profile" "$repo_root"
+  else
+    echo "codex-env profile '$profile' is not registered; local environment provisioning skipped."
+  fi
+else
+  echo "codex-env is not installed; local environment provisioning skipped."
+fi
+
 rtk bash scripts/codex-pnpm.sh install --frozen-lockfile
