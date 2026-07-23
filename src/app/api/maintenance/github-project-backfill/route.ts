@@ -6,6 +6,7 @@ import {
 } from "@/lib/delivery-auth";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import {
+  canRunFounderOpsGitHubProjectBackfill,
   normalizeFounderOpsGitHubProjectBackfillOptions,
   runFounderOpsGitHubProjectBackfill,
 } from "@/lib/github-project-backfill";
@@ -30,11 +31,15 @@ async function runBackfill(request: NextRequest, dryRun: boolean) {
 
   const { data: actorProfiles, error: actorError } = await supabase
     .from("profiles")
-    .select("id,github_login,platform_role")
+    .select("id,github_login,platform_role,deputy_for,deputy_active_from,deputy_active_until")
     .ilike("github_login", actorLogin)
     .limit(2);
-  if (actorError || (actorProfiles || []).length !== 1 || actorProfiles?.[0]?.platform_role !== "ceo") {
-    return apiError("GitHub-Akteur ist nicht dem FounderOps-CEO-Profil zugeordnet.", 403);
+  if (
+    actorError
+    || (actorProfiles || []).length !== 1
+    || !canRunFounderOpsGitHubProjectBackfill(actorProfiles?.[0])
+  ) {
+    return apiError("GitHub-Akteur ist weder FounderOps-CEO noch aktuell aktiver Deputy.", 403);
   }
 
   let input: Record<string, unknown>;
