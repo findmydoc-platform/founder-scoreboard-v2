@@ -17,6 +17,38 @@ defaults:
     shell: bash
 
 jobs:
+  local-integration:
+    name: Local Supabase Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.13.1
+          run_install: false
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reset and seed local database
+        run: pnpm local:reset
+
+      - name: Run local integration tests
+        run: pnpm test:integration:local
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm local:stop
+
   validation:
     name: Dependency Validation
     runs-on: ubuntu-latest

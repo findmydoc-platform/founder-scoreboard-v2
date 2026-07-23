@@ -21,8 +21,9 @@ import {
 } from "@/features/profile/model/profile-settings-view-model";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import { taskStatuses } from "@/lib/status";
-import { canManageFounderOpsGitHubProject } from "@/lib/platform";
+import { canConfigureFounderOpsGitHubProject } from "@/lib/platform";
 import type { PlanningData, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
@@ -31,7 +32,7 @@ type ProfileSettingsOverviewProps = {
   data: PlanningData;
   currentProfile: Profile | null;
   pending: boolean;
-  source: "seed" | "supabase";
+  source: "supabase";
   onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
   onSaveFounderOpsGitHubProject: (owner: string, number: number) => Promise<void>;
   onSaveFounderOpsReviewWindow: (hours: number) => Promise<void>;
@@ -77,9 +78,12 @@ function ProfileSettingsForm({
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
   const operationalProfile = currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy" || currentProfile.platformRole === "founder";
-  const canManageGitHubProject = canManageFounderOpsGitHubProject(currentProfile);
+  const canConfigureGitHubProject = canConfigureFounderOpsGitHubProject(currentProfile);
+  const githubProjectDisabledReason = isLocalLoginSimulationEnabled()
+    ? "Im lokalen Simulationsmodus bleiben externe GitHub-Integrationen deaktiviert."
+    : undefined;
   const visibleSections = profileSettingsSections.filter((section) => {
-    if (section.id === "process") return currentProfile.platformRole === "ceo" || canManageGitHubProject;
+    if (section.id === "process") return currentProfile.platformRole === "ceo";
     if (section.id === "api") return operationalProfile;
     return true;
   });
@@ -216,21 +220,22 @@ function ProfileSettingsForm({
               onPlanningFiltersChange={updatePlanningFilters}
             />
           )}
-          {activeSection === "process" && canManageGitHubProject && (
+          {activeSection === "process" && currentProfile.platformRole === "ceo" && (
             <div className="divide-y divide-slate-200">
-              <ProfileGitHubProjectSettingsSection
-                githubProjectOwner={data.project.githubProjectOwner}
-                githubProjectNumber={data.project.githubProjectNumber}
-                pending={pending}
-                onSave={onSaveFounderOpsGitHubProject}
-              />
-              {currentProfile.platformRole === "ceo" ? (
-                <ProfileProcessSettingsSection
-                  reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
+              {canConfigureGitHubProject ? (
+                <ProfileGitHubProjectSettingsSection
+                  githubProjectOwner={data.project.githubProjectOwner}
+                  githubProjectNumber={data.project.githubProjectNumber}
                   pending={pending}
-                  onSave={onSaveFounderOpsReviewWindow}
+                  disabledReason={githubProjectDisabledReason}
+                  onSave={onSaveFounderOpsGitHubProject}
                 />
               ) : null}
+              <ProfileProcessSettingsSection
+                reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
+                pending={pending}
+                onSave={onSaveFounderOpsReviewWindow}
+              />
             </div>
           )}
           {activeSection === "api" && operationalProfile && (

@@ -5,6 +5,17 @@ const supabase = await createSupabaseScriptClient({
   missingMessage: "Missing Supabase admin env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.",
 });
 
+function isLoopbackUrl(value) {
+  try {
+    return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const localLoginSimulation = process.env.ENABLE_LOCAL_LOGIN === "true"
+  && isLoopbackUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
 const { data: profiles, error: profileError } = await supabase
   .from("profiles")
   .select("id,name,role,auth_user_id,github_login,platform_role,org_role")
@@ -36,6 +47,7 @@ const missingRole = profiles.filter((profile) => !profile.platform_role || !prof
 const ceos = profiles.filter((profile) => profile.platform_role === "ceo");
 
 const result = {
+  mode: localLoginSimulation ? "local-simulated-login" : "github-oauth",
   profiles: profiles.length,
   authUsers: authUsers.users.length,
   legacyAuthLinked: linked.length,
@@ -66,7 +78,14 @@ const result = {
 
 console.log(JSON.stringify(result, null, 2));
 
-if (missingGithub.length || missingRole.length || stale.length || ceos.length !== 1) {
-  console.error("Auth mapping is incomplete. Map every team profile with profiles.github_login, platform_role and org_role before enabling strict auth.");
+const localAuthIncomplete = localLoginSimulation
+  && (missingRole.length || stale.length || ceos.length !== 1 || linked.length !== 1 || linked[0]?.id !== ceos[0]?.id);
+const githubAuthIncomplete = !localLoginSimulation
+  && (missingGithub.length || missingRole.length || stale.length || ceos.length !== 1);
+
+if (localAuthIncomplete || githubAuthIncomplete) {
+  console.error(localLoginSimulation
+    ? "Local Auth mapping is incomplete. Seed exactly one Auth user linked to the single CEO profile and provide every profile role."
+    : "Auth mapping is incomplete. Map every team profile with profiles.github_login, platform_role and org_role before enabling strict auth.");
   process.exit(1);
 }

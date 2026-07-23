@@ -532,7 +532,7 @@ export type PlanningData = {
 export type PlanningDataResponse = {
   data: PlanningData;
   headerData: PlanningHeaderData;
-  source: "seed" | "supabase";
+  source: "supabase";
   availability: "ready" | "unavailable";
   currentProfile: AuthenticatedProfile | null;
 };

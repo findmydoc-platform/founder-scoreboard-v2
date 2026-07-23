@@ -47,7 +47,6 @@ export function ProjectsOverview({
   data,
   tasks,
   currentProfile,
-  source,
   canManageInitiatives,
   canManageMilestones,
   pending,
@@ -62,7 +61,6 @@ export function ProjectsOverview({
   data: PlanningData;
   tasks: Task[];
   currentProfile?: Profile | null;
-  source: "seed" | "supabase";
   canManageInitiatives: boolean;
   canManageMilestones: boolean;
   pending: boolean;
@@ -163,7 +161,7 @@ export function ProjectsOverview({
                 rootType: "initiative",
                 approvalStatus: initiative.approvalStatus,
                 proposedById: initiative.proposedById,
-              }, currentProfile, source === "seed");
+              }, currentProfile, false);
               return (
                 <div key={initiative.id} className="rounded-md border border-slate-200 p-3">
                   <div className="font-semibold text-slate-950">{initiative.title}</div>

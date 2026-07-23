@@ -17,7 +17,7 @@ export function useProfilePlanningItemsTokens({
   source,
 }: {
   apiClient: BrowserApiClient;
-  source: "seed" | "supabase";
+  source: "supabase";
 }) {
   const mounted = useRef(true);
   const [tokens, setTokens] = useState<TeamPlanningItemTokenRecord[]>([]);

@@ -13,7 +13,7 @@ type UseBacklogCommandsOptions = {
   orderedTasks: Task[];
   refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
-  source: "seed" | "supabase";
+  source: "supabase";
   sprints?: Sprint[];
 };
 

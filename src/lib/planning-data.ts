@@ -3,7 +3,6 @@ import { hasCorePlanningDataError, loadPlanningDataRows, mapPlanningDataRows, sh
 import { isOperationalLeadRole } from "./platform";
 import { reconcileNotificationEvents } from "./notification-resolution";
 import { getServerSupabase } from "./supabase";
-import { allowsLocalPlanningFallback } from "./planning-data-availability";
 import type { PlanningData, PlanningHeaderData, PlatformRole } from "./types";
 
 export const emptyPlanningData: PlanningData = {
@@ -58,20 +57,11 @@ export type PlanningDataLoadOptions = {
 export type PlanningDataResult = {
   data: PlanningData;
   headerData: PlanningHeaderData;
-  source: "seed" | "supabase";
+  source: "supabase";
   availability: "ready" | "unavailable";
 };
 
 function planningDataFailureResult(): PlanningDataResult {
-  if (allowsLocalPlanningFallback()) {
-    return {
-      data: emptyPlanningData,
-      headerData: emptyPlanningHeaderData,
-      source: "seed",
-      availability: "ready",
-    };
-  }
-
   return {
     data: emptyPlanningData,
     headerData: emptyPlanningHeaderData,

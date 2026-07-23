@@ -27,7 +27,7 @@ export function useTaskComments({
   commentImportNotice: string;
   profiles: Profile[];
   apiClient: BrowserApiClient;
-  source: "seed" | "supabase";
+  source: "supabase";
   startTransition: TransitionStartFunction;
   setError: (message: string) => void;
   setMeta: Dispatch<SetStateAction<EditableTaskState>>;

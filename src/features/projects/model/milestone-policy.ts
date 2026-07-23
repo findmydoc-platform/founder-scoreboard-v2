@@ -10,9 +10,8 @@ export type MilestoneDeletePolicy = {
 
 export function canManageMilestones(
   platformRole: PlatformRole | null | undefined,
-  source: "seed" | "supabase" = "supabase",
 ) {
-  return source === "seed" || platformRole === "ceo" || platformRole === "deputy";
+  return platformRole === "ceo" || platformRole === "deputy";
 }
 
 export function isManageableMilestone(milestone: Pick<MilestoneDto, "id">) {

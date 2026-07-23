@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { FounderEventDraft } from "@/features/events/organisms/events-overview";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
 import type { FounderEvent } from "@/lib/types";
 
 export function useFounderEventCommands({
@@ -13,7 +12,6 @@ export function useFounderEventCommands({
   data,
   setData,
   setSaveError,
-  source,
 }: PlanningCommandContext) {
   const [eventMessage, setEventMessage] = useState("");
 
@@ -52,20 +50,8 @@ export function useFounderEventCommands({
     };
     const previousData = data;
 
-    setData((current) => {
-      const nextData = { ...current, events: [localEvent, ...current.events] };
-      if (source === "seed") {
-        try {
-          persistLocalPlanningData(nextData);
-        } catch {
-          // Keep local event editing usable when browser storage is unavailable.
-        }
-      }
-      return nextData;
-    });
+    setData((current) => ({ ...current, events: [localEvent, ...current.events] }));
     setEventMessage(`Event vorgemerkt: ${localEvent.title}`);
-
-    if (source !== "supabase") return;
 
     try {
       const payload = { ...draft, startsAt, endsAt: draft.endsAt ? endsAt : "" };
@@ -117,23 +103,11 @@ export function useFounderEventCommands({
     };
     const previousData = data;
 
-    setData((current) => {
-      const nextData = {
-        ...current,
-        events: current.events.map((item) => (item.id === event.id ? nextEvent : item)),
-      };
-      if (source === "seed") {
-        try {
-          persistLocalPlanningData(nextData);
-        } catch {
-          // Keep local event editing usable when browser storage is unavailable.
-        }
-      }
-      return nextData;
-    });
+    setData((current) => ({
+      ...current,
+      events: current.events.map((item) => (item.id === event.id ? nextEvent : item)),
+    }));
     setEventMessage(nextEvent.status === "cancelled" ? `Event abgesagt: ${nextEvent.title}` : `Event aktualisiert: ${nextEvent.title}`);
-
-    if (source !== "supabase") return;
 
     try {
       const payload = { ...draft, startsAt, endsAt: draft.endsAt ? endsAt : "" };

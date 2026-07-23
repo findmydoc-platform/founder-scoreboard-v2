@@ -2,7 +2,6 @@
 
 import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import {
   founderCompletedTaskGuardMessage,
   founderStatusGuardMessage,
@@ -31,7 +30,6 @@ type UseTaskUpdateCommandOptions = Pick<
   | "githubInstallationAvailable"
   | "setData"
   | "setSaveError"
-  | "source"
   | "startTransition"
 > & {
   refreshPlanningData: () => Promise<void>;
@@ -56,7 +54,6 @@ export function useTaskUpdateCommand({
   setStatusGuardNotice,
   setStatusGuardTaskId,
   serverUpdatedAtByTask,
-  source,
   startTransition,
   syncTaskToGitHub,
 }: UseTaskUpdateCommandOptions) {
@@ -84,7 +81,7 @@ export function useTaskUpdateCommand({
     const detailPermissions = taskDetailPermissions({
       task,
       profile: currentProfile,
-      unrestricted: source === "seed",
+      unrestricted: false,
     });
     const completesSubIssue = task.taskType === "sub_issue"
       && currentStatus !== "Erledigt"
@@ -135,18 +132,8 @@ export function useTaskUpdateCommand({
         } : item)),
       };
 
-      if (source === "seed") {
-        try {
-          persistLocalPlanningTasks(nextData.tasks);
-        } catch {
-          // UI remains usable even if browser storage is unavailable.
-        }
-      }
-
       return nextData;
     });
-
-    if (source !== "supabase") return Promise.resolve({ ok: true, task: normalizedPatch });
 
     const mutationId = Symbol(task.id);
     const mutationEpoch = mutationEpochByTask.current.get(task.id) || 0;

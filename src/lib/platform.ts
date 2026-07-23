@@ -22,8 +22,8 @@ export function isActiveDeputy(profile?: Pick<Profile, "platformRole" | "deputyF
   return true;
 }
 
-export function canManageFounderOpsGitHubProject(profile?: Pick<Profile, "platformRole" | "deputyFor" | "deputyActiveFrom" | "deputyActiveUntil"> | null, today = berlinDate()) {
-  return profile?.platformRole === "ceo" || isActiveDeputy(profile, today);
+export function canConfigureFounderOpsGitHubProject(profile?: Pick<Profile, "platformRole"> | null) {
+  return profile?.platformRole === "ceo";
 }
 
 export function reviewLabel(status: Task["reviewStatus"]) {

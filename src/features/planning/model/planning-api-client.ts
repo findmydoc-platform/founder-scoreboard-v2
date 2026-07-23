@@ -20,13 +20,6 @@ export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: r
   return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
 }
 
-export function importDemoSeedRequest(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{ error?: string; imported?: { profiles: number; packages: number; tasks: number; sprints: number; fmdTools: number; meetings: number } }>("/api/demo-seed/import", {
-    method: "POST",
-    jsonContentType: false,
-  });
-}
-
 export function saveInitiativeRequest(apiClient: BrowserApiClient, draft: { id?: string }) {
   return apiClient.requestJson<{ error?: string; initiative?: Package }>(draft.id ? `/api/initiatives/${draft.id}` : "/api/initiatives", {
     method: draft.id ? "PATCH" : "POST",

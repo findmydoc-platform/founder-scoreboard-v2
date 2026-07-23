@@ -10,11 +10,13 @@ export function ProfileGitHubProjectSettingsSection({
   githubProjectOwner,
   githubProjectNumber,
   pending,
+  disabledReason,
   onSave,
 }: {
   githubProjectOwner: string;
   githubProjectNumber: number;
   pending: boolean;
+  disabledReason?: string;
   onSave: (owner: string, number: number) => Promise<void>;
 }) {
   const [ownerDraft, setOwnerDraft] = useState<string | null>(null);
@@ -29,6 +31,7 @@ export function ProfileGitHubProjectSettingsSection({
   const messageId = "founderops-github-project-message";
 
   const save = async () => {
+    if (disabledReason) return;
     if (!valid) {
       setMessage({ tone: "danger", text: "Bitte eine gültige GitHub-Organisation und positive Project-Nummer eingeben." });
       return;
@@ -52,7 +55,7 @@ export function ProfileGitHubProjectSettingsSection({
 
   return (
     <SettingsPane
-      eyebrow="CEO & aktive Deputies · Global"
+      eyebrow="CEO · Global"
       title="GitHub Project"
       description="Ziel für repositoryübergreifend synchronisierte GitHub Issues. FounderOps bleibt führend."
     >
@@ -67,7 +70,7 @@ export function ProfileGitHubProjectSettingsSection({
             <UiTextInput
               id="founderops-github-project-owner"
               value={owner}
-              disabled={pending || saving}
+              disabled={pending || saving || Boolean(disabledReason)}
               autoComplete="off"
               aria-describedby={message ? messageId : undefined}
               aria-invalid={message?.tone === "danger" || undefined}
@@ -85,7 +88,7 @@ export function ProfileGitHubProjectSettingsSection({
               min={1}
               step={1}
               value={numberValue}
-              disabled={pending || saving}
+              disabled={pending || saving || Boolean(disabledReason)}
               className="w-32 tabular-nums"
               aria-describedby={message ? messageId : undefined}
               aria-invalid={message?.tone === "danger" || undefined}
@@ -95,7 +98,7 @@ export function ProfileGitHubProjectSettingsSection({
               }}
             />
           </label>
-          {projectLink ? (
+          {projectLink && !disabledReason ? (
             <a
               href={projectLink}
               target="_blank"
@@ -105,6 +108,11 @@ export function ProfileGitHubProjectSettingsSection({
               Aktuell konfiguriertes Project öffnen
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </a>
+          ) : null}
+          {disabledReason ? (
+            <UiNotice tone="info" size="compact">
+              {disabledReason}
+            </UiNotice>
           ) : null}
           {message ? (
             <UiNotice
@@ -118,7 +126,7 @@ export function ProfileGitHubProjectSettingsSection({
             </UiNotice>
           ) : null}
           <div>
-            <UiButton variant="primary" disabled={pending || saving || !valid} onClick={save}>
+            <UiButton variant="primary" disabled={pending || saving || !valid || Boolean(disabledReason)} onClick={save}>
               {saving ? "Wird geprüft …" : "Prüfen und speichern"}
             </UiButton>
           </div>
