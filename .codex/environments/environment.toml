@@ -5,14 +5,14 @@ name = "founder-scoreboard"
 script = "rtk bash scripts/codex-bootstrap.sh"
 
 [[actions]]
-name = "Run app"
+name = "Initialize local database"
 icon = "run"
-command = "rtk bash scripts/codex-pnpm.sh exec next dev --hostname 127.0.0.1 --port 3000"
+command = "rtk bash scripts/codex-pnpm.sh run local:reset"
 
 [[actions]]
-name = "Run app 3002"
+name = "Run locally"
 icon = "run"
-command = "rtk bash scripts/codex-pnpm.sh exec next dev --hostname 127.0.0.1 --port 3002"
+command = "rtk bash scripts/codex-pnpm.sh run local:start && rtk bash scripts/codex-pnpm.sh run dev:local"
 
 [[actions]]
 name = "Test"
@@ -30,36 +30,6 @@ icon = "test"
 command = "rtk bash scripts/codex-pnpm.sh run build"
 
 [[actions]]
-name = "Validate"
-icon = "test"
-command = "rtk bash scripts/codex-pnpm.sh test && rtk bash scripts/codex-pnpm.sh run lint && rtk bash scripts/codex-pnpm.sh run build"
-
-[[actions]]
-name = "Verify auth"
-icon = "test"
-command = "rtk bash scripts/codex-pnpm.sh run verify:auth"
-
-[[actions]]
-name = "Verify Supabase"
-icon = "test"
-command = "rtk bash scripts/codex-pnpm.sh run verify:supabase"
-
-[[actions]]
-name = "Verify operational"
-icon = "test"
-command = "rtk bash scripts/codex-pnpm.sh run verify:operational"
-
-[[actions]]
-name = "Verify release"
-icon = "test"
-command = "rtk bash scripts/codex-pnpm.sh run verify:release"
-
-[[actions]]
-name = "Health check"
+name = "Stop local database"
 icon = "tool"
-command = "rtk curl -fsS http://localhost:3000/api/health"
-
-[[actions]]
-name = "Git status"
-icon = "tool"
-command = "rtk git status --short --branch"
+command = "rtk bash scripts/codex-pnpm.sh run local:stop"
