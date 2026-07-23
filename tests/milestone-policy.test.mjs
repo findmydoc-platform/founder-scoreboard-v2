@@ -4,13 +4,12 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const policy = await loadTranspiledModule("src/features/projects/model/milestone-policy.ts");
 
-test("Milestone management is limited to operational leads and local seed mode", () => {
+test("Milestone management is limited to operational leads", () => {
   assert.equal(policy.canManageMilestones("ceo"), true);
   assert.equal(policy.canManageMilestones("deputy"), true);
   assert.equal(policy.canManageMilestones("founder"), false);
   assert.equal(policy.canManageMilestones("viewer"), false);
   assert.equal(policy.canManageMilestones(null), false);
-  assert.equal(policy.canManageMilestones(null, "seed"), true);
   assert.equal(policy.isManageableMilestone({ id: "milestone-one" }), true);
   assert.equal(policy.isManageableMilestone({ id: "" }), false);
 });

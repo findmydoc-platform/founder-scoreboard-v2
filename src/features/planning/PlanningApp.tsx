@@ -11,9 +11,8 @@ type Props = {
   initialData: PlanningData;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
-  source: "seed" | "supabase";
+  source: "supabase";
   authRequired: boolean;
-  demoSeedImportAvailable?: boolean;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
@@ -27,7 +26,6 @@ export function PlanningApp({
   initialWorkspace,
   source,
   authRequired,
-  demoSeedImportAvailable = false,
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
@@ -40,7 +38,6 @@ export function PlanningApp({
     initialWorkspace,
     source,
     authRequired,
-    demoSeedImportAvailable,
     initialAuthUser,
     initialCurrentProfile,
     initialProtectedDataLoaded,

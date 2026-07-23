@@ -20,7 +20,6 @@ type UsePlanningDerivedStateOptions = {
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
   setMilestoneDialogDefaults: PlanningViewState["setMilestoneDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
-  source: "seed" | "supabase";
   setWorkspace: (workspace: AppWorkspace) => void;
   statusGuardTaskId: string | null;
   workspace: AppWorkspace;
@@ -35,7 +34,6 @@ export function usePlanningDerivedState({
   setInitiativeDialogDefaults,
   setMilestoneDialogDefaults,
   setTaskDialogDefaults,
-  source,
   setWorkspace,
   statusGuardTaskId,
   workspace,
@@ -56,7 +54,6 @@ export function usePlanningDerivedState({
     setInitiativeDialogDefaults,
     setMilestoneDialogDefaults,
     setTaskDialogDefaults,
-    source,
     workspace,
   });
   const statusGuardTask = statusGuardTaskId ? data.tasks.find((task) => task.id === statusGuardTaskId) : null;

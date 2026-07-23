@@ -14,8 +14,8 @@ import {
 } from "@/features/tasks/model/task-detail-state";
 import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 type UseTaskDetailWorkflowOptions = {
   task: Task;
@@ -32,7 +32,7 @@ type UseTaskDetailWorkflowOptions = {
   profiles: Profile[];
   sprints: Sprint[];
   milestones: Milestone[];
-  source: "seed" | "supabase";
+  source: "supabase";
   commentImportNotice: string;
   initialCurrentProfile?: AuthenticatedProfile | null;
 };
@@ -54,7 +54,6 @@ export function useTaskDetailWorkflow({
   blockers,
   subIssues,
   taskRelations,
-  allTasks,
   profiles,
   source,
   commentImportNotice,
@@ -71,8 +70,7 @@ export function useTaskDetailWorkflow({
   const [taskBlockers, setTaskBlockers] = useState(blockers);
   const [taskSubIssues, setTaskSubIssues] = useState(subIssues);
   const [subIssueDialogOpen, setSubIssueDialogOpen] = useState(false);
-  const seedProfile = source === "seed" ? profiles.find((profile) => profile.platformRole === "ceo") || null : null;
-  const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile || seedProfile);
+  const [currentProfile, setCurrentProfile] = useState<Pick<Profile, "id" | "name" | "platformRole"> | null>(initialCurrentProfile);
   const [githubInstallationAvailable, setGithubInstallationAvailable] = useState(false);
   const [githubUserConnected, setGithubUserConnected] = useState(false);
   const [waitingGitHubCommentCount, setWaitingGitHubCommentCount] = useState(0);
@@ -114,7 +112,7 @@ export function useTaskDetailWorkflow({
   });
 
   useEffect(() => {
-    if (source !== "supabase") return;
+    if (isLocalLoginSimulationEnabled()) return;
 
     let active = true;
     apiClient.getAuthSnapshot().then((snapshot) => {
@@ -136,6 +134,10 @@ export function useTaskDetailWorkflow({
   const reconnectGitHub = async () => {
     setError("");
     setGithubReconnectFailed(false);
+    if (isLocalLoginSimulationEnabled()) {
+      setError("GitHub ist in der lokalen Entwicklung deaktiviert.");
+      return;
+    }
     const { error: githubError } = await apiClient.startGitHubAppConnect();
 
     if (githubError) {
@@ -157,11 +159,6 @@ export function useTaskDetailWorkflow({
     const next = { ...meta, ...editablePatch };
     setMeta(next);
     setError("");
-
-    if (source !== "supabase") {
-      persistLocalPlanningTasks(allTasks.map((item) => item.id === task.id ? { ...item, ...normalizedPatch } : item));
-      return;
-    }
 
     const mutationId = latestMutationId.current + 1;
     const queuedMutationEpoch = mutationEpoch.current;
@@ -210,8 +207,8 @@ export function useTaskDetailWorkflow({
   const syncGitHub = (options: { createIfMissing?: boolean } = {}) => {
     setError("");
 
-    if (source !== "supabase") {
-      setError("GitHub-Sync ist in diesem Arbeitsmodus nicht verfügbar.");
+    if (isLocalLoginSimulationEnabled()) {
+      setError("GitHub ist in der lokalen Entwicklung deaktiviert.");
       return;
     }
 
@@ -291,8 +288,6 @@ export function useTaskDetailWorkflow({
     setError("");
     setTaskBlockers((current) => [localBlocker, ...current]);
     setMeta((current) => ({ ...current, status: "Blockiert" }));
-    if (source !== "supabase") return;
-
     startTransition(async () => {
       const { response, body } = await reportTaskBlockerRequest(apiClient, task.id, payload);
       if (!response.ok || !body?.blocker) {
@@ -307,24 +302,6 @@ export function useTaskDetailWorkflow({
 
   const createSubIssue = (draft: NewTaskDraft) => {
     setError("");
-    if (source !== "supabase") {
-      const localSubIssue: Task = {
-        ...task,
-        id: `local-${Date.now()}`,
-        title: draft.title,
-        description: draft.description,
-        taskType: "sub_issue",
-        parentTaskId: task.id,
-        scoreRelevant: false,
-        scorePoints: 0,
-        scoreFinal: false,
-      };
-      setTaskSubIssues((current) => [...current, localSubIssue]);
-      persistLocalPlanningTasks([...allTasks, localSubIssue]);
-      setSubIssueDialogOpen(false);
-      return;
-    }
-
     startTransition(async () => {
       const { response, body } = await createTaskRequest(apiClient, draft);
       if (!response.ok || !body?.task) {
@@ -337,11 +314,6 @@ export function useTaskDetailWorkflow({
   };
 
   const withdrawTask = (reason: string) => {
-    if (source !== "supabase") {
-      persistLocalPlanningTasks(allTasks.filter((item) => item.id !== task.id && item.parentTaskId !== task.id));
-      router.replace("/planning");
-      return;
-    }
     startTransition(async () => {
       const { response, body } = await withdrawTaskRequest(apiClient, task.id, task.approvalRevision, reason);
       if (!response.ok) {

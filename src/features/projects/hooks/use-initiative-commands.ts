@@ -134,7 +134,7 @@ export function useInitiativeCommands({
       rootType: "initiative",
       approvalStatus: initiative.approvalStatus,
       proposedById: initiative.proposedById,
-    }, currentProfile, source === "seed");
+    }, currentProfile, false);
     if (!canWithdraw) {
       setSaveError("Nur Antragsteller, CEO oder Deputy können vorgeschlagene Initiativen zurückziehen.");
       return;

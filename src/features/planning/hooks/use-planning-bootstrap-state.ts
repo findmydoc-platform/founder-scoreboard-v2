@@ -2,7 +2,6 @@
 
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { useLocalPlanningState } from "@/features/planning/hooks/use-local-planning-state";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
 import { usePlanningHeaderData } from "@/features/planning/hooks/use-planning-header-data";
@@ -21,9 +20,8 @@ export type PlanningBootstrapStateOptions = {
   initialData: PlanningData;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
-  source: "seed" | "supabase";
+  source: "supabase";
   authRequired: boolean;
-  demoSeedImportAvailable?: boolean;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
@@ -46,7 +44,6 @@ export function usePlanningBootstrapState({
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
   const [baseHeaderData, setBaseHeaderData] = useState(safeInitialHeaderData);
-  const { localStateLoaded } = useLocalPlanningState({ source, setData });
   const { workspace, setWorkspace } = usePlanningWorkspace(initialWorkspace);
   const viewState = usePlanningViewState({
     initialData: safeInitialData,
@@ -96,12 +93,11 @@ export function usePlanningBootstrapState({
     protectedDataLoaded: auth.protectedDataLoaded,
     serverCurrentProfile: auth.serverCurrentProfile,
     setHeaderData: setBaseHeaderData,
-    source,
     workspace,
   });
   const canUseCeoIntake = requestContext.currentProfile?.platformRole === "ceo";
-  const canManageTaskMeta = source === "seed" || requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
-  const canManageFinalTaskStatus = source === "seed" || requestContext.currentProfile?.platformRole === "ceo";
+  const canManageTaskMeta = requestContext.currentProfile?.platformRole === "ceo" || requestContext.currentProfile?.platformRole === "deputy";
+  const canManageFinalTaskStatus = requestContext.currentProfile?.platformRole === "ceo";
   const canChangeTaskStatus = useCallback((task: Task) => (
     task.reviewStatus !== "requested"
     &&
@@ -135,7 +131,6 @@ export function usePlanningBootstrapState({
     headerData,
     githubSyncQueueOpen,
     isPending,
-    localStateLoaded,
     saveError,
     setData,
     setGithubSyncQueueOpen,

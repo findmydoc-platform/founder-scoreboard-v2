@@ -15,7 +15,6 @@ export function usePlanningAppController({
   initialWorkspace,
   source,
   authRequired,
-  demoSeedImportAvailable = false,
   initialAuthUser = null,
   initialCurrentProfile = null,
   initialProtectedDataLoaded = false,
@@ -28,7 +27,6 @@ export function usePlanningAppController({
     initialWorkspace,
     source,
     authRequired,
-    demoSeedImportAvailable,
     initialAuthUser,
     initialCurrentProfile,
     initialProtectedDataLoaded,
@@ -66,7 +64,6 @@ export function usePlanningAppController({
     initiativeDialogDefaults,
     milestoneDeleteTarget,
     milestoneDialogDefaults,
-    localStateLoaded,
     mobileNavOpen,
     protectedDataLoaded,
     refreshPlanningData,
@@ -148,13 +145,11 @@ export function usePlanningAppController({
     setInitiativeDialogDefaults,
     setMilestoneDialogDefaults,
     setTaskDialogDefaults,
-    source,
     setWorkspace,
     statusGuardTaskId,
     workspace,
   });
   const commandRegistry = usePlanningCommandRegistry({
-    apiClient,
     closeTaskPanel,
     commandContext,
     currentProfileId,
@@ -174,12 +169,10 @@ export function usePlanningAppController({
     setTaskDialogDefaults,
     setView,
     setWorkspace,
-    source,
     sprintPlanningOptions,
     workspace,
   });
-  const { boardState, demoSeedImport } = commandRegistry;
-  const { demoSeedImportPending, importDemoSeed } = demoSeedImport;
+  const { boardState } = commandRegistry;
 
   const releaseSidebarFocus = () => {
     const activeElement = document.activeElement;
@@ -204,8 +197,6 @@ export function usePlanningAppController({
     closeTaskPanel,
     currentProfile,
     data,
-    demoSeedImportAvailable: source === "seed" && demoSeedImportAvailable && data.tasks.length === 0,
-    demoSeedImportPending,
     devProfileId,
     devRoleSwitchAvailable,
     filters,
@@ -221,9 +212,7 @@ export function usePlanningAppController({
     initiativeDialogDefaults,
     milestoneDeleteTarget,
     milestoneDialogDefaults,
-    importDemoSeed,
     isPending,
-    localStateLoaded,
     metrics: derivedState.metrics,
     mobileNavOpen,
     openTaskPanel,

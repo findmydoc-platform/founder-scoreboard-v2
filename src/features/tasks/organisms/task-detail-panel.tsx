@@ -31,7 +31,7 @@ type Props = {
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
-  source: "seed" | "supabase";
+  source: "supabase";
   pending: boolean;
   error?: string;
   githubInstallationAvailable: boolean;

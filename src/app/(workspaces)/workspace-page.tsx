@@ -7,7 +7,6 @@ import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
-import { isDemoSeedImportButtonAvailable } from "@/lib/seed/demo-import";
 import { requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 
@@ -57,7 +56,6 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         initialWorkspace={initialWorkspace}
         source={source}
         authRequired
-        demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
         initialAuthUser={auth.user}
         initialCurrentProfile={auth.profile}
         initialProtectedDataLoaded
@@ -80,7 +78,6 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       initialWorkspace={initialWorkspace}
       source={source}
       authRequired={false}
-      demoSeedImportAvailable={source === "seed" && isDemoSeedImportButtonAvailable()}
       initialDecisionLogResult={initialDecisionLogResult}
     />
   );

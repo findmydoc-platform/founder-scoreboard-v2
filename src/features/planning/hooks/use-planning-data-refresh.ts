@@ -18,7 +18,7 @@ type UsePlanningDataRefreshOptions = {
   setData: Dispatch<SetStateAction<PlanningData>>;
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setProtectedDataLoaded: Dispatch<SetStateAction<boolean>>;
-  source: "seed" | "supabase";
+  source: "supabase";
   workspace: AppWorkspace;
 };
 

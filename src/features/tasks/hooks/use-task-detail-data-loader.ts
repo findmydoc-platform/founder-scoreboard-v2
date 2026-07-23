@@ -10,7 +10,7 @@ type UseTaskDetailDataLoaderOptions = {
   apiClient: BrowserApiClient;
   applyPlanningDataUpdate: (updater: (current: PlanningData) => PlanningData) => void;
   selectedTask: Task | null;
-  source: "seed" | "supabase";
+  source: "supabase";
   startTransition: TransitionStartFunction;
 };
 

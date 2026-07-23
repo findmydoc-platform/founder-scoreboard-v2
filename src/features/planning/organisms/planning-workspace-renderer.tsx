@@ -9,6 +9,7 @@ import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageMilestones } from "@/features/projects/model/milestone-policy";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -27,7 +28,7 @@ const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overvi
 
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
-  source: "seed" | "supabase";
+  source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
 };
 
@@ -94,8 +95,8 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole, source);
-  const canManageNotificationsOutbox = source === "seed" || !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
+  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole);
+  const canManageNotificationsOutbox = !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
@@ -108,11 +109,11 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
       )}
       {workspace === "ceo-intake" && canUseCeoIntake && (
         <CeoTaskIntake
-          source={source}
           profiles={data.profiles}
           packages={data.packages}
           sprints={data.sprints}
           apiClient={apiClient}
+          source={source}
           onTasksCreated={(tasks) => {
             setData((current) => ({
               ...current,
@@ -134,7 +135,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           data={data}
           tasks={data.tasks}
           currentProfile={currentProfile}
-          source={source}
           canManageInitiatives={canManageTaskMeta}
           canManageMilestones={canManageProjectMilestones}
           pending={isPending}
@@ -214,7 +214,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           data={data}
           tasks={data.tasks}
           pending={isPending}
-          canManageTeam={source === "seed" || currentProfile?.platformRole === "ceo"}
+          canManageTeam={currentProfile?.platformRole === "ceo"}
           onSaveProfileSettings={saveProfileSettings}
         />
       )}
@@ -284,7 +284,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
         waitingGitHubCommentCount={waitingGitHubCommentCount}
         githubReauthFailed={githubReauthFailed}
         authBusy={authBusy}
-        localMode={source === "seed"}
+        localMode={isLocalLoginSimulationEnabled()}
         notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}

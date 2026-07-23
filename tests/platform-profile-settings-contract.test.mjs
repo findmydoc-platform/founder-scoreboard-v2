@@ -241,21 +241,29 @@ test("CEO configures the global review and objection window from the settings pa
   assert.match(migration, /revoke all on function public\.update_founderops_review_window_transaction[^]*from public/);
 });
 
-test("CEO and active Deputies configure a live-validated global GitHub Project", async () => {
+test("only the CEO configures the live-validated global GitHub Project outside local simulation", async () => {
   const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
   const githubProjectUi = await readFile("src/features/profile/molecules/profile-github-project-settings-section.tsx", "utf8");
   const settingsRoute = await readFile("src/app/api/founderops-settings/github-project/route.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
+  const ceoOnlyMigration = await readFile(
+    "supabase/migrations/20260723102323_restrict_founderops_github_project_settings_to_ceo.sql",
+    "utf8",
+  );
 
-  assert.match(profileUi, /canManageFounderOpsGitHubProject/);
-  assert.match(profileUi, /currentProfile\.platformRole === "ceo" \? \(/);
+  assert.match(profileUi, /canConfigureFounderOpsGitHubProject/);
+  assert.match(profileUi, /githubProjectDisabledReason = isLocalLoginSimulationEnabled\(\)/);
+  assert.match(profileUi, /activeSection === "process" && currentProfile\.platformRole === "ceo"/);
+  assert.match(githubProjectUi, /disabledReason/);
+  assert.match(githubProjectUi, /CEO · Global/);
   assert.match(githubProjectUi, /GitHub-Organisation/);
   assert.match(githubProjectUi, /Project-Nummer/);
   assert.match(githubProjectUi, /Prüfen und speichern/);
   assert.match(githubProjectUi, /founderops-github-project-settings/);
-  assert.match(settingsRoute, /requireOperationalLead/);
+  assert.match(settingsRoute, /requireCEO/);
+  assert.match(settingsRoute, /isLocalLoginRequestAllowed/);
   assert.match(settingsRoute, /validateFounderOpsGitHubProject/);
   assert.match(settingsRoute, /update_founderops_github_project_transaction/);
   assert.match(syncRoute, /loadGitHubProjectSettings/);
@@ -264,8 +272,8 @@ test("CEO and active Deputies configure a live-validated global GitHub Project",
   assert.match(migration, /github_project_owner text not null default 'findmydoc-platform'/);
   assert.match(migration, /github_project_number integer not null default 21/);
   assert.match(migration, /founderops\.github_project\.update/);
-  assert.match(migration, /Europe\/Berlin/);
-  assert.match(migration, /only CEO or an active deputy may update the FounderOps GitHub Project/);
+  assert.match(ceoOnlyMigration, /v_actor\.platform_role <> 'ceo'/);
+  assert.match(ceoOnlyMigration, /only CEO may update the FounderOps GitHub Project/);
   assert.match(migration, /revoke all on function public\.update_founderops_github_project_transaction[^]*from public/);
 });
 

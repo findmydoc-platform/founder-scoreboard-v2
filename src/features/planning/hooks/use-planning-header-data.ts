@@ -27,7 +27,6 @@ type UsePlanningHeaderDataOptions = {
   protectedDataLoaded: boolean;
   serverCurrentProfile: AuthenticatedProfile | null;
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
-  source: "seed" | "supabase";
   workspace: AppWorkspace;
 };
 
@@ -41,7 +40,6 @@ export function usePlanningHeaderData({
   protectedDataLoaded,
   serverCurrentProfile,
   setHeaderData,
-  source,
   workspace,
 }: UsePlanningHeaderDataOptions) {
   const [loadingSlots, setLoadingSlots] = useState<PlanningHeaderSlotKey[]>([]);
@@ -50,11 +48,11 @@ export function usePlanningHeaderData({
     () => projectPlanningHeaderData(data, baseHeaderData, {
       currentProfileId,
       platformRole: serverCurrentProfile?.platformRole || null,
-      fmdToolsLoaded: source === "seed" || workspace === "tools",
-      eventsLoaded: source === "seed" || workspace === "events",
-      notificationEventsLoaded: source === "seed" || workspace === "notifications",
+      fmdToolsLoaded: workspace === "tools",
+      eventsLoaded: workspace === "events",
+      notificationEventsLoaded: workspace === "notifications",
     }),
-    [baseHeaderData, currentProfileId, data, serverCurrentProfile?.platformRole, source, workspace],
+    [baseHeaderData, currentProfileId, data, serverCurrentProfile?.platformRole, workspace],
   );
 
   const headerData = useMemo(
@@ -65,7 +63,6 @@ export function usePlanningHeaderData({
   const idleSlotKey = idleSlots.join(",");
 
   useEffect(() => {
-    if (source !== "supabase") return;
     if (!authUser?.id) return;
     if (authRequired && !protectedDataLoaded) return;
     if (!idleSlotKey) return;
@@ -120,7 +117,7 @@ export function usePlanningHeaderData({
       if (inFlightKeyRef.current === idleSlotKey) inFlightKeyRef.current = "";
       setLoadingSlots([]);
     };
-  }, [apiClient, authRequired, authUser, data, idleSlotKey, protectedDataLoaded, serverCurrentProfile, setHeaderData, source]);
+  }, [apiClient, authRequired, authUser, data, idleSlotKey, protectedDataLoaded, serverCurrentProfile, setHeaderData]);
 
   return headerData;
 }

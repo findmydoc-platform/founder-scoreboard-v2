@@ -23,7 +23,6 @@ type UsePlanningHeaderActionsOptions = {
   setInitiativeDialogDefaults: (defaults: Partial<InitiativeDraft> | null) => void;
   setMilestoneDialogDefaults: (defaults: Partial<MilestoneDraft> | null) => void;
   setTaskDialogDefaults: (defaults: Partial<NewTaskDraft> | null) => void;
-  source: "seed" | "supabase";
   workspace: AppWorkspace;
 };
 
@@ -34,7 +33,6 @@ export function usePlanningHeaderActions({
   setInitiativeDialogDefaults,
   setMilestoneDialogDefaults,
   setTaskDialogDefaults,
-  source,
   workspace,
 }: UsePlanningHeaderActionsOptions): HeaderAction[] {
   if (workspace === "planning") {
@@ -60,7 +58,7 @@ export function usePlanningHeaderActions({
     }];
   }
 
-  if (workspace === "projects" && canManageMilestones(currentProfile?.platformRole, source)) {
+  if (workspace === "projects" && canManageMilestones(currentProfile?.platformRole)) {
     const initiativeDisabled = data.milestones.length === 0;
     return [
       {

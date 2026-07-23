@@ -14,7 +14,7 @@ import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 type PlanningAppShellProps = {
   authRequired: boolean;
   controller: PlanningAppController;
-  source: "seed" | "supabase";
+  source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
 };
 
@@ -29,7 +29,6 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
     data,
     filters,
     filtersAvailable,
-    localStateLoaded,
     mobileNavOpen,
     protectedDataLoaded,
     releaseSidebarFocus,
@@ -48,7 +47,6 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
       <PlanningBootShell
         workspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail=""
         title="Zugriff wird geprüft"
@@ -66,7 +64,6 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
       <PlanningBootShell
         workspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser.email || ""}
         title={authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}
@@ -87,7 +84,6 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
         onMouseLeave={releaseSidebarFocus}
         activeWorkspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser?.email || ""}
         currentPlatformRole={currentProfile?.platformRole || ""}

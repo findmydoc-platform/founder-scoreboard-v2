@@ -4,7 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Profile, Task } from "@/lib/types";
 
-export type PlanningSource = "seed" | "supabase";
+export type PlanningSource = "supabase";
 export type PlanningDataUpdater = (updater: (current: PlanningData) => PlanningData) => void;
 export type PlanningStartTransition = (callback: () => void) => void;
 

@@ -527,7 +527,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.doesNotMatch(githubQueue, /Verbindung verwalten/);
   assert.match(planningHeader, /projectGitHubSyncQueue\(data\.tasks, data\.taskComments\)/);
   assert.doesNotMatch(planningHeader, /showGitHubSyncTrigger/);
-  assert.match(planningHeader, /localMode=\{source === "seed"\}/);
+  assert.match(planningHeader, /localMode=\{isLocalLoginSimulationEnabled\(\)\}/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
   assert.doesNotMatch(detailGitHubActions, /GitHub-Verbindung .*erneuern/);

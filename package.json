@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.13.1",
   "scripts": {
     "dev": "next dev",
+    "dev:local": "node scripts/local-development.mjs dev",
     "test": "node --test tests/*.test.mjs",
     "build": "next build",
     "start": "next start",
@@ -35,7 +36,12 @@
     "verify:deploy": "pnpm run verify:migrations && pnpm test && pnpm run verify:product-updates && pnpm run verify:vercel-ready && pnpm run verify:google-chat && pnpm run lint",
     "vercel:build": "pnpm run verify:deploy && pnpm run build",
     "db:migration:new": "supabase migration new",
-    "db:reset": "supabase db reset --local --no-seed",
+    "db:reset": "node scripts/local-development.mjs reset",
+    "local:start": "node scripts/local-development.mjs start",
+    "local:reset": "node scripts/local-development.mjs reset",
+    "local:seed": "node scripts/local-development.mjs seed",
+    "local:stop": "node scripts/local-development.mjs stop",
+    "test:integration:local": "node scripts/verify-local-integration.mjs",
     "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs"
   },
   "dependencies": {

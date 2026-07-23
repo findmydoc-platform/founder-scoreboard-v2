@@ -35,7 +35,7 @@ type BacklogOverviewProps = {
   onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
-  source: "seed" | "supabase";
+  source: "supabase";
 };
 
 export function BacklogOverview({

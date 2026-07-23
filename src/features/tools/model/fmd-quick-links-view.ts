@@ -12,8 +12,8 @@ export const categoryTabs: Array<{ value: FmdQuickLinkCategoryFilter; label: str
   ...fmdToolCategoryOptions,
 ];
 
-export function canEditFmdQuickLinks(source: "seed" | "supabase", currentProfile: Profile | null) {
-  return source === "seed" || Boolean(currentProfile);
+export function canEditFmdQuickLinks(_source: "supabase", currentProfile: Profile | null) {
+  return Boolean(currentProfile);
 }
 
 export function categoryCountsForLinks(tools: FmdTool[]) {

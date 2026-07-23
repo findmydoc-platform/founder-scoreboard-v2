@@ -17,7 +17,7 @@ export function useTaskRelationships({
   task: Task;
   initialRelations: TaskRelation[];
   apiClient: BrowserApiClient;
-  source: "seed" | "supabase";
+  source: "supabase";
   startTransition: TransitionStartFunction;
   setError: (message: string) => void;
 }) {

@@ -23,7 +23,7 @@ type FeatureTourProviderProps = {
   selectedTaskId: string | null;
   setData: Dispatch<SetStateAction<PlanningData>>;
   setWorkspace: (workspace: AppWorkspace) => void;
-  source: "seed" | "supabase";
+  source: "supabase";
   workspace: AppWorkspace;
 };
 
