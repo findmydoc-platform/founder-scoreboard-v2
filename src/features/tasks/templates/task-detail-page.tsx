@@ -14,13 +14,14 @@ import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discar
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 
 type Props = {
   taskId: string;
   initialData: PlanningData;
   headerData: PlanningHeaderData;
-  source: "seed" | "supabase";
+  source: "supabase";
   authRequired?: boolean;
   initialAuthUser?: User | null;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -48,7 +49,7 @@ export function TaskDetailPage({
     authRequired,
     initialAuthUser,
     initialCurrentProfile,
-    initialProtectedDataLoaded: source === "seed" || Boolean(initialAuthUser),
+    initialProtectedDataLoaded: Boolean(initialAuthUser),
   });
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
 
@@ -85,7 +86,7 @@ export function TaskDetailPage({
             count={githubSyncQueue.count}
             failedCount={githubSyncQueue.failedCount}
             installationAvailable={controller.githubInstallationAvailable}
-            localMode={source === "seed"}
+            localMode={isLocalLoginSimulationEnabled()}
             connectionState={controller.githubConnectionState}
             open={controller.githubSyncQueueOpen}
             onOpen={() => controller.setGithubSyncQueueOpen(true)}
@@ -111,7 +112,6 @@ export function TaskDetailPage({
           allTasks={controller.data.tasks}
           relations={selectedRelations}
           currentProfile={controller.currentProfile}
-          source={source}
           pending={controller.isPending}
           error={controller.saveError}
           detailDataError={initialDetailDataError}
@@ -151,7 +151,7 @@ export function TaskDetailPage({
         waitingGitHubCommentCount={controller.waitingGitHubCommentCount}
         githubReauthFailed={controller.githubReauthFailed}
         authBusy={controller.authBusy}
-        localMode={source === "seed"}
+        localMode={isLocalLoginSimulationEnabled()}
         notice={controller.githubSyncNotice}
         onClose={() => controller.setGithubSyncQueueOpen(false)}
         onOpenTask={controller.openTaskPanel}

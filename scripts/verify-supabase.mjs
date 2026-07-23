@@ -139,6 +139,32 @@ async function verifyFounderOpsReviewWindowRpc() {
   };
 }
 
+async function verifyFounderOpsGitHubProjectRpc() {
+  const missingProfileId = `verify-missing-operational-lead-${Date.now()}`;
+  const params = {
+    p_project_id: "findmydoc-founder-execution",
+    p_expected_owner: "findmydoc-platform",
+    p_expected_number: 21,
+    p_github_project_owner: "findmydoc-platform",
+    p_github_project_number: 21,
+    p_actor_profile_id: missingProfileId,
+    p_request_ip: null,
+    p_user_agent: null,
+  };
+  const [{ error }, { error: anonError }] = await Promise.all([
+    supabase.rpc("update_founderops_github_project_transaction", params),
+    anonSupabase.rpc("update_founderops_github_project_transaction", params),
+  ]);
+  return {
+    ok: error?.code === "P0005" && Boolean(anonError),
+    error: error?.code !== "P0005"
+      ? error?.message || "FounderOps GitHub Project RPC unexpectedly accepted a missing operational lead"
+      : !anonError
+        ? "FounderOps GitHub Project RPC unexpectedly allowed anonymous execution"
+        : "",
+  };
+}
+
 async function verifyTaskUpdateRpc() {
   const { error } = await supabase.rpc("update_task_transaction", {
     p_task_id: `verify-missing-task-${Date.now()}`,
@@ -700,7 +726,7 @@ async function verifyPlanningTrashPurgeRpc() {
 
 const { data: project, error: projectError } = await supabase
   .from("projects")
-  .select("id,name,range_label,review_objection_window_hours")
+  .select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number")
   .eq("id", "findmydoc-founder-execution")
   .single();
 
@@ -710,6 +736,8 @@ const result = {
   project: project.name,
   range: project.range_label,
   reviewObjectionWindowHours: project.review_objection_window_hours,
+  githubProjectOwner: project.github_project_owner,
+  githubProjectNumber: project.github_project_number,
   profiles: await count("profiles"),
   githubAppConnections: await count("github_app_user_tokens"),
   packages: await count("packages"),
@@ -746,6 +774,7 @@ const result = {
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
   profileWriteRpcs: await verifyProfileWriteRpcs(),
   founderOpsReviewWindowRpc: await verifyFounderOpsReviewWindowRpc(),
+  founderOpsGitHubProjectRpc: await verifyFounderOpsGitHubProjectRpc(),
   taskUpdateRpc: await verifyTaskUpdateRpc(),
   taskDeletionRpcs: await verifyTaskDeletionRpcs(),
   taskCreationAndGitHubSyncRpcs: await verifyTaskCreationAndGitHubSyncRpcs(),
@@ -782,6 +811,11 @@ if (missingProfileWriteRpc) {
 
 if (!result.founderOpsReviewWindowRpc.ok) {
   console.error(`FounderOps review-window RPC check failed: ${result.founderOpsReviewWindowRpc.error}`);
+  process.exit(1);
+}
+
+if (!result.founderOpsGitHubProjectRpc.ok) {
+  console.error(`FounderOps GitHub Project RPC check failed: ${result.founderOpsGitHubProjectRpc.error}`);
   process.exit(1);
 }
 

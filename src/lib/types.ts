@@ -41,6 +41,8 @@ export type Project = {
   name: string;
   range: string;
   reviewObjectionWindowHours: number;
+  githubProjectOwner: string;
+  githubProjectNumber: number;
 };
 
 export type Package = {
@@ -291,7 +293,11 @@ export type TaskRelation = {
 export type TaskActivity = {
   id: number;
   taskId: string;
+  action: string;
+  actorProfileId: string;
   message: string;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
   createdAt: string;
 };
 
@@ -526,7 +532,7 @@ export type PlanningData = {
 export type PlanningDataResponse = {
   data: PlanningData;
   headerData: PlanningHeaderData;
-  source: "seed" | "supabase";
+  source: "supabase";
   availability: "ready" | "unavailable";
   currentProfile: AuthenticatedProfile | null;
 };

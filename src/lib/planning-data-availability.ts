@@ -1,5 +1,3 @@
-type RuntimeEnvironment = Record<string, string | undefined>;
-
 export const planningDataUnavailableMessage = "Planungsdaten sind vorübergehend nicht verfügbar. Bitte versuche es erneut.";
 
 export class PlanningDataUnavailableError extends Error {
@@ -7,15 +5,6 @@ export class PlanningDataUnavailableError extends Error {
     super(planningDataUnavailableMessage);
     this.name = "PlanningDataUnavailableError";
   }
-}
-
-export function allowsLocalPlanningFallback(environment: RuntimeEnvironment = process.env) {
-  return (
-    environment.NODE_ENV === "development"
-    && environment.CI !== "true"
-    && !environment.VERCEL
-    && !environment.VERCEL_ENV
-  );
 }
 
 export function isPlanningDataUnavailableError(error: unknown): error is PlanningDataUnavailableError {

@@ -12,7 +12,6 @@ export function PlanningDataUnavailablePage({ workspace, authUserEmail = "" }: P
     <PlanningBootShell
       workspace={workspace}
       source="supabase"
-      localStateLoaded
       authAvailable
       authUserEmail={authUserEmail}
       title="Planungsdaten nicht verfügbar"

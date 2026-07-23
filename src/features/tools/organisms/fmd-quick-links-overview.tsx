@@ -34,7 +34,7 @@ import { FilterToolbar, FilterSegmentedControl, type ActiveFilter } from "@/shar
 
 type FmdQuickLinksOverviewProps = {
   tools?: FmdTool[];
-  source: "seed" | "supabase";
+  source: "supabase";
   currentProfile: Profile | null;
   pending?: boolean;
   message?: string;
@@ -68,7 +68,7 @@ export function FmdQuickLinksOverview({
     () => (showMissingLinks ? sortedTools : sortedTools.filter(hasFmdToolLink)),
     [showMissingLinks, sortedTools],
   );
-  const createAllowed = source === "seed" || Boolean(currentProfile);
+  const createAllowed = Boolean(currentProfile);
   const canEditLinks = canEditFmdQuickLinks(source, currentProfile);
   const editingTool = editingToolId ? sortedTools.find((tool) => tool.id === editingToolId) || null : null;
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase("de");

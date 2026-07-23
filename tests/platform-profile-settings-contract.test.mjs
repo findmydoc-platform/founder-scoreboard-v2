@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 test("profile workspace is hidden from sidebar but reachable from account menu", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const workspaceHook = await readFile("src/features/planning/hooks/use-planning-workspace.ts", "utf8");
   const authControl = await readFile("src/features/settings/organisms/auth-control.tsx", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
@@ -13,18 +14,19 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
   const profileModel = await readFile("src/features/profile/model/profile-settings-view-model.ts", "utf8");
   const profileRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
-  assert.match(routes, /AppWorkspace = .*"profile"/);
+  assert.match(workspacePreferences, /appWorkspaceIds = \[/);
+  assert.match(workspacePreferences, /"profile"/);
   assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
   assert.match(routes, /href: "\/profile"/);
   assert.match(routes, /id: "profile".*hidden: true/s);
   assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
-  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.match(routes, /rootWorkspaceFromPreference/);
   assert.doesNotMatch(profileSync, /setWorkspace|workspaceFromPathname|appWorkspaceFromValue/);
   assert.match(profileModel, /appWorkspaceFromValue\(value\) \|\| "planning"/);
-  assert.match(routes, /value === "settings"\) return "notifications"/);
-  assert.match(profileRoute, /value === "settings"\) return "notifications"/);
+  assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
+  assert.match(profileRoute, /rootWorkspaceFromPreference/);
   assert.doesNotMatch(profileRoute, /"execution",/);
   assert.match(authControl, /Mein Profil/);
   assert.match(authControl, /data-tour-id="account-menu-trigger"/);
@@ -113,8 +115,7 @@ test("URL filters hydrate without silently changing saved profile defaults", asy
 
   assert.match(profileSync, /if \(!hasPlanningFilterUrlState\)/);
   assert.doesNotMatch(profileSync, /updateProfileUiPreferenceRequest|saveProfileUiPreference|planningFilters:/);
-  assert.match(profileBoard, /onCurrentBoardSave/);
-  assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
+  assert.doesNotMatch(profileBoard, /onCurrentBoardSave|Aktuelle Ansicht|Aktuelle Board-Ansicht/);
 });
 
 test("driver tour waits for rendered targets and acknowledges only after popover render", async () => {
@@ -147,9 +148,7 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(selection, /profileHasSeenTour/);
   assert.match(selection, /selectNextFeatureTour/);
   assert.match(selection, /tours\.find/);
-  assert.match(header, /HelpCircle/);
-  assert.match(header, /fmd:start-feature-tour/);
-  assert.match(header, /Hilfe anzeigen/);
+  assert.match(header, /PlanningHelpMenu/);
   assert.match(provider, /window\.addEventListener\("fmd:start-feature-tour"/);
   assert.match(provider, /tourRequested/);
   assert.match(provider, /if \(!tourRequested \|\| !tour/);
@@ -188,7 +187,12 @@ test("profile settings use slim section navigation and dirty-only save UX", asyn
   assert.match(profileUi, /useState<ProfileSettingsSectionId>\("profile"\)/);
   assert.match(profileUi, /useState\(false\)/);
   assert.match(profileBoard, /data-profile-advanced-board-defaults=\{advancedBoardOpen \? "open" : "closed"\}/);
-  assert.match(profileBoard, /Aktuelle Board-Ansicht als Standard speichern/);
+  assert.match(profileBoard, /Standardansicht für Planung/);
+  assert.match(profileBoard, /aria-label="Startbereich"/);
+  assert.match(profileBoard, /aria-label="Standardansicht für Planung"/);
+  assert.match(profileUi, /workspaceRoutes/);
+  assert.match(profileUi, /viewTabs\.map/);
+  assert.doesNotMatch(profileUi, /saveCurrentBoardDefaults|onCurrentBoardSave/);
   assert.match(profileUi, /\(isDirty \|\| \(activeSection !== "process" && message\)\) &&/);
   assert.match(profileUi, /data-profile-save-bar/);
   assert.match(profileUi, /Ungespeicherte Änderungen/);
@@ -235,6 +239,42 @@ test("CEO configures the global review and objection window from the settings pa
   assert.match(migration, /grant update \(id, name, range_label\) on table public\.projects to authenticated/);
   assert.match(migration, /revoke insert, update on table public\.sprints from authenticated/);
   assert.match(migration, /revoke all on function public\.update_founderops_review_window_transaction[^]*from public/);
+});
+
+test("only the CEO configures the live-validated global GitHub Project outside local simulation", async () => {
+  const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
+  const githubProjectUi = await readFile("src/features/profile/molecules/profile-github-project-settings-section.tsx", "utf8");
+  const settingsRoute = await readFile("src/app/api/founderops-settings/github-project/route.ts", "utf8");
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const migration = await readSupabaseSchemaContract();
+  const ceoOnlyMigration = await readFile(
+    "supabase/migrations/20260723102323_restrict_founderops_github_project_settings_to_ceo.sql",
+    "utf8",
+  );
+
+  assert.match(profileUi, /canConfigureFounderOpsGitHubProject/);
+  assert.match(profileUi, /githubProjectDisabledReason = isLocalLoginSimulationEnabled\(\)/);
+  assert.match(profileUi, /activeSection === "process" && currentProfile\.platformRole === "ceo"/);
+  assert.match(githubProjectUi, /disabledReason/);
+  assert.match(githubProjectUi, /CEO · Global/);
+  assert.match(githubProjectUi, /GitHub-Organisation/);
+  assert.match(githubProjectUi, /Project-Nummer/);
+  assert.match(githubProjectUi, /Prüfen und speichern/);
+  assert.match(githubProjectUi, /founderops-github-project-settings/);
+  assert.match(settingsRoute, /requireCEO/);
+  assert.match(settingsRoute, /isLocalLoginRequestAllowed/);
+  assert.match(settingsRoute, /validateFounderOpsGitHubProject/);
+  assert.match(settingsRoute, /update_founderops_github_project_transaction/);
+  assert.match(syncRoute, /loadGitHubProjectSettings/);
+  assert.match(syncRoute, /ensureFounderOpsGitHubProjectItem/);
+  assert.match(loader, /github_project_owner,github_project_number/);
+  assert.match(migration, /github_project_owner text not null default 'findmydoc-platform'/);
+  assert.match(migration, /github_project_number integer not null default 21/);
+  assert.match(migration, /founderops\.github_project\.update/);
+  assert.match(ceoOnlyMigration, /v_actor\.platform_role <> 'ceo'/);
+  assert.match(ceoOnlyMigration, /only CEO may update the FounderOps GitHub Project/);
+  assert.match(migration, /revoke all on function public\.update_founderops_github_project_transaction[^]*from public/);
 });
 
 test("team overview no longer edits personal self-service settings", async () => {

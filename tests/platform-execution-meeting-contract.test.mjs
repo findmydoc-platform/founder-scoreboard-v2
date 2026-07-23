@@ -153,6 +153,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const migration = await readSupabaseSchemaContract();
   const ui = await readPlanningSurface();
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -177,7 +178,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(migration, /create table if not exists task_focus_items/);
   assert.match(migration, /unique \(profile_id, task_id, focus_date\)/);
   assert.doesNotMatch(routes, /label: "Execution"|id: "execution"|href: "\/execution"/);
-  assert.match(routes, /value === "mine" \|\| value === "execution"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution"/);
   assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.doesNotMatch(ui, /ExecutionLayerOverview|Heute-Fokus|Hygiene Alerts|Fokus-Kontext|buildHygieneAlerts/);
   assert.match(routes, /rootWorkspaceFromPreference/);
@@ -220,8 +221,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.match(focusRoute, /task_focus_items/);
   assert.match(focusRoute, /Heute-Fokus ist auf drei Aufgaben begrenzt/);
   assert.match(focusRoute, /export async function DELETE/);
-  assert.match(focusRoute, /Fokus entfernt/);
-  assert.match(focusRoute, /Fokus aktualisiert/);
+  assert.doesNotMatch(focusRoute, /task_activity|Fokus entfernt|Fokus aktualisiert/);
   assert.match(verify, /planning-schema-checks\.json/);
   assert.doesNotMatch(health, /planning-schema-checks\.json/);
   assert.match(schemaChecks, /task_focus_items/);
@@ -315,17 +315,25 @@ test("weekly meeting attendance has scoring, absence reasons and updates", async
   assert.match(types, /MeetingAttendanceStatus/);
 });
 
-test("meeting finder, calendar sync and decision log surfaces are removed while deployed legacy storage remains", async () => {
+test("legacy decision storage stays removed while the productive Notion projection is isolated", async () => {
   const ui = await readPlanningSurface();
   const sidebar = await readFile("src/features/planning/organisms/app-sidebar.tsx", "utf8");
+  const workspaceRoutes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const notionLoader = await readFile("src/lib/notion-decision-log.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const schema = await readSupabaseSchemaContract();
   const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
-  assert.doesNotMatch(ui, /MeetingFinderOverview|DecisionLogOverview/);
-  assert.doesNotMatch(sidebar, /Meeting Finder|Decision Log/);
+  assert.doesNotMatch(ui, /MeetingFinderOverview/);
+  assert.match(ui, /DecisionLogOverview/);
+  assert.doesNotMatch(sidebar, /Meeting Finder/);
+  assert.match(workspaceRoutes, /label: "Decision Log"/);
+  assert.match(workspaceRoutes, /href: "\/decision-log"/);
+  assert.doesNotMatch(sidebar, /process\.env\.NODE_ENV === "development"/);
+  assert.match(notionLoader, /import "server-only"/);
+  assert.match(notionLoader, /NOTION_DECISION_LOG_TOKEN/);
   assert.doesNotMatch(planningApiClient, /createMeetingRequest|availabilityRequest|syncGoogleCalendarRequest|createDecisionRequest/);
   assert.match(verify, /planning-schema-checks\.json/);
   assert.doesNotMatch(schemaChecks, /availability\.calendar_sync|meetings\.google_calendar_sync|profiles\.google_calendar|decision_task_links/);

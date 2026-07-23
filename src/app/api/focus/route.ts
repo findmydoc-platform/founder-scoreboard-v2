@@ -84,11 +84,6 @@ export async function POST(request: NextRequest) {
 
   if (error || !data) return apiError(error?.message || "Fokus konnte nicht gespeichert werden.", 500);
 
-  await supabase.from("task_activity").insert({
-    task_id: taskId,
-    message: status === "done" ? "Fokus erledigt" : status === "needs_decision" ? "Fokus braucht Entscheidung" : "Fokus aktualisiert",
-  });
-
   return NextResponse.json({ ok: true, focusItem: mapFocusItem(data) });
 }
 
@@ -114,11 +109,6 @@ export async function DELETE(request: NextRequest) {
 
   const { error } = await supabase.from("task_focus_items").delete().eq("id", id);
   if (error) return apiError(error.message, 500);
-
-  await supabase.from("task_activity").insert({
-    task_id: focusItem.task_id,
-    message: "Fokus entfernt",
-  });
 
   return NextResponse.json({ ok: true });
 }

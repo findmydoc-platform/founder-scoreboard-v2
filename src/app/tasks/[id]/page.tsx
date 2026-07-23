@@ -3,7 +3,6 @@ import type { User } from "@supabase/supabase-js";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
-import { SeedTaskDetailPage } from "@/features/tasks/templates/seed-task-detail-page";
 import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
 import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
 import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
@@ -51,7 +50,6 @@ export default async function TaskPage({ params }: Props) {
   }
   const task = data.tasks.find((item) => item.id === id);
 
-  if (!task && source === "seed") return <SeedTaskDetailPage taskId={id} />;
   if (!task) {
     if (!supabase) notFound();
     const trashDetailResult = await loadPlanningTrashTaskDetail(supabase, id, data.profiles);

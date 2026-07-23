@@ -7,6 +7,7 @@ export const FOUNDEROPS_PLANNING_PROJECT_ID = "findmydoc-founder-execution";
 export const TEAM_PLANNING_ITEM_TYPES = ["milestone", "initiative", "deliverable", "sub_issue"] as const;
 export const TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES = ["deliverable", "sub_issue"] as const;
 export const TEAM_PLANNING_MILESTONE_STATUSES = ["planned", "active", "done"] as const;
+export const TEAM_PLANNING_TASK_STATUSES = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] as const;
 export const TEAM_PLANNING_ITEM_SCOPES = [
   "read:planning-context",
   "write:planning-items:create",

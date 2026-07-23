@@ -7,8 +7,7 @@ import { UiPanel } from "@/shared/atoms/ui-primitives";
 
 type PlanningBootShellProps = {
   workspace: AppWorkspace;
-  source: "seed" | "supabase";
-  localStateLoaded: boolean;
+  source: "supabase";
   authAvailable: boolean;
   authUserEmail: string;
   title: string;
@@ -24,7 +23,6 @@ type PlanningBootShellProps = {
 export function PlanningBootShell({
   workspace,
   source,
-  localStateLoaded,
   authAvailable,
   authUserEmail,
   title,
@@ -41,7 +39,6 @@ export function PlanningBootShell({
       <AppSidebar
         activeWorkspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUserEmail}
       />

@@ -3,7 +3,9 @@
     "id": "findmydoc-founder-execution",
     "name": "findmydoc Planning",
     "range": "Sprint 1 / operative Planungsphase",
-    "reviewObjectionWindowHours": 48
+    "reviewObjectionWindowHours": 48,
+    "githubProjectOwner": "findmydoc-platform",
+    "githubProjectNumber": 21
   },
   "profiles": [
     {
@@ -60,6 +62,29 @@
       "focus": "Outreach-Kampagnen, Content, Social, Landingpages",
       "weeklyCapacity": 6,
       "color": "#ec4899"
+    },
+    {
+      "id": "local-deputy",
+      "name": "Local Deputy",
+      "role": "member",
+      "platformRole": "deputy",
+      "orgRole": "Deputy",
+      "githubLogin": "",
+      "deputyFor": "volkan",
+      "focus": "Lokale Rollensimulation für operative Leitung",
+      "weeklyCapacity": 6,
+      "color": "#0f766e"
+    },
+    {
+      "id": "local-viewer",
+      "name": "Local Viewer",
+      "role": "viewer",
+      "platformRole": "viewer",
+      "orgRole": "Viewer",
+      "githubLogin": "",
+      "focus": "Lokale Rollensimulation für Lesezugriff",
+      "weeklyCapacity": 0,
+      "color": "#64748b"
     }
   ],
   "packages": [

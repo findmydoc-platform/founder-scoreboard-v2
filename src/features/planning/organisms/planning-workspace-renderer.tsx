@@ -8,6 +8,8 @@ import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspac
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageMilestones } from "@/features/projects/model/milestone-policy";
+import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -19,16 +21,18 @@ const EventsOverview = dynamic(() => import("@/features/events/organisms/events-
 const ProjectsOverview = dynamic(() => import("@/features/projects/organisms/projects-overview").then((mod) => mod.ProjectsOverview), { loading: GenericWorkspacePanelLoading });
 const ProfileSettingsOverview = dynamic(() => import("@/features/profile/organisms/profile-settings-overview").then((mod) => mod.ProfileSettingsOverview), { loading: GenericWorkspacePanelLoading });
 const NotificationsOverview = dynamic(() => import("@/features/notifications/organisms/notifications-overview").then((mod) => mod.NotificationsOverview), { loading: GenericWorkspacePanelLoading });
+const DecisionLogOverview = dynamic(() => import("@/features/decision-log/organisms/decision-log-overview").then((mod) => mod.DecisionLogOverview), { loading: GenericWorkspacePanelLoading });
 const SprintScoreTableOverview = dynamic(() => import("@/features/sprint/organisms/sprint-score-overview").then((mod) => mod.SprintScoreTableOverview), { loading: GenericWorkspacePanelLoading });
 const FmdQuickLinksOverview = dynamic(() => import("@/features/tools/organisms/fmd-quick-links-overview").then((mod) => mod.FmdQuickLinksOverview), { loading: GenericWorkspacePanelLoading });
 const TeamOverview = dynamic(() => import("@/features/team/organisms/team-overview").then((mod) => mod.TeamOverview), { loading: GenericWorkspacePanelLoading });
 
 type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
-  source: "seed" | "supabase";
+  source: "supabase";
+  decisionLogResult?: NotionDecisionLogResult;
 };
 
-export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult }: PlanningWorkspaceRendererProps) {
   const {
     authBusy,
     canManageTaskMeta,
@@ -42,8 +46,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     dismissNotification,
     dispatchNotifications,
     eventMessage,
-    expandedPackages,
-    filters,
     fmdToolMessage,
     fmdToolPending,
     googleChatStatus,
@@ -64,6 +66,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     reviewScoreObjection,
     saveProfileSettings,
     saveOwnProfileSettings,
+    saveFounderOpsGitHubProject,
     saveFounderOpsReviewWindow,
     sendGoogleChatTest,
     setData,
@@ -89,22 +92,28 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
     updateTask,
     waitingGitHubCommentCount,
     withdrawInitiative,
-    view,
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole, source);
-  const canManageNotificationsOutbox = source === "seed" || !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
+  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole);
+  const canManageNotificationsOutbox = !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
     <section className="min-w-0 px-4 pb-8 pt-4 lg:px-6">
+      {workspace === "decision-log" && decisionLogResult && <DecisionLogOverview result={decisionLogResult} />}
+      {workspace === "decision-log" && !decisionLogResult && (
+        <UiPanel padding="xl">
+          <h2 className="text-lg font-semibold text-slate-950">Decision Log nicht verfügbar</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Für diesen Seitenaufruf wurden keine Notion-Daten geladen.</p>
+        </UiPanel>
+      )}
       {workspace === "ceo-intake" && canUseCeoIntake && (
         <CeoTaskIntake
-          source={source}
           profiles={data.profiles}
           packages={data.packages}
           sprints={data.sprints}
           apiClient={apiClient}
+          source={source}
           onTasksCreated={(tasks) => {
             setData((current) => ({
               ...current,
@@ -126,7 +135,6 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           data={data}
           tasks={data.tasks}
           currentProfile={currentProfile}
-          source={source}
           canManageInitiatives={canManageTaskMeta}
           canManageMilestones={canManageProjectMilestones}
           pending={isPending}
@@ -206,7 +214,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           data={data}
           tasks={data.tasks}
           pending={isPending}
-          canManageTeam={source === "seed" || currentProfile?.platformRole === "ceo"}
+          canManageTeam={currentProfile?.platformRole === "ceo"}
           onSaveProfileSettings={saveProfileSettings}
         />
       )}
@@ -215,13 +223,10 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
           apiClient={apiClient}
           data={data}
           currentProfile={currentProfile}
-          expandedPackages={expandedPackages}
-          filters={filters}
           pending={isPending}
           source={source}
-          view={view}
-          workspace={workspace}
           onSaveOwnProfileSettings={saveOwnProfileSettings}
+          onSaveFounderOpsGitHubProject={saveFounderOpsGitHubProject}
           onSaveFounderOpsReviewWindow={saveFounderOpsReviewWindow}
         />
       )}
@@ -279,7 +284,7 @@ export function PlanningWorkspaceRenderer({ controller, source }: PlanningWorksp
         waitingGitHubCommentCount={waitingGitHubCommentCount}
         githubReauthFailed={githubReauthFailed}
         authBusy={authBusy}
-        localMode={source === "seed"}
+        localMode={isLocalLoginSimulationEnabled()}
         notice={githubSyncNotice}
         onClose={() => setGithubSyncQueueOpen(false)}
         onOpenTask={openTaskPanel}

@@ -94,10 +94,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       })
       .eq("id", id);
     if (evidenceError) return apiError(evidenceError.message, 500);
-    await supabase.from("task_activity").insert({
-      task_id: id,
-      message: "Nachweis aus externer Ablage importiert",
-    });
   } else {
     importedEvidenceLink = "";
   }
@@ -133,13 +129,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       .from("task_external_comments")
       .upsert(externalRows, { onConflict: "source,external_id" });
     if (upsertError) return apiError(upsertError.message, 500);
-  }
-
-  if (newExternalRows.length) {
-    await supabase.from("task_activity").insert({
-      task_id: id,
-      message: `GitHub-Kommentare importiert: ${newExternalRows.length} neue externe Kommentare`,
-    });
   }
 
   const { data: importedComments, error: importedError } = await supabase

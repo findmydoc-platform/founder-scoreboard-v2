@@ -20,13 +20,6 @@ export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: r
   return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
 }
 
-export function importDemoSeedRequest(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{ error?: string; imported?: { profiles: number; packages: number; tasks: number; sprints: number; fmdTools: number; meetings: number } }>("/api/demo-seed/import", {
-    method: "POST",
-    jsonContentType: false,
-  });
-}
-
 export function saveInitiativeRequest(apiClient: BrowserApiClient, draft: { id?: string }) {
   return apiClient.requestJson<{ error?: string; initiative?: Package }>(draft.id ? `/api/initiatives/${draft.id}` : "/api/initiatives", {
     method: draft.id ? "PATCH" : "POST",
@@ -139,6 +132,33 @@ export function updateFounderOpsReviewWindowRequest(
   }>("/api/founderops-settings", {
     method: "PATCH",
     json: { expectedReviewObjectionWindowHours, reviewObjectionWindowHours },
+  });
+}
+
+export function updateFounderOpsGitHubProjectRequest(
+  apiClient: BrowserApiClient,
+  expectedGithubProjectOwner: string,
+  expectedGithubProjectNumber: number,
+  githubProjectOwner: string,
+  githubProjectNumber: number,
+) {
+  return apiClient.requestJson<{
+    error?: string;
+    project?: { id: string; githubProjectOwner: string; githubProjectNumber: number };
+    validation?: {
+      title: string;
+      url: string;
+      repositories: string[];
+      fields: Array<{ name: string; dataType: string }>;
+    };
+  }>("/api/founderops-settings/github-project", {
+    method: "PATCH",
+    json: {
+      expectedGithubProjectOwner,
+      expectedGithubProjectNumber,
+      githubProjectOwner,
+      githubProjectNumber,
+    },
   });
 }
 

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { isLocalLoginRequestAllowed } from "./local-development-auth";
 import { isOperationalLeadRole } from "./platform";
 import { getSupabaseForToken, requiresSupabaseAuth } from "./supabase";
 import type { AuthenticatedProfile, PlatformRole } from "./types";
@@ -22,9 +23,7 @@ export function bearerToken(request: NextRequest) {
 }
 
 function devProfileOverrideAllowed(request: NextRequest) {
-  if (process.env.NODE_ENV === "production") return false;
-  const host = request.headers.get("host") || "";
-  return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
+  return isLocalLoginRequestAllowed(request.headers.get("host") || "");
 }
 
 function mapAuthzProfile(profile: AuthzProfileRow): AuthenticatedProfile {

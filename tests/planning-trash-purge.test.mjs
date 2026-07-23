@@ -74,6 +74,10 @@ test("planning trash purge is bounded, locked, and fails closed on GitHub lifecy
 
 test("purge retains audit and notification history while removing only eligible source rows", async () => {
   const migration = await readSupabaseSchemaContract();
+  const migrationWithoutRetiredAgentAuditCleanup = migration.replace(
+    /delete from public\.audit_log\s+where action = 'agent\.task_intake\.create';/gi,
+    "",
+  );
 
   assert.match(migration, /set status = 'resolved'/);
   assert.match(migration, /resolution_reason = coalesce\(notification\.resolution_reason, 'source_purged'\)/);
@@ -81,7 +85,7 @@ test("purge retains audit and notification history while removing only eligible 
   assert.match(migration, /'planning_trash\.purge'/);
   assert.match(migration, /delete from public\.tasks/);
   assert.match(migration, /delete from public\.packages/);
-  assert.doesNotMatch(migration, /delete from public\.audit_log/i);
+  assert.doesNotMatch(migrationWithoutRetiredAgentAuditCleanup, /delete from public\.audit_log/i);
   assert.doesNotMatch(migration, /delete from public\.notification_events/i);
   assert.doesNotMatch(migration, /github\.com|api\.github/i);
 });

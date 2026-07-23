@@ -27,7 +27,7 @@ export function useTaskComments({
   commentImportNotice: string;
   profiles: Profile[];
   apiClient: BrowserApiClient;
-  source: "seed" | "supabase";
+  source: "supabase";
   startTransition: TransitionStartFunction;
   setError: (message: string) => void;
   setMeta: Dispatch<SetStateAction<EditableTaskState>>;
@@ -84,14 +84,7 @@ export function useTaskComments({
 
     const { response, body } = await uploadTaskAttachmentRequest(apiClient, task.id, file);
     if (!response.ok || !body?.markdown) throw new Error(body?.error || "Anhang konnte nicht hochgeladen werden.");
-    appendTaskActivities([
-      {
-        id: Date.now(),
-        taskId: task.id,
-        message: `Anhang hochgeladen: ${file.name}`,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    if (body.activity) appendTaskActivities([body.activity]);
     return body.markdown;
   };
 

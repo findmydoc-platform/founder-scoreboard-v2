@@ -29,6 +29,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   const syncRenameMigration = await readSupabaseSchemaContract();
   const commentDelivery = await readFile("src/lib/github-comment-delivery.ts", "utf8");
   const reconcileRoute = await readFile("src/app/api/github-comments/reconcile/route.ts", "utf8");
+  const deliveryAuth = await readFile("src/lib/delivery-auth.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const syncHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
@@ -98,7 +99,9 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(syncRenameMigration, /github_issue_sync_status = 'synced'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'failed'/);
   assert.match(commentDelivery, /waiting_for_author_connection/);
-  assert.match(reconcileRoute, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(reconcileRoute, /validateDeliverySecret/);
+  assert.match(deliveryAuth, /FOUNDEROPS_DELIVERY_SECRET/);
+  assert.match(deliveryAuth, /timingSafeEqual/);
   assert.match(reconcileRoute, /requireOperationalLead/);
   assert.match(reconcileRoute, /export async function GET/);
   assert.match(reconcileRoute, /previewPendingGitHubComments/);
@@ -146,6 +149,10 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
 
 test("github issue export includes only the task brief and FounderOps source", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
+  const taskIssueBodySource = github.slice(
+    github.indexOf("export function taskIssueBody"),
+    github.indexOf("export async function githubUserForToken"),
+  );
   const issueReferences = await readFile("src/lib/github-issue-reference.ts", "utf8");
   const ui = await readPlanningSurface();
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
@@ -175,9 +182,9 @@ test("github issue export includes only the task brief and FounderOps source", a
   assert.doesNotMatch(github, /Letzte Kommentare/);
   assert.doesNotMatch(github, /Aktivitätsprotokoll/);
   assert.doesNotMatch(github, /Planning Metadata/);
-  assert.doesNotMatch(github, /Founder Scoreboard v2 Task ID/);
-  assert.doesNotMatch(github, /Sync-Ziel/);
-  assert.doesNotMatch(github, /Bestehendes GitHub Issue/);
+  assert.doesNotMatch(taskIssueBodySource, /Founder Scoreboard v2 Task ID/);
+  assert.doesNotMatch(taskIssueBodySource, /Sync-Ziel/);
+  assert.doesNotMatch(taskIssueBodySource, /Bestehendes GitHub Issue/);
   assert.match(github, /resolveGitHubIssueNumber/);
   assert.match(issueReferences, /issueNumber/);
   assert.match(platform, /hasGitHubIssue/);
@@ -318,7 +325,7 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.match(syncRoute, /profileGitHubLoginById/);
   assert.match(syncRoute, /const assigneeProfileId = data\.assignee \|\| ""/);
   assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
-  assert.match(syncRoute, /const warnings = issue\.warnings \|\| \[\]/);
+  assert.match(syncRoute, /const warnings = \[\.\.\.\(issue\.warnings \|\| \[\]\), \.\.\.sprintContext\.warnings, \.\.\.fieldSync\.warnings\]/);
   assert.match(syncRoute, /Warnung:/);
   assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
   assert.match(migration, /github_issue_sync_status = 'synced'/);
@@ -520,7 +527,7 @@ test("github app connect persists reload-stable user tokens without browser toke
   assert.doesNotMatch(githubQueue, /Verbindung verwalten/);
   assert.match(planningHeader, /projectGitHubSyncQueue\(data\.tasks, data\.taskComments\)/);
   assert.doesNotMatch(planningHeader, /showGitHubSyncTrigger/);
-  assert.match(planningHeader, /localMode=\{source === "seed"\}/);
+  assert.match(planningHeader, /localMode=\{isLocalLoginSimulationEnabled\(\)\}/);
   assert.doesNotMatch(notificationsOverviewUi, /GitHub-Verbindung .*erneuern/);
   assert.doesNotMatch(notificationsOverviewUi, /zentrale Verbindung im Header/);
   assert.doesNotMatch(detailGitHubActions, /GitHub-Verbindung .*erneuern/);
@@ -612,7 +619,6 @@ test("github app connect persists reload-stable user tokens without browser toke
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readSupabaseSchemaContract();
   const externalMigration = await readSupabaseSchemaContract();
-  const commentDeliveryMigration = await readSupabaseSchemaContract();
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
@@ -633,6 +639,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const commentBody = await readFile("src/features/tasks/atoms/task-comment-body.tsx", "utf8");
   const commentComposer = await readFile("src/features/tasks/molecules/task-comment-composer.tsx", "utf8");
   const commentTimeline = await readFile("src/features/tasks/molecules/task-comment-timeline.tsx", "utf8");
+  const activityPresentation = await readFile("src/features/tasks/model/task-activity-presentation.ts", "utf8");
   const githubCommentImage = await readFile("src/features/tasks/molecules/github-comment-image.tsx", "utf8");
   const mentions = await readFile("src/lib/mentions.ts", "utf8");
   const notificationPolicy = await readFile("src/lib/notification-catalog.ts", "utf8");
@@ -650,13 +657,13 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(data, /task_external_comments/);
   assert.match(data, /taskBlockers/);
   assert.match(data, /taskActivity/);
-  assert.match(data, /task_activity/);
+  assert.match(data, /task_audit_timeline/);
+  assert.doesNotMatch(data, /from\("task_activity"\)/);
   assert.match(data, /notificationEvents/);
   assert.match(commentsRoute, /task.comment/);
   assert.match(commentsRoute, /mentionedProfileIds/);
   assert.match(commentsRoute, /task.mention/);
   assert.match(commentsRoute, /Du wurdest erwähnt/);
-  assert.match(commentDeliveryMigration, /Kommentar hinzugefügt/);
   assert.match(mentions, /githubLogin/);
   assert.match(notificationPolicy, /task\.mention/);
   assert.match(notificationPolicy, /Erwähnung/);
@@ -671,7 +678,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(githubCommentsRoute, /listGitHubIssueComments/);
   assert.match(githubCommentsRoute, /getGitHubIssue/);
   assert.match(githubCommentsRoute, /extractEvidenceFromIssueBody/);
-  assert.match(githubCommentsRoute, /Nachweis aus externer Ablage importiert/);
+  assert.doesNotMatch(githubCommentsRoute, /Nachweis aus externer Ablage importiert|GitHub-Kommentare importiert|task_activity/);
   assert.match(githubCommentsRoute, /evidenceLink/);
   assert.match(githubCommentsRoute, /isAppMirroredComment/);
   assert.match(githubCommentsRoute, /task_external_comments/);
@@ -703,12 +710,12 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(thread, /github-comment/);
   assert.match(thread, /timeline/);
   assert.match(thread, /TaskCommentTimeline/);
-  assert.match(commentTimeline, /describeActivity/);
-  assert.match(commentTimeline, /repairGermanText/);
+  assert.match(commentTimeline, /describeTaskActivity/);
+  assert.match(commentTimeline, /activityIcons/);
   assert.match(commentTimeline, /activityToneClass/);
-  assert.match(commentTimeline, /Status geändert/);
-  assert.match(commentTimeline, /Review finalisiert/);
-  assert.match(commentTimeline, /Abhängigkeit/);
+  assert.match(activityPresentation, /Status geändert/);
+  assert.match(activityPresentation, /Prüfung abgeschlossen/);
+  assert.match(activityPresentation, /Abhängigkeit hinzugefügt/);
   assert.match(thread, /CommentBody/);
   assert.match(thread, /TaskCommentComposer/);
   assert.match(githubCommentImage, /<img\b/);

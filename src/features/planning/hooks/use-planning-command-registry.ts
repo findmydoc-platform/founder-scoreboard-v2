@@ -2,7 +2,6 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { useFounderEventCommands } from "@/features/events/hooks/use-founder-event-commands";
-import { useDemoSeedImport } from "@/features/planning/hooks/use-demo-seed-import";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import { useNotificationCommands } from "@/features/planning/hooks/use-notification-commands";
 import { usePlanningBoardState } from "@/features/planning/hooks/use-planning-board-state";
@@ -20,13 +19,11 @@ import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutatio
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import { useFounderOpsSettingsCommands } from "@/features/settings/hooks/use-founderops-settings-commands";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, PlanningHeaderData, Task } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningCommandRegistryOptions = {
-  apiClient: BrowserApiClient;
   closeTaskPanel: () => void;
   commandContext: PlanningCommandContext;
   currentProfileId: string;
@@ -46,13 +43,11 @@ type UsePlanningCommandRegistryOptions = {
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
   setView: PlanningViewState["setView"];
   setWorkspace: (workspace: AppWorkspace) => void;
-  source: "seed" | "supabase";
   sprintPlanningOptions: PlanningViewState["sprintPlanningOptions"];
   workspace: AppWorkspace;
 };
 
 export function usePlanningCommandRegistry({
-  apiClient,
   closeTaskPanel,
   commandContext,
   currentProfileId,
@@ -72,7 +67,6 @@ export function usePlanningCommandRegistry({
   setTaskDialogDefaults,
   setView,
   setWorkspace,
-  source,
   sprintPlanningOptions,
   workspace,
 }: UsePlanningCommandRegistryOptions) {
@@ -137,16 +131,8 @@ export function usePlanningCommandRegistry({
     setWorkspace,
     workspace,
   });
-  const demoSeedImport = useDemoSeedImport({
-    apiClient,
-    setData: commandContext.setData,
-    setSaveError: commandContext.setSaveError,
-    source,
-  });
-
   return {
     boardState,
-    demoSeedImport,
     eventCommands,
     fmdToolCommands,
     founderOpsSettingsCommands,

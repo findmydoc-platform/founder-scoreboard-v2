@@ -4,6 +4,7 @@ import { getBrowserSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile, PlanningData, PlanningDataResponse, PlanningHeaderData } from "@/lib/types";
 import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -24,7 +25,7 @@ export function setProtectedPlanningDataCache(cache: ProtectedPlanningDataCache 
 
 type UsePlanningAuthOptions = {
   authRequired: boolean;
-  source: "seed" | "supabase";
+  source: "supabase";
   safeInitialData: PlanningData;
   safeInitialHeaderData: PlanningHeaderData;
   taskCount: number;
@@ -95,6 +96,14 @@ export function usePlanningAuth({
 
     const refreshGitHubUserConnectionState = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
       if (!active) return;
+      if (isLocalLoginSimulationEnabled()) {
+        setGithubInstallationAvailable(false);
+        setGithubUserConnected(false);
+        setWaitingGitHubCommentCount(0);
+        setGithubReauthFailed(false);
+        setGithubConnectionState("unknown");
+        return;
+      }
       if (!session?.access_token) {
         setGithubInstallationAvailable(false);
         setGithubUserConnected(false);
@@ -281,6 +290,17 @@ export function usePlanningAuth({
     setAuthError("");
     setAuthNotice("");
     const next = currentRelativeUrl();
+    if (isLocalLoginSimulationEnabled()) {
+      const response = await fetch("/api/auth/local-login", { method: "POST" }).catch(() => null);
+      if (!response?.ok) {
+        const payload = await response?.json().catch(() => null) as { error?: string } | null;
+        setAuthError(payload?.error || "Lokaler Login konnte nicht erstellt werden.");
+        setAuthBusy(false);
+        return;
+      }
+      window.location.reload();
+      return;
+    }
     if (options.githubReconnect) {
       setGithubReauthFailed(false);
       setGithubConnectionState("checking");

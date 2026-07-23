@@ -93,11 +93,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     await supabase.from("notification_events").insert(notifications);
   }
 
-  await supabase.from("task_activity").insert({
-    task_id: id,
-    message: `Blocker gemeldet: ${reason.slice(0, 160)}`,
-  });
-
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
     action: "task.blocker_reported",

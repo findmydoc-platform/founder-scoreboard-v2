@@ -106,7 +106,7 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
 export function uploadTaskAttachmentRequest(apiClient: BrowserApiClient, taskId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiClient.requestForm<{ error?: string; markdown?: string }>(`/api/tasks/${taskId}/attachments`, formData, {
+  return apiClient.requestForm<{ error?: string; markdown?: string; activity?: TaskActivity }>(`/api/tasks/${taskId}/attachments`, formData, {
   });
 }
 

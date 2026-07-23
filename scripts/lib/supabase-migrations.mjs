@@ -8,6 +8,15 @@ export const productionBaseline = {
   sha256: "63421ddef79d60d0a5e117915285297ab48f318348278c42ca748d46183be2a5",
 };
 
+export const approvedDestructiveDdlByMigration = new Map([
+  ["20260721120056_replace_task_activity_with_audit_log.sql", new Set(["drop table"])],
+]);
+
+export const approvedOutOfOrderMigrationVersions = new Set([
+  "20260721112813",
+  "20260721120056",
+]);
+
 export const migrationFilePattern = /^(\d{14})_([a-z0-9_]+)\.sql$/;
 
 export async function listSupabaseMigrations(root = process.cwd()) {
@@ -60,4 +69,29 @@ export function findDestructiveDdl(sql) {
   ];
 
   return patterns.filter(([, pattern]) => pattern.test(sql)).map(([label]) => label);
+}
+
+export function findUnapprovedDestructiveDdl(migration) {
+  const approvedOperations = approvedDestructiveDdlByMigration.get(migration.file) || new Set();
+  return findDestructiveDdl(migration.sql)
+    .filter((operation) => !approvedOperations.has(operation));
+}
+
+export function planOutOfOrderMigrations(migrations, appliedVersions) {
+  const appliedMigrationVersions = new Set(
+    Array.from(appliedVersions, (version) => String(version)),
+  );
+  const latestAppliedVersion = Array.from(appliedMigrationVersions).sort().at(-1) || "";
+  const pendingMigrations = migrations.filter((migration) =>
+    migration.version < latestAppliedVersion && !appliedMigrationVersions.has(migration.version)
+  );
+  const unapprovedMigrations = pendingMigrations.filter((migration) =>
+    !approvedOutOfOrderMigrationVersions.has(migration.version)
+  );
+
+  return {
+    includeAllMigrations: pendingMigrations.length > 0,
+    pendingMigrations,
+    unapprovedMigrations,
+  };
 }

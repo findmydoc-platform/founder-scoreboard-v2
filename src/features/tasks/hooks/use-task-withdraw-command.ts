@@ -6,7 +6,6 @@ import {
   removePlanningRootFromData,
   restorePlanningRootToData,
 } from "@/features/planning/model/planning-trash-state";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { Task } from "@/lib/types";
 
@@ -17,7 +16,6 @@ type UseTaskWithdrawCommandOptions = Pick<
   | "currentProfile"
   | "data"
   | "setSaveError"
-  | "source"
   | "startTransition"
 > & {
   closeTaskPanel: () => void;
@@ -32,7 +30,6 @@ export function useTaskWithdrawCommand({
   data,
   refreshPlanningData,
   setSaveError,
-  source,
   startTransition,
 }: UseTaskWithdrawCommandOptions) {
   const withdrawTask = (task: Task, reason: string) => {
@@ -40,7 +37,7 @@ export function useTaskWithdrawCommand({
       rootType: "deliverable",
       approvalStatus: task.approvalStatus,
       proposedById: task.proposedById,
-    }, currentProfile, source === "seed");
+    }, currentProfile, false);
     if (!canWithdraw) {
       setSaveError("Nur Antragsteller, CEO oder Deputy können vorgeschlagene Deliverables zurückziehen.");
       return false;
@@ -50,15 +47,6 @@ export function useTaskWithdrawCommand({
     setSaveError("");
     applyPlanningDataUpdate((current) => removePlanningRootFromData(current, "deliverable", task.id).data);
     closeTaskPanel();
-
-    if (source !== "supabase") {
-      try {
-        persistLocalPlanningTasks(withdrawal.data.tasks);
-      } catch {
-        // Local development remains usable when browser storage is unavailable.
-      }
-      return true;
-    }
 
     startTransition(async () => {
       try {

@@ -6,12 +6,10 @@ import type { Dispatch, SetStateAction } from "react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { navigateAfterNotificationStatusUpdate } from "@/features/notifications/model/notification-navigation";
 import { notificationTarget } from "@/features/notifications/model/notification-target";
-import { persistLocalPlanningData } from "@/features/planning/hooks/use-local-planning-state";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { HeaderNotification, NotificationDelivery, PlanningHeaderData } from "@/lib/types";
 import { applyLocalNotificationAction, type NotificationUserAction } from "@/lib/notification-lifecycle";
-import { resolveNotificationEvents } from "@/lib/notification-resolution";
 import { markPlanningHeaderDataError, markPlanningHeaderDataLoading, mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/planning-header-data";
 
 type GoogleChatStatus = {
@@ -140,17 +138,8 @@ export function useNotificationCommands({
           event.id === eventId ? applyLocalNotificationAction(event, action) : event
         )),
       };
-      if (source === "seed") {
-        try {
-          persistLocalPlanningData(nextData);
-        } catch {
-          // Local navigation still works when browser storage is unavailable.
-        }
-      }
       return nextData;
     });
-
-    if (source !== "supabase") return Promise.resolve();
 
     return new Promise<void>((resolve) => {
       startTransition(async () => {
@@ -198,19 +187,6 @@ export function useNotificationCommands({
 
   const openNotificationInbox = () => {
     setShowNotifications(true);
-    if (source === "seed") {
-      setData((current) => {
-        const nextData = resolveNotificationEvents(current).data;
-        try {
-          persistLocalPlanningData(nextData);
-        } catch {
-          // Keep the local inbox usable when browser storage is unavailable.
-        }
-        return nextData;
-      });
-      return;
-    }
-
     setHeaderData((current) => markPlanningHeaderDataLoading(current, ["notifications"]));
     startTransition(async () => {
       try {

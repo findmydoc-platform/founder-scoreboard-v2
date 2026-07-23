@@ -11,8 +11,7 @@ export type { AppWorkspace, VisibleAppWorkspace };
 
 type AppSidebarProps = {
   activeWorkspace?: AppWorkspace;
-  source?: "seed" | "supabase";
-  localStateLoaded?: boolean;
+  source?: "supabase";
   authAvailable?: boolean;
   authUserEmail?: string;
   currentPlatformRole?: string;

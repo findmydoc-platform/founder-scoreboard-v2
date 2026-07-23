@@ -5,24 +5,31 @@ Factro-inspirierte Planungs-App für das interne findmydoc Founder-Board.
 ## Entwicklung
 
 ```bash
-pnpm run dev
+pnpm run local:reset
+pnpm run dev:local
 ```
 
-Die App läuft standardmäßig auf `http://localhost:3000`.
+The first command starts the disposable local Supabase stack, rebuilds its database from the tracked migrations, loads `src/lib/seed/source.json`, and creates the local CEO Auth identity. The app then runs on `http://localhost:3000`.
+
+On the login screen, click **Mit GitHub anmelden**. In local development this button creates a real Supabase cookie session for the seeded CEO profile without contacting GitHub. Use the existing development profile switch to verify Founder, Deputy, and Viewer permissions. GitHub sync and other external integrations stay disabled locally; they are not mocked.
+
+Useful local commands:
+
+```bash
+pnpm run local:start
+pnpm run local:seed
+pnpm run local:reset
+pnpm run test:integration:local
+pnpm run local:stop
+```
 
 ## Supabase
 
-The repository uses the pinned Supabase CLI and timestamp migrations under `supabase/migrations/`. There is no separate schema file or direct SQL apply path.
+The repository uses the pinned Supabase CLI and timestamp migrations under `supabase/migrations/`. There is no separate schema file or direct SQL apply path. `pnpm run local:start` writes the local stack credentials to the ignored `.env.local` file without printing secrets. `pnpm run local:seed` replaces the loopback stack's source-managed planning rows so the database converges to `src/lib/seed/source.json`. `pnpm run local:reset` additionally rebuilds the schema from all tracked migrations. Both mutation commands refuse remote database targets.
 
-1. Copy `.env.example` to `.env.local` and configure the local values.
-2. Start the local Supabase stack with `pnpm exec supabase start`.
-3. Recreate the local database from the canonical migration history with `pnpm run db:reset`.
-4. Optionally set `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` for the local demo import.
-5. Start the app and use the `Demo Import` header action.
+Create a new migration with `pnpm run db:migration:new <clear_name>`. Validate migration structure with `pnpm run verify:migrations`. Production applies only pending migrations through the protected GitHub Actions workflow.
 
-Create a new migration with `pnpm run db:migration:new -- <clear_name>`. Validate migration structure with `pnpm run verify:migrations`. Production applies only pending migrations through the protected GitHub Actions workflow.
-
-Ohne Supabase-ENV oder bei fehlenden Core-Daten startet die App mit einem leeren lokalen Fallback. Demo-Daten aus `src/lib/seed/source.json` werden nur durch den lokalen `Demo Import` Button geladen. Mit leerer Supabase-Bootstrap-Datenbank schreibt der Button nach Supabase; ohne passende ENV befüllt er den lokalen Browser-State.
+Planning data is always read from Supabase. Missing configuration, missing core rows, or an unavailable database produce the normal data-unavailable state instead of a browser-local seed fallback.
 
 ## Rollen und Zugriff
 
@@ -35,7 +42,7 @@ Rollen:
 - `deputy`: temporäre operative Vertretung ohne Decision-Log-Edit.
 - `viewer`: liest nur.
 
-Mit `REQUIRE_SUPABASE_AUTH=true` verlangt die API für Schreibzugriffe eine gültige Supabase-Session mit gemapptem GitHub-Login und passender `platform_role`. Für lokale Entwicklung kann der Wert auf `false` bleiben.
+With `REQUIRE_SUPABASE_AUTH=true`, all protected API access requires a valid Supabase session and a mapped `platform_role`. The generated local environment keeps this boundary enabled.
 
 ## Login-Ablauf
 

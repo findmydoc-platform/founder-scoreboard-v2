@@ -20,8 +20,7 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   const ui = await readPlanningSurface();
 
   assert.match(route, /loadTaskDetailData\(supabase, id\)/);
-  assert.match(route, /SeedTaskDetailPage/);
-  assert.match(route, /source === "seed"/);
+  assert.doesNotMatch(route, /SeedTaskDetailPage|source === "seed"/);
   assert.match(detailDataRoute, /\["ceo", "founder", "deputy", "viewer"\]/);
   assert.match(page, /TaskDetailSurface/);
   assert.match(page, /usePlanningAppController/);

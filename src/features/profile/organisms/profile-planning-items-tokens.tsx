@@ -16,7 +16,7 @@ export function ProfilePlanningItemsTokens({
   source,
 }: {
   apiClient: BrowserApiClient;
-  source: "seed" | "supabase";
+  source: "supabase";
 }) {
   const tokens = useProfilePlanningItemsTokens({ apiClient, source });
 

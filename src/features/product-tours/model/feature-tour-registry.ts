@@ -5,6 +5,11 @@ export type FeatureTourDefinition = {
   doneWorkspace?: AppWorkspace;
   id: string;
   openAccountMenu?: boolean;
+  openHelpMenu?: boolean;
+  openProfileProcessSettings?: boolean;
+  openTaskDetail?: boolean;
+  openTaskShare?: boolean;
+  productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
   steps: readonly DriveStep[];
@@ -15,8 +20,152 @@ export const workspaceCleanupTourId = "workspace-cleanup-v2";
 export const profileSettingsTourId = "profile-settings-v1";
 export const planningMyTasksScopeTourId = "planning-my-tasks-scope-v1";
 export const backlogTourId = "backlog-prioritization-v1";
+export const productUpdatesTourId = "product-updates-v1";
+export const taskActivityTourId = "task-activity-v1";
+export const decisionLogTourId = "decision-log-workspace-v1";
+export const issueSharingTourId = "issue-sharing-v1";
+export const modalOverlayStackTourId = "modal-overlay-stack-v1";
+export const githubProjectSettingsTourId = "github-project-settings-v1";
 
 export const featureTours = [
+  {
+    id: githubProjectSettingsTourId,
+    productUpdateId: "2026-07-22-github-project-settings",
+    startWorkspace: "profile",
+    openProfileProcessSettings: true,
+    requiredSelectors: ["[data-tour-id='profile-settings-process']", "[data-tour-id='founderops-github-project-settings']"],
+    steps: [
+      {
+        element: "[data-tour-id='profile-settings-process']",
+        popover: {
+          title: "FounderOps-Prozess öffnen",
+          description: "Die globalen Einstellungen bündeln jetzt auch das repositoryübergreifende GitHub Project.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='founderops-github-project-settings']",
+        popover: {
+          title: "Project prüfen und speichern",
+          description: "FounderOps prüft App-Zugriff, alle drei Repository-Verknüpfungen und die erwarteten Felder, bevor das Ziel gespeichert wird.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: modalOverlayStackTourId,
+    productUpdateId: "2026-07-21-modal-overlay-stack",
+    requiredSelectors: ["[data-tour-id='github-sync-trigger']"],
+    startWorkspace: "planning",
+    steps: [
+      {
+        element: "[data-tour-id='github-sync-trigger']",
+        popover: {
+          title: "GitHub und Item-Details öffnen",
+          description: "Öffne GitHub und danach ein Item. Das zuletzt geöffnete Fenster bleibt vorn; beim Schließen kehrst du zuverlässig zur vorherigen Ansicht zurück.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: decisionLogTourId,
+    doneWorkspace: "decision-log",
+    productUpdateId: "2026-07-21-decision-log",
+    requiredSelectors: ["[data-tour-id='workspace-nav-decision-log']"],
+    steps: [
+      {
+        element: "[data-tour-id='workspace-nav-decision-log']",
+        popover: {
+          title: "Decision Log öffnen",
+          description: "Hier findest du Entscheidungen aus Notion, den aktuellen Handlungsbedarf und alle vorhandenen Quellen. Die Ansicht ist ausschließlich lesend.",
+          side: "right",
+          align: "center",
+          doneBtnText: "Decision Log öffnen",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: taskActivityTourId,
+    productUpdateId: "2026-07-21-clear-task-activity",
+    requiredSelectors: ["[data-tour-id='planning-task-scope']"],
+    startWorkspace: "planning",
+    steps: [
+      {
+        element: "[data-tour-id='planning-task-scope']",
+        popover: {
+          title: "Aktivität einer Aufgabe öffnen",
+          description: "Öffne eine Aufgabe und wechsle zu Aktivität. Dort stehen Kommentare einmalig neben den wichtigsten Änderungen mit passenden Symbolen.",
+          side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: issueSharingTourId,
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    openTaskShare: true,
+    productUpdateId: "2026-07-21-issue-sharing",
+    requiredSelectors: ["[data-tour-id='task-share-trigger']", "[data-tour-id='task-share-popover']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-share-trigger']",
+        popover: {
+          title: "Issue teilen",
+          description: "Hier bereitest du für jedes Deliverable und Sub-Issue eine Nachricht vor. Der Text greift Vorschlag, Review oder allgemeinen Abstimmungsbedarf auf.",
+          side: "bottom",
+          align: "end",
+        },
+      },
+      {
+        element: "[data-tour-id='task-share-popover']",
+        popover: {
+          title: "Nachricht selbst senden",
+          description: "Passe den Text an. Der blaue Button kopiert ihn und öffnet Google Chat; den Chat und das Senden übernimmst du dort selbst.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
+  {
+    id: productUpdatesTourId,
+    openHelpMenu: true,
+    productUpdateId: "2026-07-21-whats-new-gallery",
+    requiredSelectors: ["[data-tour-id='help-menu-trigger']", "[data-tour-id='product-updates-menu-link']"],
+    steps: [
+      {
+        element: "[data-tour-id='help-menu-trigger']",
+        popover: {
+          title: "Neuigkeiten wiederfinden",
+          description: "Öffne die Hilfe, wenn du eine Änderung später noch einmal ansehen möchtest.",
+          side: "bottom",
+          align: "end",
+        },
+      },
+      {
+        element: "[data-tour-id='product-updates-menu-link']",
+        popover: {
+          title: "Was ist neu",
+          description: "Hier findest du alle kurzen Bilderklärungen zu sichtbaren Neuerungen.",
+          side: "left",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: backlogTourId,
     workspaceScope: "backlog",
@@ -89,7 +238,7 @@ export const featureTours = [
         element: "[data-tour-id='profile-menu-link']",
         popover: {
           title: "Profil-Einstellungen sind schlanker",
-          description: "Kalender und Verfügbarkeit sind aus dem Profil raus. Übrig bleiben Profil, Benachrichtigungen und Board-Defaults.",
+          description: "Kalender und Verfügbarkeit sind aus dem Profil raus. Übrig bleiben Profil, Benachrichtigungen und Planungs-Defaults.",
           side: "left",
           align: "start",
           doneBtnText: "Profil öffnen",
@@ -132,7 +281,7 @@ export const featureTours = [
         element: "[data-tour-id='profile-menu-link']",
         popover: {
           title: "Mein Profil",
-          description: "Hier öffnest du Profil, Benachrichtigungen und Board-Defaults.",
+          description: "Hier öffnest du Profil, Benachrichtigungen und Planungs-Defaults.",
           side: "left",
           align: "start",
           doneBtnText: "Profil öffnen",

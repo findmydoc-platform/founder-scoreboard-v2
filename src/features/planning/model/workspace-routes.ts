@@ -1,6 +1,7 @@
 import {
   Archive,
   Bell,
+  BookOpenCheck,
   CalendarClock,
   GanttChart,
   LayoutDashboard,
@@ -11,10 +12,24 @@ import {
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
-import type { PlatformRole } from "@/lib/types";
+import {
+  appWorkspaceIds,
+  appWorkspaceFromValue,
+  isPersistedWorkspace,
+  persistedWorkspaceIds,
+  rootWorkspaceFromPreference,
+  type AppWorkspace,
+  type VisibleAppWorkspace,
+} from "@/features/planning/model/workspace-preferences";
 
-export type AppWorkspace = "planning" | "backlog" | "events" | "sprint" | "projects" | "tools" | "team" | "notifications" | "ceo-intake" | "profile";
-export type VisibleAppWorkspace = Exclude<AppWorkspace, "profile">;
+export {
+  appWorkspaceIds,
+  appWorkspaceFromValue,
+  isPersistedWorkspace,
+  persistedWorkspaceIds,
+  rootWorkspaceFromPreference,
+};
+export type { AppWorkspace, VisibleAppWorkspace };
 
 type WorkspaceRoute = {
   id: AppWorkspace;
@@ -32,6 +47,7 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
   { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
+  { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log" },
   { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
   { id: "ceo-intake", label: "CEO Intake", icon: WandSparkles, href: "/ceo-intake", ceoOnly: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
@@ -44,24 +60,8 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
 
 export const appNavItems = workspaceRoutes.filter(isVisibleWorkspaceRoute);
 export const hiddenWorkspaceIds = ["profile"] as const satisfies readonly AppWorkspace[];
-export const appWorkspaceIds = workspaceRoutes.map((route) => route.id) as AppWorkspace[];
 export const visibleWorkspaceIds = appNavItems.map((route) => route.id) as VisibleAppWorkspace[];
 
 export function workspacePath(workspace: AppWorkspace) {
   return workspaceRoutes.find((route) => route.id === workspace)?.href || "/planning";
-}
-
-export function appWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
-  if (value === "mine" || value === "execution") return "planning";
-  if (value === "reviews") return "planning";
-  if (value === "settings") return "notifications";
-  return appWorkspaceIds.find((id) => id === value) || null;
-}
-
-export function rootWorkspaceFromPreference(
-  value: string | null | undefined,
-  platformRole: PlatformRole | null | undefined,
-): AppWorkspace {
-  const workspace = appWorkspaceFromValue(value) || "planning";
-  return workspace === "ceo-intake" && platformRole !== "ceo" ? "planning" : workspace;
 }

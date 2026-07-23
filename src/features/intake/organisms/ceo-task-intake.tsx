@@ -9,7 +9,7 @@ import type { Package, Profile, Sprint, Task } from "@/lib/types";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type Props = {
-  source: "seed" | "supabase";
+  source: "supabase";
   profiles: Profile[];
   packages: Package[];
   sprints: Sprint[];

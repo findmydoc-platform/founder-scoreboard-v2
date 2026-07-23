@@ -57,7 +57,6 @@ type TaskDetailSurfaceProps = {
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
-  source: "seed" | "supabase";
   pending: boolean;
   error?: string;
   detailDataError?: string;
@@ -101,7 +100,6 @@ export function TaskDetailSurface({
   allTasks,
   relations,
   currentProfile = null,
-  source,
   pending,
   error = "",
   detailDataError = "",
@@ -133,7 +131,7 @@ export function TaskDetailSurface({
   const controller = useTaskDetailController({
     task,
     currentProfile,
-    unrestricted: source === "seed",
+    unrestricted: false,
     onUpdate,
   });
   const reviewActive = isTaskReviewActive(task);
@@ -143,7 +141,7 @@ export function TaskDetailSurface({
   const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
-  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: source === "seed" });
+  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: false });
   const relationshipAccess = reviewLocked ? {
     ...baseRelationshipAccess,
     allowedRelationTypes: [],
@@ -158,9 +156,8 @@ export function TaskDetailSurface({
     rootType: "deliverable",
     approvalStatus: task.approvalStatus,
     proposedById: task.proposedById,
-  }, currentProfile, source === "seed");
-  const canWithdrawReview = reviewActive && (source === "seed"
-    || currentProfile?.platformRole === "ceo"
+  }, currentProfile, false);
+  const canWithdrawReview = reviewActive && (currentProfile?.platformRole === "ceo"
     || currentProfile?.platformRole === "deputy"
     || taskOwnedByProfile(task, currentProfile));
   const statusOptions = taskStatusOptionsForPermissions(task.status, {
@@ -356,6 +353,10 @@ export function TaskDetailSurface({
         activities={activities}
         notice={commentImportNotice}
         profiles={teamProfiles}
+        tasks={allTasks}
+        sprints={sprints}
+        packages={packages}
+        milestones={milestones}
         currentProfileId={currentProfile?.id || ""}
         loading={detailDataLoading}
         unavailable={detailDataUnavailable}

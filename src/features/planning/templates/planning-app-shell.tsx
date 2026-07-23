@@ -8,14 +8,17 @@ import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
 import { PlanningWorkspaceRenderer } from "@/features/planning/organisms/planning-workspace-renderer";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
+import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
+import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
   controller: PlanningAppController;
-  source: "seed" | "supabase";
+  source: "supabase";
+  decisionLogResult?: NotionDecisionLogResult;
 };
 
-export function PlanningAppShell({ authRequired, controller, source }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, source, decisionLogResult }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -26,7 +29,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
     data,
     filters,
     filtersAvailable,
-    localStateLoaded,
     mobileNavOpen,
     protectedDataLoaded,
     releaseSidebarFocus,
@@ -45,7 +47,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
       <PlanningBootShell
         workspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail=""
         title="Zugriff wird geprüft"
@@ -63,7 +64,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
       <PlanningBootShell
         workspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser.email || ""}
         title={authError ? "Planungsdaten konnten nicht geladen werden" : "Planungsdaten werden geladen"}
@@ -84,7 +84,6 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
         onMouseLeave={releaseSidebarFocus}
         activeWorkspace={workspace}
         source={source}
-        localStateLoaded={localStateLoaded}
         authAvailable={authAvailable}
         authUserEmail={authUser?.email || ""}
         currentPlatformRole={currentProfile?.platformRole || ""}
@@ -99,11 +98,15 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           apiClient={controller.apiClient}
           currentProfile={currentProfile}
           data={data}
+          openTaskPanel={controller.openTaskPanel}
+          selectedTaskId={controller.selectedTaskId}
           setData={controller.setData}
           setWorkspace={setWorkspace}
           source={source}
           workspace={workspace}
         />
+
+        <ProductUpdatesProvider profileId={currentProfile?.id || null} />
 
         {filtersAvailable && (
           <PlanningFilters
@@ -121,7 +124,7 @@ export function PlanningAppShell({ authRequired, controller, source }: PlanningA
           />
         )}
 
-        <PlanningWorkspaceRenderer controller={controller} source={source} />
+        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} />
       </main>
 
       <PlanningOverlayLayer controller={controller} />

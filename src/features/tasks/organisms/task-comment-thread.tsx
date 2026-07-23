@@ -1,19 +1,23 @@
 "use client";
 
 import { MessageSquare, RefreshCw } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CommentBody } from "@/features/tasks/atoms/task-comment-body";
 import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-composer";
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
-import { isUsefulTaskActivity } from "@/features/tasks/model/task-detail-presentation";
-import type { Profile, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
+import { isUsefulActivity } from "@/features/tasks/model/task-comment-timeline-policy";
+import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
 type Props = {
   comments: TaskComment[];
   externalComments?: TaskExternalComment[];
   activities?: TaskActivity[];
   profiles: Profile[];
+  tasks?: Task[];
+  sprints?: Sprint[];
+  packages?: Package[];
+  milestones?: Milestone[];
   currentProfileId?: string;
   error?: string;
   loading?: boolean;
@@ -31,13 +35,13 @@ type Props = {
 };
 
 function buildTimeline(comments: TaskComment[], externalComments: TaskExternalComment[], activities: TaskActivity[]): TaskCommentTimelineItem[] {
-  const visibleActivities = activities.filter((activity) => isUsefulTaskActivity(activity.message));
+  const visibleActivities = activities.filter(isUsefulActivity);
   return [
     ...visibleActivities.map((activity) => ({
       id: `activity-${activity.id}`,
       type: "activity" as const,
       createdAt: activity.createdAt,
-      message: activity.message,
+      activity,
       profileId: "",
       comment: "",
       authorLogin: "",
@@ -78,6 +82,10 @@ export function TaskCommentThread({
   externalComments = [],
   activities = [],
   profiles,
+  tasks = [],
+  sprints = [],
+  packages = [],
+  milestones = [],
   currentProfileId = "",
   error = "",
   loading = false,
@@ -93,8 +101,17 @@ export function TaskCommentThread({
   onImportGitHubComments,
   onUploadAttachment,
 }: Props) {
-  const visibleActivities = activities.filter((activity) => isUsefulTaskActivity(activity.message));
+  const visibleActivities = activities.filter(isUsefulActivity);
+  const commentCount = comments.length + externalComments.length;
+  const activityCount = visibleActivities.length;
   const timeline = buildTimeline(comments, externalComments, visibleActivities);
+  const labelsById = useMemo(() => new Map([
+    ...profiles.map((profile) => [profile.id, profile.name] as const),
+    ...tasks.map((task) => [task.id, task.title] as const),
+    ...sprints.map((sprint) => [sprint.id, sprint.name] as const),
+    ...packages.map((initiative) => [initiative.id, initiative.title] as const),
+    ...milestones.map((milestone) => [milestone.id, milestone.title] as const),
+  ]), [milestones, packages, profiles, sprints, tasks]);
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 p-4">
@@ -118,7 +135,18 @@ export function TaskCommentThread({
               {importPending ? "Aktualisiert..." : "GitHub aktualisieren"}
             </button>
           )}
-          {!loading && !error && !unavailable ? <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">{timeline.length} Einträge</span> : null}
+          {!loading && !error && !unavailable ? (
+            <>
+              <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">
+                {commentCount} {commentCount === 1 ? "Kommentar" : "Kommentare"}
+              </span>
+              {activityCount > 0 && (
+                <span className="rounded-full border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-500">
+                  {activityCount} {activityCount === 1 ? "Aktivität" : "Aktivitäten"}
+                </span>
+              )}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -145,6 +173,7 @@ export function TaskCommentThread({
       <TaskCommentTimeline
         items={timeline}
         profiles={profiles}
+        labelsById={labelsById}
         currentProfileId={currentProfileId}
         error={error}
         loading={loading}

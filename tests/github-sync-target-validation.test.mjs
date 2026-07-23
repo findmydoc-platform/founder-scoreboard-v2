@@ -151,6 +151,60 @@ test("repairs a previously synced legacy issue carrying the exact FounderOps tas
   }
 });
 
+test("repairs a previously synced oldest-format issue carrying the exact Founder Scoreboard task id", async () => {
+  const task = sourceTask({ githubIssueLastSyncedAt: "2026-05-26T23:53:21.000Z" });
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Deliverable] Validate linked target",
+    body: [
+      "## Source of Truth",
+      `- Founder Scoreboard v2 Task ID: ${task.id}`,
+      "- Sync-Ziel: findmydoc-platform/management",
+    ].join("\n"),
+  });
+
+  await github.upsertGitHubIssue(task, "installation-token");
+
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+  assert.equal(requests[1].body.body.includes(githubMarker(task.id)), true);
+});
+
+test("rejects an oldest-format issue carrying a different Founder Scoreboard task id", async () => {
+  const task = sourceTask({ githubIssueLastSyncedAt: "2026-05-26T23:53:21.000Z" });
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Deliverable] Validate linked target",
+    body: [
+      "## Source of Truth",
+      "- Founder Scoreboard v2 Task ID: another-task",
+      "- Sync-Ziel: findmydoc-platform/management",
+    ].join("\n"),
+  });
+
+  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
+});
+
+test("rejects an oldest-format issue carrying matching and conflicting Founder Scoreboard task ids", async () => {
+  const task = sourceTask({ githubIssueLastSyncedAt: "2026-05-26T23:53:21.000Z" });
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Deliverable] Validate linked target",
+    body: [
+      "## Source of Truth",
+      `- Founder Scoreboard v2 Task ID: ${task.id}`,
+      "- Founder Scoreboard v2 Task ID: another-task",
+      "- Sync-Ziel: findmydoc-platform/management",
+    ].join("\n"),
+  });
+
+  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
+});
+
 test("rejects a loaded issue from another repository before patching", async () => {
   const task = sourceTask();
   const { github, requests } = await loadGitHub({

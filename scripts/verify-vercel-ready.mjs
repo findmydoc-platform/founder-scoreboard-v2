@@ -32,6 +32,8 @@ const requiredEnvKeys = [
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "REQUIRE_SUPABASE_AUTH",
+  "NOTION_DECISION_LOG_TOKEN",
+  "NOTION_DECISION_LOG_DATA_SOURCE_ID",
   "APP_URL",
   "GITHUB_SYNC_OWNER",
   "GITHUB_SYNC_REPO",
@@ -67,7 +69,7 @@ for (const file of requiredFiles) {
 
 const packageJson = JSON.parse(await read("package.json"));
 const pnpmWorkspace = await read("pnpm-workspace.yaml");
-for (const script of ["build", "start", "lint", "test", "verify:migrations", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"]) {
+for (const script of ["build", "start", "lint", "test", "verify:migrations", "verify:product-updates", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"]) {
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 if (packageJson.packageManager !== "pnpm@10.13.1") failures.push("package.json must pin packageManager to pnpm@10.13.1.");
@@ -75,6 +77,7 @@ for (const marker of ["overrides:", "js-yaml: 4.3.0", "postcss: 8.5.15", "onlyBu
   if (!pnpmWorkspace.includes(marker)) failures.push(`pnpm-workspace.yaml missing: ${marker}`);
 }
 if (!packageJson.scripts?.["verify:deploy"]?.includes("pnpm test")) failures.push("verify:deploy must run pnpm test.");
+if (!packageJson.scripts?.["verify:deploy"]?.includes("verify:product-updates")) failures.push("verify:deploy must validate product updates.");
 if (!packageJson.scripts?.["vercel:build"]?.includes("pnpm run verify:deploy")) failures.push("vercel:build must run verify:deploy before build.");
 if (!packageJson.scripts?.["vercel:build"]?.includes("pnpm run build")) failures.push("vercel:build must run pnpm run build.");
 
@@ -169,8 +172,14 @@ for (const marker of [
 ]) {
   if (!previewWorkflow.includes(marker)) failures.push(`deploy-preview.yml missing: ${marker}`);
 }
+if (!previewWorkflow.includes('REQUIRE_SUPABASE_AUTH: "true"')) {
+  failures.push("deploy-preview.yml must force REQUIRE_SUPABASE_AUTH=true.");
+}
 
 const productionWorkflow = await read(".github/workflows/deploy-production.yml");
+if (!productionWorkflow.includes('REQUIRE_SUPABASE_AUTH: "true"')) {
+  failures.push("deploy-production.yml must force REQUIRE_SUPABASE_AUTH=true.");
+}
 const trashPurgeWorkflow = await read(".github/workflows/purge-planning-trash.yml");
 const trashPurgeScript = await read(".github/scripts/maintenance/purge-planning-trash.sh");
 const googleChatReleaseWorkflow = await read(".github/workflows/send-release-google-chat.yml");
@@ -334,7 +343,7 @@ console.log(JSON.stringify({
   requiredEnvKeys,
   checks: {
     files: requiredFiles.length,
-    scripts: ["build", "start", "lint", "test", "verify:migrations", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"],
+    scripts: ["build", "start", "lint", "test", "verify:migrations", "verify:product-updates", "verify:vercel-ready", "verify:google-chat", "verify:deploy", "vercel:build", "deploy:supabase-migrations"],
     workflows: ["deploy-preview", "deploy-production", "send-release-google-chat"],
     healthRoute: true,
     deploymentDoc: true,

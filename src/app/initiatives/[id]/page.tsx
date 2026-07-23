@@ -27,13 +27,13 @@ export default async function InitiativePage({ params }: Props) {
   }
 
   const supabase = getServerSupabase();
-  const { availability, data, source } = await getPlanningData(initiativeDetailPageDataScope, {
+  const { availability, data } = await getPlanningData(initiativeDetailPageDataScope, {
     workspace: "planning",
     currentProfileId: authProfile?.id || null,
     platformRole: authProfile?.platformRole || null,
   });
   if (availability === "unavailable") return <PlanningDataUnavailablePage workspace="planning" />;
-  if (!supabase || source === "seed") notFound();
+  if (!supabase) notFound();
 
   const detailResult = await loadPlanningInitiativeDetail(supabase, id, data.profiles);
   if (!detailResult.ok) {

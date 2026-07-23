@@ -7,14 +7,18 @@ import assert from "node:assert/strict";
 
 test("dev role switch is local-only and flows through API authorization", async () => {
   const authz = await readFile("src/lib/authz.ts", "utf8");
+  const localAuth = await readFile("src/lib/local-development-auth.ts", "utf8");
   const ui = await readPlanningSurface();
   const requestContext = await readFile("src/features/planning/hooks/use-planning-request-context.ts", "utf8");
   const browserApiClient = await readFile("src/lib/browser-api-client.ts", "utf8");
   const devSwitch = await readFile("src/features/planning/molecules/dev-role-switch.tsx", "utf8");
 
   assert.match(authz, /x-fmd-dev-profile-id/);
-  assert.match(authz, /process\.env\.NODE_ENV === "production"/);
-  assert.match(authz, /localhost\|127\\\.0\\\.0\\\.1\|\\\[::1\\\]/);
+  assert.match(authz, /isLocalLoginRequestAllowed/);
+  assert.match(localAuth, /environment\.NODE_ENV === "development"/);
+  assert.match(localAuth, /environment\.ENABLE_LOCAL_LOGIN === "true"/);
+  assert.match(localAuth, /isLoopbackRequestHost/);
+  assert.match(localAuth, /isLoopbackSupabaseUrl/);
   assert.match(authz, /isOperationalLeadRole\(profile\.platform_role\)/);
   assert.match(ui, /DevRoleSwitch/);
   assert.match(ui, /usePlanningRequestContext/);
@@ -23,8 +27,7 @@ test("dev role switch is local-only and flows through API authorization", async 
   assert.match(requestContext, /createBrowserApiClient/);
   assert.match(browserApiClient, /x-fmd-dev-profile-id/);
   assert.match(requestContext, /devProfileStateKey/);
-  assert.match(requestContext, /process\.env\.NODE_ENV !== "production"/);
-  assert.match(requestContext, /isLocalDevHost\(\)/);
+  assert.match(requestContext, /isLocalLoginSimulationEnabled\(\)/);
 });
 
 test("workflow logic hot spots are delegated to feature-local hooks", async () => {
@@ -70,9 +73,9 @@ test("planning app controller delegates command domains and stays a thin compose
   assert.ok(controller.split(/\r?\n/).length < 500);
   assert.match(bootstrapState, /usePlanningHeaderData/);
   assert.match(headerDataHook, /projectPlanningHeaderData\(data, baseHeaderData/);
-  assert.match(headerDataHook, /fmdToolsLoaded: source === "seed" \|\| workspace === "tools"/);
-  assert.match(headerDataHook, /eventsLoaded: source === "seed" \|\| workspace === "events"/);
-  assert.match(headerDataHook, /notificationEventsLoaded: source === "seed" \|\| workspace === "notifications"/);
+  assert.match(headerDataHook, /fmdToolsLoaded: workspace === "tools"/);
+  assert.match(headerDataHook, /eventsLoaded: workspace === "events"/);
+  assert.match(headerDataHook, /notificationEventsLoaded: workspace === "notifications"/);
   assert.match(headerDataHook, /idlePlanningHeaderSlots/);
   assert.match(headerDataHook, /requestPlanningHeaderData/);
   await assertFileContracts([
@@ -121,7 +124,6 @@ test("planning app controller delegates command domains and stays a thin compose
         /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,
-        /useDemoSeedImport/,
       ],
       excludes: [
         /planningApi\.|taskApi\./,
@@ -146,7 +148,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task update command",
       path: "src/features/tasks/hooks/use-task-update-command.ts",
-      matches: [/updateTaskRequest/, /persistLocalPlanningTasks/, /buildClientTaskUpdatePatch/],
+      matches: [/updateTaskRequest/, /buildClientTaskUpdatePatch/],
     },
     {
       label: "task create command",
@@ -197,17 +199,9 @@ test("planning app controller delegates command domains and stays a thin compose
     { label: "profile commands", path: "src/features/team/hooks/use-profile-settings-commands.ts", matches: [/updateProfileRequest/] },
     { label: "weekly attendance commands", path: "src/features/sprint/hooks/use-weekly-attendance-commands.ts", matches: [/updateMeetingAttendanceRequest/] },
     { label: "event commands", path: "src/features/events/hooks/use-founder-event-commands.ts", matches: [/createFounderEventRequest/] },
-    { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/, /withdrawTaskReviewRequest/, /reviewDecisionTaskState/, /persistLocalPlanningTasks/] },
+    { label: "review commands", path: "src/features/reviews/hooks/use-review-commands.ts", matches: [/reviewTaskRequest/, /withdrawTaskReviewRequest/, /reviewDecisionTaskState/] },
     { label: "notification commands", path: "src/features/planning/hooks/use-notification-commands.ts", matches: [/runNotificationDeliveryRequest/] },
   ]);
-});
-
-test("local planning persistence preserves active review metadata", async () => {
-  const localPlanningState = await readFile("src/features/planning/hooks/use-local-planning-state.ts", "utf8");
-
-  assert.match(localPlanningState, /reviewOwnerProfileId: task\.reviewOwnerProfileId/);
-  assert.match(localPlanningState, /reviewRequestedAt: task\.reviewRequestedAt/);
-  assert.match(localPlanningState, /scoreFinal: task\.scoreFinal/);
 });
 
 test("task mutation contract centralizes update normalization and route patches", async () => {
@@ -556,6 +550,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
 
 test("reviews live in task detail while legacy review links remain compatible", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
+  const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const app = await readPlanningSurface();
   const reviewRail = await readFile("src/features/reviews/organisms/task-review-rail.tsx", "utf8");
   const reviewSummary = await readFile("src/features/reviews/molecules/task-review-summary.tsx", "utf8");
@@ -584,7 +579,7 @@ test("reviews live in task detail while legacy review links remain compatible", 
   const reviewMigration = await readFile("supabase/migrations/20260717175618_integrate_reviews_into_tasks.sql", "utf8");
 
   assert.doesNotMatch(routes, /id: "reviews"|label: "Reviews"|href: "\/reviews"/);
-  assert.match(routes, /value === "reviews"\) return "planning"/);
+  assert.match(workspacePreferences, /value === "mine" \|\| value === "execution" \|\| value === "reviews"/);
   assert.doesNotMatch(app, /workspace === "reviews"|ReviewWorkspaceOverview|ReviewDetailPage|initialReviewTaskId/);
   assert.match(legacyReviewsRoute, /permanentRedirect\("\/planning\?tasks\.review=requested"\)/);
   assert.match(reviewRoute, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
@@ -818,7 +813,7 @@ test("tasks can be assigned to an unlocked sprint", async () => {
   assert.match(route, /backlogSprintAssignmentMessage/);
 });
 
-test("decision log routes and data slices stay removed while legacy storage remains in the production baseline", async () => {
+test("Supabase decision log mutations and data slices stay removed while legacy storage remains in the production baseline", async () => {
   const schema = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");

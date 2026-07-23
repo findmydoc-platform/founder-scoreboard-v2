@@ -1,4 +1,4 @@
-import { HelpCircle, Import, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
@@ -7,6 +7,8 @@ import { viewTabs, workspaceDescriptions, workspaceLabels } from "@/features/pla
 import { AuthControl } from "@/features/settings/organisms/auth-control";
 import { GitHubSyncTrigger } from "@/features/tasks/molecules/github-sync-trigger";
 import { projectGitHubSyncQueue } from "@/features/tasks/model/github-sync-queue";
+import { PlanningHelpMenu } from "@/features/planning/molecules/planning-help-menu";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 export function PlanningHeader({ controller }: { controller: PlanningAppController }) {
   const {
@@ -17,8 +19,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     authNotice,
     authUser,
     data,
-    demoSeedImportAvailable,
-    demoSeedImportPending,
     devProfileId,
     devRoleSwitchAvailable,
     dismissNotification,
@@ -29,7 +29,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     githubSyncQueueOpen,
     headerData,
     headerActions,
-    importDemoSeed,
     mobileNavOpen,
     openNotification,
     openNotificationInbox,
@@ -46,7 +45,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     showNotifications,
     signIn,
     signOut,
-    source,
     statusGuardNotice,
     view,
     workspace,
@@ -56,7 +54,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
   const description = workspace === "planning"
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
     : workspaceDescriptions[workspace];
-  const startFeatureTour = () => window.dispatchEvent(new CustomEvent("fmd:start-feature-tour"));
   const actionButtons = headerActions.map((action) => (
     <button
       key={action.id}
@@ -118,17 +115,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               onChange={setDevProfileId}
             />
           )}
-          {demoSeedImportAvailable && (
-            <button
-              type="button"
-              onClick={importDemoSeed}
-              disabled={demoSeedImportPending}
-              className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Import size={16} />
-              {demoSeedImportPending ? "Lädt..." : "Beispieldaten laden"}
-            </button>
-          )}
           <PlanningHeaderDataActions
             headerData={headerData}
             notificationsOpen={showNotifications}
@@ -136,20 +122,12 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             onOpenNotification={openNotification}
             onDismissNotification={dismissNotification}
           />
-          <button
-            type="button"
-            onClick={startFeatureTour}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            aria-label="Hilfe anzeigen"
-            title="Hilfe anzeigen"
-          >
-            <HelpCircle size={16} />
-          </button>
+          <PlanningHelpMenu />
           <GitHubSyncTrigger
             count={githubSyncQueue.count}
             failedCount={githubSyncQueue.failedCount}
             installationAvailable={githubInstallationAvailable}
-            localMode={source === "seed"}
+            localMode={isLocalLoginSimulationEnabled()}
             connectionState={githubConnectionState}
             open={githubSyncQueueOpen}
             onOpen={() => setGithubSyncQueueOpen(true)}

@@ -1,39 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { appNavItems, type AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
+import {
+  isPersistedWorkspace,
+  workspaceRoutes,
+} from "@/features/planning/model/workspace-routes";
 import { BoardSettingsSection } from "@/features/profile/molecules/profile-board-section";
 import { ProfileIdentitySection } from "@/features/profile/molecules/profile-identity-section";
+import { ProfileGitHubProjectSettingsSection } from "@/features/profile/molecules/profile-github-project-settings-section";
 import { NotificationSettingsSection } from "@/features/profile/molecules/profile-notification-section";
 import { ProfileProcessSettingsSection } from "@/features/profile/molecules/profile-process-settings-section";
 import { ProfilePlanningItemsTokens } from "@/features/profile/organisms/profile-planning-items-tokens";
 import { ProfileSettingsNavButton, profileSettingsSections } from "@/features/profile/molecules/profile-settings-layout";
 import {
   buildInitialDraft,
-  defaultFilters,
-  expandedPackageIds,
   serializeDraft,
   type ProfileSettingsDraft,
   type ProfileSettingsSectionId,
 } from "@/features/profile/model/profile-settings-view-model";
 import type { OwnProfileSettingsPatch } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import { taskStatuses } from "@/lib/status";
-import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
+import { canConfigureFounderOpsGitHubProject } from "@/lib/platform";
+import type { PlanningData, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type ProfileSettingsOverviewProps = {
   apiClient: BrowserApiClient;
   data: PlanningData;
   currentProfile: Profile | null;
-  expandedPackages: Record<string, boolean>;
-  filters: PlanningFilterPreferences;
   pending: boolean;
-  source: "seed" | "supabase";
-  view: ViewMode;
-  workspace: AppWorkspace;
+  source: "supabase";
   onSaveOwnProfileSettings: (patch: OwnProfileSettingsPatch) => Promise<void>;
+  onSaveFounderOpsGitHubProject: (owner: string, number: number) => Promise<void>;
   onSaveFounderOpsReviewWindow: (hours: number) => Promise<void>;
 };
 
@@ -63,23 +64,24 @@ function ProfileSettingsForm({
   apiClient,
   data,
   currentProfile,
-  expandedPackages,
-  filters,
   pending,
   source,
-  view,
-  workspace,
   onSaveOwnProfileSettings,
+  onSaveFounderOpsGitHubProject,
   onSaveFounderOpsReviewWindow,
   profileUiPreference,
 }: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null }) {
-  const initialDraft = buildInitialDraft({ currentProfile, data, expandedPackages, filters, profileUiPreference, view, workspace });
+  const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
   const [draft, setDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
   const [savedSnapshot, setSavedSnapshot] = useState(() => serializeDraft(initialDraft));
   const [activeSection, setActiveSection] = useState<ProfileSettingsSectionId>("profile");
   const [advancedBoardOpen, setAdvancedBoardOpen] = useState(false);
   const [message, setMessage] = useState("");
   const operationalProfile = currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy" || currentProfile.platformRole === "founder";
+  const canConfigureGitHubProject = canConfigureFounderOpsGitHubProject(currentProfile);
+  const githubProjectDisabledReason = isLocalLoginSimulationEnabled()
+    ? "Im lokalen Simulationsmodus bleiben externe GitHub-Integrationen deaktiviert."
+    : undefined;
   const visibleSections = profileSettingsSections.filter((section) => {
     if (section.id === "process") return currentProfile.platformRole === "ceo";
     if (section.id === "api") return operationalProfile;
@@ -88,12 +90,13 @@ function ProfileSettingsForm({
   const draftSnapshot = serializeDraft(draft);
   const isDirty = draftSnapshot !== savedSnapshot;
 
-  const workspaceOptions = [
-    ...appNavItems
-      .filter((item) => !item.ceoOnly || currentProfile.platformRole === "ceo")
-      .map((item) => ({ value: item.id, label: item.label })),
-    { value: "profile", label: "Mein Profil" },
-  ];
+  const workspaceOptions = workspaceRoutes
+    .filter(
+      (route) =>
+        isPersistedWorkspace(route.id) &&
+        (!route.ceoOnly || currentProfile.platformRole === "ceo"),
+    )
+    .map((route) => ({ value: route.id, label: route.label }));
   const viewOptions = viewTabs.map((item) => ({ value: item.id, label: item.label }));
   const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const statusOptions = [{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
@@ -129,17 +132,6 @@ function ProfileSettingsForm({
       expandedPackageIds: current.expandedPackageIds.includes(packageId)
         ? current.expandedPackageIds.filter((item) => item !== packageId)
         : [...current.expandedPackageIds, packageId],
-    }));
-  };
-
-  const saveCurrentBoardDefaults = () => {
-    setMessage("");
-    setDraft((current) => ({
-      ...current,
-      defaultWorkspace: workspace === "profile" ? "planning" : workspace,
-      defaultTaskView: view,
-      planningFilters: defaultFilters(filters),
-      expandedPackageIds: expandedPackageIds(expandedPackages),
     }));
   };
 
@@ -222,7 +214,6 @@ function ProfileSettingsForm({
               viewOptions={viewOptions}
               workspaceOptions={workspaceOptions}
               onAdvancedBoardOpenChange={setAdvancedBoardOpen}
-              onCurrentBoardSave={saveCurrentBoardDefaults}
               onDefaultTaskViewChange={(defaultTaskView) => updateDraft("defaultTaskView", defaultTaskView)}
               onDefaultWorkspaceChange={(defaultWorkspace) => updateDraft("defaultWorkspace", defaultWorkspace)}
               onPackageToggle={toggleExpandedPackage}
@@ -230,11 +221,22 @@ function ProfileSettingsForm({
             />
           )}
           {activeSection === "process" && currentProfile.platformRole === "ceo" && (
-            <ProfileProcessSettingsSection
-              reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
-              pending={pending}
-              onSave={onSaveFounderOpsReviewWindow}
-            />
+            <div className="divide-y divide-slate-200">
+              {canConfigureGitHubProject ? (
+                <ProfileGitHubProjectSettingsSection
+                  githubProjectOwner={data.project.githubProjectOwner}
+                  githubProjectNumber={data.project.githubProjectNumber}
+                  pending={pending}
+                  disabledReason={githubProjectDisabledReason}
+                  onSave={onSaveFounderOpsGitHubProject}
+                />
+              ) : null}
+              <ProfileProcessSettingsSection
+                reviewObjectionWindowHours={data.project.reviewObjectionWindowHours}
+                pending={pending}
+                onSave={onSaveFounderOpsReviewWindow}
+              />
+            </div>
           )}
           {activeSection === "api" && operationalProfile && (
             <ProfilePlanningItemsTokens apiClient={apiClient} source={source} />

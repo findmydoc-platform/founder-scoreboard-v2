@@ -1,7 +1,6 @@
 "use client";
 
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { hasGitHubIssue } from "@/lib/platform";
 import { reviewDecisionTaskState } from "@/features/reviews/model/task-review-state";
@@ -14,20 +13,12 @@ export function useReviewCommands({
   githubInstallationAvailable,
   setData,
   setSaveError,
-  source,
   startTransition,
   syncTaskToGitHub,
 }: PlanningCommandContext & { syncTaskToGitHub: TaskSyncCommand }) {
   const updateReviewTasks = (update: (tasks: Task[]) => Task[]) => {
     setData((current) => {
       const tasks = update(current.tasks);
-      if (source === "seed") {
-        try {
-          persistLocalPlanningTasks(tasks);
-        } catch {
-          // The local demo stays usable if browser storage is unavailable.
-        }
-      }
       return { ...current, tasks };
     });
   };
@@ -49,8 +40,6 @@ export function useReviewCommands({
         item.id === task.id ? { ...item, status: nextStatus, reviewStatus, scorePoints, scoreFinal, reviewRequestedAt: "" } : item,
       ),
     );
-
-    if (source !== "supabase") return true;
 
     return new Promise<boolean>((resolve) => startTransition(async () => {
       try {
@@ -92,8 +81,6 @@ export function useReviewCommands({
       } : item),
     );
 
-    if (source !== "supabase") return true;
-
     return new Promise<boolean>((resolve) => startTransition(async () => {
       try {
         const { response, body } = await taskApi.withdrawTaskReviewRequest(apiClient, task.id, reason, task.updatedAt || "");
@@ -124,8 +111,6 @@ export function useReviewCommands({
         item.id === task.id ? { ...item, status: "Review", reviewStatus: "requested", scoreFinal: false, scorePoints: 0, reviewRequestedAt } : item,
       ),
     );
-
-    if (source !== "supabase") return true;
 
     return new Promise<boolean>((resolve) => startTransition(async () => {
       try {

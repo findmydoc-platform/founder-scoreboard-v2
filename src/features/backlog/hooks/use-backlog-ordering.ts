@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useTransition } from "react";
-import { persistLocalPlanningTasks } from "@/features/planning/hooks/use-local-planning-state";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { BacklogMovePlacement } from "@/features/tasks/model/task-api-client";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
@@ -23,7 +22,7 @@ type UseBacklogOrderingOptions = {
   refreshPlanningData: () => Promise<void>;
   setData: (updater: (current: PlanningData) => PlanningData) => void;
   setMessage: (message: string) => void;
-  source: "seed" | "supabase";
+  source: "supabase";
 };
 
 function reorderedBacklogTasks(tasks: Task[], taskId: string, targetTaskId: string, placement: BacklogPlacement) {
@@ -73,7 +72,6 @@ export function useBacklogOrdering({
   refreshPlanningData,
   setData,
   setMessage,
-  source,
 }: UseBacklogOrderingOptions) {
   const [isReordering, startReorderTransition] = useTransition();
   const reorderInFlightRef = useRef(false);
@@ -83,7 +81,7 @@ export function useBacklogOrdering({
       setMessage("Nur CEO oder Deputy können die Backlog-Reihenfolge ändern.");
       return "blocked";
     }
-    if (source === "supabase" && reorderInFlightRef.current) {
+    if (reorderInFlightRef.current) {
       setMessage("Backlog-Reihenfolge wird bereits gespeichert.");
       return "blocked";
     }
@@ -94,7 +92,7 @@ export function useBacklogOrdering({
     const task = orderedTasks.find((item) => item.id === taskId);
     const targetTask = orderedTasks.find((item) => item.id === targetTaskId);
     if (!task || !targetTask) return "ignored";
-    if (source === "supabase" && (!task.updatedAt || !targetTask.updatedAt)) {
+    if (!task.updatedAt || !targetTask.updatedAt) {
       setMessage("Backlog-Reihenfolge konnte nicht geprüft werden. Bitte neu laden.");
       return "blocked";
     }
@@ -104,20 +102,8 @@ export function useBacklogOrdering({
     setMessage("");
     setData((current) => {
       const tasks = current.tasks.map((item) => nextOrderById.has(item.id) ? { ...item, order: nextOrderById.get(item.id)! } : item);
-      if (source === "seed") {
-        try {
-          persistLocalPlanningTasks(tasks);
-        } catch {
-          // The local UI remains usable when browser storage is unavailable.
-        }
-      }
       return { ...current, tasks };
     });
-
-    if (source !== "supabase") {
-      setMessage("Rangfolge aktualisiert.");
-      return "queued";
-    }
 
     reorderInFlightRef.current = true;
     startReorderTransition(async () => {
