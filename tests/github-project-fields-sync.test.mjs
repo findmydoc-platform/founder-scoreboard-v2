@@ -175,6 +175,39 @@ test("matching values make repeated field sync mutation-free", async () => {
   assert.equal(mutations, 0);
 });
 
+test("field dry run reports exact changes without mutations", async () => {
+  let mutations = 0;
+  const fields = await loadFieldModule(async (_url, options) => {
+    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
+    mutations += 1;
+    throw new Error("mutation must not run");
+  });
+
+  const result = await fields.syncFounderOpsGitHubProjectFields({
+    dryRun: true,
+    itemId: "item-1",
+    projectId: "project-21",
+    projectNumber: 21,
+    projectOwner: "findmydoc-platform",
+    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
+    task,
+    token: "token",
+  });
+
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.changes, [
+    "Status",
+    "Sprint",
+    "Workstream",
+    "Estimate hours",
+    "Evidence URL",
+    "Priority",
+    "Start date",
+    "Target date",
+  ]);
+  assert.equal(mutations, 0);
+});
+
 test("empty planning values clear Sprint, Workstream, evidence, and both dates", async () => {
   const mutations = [];
   const fields = await loadFieldModule(async (_url, options) => {

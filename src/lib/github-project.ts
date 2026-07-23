@@ -161,19 +161,21 @@ const addProjectItemMutation = `mutation FounderOpsAddProjectItem($projectId: ID
   }
 }`;
 
-export async function ensureFounderOpsGitHubProjectItem({
-  issueNumber,
-  projectNumber,
-  projectOwner,
-  repository,
-  token,
-}: {
+type FounderOpsGitHubProjectItemInput = {
   issueNumber: number;
   projectNumber: number;
   projectOwner: string;
   repository: string;
   token: string;
-}) {
+};
+
+export async function observeFounderOpsGitHubProjectItem({
+  issueNumber,
+  projectNumber,
+  projectOwner,
+  repository,
+  token,
+}: FounderOpsGitHubProjectItemInput) {
   if (!validGitHubProjectOwner(projectOwner) || !validGitHubProjectNumber(projectNumber)) {
     throw new Error("FounderOps GitHub-Project-Konfiguration fehlt oder ist ungültig.");
   }
@@ -192,12 +194,28 @@ export async function ensureFounderOpsGitHubProjectItem({
   if (!issue) throw new Error(`GitHub Issue ${repository}#${issueNumber} konnte für die Project-Aufnahme nicht gelesen werden.`);
 
   const existing = issue.projectItems.nodes.find((item) => item.project.id === project.id);
-  if (existing) return { added: false, itemId: existing.id, projectId: project.id };
+  return {
+    issueId: issue.id,
+    itemId: existing?.id || null,
+    projectId: project.id,
+  };
+}
+
+export async function ensureFounderOpsGitHubProjectItem(input: FounderOpsGitHubProjectItemInput) {
+  const observed = await observeFounderOpsGitHubProjectItem(input);
+  if (observed.itemId) return { added: false, itemId: observed.itemId, projectId: observed.projectId };
 
   const mutation = await githubGraphql<{
     addProjectV2ItemById?: { item?: { id: string } | null } | null;
-  }>(addProjectItemMutation, { projectId: project.id, contentId: issue.id }, token, "mutation");
+  }>(addProjectItemMutation, {
+    projectId: observed.projectId,
+    contentId: observed.issueId,
+  }, input.token, "mutation");
   const itemId = mutation.addProjectV2ItemById?.item?.id;
-  if (!itemId) throw new Error(`GitHub Issue ${repository}#${issueNumber} wurde nicht in Project ${projectOwner}#${projectNumber} aufgenommen.`);
-  return { added: true, itemId, projectId: project.id };
+  if (!itemId) {
+    throw new Error(
+      `GitHub Issue ${input.repository}#${input.issueNumber} wurde nicht in Project ${input.projectOwner}#${input.projectNumber} aufgenommen.`,
+    );
+  }
+  return { added: true, itemId, projectId: observed.projectId };
 }
