@@ -1,7 +1,8 @@
 "use client";
 
+import { SiGithub } from "@icons-pack/react-simple-icons";
 import type { User } from "@supabase/supabase-js";
-import { Settings, Users } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 function getUserMetadataString(user: User | null, key: string) {
@@ -11,7 +12,6 @@ function getUserMetadataString(user: User | null, key: string) {
 
 export function AuthControl({
   user,
-  error,
   busy,
   onSignIn,
   onSignOut,
@@ -19,7 +19,6 @@ export function AuthControl({
   variant = "header",
 }: {
   user: User | null;
-  error: string;
   busy: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -51,25 +50,17 @@ export function AuthControl({
 
   if (!user) {
     return (
-      <div className={variant === "gate" ? "grid gap-3" : ""}>
-        {variant === "gate" && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-            Rollen und Zugriff werden nach dem Login über dein verbundenes Profil geprüft.
-          </div>
-        )}
-        {error && variant === "gate" && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-        <button
-          type="button"
-          onClick={onSignIn}
-          disabled={busy}
-          className={variant === "gate"
-            ? "inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"}
-        >
-          <Users size={17} />
-          {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onSignIn}
+        disabled={busy}
+        className={variant === "gate"
+          ? "inline-flex h-14 w-full items-center justify-center gap-3 rounded-[5px] bg-[#1557ff] px-4 text-base font-medium text-white shadow-sm transition hover:bg-[#0d47e5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ff] disabled:cursor-not-allowed disabled:opacity-60"
+          : "inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"}
+      >
+        <SiGithub size={variant === "gate" ? 21 : 17} aria-hidden="true" />
+        {busy ? "GitHub wird geöffnet..." : "Mit GitHub anmelden"}
+      </button>
     );
   }
 

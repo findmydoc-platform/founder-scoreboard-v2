@@ -414,7 +414,10 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(ui, /PlanningBootShell/);
   assert.doesNotMatch(ui, /ShieldCheck/);
   assert.match(ui, /variant="gate"/);
-  assert.match(authControl, /Rollen und Zugriff werden nach dem Login/);
+  assert.match(ui, /Founder Planning/);
+  assert.match(ui, /Willkommen zurück/);
+  assert.match(ui, /planning-login-network\.svg/);
+  assert.doesNotMatch(authControl, /Rollen und Zugriff werden nach dem Login/);
   assert.match(authControl, /Mit GitHub anmelden/);
   assert.doesNotMatch(authControl, /GitHub-Rechte fehlen/);
   assert.doesNotMatch(authControl, /Login öffnen/);

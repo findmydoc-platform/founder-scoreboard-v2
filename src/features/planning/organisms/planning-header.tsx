@@ -15,7 +15,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     actualProfile,
     authAvailable,
     authBusy,
-    authError,
     authNotice,
     authUser,
     data,
@@ -135,7 +134,6 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
           {authAvailable && (
             <AuthControl
               user={authUser}
-              error={authError}
               busy={authBusy}
               onSignIn={signIn}
               onSignOut={signOut}

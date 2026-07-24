@@ -53,7 +53,6 @@ export function PlanningBootShell({
             {authUser && onSignIn && onSignOut && (
               <AuthControl
                 user={authUser}
-                error={error || ""}
                 busy={authBusy}
                 onSignIn={onSignIn}
                 onSignOut={onSignOut}
