@@ -45,15 +45,15 @@ function recordingSupabase() {
 }
 
 const expectedTablesByWorkspace = {
-  planning: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  backlog: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "sprint_commitments", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
+  planning: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
+  backlog: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "task_links", "sprints", "sprint_commitments", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   "decision-log": ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   events: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "founder_events"],
-  sprint: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
-  projects: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
+  sprint: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "task_links", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
+  projects: ["projects", "profiles", "active_packages", "milestones", "active_tasks", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   tools: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "fmd_tools"],
-  team: ["projects", "profiles", "active_tasks", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  notifications: ["projects", "profiles", "active_tasks", "notification_events", "notification_deliveries", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
+  team: ["projects", "profiles", "active_tasks", "task_links", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
+  notifications: ["projects", "profiles", "active_tasks", "task_links", "notification_events", "notification_deliveries", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   profile: ["projects", "profiles", "active_packages", "notification_preferences", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
 };
 
@@ -74,6 +74,7 @@ test("task detail keeps every core collection while loading detail rows separate
     "active_packages",
     "milestones",
     "active_tasks",
+    "task_links",
     "sprints",
     "profile_ui_preferences",
     "profile_feature_tour_acknowledgements",

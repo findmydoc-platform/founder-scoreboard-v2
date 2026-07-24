@@ -1,4 +1,4 @@
-import type { Task } from "./types";
+import type { LinkedPullRequest, Task } from "./types";
 import { requireAllowedGitHubRepository, splitGitHubRepository } from "./github-repositories";
 import {
   assertGitHubIssueRepository,
@@ -561,6 +561,83 @@ export async function listGitHubIssueBlockedBy(issueNumber: number, token: strin
     apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
     cache: "no-store",
     errorMessage: "GitHub Dependencies konnten nicht geladen werden",
+  });
+}
+
+export async function listGitHubIssueLinkedPullRequests(
+  issueNumber: number,
+  token: string,
+  repository?: string | null,
+): Promise<LinkedPullRequest[]> {
+  const { owner, repo } = splitGitHubRepository(repository);
+  const query = `query($owner: String!, $repo: String!, $issueNumber: Int!) {
+    repository(owner: $owner, name: $repo) {
+      issue(number: $issueNumber) {
+        closedByPullRequestsReferences(
+          first: 100
+          includeClosedPrs: true
+          userLinkedOnly: false
+        ) {
+          nodes {
+            title
+            number
+            url
+            state
+            merged
+            mergedAt
+            repository { nameWithOwner }
+          }
+        }
+      }
+    }
+  }`;
+  const result = await githubJson<{
+    data?: {
+      repository?: {
+        issue?: {
+          closedByPullRequestsReferences?: {
+            nodes?: Array<{
+              title?: string | null;
+              number?: number | null;
+              url?: string | null;
+              state?: string | null;
+              merged?: boolean | null;
+              mergedAt?: string | null;
+              repository?: { nameWithOwner?: string | null } | null;
+            } | null>;
+          } | null;
+        } | null;
+      } | null;
+    };
+    errors?: Array<{ message?: string | null }>;
+  }>("https://api.github.com/graphql", {
+    token,
+    method: "POST",
+    operation: "read",
+    body: { query, variables: { owner, repo, issueNumber } },
+    cache: "no-store",
+    errorMessage: "Verknüpfte GitHub Pull Requests konnten nicht geladen werden",
+  });
+  if (result.errors?.length) {
+    throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));
+  }
+  const issue = result.data?.repository?.issue;
+  if (!issue) throw new Error(`GitHub Issue ${owner}/${repo}#${issueNumber} wurde nicht gefunden.`);
+
+  return (issue.closedByPullRequestsReferences?.nodes || []).flatMap((pullRequest): LinkedPullRequest[] => {
+    const title = pullRequest?.title?.trim() || "";
+    const number = pullRequest?.number || 0;
+    const url = pullRequest?.url || "";
+    const pullRequestRepository = pullRequest?.repository?.nameWithOwner || "";
+    if (!title || number <= 0 || !url || !pullRequestRepository) return [];
+    return [{
+      title,
+      number,
+      repository: pullRequestRepository,
+      url,
+      status: pullRequest?.merged ? "merged" : pullRequest?.state === "OPEN" ? "open" : "closed",
+      ...(pullRequest?.mergedAt ? { mergedAt: pullRequest.mergedAt } : {}),
+    }];
   });
 }
 

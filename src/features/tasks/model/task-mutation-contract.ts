@@ -23,6 +23,7 @@ export type TaskUpdatePayload = {
   deadline?: string;
   dependsOn?: string;
   evidenceLink?: string;
+  evidenceLinks?: string[];
   note?: string;
   reviewStatus?: string;
   scorePoints?: number;
@@ -56,7 +57,7 @@ export type CurrentTaskForActivity = {
   evidence_link?: string | null;
 };
 
-type DbTaskUpdate = Record<string, string | number | boolean | null>;
+type DbTaskUpdate = Record<string, unknown>;
 
 type NormalizedClientTaskPatch =
   | { ok: true; patch: Partial<Task> }
@@ -134,6 +135,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     milestoneId: patch.parentTaskId !== undefined ? undefined : patch.milestoneId,
     dependsOn: patch.dependsOn,
     evidenceLink: patch.evidenceLink,
+    evidenceLinks: patch.evidenceLinks,
     selfDodChecked: patch.selfDodChecked,
     selfEvidenceChecked: patch.selfEvidenceChecked,
     selfDocumentedChecked: patch.selfDocumentedChecked,
@@ -177,7 +179,8 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
     messages.push(`Zeitraum geändert: ${formatChange(currentTask?.start_date, payload.startDate ?? currentTask?.start_date)} bis ${formatChange(currentTask?.end_date, payload.endDate ?? currentTask?.end_date)}`);
   }
   if (payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined) messages.push("Aufgabenbrief aktualisiert");
-  if (payload.evidenceLink !== undefined && payload.evidenceLink !== currentTask?.evidence_link) messages.push("Evidence-Link geändert");
+  if (payload.evidenceLinks !== undefined) messages.push("Nachweis-Links geändert");
+  else if (payload.evidenceLink !== undefined && payload.evidenceLink !== currentTask?.evidence_link) messages.push("Nachweis-Link geändert");
   if (payload.selfDodChecked !== undefined || payload.selfEvidenceChecked !== undefined || payload.selfDocumentedChecked !== undefined || payload.selfBlockersChecked !== undefined) messages.push("Founder-Checkliste aktualisiert");
   if (payload.note !== undefined) messages.push("Notiz aktualisiert");
   if (payload.dependsOn !== undefined) messages.push("Abhängigkeit aktualisiert");
@@ -189,6 +192,15 @@ export function buildTaskUpdateResponsePatch(
   update: DbTaskUpdate,
   startsReviewRequest: boolean,
 ): (Partial<Task> & { id: string }) | undefined {
+  const evidenceLinks = Array.isArray(update.evidence_links)
+    ? update.evidence_links.filter((value): value is string => typeof value === "string")
+    : undefined;
+  const evidencePatch = evidenceLinks
+    ? { evidenceLinks, evidenceLink: evidenceLinks[0] || "" }
+    : update.evidence_link !== undefined
+      ? { evidenceLink: typeof update.evidence_link === "string" ? update.evidence_link : "" }
+      : {};
+
   if (
     startsReviewRequest
     || update.review_owner_profile_id !== undefined
@@ -213,6 +225,7 @@ export function buildTaskUpdateResponsePatch(
       } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
+      ...evidencePatch,
     };
   }
 
@@ -224,6 +237,7 @@ export function buildTaskUpdateResponsePatch(
       ...(update.title ? { title: String(update.title) } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
+      ...evidencePatch,
     };
   }
 

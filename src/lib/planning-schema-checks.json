@@ -102,6 +102,12 @@
     "health": true
   },
   {
+    "name": "task_links.projections",
+    "table": "task_links",
+    "select": "id,task_id,type,label,url,position,metadata,updated_at",
+    "health": true
+  },
+  {
     "name": "sprint_commitments",
     "table": "sprint_commitments",
     "select": "id,sprint_id,profile_id,commitment_level,weekly_hours,note",

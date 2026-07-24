@@ -26,8 +26,37 @@ export const decisionLogTourId = "decision-log-workspace-v1";
 export const issueSharingTourId = "issue-sharing-v1";
 export const modalOverlayStackTourId = "modal-overlay-stack-v1";
 export const githubProjectSettingsTourId = "github-project-settings-v1";
+export const taskEvidenceLinksTourId = "task-evidence-links-v1";
 
 export const featureTours = [
+  {
+    id: taskEvidenceLinksTourId,
+    productUpdateId: "2026-07-24-evidence-links",
+    startWorkspace: "planning",
+    openTaskDetail: true,
+    requiredSelectors: ["[data-tour-id='task-evidence-links']", "[data-tour-id='github-sync-trigger']"],
+    steps: [
+      {
+        element: "[data-tour-id='task-evidence-links']",
+        popover: {
+          title: "Alle Nachweise im Blick",
+          description: "Links stehen kompakt untereinander. Beim Bearbeiten erscheint nach jedem ausgefüllten Link automatisch das nächste leere Feld.",
+          side: "left",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='github-sync-trigger']",
+        popover: {
+          title: "Pull Requests automatisch aktualisieren",
+          description: "Der GitHub-Sync übernimmt native Issue-Verknüpfungen und aktualisiert Titel und Status der Pull Requests.",
+          side: "bottom",
+          align: "end",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: githubProjectSettingsTourId,
     productUpdateId: "2026-07-22-github-project-settings",

@@ -4,6 +4,7 @@ import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const migration = await readFile("supabase/migrations/20260713162208_github_issue_sync_optimistic_concurrency.sql", "utf8");
+const pullRequestMigration = await readFile("supabase/migrations/20260724123616_task_evidence_links_and_linked_pull_requests.sql", "utf8");
 const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
 const listHook = await readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8");
 const detailHook = await readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8");
@@ -24,7 +25,7 @@ test("GitHub sync v2 RPCs use task revisions for begin and finalize CAS", () => 
 test("route checks the revision before the GitHub write and before finalization", () => {
   const beginIndex = route.indexOf('supabase.rpc("begin_github_issue_sync_transaction_v2"');
   const writeIndex = route.indexOf("const issue = await upsertGitHubIssue");
-  const finalizeIndex = route.indexOf('supabase.rpc("finalize_github_issue_sync_transaction_v2"');
+  const finalizeIndex = route.indexOf('supabase.rpc("finalize_github_issue_sync_with_pull_requests_v1"');
 
   assert.ok(beginIndex > 0);
   assert.ok(beginIndex < writeIndex);
@@ -34,6 +35,8 @@ test("route checks the revision before the GitHub write and before finalization"
   assert.match(route, /pendingError\?\.code === "P0001"/);
   assert.match(route, /finalizeError\?\.code === "P0001"/);
   assert.match(route, /code: "github_sync_stale"/);
+  assert.match(pullRequestMigration, /and updated_at = p_expected_updated_at/);
+  assert.match(pullRequestMigration, /and github_issue_sync_status = 'pending'/);
 });
 
 test("stale responses remain retryable instead of becoming failed", () => {

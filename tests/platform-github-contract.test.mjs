@@ -91,7 +91,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(route, /Nur freigegebene Deliverables können mit GitHub synchronisiert werden/);
   assert.match(route, /Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein/);
   assert.match(route, /begin_github_issue_sync_transaction/);
-  assert.match(route, /finalize_github_issue_sync_transaction/);
+  assert.match(route, /finalize_github_issue_sync_with_pull_requests_v1/);
   assert.match(route, /persistGitHubSyncFailure/);
   assert.match(syncFailurePersistence, /fail_github_issue_sync_transaction/);
   assert.match(transactionalSyncMigration, /github_issue_sync_status = 'pending'/);
@@ -327,7 +327,8 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
   assert.match(syncRoute, /const warnings = \[\.\.\.\(issue\.warnings \|\| \[\]\), \.\.\.sprintContext\.warnings, \.\.\.fieldSync\.warnings\]/);
   assert.match(syncRoute, /Warnung:/);
-  assert.match(syncRoute, /finalize_github_issue_sync_transaction/);
+  assert.match(syncRoute, /finalize_github_issue_sync_with_pull_requests_v1/);
+  assert.match(syncRoute, /listGitHubIssueLinkedPullRequests/);
   assert.match(migration, /github_issue_sync_status = 'synced'/);
   assert.match(migration, /github_issue_sync_error = null/);
   assert.match(syncRoute, /warnings/);

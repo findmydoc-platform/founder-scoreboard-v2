@@ -2,7 +2,7 @@ import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/
 import { isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
 
-export type TaskRouteDbUpdate = Record<string, string | number | boolean | null>;
+export type TaskRouteDbUpdate = Record<string, unknown>;
 
 type CurrentTaskForRoute = {
   assignee?: string | null;
@@ -66,7 +66,7 @@ export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
       || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined
       ? "Aufgabenbrief"
       : "",
-    payload.evidenceLink !== undefined ? "Evidence-Link" : "",
+    payload.evidenceLinks !== undefined || payload.evidenceLink !== undefined ? "Nachweis-Links" : "",
     payload.note !== undefined ? "Notiz" : "",
     payload.dependsOn !== undefined ? "Abhängigkeit" : "",
     payload.selfDodChecked !== undefined || payload.selfEvidenceChecked !== undefined

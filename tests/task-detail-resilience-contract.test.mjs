@@ -20,8 +20,8 @@ test("overview editing uses a stable baseline and a safe discard dialog", async 
 
   assert.match(controller, /overviewBaseline/);
   assert.match(controller, /taskOverviewPatch\(overviewBaseline/);
-  assert.match(overview, /normalizedEvidenceValue !== baselineEvidenceValue/);
-  assert.match(overview, /Bestehender Hinweis/);
+  assert.match(overview, /value\.trim\(\) !== \(baseline\.evidenceLinks\[index\] \|\| ""\)\.trim\(\)/);
+  assert.match(overview, /Leere Felder werden nicht gespeichert/);
   assert.match(overview, /öffnet in neuem Tab/);
   assert.doesNotMatch(surface, /window\.confirm/);
   assert.match(surface, /onRequestDiscardAction\(action, true\)/);

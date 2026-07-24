@@ -33,6 +33,7 @@ import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-m
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
 import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
+import { normalizeEvidenceLinkList } from "@/features/tasks/model/task-evidence-links";
 
 type TaskUpdateTransactionResult = {
   parentApprovalStatus?: Task["parentApprovalStatus"];
@@ -66,9 +67,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const rawPayload = await request.json() as unknown;
+  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
+    return apiError("Aufgabenänderung ist ungültig.", 400);
+  }
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
-  let payload = rawPayload as TaskUpdatePayload;
+  let payload = { ...rawPayload } as TaskUpdatePayload;
+  const hasEvidenceLinks = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLinks");
+  const hasLegacyEvidenceLink = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLink");
+  if (hasEvidenceLinks || hasLegacyEvidenceLink) {
+    const normalizedEvidence = normalizeEvidenceLinkList(
+      hasEvidenceLinks ? payload.evidenceLinks : [payload.evidenceLink ?? ""],
+    );
+    if (!normalizedEvidence.ok) return apiError(normalizedEvidence.error, 400);
+    payload.evidenceLinks = normalizedEvidence.links;
+    payload.evidenceLink = normalizedEvidence.links[0] || "";
+  }
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
@@ -245,6 +259,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   applyTaskBriefUpdateFields(update, payload);
+  if (payload.evidenceLinks !== undefined) {
+    update.evidence_link = payload.evidenceLinks[0] || null;
+    update.evidence_links = payload.evidenceLinks;
+  }
 
   if (payload.sprintId !== undefined) {
     const nextSprintId = payload.sprintId || null;

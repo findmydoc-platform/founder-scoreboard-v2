@@ -1,5 +1,5 @@
-import type { Profile, Task, TaskReview } from "./types";
-import type { DbTask, DbTaskReview } from "./planning-data-row-types";
+import type { LinkedPullRequest, Profile, Task, TaskReview } from "./types";
+import type { DbTask, DbTaskLink, DbTaskReview } from "./planning-data-row-types";
 import { profileNameById } from "./planning-profile-mappers";
 
 export type TaskRowForMapping = Partial<DbTask>;
@@ -7,7 +7,56 @@ type TaskProfileLookup = Profile[] | Map<string, string>;
 
 type MapTaskRowOptions = {
   defaultSprintId?: string;
+  taskLinks?: DbTaskLink[];
 };
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function taskLinkProjection(row: TaskRowForMapping, taskLinks: DbTaskLink[] = []) {
+  const orderedLinks = [...taskLinks].sort((left, right) => left.position - right.position || left.id - right.id);
+  const evidenceLinks = [...new Set(
+    orderedLinks
+      .filter((link) => link.type === "evidence" && isHttpUrl(link.url))
+      .map((link) => link.url),
+  )];
+  if (!evidenceLinks.length && row.evidence_link && isHttpUrl(row.evidence_link)) {
+    evidenceLinks.push(row.evidence_link);
+  }
+
+  const linkedPullRequests = orderedLinks.flatMap((link): LinkedPullRequest[] => {
+    if (link.type !== "github_pull_request") return [];
+    const metadata = link.metadata || {};
+    const repository = typeof metadata.repository === "string" ? metadata.repository : "";
+    const number = typeof metadata.number === "number" ? metadata.number : Number(metadata.number);
+    const status = metadata.status;
+    if (
+      !repository
+      || !Number.isInteger(number)
+      || number <= 0
+      || !isHttpUrl(link.url)
+      || (status !== "open" && status !== "merged" && status !== "closed")
+    ) {
+      return [];
+    }
+    return [{
+      title: link.label,
+      repository,
+      number,
+      url: link.url,
+      status,
+      ...(typeof metadata.mergedAt === "string" && metadata.mergedAt ? { mergedAt: metadata.mergedAt } : {}),
+    }];
+  });
+
+  return { evidenceLinks, linkedPullRequests };
+}
 
 function profileName(lookup: TaskProfileLookup, profileId?: string | null) {
   if (Array.isArray(lookup)) return profileNameById(lookup, profileId);
@@ -23,6 +72,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const createdBy = profileName(profiles, row.created_by);
   const taskType: Task["taskType"] = row.task_type === "sub_issue" ? "sub_issue" : "deliverable";
   const approvalStatus = taskType === "sub_issue" ? null : row.approval_status || "approved";
+  const { evidenceLinks, linkedPullRequests } = taskLinkProjection(row, options.taskLinks);
 
   return {
     id: row.id || "",
@@ -48,7 +98,9 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     dodTemplateVersion: row.dod_template_version || "founder-deliverable-v2",
     definitionOfDone: row.definition_of_done || "",
     dependsOn: row.task_dependencies?.map((item) => item.note).join("; ") || "",
-    evidenceLink: row.evidence_link || "",
+    evidenceLink: evidenceLinks[0] || row.evidence_link || "",
+    evidenceLinks,
+    linkedPullRequests,
     issueNumber: row.issue_number || "",
     issueUrl: row.issue_url || "",
     note: row.task_notes?.note || "",
@@ -102,8 +154,8 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   };
 }
 
-export function mapTask(row: DbTask, profiles: Profile[]): Task {
-  return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1" });
+export function mapTask(row: DbTask, profiles: Profile[], taskLinks: DbTaskLink[] = []): Task {
+  return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1", taskLinks });
 }
 
 export function mapTaskReview(row: DbTaskReview): TaskReview {

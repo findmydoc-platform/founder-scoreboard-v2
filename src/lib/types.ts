@@ -80,6 +80,17 @@ export type Package = {
 
 export type Milestone = MilestoneDto;
 
+export type LinkedPullRequestStatus = "open" | "merged" | "closed";
+
+export type LinkedPullRequest = {
+  title: string;
+  repository: string;
+  number: number;
+  url: string;
+  status: LinkedPullRequestStatus;
+  mergedAt?: string;
+};
+
 export type Task = {
   id: string;
   order: number;
@@ -105,6 +116,8 @@ export type Task = {
   definitionOfDone: string;
   dependsOn: string;
   evidenceLink: string;
+  evidenceLinks: string[];
+  linkedPullRequests: LinkedPullRequest[];
   issueNumber: string;
   issueUrl: string;
   note: string;

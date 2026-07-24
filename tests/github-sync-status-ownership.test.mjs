@@ -60,7 +60,7 @@ test("dedicated sync endpoint remains team-wide and its RPCs stay service-role o
   assert.match(syncRoute, /requireTeamMember/);
   assert.match(authz, /requireTeamMember[\s\S]*\["ceo", "founder", "deputy", "viewer"\]/);
   assert.match(syncRoute, /begin_github_issue_sync_transaction_v2/);
-  assert.match(syncRoute, /finalize_github_issue_sync_transaction_v2/);
+  assert.match(syncRoute, /finalize_github_issue_sync_with_pull_requests_v1/);
   assert.match(syncRoute, /persistGitHubSyncFailure/);
   assert.match(failurePersistence, /fail_github_issue_sync_transaction/);
 
@@ -76,6 +76,7 @@ test("dedicated sync endpoint remains team-wide and its RPCs stay service-role o
   for (const rpc of [
     "begin_github_issue_sync_transaction_v2",
     "finalize_github_issue_sync_transaction_v2",
+    "finalize_github_issue_sync_with_pull_requests_v1",
   ]) {
     assert.match(migration, new RegExp(`revoke all on function public\\.${rpc}\\([^;]+ from public;`, "i"));
     assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}\\([^;]+ to service_role;`, "i"));

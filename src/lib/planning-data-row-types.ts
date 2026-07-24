@@ -134,6 +134,16 @@ export type DbTask = {
   task_notes?: { note: string } | null;
 };
 
+export type DbTaskLink = {
+  id: number;
+  task_id: string;
+  type: string;
+  label: string;
+  url: string;
+  position: number;
+  metadata: Record<string, unknown> | null;
+};
+
 export type DbTaskReview = {
   id: number;
   task_id: string;

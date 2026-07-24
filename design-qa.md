@@ -106,6 +106,43 @@ final result: passed
 
 ---
 
+# Evidence Link Editor Width - Design QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-c9023d5f-4ac5-4787-a7c2-fe21d960aaee.png`
+- Implementation screenshot: `/private/tmp/evidence-links-edit-wide-focused.png`
+- Combined comparison input: `/private/tmp/evidence-links-edit-comparison.png`
+- Source pixels: 1682 × 586
+- Implementation pixels: 1340 × 390
+- Desktop CSS viewport: 1668 × 900 at device pixel ratio 1
+- Responsive CSS viewport: 768 × 900
+- State: task overview edit mode with GitHub, Notion, generic web, and one trailing empty URL field
+
+## Findings and comparison history
+
+1. The supplied source showed a P1 usability issue: each URL input occupied only the browser-default input width while its provider label was positioned against the full-width wrapper. Complete URLs were visibly cut off despite unused horizontal space.
+2. The input now fills its wrapper with `w-full min-w-0`; the existing provider adornment, padding, focus state, row height, and lazy-field behavior remain unchanged.
+3. The focused comparison places the supplied source and final implementation in one normalized-width image. At 1668 pixels the fields fill the evidence section and the complete seeded URLs remain readable.
+4. At 768 pixels every evidence input measures 654 pixels inside the 768-pixel viewport without horizontal overflow.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing field typography, weights, line height, and labels are unchanged; URL text no longer appears prematurely truncated.
+- Spacing and layout rhythm: fields now use the available section width on desktop and responsive layouts while retaining the existing vertical rhythm.
+- Colors and visual tokens: existing border, focus, surface, and muted-provider tokens are unchanged.
+- Image quality and asset fidelity: existing local provider icons remain sharp and aligned; no new assets were introduced.
+- Copy and content: helper text, provider labels, and URL values are unchanged.
+- Interaction and accessibility: keyboard focus, accessible URL labels, automatic trailing field creation, and disabled save behavior remain intact.
+
+## Final result
+
+No actionable P0, P1, or P2 findings remain.
+
+final result: passed
+
+---
+
 # Issue Sharing - Design QA
 
 ## Visual sources
@@ -215,3 +252,25 @@ final result: passed
 - Runtime screenshot and visual comparison are pending because the local preview URL was blocked by the browser security policy during this pass.
 
 final result: visual verification pending
+
+---
+
+# Evidence Links and Linked Pull Requests - Design QA
+
+- Source reference: `/Users/razorspoint/.codex/generated_images/019f93ac-ee84-7d63-8a0a-05639751ca36/call_iJghlfbDU1fxrXLG0xTTDUwH.png`
+- Implementation screenshot: `public/product-updates/2026-07-24-evidence-links/evidence-links.png`
+- Comparison artifact: `/private/tmp/founder-scoreboard-evidence-links-comparison.png`
+- Browser: Codex in-app browser
+- Viewport: 1440 × 900 CSS pixels at browser default density
+- State: seeded local CEO session, task overview read mode, three evidence providers, and open, merged, and closed linked pull requests
+- Full-page evidence: task header, overview navigation, evidence section, and surrounding detail-page structure were checked in the live app
+- Focused evidence: the final 1440 × 900 capture shows the complete Links and Linked Pull Requests groups together
+
+## Iteration history
+
+1. The first implementation preserved the selected vertical group order and compact bordered rows, but used uppercase subgroup labels and a plural section heading.
+2. The subgroup typography was aligned with the reference's quieter title-case treatment, and the section heading was changed to singular.
+3. The reference and final implementation were placed in one side-by-side comparison. Provider icons, row rhythm, external-link affordances, group order, and PR status colors matched the selected direction while preserving the current product shell.
+4. Browser interaction verified that one filled URL creates exactly one new empty field and that empty intermediate fields do not create additional trailing inputs.
+
+final result: passed

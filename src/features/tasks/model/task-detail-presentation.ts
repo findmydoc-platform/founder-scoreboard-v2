@@ -16,7 +16,7 @@ export type TaskOverviewDraft = {
   scopeConstraints: string;
   acceptanceCriteria: string;
   evidenceRequired: string;
-  evidenceLink: string;
+  evidenceLinks: string[];
   definitionOfDone: string;
   note: string;
 };
@@ -37,6 +37,10 @@ function normalizedDraftValue(value?: string) {
   return (value || "").replaceAll("\r\n", "\n").trimEnd();
 }
 
+function normalizedEvidenceLinks(values: string[]) {
+  return values.map((value) => value.trim()).filter(Boolean);
+}
+
 export function buildTaskOverviewDraft(task: Task): TaskOverviewDraft {
   return {
     title: task.title,
@@ -45,7 +49,7 @@ export function buildTaskOverviewDraft(task: Task): TaskOverviewDraft {
     scopeConstraints: task.scopeConstraints || "",
     acceptanceCriteria: task.acceptanceCriteria || "",
     evidenceRequired: task.evidenceRequired || "",
-    evidenceLink: task.evidenceLink || "",
+    evidenceLinks: task.evidenceLinks?.length ? [...task.evidenceLinks] : task.evidenceLink ? [task.evidenceLink] : [],
     definitionOfDone: task.definitionOfDone || "",
     note: task.note || "",
   };
@@ -59,7 +63,7 @@ export function taskOverviewPatch(
   const baseline = buildTaskOverviewDraft(task);
   const patch: Partial<Task> = {};
 
-  const assignWhenChanged = <Key extends keyof TaskOverviewDraft>(key: Key) => {
+  const assignWhenChanged = <Key extends Exclude<keyof TaskOverviewDraft, "evidenceLinks">>(key: Key) => {
     if (normalizedDraftValue(draft[key]) !== normalizedDraftValue(baseline[key])) {
       Object.assign(patch, { [key]: draft[key] });
     }
@@ -76,7 +80,13 @@ export function taskOverviewPatch(
     assignWhenChanged("acceptanceCriteria");
     assignWhenChanged("definitionOfDone");
   }
-  if (permissions.canEditEvidence) assignWhenChanged("evidenceLink");
+  if (permissions.canEditEvidence) {
+    const nextEvidenceLinks = normalizedEvidenceLinks(draft.evidenceLinks);
+    const baselineEvidenceLinks = normalizedEvidenceLinks(baseline.evidenceLinks);
+    if (JSON.stringify(nextEvidenceLinks) !== JSON.stringify(baselineEvidenceLinks)) {
+      patch.evidenceLinks = nextEvidenceLinks;
+    }
+  }
   if (permissions.canEditNotes) assignWhenChanged("note");
 
   return patch;
