@@ -107,7 +107,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          REQUIRED_AUTH_LINKED_PROFILE_IDS: sebastian
+          REQUIRED_AUTH_LINKED_PROFILE_IDS: sebastian,volkan,anil,ozen,youssef
         run: pnpm run verify:auth
 
       - name: Verify Production GitHub Sync Contract
