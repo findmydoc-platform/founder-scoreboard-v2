@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-24-evidence-links",
+    "releasedAt": "2026-07-24",
+    "expiresAt": "2026-08-23",
+    "featureTourId": "task-evidence-links-v1",
+    "title": "Nachweise vollständig an einer Stelle",
+    "summary": "Aufgaben sammeln jetzt mehrere Nachweis-Links und zeigen verknüpfte Pull Requests automatisch mit ihrem aktuellen Status.",
+    "slides": [
+      {
+        "id": "task-evidence-links",
+        "title": "Links und Pull Requests klar getrennt",
+        "description": "Füge einfach Link für Link hinzu; das nächste Feld erscheint automatisch. Verknüpfte GitHub Pull Requests stehen nach dem Sync darunter und zeigen, ob sie offen, gemergt oder geschlossen sind.",
+        "image": {
+          "src": "/product-updates/2026-07-24-evidence-links/evidence-links.png",
+          "alt": "Aufgabendetails mit mehreren Nachweis-Links und farblich markierten verknüpften Pull Requests",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-22-github-project-settings",
     "releasedAt": "2026-07-22",
     "expiresAt": "2026-08-21",

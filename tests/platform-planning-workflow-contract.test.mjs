@@ -599,7 +599,7 @@ test("reviews live in task detail while legacy review links remain compatible", 
   assert.match(taskSurface, /variant="review"/);
   assert.match(taskOverview, /Kein Zielbild hinterlegt\./);
   assert.match(taskOverview, /Keine Abnahmekriterien hinterlegt\./);
-  assert.match(taskOverview, /Noch kein Nachweis-Link hinterlegt\./);
+  assert.match(taskOverview, /Noch keine Links hinterlegt\./);
   assert.match(dependencyBand, /Keine offene Abhängigkeit erfasst\./);
   assert.match(workflowStrips, /const showApproval = !effectivelyApproved && !reviewOpen/);
   assert.match(reviewState, /partial: "Kleine Nacharbeit"/);

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireTeamMember } from "@/lib/authz";
-import { connectGitHubSubIssue, githubRepoSlug, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
+import { connectGitHubSubIssue, githubRepoSlug, listGitHubIssueLinkedPullRequests, syncGitHubIssueDependencies, upsertGitHubIssue, type GitHubIssueDependencyInput } from "@/lib/github";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import { ensureFounderOpsGitHubProjectItem } from "@/lib/github-project";
 import { syncFounderOpsGitHubProjectFields, type FounderOpsGitHubSprint } from "@/lib/github-project-fields";
@@ -368,6 +368,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       warnings: [`GitHub Project-Felder konnten nicht synchronisiert werden: ${error instanceof Error ? error.message : "unbekannter Fehler"}`],
     }));
     const warnings = [...(issue.warnings || []), ...sprintContext.warnings, ...fieldSync.warnings];
+    let linkedPullRequests: Task["linkedPullRequests"] | null = null;
+    try {
+      linkedPullRequests = await listGitHubIssueLinkedPullRequests(
+        issue.number,
+        githubInstallationToken,
+        githubRepo,
+      );
+    } catch (pullRequestError) {
+      warnings.push(
+        `Verknüpfte Pull Requests konnten nicht aktualisiert werden: ${
+          pullRequestError instanceof Error ? pullRequestError.message : "unbekannter Fehler"
+        }`,
+      );
+    }
     if (task.taskType === "deliverable") {
       const dependencyContext = await githubDependencyContext(supabase, id, issue.number, githubRepo);
       await syncGitHubIssueDependencies(dependencyContext, githubInstallationToken);
@@ -388,7 +402,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       ...warnings.map((warning) => `Warnung: ${warning}`),
     ].filter(Boolean).join(" · ");
 
-    const { data: finalizedTask, error: finalizeError } = await supabase.rpc("finalize_github_issue_sync_transaction_v2", {
+    const { data: finalizedTask, error: finalizeError } = await supabase.rpc("finalize_github_issue_sync_with_pull_requests_v1", {
       p_task_id: id,
       p_expected_updated_at: pendingUpdatedAt,
       p_github_repo: githubRepo,
@@ -396,6 +410,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       p_github_issue_url: issue.html_url,
       p_synced_at: syncedAt,
       p_activity_message: activityMessage,
+      p_linked_pull_requests: linkedPullRequests,
     });
     if (finalizeError?.code === "P0001") return githubSyncStaleResponse();
     if (finalizeError) throw new Error(`GitHub Issue wurde gespeichert, aber die Verknüpfung ist fehlgeschlagen: ${finalizeError.message}`);
@@ -429,6 +444,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         githubIssueLastSyncedAt: syncedAt,
         githubIssueSyncError: "",
         updatedAt: finalizedTask?.updated_at || "",
+        ...(linkedPullRequests === null ? {} : { linkedPullRequests }),
       },
     });
   } catch (syncError) {

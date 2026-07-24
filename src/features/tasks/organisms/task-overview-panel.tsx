@@ -1,13 +1,18 @@
 "use client";
 
-import { Check, ExternalLink, Save, X } from "lucide-react";
+import { Check, ExternalLink, GitPullRequest, Globe2, Save, X } from "lucide-react";
+import { SiGithub, SiNotion } from "@icons-pack/react-simple-icons";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  safeEvidenceHost,
   type TaskOverviewDraft,
   type TaskOverviewEditPermissions,
 } from "@/features/tasks/model/task-detail-presentation";
-import type { Task } from "@/lib/types";
+import {
+  evidenceLinkFields,
+  evidenceLinkPresentation,
+  parseEvidenceUrl,
+} from "@/features/tasks/model/task-evidence-links";
+import type { LinkedPullRequest, Task } from "@/lib/types";
 import { formatDate } from "@/lib/display";
 import { classNames, UiButton, UiEmptyState, UiField, UiNotice, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 
@@ -69,37 +74,128 @@ function ReadSection({
   );
 }
 
-function ReviewEvidenceSection({
-  evidenceHost,
-  evidenceLink,
-  evidenceRequired,
+function EvidenceProviderIcon({ provider }: { provider: ReturnType<typeof evidenceLinkPresentation>["provider"] }) {
+  if (provider === "github") return <SiGithub size={18} aria-hidden="true" />;
+  if (provider === "notion") return <SiNotion size={18} aria-hidden="true" />;
+  return <Globe2 size={18} aria-hidden="true" />;
+}
+
+function EvidenceLinksList({ links }: { links: string[] }) {
+  if (!links.length) return <p className="text-sm text-slate-500">Noch keine Links hinterlegt.</p>;
+  return (
+    <ul className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {links.map((link) => {
+        const presentation = evidenceLinkPresentation(link);
+        const url = parseEvidenceUrl(link);
+        const detail = url ? `${presentation.host}${url.pathname === "/" ? "" : url.pathname}` : link;
+        return (
+          <li key={link} className="border-b border-slate-100 last:border-b-0">
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${presentation.label}-Nachweis öffnen: ${link} (öffnet in neuem Tab)`}
+              className="group flex min-h-14 items-center gap-3 px-3.5 py-2.5 text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-slate-700">
+                <EvidenceProviderIcon provider={presentation.provider} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-slate-900">{presentation.label}</span>
+                <span className="block truncate text-xs text-slate-500">{detail}</span>
+              </span>
+              <ExternalLink size={15} className="shrink-0 text-slate-400 transition group-hover:text-slate-600" aria-hidden="true" />
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const pullRequestStatusPresentation = {
+  open: { label: "Offen", iconClassName: "text-emerald-600", badgeClassName: "bg-emerald-50 text-emerald-700 ring-emerald-600/20" },
+  merged: { label: "Gemergt", iconClassName: "text-violet-600", badgeClassName: "bg-violet-50 text-violet-700 ring-violet-600/20" },
+  closed: { label: "Geschlossen", iconClassName: "text-red-600", badgeClassName: "bg-red-50 text-red-700 ring-red-600/20" },
+} as const;
+
+function LinkedPullRequestsList({ pullRequests }: { pullRequests: LinkedPullRequest[] }) {
+  if (!pullRequests.length) {
+    return <p className="text-sm text-slate-500">Noch keine Pull Requests mit dem GitHub Issue verknüpft.</p>;
+  }
+  return (
+    <ul className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {pullRequests.map((pullRequest) => {
+        const status = pullRequestStatusPresentation[pullRequest.status];
+        return (
+          <li key={`${pullRequest.repository}#${pullRequest.number}`} className="border-b border-slate-100 last:border-b-0">
+            <a
+              href={pullRequest.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Pull Request ${pullRequest.repository} Nummer ${pullRequest.number}: ${pullRequest.title}, Status ${status.label} (öffnet in neuem Tab)`}
+              className="group flex min-h-16 items-center gap-3 px-3.5 py-2.5 text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50">
+                <GitPullRequest size={18} className={status.iconClassName} aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-slate-900">{pullRequest.title}</span>
+                <span className="mt-0.5 block truncate text-xs text-slate-500">{pullRequest.repository} #{pullRequest.number}</span>
+              </span>
+              <span className={classNames("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset", status.badgeClassName)}>
+                {status.label}
+              </span>
+              <ExternalLink size={15} className="shrink-0 text-slate-400 transition group-hover:text-slate-600" aria-hidden="true" />
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function EvidenceGroups({
+  evidenceLinks,
+  linkedPullRequests,
 }: {
-  evidenceHost: string;
-  evidenceLink: string;
-  evidenceRequired: string;
+  evidenceLinks: string[];
+  linkedPullRequests: LinkedPullRequest[];
 }) {
   return (
-    <section id="task-review-evidence" tabIndex={-1} className="scroll-mt-6 border-b border-slate-100 py-5 outline-none">
+    <div className="mt-3 grid gap-5">
+      <div>
+        <h4 className="mb-2 text-sm font-medium text-slate-600">Links</h4>
+        <EvidenceLinksList links={evidenceLinks} />
+      </div>
+      <div>
+        <h4 className="mb-2 text-sm font-medium text-slate-600">Verknüpfte Pull Requests</h4>
+        <LinkedPullRequestsList pullRequests={linkedPullRequests} />
+      </div>
+    </div>
+  );
+}
+
+function ReviewEvidenceSection({
+  evidenceLinks,
+  evidenceRequired,
+  linkedPullRequests,
+}: {
+  evidenceLinks: string[];
+  evidenceRequired: string;
+  linkedPullRequests: LinkedPullRequest[];
+}) {
+  return (
+    <section
+      id="task-review-evidence"
+      data-tour-id="task-evidence-links"
+      tabIndex={-1}
+      className="scroll-mt-6 border-b border-slate-100 py-5 outline-none"
+    >
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-      <div className="mt-2 grid gap-2 text-[15px] leading-7 text-slate-700">
+      <div className="mt-2 text-[15px] leading-7 text-slate-700">
         <p>{evidenceRequired.trim() || <span className="text-slate-500">Kein erwarteter Nachweis hinterlegt.</span>}</p>
-        {evidenceLink && evidenceHost ? (
-          <a
-            href={evidenceLink}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Nachweis öffnen: ${evidenceLink} (öffnet in neuem Tab)`}
-            className="flex min-h-12 items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-2.5 text-blue-800 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            <span>
-              <span className="block text-sm font-semibold">Nachweis öffnen</span>
-              <span className="mt-0.5 block text-xs text-blue-700">{evidenceHost}</span>
-            </span>
-            <ExternalLink size={17} aria-hidden="true" />
-          </a>
-        ) : evidenceLink ? (
-          <p>{evidenceLink}</p>
-        ) : <p className="text-slate-500">Noch kein Nachweis-Link hinterlegt.</p>}
+        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
       </div>
     </section>
   );
@@ -138,13 +234,19 @@ export function TaskOverviewPanel({
 }: Props) {
   const [announcement, setAnnouncement] = useState("");
   const previousEditingRef = useRef(editing);
-  const evidenceHost = safeEvidenceHost(draft.evidenceLink);
-  const evidenceValue = draft.evidenceLink.trim();
-  const baselineEvidenceValue = baseline.evidenceLink.replaceAll("\r\n", "\n").trimEnd();
-  const normalizedEvidenceValue = draft.evidenceLink.replaceAll("\r\n", "\n").trimEnd();
-  const evidenceIsLegacyText = Boolean(evidenceValue && !evidenceHost);
-  const evidenceInvalid = evidenceIsLegacyText && normalizedEvidenceValue !== baselineEvidenceValue;
-  const hasReadContent = overviewFields.some(({ key }) => draft[key].trim()) || Boolean(draft.evidenceLink.trim()) || Boolean(riskContent);
+  const editableEvidenceFields = evidenceLinkFields(draft.evidenceLinks);
+  const evidenceInvalidIndex = editableEvidenceFields.findIndex((value, index) => (
+    Boolean(value.trim())
+    && !parseEvidenceUrl(value)
+    && value.trim() !== (baseline.evidenceLinks[index] || "").trim()
+  ));
+  const evidenceInvalid = evidenceInvalidIndex >= 0;
+  const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
+  const linkedPullRequests = task.linkedPullRequests || [];
+  const hasReadContent = overviewFields.some(({ key }) => draft[key].trim())
+    || evidenceLinks.length > 0
+    || linkedPullRequests.length > 0
+    || Boolean(riskContent);
   const flatReadOnly = flat && !editing;
 
   useEffect(() => {
@@ -166,7 +268,7 @@ export function TaskOverviewPanel({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (evidenceInvalid) {
-      document.getElementById("task-evidence-link")?.focus();
+      document.getElementById(`task-evidence-link-${evidenceInvalidIndex}`)?.focus();
       return;
     }
     const saved = await onSave();
@@ -236,38 +338,59 @@ export function TaskOverviewPanel({
           ) : null)}
 
           {permissions.canEditEvidence ? (
-            <UiField>
-              Nachweis-Link
-              <UiTextInput
-                id="task-evidence-link"
-                type="text"
-                inputMode="url"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                data-task-overview-field
-                value={draft.evidenceLink}
-                disabled={saving}
-                aria-invalid={evidenceInvalid}
-                aria-describedby={evidenceInvalid ? "task-evidence-error" : "task-evidence-help"}
-                onChange={(event) => onChange({ evidenceLink: event.target.value })}
-                inputSize="lg"
-                inputPadding="md"
-                placeholder="https://…"
-                className="h-11"
-              />
-              {evidenceInvalid ? (
-                <span id="task-evidence-error" className="font-normal text-red-700">Bitte eine vollständige http- oder https-URL eingeben.</span>
-              ) : (
-                <span id="task-evidence-help" className="font-normal text-slate-500">
-                  {evidenceHost
-                    ? `Vorschau: ${evidenceHost}`
-                    : evidenceIsLegacyText
-                      ? "Bestehender Hinweis; beim nächsten Ändern durch eine vollständige URL ersetzen."
-                      : "Link zu Drive, GitHub oder einem anderen Nachweis."}
-                </span>
-              )}
-            </UiField>
+            <fieldset className="grid gap-3" data-tour-id="task-evidence-links">
+              <legend className="text-sm font-semibold text-slate-950">Nachweis-Links</legend>
+              <p className="-mt-1 text-sm text-slate-500">
+                Sobald ein Link eingetragen ist, erscheint automatisch das nächste Feld. Leere Felder werden nicht gespeichert.
+              </p>
+              <div className="grid gap-2.5">
+                {editableEvidenceFields.map((value, index) => {
+                  const invalid = evidenceInvalidIndex === index;
+                  const presentation = parseEvidenceUrl(value) ? evidenceLinkPresentation(value) : null;
+                  return (
+                    <UiField key={`evidence-${index}`}>
+                      <span className="sr-only">Nachweis-Link {index + 1}</span>
+                      <div className="relative">
+                        <UiTextInput
+                          id={`task-evidence-link-${index}`}
+                          type="text"
+                          inputMode="url"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          data-task-overview-field
+                          value={value}
+                          disabled={saving}
+                          aria-label={`Nachweis-Link ${index + 1}`}
+                          aria-invalid={invalid}
+                          aria-describedby={invalid ? `task-evidence-error-${index}` : undefined}
+                          onChange={(event) => {
+                            const nextLinks = [...editableEvidenceFields];
+                            nextLinks[index] = event.target.value;
+                            onChange({ evidenceLinks: evidenceLinkFields(nextLinks) });
+                          }}
+                          inputSize="lg"
+                          inputPadding="md"
+                          placeholder="https://…"
+                          className="h-11 w-full min-w-0 pr-28"
+                        />
+                        {presentation ? (
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                            <EvidenceProviderIcon provider={presentation.provider} />
+                            {presentation.label}
+                          </span>
+                        ) : null}
+                      </div>
+                      {invalid ? (
+                        <span id={`task-evidence-error-${index}`} className="font-normal text-red-700">
+                          Bitte eine vollständige http- oder https-URL eingeben.
+                        </span>
+                      ) : null}
+                    </UiField>
+                  );
+                })}
+              </div>
+            </fieldset>
           ) : null}
 
           <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-6 sm:px-6">
@@ -301,31 +424,22 @@ export function TaskOverviewPanel({
           />
           {flatReadOnly ? (
             <ReviewEvidenceSection
-              evidenceHost={evidenceHost}
-              evidenceLink={evidenceValue}
+              evidenceLinks={evidenceLinks}
               evidenceRequired={draft.evidenceRequired}
+              linkedPullRequests={linkedPullRequests}
             />
           ) : (
             <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
           )}
-          {!flatReadOnly && evidenceValue && evidenceHost ? (
-            <section className="border-b border-slate-100 py-5">
+          {!flatReadOnly ? (
+            <section
+              data-tour-id="task-evidence-links"
+              className="border-b border-slate-100 py-5"
+            >
               <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-              <a
-                href={draft.evidenceLink}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Nachweis öffnen: ${draft.evidenceLink} (öffnet in neuem Tab)`}
-                className="mt-2 flex min-h-14 items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-blue-800 transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <span>
-                  <span className="block text-sm font-semibold">Nachweis öffnen</span>
-                  <span className="mt-0.5 block text-xs text-blue-700">{evidenceHost}</span>
-                </span>
-                <ExternalLink size={17} aria-hidden="true" />
-              </a>
+              <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
             </section>
-          ) : !flatReadOnly && evidenceValue ? <ReadSection label="Nachweis" value={draft.evidenceLink} /> : null}
+          ) : null}
           {flatReadOnly ? riskContent : null}
           <ReadSection
             label="Qualitätsstandard"

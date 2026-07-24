@@ -45,6 +45,7 @@
     "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs"
   },
   "dependencies": {
+    "@icons-pack/react-simple-icons": "13.13.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.7",
     "driver.js": "^1.8.0",

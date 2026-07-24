@@ -46,6 +46,7 @@ function task(overrides = {}) {
     acceptanceCriteria: "The report is readable",
     evidenceRequired: "Screenshot",
     evidenceLink: "https://example.com/evidence",
+    evidenceLinks: ["https://example.com/evidence"],
     definitionOfDone: "Founder review completed",
     note: "Keep the scope narrow",
     status: "Offen",
@@ -69,6 +70,7 @@ test("buildTaskOverviewDraft uses the description fallback and empty optional va
       acceptanceCriteria: undefined,
       evidenceRequired: undefined,
       evidenceLink: undefined,
+      evidenceLinks: [],
       definitionOfDone: undefined,
       note: undefined,
     }),
@@ -81,7 +83,7 @@ test("buildTaskOverviewDraft uses the description fallback and empty optional va
     scopeConstraints: "",
     acceptanceCriteria: "",
     evidenceRequired: "",
-    evidenceLink: "",
+    evidenceLinks: [],
     definitionOfDone: "",
     note: "",
   });
@@ -108,7 +110,7 @@ test("taskOverviewPatch includes only changed fields allowed by permissions", ()
     ...buildTaskOverviewDraft(baseline),
     title: "Changed title",
     acceptanceCriteria: "Changed checklist",
-    evidenceLink: "https://proof.example/evidence",
+    evidenceLinks: ["https://proof.example/evidence", ""],
     note: "Changed note",
   };
   const evidenceOnlyPermissions = {
@@ -119,7 +121,7 @@ test("taskOverviewPatch includes only changed fields allowed by permissions", ()
   };
 
   assert.deepEqual(taskOverviewPatch(baseline, draft, evidenceOnlyPermissions), {
-    evidenceLink: "https://proof.example/evidence",
+    evidenceLinks: ["https://proof.example/evidence"],
   });
   assert.equal(taskOverviewIsDirty(baseline, draft, evidenceOnlyPermissions), true);
   assert.deepEqual(
