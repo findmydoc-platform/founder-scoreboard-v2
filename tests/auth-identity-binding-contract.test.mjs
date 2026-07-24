@@ -1,0 +1,186 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import {
+  findMissingRequiredAuthLinkedProfileIds,
+  parseRequiredAuthLinkedProfileIds,
+} from "../scripts/lib/auth-verification.mjs";
+import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
+import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
+
+async function loadAuthz() {
+  return loadTranspiledModule("src/lib/authz.ts", {
+    "./local-development-auth": {
+      isLocalLoginRequestAllowed: () => false,
+    },
+    "./platform": {
+      isOperationalLeadRole: (role) => role === "ceo" || role === "deputy",
+    },
+    "./supabase": {
+      getSupabaseForToken: () => null,
+      requiresSupabaseAuth: () => true,
+    },
+  });
+}
+
+function profileQueryClient({
+  authProfile = null,
+  legacyProfile = null,
+} = {}) {
+  const queries = [];
+
+  return {
+    queries,
+    from(table) {
+      assert.equal(table, "profiles");
+      const filters = [];
+      const query = {
+        select() {
+          return query;
+        },
+        eq(column, value) {
+          filters.push(["eq", column, value]);
+          return query;
+        },
+        ilike(column, value) {
+          filters.push(["ilike", column, value]);
+          return query;
+        },
+        is(column, value) {
+          filters.push(["is", column, value]);
+          return query;
+        },
+        limit(value) {
+          filters.push(["limit", value]);
+          return query;
+        },
+        async maybeSingle() {
+          queries.push(filters);
+          return { data: authProfile, error: null };
+        },
+        async returns() {
+          queries.push(filters);
+          const requiresUnboundProfile = filters.some(
+            (filter) => filter[0] === "is"
+              && filter[1] === "auth_user_id"
+              && filter[2] === null,
+          );
+          return {
+            data: requiresUnboundProfile && legacyProfile ? [legacyProfile] : [],
+            error: null,
+          };
+        },
+      };
+      return query;
+    },
+  };
+}
+
+test("required Auth profile verification is deterministic and fail closed", () => {
+  assert.deepEqual(parseRequiredAuthLinkedProfileIds(), []);
+  assert.deepEqual(
+    parseRequiredAuthLinkedProfileIds(" sebastian,volkan,sebastian "),
+    ["sebastian", "volkan"],
+  );
+
+  const profiles = [
+    { id: "sebastian", auth_user_id: "auth-sebastian" },
+    { id: "volkan", auth_user_id: null },
+    { id: "other", auth_user_id: "stale-auth-user" },
+  ];
+  const authUserIds = new Set(["auth-sebastian"]);
+
+  assert.deepEqual(
+    findMissingRequiredAuthLinkedProfileIds(
+      profiles,
+      authUserIds,
+      ["sebastian", "volkan", "missing"],
+    ),
+    ["volkan", "missing"],
+  );
+});
+
+test("Sebastian pilot binds one stable GitHub identity without trusting user metadata", async () => {
+  const [migrations, workflow] = await Promise.all([
+    listSupabaseMigrations(),
+    readFile(".github/workflows/deploy-production.yml", "utf8"),
+  ]);
+  const matchingMigrations = migrations.filter(
+    (migration) => migration.name === "bind_sebastian_auth_identity",
+  );
+
+  assert.equal(matchingMigrations.length, 1);
+
+  const migration = matchingMigrations[0].sql;
+  assert.match(migration, /where profile\.id = 'sebastian'/i);
+  assert.match(migration, /lower\('SebastianSchuetze'\)/i);
+  assert.match(migration, /from auth\.identities/i);
+  assert.match(migration, /identity_row\.provider = 'github'/i);
+  assert.match(migration, /identity_row\.provider_id = '7256168'/i);
+  assert.match(migration, /v_identity_count <> 1/i);
+  assert.match(migration, /v_existing_auth_user_id <> v_auth_user_id/i);
+  assert.match(migration, /profile\.auth_user_id = v_auth_user_id[\s\S]*profile\.id <> 'sebastian'/i);
+  assert.match(migration, /auth_user_id is distinct from v_auth_user_id/i);
+  assert.doesNotMatch(migration, /user_metadata|raw_user_meta_data|identity_data/i);
+
+  assert.match(
+    workflow,
+    /Verify Production Auth Mapping[\s\S]*REQUIRED_AUTH_LINKED_PROFILE_IDS: sebastian[\s\S]*pnpm run verify:auth/,
+  );
+});
+
+test("bound profiles reject metadata fallback while unbound profiles keep the pilot fallback", async () => {
+  const { requirePlatformRoleForUser } = await loadAuthz();
+  const githubMetadataUser = {
+    id: "unrelated-auth-user",
+    user_metadata: { user_name: "SebastianSchuetze" },
+  };
+  const boundClient = profileQueryClient();
+
+  const boundResult = await requirePlatformRoleForUser(
+    boundClient,
+    githubMetadataUser,
+    ["founder"],
+  );
+
+  assert.deepEqual(boundResult, {
+    ok: false,
+    status: 403,
+    error: "GitHub-User ist keinem Teamprofil zugeordnet.",
+  });
+  assert.ok(
+    boundClient.queries.some((filters) =>
+      filters.some((filter) =>
+        filter[0] === "is"
+        && filter[1] === "auth_user_id"
+        && filter[2] === null
+      )
+    ),
+  );
+
+  const legacyProfile = {
+    id: "legacy-founder",
+    name: "Legacy Founder",
+    platform_role: "founder",
+    github_login: "LegacyFounder",
+  };
+  const legacyClient = profileQueryClient({ legacyProfile });
+  const legacyResult = await requirePlatformRoleForUser(
+    legacyClient,
+    {
+      id: "legacy-auth-user",
+      user_metadata: { user_name: "LegacyFounder" },
+    },
+    ["founder"],
+  );
+
+  assert.deepEqual(legacyResult, {
+    ok: true,
+    profile: {
+      id: "legacy-founder",
+      name: "Legacy Founder",
+      platformRole: "founder",
+      githubLogin: "LegacyFounder",
+    },
+  });
+});

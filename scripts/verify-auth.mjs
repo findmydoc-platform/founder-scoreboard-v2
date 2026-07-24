@@ -1,4 +1,8 @@
 import { createSupabaseScriptClient } from "./lib/supabase.mjs";
+import {
+  findMissingRequiredAuthLinkedProfileIds,
+  parseRequiredAuthLinkedProfileIds,
+} from "./lib/auth-verification.mjs";
 
 const supabase = await createSupabaseScriptClient({
   keyEnv: ["SUPABASE_SERVICE_ROLE_KEY"],
@@ -33,12 +37,20 @@ const { data: githubAppConnections, error: githubAppConnectionError } = await su
 if (githubAppConnectionError) throw new Error(`github_app_user_tokens: ${githubAppConnectionError.message}`);
 
 const authUserIds = new Set(authUsers.users.map((user) => user.id));
+const requiredAuthLinkedProfileIds = parseRequiredAuthLinkedProfileIds(
+  process.env.REQUIRED_AUTH_LINKED_PROFILE_IDS,
+);
 const authGithubLogins = new Set(
   authUsers.users
     .map((user) => user.user_metadata?.user_name || user.user_metadata?.preferred_username)
     .filter(Boolean),
 );
 const linked = profiles.filter((profile) => profile.auth_user_id && authUserIds.has(profile.auth_user_id));
+const missingRequiredAuthLinkedProfileIds = findMissingRequiredAuthLinkedProfileIds(
+  profiles,
+  authUserIds,
+  requiredAuthLinkedProfileIds,
+);
 const githubMapped = profiles.filter((profile) => profile.github_login);
 const githubAuthenticated = profiles.filter((profile) => profile.github_login && authGithubLogins.has(profile.github_login));
 const missingGithub = profiles.filter((profile) => !profile.github_login);
@@ -51,6 +63,8 @@ const result = {
   profiles: profiles.length,
   authUsers: authUsers.users.length,
   legacyAuthLinked: linked.length,
+  requiredAuthLinkedProfileIds,
+  missingRequiredAuthLinkedProfileIds,
   githubMapped: githubMapped.length,
   githubAuthenticated: githubAuthenticated.length,
   githubAppConnections: (githubAppConnections || []).filter((connection) => !connection.revoked_at).length,
@@ -81,11 +95,17 @@ console.log(JSON.stringify(result, null, 2));
 const localAuthIncomplete = localLoginSimulation
   && (missingRole.length || stale.length || ceos.length !== 1 || linked.length !== 1 || linked[0]?.id !== ceos[0]?.id);
 const githubAuthIncomplete = !localLoginSimulation
-  && (missingGithub.length || missingRole.length || stale.length || ceos.length !== 1);
+  && (
+    missingGithub.length
+    || missingRole.length
+    || stale.length
+    || ceos.length !== 1
+    || missingRequiredAuthLinkedProfileIds.length
+  );
 
 if (localAuthIncomplete || githubAuthIncomplete) {
   console.error(localLoginSimulation
     ? "Local Auth mapping is incomplete. Seed exactly one Auth user linked to the single CEO profile and provide every profile role."
-    : "Auth mapping is incomplete. Map every team profile with profiles.github_login, platform_role and org_role before enabling strict auth.");
+    : "Auth mapping is incomplete. Map every team profile with profiles.github_login, platform_role and org_role, and bind every required profile to an Auth user before enabling strict auth.");
   process.exit(1);
 }
