@@ -61,6 +61,7 @@ export async function requirePlatformRoleForUser(
       .from("profiles")
       .select("id,name,platform_role,github_login")
       .ilike("github_login", githubLogin)
+      .is("auth_user_id", null)
       .limit(2)
       .returns<AuthzProfileRow[]>();
     if (githubProfileResult.error) return { ok: false, status: 403, error: "GitHub-Profilzuordnung konnte nicht geprüft werden." };
