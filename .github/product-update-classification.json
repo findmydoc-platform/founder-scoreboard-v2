@@ -1,4 +1,4 @@
 {
-  "classification": "visual-polish",
-  "reason": "Refreshes the existing Planning login presentation without adding data, capabilities, or workflow steps."
+  "classification": "maintenance",
+  "reason": "Hardens database and API authorization while making the existing Viewer tool controls accurately read-only without adding data, capabilities, or workflow steps."
 }
