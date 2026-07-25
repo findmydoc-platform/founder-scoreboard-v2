@@ -29,6 +29,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
 
+## Database Authorization Contract
+
+- Database access may be equal to or narrower than app authorization, never broader. Before changing a grant, RLS policy, or RPC execution privilege, trace the real caller, server-side app guard, Supabase client/key, allowed platform roles, ownership rule, and mutable fields. Unknown access is denied; do not invent compatibility grants.
+- `authenticated` proves only that a Supabase session exists. It does not prove findmydoc team membership or a business role. Team-data policies must not use `TO authenticated` or `auth.uid() IS NOT NULL` as their sole authorization predicate.
+- Resolve team membership and platform roles only through the durable `profiles.auth_user_id = auth.uid()` binding. Never authorize from user metadata, names, email addresses, GitHub logins, request payload roles, or UI state.
+- Grant direct Data API access only when a verified browser or user-token path requires it. A server route using the service role does not justify `anon` or `authenticated` table privileges. Direct changes to `profiles.role`, `profiles.platform_role`, or `profiles.auth_user_id` remain server-only and transactional.
+- Preserve self-service database rights only where the app exposes the same action and the policy enforces the same profile or resource ownership. Viewers remain read-only for business and planning data unless an explicit self-service contract proves otherwise.
+- RLS or grant changes require positive and negative coverage for an unmapped authenticated session, each affected platform role, relevant ownership boundaries, and direct Data API access. Update `scripts/lib/database-security.mjs` for durable catalog assertions and run the local Auth integration verifier.
+- Roll back authorization changes with a reviewed forward migration. A rollback must not silently restore a known-broad policy or grant; document the exact compatibility reason and the temporary scope.
+
 ## Product Update Release Contract
 
 - Product updates are reserved for new or materially expanded UI functionality with clear relevance and user benefit. Bug fixes, maintenance changes, copy or visual polish, and minor UI or UX improvements must not create or extend a product update.
