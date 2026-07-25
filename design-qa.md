@@ -274,3 +274,67 @@ final result: visual verification pending
 4. Browser interaction verified that one filled URL creates exactly one new empty field and that empty intermediate fields do not create additional trailing inputs.
 
 final result: passed
+
+---
+
+# Login Redesign QA
+
+## Evidence
+
+- Source visual truth: `.codex-login-reference.png`
+- Normalized source: `.codex-login-reference-normalized.png`
+- Browser-rendered implementation: `.codex-login-implementation-svg-2.png`
+- Full-view comparison: `.codex-login-comparison-svg.png`
+- Focused artwork comparison: `.codex-login-comparison-artwork-svg.png`
+- Responsive evidence: `.codex-login-mobile-svg.png`
+- State: signed-out login gate
+- Route: `/planning`
+- CSS viewport: `1440 x 1024`
+- Source pixels: `1487 x 1058`, normalized to `1440 x 1024`
+- Implementation pixels: `1440 x 1024`
+- Device scale factor: `2`; the browser capture is normalized to CSS viewport pixels
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: The implementation preserves the source hierarchy with the existing Inter-based product font, a mint `Founder Planning` label, a strong `Willkommen zurück` heading, and a restrained button label. The lockup and control typography are intentionally slightly tighter than the generated mock to preserve the established brand component and the requested thin login treatment.
+- Spacing and layout rhythm: The desktop split matches the source at approximately `34.5% / 65.5%`. The login rail, gray vertical divider, gray horizontal rule, title stack, and CTA alignment match the normalized source. The final rail width is `324px`.
+- Colors and visual tokens: The implementation retains the white and pale blue-gray surfaces, slate-gray dividers, mint label, cobalt CTA, and existing FounderOps brand colors. Contrast remains clear without introducing extra panels or shadows.
+- Image quality and asset fidelity: The right-side planning network is a native `1600 x 1600` vector asset at `public/assets/planning-login-network.svg`. Its paths, nodes, rings, panels, and dotted structures retain the reference art direction without embedding a raster image. The asset is crop-safe, stays sharp at any display size, and is served unoptimized through `next/image` as recommended for local SVG sources.
+- Copy and content: The signed-out surface contains only the approved copy: `Founder Planning`, `Willkommen zurück`, and `Mit GitHub anmelden`. The previous explanatory access notice is absent. Runtime errors remain available when needed.
+- Interaction and accessibility: The GitHub button resolves to exactly one enabled control, has a visible focus style, and keeps its existing sign-in behavior. OAuth was not invoked during visual QA because it would leave the local preview and start an external authentication flow.
+- Responsiveness: At `390 x 844`, the decorative panel is removed, the login remains centered and readable, and document width remains exactly `390px` with no horizontal overflow.
+- Console: No errors or warnings were recorded for the production preview on port `3003`.
+
+## Comparison History
+
+1. Initial browser pass:
+   - P2: The signed-out status notice introduced an unnecessary explanatory panel and displaced the CTA.
+   - Fix: Removed the benign notice from the login gate while preserving actionable error output.
+   - P2: The login rail content was wider and vertically lower than the selected visual target.
+   - Fix: Reduced the rail content width to `324px`, tightened the brand-to-title spacing, and adjusted the desktop alignment.
+2. Post-fix pass:
+   - Full-view and focused rail comparisons show matching hierarchy, dividers, copy, major-region proportions, CTA placement, and artwork treatment.
+   - No further P0, P1, or P2 findings.
+3. SVG replacement pass:
+   - Rebuilt the decorative network as a native square SVG and replaced the generated PNG source.
+   - The full-view and focused artwork comparisons confirm the same visual density, central-node hierarchy, mint and cobalt accents, gray connector system, and crop behavior.
+   - Desktop natural image dimensions are `1600 x 1600`; mobile keeps the decorative panel hidden. No P0, P1, or P2 differences were introduced.
+
+## Primary Interaction Checks
+
+- Page title: `findmydoc Planning`
+- Login CTA count: `1`
+- Login CTA enabled: `true`
+- Desktop viewport: passed
+- Mobile viewport: passed
+- Production console check: passed
+
+## Follow-up Polish
+
+- P3: The generated mock exaggerates the brand lockup scale slightly. The implementation keeps the established product lockup more compact to support the requested thin treatment.
+
+## Final Result
+
+final result: passed

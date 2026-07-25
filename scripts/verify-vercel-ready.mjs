@@ -73,7 +73,17 @@ for (const script of ["build", "start", "lint", "test", "verify:migrations", "ve
   if (!packageJson.scripts?.[script]) failures.push(`package.json missing script: ${script}`);
 }
 if (packageJson.packageManager !== "pnpm@10.13.1") failures.push("package.json must pin packageManager to pnpm@10.13.1.");
-for (const marker of ["overrides:", "js-yaml: 4.3.0", "postcss: 8.5.15", "onlyBuiltDependencies:", "sharp", "unrs-resolver"]) {
+for (const marker of [
+  "overrides:",
+  "brace-expansion: 5.0.8",
+  "js-yaml: 4.3.0",
+  "postcss: 8.5.23",
+  "sharp: 0.35.3",
+  "onlyBuiltDependencies:",
+  "unrs-resolver",
+  "patchedDependencies:",
+  "minimatch@3.1.5: patches/minimatch@3.1.5.patch",
+]) {
   if (!pnpmWorkspace.includes(marker)) failures.push(`pnpm-workspace.yaml missing: ${marker}`);
 }
 if (!packageJson.scripts?.["verify:deploy"]?.includes("pnpm test")) failures.push("verify:deploy must run pnpm test.");
