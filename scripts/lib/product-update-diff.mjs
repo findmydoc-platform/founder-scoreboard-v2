@@ -1,4 +1,12 @@
 const visibleUiPathPattern = /^src\/(app|features|shared)\/.*\.(tsx|css)$/;
+export const productUpdateClassificationPath = ".github/product-update-classification.json";
+const nonReleaseClassifications = new Set([
+  "bug-fix",
+  "copy",
+  "maintenance",
+  "minor-ux",
+  "visual-polish",
+]);
 
 export function parseGitNumstat(output) {
   return String(output || "")
@@ -31,4 +39,14 @@ export function requiresProductUpdateForDiff(entries) {
   ));
 
   return !(removesUiFile && removalOnly);
+}
+
+export function isValidNonReleaseClassification(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && nonReleaseClassifications.has(value.classification)
+    && typeof value.reason === "string"
+    && value.reason.trim().length >= 20,
+  );
 }

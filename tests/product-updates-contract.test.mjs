@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  isValidNonReleaseClassification,
   parseGitNumstat,
+  productUpdateClassificationPath,
   requiresProductUpdateForDiff,
 } from "../scripts/lib/product-update-diff.mjs";
 
@@ -83,4 +85,27 @@ test("product update diff classification excludes removal-only UI maintenance", 
     "10\t0\tsrc/app/api/team/planning-items/v1/items/route.ts",
   );
   assert.equal(requiresProductUpdateForDiff(serverOnly), false);
+});
+
+test("non-release UI classifications are explicit and deployment-bound", async () => {
+  const classification = JSON.parse(await readFile(productUpdateClassificationPath, "utf8"));
+  const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
+
+  assert.equal(isValidNonReleaseClassification(classification), true);
+  assert.equal(
+    isValidNonReleaseClassification({
+      classification: "feature",
+      reason: "This adds a materially expanded workflow.",
+    }),
+    false,
+  );
+  assert.equal(
+    isValidNonReleaseClassification({
+      classification: "visual-polish",
+      reason: "Too short",
+    }),
+    false,
+  );
+  assert.match(verifier, /changedFiles\.includes\(productUpdateClassificationPath\)/);
+  assert.match(verifier, /unless the same deployment diff includes a valid non-release classification/);
 });

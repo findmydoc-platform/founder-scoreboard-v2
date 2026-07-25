@@ -4,7 +4,7 @@ FounderOps explains user-visible changes inside the product with a lightweight s
 
 ## Release rule
 
-Every production deployment with a user-visible change must:
+Every production deployment with new or materially expanded user-visible functionality must:
 
 1. Add or extend an entry in `src/features/product-updates/model/product-updates.json`.
 2. Add at least one current screenshot under `public/product-updates/<update-id>/`.
@@ -13,9 +13,11 @@ Every production deployment with a user-visible change must:
 5. Set `expiresAt` to 30 days after `releasedAt` by default. The verifier allows at most 60 days.
 6. Run `pnpm run verify:product-updates`.
 
-Purely operational changes do not create a gallery entry. They must not reuse an old update ID to reopen stale product news.
+Bug fixes, maintenance, copy changes, visual polish, minor UI or UX improvements, and purely operational changes do not create a gallery entry. They must not reuse an old update ID to reopen stale product news.
 
-The production deployment passes the previous `main` revision to the verifier. New or expanded user-facing TSX or CSS fails unless both the registry and a screenshot under `public/product-updates/` changed. A removal-only UI change is treated as maintenance only when it deletes at least one UI file and every remaining visible UI diff removes more lines than it adds. Manual local verification validates the complete registry without requiring a Git base revision.
+The production deployment passes the previous `main` revision to the verifier. New or expanded user-facing TSX or CSS fails unless both the registry and a screenshot under `public/product-updates/` changed. A removal-only UI change is treated as maintenance only when it deletes at least one UI file and every remaining visible UI diff removes more lines than it adds.
+
+For a non-release UI change, update `.github/product-update-classification.json` in the same deployment diff. Use one of `bug-fix`, `copy`, `maintenance`, `minor-ux`, or `visual-polish`, plus a concrete English reason. The same-diff requirement prevents an old classification from suppressing a later product update. Manual local verification validates the complete registry without requiring a Git base revision.
 
 ## Entry contract
 

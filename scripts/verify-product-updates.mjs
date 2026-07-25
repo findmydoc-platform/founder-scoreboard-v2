@@ -2,7 +2,12 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { parseGitNumstat, requiresProductUpdateForDiff } from "./lib/product-update-diff.mjs";
+import {
+  isValidNonReleaseClassification,
+  parseGitNumstat,
+  productUpdateClassificationPath,
+  requiresProductUpdateForDiff,
+} from "./lib/product-update-diff.mjs";
 
 const registryPath = "src/features/product-updates/model/product-updates.json";
 const tourRegistryPath = "src/features/product-tours/model/feature-tour-registry.ts";
@@ -22,8 +27,19 @@ if (baseRef && !/^0+$/.test(baseRef)) {
     const requiresProductUpdate = requiresProductUpdateForDiff(diffEntries);
     const hasProductUpdate = changedFiles.includes(registryPath)
       && changedFiles.some((file) => file.startsWith("public/product-updates/"));
+    const hasChangedNonReleaseClassification = changedFiles.includes(productUpdateClassificationPath);
     if (requiresProductUpdate && !hasProductUpdate) {
-      failures.push("New or expanded production UI changes require both a product update registry change and a current screenshot under public/product-updates/.");
+      let classification;
+      if (hasChangedNonReleaseClassification) {
+        try {
+          classification = JSON.parse(await readFile(productUpdateClassificationPath, "utf8"));
+        } catch {
+          failures.push(`${productUpdateClassificationPath} must contain valid JSON.`);
+        }
+      }
+      if (!isValidNonReleaseClassification(classification)) {
+        failures.push("New or expanded production UI changes require both a product update registry change and a current screenshot under public/product-updates/, unless the same deployment diff includes a valid non-release classification.");
+      }
     }
   }
 }
