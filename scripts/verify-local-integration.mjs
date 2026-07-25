@@ -173,6 +173,76 @@ async function verifyGitHubProjectRoleBoundary(status, source) {
   }
 }
 
+async function verifyUnmappedAuthReadBoundary(status) {
+  const adminKey = status.SERVICE_ROLE_KEY || status.SECRET_KEY;
+  if (!adminKey) throw new Error("Local Supabase status did not expose an admin key.");
+
+  const admin = createClient(status.API_URL, adminKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const unmapped = createClient(status.API_URL, status.ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const email = `unmapped-rls-${Date.now()}@example.test`;
+  const password = "Local-only-unmapped-RLS-2026!";
+  let userId = "";
+
+  try {
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (createError || !created.user) {
+      throw new Error("Could not create the temporary unmapped local Auth user.");
+    }
+    userId = created.user.id;
+
+    const { data: signIn, error: signInError } = await unmapped.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInError || !signIn.session) {
+      throw new Error("Temporary unmapped local Auth user could not sign in.");
+    }
+
+    for (const table of ["profiles", "tasks"]) {
+      const { data, error } = await unmapped.from(table).select("id").limit(1);
+      if (error) throw new Error(`Unmapped Auth RLS read failed unexpectedly for ${table}.`);
+      if (data?.length) {
+        throw new Error(`Unmapped Auth user unexpectedly read team data from ${table}.`);
+      }
+    }
+  } finally {
+    await unmapped.auth.signOut({ scope: "local" }).catch(() => undefined);
+    if (userId) {
+      const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+      if (deleteError) throw new Error("Temporary unmapped local Auth user could not be removed.");
+    }
+  }
+}
+
+async function verifyDirectProfileMutationDenied(supabase, userId) {
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id,role,platform_role")
+    .eq("auth_user_id", userId)
+    .single();
+  if (profileError || !profile) throw new Error("Mapped local profile could not be read through RLS.");
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({
+      role: profile.role,
+      platform_role: profile.platform_role,
+    })
+    .eq("id", profile.id)
+    .select("id");
+  if (!error || error.code !== "42501" || data?.length) {
+    throw new Error("Authenticated user unexpectedly mutated an authorization profile directly.");
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -180,6 +250,7 @@ async function main() {
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
   await verifyGitHubProjectRoleBoundary(status, source);
+  await verifyUnmappedAuthReadBoundary(status);
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
   const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3012"], {
     cwd: root,
@@ -207,6 +278,7 @@ async function main() {
     });
     if (signInError || !signInData.session) throw new Error("Seeded local Auth user could not sign in.");
     const token = signInData.session.access_token;
+    await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
 
     const expectedProfiles = [
       ["", "ceo"],
