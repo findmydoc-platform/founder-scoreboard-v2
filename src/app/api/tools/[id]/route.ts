@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { mapFmdTool } from "@/lib/planning-data-mappers";
 import type { DbFmdTool } from "@/lib/planning-data-row-types";
 import type { FmdTool } from "@/lib/types";
@@ -49,7 +49,7 @@ function normalizePreviewImageUrl(value: string) {
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const apiContext = await requireJsonApiContext<FmdToolPayload>(request, requireTeamMember, {});
+  const apiContext = await requireJsonApiContext<FmdToolPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
 
   const { payload, permission, supabase } = apiContext;

@@ -46,8 +46,6 @@ export async function requirePlatformRoleForUser(
   allowedRoles: PlatformRole[],
   options: PlatformRoleCheckOptions = {},
 ): Promise<AuthzResult> {
-  const githubLogin = String(user.user_metadata?.user_name || user.user_metadata?.preferred_username || "");
-
   const authProfileResult = await supabase
     .from("profiles")
     .select("id,name,platform_role,github_login")
@@ -55,27 +53,7 @@ export async function requirePlatformRoleForUser(
     .maybeSingle<AuthzProfileRow>();
   if (authProfileResult.error) return { ok: false, status: 403, error: "Teamprofil konnte nicht eindeutig geprüft werden." };
 
-  let githubProfile: AuthzProfileRow | null = null;
-  if (githubLogin) {
-    const githubProfileResult = await supabase
-      .from("profiles")
-      .select("id,name,platform_role,github_login")
-      .ilike("github_login", githubLogin)
-      .is("auth_user_id", null)
-      .limit(2)
-      .returns<AuthzProfileRow[]>();
-    if (githubProfileResult.error) return { ok: false, status: 403, error: "GitHub-Profilzuordnung konnte nicht geprüft werden." };
-    if ((githubProfileResult.data || []).length > 1) {
-      return { ok: false, status: 403, error: "GitHub-Login ist mehreren Teamprofilen zugeordnet." };
-    }
-    githubProfile = githubProfileResult.data?.[0] || null;
-  }
-
-  if (authProfileResult.data && githubProfile && authProfileResult.data.id !== githubProfile.id) {
-    return { ok: false, status: 403, error: "Session-Profil und GitHub-Profil verweisen auf unterschiedliche Teamprofile." };
-  }
-
-  const profile = authProfileResult.data || githubProfile;
+  const profile = authProfileResult.data;
   if (!profile) return { ok: false, status: 403, error: "GitHub-User ist keinem Teamprofil zugeordnet." };
   let effectiveProfile = profile;
   const devProfileId = options.devProfileId?.trim() || "";

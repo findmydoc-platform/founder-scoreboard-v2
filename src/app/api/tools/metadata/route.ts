@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cleanText } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { loadFmdToolMetadata } from "@/lib/fmd-tool-metadata";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ type MetadataPayload = {
 };
 
 export async function POST(request: NextRequest) {
-  const context = await requireJsonApiContext<MetadataPayload>(request, requireTeamMember, {});
+  const context = await requireJsonApiContext<MetadataPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
 
   const url = cleanText(context.payload.url, 1000);

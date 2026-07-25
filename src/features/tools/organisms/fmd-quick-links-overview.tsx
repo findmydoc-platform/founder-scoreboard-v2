@@ -68,8 +68,8 @@ export function FmdQuickLinksOverview({
     () => (showMissingLinks ? sortedTools : sortedTools.filter(hasFmdToolLink)),
     [showMissingLinks, sortedTools],
   );
-  const createAllowed = Boolean(currentProfile);
   const canEditLinks = canEditFmdQuickLinks(source, currentProfile);
+  const createAllowed = canEditLinks;
   const editingTool = editingToolId ? sortedTools.find((tool) => tool.id === editingToolId) || null : null;
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase("de");
   const curatedLinkCount = sortedTools.filter((tool) => tool.isCurated && tool.url).length;
@@ -141,7 +141,9 @@ export function FmdQuickLinksOverview({
           {message && <UiNotice tone="success" className="font-medium">{message}</UiNotice>}
           {!createAllowed && (
             <UiNotice tone="warning" className="font-medium">
-              Link-Eintragung braucht ein angemeldetes Teamprofil.
+              {currentProfile
+                ? "Viewer-Zugriff ist schreibgeschützt."
+                : "Link-Eintragung braucht ein angemeldetes Teamprofil."}
             </UiNotice>
           )}
         </div>

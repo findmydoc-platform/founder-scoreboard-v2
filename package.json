@@ -26,6 +26,7 @@
     "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
+    "verify:database-security": "node scripts/verify-database-security.mjs",
     "verify:operational": "node scripts/verify-operational.mjs",
     "verify:vercel-ready": "node scripts/verify-vercel-ready.mjs",
     "verify:github-sync": "node scripts/verify-github-sync.mjs",

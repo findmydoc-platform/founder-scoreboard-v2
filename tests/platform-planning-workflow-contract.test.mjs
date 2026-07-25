@@ -400,9 +400,9 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.match(api, /planningDataUnavailableMessage, 503/);
   assert.match(page, /PlanningDataUnavailablePage/);
   assert.match(authz, /auth_user_id/);
-  assert.match(authz, /ilike\("github_login", githubLogin\)/);
+  assert.match(authz, /\.eq\("auth_user_id", user\.id\)/);
   assert.match(serverAuth, /requirePlatformRoleForUser/);
-  assert.match(authz, /unterschiedliche Teamprofile/);
+  assert.doesNotMatch(authz, /user\.user_metadata|ilike\("github_login"/);
   assert.doesNotMatch(authz, /\.or\(`auth_user_id/);
   assert.match(authHook, /Du bist abgemeldet/);
   assert.match(authHook, /serverCurrentProfile/);
