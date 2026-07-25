@@ -3,7 +3,41 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { listSupabaseMigrations } from "../scripts/lib/supabase-migrations.mjs";
 
-test("database hardening removes RLS bypasses without removing authenticated CRUD", async () => {
+const mappedTeamReadPolicies = [
+  ["audit_log_select_team", "audit_log"],
+  ["availability_select_team", "availability"],
+  ["decision_comments_select_team", "decision_comments"],
+  ["decision_confirmations_select_team", "decision_confirmations"],
+  ["decision_log_select_team", "decision_log"],
+  ["decision_task_links_select_team", "decision_task_links"],
+  ["feedback_items_select_team", "feedback_items"],
+  ["fmd_tools_select_team", "fmd_tools"],
+  ["founder_events_select_team", "founder_events"],
+  ["founder_sprint_scores_select_team", "founder_sprint_scores"],
+  ["founder_strike_state_select_team", "founder_strike_state"],
+  ["meeting_attendance_select_team", "meeting_attendance"],
+  ["meetings_select_team", "meetings"],
+  ["milestones_select_team", "milestones"],
+  ["packages_select_team", "packages"],
+  ["profiles_select_team", "profiles"],
+  ["projects_select_team", "projects"],
+  ["score_objections_select_team", "score_objections"],
+  ["sprint_commitments_select_team", "sprint_commitments"],
+  ["sprints_select_team", "sprints"],
+  ["strike_events_select_team", "strike_events"],
+  ["task_blockers_select_team", "task_blockers"],
+  ["task_comments_select_team", "task_comments"],
+  ["task_dependencies_select_team", "task_dependencies"],
+  ["task_external_comments_select_team", "task_external_comments"],
+  ["task_focus_items_select_team", "task_focus_items"],
+  ["task_links_select_team", "task_links"],
+  ["task_notes_select_team", "task_notes"],
+  ["task_relationship_edges_select_team", "task_relationship_edges"],
+  ["task_reviews_select_team", "task_reviews"],
+  ["tasks_select_team", "tasks"],
+];
+
+test("initial database hardening removes RLS bypasses without removing authenticated CRUD", async () => {
   const migrations = await listSupabaseMigrations();
   const matchingMigrations = migrations.filter(
     (migration) => migration.name === "harden_database_security",
@@ -76,6 +110,56 @@ test("database hardening removes RLS bypasses without removing authenticated CRU
   }
 });
 
+test("team RLS mirrors mapped app membership and contributor roles", async () => {
+  const migrations = await listSupabaseMigrations();
+  const matchingMigrations = migrations.filter(
+    (migration) => migration.name === "enforce_mapped_team_rls",
+  );
+
+  assert.equal(matchingMigrations.length, 1);
+  const migration = matchingMigrations[0].sql;
+
+  for (const [policyName, tableName] of mappedTeamReadPolicies) {
+    const policyStatement = migration.match(
+      new RegExp(
+        `alter policy ${policyName}\\s+on public\\.${tableName}[\\s\\S]*?;`,
+        "i",
+      ),
+    )?.[0];
+    assert.ok(policyStatement, `${policyName} must be hardened`);
+    assert.match(
+      policyStatement,
+      /using \(public\.current_profile_id\(\) is not null\)/i,
+    );
+    assert.doesNotMatch(policyStatement, /auth\.uid/i);
+  }
+
+  for (const policyName of [
+    "decision_task_links_write_team",
+    "task_external_comments_insert_members",
+    "task_external_comments_update_members",
+    "task_focus_items_write_team",
+  ]) {
+    const policyStatement = migration.match(
+      new RegExp(`alter policy ${policyName}[\\s\\S]*?;`, "i"),
+    )?.[0];
+    assert.ok(policyStatement, `${policyName} must match the app contributor gate`);
+    assert.match(policyStatement, /'ceo'::text/);
+    assert.match(policyStatement, /'founder'::text/);
+    assert.match(policyStatement, /'deputy'::text/);
+    assert.doesNotMatch(policyStatement, /viewer|auth\.uid/i);
+  }
+
+  assert.match(
+    migration,
+    /revoke insert, update, delete\s+on table public\.profiles\s+from public, anon, authenticated/i,
+  );
+  assert.match(
+    migration,
+    /alter policy profiles_update_self_or_admin\s+on public\.profiles\s+using \(false\)\s+with check \(false\)/i,
+  );
+});
+
 test("server authorization no longer falls back to mutable GitHub metadata", async () => {
   const authz = await readFile("src/lib/authz.ts", "utf8");
 
@@ -112,10 +196,11 @@ test("viewer tool access is read-only across UI and server routes", async () => 
 });
 
 test("the protected production workflow enforces the database security contract", async () => {
-  const [workflow, packageJson, verifier] = await Promise.all([
+  const [workflow, packageJson, verifier, securityContract] = await Promise.all([
     readFile(".github/workflows/deploy-production.yml", "utf8"),
     readFile("package.json", "utf8"),
     readFile("scripts/verify-database-security.mjs", "utf8"),
+    readFile("scripts/lib/database-security.mjs", "utf8"),
   ]);
 
   assert.match(
@@ -132,4 +217,16 @@ test("the protected production workflow enforces the database security contract"
   );
   assert.match(verifier, /begin read only/);
   assert.match(verifier, /GITHUB_REF !== "refs\/heads\/main"/);
+  assert.match(
+    securityContract,
+    /team reads granted to any authenticated session/,
+  );
+  assert.match(
+    securityContract,
+    /writes granted to any authenticated session/,
+  );
+  assert.match(
+    securityContract,
+    /client roles can mutate authorization profiles directly/,
+  );
 });

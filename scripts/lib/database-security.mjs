@@ -24,6 +24,47 @@ const highRiskAuthenticatedTablePrivileges = new Set([
 
 const sequencePrivileges = ["USAGE", "SELECT", "UPDATE"];
 
+const mappedTeamReadPolicies = new Map([
+  ["audit_log_select_team", "audit_log"],
+  ["availability_select_team", "availability"],
+  ["decision_comments_select_team", "decision_comments"],
+  ["decision_confirmations_select_team", "decision_confirmations"],
+  ["decision_log_select_team", "decision_log"],
+  ["decision_task_links_select_team", "decision_task_links"],
+  ["feedback_items_select_team", "feedback_items"],
+  ["fmd_tools_select_team", "fmd_tools"],
+  ["founder_events_select_team", "founder_events"],
+  ["founder_sprint_scores_select_team", "founder_sprint_scores"],
+  ["founder_strike_state_select_team", "founder_strike_state"],
+  ["meeting_attendance_select_team", "meeting_attendance"],
+  ["meetings_select_team", "meetings"],
+  ["milestones_select_team", "milestones"],
+  ["packages_select_team", "packages"],
+  ["profiles_select_team", "profiles"],
+  ["projects_select_team", "projects"],
+  ["score_objections_select_team", "score_objections"],
+  ["sprint_commitments_select_team", "sprint_commitments"],
+  ["sprints_select_team", "sprints"],
+  ["strike_events_select_team", "strike_events"],
+  ["task_blockers_select_team", "task_blockers"],
+  ["task_comments_select_team", "task_comments"],
+  ["task_dependencies_select_team", "task_dependencies"],
+  ["task_external_comments_select_team", "task_external_comments"],
+  ["task_focus_items_select_team", "task_focus_items"],
+  ["task_links_select_team", "task_links"],
+  ["task_notes_select_team", "task_notes"],
+  ["task_relationship_edges_select_team", "task_relationship_edges"],
+  ["task_reviews_select_team", "task_reviews"],
+  ["tasks_select_team", "tasks"],
+]);
+
+const planningContributorWritePolicies = new Set([
+  "decision_task_links_write_team",
+  "task_external_comments_insert_members",
+  "task_external_comments_update_members",
+  "task_focus_items_write_team",
+]);
+
 function rowSummary(rows, fields) {
   return rows
     .slice(0, 12)
@@ -285,6 +326,113 @@ export async function verifyDatabaseSecurity(client) {
     ["tablename", "policyname", "cmd"],
   );
 
+  const broadAuthenticatedSelectPolicies = await client.query(
+    `select tablename, policyname, cmd
+     from pg_policies
+     where schemaname = 'public'
+       and cmd = 'SELECT'
+       and regexp_replace(
+         lower(coalesce(qual, '')),
+         '[[:space:]]+',
+         '',
+         'g'
+       ) in ('auth.uid()isnotnull', '(auth.uid()isnotnull)')
+     order by tablename, policyname`,
+  );
+  addRows(
+    failures,
+    "team reads granted to any authenticated session",
+    broadAuthenticatedSelectPolicies.rows,
+    ["tablename", "policyname"],
+  );
+
+  const mappedTeamPolicyRows = await client.query(
+    `select tablename, policyname, cmd, roles::text[] as roles, qual
+     from pg_policies
+     where schemaname = 'public'
+       and policyname = any($1::text[])
+     order by tablename, policyname`,
+    [[...mappedTeamReadPolicies.keys()]],
+  );
+  const mappedTeamPolicyByName = new Map(
+    mappedTeamPolicyRows.rows.map((row) => [row.policyname, row]),
+  );
+  for (const [policyName, tableName] of mappedTeamReadPolicies) {
+    const policy = mappedTeamPolicyByName.get(policyName);
+    if (!policy) {
+      failures.push(`missing mapped team read policy: ${tableName}:${policyName}`);
+      continue;
+    }
+    if (
+      policy.tablename !== tableName
+      || policy.cmd !== "SELECT"
+      || policy.roles.length !== 1
+      || policy.roles[0] !== "authenticated"
+      || !/current_profile_id\(\)\s+is\s+not\s+null/i.test(policy.qual || "")
+      || /auth\.uid/i.test(policy.qual || "")
+    ) {
+      failures.push(`team read policy does not require a mapped profile: ${tableName}:${policyName}`);
+    }
+  }
+
+  const broadAuthenticatedWritePolicies = await client.query(
+    `select tablename, policyname, cmd
+     from pg_policies
+     where schemaname = 'public'
+       and cmd in ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+       and (
+         regexp_replace(
+           lower(coalesce(qual, '')),
+           '[[:space:]]+',
+           '',
+           'g'
+         ) in ('auth.uid()isnotnull', '(auth.uid()isnotnull)')
+         or regexp_replace(
+           lower(coalesce(with_check, '')),
+           '[[:space:]]+',
+           '',
+           'g'
+         ) in ('auth.uid()isnotnull', '(auth.uid()isnotnull)')
+       )
+     order by tablename, policyname`,
+  );
+  addRows(
+    failures,
+    "writes granted to any authenticated session",
+    broadAuthenticatedWritePolicies.rows,
+    ["tablename", "policyname", "cmd"],
+  );
+
+  const contributorPolicyRows = await client.query(
+    `select tablename, policyname, cmd, roles::text[] as roles, qual, with_check
+     from pg_policies
+     where schemaname = 'public'
+       and policyname = any($1::text[])
+     order by tablename, policyname`,
+    [[...planningContributorWritePolicies]],
+  );
+  const contributorPolicyByName = new Map(
+    contributorPolicyRows.rows.map((row) => [row.policyname, row]),
+  );
+  for (const policyName of planningContributorWritePolicies) {
+    const policy = contributorPolicyByName.get(policyName);
+    if (!policy) {
+      failures.push(`missing planning contributor write policy: ${policyName}`);
+      continue;
+    }
+    const expression = `${policy.qual || ""} ${policy.with_check || ""}`;
+    if (
+      policy.roles.length !== 1
+      || policy.roles[0] !== "authenticated"
+      || !["ceo", "founder", "deputy"].every(
+        (role) => expression.includes(`'${role}'::text`),
+      )
+      || /viewer|auth\.uid|current_profile_role/i.test(expression)
+    ) {
+      failures.push(`write policy exceeds the app planning contributor role: ${policy.tablename}:${policyName}`);
+    }
+  }
+
   const viewerWritePolicies = await client.query(
     `select tablename, policyname, cmd
      from pg_policies
@@ -302,6 +450,57 @@ export async function verifyDatabaseSecurity(client) {
     viewerWritePolicies.rows,
     ["tablename", "policyname", "cmd"],
   );
+
+  const profileWritePrivileges = await client.query(
+    `with client_role(role_name) as (
+       values ('anon'::name), ('authenticated'::name)
+     ),
+     privilege(privilege_name) as (
+       values ('INSERT'::text), ('UPDATE'::text), ('DELETE'::text)
+     )
+     select client_role.role_name::text, privilege.privilege_name
+     from client_role
+     cross join privilege
+     where has_table_privilege(
+       client_role.role_name,
+       'public.profiles',
+       privilege.privilege_name
+     )
+     order by client_role.role_name, privilege.privilege_name`,
+  );
+  addRows(
+    failures,
+    "client roles can mutate authorization profiles directly",
+    profileWritePrivileges.rows,
+    ["role_name", "privilege_name"],
+  );
+
+  const profileWritePolicy = await client.query(
+    `select policyname, cmd, qual, with_check
+     from pg_policies
+     where schemaname = 'public'
+       and tablename = 'profiles'
+       and policyname = 'profiles_update_self_or_admin'`,
+  );
+  const profilePolicy = profileWritePolicy.rows[0];
+  const normalizedProfileUsing = (profilePolicy?.qual || "")
+    .toLowerCase()
+    .replaceAll(/\s/g, "")
+    .replaceAll("(", "")
+    .replaceAll(")", "");
+  const normalizedProfileCheck = (profilePolicy?.with_check || "")
+    .toLowerCase()
+    .replaceAll(/\s/g, "")
+    .replaceAll("(", "")
+    .replaceAll(")", "");
+  if (
+    profileWritePolicy.rowCount !== 1
+    || profilePolicy.cmd !== "UPDATE"
+    || normalizedProfileUsing !== "false"
+    || normalizedProfileCheck !== "false"
+  ) {
+    failures.push("direct authenticated profile update policy is still active");
+  }
 
   const schemaPrivileges = await client.query(
     `select
