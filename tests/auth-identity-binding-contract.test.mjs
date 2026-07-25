@@ -23,10 +23,7 @@ async function loadAuthz() {
   });
 }
 
-function profileQueryClient({
-  authProfile = null,
-  legacyProfile = null,
-} = {}) {
+function profileQueryClient({ authProfile = null } = {}) {
   const queries = [];
 
   return {
@@ -42,33 +39,9 @@ function profileQueryClient({
           filters.push(["eq", column, value]);
           return query;
         },
-        ilike(column, value) {
-          filters.push(["ilike", column, value]);
-          return query;
-        },
-        is(column, value) {
-          filters.push(["is", column, value]);
-          return query;
-        },
-        limit(value) {
-          filters.push(["limit", value]);
-          return query;
-        },
         async maybeSingle() {
           queries.push(filters);
           return { data: authProfile, error: null };
-        },
-        async returns() {
-          queries.push(filters);
-          const requiresUnboundProfile = filters.some(
-            (filter) => filter[0] === "is"
-              && filter[1] === "auth_user_id"
-              && filter[2] === null,
-          );
-          return {
-            data: requiresUnboundProfile && legacyProfile ? [legacyProfile] : [],
-            error: null,
-          };
         },
       };
       return query;
@@ -165,7 +138,7 @@ test("remaining team profiles bind atomically through stable GitHub identities",
   assert.doesNotMatch(migration, /user_metadata|raw_user_meta_data|identity_data/i);
 });
 
-test("bound profiles reject metadata fallback while unbound profiles keep the pilot fallback", async () => {
+test("authorization requires the stable Auth user id and ignores user metadata", async () => {
   const { requirePlatformRoleForUser } = await loadAuthz();
   const githubMetadataUser = {
     id: "unrelated-auth-user",
@@ -184,39 +157,36 @@ test("bound profiles reject metadata fallback while unbound profiles keep the pi
     status: 403,
     error: "GitHub-User ist keinem Teamprofil zugeordnet.",
   });
-  assert.ok(
-    boundClient.queries.some((filters) =>
-      filters.some((filter) =>
-        filter[0] === "is"
-        && filter[1] === "auth_user_id"
-        && filter[2] === null
-      )
-    ),
-  );
+  assert.deepEqual(boundClient.queries, [
+    [["eq", "auth_user_id", "unrelated-auth-user"]],
+  ]);
 
-  const legacyProfile = {
-    id: "legacy-founder",
-    name: "Legacy Founder",
+  const linkedProfile = {
+    id: "linked-founder",
+    name: "Linked Founder",
     platform_role: "founder",
-    github_login: "LegacyFounder",
+    github_login: "StableFounder",
   };
-  const legacyClient = profileQueryClient({ legacyProfile });
-  const legacyResult = await requirePlatformRoleForUser(
-    legacyClient,
+  const linkedClient = profileQueryClient({ authProfile: linkedProfile });
+  const linkedResult = await requirePlatformRoleForUser(
+    linkedClient,
     {
-      id: "legacy-auth-user",
-      user_metadata: { user_name: "LegacyFounder" },
+      id: "linked-auth-user",
+      user_metadata: { user_name: "AttackerControlledMetadata" },
     },
     ["founder"],
   );
 
-  assert.deepEqual(legacyResult, {
+  assert.deepEqual(linkedResult, {
     ok: true,
     profile: {
-      id: "legacy-founder",
-      name: "Legacy Founder",
+      id: "linked-founder",
+      name: "Linked Founder",
       platformRole: "founder",
-      githubLogin: "LegacyFounder",
+      githubLogin: "StableFounder",
     },
   });
+  assert.deepEqual(linkedClient.queries, [
+    [["eq", "auth_user_id", "linked-auth-user"]],
+  ]);
 });

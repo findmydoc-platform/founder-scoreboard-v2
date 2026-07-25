@@ -13,7 +13,7 @@ export const categoryTabs: Array<{ value: FmdQuickLinkCategoryFilter; label: str
 ];
 
 export function canEditFmdQuickLinks(_source: "supabase", currentProfile: Profile | null) {
-  return Boolean(currentProfile);
+  return Boolean(currentProfile && currentProfile.platformRole !== "viewer");
 }
 
 export function categoryCountsForLinks(tools: FmdTool[]) {

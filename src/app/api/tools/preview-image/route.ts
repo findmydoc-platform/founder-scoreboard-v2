@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireApiContext } from "@/lib/api-response";
-import { requireTeamMember } from "@/lib/authz";
+import { requirePlanningContributor } from "@/lib/authz";
 import { compactAlphanumeric, slugify } from "@/lib/slug";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ function safeFileName(value: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await requireApiContext(request, requireTeamMember);
+  const context = await requireApiContext(request, requirePlanningContributor);
   if (!context.ok) return context.response;
 
   const formData = await request.formData();

@@ -94,10 +94,10 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.doesNotMatch(toolsUi, /Interne Tools, Repos, Wissen und Assets/);
   assert.doesNotMatch(planningAppModel, /tools: "Interne Tools, Repos, Wissen und Assets/);
   assert.doesNotMatch(toolsSurface, /bg-red-600|bg-yellow-300|border-t-red-600/);
-  assert.match(toolRoute, /requireTeamMember/);
+  assert.match(toolRoute, /requirePlanningContributor/);
   assert.match(toolRoute, /fmd_tool\.create/);
   assert.match(toolRoute, /slugify/);
-  assert.match(toolUpdateRoute, /requireTeamMember/);
+  assert.match(toolUpdateRoute, /requirePlanningContributor/);
   assert.match(toolUpdateRoute, /export async function PATCH/);
   assert.match(toolUpdateRoute, /fmd_tool\.update/);
   assert.match(toolCommands, /new URL\(value\)/);
@@ -110,13 +110,20 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolCommands, /Link muss mit http:\/\/ oder https:\/\/ beginnen\./);
   assert.match(toolCommands, /previewImageUrl/);
   assert.match(toolRegistrationMigration, /fmd_tools_insert_team/);
-  assert.match(toolRegistrationMigration, /'viewer'/);
   assert.match(toolRegistrationMigration, /fmd_tools_update_team/);
+  assert.match(
+    toolRegistrationMigration,
+    /alter policy fmd_tools_insert_team[\s\S]*array\['ceo'::text, 'founder'::text, 'deputy'::text\]/i,
+  );
+  assert.match(
+    toolRegistrationMigration,
+    /alter policy fmd_tools_update_team[\s\S]*array\['ceo'::text, 'founder'::text, 'deputy'::text\]/i,
+  );
   assert.match(toolPreviewMigration, /preview_image_url/);
   assert.match(toolPreviewMigration, /preview_image_source/);
   assert.match(toolPreviewMigration, /fmd-tool-previews/);
   assert.match(toolPreviewMigration, /image\/webp/);
-  assert.match(toolMetadataRoute, /requireTeamMember/);
+  assert.match(toolMetadataRoute, /requirePlanningContributor/);
   assert.match(toolMetadataRoute, /loadFmdToolMetadata/);
   assert.match(toolMetadataHelper, /assertPublicHttpUrl/);
   assert.match(toolMetadataHelper, /isBlockedHostname/);
@@ -124,7 +131,7 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(toolMetadataHelper, /redirect: "manual"/);
   assert.match(toolMetadataHelper, /maxHtmlBytes = 256 \* 1024/);
   assert.doesNotMatch(toolMetadataHelper, /Authorization/);
-  assert.match(toolPreviewRoute, /requireTeamMember/);
+  assert.match(toolPreviewRoute, /requirePlanningContributor/);
   assert.match(toolPreviewRoute, /request\.formData\(\)/);
   assert.match(toolPreviewRoute, /image\/png/);
   assert.match(toolPreviewRoute, /maxUploadBytes = 5 \* 1024 \* 1024/);

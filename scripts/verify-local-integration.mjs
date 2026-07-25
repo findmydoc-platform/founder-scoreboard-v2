@@ -239,6 +239,20 @@ async function main() {
       assertStatus(response, 400, `${profileId || "ceo"} milestone validation`);
     }
 
+    const viewerToolWrite = await apiRequest("/api/tools", token, "local-viewer", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assertStatus(viewerToolWrite, 403, "Viewer tool write authorization");
+
+    const founderToolWrite = await apiRequest("/api/tools", token, "sebastian", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assertStatus(founderToolWrite, 400, "Founder tool write validation");
+
     const deputyGitHubProject = await apiRequest("/api/founderops-settings/github-project", token, "local-deputy", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
