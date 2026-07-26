@@ -96,28 +96,22 @@ test("Sub-Issue context falls back to the legacy description field", () => {
   const task = mapTaskRow(row, new Map());
 
   assert.equal(task.description, "Legacy Sub-Issue description");
-  assert.equal(task.problemStatement, "");
+  assert.equal(task.problemStatement, "Legacy Sub-Issue description");
+  assert.equal(task.intendedOutcome, "Legacy outcome");
+  assert.equal(task.scopeConstraints, "Legacy scope");
+  assert.equal(task.acceptanceCriteria, "Legacy acceptance");
+  assert.equal(task.evidenceRequired, "Legacy evidence");
+  assert.equal(task.definitionOfDone, "Legacy completion");
 
-  const githubProjection = mapTaskRow(row, new Map(), {
-    includeLegacySubIssueBrief: true,
-  });
-  assert.equal(githubProjection.problemStatement, "Legacy Sub-Issue description");
-  assert.equal(githubProjection.intendedOutcome, "Legacy outcome");
-  assert.equal(githubProjection.scopeConstraints, "Legacy scope");
-  assert.equal(githubProjection.acceptanceCriteria, "Legacy acceptance");
-  assert.equal(githubProjection.evidenceRequired, "Legacy evidence");
-  assert.equal(githubProjection.definitionOfDone, "Legacy completion");
-
-  const githubProjectionWithParallelContext = mapTaskRow({
+  const taskWithParallelContext = mapTaskRow({
     ...row,
     description: "Parallel compact context",
-  }, new Map(), {
-    includeLegacySubIssueBrief: true,
-  });
-  assert.equal(githubProjectionWithParallelContext.problemStatement, "Legacy Sub-Issue description");
+  }, new Map());
+  assert.equal(taskWithParallelContext.description, "Parallel compact context");
+  assert.equal(taskWithParallelContext.problemStatement, "Legacy Sub-Issue description");
 });
 
-test("Sub-Issue read model normalizes legacy review state and ignores review, score, and evidence data", () => {
+test("Sub-Issue read model restores the legacy brief while ignoring active review, score, and evidence links", () => {
   const task = mapTaskRow({
     id: "sub-legacy",
     task_type: "sub_issue",
@@ -128,6 +122,7 @@ test("Sub-Issue read model normalizes legacy review state and ignores review, sc
     score_final: true,
     score_relevant: true,
     evidence_link: "https://legacy.example/proof",
+    problem_statement: "Legacy problem",
     evidence_required: "Legacy proof",
   }, new Map(), {
     taskLinks: [{
@@ -148,7 +143,7 @@ test("Sub-Issue read model normalizes legacy review state and ignores review, sc
   assert.equal(task.status, "In Arbeit");
   assert.deepEqual(task.evidenceLinks, []);
   assert.equal(task.evidenceLink, "");
-  assert.equal(task.evidenceRequired, "");
+  assert.equal(task.evidenceRequired, "Legacy proof");
   assert.equal(task.reviewStatus, "not_requested");
   assert.equal(task.reviewOwnerProfileId, "");
   assert.equal(task.scorePoints, 0);

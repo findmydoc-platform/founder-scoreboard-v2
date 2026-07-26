@@ -8,7 +8,6 @@ type TaskProfileLookup = Profile[] | Map<string, string>;
 
 type MapTaskRowOptions = {
   defaultSprintId?: string;
-  includeLegacySubIssueBrief?: boolean;
   taskLinks?: DbTaskLink[];
 };
 
@@ -83,9 +82,6 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const description = taskType === "sub_issue" && !row.description?.trim()
     ? row.problem_statement || ""
     : row.description || "";
-  const includeLegacySubIssueBrief = taskType === "sub_issue"
-    && Boolean(options.includeLegacySubIssueBrief)
-    && Boolean(row.problem_statement?.trim());
 
   return {
     id: row.id || "",
@@ -103,13 +99,13 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     workstream: row.workstream || "",
     packageId: row.package_id || "",
     deadline: row.deadline || "",
-    problemStatement: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.problem_statement || "",
-    intendedOutcome: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.intended_outcome || "",
-    scopeConstraints: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.scope_constraints || "",
-    acceptanceCriteria: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.acceptance_criteria || "",
-    evidenceRequired: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.evidence_required || "",
+    problemStatement: row.problem_statement || "",
+    intendedOutcome: row.intended_outcome || "",
+    scopeConstraints: row.scope_constraints || "",
+    acceptanceCriteria: row.acceptance_criteria || "",
+    evidenceRequired: row.evidence_required || "",
     dodTemplateVersion: taskType === "sub_issue" ? "" : row.dod_template_version || "founder-deliverable-v2",
-    definitionOfDone: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.definition_of_done || "",
+    definitionOfDone: row.definition_of_done || "",
     dependsOn: row.task_dependencies?.map((item) => item.note).join("; ") || "",
     evidenceLink: taskType === "sub_issue" ? "" : evidenceLinks[0] || row.evidence_link || "",
     evidenceLinks,

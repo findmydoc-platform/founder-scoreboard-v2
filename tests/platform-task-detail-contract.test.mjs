@@ -58,6 +58,12 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.doesNotMatch(operationalHeader, /Parent:/);
   assert.match(overview, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
   assert.match(overview, /<LinkedPullRequestsSection compact/);
+  assert.match(overview, /hasLegacySubIssueBrief/);
+  assert.match(overview, /Historischer Aufgabenbrief/);
+  assert.match(overview, /weder Review, Score noch verpflichtende Nachweise/);
+  assert.match(overview, /<ReadSection label="Zielbild" value=\{draft\.intendedOutcome\}/);
+  assert.match(overview, /<ReadSection label="Abnahmekriterien" value=\{draft\.acceptanceCriteria\} checklist/);
+  assert.match(overview, /<ReadSection label="Qualitätsstandard" value=\{draft\.definitionOfDone\} checklist/);
   assert.match(blockerSection, /embedded \? "shrink-0"/);
   assert.match(blockerSection, /embedded \? "Auswirkung auf die weitere Arbeit"/);
   assert.match(surface, /embedded=\{task\.taskType === "sub_issue"\}/);

@@ -264,8 +264,12 @@ export function TaskOverviewPanel({
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
   const isSubIssue = task.taskType === "sub_issue";
+  const hasLegacySubIssueBrief = isSubIssue && Boolean(draft.problemStatement.trim());
+  const hasDistinctSubIssueContext = hasLegacySubIssueBrief
+    && Boolean(draft.description.trim())
+    && draft.description.trim() !== draft.problemStatement.trim();
   const hasReadContent = isSubIssue
-    ? Boolean(draft.description.trim() || linkedPullRequests.length > 0 || riskContent)
+    ? Boolean(draft.description.trim() || hasLegacySubIssueBrief || linkedPullRequests.length > 0 || riskContent)
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
       || linkedPullRequests.length > 0
@@ -316,7 +320,11 @@ export function TaskOverviewPanel({
           <div>
             <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
             <p className="mt-1 text-sm text-slate-500">
-              {isSubIssue ? "Kontext, Blocker und automatisch verknüpfte Pull Requests." : "Ziel, Abnahme und notwendige Nachweise für die Umsetzung."}
+              {isSubIssue
+                ? hasLegacySubIssueBrief
+                  ? "Historischer Aufgabenbrief, Blocker und automatisch verknüpfte Pull Requests."
+                  : "Kontext, Blocker und automatisch verknüpfte Pull Requests."
+                : "Ziel, Abnahme und notwendige Nachweise für die Umsetzung."}
             </p>
           </div>
         </div>
@@ -450,15 +458,39 @@ export function TaskOverviewPanel({
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           {isSubIssue ? (
             <>
-              <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
-                  <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-                    {draft.description.trim() || <span className="text-slate-500">Kein Kontext hinterlegt.</span>}
+              {hasLegacySubIssueBrief ? (
+                <>
+                  <UiNotice tone="neutral" className="my-4">
+                    <span className="font-semibold text-slate-700">Historischer Aufgabenbrief.</span>{" "}
+                    Diese Angaben bleiben als Kontext sichtbar. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
+                  </UiNotice>
+                  {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} /> : null}
+                  <section className="grid gap-4 border-b border-slate-100 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">Problem</h3>
+                      <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
+                        {draft.problemStatement}
+                      </div>
+                    </div>
+                    {riskContent}
+                  </section>
+                  <ReadSection label="Zielbild" value={draft.intendedOutcome} />
+                  <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
+                  <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
+                  <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
+                  <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
+                </>
+              ) : (
+                <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
+                    <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
+                      {draft.description.trim() || <span className="text-slate-500">Kein Kontext hinterlegt.</span>}
+                    </div>
                   </div>
-                </div>
-                {riskContent}
-              </section>
+                  {riskContent}
+                </section>
+              )}
               <LinkedPullRequestsSection compact pullRequests={linkedPullRequests} />
             </>
           ) : (
