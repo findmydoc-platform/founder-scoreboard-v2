@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChevronDown, Pencil, UsersRound } from "lucide-react";
+import { CalendarDays, ChevronDown, ListTree, Pencil, UsersRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -80,6 +80,62 @@ export function TaskDetailPlanningSection({
     });
   };
 
+  if (task.taskType === "sub_issue") {
+    return (
+      <section aria-label="Parent-Deliverable" className="border-b border-slate-200">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <ListTree size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-slate-900">
+                {currentParent?.title || task.parentTaskId || "Parent-Deliverable fehlt"}
+              </div>
+              <div className="mt-0.5 truncate text-xs text-slate-500">
+                {currentPackage?.title || "Ohne Initiative"}
+                <span aria-hidden="true"> · </span>
+                {currentMilestone?.title || "Kein Epic / Meilenstein"}
+              </div>
+            </div>
+          </div>
+          {canReparentSubIssue ? (
+            <UiButton
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-blue-700 hover:bg-blue-50"
+              aria-expanded={open}
+              aria-controls="sub-issue-parent-control"
+              onClick={() => setOpen((current) => !current)}
+            >
+              <Pencil size={14} aria-hidden="true" />
+              Parent ändern
+              <ChevronDown size={15} className={classNames("transition", open && "rotate-180")} aria-hidden="true" />
+            </UiButton>
+          ) : null}
+        </div>
+
+        {open && canReparentSubIssue ? (
+          <div id="sub-issue-parent-control" className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
+            <UiSelectField
+              label="Parent-Deliverable"
+              value={task.parentTaskId}
+              disabled={pending}
+              onChange={updateParentDeliverable}
+              options={parentDeliverableOptions(parentDeliverables, packages)}
+              selectClassName="h-11 text-sm"
+            />
+          </div>
+        ) : null}
+
+        {task.parentApprovalStatus !== "approved" ? (
+          <p className="pb-3 text-xs font-medium text-amber-800">
+            Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section aria-label="Planung" className="border-b border-slate-200">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
@@ -109,22 +165,7 @@ export function TaskDetailPlanningSection({
       {open ? (
         <div id="task-detail-planning-controls" className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {task.taskType === "sub_issue" ? (
-              <>
-                {canReparentSubIssue ? (
-                  <UiSelectField
-                    label="Parent-Deliverable"
-                    value={task.parentTaskId}
-                    disabled={pending}
-                    onChange={updateParentDeliverable}
-                    options={parentDeliverableOptions(parentDeliverables, packages)}
-                    selectClassName="h-11 text-sm"
-                  />
-                ) : <ReadFact label="Parent-Deliverable">{currentParent?.title || task.parentTaskId || "Nicht gesetzt"}</ReadFact>}
-                <ReadFact label="Geerbte Initiative">{currentPackage?.title || "Ohne Initiative"}</ReadFact>
-                <ReadFact label="Geerbtes Epic / Meilenstein">{currentMilestone?.title || "Kein Epic"}</ReadFact>
-              </>
-            ) : canManageTaskMeta ? (
+            {canManageTaskMeta ? (
               <>
                 <UiSelectField label="Initiative" value={task.packageId} disabled={pending} onChange={updatePackage} options={initiativeOptions(packages)} selectClassName="h-11 text-sm" />
                 <UiSelectField label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
@@ -148,10 +189,6 @@ export function TaskDetailPlanningSection({
               </div>
             ) : null}
           </div>
-
-          {task.taskType === "sub_issue" && task.parentApprovalStatus !== "approved" ? (
-            <p className="mt-4 text-xs font-medium text-amber-800">Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.</p>
-          ) : null}
 
           {currentPackage ? (
             <details className="group mt-4 w-fit">

@@ -23,7 +23,9 @@ Die Initiative trägt den Mini-RACI-Kontext: genau ein Accountable-Profil sowie 
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum und Review. Nur Deliverables sind scoring-relevant.
 
 ## Sub-Issue
-Persönliche Arbeitsunterteilung unter einem Deliverable. Nicht scoring-relevant.
+A small work step below one Deliverable. It requires a title and parent, defaults its owner to the current user, and may include short context, a GitHub repository, and one initial dependency. It has only `Offen`, `In Arbeit`, `Blockiert`, and `Erledigt` status. It has no task brief, Acceptance Criteria, Definition of Done, Evidence, review, score, RACI, Sprint, schedule, estimate, priority, or nested Sub-Issues.
+
+The template sections below apply to Deliverables, not Sub-Issues.
 
 ## Problem Statement
 Beschreibt den aktuellen Zustand, das konkrete Problem oder den Pain Point und warum es jetzt relevant ist. Keine Lösung, Umsetzungsschritte oder technische Vorgaben in das Problem Statement schreiben.
@@ -54,7 +56,7 @@ Wenn mehrere Bedingungen gelten, DoD als mehrere kurze Checklist-Punkte formulie
 Nicht in die DoD gehören Meta-Punkte zur Aufgabenerstellung wie `Template v2 ist vollständig ausgefüllt`, `Aufgabe ist im Sprint`, `Owner ist gesetzt` oder ähnliche Formular-/Zuordnungschecks. Diese Punkte sind Qualitätsregeln beim Anlegen der Aufgabe, aber kein fachlicher Abschlussstandard für den Owner.
 
 ## Follow-up / Sub-Issues
-Optional. Dient der persönlichen Arbeitsstruktur und ist nicht score-relevant.
+Optional. Use Sub-Issues only to split a Deliverable into simple work steps. They do not add review, score, Evidence, or quality gates.
 
 ## Approval-sensitive changes
 

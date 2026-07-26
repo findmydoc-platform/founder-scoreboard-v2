@@ -11,6 +11,13 @@ const slugMock = {
   slugify: (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, "-"),
 };
 
+const statusMock = {
+  isSubIssueStatus: (status) => ["Offen", "In Arbeit", "Blockiert", "Erledigt"].includes(status),
+  isTaskStatusChange: (current, next) => current !== next,
+  normalizeStatus: (status) => status,
+  taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
+};
+
 test("review request payload omits protected score and review owner fields", async () => {
   const { buildClientTaskUpdatePatch, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
@@ -95,16 +102,12 @@ test("normal task updates omit the server-owned GitHub sync status", async () =>
 test("unchanged status payloads become true no-ops before route guards", async () => {
   const { withoutUnchangedTaskStatus } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => false },
-    "@/lib/status": {
-      isTaskStatusChange: (current, next) => current !== next,
-      normalizeStatus: (status) => status,
-      taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
-    },
+    "@/lib/status": statusMock,
   });
 
   const unchanged = withoutUnchangedTaskStatus(
-    { status: "Review", task_type: "sub_issue" },
-    { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", status: "Review" },
+    { status: "In Arbeit", task_type: "sub_issue" },
+    { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", status: "In Arbeit" },
   );
   assert.equal(unchanged.statusNoop, true);
   assert.equal(unchanged.payload.status, undefined);
@@ -116,6 +119,13 @@ test("unchanged status payloads become true no-ops before route guards", async (
   );
   assert.equal(invalid.statusNoop, false);
   assert.equal(invalid.payload.status, "invalid");
+
+  const legacyReview = withoutUnchangedTaskStatus(
+    { status: "Review", task_type: "sub_issue" },
+    { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", status: "Review" },
+  );
+  assert.equal(legacyReview.statusNoop, false);
+  assert.equal(legacyReview.payload.status, "Review");
 });
 
 test("task brief fields stay together in the shared update payload", async () => {
@@ -150,7 +160,7 @@ test("Sub-Issue parent updates keep CAS, activity, and sync state together", asy
   });
   const { markTaskGitHubSyncDirty } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
-    "@/lib/status": { normalizeStatus: (status) => status, taskStatuses: ["Offen"] },
+    "@/lib/status": statusMock,
   });
 
   const payload = taskUpdateRequestPayload(
@@ -198,7 +208,7 @@ test("parent Deliverable options include Initiative and inactive approval contex
 test("task route guard allows only the implicit score reset for review requests", async () => {
   const { restrictedTaskUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
-    "@/lib/status": { taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
+    "@/lib/status": statusMock,
   });
 
   assert.deepEqual(restrictedTaskUpdateFields({ status: "Review", reviewStatus: "requested", scoreFinal: false }), []);
@@ -210,7 +220,7 @@ test("task route guard allows only the implicit score reset for review requests"
 test("generic task updates may request a review but cannot write review outcomes", async () => {
   const { applyReviewStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
-    "@/lib/status": { taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
+    "@/lib/status": statusMock,
   });
 
   const update = {};
@@ -230,14 +240,11 @@ test("generic task updates may request a review but cannot write review outcomes
 });
 
 test("task route guard limits role-based final transitions to Sub-Issues", async () => {
-  const { applyFinalStatusReopen, validateSubIssueStatusParentApproval, validateTaskStatusUpdate } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+  const { applyFinalStatusReopen, validateSubIssueStatusParentApproval, validateTaskStatusUpdate, validateTaskTypeUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": {
       taskAssignedToProfile: (task, profile) => task.assignee === profile?.id,
     },
-    "@/lib/status": {
-      normalizeStatus: (status) => status,
-      taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
-    },
+    "@/lib/status": statusMock,
   });
 
   const contributorActors = [
@@ -245,7 +252,7 @@ test("task route guard limits role-based final transitions to Sub-Issues", async
     { label: "Deputy", id: "deputy", isOperationalLead: true, isCeo: false },
     { label: "Founder", id: "founder-2", isOperationalLead: false, isCeo: false },
   ];
-  const activeSubIssueStatuses = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert"];
+  const activeSubIssueStatuses = ["Offen", "In Arbeit", "Blockiert"];
 
   for (const actor of contributorActors) {
     for (const status of activeSubIssueStatuses) {
@@ -290,6 +297,31 @@ test("task route guard limits role-based final transitions to Sub-Issues", async
       profile: { id: "founder-2" },
     }),
     { ok: false, error: "Founder können nur den Status ihrer eigenen Aufgaben ändern.", status: 403 },
+  );
+
+  for (const status of ["Review", "Nacharbeit"]) {
+    assert.deepEqual(
+      validateTaskStatusUpdate({
+        currentTask: { status: "In Arbeit", assignee: "ceo", task_type: "sub_issue" },
+        isOperationalLead: true,
+        isCeo: true,
+        payload: { status },
+        profile: { id: "ceo" },
+      }),
+      {
+        ok: false,
+        error: "Sub-Issues unterstützen nur Offen, In Arbeit, Blockiert oder Erledigt.",
+        status: 400,
+      },
+    );
+  }
+
+  assert.deepEqual(
+    validateTaskTypeUpdateFields(
+      { task_type: "sub_issue" },
+      { evidenceLinks: ["https://example.com/proof"] },
+    ),
+    { ok: false, error: "Das Feld evidenceLinks ist für Sub-Issues nicht zulässig.", status: 400 },
   );
 
   assert.deepEqual(
@@ -351,11 +383,7 @@ test("task route guard limits role-based final transitions to Sub-Issues", async
     false,
     true,
   );
-  assert.deepEqual(founderReopen, {
-    score_final: false,
-    review_status: "not_requested",
-    review_requested_at: null,
-  });
+  assert.deepEqual(founderReopen, {});
 
   const ceoReopen = {};
   applyFinalStatusReopen(ceoReopen, { status: "Erledigt", task_type: "deliverable" }, { status: "Review" }, true);
@@ -364,7 +392,7 @@ test("task route guard limits role-based final transitions to Sub-Issues", async
   assert.equal(typeof ceoReopen.review_requested_at, "string");
 });
 
-test("reopen response returns the reset review fields without clearing the review owner", async () => {
+test("Sub-Issue response ignores legacy review fields", async () => {
   const { buildTaskUpdateResponsePatch } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,
     "@/lib/slug": slugMock,
@@ -375,11 +403,11 @@ test("reopen response returns the reset review fields without clearing the revie
     score_final: false,
     review_status: "not_requested",
     review_requested_at: null,
-  }, false);
+  }, false, "sub_issue");
 
   assert.equal(patch.status, "Offen");
-  assert.equal(patch.scoreFinal, false);
-  assert.equal(patch.reviewStatus, "not_requested");
-  assert.equal(patch.reviewRequestedAt, "");
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "scoreFinal"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "reviewStatus"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "reviewRequestedAt"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(patch, "reviewOwnerProfileId"), false);
 });

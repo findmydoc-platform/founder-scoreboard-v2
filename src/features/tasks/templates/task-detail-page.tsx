@@ -125,7 +125,14 @@ export function TaskDetailPage({
           onUploadAttachment={(file) => controller.uploadTaskAttachment(task, file)}
           onImportGitHubComments={() => controller.importGitHubComments(task)}
           onReportBlocker={(payload) => controller.reportTaskBlocker(task, payload)}
-          onCreateSubIssue={() => controller.setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: task.id, milestoneId: task.milestoneId, packageId: task.packageId, assignee: task.assigneeId || task.assignee, status: "Offen" })}
+          onCreateSubIssue={() => controller.setTaskDialogDefaults({
+            taskType: "sub_issue",
+            parentTaskId: task.id,
+            milestoneId: task.milestoneId,
+            packageId: task.packageId,
+            assignee: controller.currentProfile?.id || "",
+            status: "Offen",
+          })}
           onOpenTask={controller.openTaskPanel}
           onSyncGitHub={(options) => controller.syncTaskToGitHub(task, options)}
           onReview={controller.reviewTask}

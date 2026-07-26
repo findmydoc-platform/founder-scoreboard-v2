@@ -1,5 +1,5 @@
 import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
-import { isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
+import { isSubIssueStatus, isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 export type TaskRouteDbUpdate = Record<string, unknown>;
@@ -14,12 +14,38 @@ type CurrentTaskForRoute = {
 type RouteGuardResult = { ok: true } | { ok: false; error: string; status: number };
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
+const subIssueAllowedUpdateFields = new Set([
+  "expectedUpdatedAt",
+  "title",
+  "description",
+  "status",
+  "assignee",
+  "owner",
+  "parentTaskId",
+]);
+
+export function validateTaskTypeUpdateFields(
+  currentTask: Pick<CurrentTaskForRoute, "task_type">,
+  payload: TaskUpdatePayload,
+): RouteGuardResult {
+  if (currentTask.task_type !== "sub_issue") return { ok: true };
+  const rawPayload = payload as TaskUpdatePayload & Record<string, unknown>;
+  const forbiddenField = Object.keys(rawPayload).find((field) => !subIssueAllowedUpdateFields.has(field));
+  if (!forbiddenField) return { ok: true };
+  return {
+    ok: false,
+    error: `Das Feld ${forbiddenField} ist für Sub-Issues nicht zulässig.`,
+    status: 400,
+  };
+}
+
 export function withoutUnchangedTaskStatus(
   currentTask: CurrentTaskForRoute,
   payload: TaskUpdatePayload,
 ) {
   if (
     !payload.status
+    || (currentTask.task_type === "sub_issue" && !isSubIssueStatus(payload.status))
     || !taskStatuses.includes(payload.status as (typeof taskStatuses)[number])
     || isTaskStatusChange(currentTask.status || "", payload.status)
   ) {
@@ -62,7 +88,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
 
 export function founderOwnedTaskUpdateFields(payload: TaskUpdatePayload) {
   return [
-    payload.title !== undefined || payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined
+    payload.title !== undefined || payload.description !== undefined || payload.problemStatement !== undefined || payload.intendedOutcome !== undefined || payload.scopeConstraints !== undefined
       || payload.acceptanceCriteria !== undefined || payload.evidenceRequired !== undefined || payload.definitionOfDone !== undefined
       ? "Aufgabenbrief"
       : "",
@@ -95,6 +121,13 @@ export function validateTaskStatusUpdate({
   profile?: AuthenticatedProfile | null;
 }): RouteGuardResult {
   if (!payload.status) return { ok: true };
+  if (currentTask.task_type === "sub_issue" && !isSubIssueStatus(payload.status)) {
+    return {
+      ok: false,
+      error: "Sub-Issues unterstützen nur Offen, In Arbeit, Blockiert oder Erledigt.",
+      status: 400,
+    };
+  }
   if (!taskStatuses.includes(payload.status as (typeof taskStatuses)[number])) {
     return { ok: false, error: "Ungültiger Status.", status: 400 };
   }
@@ -158,7 +191,8 @@ export function applyFinalStatusReopen(
   const reopensSubIssue = currentTask.task_type === "sub_issue"
     && payload.status === "Offen"
     && canReopenSubIssue;
-  if (!isCeo && !reopensSubIssue) return;
+  if (reopensSubIssue) return;
+  if (!isCeo) return;
   update.score_final = false;
   if (payload.status === "Review") {
     update.review_status = "requested";
@@ -187,6 +221,7 @@ export function applyTaskTitleUpdate(update: TaskRouteDbUpdate, payload: TaskUpd
 }
 
 export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: TaskUpdatePayload) {
+  if (payload.description !== undefined) update.description = payload.description.trim().slice(0, 4000) || null;
   if (payload.startDate !== undefined) update.start_date = payload.startDate || null;
   if (payload.endDate !== undefined) update.end_date = payload.endDate || null;
   if (payload.deadline !== undefined) update.deadline = payload.deadline || null;

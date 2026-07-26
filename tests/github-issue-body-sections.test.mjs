@@ -56,3 +56,19 @@ test("github issue body keeps explicit acceptance criteria and definition of don
   assert.match(body, /## Acceptance Criteria\n- User sees the saved result/);
   assert.match(body, /## Definition of Done\n- Document the result/);
 });
+
+test("Sub-Issue GitHub projection contains only optional context and the FounderOps source", async () => {
+  const { taskIssueBody, taskIssueLabels } = await githubModule();
+  const subIssue = task({
+    taskType: "sub_issue",
+    description: "Coordinate the rollout window.",
+    status: "Review",
+    priority: "P0",
+  });
+  const body = taskIssueBody(subIssue);
+
+  assert.match(body, /^## Context\nCoordinate the rollout window\.\n\n---\nSource: FounderOps\./);
+  assert.match(body, /<!-- founderops-task-id:task-body-sections -->$/);
+  assert.doesNotMatch(body, /Problem Statement|Acceptance Criteria|Evidence Required|Definition of Done/);
+  assert.deepEqual(taskIssueLabels(subIssue), ["task", "sub-issue"]);
+});

@@ -7,6 +7,36 @@ type TaskCreationHierarchy = {
   milestoneId: string;
 };
 
+type TaskCreationRequestDraft = TaskCreationHierarchy & {
+  creationRequestId: string;
+  title: string;
+  description: string;
+  assignee: string;
+  githubRepo: string;
+  relationType: string;
+  relatedTaskId: string;
+  relationNote: string;
+};
+
+export const SUB_ISSUE_CREATE_REQUEST_FIELDS = [
+  "creationRequestId",
+  "title",
+  "description",
+  "taskType",
+  "parentTaskId",
+  "assignee",
+  "owner",
+  "githubRepo",
+  "relationType",
+  "relatedTaskId",
+  "relationNote",
+] as const;
+
+export function unsupportedSubIssueCreateField(payload: Record<string, unknown>) {
+  const allowedFields = new Set<string>(SUB_ISSUE_CREATE_REQUEST_FIELDS);
+  return Object.keys(payload).find((field) => !allowedFields.has(field)) || "";
+}
+
 export function taskCreationTitleError(title: string, visible: boolean) {
   if (!visible) return "";
 
@@ -38,4 +68,20 @@ export function withSubIssueParentHierarchy<T extends TaskCreationHierarchy>(
 export function resolveTaskCreationHierarchy<T extends TaskCreationHierarchy>(draft: T, tasks: Task[]): T {
   if (draft.taskType !== "sub_issue") return draft;
   return withSubIssueParentHierarchy(draft, tasks, draft.parentTaskId);
+}
+
+export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(draft: T) {
+  if (draft.taskType === "deliverable") return draft;
+  return {
+    creationRequestId: draft.creationRequestId,
+    title: draft.title,
+    description: draft.description,
+    taskType: draft.taskType,
+    parentTaskId: draft.parentTaskId,
+    assignee: draft.assignee,
+    githubRepo: draft.githubRepo,
+    relationType: draft.relationType,
+    relatedTaskId: draft.relatedTaskId,
+    relationNote: draft.relationNote,
+  };
 }

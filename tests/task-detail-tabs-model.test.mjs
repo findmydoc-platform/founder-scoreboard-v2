@@ -12,6 +12,7 @@ const {
 const emptyKnownState = {
   activityCount: 0,
   activityKnown: true,
+  allowsSubIssues: false,
   canAddRelationship: false,
   canComment: false,
   canCreateSubIssue: false,
@@ -29,6 +30,7 @@ test("tabs remain available for content, actions, and unresolved detail data", (
     taskDetailAvailableTabs({
       ...emptyKnownState,
       activityCount: 2,
+      allowsSubIssues: true,
       canAddRelationship: true,
       canCreateSubIssue: true,
     }),
@@ -42,6 +44,14 @@ test("tabs remain available for content, actions, and unresolved detail data", (
     }),
     ["overview", "relationships", "activity"],
   );
+});
+
+test("Sub-Issue details never expose nested Sub-Issues", () => {
+  assert.deepEqual(taskDetailAvailableTabs({
+    ...emptyKnownState,
+    subIssueCount: 3,
+    canCreateSubIssue: true,
+  }), ["overview"]);
 });
 
 test("tab normalization preserves order and falls back to overview", () => {

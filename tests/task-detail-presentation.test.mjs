@@ -50,6 +50,7 @@ function task(overrides = {}) {
     definitionOfDone: "Founder review completed",
     note: "Keep the scope narrow",
     status: "Offen",
+    taskType: "deliverable",
     milestoneId: "milestone-7",
     packageId: "package-3",
     workstream: "Founder Ops",
@@ -78,6 +79,7 @@ test("buildTaskOverviewDraft uses the description fallback and empty optional va
 
   assert.deepEqual(draft, {
     title: "Clarify reporting",
+    description: "Legacy description",
     problemStatement: "Legacy description",
     intendedOutcome: "",
     scopeConstraints: "",
@@ -133,6 +135,23 @@ test("taskOverviewPatch includes only changed fields allowed by permissions", ()
     }),
     {},
   );
+});
+
+test("Sub-Issue overview edits only title and context", () => {
+  const baseline = task({ taskType: "sub_issue" });
+  const draft = {
+    ...buildTaskOverviewDraft(baseline),
+    title: "Changed work step",
+    description: "Updated context",
+    acceptanceCriteria: "Must be ignored",
+    evidenceLinks: ["https://proof.example/evidence"],
+    note: "Must be ignored",
+  };
+
+  assert.deepEqual(taskOverviewPatch(baseline, draft, fullPermissions), {
+    title: "Changed work step",
+    description: "Updated context",
+  });
 });
 
 test("partitionSubIssues separates normalized completed statuses and preserves order", () => {
@@ -221,11 +240,11 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
       assignee: "sebastian",
       priority: "P2",
       status: "Offen",
-      workstream: "Founder Ops",
-      startDate: "2026-07-14",
-      endDate: "2026-07-18",
-      deadline: "2026-07-18",
-      hours: 2,
+      workstream: "",
+      startDate: "",
+      endDate: "",
+      deadline: "",
+      hours: 0,
       definitionOfDone: "",
       createGitHubIssue: false,
       githubRepo: "findmydoc-platform/management",

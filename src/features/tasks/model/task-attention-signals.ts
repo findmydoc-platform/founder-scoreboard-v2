@@ -20,10 +20,18 @@ function taskHasOwner(task: Task) {
 }
 
 function taskMissingEvidence(task: Task) {
-  return Boolean(task.sprintId && normalizeStatus(task.status) !== "Erledigt" && !task.evidenceLink && !task.githubIssueUrl && !task.issueUrl);
+  return Boolean(
+    task.taskType === "deliverable"
+    && task.sprintId
+    && normalizeStatus(task.status) !== "Erledigt"
+    && !task.evidenceLink
+    && !task.githubIssueUrl
+    && !task.issueUrl,
+  );
 }
 
 function reviewIsOverdue(task: Task) {
+  if (task.taskType === "sub_issue") return false;
   if (normalizeStatus(task.status) !== "Review" && task.reviewStatus !== "requested") return false;
   const reviewDate = (task.reviewRequestedAt || task.endDate || "").slice(0, 10);
   return Boolean(reviewDate && reviewDate < addDaysIso(currentIsoDate(), -2));
@@ -33,7 +41,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
   const signals: TaskAttentionSignal[] = [];
   const status = normalizeStatus(task.status);
 
-  if (task.priority === "P0" && !taskHasOwner(task)) {
+  if (task.taskType === "deliverable" && task.priority === "P0" && !taskHasOwner(task)) {
     signals.push({ id: "owner-missing", label: "Owner fehlt", kind: "critical" });
   }
   if (status === "Blockiert" && !taskHasOpenBlocker(task.id, data)) {
@@ -50,6 +58,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
 }
 
 export function taskQualityAttentionSignals(task: Task): TaskAttentionSignal[] {
+  if (task.taskType === "sub_issue") return [];
   const signals: TaskAttentionSignal[] = [];
 
   if (!task.acceptanceCriteria?.trim()) {
@@ -66,6 +75,7 @@ export function taskQualityAttentionSignals(task: Task): TaskAttentionSignal[] {
 }
 
 export function taskReviewAttentionSignals(task: Task): TaskAttentionSignal[] {
+  if (task.taskType === "sub_issue") return [];
   const signals: TaskAttentionSignal[] = [];
 
   if (reviewIsOverdue(task)) {

@@ -65,7 +65,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
 
   const document = JSON.parse(openapi);
   assert.equal(document.info.title, "FounderOps Planning Items API");
-  assert.equal(document.info.version, "1.2.0");
+  assert.equal(document.info.version, "1.3.0");
   assert.deepEqual(Object.keys(document.paths), publicPaths);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.operationId, "updatePlanningItem");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyMilestone");
@@ -76,9 +76,11 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "milestone");
   assert.deepEqual(document.components.schemas.TaskStatus.enum, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
+  assert.deepEqual(document.components.schemas.SubIssueStatus.enum, ["Offen", "In Arbeit", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.PatchPayload.properties.status.oneOf, [
     { $ref: "#/components/schemas/MilestoneStatus" },
     { $ref: "#/components/schemas/TaskStatus" },
+    { $ref: "#/components/schemas/SubIssueStatus" },
   ]);
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.default, false);
   assert.match(documentation, /PATCH processes only properties that are present/);
@@ -87,6 +89,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.match(documentation, /No legacy HTTP aliases or parallel planning-item creation routes are retained/);
   assert.match(documentation, /Existing update-enabled tokens continue to work without rotation/);
   assert.match(documentation, /status: "Review"/);
+  assert.match(documentation, /separate four-state contract/);
   assert.match(documentation, /complete any Sub-Issue/);
 });
 
@@ -201,7 +204,8 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
       "@/features/planning-items/model/planning-items-contract": contract,
       "@/features/planning-items/model/planning-item-normalization": normalization,
       "@/features/reviews/model/task-review-state": {
-        REVIEW_LOCKED_MESSAGE: "Review locked",
+        isReviewStateLocked: () => false,
+        reviewStateLockMessage: () => "Review locked",
       },
     },
   );
@@ -277,6 +281,56 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     errors: [],
     warnings: [],
   });
+
+  rowsByTable.profiles = [{ id: "founder", name: "Founder" }];
+  rowsByTable.active_tasks = [{
+    id: "deliverable-parent",
+    title: "Parent",
+    task_type: "deliverable",
+    package_id: "initiative-one",
+    milestone_id: "milestone-one",
+    approval_status: "approved",
+    review_status: "not_requested",
+    score_final: false,
+  }];
+  const [subIssuePreview] = await create.buildPlanningItemCreatePreview(
+    [{
+      itemType: "sub_issue",
+      title: " Confirm rollout ",
+      description: " Coordinate the date. ",
+      parentTaskId: "deliverable-parent",
+      githubRepo: "findmydoc-platform/management",
+    }],
+    { id: "founder", name: "Founder", platformRole: "founder", githubLogin: "" },
+    supabase,
+  );
+  assert.deepEqual(subIssuePreview, {
+    clientId: "planning-items-create-1",
+    itemType: "sub_issue",
+    title: "Confirm rollout",
+    description: "Coordinate the date.",
+    parentTaskId: "deliverable-parent",
+    packageId: "initiative-one",
+    milestoneId: "milestone-one",
+    ownerId: "founder",
+    githubRepo: "findmydoc-platform/management",
+    approvalStatus: null,
+    scoreRelevant: false,
+    errors: [],
+    warnings: [],
+  });
+
+  const [forbiddenSubIssuePreview] = await create.buildPlanningItemCreatePreview(
+    [{
+      itemType: "sub_issue",
+      title: "Confirm rollout",
+      parentTaskId: "deliverable-parent",
+      evidenceRequired: "Legacy proof",
+    }],
+    { id: "founder", name: "Founder", platformRole: "founder", githubLogin: "" },
+    supabase,
+  );
+  assert.equal(forbiddenSubIssuePreview.errors.includes("evidenceRequired ist für sub_issue nicht zulässig."), true);
 
   const expectedUpdatedAt = "2026-07-14T12:00:00.000Z";
   assert.deepEqual(deletion.parsePlanningItemDeletePayload({ expectedUpdatedAt }), { ok: true, expectedUpdatedAt });

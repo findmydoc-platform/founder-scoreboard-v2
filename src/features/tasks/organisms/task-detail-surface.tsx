@@ -134,8 +134,8 @@ export function TaskDetailSurface({
     unrestricted: false,
     onUpdate,
   });
-  const reviewActive = isTaskReviewActive(task);
-  const reviewLocked = isTaskReviewLocked(task);
+  const reviewActive = task.taskType === "deliverable" && isTaskReviewActive(task);
+  const reviewLocked = task.taskType === "deliverable" && isTaskReviewLocked(task);
   const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
   const currentMilestoneId = task.milestoneId || currentPackage?.milestoneId || "";
   const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
@@ -165,7 +165,7 @@ export function TaskDetailSurface({
     canManageFinalStatus: controller.permissions.canManageFinalStatus,
     canReopenSubIssue: controller.permissions.canReopenSubIssue,
     canUpdateWorkingStatus: controller.permissions.canUpdateWorkingStatus,
-  });
+  }, task.taskType);
   const effectivelyApproved = isTaskPlanningActive(task);
   const canSelectNextStatus = statusOptions.some((status) => status !== normalizeStatus(task.status));
   const statusLockedReason = reviewLocked
@@ -183,6 +183,7 @@ export function TaskDetailSurface({
   const availableTabs = taskDetailAvailableTabs({
     activityCount,
     activityKnown: detailDataKnown,
+    allowsSubIssues: task.taskType === "deliverable",
     canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
     canComment: controller.permissions.canComment,
     canCreateSubIssue: controller.permissions.canCreateSubIssue,
@@ -449,20 +450,22 @@ export function TaskDetailSurface({
         />
       ) : null}
 
-      <TaskDetailWorkflowStrips
-        task={task}
-        teamProfiles={teamProfiles}
-        canApprove={canApprove}
-        canReject={canReject}
-        canReturnToDraft={canReturnToDraft}
-        canManageReviewOwner={controller.permissions.canManageReviewOwner}
-        forceReviewSetup={reviewSetupOpen}
-        pending={pending}
-        onUpdate={onUpdate}
-        onDecideApproval={onDecideApproval}
-      />
+      {task.taskType === "deliverable" ? (
+        <TaskDetailWorkflowStrips
+          task={task}
+          teamProfiles={teamProfiles}
+          canApprove={canApprove}
+          canReject={canReject}
+          canReturnToDraft={canReturnToDraft}
+          canManageReviewOwner={controller.permissions.canManageReviewOwner}
+          forceReviewSetup={reviewSetupOpen}
+          pending={pending}
+          onUpdate={onUpdate}
+          onDecideApproval={onDecideApproval}
+        />
+      ) : null}
 
-      {!reviewActive ? (
+      {!reviewActive && task.taskType === "deliverable" ? (
         <TaskReviewSummary
           task={task}
           reviews={reviews}

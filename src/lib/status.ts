@@ -2,6 +2,7 @@ import type { UiTone } from "@/shared/atoms/ui-primitives";
 import type { TaskStatus } from "./types";
 
 export const taskStatuses: TaskStatus[] = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"];
+export const SUB_ISSUE_STATUSES = ["Offen", "In Arbeit", "Blockiert", "Erledigt"] as const satisfies readonly TaskStatus[];
 
 export function normalizeStatus(status: string): TaskStatus {
   const lower = status.toLowerCase();
@@ -12,6 +13,15 @@ export function normalizeStatus(status: string): TaskStatus {
   if (lower.includes("block")) return "Blockiert";
   if (lower.includes("arbeit") || lower.includes("aktiv") || lower.includes("progress")) return "In Arbeit";
   return "Offen";
+}
+
+export function normalizeSubIssueStatus(status: string): TaskStatus {
+  const normalized = normalizeStatus(status);
+  return normalized === "Review" || normalized === "Nacharbeit" ? "In Arbeit" : normalized;
+}
+
+export function isSubIssueStatus(status: string): status is (typeof SUB_ISSUE_STATUSES)[number] {
+  return SUB_ISSUE_STATUSES.includes(status as (typeof SUB_ISSUE_STATUSES)[number]);
 }
 
 export function isTaskStatusChange(currentStatus: string, nextStatus: string) {

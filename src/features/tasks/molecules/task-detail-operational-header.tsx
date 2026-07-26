@@ -304,7 +304,7 @@ export function TaskDetailOperationalHeader({
     ? parentTask?.title
     : initiative?.title;
   const milestoneLabel = milestone?.title;
-  const accountableLabel = initiative
+  const accountableLabel = task.taskType === "deliverable" && initiative
     ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
     : "";
   const directSubIssues = subIssues.filter((subIssue) => subIssue.parentTaskId === task.id);
@@ -370,40 +370,44 @@ export function TaskDetailOperationalHeader({
           <OperationalFact label="Zuständig" emphasized icon={<UserRound size={16} />}>{taskAssigneeLabel(task)}</OperationalFact>
         )}
 
-        {canManageTaskMeta ? (
-          <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
-            <CustomSelect
-              value={task.priority}
-              options={priorityOptions}
-              disabled={pending}
-              className="h-8 w-20 text-sm"
-              aria-label="Priorität ändern"
-              onChange={(value) => onUpdate({ priority: value })}
-            />
-          </OperationalFact>
-        ) : (
-          <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
-            <UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge>
-          </OperationalFact>
-        )}
+        {task.taskType === "deliverable" ? (
+          <>
+            {canManageTaskMeta ? (
+              <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
+                <CustomSelect
+                  value={task.priority}
+                  options={priorityOptions}
+                  disabled={pending}
+                  className="h-8 w-20 text-sm"
+                  aria-label="Priorität ändern"
+                  onChange={(value) => onUpdate({ priority: value })}
+                />
+              </OperationalFact>
+            ) : (
+              <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
+                <UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge>
+              </OperationalFact>
+            )}
 
-        {showDeadline && (canManageTaskMeta ? (
-          <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>
-            <CustomDatePicker
-              value={task.deadline || ""}
-              disabled={pending}
-              className="h-8 w-36 text-sm"
-              aria-label="Zieltermin ändern"
-              onChange={(deadline) => onUpdate({ deadline })}
-            />
-          </OperationalFact>
-        ) : (
-          <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>{formatDate(task.deadline, { includeYear: true })}</OperationalFact>
-        ))}
+            {showDeadline && (canManageTaskMeta ? (
+              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>
+                <CustomDatePicker
+                  value={task.deadline || ""}
+                  disabled={pending}
+                  className="h-8 w-36 text-sm"
+                  aria-label="Zieltermin ändern"
+                  onChange={(deadline) => onUpdate({ deadline })}
+                />
+              </OperationalFact>
+            ) : (
+              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>{formatDate(task.deadline, { includeYear: true })}</OperationalFact>
+            ))}
 
-        {subIssuesKnown && directSubIssues.length > 0 && (
-          <SubIssueProgress completed={completedSubIssues} total={directSubIssues.length} />
-        )}
+            {subIssuesKnown && directSubIssues.length > 0 && (
+              <SubIssueProgress completed={completedSubIssues} total={directSubIssues.length} />
+            )}
+          </>
+        ) : null}
       </div>
     </header>
   );

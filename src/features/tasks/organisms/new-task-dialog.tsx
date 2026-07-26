@@ -398,100 +398,81 @@ function SubIssueForm({
   titleError: string;
   titleValidationId: string;
 }) {
-  const parentTask = data.tasks.find((task) => task.id === draft.parentTaskId && task.taskType === "deliverable");
-  const inheritedInitiative = data.packages.find((pack) => pack.id === parentTask?.packageId);
-  const inheritedMilestone = data.milestones.find((milestone) => milestone.id === parentTask?.milestoneId);
-
   return (
-    <div className="grid min-h-0 gap-0 lg:grid-cols-[minmax(0,3fr)_minmax(19rem,1.65fr)]">
-      <div className="grid content-start gap-5 p-5 sm:p-6 lg:border-r lg:border-slate-200">
-        <p className="text-xs font-medium text-slate-500"><span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld</p>
-        <UiSelectField
-          label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
-          value={draft.parentTaskId}
-          onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
-          options={[{ value: "", label: "Deliverable auswählen" }, ...parentDeliverableOptions(data.tasks, data.packages)]}
-          aria-label="Übergeordnetes Deliverable, Pflichtfeld"
-          aria-required
-          data-autofocus
-          selectClassName="h-10 text-sm"
+    <div className="grid content-start gap-5 p-5 sm:p-6">
+      <p className="text-xs font-medium text-slate-500">
+        <span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld
+      </p>
+
+      <UiSelectField
+        label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
+        value={draft.parentTaskId}
+        onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
+        options={[{ value: "", label: "Deliverable auswählen" }, ...parentDeliverableOptions(data.tasks, data.packages)]}
+        aria-label="Übergeordnetes Deliverable, Pflichtfeld"
+        aria-required
+        data-autofocus
+        selectClassName="h-11 text-sm"
+      />
+
+      <p className="-mt-2 text-xs leading-5 text-slate-500">
+        Initiative, Epic / Meilenstein, Freigabe und RACI werden vom Parent-Deliverable übernommen.
+      </p>
+
+      <UiField>
+        <RequiredLabel>Titel</RequiredLabel>
+        <UiTextInput
+          data-task-title
+          required
+          minLength={3}
+          value={draft.title}
+          aria-describedby={titleError ? titleValidationId : undefined}
+          aria-errormessage={titleError ? titleValidationId : undefined}
+          aria-invalid={titleError ? true : undefined}
+          onBlur={onTitleBlur}
+          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+          inputSize="lg"
+          inputPadding="md"
+          className={titleError ? "border-red-300 focus:border-red-500 focus:ring-red-100" : undefined}
+          placeholder="Konkreter Arbeitsschritt"
         />
+        {titleError ? <span id={titleValidationId} aria-live="polite" className="text-red-700">{titleError}</span> : null}
+      </UiField>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <div className="text-[11px] font-semibold text-slate-500">Initiative</div>
-              <div className="mt-1 text-xs font-semibold text-slate-800">{inheritedInitiative?.title || "Wird übernommen"}</div>
-            </div>
-            <div className="border-slate-200 sm:border-l sm:pl-3">
-              <div className="text-[11px] font-semibold text-slate-500">Epic / Meilenstein</div>
-              <div className="mt-1 text-xs font-semibold text-slate-800">{inheritedMilestone?.title || (parentTask ? "Ohne Epic" : "Wird übernommen")}</div>
-            </div>
-            <div className="border-slate-200 sm:border-l sm:pl-3">
-              <div className="text-[11px] font-semibold text-slate-500">Geerbter RACI-Kontext</div>
-              <div className="mt-1 text-xs font-semibold text-slate-800">{inheritedInitiative ? "Vom Deliverable übernommen" : "Wird übernommen"}</div>
-            </div>
-          </div>
-          {inheritedInitiative ? <InitiativeRaciList initiative={inheritedInitiative} profiles={data.profiles} className="mt-3 grid gap-1 border-t border-slate-200 pt-3 text-xs text-slate-600 sm:grid-cols-2" /> : null}
-        </div>
-        <p className="text-xs leading-5 text-slate-500">Sub-Issues sind nicht score-relevant und übernehmen Initiative sowie RACI vom Deliverable.</p>
+      <UiSelectField
+        label="Zuständig"
+        value={draft.assignee}
+        onChange={(value) => setDraft((current) => ({ ...current, assignee: value }))}
+        options={taskAssigneeOptions("sub_issue", data.profiles)}
+        selectClassName="h-11 text-sm"
+      />
 
-        <UiField>
-          <RequiredLabel>Titel</RequiredLabel>
-          <UiTextInput
-            data-task-title
-            required
-            minLength={3}
-            value={draft.title}
-            aria-describedby={titleError ? titleValidationId : undefined}
-            aria-errormessage={titleError ? titleValidationId : undefined}
-            aria-invalid={titleError ? true : undefined}
-            onBlur={onTitleBlur}
-            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-            inputSize="lg"
-            inputPadding="md"
-            className={titleError ? "border-red-300 focus:border-red-500 focus:ring-red-100" : undefined}
-            placeholder="Konkreter Arbeitsschritt"
+      <UiField>
+        Kontext <span className="font-normal text-slate-400">(optional)</span>
+        <UiTextArea
+          value={draft.description}
+          onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+          minHeight="lg"
+          inputPadding="md"
+          leading="relaxed"
+          placeholder="Relevante Hinweise, Hintergründe oder Absprachen"
+        />
+      </UiField>
+
+      <div className="grid gap-5 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+        <section className="grid gap-3">
+          <SectionHeading>GitHub-Repository</SectionHeading>
+          <UiSelectField
+            label="Repository"
+            value={draft.githubRepo}
+            onChange={(value) => setDraft((current) => ({ ...current, githubRepo: value }))}
+            options={[...allowedGitHubRepositories].map((repository) => ({ value: repository, label: repository }))}
           />
-          {titleError ? <span id={titleValidationId} aria-live="polite" className="text-red-700">{titleError}</span> : null}
-        </UiField>
-
-        <UiField>
-          Zusätzlicher Kontext
-          <UiTextArea
-            value={draft.description}
-            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-            minHeight="lg"
-            inputPadding="md"
-            leading="relaxed"
-            placeholder="Relevante Hinweise, Hintergründe oder Absprachen"
-          />
-        </UiField>
-
-        <section className="grid gap-4">
-          <div>
-            <SectionHeading accent>Aufgabenbrief</SectionHeading>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Nur die für diesen Arbeitsschritt relevanten Ergebnis- und Abnahmeangaben ergänzen.</p>
-          </div>
-          <TaskBriefFields compact draft={draft} setDraft={setDraft} />
+          <p className="text-xs leading-5 text-slate-500">
+            Verknüpfte Pull Requests werden später automatisch erkannt. Sie sind keine Abschlussvoraussetzung.
+          </p>
         </section>
-      </div>
-
-      <div className="grid content-start gap-5 bg-slate-50/40 p-5 sm:p-6">
-        <div className="rounded-lg border border-slate-200 bg-white p-4"><ResponsibilityFields accent draft={draft} data={data} setDraft={setDraft} /></div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4"><PlanningFields accent draft={draft} setDraft={setDraft} /></div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <section className="grid gap-3">
-            <SectionHeading accent>GitHub-Repository</SectionHeading>
-            <UiSelectField
-              label="Repository"
-              value={draft.githubRepo}
-              onChange={(value) => setDraft((current) => ({ ...current, githubRepo: value }))}
-              options={[...allowedGitHubRepositories].map((repository) => ({ value: repository, label: repository }))}
-            />
-          </section>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4"><RelationshipFields accent draft={draft} data={data} setDraft={setDraft} /></div>
+        <RelationshipFields draft={draft} data={data} setDraft={setDraft} />
       </div>
     </div>
   );
@@ -504,6 +485,7 @@ export function NewTaskDialog({
   onClose,
   onCreate,
   canApproveNow = false,
+  currentProfileId = "",
 }: {
   defaults: Partial<NewTaskDraft>;
   data: TaskDialogData;
@@ -511,6 +493,7 @@ export function NewTaskDialog({
   onClose: () => void;
   onCreate: (draft: NewTaskDraft, callbacks?: NewTaskCreateCallbacks) => void;
   canApproveNow?: boolean;
+  currentProfileId?: string;
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const errorSummaryRef = useRef<HTMLDivElement>(null);
@@ -523,7 +506,7 @@ export function NewTaskDialog({
   const [titleTouched, setTitleTouched] = useState(false);
   const [draft, setDraft] = useState<NewTaskDraft>(() => {
     const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
-    const fallbackAssignee = data.profiles[0]?.id || "volkan";
+    const fallbackAssignee = currentProfileId || data.profiles[0]?.id || "";
     const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
     const initiativesForDefaultMilestone = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
     const initialPackageId = defaults.packageId || initiativesForDefaultMilestone[0]?.id || data.packages[0]?.id || "";
@@ -560,7 +543,24 @@ export function NewTaskDialog({
     };
 
     return initialTaskType === "sub_issue"
-      ? withSubIssueParentHierarchy(initialDraft, data.tasks, initialDraft.parentTaskId)
+      ? withSubIssueParentHierarchy({
+          ...initialDraft,
+          status: "Offen",
+          priority: "P2",
+          workstream: "",
+          startDate: "",
+          endDate: "",
+          deadline: "",
+          hours: 0,
+          problemStatement: "",
+          intendedOutcome: "",
+          scopeConstraints: "",
+          acceptanceCriteria: "",
+          evidenceRequired: "",
+          definitionOfDone: "",
+          createGitHubIssue: false,
+          approveNow: false,
+        }, data.tasks, initialDraft.parentTaskId)
       : initialDraft;
   });
 
@@ -605,7 +605,9 @@ export function NewTaskDialog({
       }}
     >
       <form
-        className="grid h-dvh max-h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-white shadow-2xl md:max-w-[64rem] md:border-l md:border-slate-200"
+        className={`grid h-dvh max-h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-white shadow-2xl md:border-l md:border-slate-200 ${
+          draft.taskType === "sub_issue" ? "md:max-w-[42rem]" : "md:max-w-[64rem]"
+        }`}
         aria-busy={pending}
         noValidate
         onSubmit={(event) => {

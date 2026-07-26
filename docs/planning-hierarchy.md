@@ -26,13 +26,15 @@ Mini-RACI liegt auf der Initiative:
 - `Consulted`: Personen, die aktiv einbezogen werden.
 - `Informed`: Personen, die informiert bleiben.
 
-Responsible, Consulted und Informed werden als Profil-Listen geführt. Sub-Issues bekommen kein eigenes RACI.
+Responsible, Consulted, and Informed are profile lists. Sub-Issues do not have their own RACI; they inherit the parent Deliverable's Initiative context.
 
 ### Deliverable
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum, Review und Evidence. Nur Deliverables werden bepunktet.
 
 ### Sub-Issue
-Persönliche Arbeitsunterteilung eines Deliverables. Founder dürfen damit eigene Schritte strukturieren. Sub-Issues sind nicht scoring-relevant.
+A small work step below one Deliverable. It has a required parent and title, one owner/assignee, optional context, an optional GitHub repository, and an optional first dependency. It does not have its own priority, Sprint, schedule, estimate, workstream, task brief, acceptance criteria, Definition of Done, Evidence, RACI, approval, review, review owner, or score. A Sub-Issue cannot contain another Sub-Issue.
+
+Its only work statuses are `Offen`, `In Arbeit`, `Blockiert`, and `Erledigt`. Legacy `Review` and `Nacharbeit` values are projected as `In Arbeit` until an explicit status update persists one of the four valid states.
 
 ## Bestehende GitHub-Issues
 
@@ -48,7 +50,7 @@ Die App bleibt führend. GitHub im Repo `findmydoc-platform/management` ist ein 
 
 Jede gültige, einem Teamprofil zugeordnete Session darf den Issue-Sync auslösen, unabhängig von Rolle, Owner oder Assignee. Der Issue-Sync verwendet ausschließlich das GitHub-App-Installationstoken. Viewer bleiben für Task-Änderungen und neue Kommentare read-only.
 
-Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungskern:
+Projected Deliverable issues contain only the editable brief core:
 
 - `Problem Statement`
 - `Intended Outcome`
@@ -56,7 +58,9 @@ Gespiegelte GitHub-Issues enthalten im Beschreibungstext nur den Bearbeitungsker
 - `Acceptance Criteria`
 - `Evidence Required`
 - `Definition of Done`
-- einen kurzen FounderOps-Rücklink mit One-way-Sync-Hinweis
+- a short FounderOps backlink with the one-way sync note
+
+Projected Sub-Issues contain only their optional context and the FounderOps backlink. They never include Acceptance Criteria, Evidence, or Definition of Done sections. Native linked Pull Requests remain a read-only technical history and are not a completion requirement.
 
 Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können über native GitHub-Mittel wie Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
 
@@ -77,10 +81,11 @@ Approval is separate from work status. Initiatives and Deliverables use `draft`,
 - Sprint carry-overs create a new proposed Deliverable without a Sprint assignment. They require the normal approval decision before later Sprint planning.
 - Approved Deliverables may remain in the backlog without a Sprint. They become score-relevant only after Sprint assignment.
 - Material brief or Initiative changes create a new approval revision and reset an approved Deliverable to proposed.
-- Sprint, work status, Evidence, comments, and GitHub sync metadata do not reset approval.
+- Sprint, work status, Evidence, comments, and GitHub sync metadata do not reset Deliverable approval.
 - Proposed or rejected Deliverables cannot enter Sprint planning, Review, scoring, or GitHub projection.
 - While the parent Deliverable is approved, any CEO, Deputy, or Founder may close a Sub-Issue and reopen it to `Offen`, regardless of assignee, owner, or Initiative RACI. Viewers remain read-only, and all other work-status transitions retain their existing ownership and role rules.
 - No Sub-Issue status may change while its parent Deliverable is not approved.
+- Sub-Issue review, score, quality, and Evidence values from legacy storage are ignored and never lock the work step.
 - A Sub-Issue may be moved to another Deliverable by the CEO, a Deputy, or its current owner or assignee. It immediately inherits the target Initiative, Milestone, and effective approval state; the next explicit GitHub sync replaces the native parent relationship.
 
 ## GitHub item repositories

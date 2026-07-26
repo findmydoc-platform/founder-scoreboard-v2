@@ -155,6 +155,20 @@ function LinkedPullRequestsList({ pullRequests }: { pullRequests: LinkedPullRequ
   );
 }
 
+function LinkedPullRequestsSection({ pullRequests }: { pullRequests: LinkedPullRequest[] }) {
+  return (
+    <section className="border-b border-slate-100 py-5 last:border-b-0">
+      <h3 className="text-sm font-semibold text-slate-950">Verknüpfte Pull Requests</h3>
+      <p className="mt-1 text-sm leading-6 text-slate-500">
+        Automatisch aus dem verknüpften GitHub Issue erkannt. Ein Pull Request ist keine Abschlussvoraussetzung.
+      </p>
+      <div className="mt-3">
+        <LinkedPullRequestsList pullRequests={pullRequests} />
+      </div>
+    </section>
+  );
+}
+
 function EvidenceGroups({
   evidenceLinks,
   linkedPullRequests,
@@ -243,10 +257,13 @@ export function TaskOverviewPanel({
   const evidenceInvalid = evidenceInvalidIndex >= 0;
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
-  const hasReadContent = overviewFields.some(({ key }) => draft[key].trim())
-    || evidenceLinks.length > 0
-    || linkedPullRequests.length > 0
-    || Boolean(riskContent);
+  const isSubIssue = task.taskType === "sub_issue";
+  const hasReadContent = isSubIssue
+    ? Boolean(draft.description.trim() || linkedPullRequests.length > 0 || riskContent)
+    : overviewFields.some(({ key }) => draft[key].trim())
+      || evidenceLinks.length > 0
+      || linkedPullRequests.length > 0
+      || Boolean(riskContent);
   const flatReadOnly = flat && !editing;
 
   useEffect(() => {
@@ -292,7 +309,9 @@ export function TaskOverviewPanel({
         <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
           <div>
             <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
-            <p className="mt-1 text-sm text-slate-500">Ziel, Abnahme und notwendige Nachweise für die Umsetzung.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {isSubIssue ? "Kontext, Blocker und automatisch verknüpfte Pull Requests." : "Ziel, Abnahme und notwendige Nachweise für die Umsetzung."}
+            </p>
           </div>
         </div>
       ) : null}
@@ -321,23 +340,39 @@ export function TaskOverviewPanel({
             </UiField>
           ) : null}
 
-          {overviewFields.map(({ key, label, placeholder, permission }) => permissions[permission] ? (
-            <UiField key={key}>
-              {label}
-              <UiTextArea
-                data-task-overview-field
-                value={draft[key]}
-                disabled={saving}
-                onChange={(event) => onChange({ [key]: event.target.value })}
-                minHeight={key === "note" ? "md" : "lg"}
-                inputPadding="md"
-                leading="relaxed"
-                placeholder={placeholder}
-              />
-            </UiField>
-          ) : null)}
+          {isSubIssue ? (
+            permissions.canEditBrief ? (
+              <UiField>
+                Kontext <span className="font-normal text-slate-400">(optional)</span>
+                <UiTextArea
+                  data-task-overview-field
+                  value={draft.description}
+                  disabled={saving}
+                  onChange={(event) => onChange({ description: event.target.value })}
+                  minHeight="lg"
+                  inputPadding="md"
+                  leading="relaxed"
+                  placeholder="Relevante Hinweise, Hintergründe oder Absprachen"
+                />
+              </UiField>
+            ) : null
+          ) : overviewFields.map(({ key, label, placeholder, permission }) => permissions[permission] ? (
+              <UiField key={key}>
+                {label}
+                <UiTextArea
+                  data-task-overview-field
+                  value={draft[key]}
+                  disabled={saving}
+                  onChange={(event) => onChange({ [key]: event.target.value })}
+                  minHeight={key === "note" ? "md" : "lg"}
+                  inputPadding="md"
+                  leading="relaxed"
+                  placeholder={placeholder}
+                />
+              </UiField>
+            ) : null)}
 
-          {permissions.canEditEvidence ? (
+          {!isSubIssue && permissions.canEditEvidence ? (
             <fieldset className="grid gap-3" data-tour-id="task-evidence-links">
               <legend className="text-sm font-semibold text-slate-950">Nachweis-Links</legend>
               <p className="-mt-1 text-sm text-slate-500">
@@ -407,48 +442,58 @@ export function TaskOverviewPanel({
       ) : (
         <div className={flatReadOnly ? "" : "px-5 sm:px-6"}>
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
-          <ReadSection label="Problem" value={draft.problemStatement} />
-          <ReadSection
-            label="Zielbild"
-            value={draft.intendedOutcome}
-            anchorId="task-review-outcome"
-            emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
-          />
-          <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
-          <ReadSection
-            label="Abnahmekriterien"
-            value={draft.acceptanceCriteria}
-            checklist
-            anchorId="task-review-acceptance"
-            emptyValue={flatReadOnly ? "Keine Abnahmekriterien hinterlegt." : undefined}
-          />
-          {flatReadOnly ? (
-            <ReviewEvidenceSection
-              evidenceLinks={evidenceLinks}
-              evidenceRequired={draft.evidenceRequired}
-              linkedPullRequests={linkedPullRequests}
-            />
+          {isSubIssue ? (
+            <>
+              <ReadSection label="Kontext" value={draft.description} />
+              {riskContent}
+              <LinkedPullRequestsSection pullRequests={linkedPullRequests} />
+            </>
           ) : (
-            <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
+            <>
+              <ReadSection label="Problem" value={draft.problemStatement} />
+              <ReadSection
+                label="Zielbild"
+                value={draft.intendedOutcome}
+                anchorId="task-review-outcome"
+                emptyValue={flatReadOnly ? "Kein Zielbild hinterlegt." : undefined}
+              />
+              <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
+              <ReadSection
+                label="Abnahmekriterien"
+                value={draft.acceptanceCriteria}
+                checklist
+                anchorId="task-review-acceptance"
+                emptyValue={flatReadOnly ? "Keine Abnahmekriterien hinterlegt." : undefined}
+              />
+              {flatReadOnly ? (
+                <ReviewEvidenceSection
+                  evidenceLinks={evidenceLinks}
+                  evidenceRequired={draft.evidenceRequired}
+                  linkedPullRequests={linkedPullRequests}
+                />
+              ) : (
+                <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} anchorId="task-review-evidence" />
+              )}
+              {!flatReadOnly ? (
+                <section
+                  data-tour-id="task-evidence-links"
+                  className="border-b border-slate-100 py-5"
+                >
+                  <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
+                  <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
+                </section>
+              ) : null}
+              {flatReadOnly ? riskContent : null}
+              <ReadSection
+                label="Qualitätsstandard"
+                value={draft.definitionOfDone}
+                checklist
+                emptyValue={flatReadOnly ? "Kein Qualitätsstandard hinterlegt." : undefined}
+              />
+              {!flatReadOnly ? riskContent : null}
+              <ReadSection label="Interne Notiz" value={draft.note} />
+            </>
           )}
-          {!flatReadOnly ? (
-            <section
-              data-tour-id="task-evidence-links"
-              className="border-b border-slate-100 py-5"
-            >
-              <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
-              <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} />
-            </section>
-          ) : null}
-          {flatReadOnly ? riskContent : null}
-          <ReadSection
-            label="Qualitätsstandard"
-            value={draft.definitionOfDone}
-            checklist
-            emptyValue={flatReadOnly ? "Kein Qualitätsstandard hinterlegt." : undefined}
-          />
-          {!flatReadOnly ? riskContent : null}
-          <ReadSection label="Interne Notiz" value={draft.note} />
           {task.updatedAt ? <p className="border-t border-slate-100 py-4 text-xs text-slate-400">Zuletzt aktualisiert am {formatDate(task.updatedAt)}</p> : null}
         </div>
       )}

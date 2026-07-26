@@ -6,6 +6,9 @@ const { mapTaskRow } = await loadTranspiledModule("src/lib/planning-task-mappers
   "./planning-profile-mappers": {
     profileNameById: (_profiles, profileId) => profileId || "",
   },
+  "./status": {
+    normalizeSubIssueStatus: (status) => status === "Review" || status === "Nacharbeit" ? "In Arbeit" : status,
+  },
 });
 
 test("task mapping projects ordered evidence links and linked pull request metadata", () => {
@@ -76,4 +79,45 @@ test("legacy single evidence URL remains visible until migrated", () => {
   }, new Map());
   assert.deepEqual(task.evidenceLinks, ["https://legacy.example/proof"]);
   assert.equal(task.evidenceLink, "https://legacy.example/proof");
+});
+
+test("Sub-Issue read model normalizes legacy review state and ignores review, score, and evidence data", () => {
+  const task = mapTaskRow({
+    id: "sub-legacy",
+    task_type: "sub_issue",
+    status: "Review",
+    review_status: "requested",
+    review_owner_profile_id: "reviewer",
+    score_points: 8,
+    score_final: true,
+    score_relevant: true,
+    evidence_link: "https://legacy.example/proof",
+    evidence_required: "Legacy proof",
+  }, new Map(), {
+    taskLinks: [{
+      id: 4,
+      task_id: "sub-legacy",
+      type: "github_pull_request",
+      label: "Implement work step",
+      url: "https://github.com/findmydoc-platform/management/pull/90",
+      position: 0,
+      metadata: {
+        repository: "findmydoc-platform/management",
+        number: 90,
+        status: "open",
+      },
+    }],
+  });
+
+  assert.equal(task.status, "In Arbeit");
+  assert.deepEqual(task.evidenceLinks, []);
+  assert.equal(task.evidenceLink, "");
+  assert.equal(task.evidenceRequired, "");
+  assert.equal(task.reviewStatus, "not_requested");
+  assert.equal(task.reviewOwnerProfileId, "");
+  assert.equal(task.scorePoints, 0);
+  assert.equal(task.scoreFinal, false);
+  assert.equal(task.scoreRelevant, false);
+  assert.equal(task.linkedPullRequests.length, 1);
+  assert.equal(task.linkedPullRequests[0].status, "open");
 });

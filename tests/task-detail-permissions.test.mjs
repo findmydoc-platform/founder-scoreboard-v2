@@ -10,6 +10,8 @@ const { taskDetailPermissions, taskStatusOptionsForPermissions } = await loadTra
     },
     "@/lib/status": {
       normalizeStatus: (status) => status,
+      normalizeSubIssueStatus: (status) => status === "Review" || status === "Nacharbeit" ? "In Arbeit" : status,
+      SUB_ISSUE_STATUSES: ["Offen", "In Arbeit", "Blockiert", "Erledigt"],
       taskStatuses: ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"],
     },
     "@/features/reviews/model/task-review-state": {
@@ -30,15 +32,24 @@ const task = {
   taskType: "sub_issue",
 };
 
-test("CEO receives full task detail permissions", () => {
+const deliverableTask = { ...task, taskType: "deliverable" };
+
+test("CEO keeps operational Sub-Issue rights without review, evidence, or nesting controls", () => {
   const permissions = taskDetailPermissions({ task, profile: { id: "ceo", name: "CEO", platformRole: "ceo" } });
-  assert.equal(Object.values(permissions).every(Boolean), true);
+  assert.equal(permissions.canEditBrief, true);
+  assert.equal(permissions.canCompleteSubIssue, true);
+  assert.equal(permissions.canReopenSubIssue, true);
+  assert.equal(permissions.canCreateSubIssue, false);
+  assert.equal(permissions.canEditChecklist, false);
+  assert.equal(permissions.canEditEvidence, false);
+  assert.equal(permissions.canOpenReview, false);
+  assert.equal(permissions.canManageReviewOwner, false);
 });
 
 test("Deputy keeps operational rights but not CEO-only controls", () => {
   const permissions = taskDetailPermissions({ task, profile: { id: "deputy", name: "Deputy", platformRole: "deputy" } });
   assert.equal(permissions.canManageTaskMeta, true);
-  assert.equal(permissions.canOpenReview, true);
+  assert.equal(permissions.canOpenReview, false);
   assert.equal(permissions.canManageFinalStatus, false);
   assert.equal(permissions.canManageReviewOwner, false);
   assert.equal(permissions.canCompleteSubIssue, true);
@@ -49,8 +60,8 @@ test("Deputy keeps operational rights but not CEO-only controls", () => {
 test("assigned Founder can work on own task but cannot change planning metadata", () => {
   const permissions = taskDetailPermissions({ task, profile: { id: "founder-1", name: "Founder One", platformRole: "founder" } });
   assert.equal(permissions.canEditBrief, true);
-  assert.equal(permissions.canEditEvidence, true);
-  assert.equal(permissions.canEditNotes, true);
+  assert.equal(permissions.canEditEvidence, false);
+  assert.equal(permissions.canEditNotes, false);
   assert.equal(permissions.canReportBlocker, true);
   assert.equal(permissions.canUpdateStatus, true);
   assert.equal(permissions.canManageTaskMeta, false);
@@ -90,7 +101,7 @@ test("unrelated Founder receives no status right for a Deliverable", () => {
 });
 
 test("review owner can open review without receiving task edit rights", () => {
-  const permissions = taskDetailPermissions({ task, profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" } });
+  const permissions = taskDetailPermissions({ task: deliverableTask, profile: { id: "reviewer-1", name: "Reviewer", platformRole: "founder" } });
   assert.equal(permissions.canOpenReview, true);
   assert.equal(permissions.canEditBrief, false);
 });
@@ -100,7 +111,7 @@ test("active and final reviews keep comments open while locking business mutatio
     { ...task, reviewStatus: "requested", scoreFinal: false },
     { ...task, reviewStatus: "accepted", scoreFinal: true },
   ]) {
-    const permissions = taskDetailPermissions({ task: reviewTask, profile: { id: "founder-1", name: "Founder One", platformRole: "founder" } });
+    const permissions = taskDetailPermissions({ task: { ...reviewTask, taskType: "deliverable" }, profile: { id: "founder-1", name: "Founder One", platformRole: "founder" } });
     assert.equal(permissions.canComment, true);
     assert.equal(permissions.canEditBrief, false);
     assert.equal(permissions.canCreateSubIssue, false);
@@ -110,7 +121,7 @@ test("active and final reviews keep comments open while locking business mutatio
 
 test("minor rework unlocks the issue for the assignee", () => {
   const permissions = taskDetailPermissions({
-    task: { ...task, reviewStatus: "partial", scoreFinal: false },
+    task: { ...deliverableTask, reviewStatus: "partial", scoreFinal: false },
     profile: { id: "founder-1", name: "Founder One", platformRole: "founder" },
   });
   assert.equal(permissions.canEditBrief, true);
@@ -124,12 +135,12 @@ test("Viewer remains fully read-only", () => {
 
 test("status options expose only the role-allowed Sub-Issue transitions", () => {
   const foreignFounder = taskDetailPermissions({ task, profile: { id: "founder-2", name: "Founder Two", platformRole: "founder" } });
-  assert.deepEqual(taskStatusOptionsForPermissions("In Arbeit", foreignFounder), ["In Arbeit", "Erledigt"]);
-  assert.deepEqual(taskStatusOptionsForPermissions("Erledigt", foreignFounder), ["Erledigt", "Offen"]);
+  assert.deepEqual(taskStatusOptionsForPermissions("In Arbeit", foreignFounder, "sub_issue"), ["In Arbeit", "Erledigt"]);
+  assert.deepEqual(taskStatusOptionsForPermissions("Erledigt", foreignFounder, "sub_issue"), ["Erledigt", "Offen"]);
 
   const ownFounder = taskDetailPermissions({ task, profile: { id: "founder-1", name: "Founder One", platformRole: "founder" } });
-  assert.deepEqual(taskStatusOptionsForPermissions("Nacharbeit", ownFounder), ["In Arbeit", "Review", "Blockiert", "Erledigt"]);
+  assert.deepEqual(taskStatusOptionsForPermissions("Nacharbeit", ownFounder, "sub_issue"), ["Offen", "In Arbeit", "Blockiert", "Erledigt"]);
 
   const viewer = taskDetailPermissions({ task, profile: { id: "viewer", name: "Viewer", platformRole: "viewer" } });
-  assert.deepEqual(taskStatusOptionsForPermissions("Offen", viewer), ["Offen"]);
+  assert.deepEqual(taskStatusOptionsForPermissions("Offen", viewer, "sub_issue"), ["Offen"]);
 });
