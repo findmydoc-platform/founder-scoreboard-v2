@@ -295,6 +295,7 @@ export function TaskDetailSurface({
                   canReport={controller.permissions.canReportBlocker}
                   blockers={blockers}
                   blockerDraft={controller.blockerDraft}
+                  embedded={task.taskType === "sub_issue"}
                   loading={detailDataLoading}
                   unavailable={detailDataUnavailable}
                   pending={pending}

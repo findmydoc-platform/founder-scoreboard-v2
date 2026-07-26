@@ -79,12 +79,15 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const status = taskType === "sub_issue"
     ? normalizeSubIssueStatus(row.status || "Offen")
     : row.status || "Offen";
+  const description = taskType === "sub_issue" && !row.description?.trim()
+    ? row.problem_statement || ""
+    : row.description || "";
 
   return {
     id: row.id || "",
     order: row.sort_order || 0,
     title: row.title || "",
-    description: row.description || "",
+    description,
     status,
     priority: row.priority || "P2",
     assigneeId,

@@ -155,14 +155,20 @@ function LinkedPullRequestsList({ pullRequests }: { pullRequests: LinkedPullRequ
   );
 }
 
-function LinkedPullRequestsSection({ pullRequests }: { pullRequests: LinkedPullRequest[] }) {
+function LinkedPullRequestsSection({
+  compact = false,
+  pullRequests,
+}: {
+  compact?: boolean;
+  pullRequests: LinkedPullRequest[];
+}) {
   return (
-    <section className="border-b border-slate-100 py-5 last:border-b-0">
+    <section className={classNames("border-b border-slate-100 last:border-b-0", compact ? "py-4" : "py-5")}>
       <h3 className="text-sm font-semibold text-slate-950">Verknüpfte Pull Requests</h3>
       <p className="mt-1 text-sm leading-6 text-slate-500">
         Automatisch aus dem verknüpften GitHub Issue erkannt. Ein Pull Request ist keine Abschlussvoraussetzung.
       </p>
-      <div className="mt-3">
+      <div className={compact ? "mt-2" : "mt-3"}>
         <LinkedPullRequestsList pullRequests={pullRequests} />
       </div>
     </section>
@@ -444,9 +450,16 @@ export function TaskOverviewPanel({
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           {isSubIssue ? (
             <>
-              <ReadSection label="Kontext" value={draft.description} />
-              {riskContent}
-              <LinkedPullRequestsSection pullRequests={linkedPullRequests} />
+              <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-950">Kontext</h3>
+                  <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
+                    {draft.description.trim() || <span className="text-slate-500">Kein Kontext hinterlegt.</span>}
+                  </div>
+                </div>
+                {riskContent}
+              </section>
+              <LinkedPullRequestsSection compact pullRequests={linkedPullRequests} />
             </>
           ) : (
             <>

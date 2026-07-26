@@ -15,6 +15,8 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   const operationalHeader = await readFile("src/features/tasks/molecules/task-detail-operational-header.tsx", "utf8");
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const planningSection = await readFile("src/features/tasks/molecules/task-detail-planning-section.tsx", "utf8");
+  const blockerSection = await readFile("src/features/tasks/molecules/task-detail-panel-blocker-section.tsx", "utf8");
+  const overview = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const workflowStrips = await readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8");
   const tabs = await readFile("src/features/tasks/molecules/task-detail-tabs.tsx", "utf8");
   const ui = await readPlanningSurface();
@@ -53,6 +55,12 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   assert.match(operationalHeader, /Wartet auf/);
   assert.match(operationalHeader, /Andere warten hierauf/);
   assert.match(operationalHeader, /Accountable:/);
+  assert.doesNotMatch(operationalHeader, /Parent:/);
+  assert.match(overview, /sm:grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(overview, /<LinkedPullRequestsSection compact/);
+  assert.match(blockerSection, /embedded \? "shrink-0"/);
+  assert.match(blockerSection, /embedded \? "Auswirkung auf die weitere Arbeit"/);
+  assert.match(surface, /embedded=\{task\.taskType === "sub_issue"\}/);
   assert.match(headerActions, /GitHub Issue/);
   assert.match(headerActions, /Deliverable zurückziehen/);
   assert.match(planningSection, /Planung bearbeiten/);

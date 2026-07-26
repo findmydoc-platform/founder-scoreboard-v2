@@ -81,6 +81,18 @@ test("legacy single evidence URL remains visible until migrated", () => {
   assert.equal(task.evidenceLink, "https://legacy.example/proof");
 });
 
+test("Sub-Issue context falls back to the legacy description field", () => {
+  const task = mapTaskRow({
+    id: "sub-legacy-context",
+    task_type: "sub_issue",
+    description: "",
+    problem_statement: "Legacy Sub-Issue description",
+  }, new Map());
+
+  assert.equal(task.description, "Legacy Sub-Issue description");
+  assert.equal(task.problemStatement, "");
+});
+
 test("Sub-Issue read model normalizes legacy review state and ignores review, score, and evidence data", () => {
   const task = mapTaskRow({
     id: "sub-legacy",

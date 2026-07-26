@@ -120,11 +120,14 @@ function publicPackage(row: DatabaseRow): UnknownRecord {
 
 function publicTask(row: DatabaseRow): UnknownRecord {
   const isSubIssue = row.task_type === "sub_issue";
+  const description = isSubIssue && !String(row.description || "").trim()
+    ? String(row.problem_statement || "")
+    : String(row.description || "");
   return {
     id: String(row.id || ""),
     itemType: isSubIssue ? "sub_issue" : "deliverable",
     title: String(row.title || ""),
-    description: String(row.description || ""),
+    description,
     problemStatement: isSubIssue ? "" : String(row.problem_statement || ""),
     intendedOutcome: isSubIssue ? "" : String(row.intended_outcome || ""),
     scopeConstraints: isSubIssue ? "" : String(row.scope_constraints || ""),

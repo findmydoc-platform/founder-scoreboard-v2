@@ -227,6 +227,21 @@ export function taskIssueBody(task: Task) {
   ].join("\n");
 }
 
+export function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
+  const desiredBody = taskIssueBody(task);
+  if (task.taskType !== "sub_issue" || !existingBody?.trim()) {
+    return desiredBody;
+  }
+
+  const marker = taskIssueMarker(task.id);
+  const preservesLegacyBrief = /^## (?:Problem Statement|Intended Outcome|Scope & Constraints|Acceptance Criteria|Evidence Required|Definition of Done)\s*$/m.test(existingBody);
+  if (preservesLegacyBrief || !task.description?.trim()) {
+    if (existingBody.includes(marker)) return existingBody;
+    return `${existingBody.trimEnd()}\n\n${marker}`;
+  }
+  return desiredBody;
+}
+
 export async function githubUserForToken(token: string) {
   return githubJson<{ login: string }>("https://api.github.com/user", {
     token,
@@ -365,6 +380,7 @@ async function updateValidatedGitHubIssue(
     operation: "mutation",
     body: {
       ...payload,
+      body: taskIssueUpdateBody(task, target.body),
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,
