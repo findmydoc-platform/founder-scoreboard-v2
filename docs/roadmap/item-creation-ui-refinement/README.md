@@ -2,7 +2,7 @@
 
 This folder contains the working Product Spec and visual references for the Item creation-form redesign.
 
-The material is roadmap and implementation-planning input. It is not permanent product documentation and must be reconciled with the implemented behavior before this folder is archived or removed.
+The material is historical roadmap and implementation-planning input. Its Sub-Issue form specification and mockup were superseded by the simple-work-step model documented in [`docs/planning-hierarchy.md`](../../planning-hierarchy.md) and [`docs/task-template-v2.md`](../../task-template-v2.md). Do not use the older Sub-Issue form as the current product contract. The Deliverable, Initiative, and Milestone references remain historical QA material and are not rewritten retroactively.
 
 ## Current iteration
 

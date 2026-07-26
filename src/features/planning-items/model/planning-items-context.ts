@@ -1,4 +1,4 @@
-import { normalizeStatus } from "@/lib/status";
+import { normalizeStatus, normalizeSubIssueStatus } from "@/lib/status";
 import type { getServerSupabase } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 import {
@@ -145,6 +145,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       endDate: sprint.end_date || "",
     })),
     tasks: tasks.map((task) => {
+      const isSubIssue = task.task_type === "sub_issue";
       const taskBlockers = blockersByTaskId.get(task.id) || [];
       const openBlockers = taskBlockers.filter((blocker) => blocker.status === "open");
       const taskRelationStats = relationStats.get(task.id) || { count: 0, blocks: 0, blockedBy: 0 };
@@ -154,28 +155,28 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
         description: task.description || "",
         taskType: task.task_type || "deliverable",
         parentTaskId: task.parent_task_id || "",
-        status: normalizeStatus(task.status || ""),
-        priority: task.priority || "P2",
+        status: isSubIssue ? normalizeSubIssueStatus(task.status || "") : normalizeStatus(task.status || ""),
+        priority: isSubIssue ? "" : task.priority || "P2",
         ownerId: task.owner || "",
         assigneeId: task.assignee || "",
         createdById: task.created_by || "",
         initiativeId: task.package_id || "",
         milestoneId: task.milestone_id || "",
-        sprintId: task.sprint_id || "",
-        workstream: task.workstream || "",
-        startDate: task.start_date || "",
-        endDate: task.end_date || "",
-        deadline: task.deadline || "",
-        hours: task.estimate_hours || 0,
-        problemStatement: task.problem_statement || task.description || "",
-        intendedOutcome: task.intended_outcome || "",
-        scopeConstraints: task.scope_constraints || "",
-        acceptanceCriteria: task.acceptance_criteria || "",
-        evidenceRequired: task.evidence_required || "",
-        definitionOfDone: task.definition_of_done || "",
+        sprintId: isSubIssue ? "" : task.sprint_id || "",
+        workstream: isSubIssue ? "" : task.workstream || "",
+        startDate: isSubIssue ? "" : task.start_date || "",
+        endDate: isSubIssue ? "" : task.end_date || "",
+        deadline: isSubIssue ? "" : task.deadline || "",
+        hours: isSubIssue ? 0 : task.estimate_hours || 0,
+        problemStatement: isSubIssue ? "" : task.problem_statement || task.description || "",
+        intendedOutcome: isSubIssue ? "" : task.intended_outcome || "",
+        scopeConstraints: isSubIssue ? "" : task.scope_constraints || "",
+        acceptanceCriteria: isSubIssue ? "" : task.acceptance_criteria || "",
+        evidenceRequired: isSubIssue ? "" : task.evidence_required || "",
+        definitionOfDone: isSubIssue ? "" : task.definition_of_done || "",
         githubRepo: task.github_repo || "",
         updatedAt: task.updated_at || "",
-        evidencePresent: Boolean(task.evidence_link || task.github_issue_url || task.issue_url),
+        evidencePresent: !isSubIssue && Boolean(task.evidence_link || task.github_issue_url || task.issue_url),
         canCreateSubIssue: task.task_type === "deliverable",
         blockers: {
           openCount: openBlockers.length,

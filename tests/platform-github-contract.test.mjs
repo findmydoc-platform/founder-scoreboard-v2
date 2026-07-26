@@ -147,7 +147,7 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   assert.doesNotMatch(headerActions, /Aufgabe löschen/);
 });
 
-test("github issue export includes only the task brief and FounderOps source", async () => {
+test("github issue export keeps Deliverable briefs and compact Sub-Issue context separate", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
   const taskIssueBodySource = github.slice(
     github.indexOf("export function taskIssueBody"),
@@ -161,7 +161,8 @@ test("github issue export includes only the task brief and FounderOps source", a
 
   assert.match(github, /taskIssueTitle/);
   assert.match(github, /taskIssueLabels/);
-  assert.match(github, /task\.taskType === "deliverable" \? "deliverable"/);
+  assert.match(github, /if \(task\.taskType === "sub_issue"\)/);
+  assert.match(github, /subIssueSourceLine/);
   assert.match(github, /review:ready/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Intended Outcome/);

@@ -756,6 +756,7 @@ test("sprint lock creates carryover for unfinished deliverables", async () => {
   assert.match(route, /&& !task\.score_final/);
   assert.match(route, /deadline: nextSprint\.end_date \|\| null/);
   assert.match(routeContract, /github_issue_number: input\.githubIssueNumber \|\| null/);
+  assert.match(taskInsertRow, /carryover_count: input\.carryoverCount \?\? 0/);
   assert.match(route, /missed_uncommunicated/);
   assert.match(finalizationMigration, /accepted_carryover/);
   assert.match(finalizationMigration, /insert into public\.tasks/);

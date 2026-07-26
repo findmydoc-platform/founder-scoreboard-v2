@@ -89,6 +89,14 @@ const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
 const inputKeys = new Set<string>(TEAM_PLANNING_ITEM_CREATE_FIELDS);
 const milestoneStatuses = new Set<string>(TEAM_PLANNING_MILESTONE_STATUSES);
 const milestoneCreateFields = new Set(["itemType", "title", "description", "targetDate", "status"]);
+const subIssueCreateFields = new Set([
+  "itemType",
+  "title",
+  "description",
+  "parentTaskId",
+  "ownerId",
+  "githubRepo",
+]);
 
 export function planningItemCreateRequiresOperationalLead(items: PlanningItemCreateInput[]) {
   return items.some((item) => intakeText(item.itemType, 40) === "milestone");
@@ -165,6 +173,10 @@ export async function buildPlanningItemCreatePreview(
       for (const field of Object.keys(raw)) {
         if (!milestoneCreateFields.has(field)) errors.push(`${field} ist für milestone nicht zulässig.`);
       }
+    } else if (itemType === "sub_issue") {
+      for (const field of Object.keys(raw)) {
+        if (!subIssueCreateFields.has(field)) errors.push(`${field} ist für sub_issue nicht zulässig.`);
+      }
     } else {
       if (raw.targetDate !== undefined) errors.push(`targetDate ist für ${itemType} nicht zulässig.`);
       if (raw.status !== undefined) errors.push(`status ist für ${itemType} nicht zulässig.`);
@@ -226,6 +238,24 @@ export async function buildPlanningItemCreatePreview(
     if (!githubRepository.ok) errors.push(githubRepository.error);
     const githubRepo = githubRepository.ok ? githubRepository.repository : defaultGitHubRepository;
 
+    if (itemType === "sub_issue") {
+      return {
+        clientId: `planning-items-create-${index + 1}`,
+        itemType,
+        title,
+        description: intakeText(raw.description, 4_000),
+        parentTaskId,
+        packageId,
+        milestoneId,
+        ownerId,
+        githubRepo,
+        approvalStatus: null,
+        scoreRelevant: false,
+        errors,
+        warnings,
+      };
+    }
+
     const startDate = intakeDate(raw.startDate);
     const endDate = intakeDate(raw.endDate);
     if (startDate && endDate && startDate > endDate) {
@@ -244,7 +274,7 @@ export async function buildPlanningItemCreatePreview(
         : intakeText(raw.acceptanceCriteria, 6_000),
       evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
       definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
-      parentTaskId: itemType === "sub_issue" ? parentTaskId : "",
+      parentTaskId: "",
       packageId: itemType === "initiative" ? "" : packageId,
       milestoneId,
       ownerId,
@@ -259,7 +289,7 @@ export async function buildPlanningItemCreatePreview(
       deadline: intakeDate(raw.deadline),
       hours: intakeHours(raw.hours),
       githubRepo,
-      approvalStatus: itemType === "sub_issue" ? null : "proposed",
+      approvalStatus: "proposed",
       scoreRelevant: false,
       errors,
       warnings,

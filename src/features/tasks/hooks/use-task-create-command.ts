@@ -6,7 +6,7 @@ import {
   profileForAssigneeValue,
 } from "@/features/planning/model/planning-app-model";
 import * as taskApi from "@/features/tasks/model/task-api-client";
-import { resolveTaskCreationHierarchy } from "@/features/tasks/model/task-creation-draft";
+import { resolveTaskCreationHierarchy, taskCreationRequestPayload } from "@/features/tasks/model/task-creation-draft";
 import type { NewTaskCreateCallbacks, NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 
 type UseTaskCreateCommandOptions = Pick<
@@ -40,7 +40,11 @@ export function useTaskCreateCommand({
     startTransition(async () => {
       let creationCompleted = false;
       try {
-        const { response, body } = await taskApi.createTaskRequest(apiClient, { ...creationDraft, assignee: assigneeId || creationDraft.assignee });
+        const requestPayload = taskCreationRequestPayload({
+          ...creationDraft,
+          assignee: assigneeId || creationDraft.assignee,
+        });
+        const { response, body } = await taskApi.createTaskRequest(apiClient, requestPayload);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
         applyPlanningDataUpdate((current) => {

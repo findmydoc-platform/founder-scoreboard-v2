@@ -84,6 +84,7 @@ const task = {
   priority: "P4",
   startDate: "",
   status: "Review",
+  taskType: "deliverable",
   workstream: " founderops ",
 };
 
@@ -138,6 +139,30 @@ test("field sync writes exact values, clears blanks, preserves Effort, and inclu
     { fieldId: "issue-field-target", dateValue: "2026-08-01" },
   ]);
   assert.equal(JSON.stringify(mutations).includes("issue-field-effort"), false);
+});
+
+test("Sub-Issue field sync projects only its working status", async () => {
+  const mutations = [];
+  const fields = await loadFieldModule(async (_url, options) => {
+    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
+    mutations.push(options.body);
+    return { data: { ok: true } };
+  });
+
+  const result = await fields.syncFounderOpsGitHubProjectFields({
+    itemId: "item-1",
+    projectId: "project-21",
+    projectNumber: 21,
+    projectOwner: "findmydoc-platform",
+    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
+    task: { ...task, status: "Blockiert", taskType: "sub_issue" },
+    token: "token",
+  });
+
+  assert.deepEqual(result.warnings, []);
+  assert.equal(mutations.length, 1);
+  assert.equal(mutations[0].variables.fieldId, "field-status");
+  assert.deepEqual(mutations[0].variables.value, { singleSelectOptionId: "status-blocked" });
 });
 
 test("matching values make repeated field sync mutation-free", async () => {

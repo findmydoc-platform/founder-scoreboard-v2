@@ -108,6 +108,6 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     carried_from_task_id: input.carriedFromTaskId || null,
     carried_from_sprint_id: input.carriedFromSprintId || null,
     carryover_reason: input.carryoverReason || null,
-    carryover_count: input.carryoverCount ?? null,
+    carryover_count: input.carryoverCount ?? 0,
   };
 }

@@ -5,9 +5,11 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const {
   resolveTaskCreationHierarchy,
+  taskCreationRequestPayload,
   taskCreationParent,
   taskCreationTitleError,
   withSubIssueParentHierarchy,
+  unsupportedSubIssueCreateField,
 } = await loadTranspiledModule("src/features/tasks/model/task-creation-draft.ts");
 
 const tasks = [
@@ -75,4 +77,59 @@ test("task title validation stays quiet until the field is exposed", () => {
   assert.equal(taskCreationTitleError("", true), "Bitte einen Titel eingeben.");
   assert.equal(taskCreationTitleError(" x ", true), "Der Titel benötigt mindestens 3 Zeichen.");
   assert.equal(taskCreationTitleError("Task title", true), "");
+});
+
+test("Sub-Issue create requests strip Deliverable-only planning, review, and evidence fields", () => {
+  const payload = taskCreationRequestPayload({
+    creationRequestId: "019fb484-68c2-7000-8000-000000000001",
+    title: "Implement small work step",
+    description: "Optional context",
+    taskType: "sub_issue",
+    parentTaskId: "deliverable-one",
+    packageId: "initiative-one",
+    milestoneId: "milestone-one",
+    assignee: "founder-one",
+    githubRepo: "findmydoc-platform/management",
+    relationType: "blocked_by",
+    relatedTaskId: "dependency-one",
+    relationNote: "Wait for the API",
+    priority: "P0",
+    status: "Review",
+    sprintId: "sprint-one",
+    acceptanceCriteria: "Legacy acceptance",
+    evidenceRequired: "Legacy evidence",
+    definitionOfDone: "Legacy quality",
+  });
+
+  assert.deepEqual(payload, {
+    creationRequestId: "019fb484-68c2-7000-8000-000000000001",
+    title: "Implement small work step",
+    description: "Optional context",
+    taskType: "sub_issue",
+    parentTaskId: "deliverable-one",
+    assignee: "founder-one",
+    githubRepo: "findmydoc-platform/management",
+    relationType: "blocked_by",
+    relatedTaskId: "dependency-one",
+    relationNote: "Wait for the API",
+  });
+});
+
+test("standard task API rejects every field outside the Sub-Issue create contract", () => {
+  const allowed = {
+    creationRequestId: "019fb484-68c2-7000-8000-000000000001",
+    title: "Implement small work step",
+    description: "Optional context",
+    taskType: "sub_issue",
+    parentTaskId: "deliverable-one",
+    assignee: "founder-one",
+    githubRepo: "findmydoc-platform/management",
+    relationType: "blocked_by",
+    relatedTaskId: "dependency-one",
+    relationNote: "Wait for the API",
+  };
+  assert.equal(unsupportedSubIssueCreateField(allowed), "");
+  for (const field of ["status", "priority", "acceptanceCriteria", "definitionOfDone", "evidenceLinks", "reviewStatus", "scorePoints"]) {
+    assert.equal(unsupportedSubIssueCreateField({ ...allowed, [field]: "forbidden" }), field);
+  }
 });

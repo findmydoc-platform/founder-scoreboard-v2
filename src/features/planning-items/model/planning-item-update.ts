@@ -13,6 +13,7 @@ import {
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { isOperationalLeadRole } from "@/lib/platform";
+import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
@@ -73,9 +74,7 @@ const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>
     "endDate", "deadline", "hours", "status",
   ]),
   sub_issue: new Set([
-    "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
-    "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "startDate",
-    "endDate", "deadline", "hours", "githubRepo", "status",
+    "title", "description", "parentTaskId", "ownerId", "githubRepo", "status",
   ]),
 };
 
@@ -120,17 +119,18 @@ function publicPackage(row: DatabaseRow): UnknownRecord {
 }
 
 function publicTask(row: DatabaseRow): UnknownRecord {
+  const isSubIssue = row.task_type === "sub_issue";
   return {
     id: String(row.id || ""),
-    itemType: row.task_type === "sub_issue" ? "sub_issue" : "deliverable",
+    itemType: isSubIssue ? "sub_issue" : "deliverable",
     title: String(row.title || ""),
     description: String(row.description || ""),
-    problemStatement: String(row.problem_statement || ""),
-    intendedOutcome: String(row.intended_outcome || ""),
-    scopeConstraints: String(row.scope_constraints || ""),
-    acceptanceCriteria: String(row.acceptance_criteria || ""),
-    evidenceRequired: String(row.evidence_required || ""),
-    definitionOfDone: String(row.definition_of_done || ""),
+    problemStatement: isSubIssue ? "" : String(row.problem_statement || ""),
+    intendedOutcome: isSubIssue ? "" : String(row.intended_outcome || ""),
+    scopeConstraints: isSubIssue ? "" : String(row.scope_constraints || ""),
+    acceptanceCriteria: isSubIssue ? "" : String(row.acceptance_criteria || ""),
+    evidenceRequired: isSubIssue ? "" : String(row.evidence_required || ""),
+    definitionOfDone: isSubIssue ? "" : String(row.definition_of_done || ""),
     parentTaskId: String(row.parent_task_id || ""),
     packageId: String(row.package_id || ""),
     milestoneId: String(row.milestone_id || ""),
@@ -141,17 +141,17 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     endDate: String(row.end_date || ""),
     deadline: String(row.deadline || ""),
     hours: Number(row.estimate_hours || 0),
-    status: String(row.status || "Offen"),
+    status: isSubIssue ? normalizeSubIssueStatus(String(row.status || "Offen")) : String(row.status || "Offen"),
     githubRepo: String(row.github_repo || ""),
     approvalStatus: row.approval_status || null,
     approvalRevision: Number(row.approval_revision || 1),
     sprintId: String(row.sprint_id || ""),
-    reviewStatus: String(row.review_status || "not_requested"),
-    reviewOwnerProfileId: String(row.review_owner_profile_id || ""),
-    reviewRequestedAt: String(row.review_requested_at || ""),
-    scorePoints: Number(row.score_points || 0),
-    scoreFinal: Boolean(row.score_final),
-    scoreRelevant: Boolean(row.score_relevant),
+    reviewStatus: isSubIssue ? "not_requested" : String(row.review_status || "not_requested"),
+    reviewOwnerProfileId: isSubIssue ? "" : String(row.review_owner_profile_id || ""),
+    reviewRequestedAt: isSubIssue ? "" : String(row.review_requested_at || ""),
+    scorePoints: isSubIssue ? 0 : Number(row.score_points || 0),
+    scoreFinal: !isSubIssue && Boolean(row.score_final),
+    scoreRelevant: !isSubIssue && Boolean(row.score_relevant),
     githubIssueSyncStatus: String(row.github_issue_sync_status || "not_synced"),
     updatedAt: String(row.updated_at || ""),
   };
@@ -363,7 +363,9 @@ function normalizePatch(
       default: result = { ok: false, error: "wird nicht unterstützt" };
     }
     if (!result.ok) errors.push(`${field} ${result.error}.`);
-    else normalized[field] = result.value;
+    else if (field === "status" && itemType === "sub_issue" && !isSubIssueStatus(String(result.value))) {
+      errors.push("status muss Offen, In Arbeit, Blockiert oder Erledigt sein.");
+    } else normalized[field] = result.value;
   }
   return { normalized, errors };
 }
@@ -424,7 +426,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;
   }
-  if (changed.has("status")) {
+  if (changed.has("status") && itemType === "deliverable") {
     dbPatch.review_status = resultingItem.reviewStatus;
     dbPatch.review_owner_profile_id = resultingItem.reviewOwnerProfileId || null;
     dbPatch.review_requested_at = resultingItem.reviewRequestedAt || null;
@@ -523,10 +525,15 @@ export async function buildPlanningItemUpdatePreview({
     errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
   }
 
-  const requestedChangedFields = parsed.presentFields.filter((field) => !sameValue(currentItem[field], resultingItem[field]));
+  const rewritesLegacySubIssueStatus = target.itemType === "sub_issue"
+    && parsed.presentFields.includes("status")
+    && !isSubIssueStatus(String(target.row.status || ""));
+  const requestedChangedFields = parsed.presentFields.filter(
+    (field) => !sameValue(currentItem[field], resultingItem[field]) || (field === "status" && rewritesLegacySubIssueStatus),
+  );
   const taskUpdateRequested = (target.itemType === "deliverable" || target.itemType === "sub_issue")
     && requestedChangedFields.length > 0;
-  if (taskUpdateRequested && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
+  if (taskUpdateRequested && target.itemType === "deliverable" && isReviewStateLocked(String(target.row.review_status || ""), Boolean(target.row.score_final))) {
     return { ok: false, status: 409, error: reviewStateLockMessage(String(target.row.review_status || ""), Boolean(target.row.score_final)) };
   }
   if (taskUpdateRequested && currentParent && isReviewStateLocked(currentParent.review_status, currentParent.score_final)) {
@@ -591,9 +598,14 @@ export async function buildPlanningItemUpdatePreview({
     resultingItem.milestoneId = nextMilestoneId;
   }
 
-  const changedFields = parsed.presentFields.filter((field) => !sameValue(currentItem[field], resultingItem[field]));
+  const changedFields = parsed.presentFields.filter(
+    (field) => !sameValue(currentItem[field], resultingItem[field]) || (field === "status" && rewritesLegacySubIssueStatus),
+  );
   if (statusChanged) {
-    const statusMessage = `Status geändert: ${String(currentItem.status)} → ${String(resultingItem.status)}`;
+    const currentStatus = rewritesLegacySubIssueStatus
+      ? String(target.row.status || currentItem.status)
+      : String(currentItem.status);
+    const statusMessage = `Status geändert: ${currentStatus} → ${String(resultingItem.status)}`;
     systemEffects.push({
       field: "activity",
       before: null,
@@ -627,7 +639,7 @@ export async function buildPlanningItemUpdatePreview({
       resultingItem.reviewRequestedAt = reopenedPatch.review_requested_at;
     }
 
-    if (startsTaskReviewRequest(statusPayload)) {
+    if (target.itemType === "deliverable" && startsTaskReviewRequest(statusPayload)) {
       if (target.itemType !== "deliverable" || target.row.approval_status !== "approved") {
         errors.push("Nur freigegebene Deliverables können in Review gegeben werden.");
       }

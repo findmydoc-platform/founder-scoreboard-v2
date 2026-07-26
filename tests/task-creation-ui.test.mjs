@@ -15,11 +15,18 @@ test("task creation reveals accessible title errors only after interaction", asy
   assert.doesNotMatch(dialog, /Titel braucht mindestens 3 Zeichen/);
 });
 
-test("Sub-Issue creation separates inherited RACI from task responsibility", async () => {
+test("Sub-Issue creation exposes only the compact work-step fields", async () => {
   const dialog = await readFile(new URL("src/features/tasks/organisms/new-task-dialog.tsx", root), "utf8");
+  const subIssueForm = dialog.slice(dialog.indexOf("function SubIssueForm"), dialog.indexOf("export function NewTaskDialog"));
 
-  assert.match(dialog, /RACI-Kontext/);
-  assert.match(dialog, /Vom Deliverable übernommen/);
-  assert.match(dialog, /<SectionHeading accent=\{accent\}>Verantwortung<\/SectionHeading>/);
-  assert.doesNotMatch(dialog, />RACI vom Deliverable</);
+  assert.match(subIssueForm, /Übergeordnetes Deliverable/);
+  assert.match(subIssueForm, /Initiative, Epic \/ Meilenstein, Freigabe und RACI werden vom Parent-Deliverable übernommen/);
+  assert.match(subIssueForm, /Zuständig/);
+  assert.match(subIssueForm, /Kontext/);
+  assert.match(subIssueForm, /GitHub-Repository/);
+  assert.match(subIssueForm, /<RelationshipFields/);
+  assert.doesNotMatch(subIssueForm, /Weitere Optionen|<details|<summary/);
+  assert.doesNotMatch(subIssueForm, /<PlanningFields/);
+  assert.doesNotMatch(subIssueForm, /<TaskBriefFields/);
+  assert.doesNotMatch(subIssueForm, /<ResponsibilityFields/);
 });

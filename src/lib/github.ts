@@ -101,10 +101,16 @@ export function taskIssueTitle(task: Task) {
 }
 
 export function taskIssueLabels(task: Task) {
+  if (task.taskType === "sub_issue") {
+    return [
+      "task",
+      "sub-issue",
+      task.status === "Blockiert" ? "blocked" : "",
+    ].filter(Boolean);
+  }
   return [
     "task",
-    task.taskType === "deliverable" ? "deliverable" : "",
-    task.taskType === "sub_issue" ? "sub-issue" : "",
+    "deliverable",
     task.status === "Review" ? "review:ready" : "",
     task.status === "Nacharbeit" ? "changes-requested" : "",
     task.status === "Blockiert" ? "blocked" : "",
@@ -166,6 +172,11 @@ function sourceLine(task: Task) {
   return `Planning context: ${source}. GitHub issue sync keeps the working issue aligned.`;
 }
 
+function subIssueSourceLine(task: Task) {
+  const taskUrl = founderOpsTaskUrl(task.id);
+  return taskUrl ? `Source: [FounderOps](${taskUrl}).` : "Source: FounderOps.";
+}
+
 function hasMatchingLegacyFounderOpsTaskLink(task: Task, body?: string | null) {
   const taskUrl = founderOpsTaskUrl(task.id);
   return Boolean(taskUrl && body?.includes(`](${taskUrl})`));
@@ -186,6 +197,14 @@ export function taskIssueMarker(taskId: string) {
 }
 
 export function taskIssueBody(task: Task) {
+  if (task.taskType === "sub_issue") {
+    return [
+      ...(task.description?.trim() ? ["## Context", task.description.trim(), ""] : []),
+      "---",
+      subIssueSourceLine(task),
+      taskIssueMarker(task.id),
+    ].join("\n");
+  }
   return [
     "## Problem Statement",
     task.problemStatement || task.description || "_Nicht gesetzt._",

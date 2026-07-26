@@ -69,7 +69,7 @@ export type FounderOpsGitHubProjectFieldInput = {
   projectNumber: number;
   projectOwner: string;
   sprint?: FounderOpsGitHubSprint | null;
-  task: Pick<Task, "deadline" | "evidenceLink" | "hours" | "priority" | "startDate" | "status" | "workstream">;
+  task: Pick<Task, "deadline" | "evidenceLink" | "hours" | "priority" | "startDate" | "status" | "taskType" | "workstream">;
   token: string;
 };
 
@@ -313,6 +313,10 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
     } else {
       warnings.push(`Status konnte nicht synchronisiert werden: Option ${statusName} fehlt.`);
     }
+  }
+
+  if (input.task.taskType === "sub_issue") {
+    return { changes, warnings };
   }
 
   if (input.sprint !== undefined) {

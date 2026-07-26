@@ -11,6 +11,7 @@ import { createNotificationPayload } from "@/lib/notification-catalog";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
+import { unsupportedSubIssueCreateField } from "@/features/tasks/model/task-creation-draft";
 
 type CreateTaskPayload = {
   title?: string;
@@ -46,7 +47,6 @@ type CreateTaskPayload = {
 const taskTypes = new Set<TaskType>(["deliverable", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
-
 type CreateTaskTransactionResult = {
   task?: TaskRowForMapping;
   relatedTask?: Partial<Task> & { id: string };
@@ -85,6 +85,12 @@ export async function POST(request: NextRequest) {
 
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
+  if (requestedType === "sub_issue") {
+    const forbiddenField = unsupportedSubIssueCreateField(payload as Record<string, unknown>);
+    if (forbiddenField) {
+      return apiError(`Das Feld ${forbiddenField} ist für Sub-Issues nicht zulässig.`, 400);
+    }
+  }
   const githubRepository = resolveTaskGitHubRepository(requestedType, payload.githubRepo);
   if (!githubRepository.ok) return apiError(githubRepository.error, 400);
 
@@ -118,10 +124,16 @@ export async function POST(request: NextRequest) {
 
   const taskType: TaskType = requestedType;
   const scoreRelevant = false;
-  const status = payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
-  const priority = payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
+  const status = taskType === "sub_issue"
+    ? "Offen"
+    : payload.status && taskStatuses.includes(payload.status as (typeof taskStatuses)[number]) ? payload.status : "Offen";
+  const priority = taskType === "sub_issue"
+    ? "P2"
+    : payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
   const assignee = profileId(payload.assignee || payload.owner) || permission.profile?.id || null;
-  const reviewOwnerProfileId = packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
+  const reviewOwnerProfileId = taskType === "sub_issue"
+    ? null
+    : packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
   const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && !packageId) {
@@ -177,23 +189,23 @@ export async function POST(request: NextRequest) {
     milestoneId,
     title,
     description: cleanText(payload.description, 4000),
-    problemStatement: cleanText(payload.problemStatement, 4000),
-    intendedOutcome: cleanText(payload.intendedOutcome, 4000),
-    scopeConstraints: cleanText(payload.scopeConstraints, 4000),
-    acceptanceCriteria: cleanText(payload.acceptanceCriteria, 6000),
-    evidenceRequired: cleanText(payload.evidenceRequired, 4000),
+    problemStatement: taskType === "sub_issue" ? "" : cleanText(payload.problemStatement, 4000),
+    intendedOutcome: taskType === "sub_issue" ? "" : cleanText(payload.intendedOutcome, 4000),
+    scopeConstraints: taskType === "sub_issue" ? "" : cleanText(payload.scopeConstraints, 4000),
+    acceptanceCriteria: taskType === "sub_issue" ? "" : cleanText(payload.acceptanceCriteria, 6000),
+    evidenceRequired: taskType === "sub_issue" ? "" : cleanText(payload.evidenceRequired, 4000),
     status,
     priority,
     owner: assignee,
     assignee,
     createdBy: permission.profile?.id || null,
-    workstream: cleanText(payload.workstream, 120),
+    workstream: taskType === "sub_issue" ? "" : cleanText(payload.workstream, 120),
     sortOrder: 0,
-    startDate,
-    endDate,
-    deadline: payload.deadline || null,
-    hours: Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
-    definitionOfDone: cleanText(payload.definitionOfDone, 4000),
+    startDate: taskType === "sub_issue" ? null : startDate,
+    endDate: taskType === "sub_issue" ? null : endDate,
+    deadline: taskType === "sub_issue" ? null : payload.deadline || null,
+    hours: taskType === "sub_issue" ? 0 : Math.max(0, Math.min(200, Math.round(Number(payload.hours || 0)))),
+    definitionOfDone: taskType === "sub_issue" ? "" : cleanText(payload.definitionOfDone, 4000),
     sprintId: null,
     reviewOwnerProfileId,
     taskType,
@@ -238,7 +250,7 @@ export async function POST(request: NextRequest) {
     p_actor_profile_id: permission.profile?.id || null,
     p_request_ip: requestMetadata.request_ip,
     p_user_agent: requestMetadata.user_agent || null,
-    p_approve_now: Boolean(payload.approveNow),
+    p_approve_now: taskType === "deliverable" && Boolean(payload.approveNow),
   });
   if (transactionError) {
     if (transactionError.code === "P0002") return apiError("Verknüpfte Aufgabe wurde nicht gefunden.", 404);

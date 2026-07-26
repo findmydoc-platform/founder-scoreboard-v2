@@ -5,6 +5,7 @@ import type { Package, Profile, Task } from "@/lib/types";
 export type TaskUpdatePayload = {
   expectedUpdatedAt?: string;
   title?: string;
+  description?: string;
   status?: string;
   assignee?: string;
   owner?: string;
@@ -38,6 +39,7 @@ export type TaskUpdatePayload = {
 
 export type CurrentTaskForActivity = {
   title?: string | null;
+  description?: string | null;
   task_type?: string | null;
   status?: string | null;
   review_status?: string | null;
@@ -112,6 +114,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
   return {
     expectedUpdatedAt,
     title: patch.title,
+    description: patch.description,
     status: patch.status,
     assignee: patch.assigneeId || patch.assignee || patch.ownerId || patch.owner,
     priority: patch.priority,
@@ -154,6 +157,9 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.title !== undefined && payload.title !== currentTask?.title) {
     messages.push(`Titel geändert: ${formatChange(currentTask?.title, payload.title)}`);
   }
+  if (payload.description !== undefined && payload.description !== currentTask?.description) {
+    messages.push("Kontext aktualisiert");
+  }
   if (payload.status && currentTask?.status && payload.status !== currentTask.status) {
     messages.push(`Status geändert: ${currentTask.status} → ${payload.status}`);
   }
@@ -191,22 +197,26 @@ export function buildTaskUpdateResponsePatch(
   id: string,
   update: DbTaskUpdate,
   startsReviewRequest: boolean,
+  taskType: Task["taskType"] = "deliverable",
 ): (Partial<Task> & { id: string }) | undefined {
+  const isSubIssue = taskType === "sub_issue";
   const evidenceLinks = Array.isArray(update.evidence_links)
     ? update.evidence_links.filter((value): value is string => typeof value === "string")
     : undefined;
-  const evidencePatch = evidenceLinks
+  const evidencePatch = isSubIssue
+    ? {}
+    : evidenceLinks
     ? { evidenceLinks, evidenceLink: evidenceLinks[0] || "" }
     : update.evidence_link !== undefined
       ? { evidenceLink: typeof update.evidence_link === "string" ? update.evidence_link : "" }
       : {};
 
   if (
-    startsReviewRequest
-    || update.review_owner_profile_id !== undefined
-    || update.review_status !== undefined
-    || update.review_requested_at !== undefined
-    || update.score_final !== undefined
+    (!isSubIssue && startsReviewRequest)
+    || (!isSubIssue && update.review_owner_profile_id !== undefined)
+    || (!isSubIssue && update.review_status !== undefined)
+    || (!isSubIssue && update.review_requested_at !== undefined)
+    || (!isSubIssue && update.score_final !== undefined)
     || update.status !== undefined
   ) {
     return {
@@ -214,13 +224,14 @@ export function buildTaskUpdateResponsePatch(
       ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
       ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
       ...(update.title ? { title: String(update.title) } : {}),
+      ...(update.description !== undefined ? { description: typeof update.description === "string" ? update.description : "" } : {}),
       ...(update.status ? { status: String(update.status) } : {}),
-      ...(update.review_status ? { reviewStatus: String(update.review_status) as Task["reviewStatus"] } : {}),
-      ...(update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
-      ...(update.review_owner_profile_id !== undefined ? {
+      ...(!isSubIssue && update.review_status ? { reviewStatus: String(update.review_status) as Task["reviewStatus"] } : {}),
+      ...(!isSubIssue && update.score_final !== undefined ? { scoreFinal: Boolean(update.score_final) } : {}),
+      ...(!isSubIssue && update.review_owner_profile_id !== undefined ? {
         reviewOwnerProfileId: typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "",
       } : {}),
-      ...(update.review_requested_at !== undefined ? {
+      ...(!isSubIssue && update.review_requested_at !== undefined ? {
         reviewRequestedAt: typeof update.review_requested_at === "string" ? update.review_requested_at : "",
       } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
@@ -235,6 +246,7 @@ export function buildTaskUpdateResponsePatch(
       ...(update.assignee ? { assigneeId: String(update.assignee), assignee: String(update.assignee) } : {}),
       ...(update.owner ? { ownerId: String(update.owner), owner: String(update.owner) } : {}),
       ...(update.title ? { title: String(update.title) } : {}),
+      ...(update.description !== undefined ? { description: typeof update.description === "string" ? update.description : "" } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
       ...evidencePatch,

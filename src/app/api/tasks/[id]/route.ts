@@ -18,6 +18,7 @@ import {
   restrictedTaskUpdateFields,
   startsTaskReviewRequest,
   validateSubIssueStatusParentApproval,
+  validateTaskTypeUpdateFields,
   validateTaskStatusUpdate,
   withoutUnchangedTaskStatus,
   type TaskRouteDbUpdate,
@@ -73,16 +74,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
   let payload = { ...rawPayload } as TaskUpdatePayload;
-  const hasEvidenceLinks = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLinks");
-  const hasLegacyEvidenceLink = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLink");
-  if (hasEvidenceLinks || hasLegacyEvidenceLink) {
-    const normalizedEvidence = normalizeEvidenceLinkList(
-      hasEvidenceLinks ? payload.evidenceLinks : [payload.evidenceLink ?? ""],
-    );
-    if (!normalizedEvidence.ok) return apiError(normalizedEvidence.error, 400);
-    payload.evidenceLinks = normalizedEvidence.links;
-    payload.evidenceLink = normalizedEvidence.links[0] || "";
-  }
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
@@ -93,14 +84,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,updated_at")
+    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
     return apiError("Aufgabe wurde nicht gefunden.", 404);
   }
+  const taskTypeFieldGuard = validateTaskTypeUpdateFields(currentTask, payload);
+  if (!taskTypeFieldGuard.ok) return apiError(taskTypeFieldGuard.error, taskTypeFieldGuard.status);
+  const hasEvidenceLinks = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLinks");
+  const hasLegacyEvidenceLink = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLink");
+  if (hasEvidenceLinks || hasLegacyEvidenceLink) {
+    const normalizedEvidence = normalizeEvidenceLinkList(
+      hasEvidenceLinks ? payload.evidenceLinks : [payload.evidenceLink ?? ""],
+    );
+    if (!normalizedEvidence.ok) return apiError(normalizedEvidence.error, 400);
+    payload.evidenceLinks = normalizedEvidence.links;
+    payload.evidenceLink = normalizedEvidence.links[0] || "";
+  }
   const currentReviewState = { reviewStatus: currentTask.review_status, scoreFinal: Boolean(currentTask.score_final) } as Pick<Task, "reviewStatus" | "scoreFinal">;
-  if (isTaskReviewLocked(currentReviewState) && hasReviewLockedTaskChanges(payload, { allowReviewOwnerChange: isTaskReviewActive(currentReviewState) })) {
+  if (currentTask.task_type === "deliverable" && isTaskReviewLocked(currentReviewState) && hasReviewLockedTaskChanges(payload, { allowReviewOwnerChange: isTaskReviewActive(currentReviewState) })) {
     return apiError(reviewLockMessage(currentReviewState), 409);
   }
   if (currentTask.parent_task_id) {
@@ -496,7 +499,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     createdAt: activity.created_at,
   })).filter((activity) => activity.action);
   const taskPatch = {
-    ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest),
+    ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest, currentTask.task_type as Task["taskType"]),
     id,
     updatedAt: result.task.updated_at,
     approvalStatus: result.task.approval_status ?? null,

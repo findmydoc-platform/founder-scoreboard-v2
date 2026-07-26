@@ -1,4 +1,4 @@
 {
-  "classification": "maintenance",
-  "reason": "Hardens database and API authorization while making the existing Viewer tool controls accurately read-only without adding data, capabilities, or workflow steps."
+  "classification": "minor-ux",
+  "reason": "Simplifies the existing Sub-Issue workflow into lightweight Responsible work items without adding data, capabilities, or score-tracking steps."
 }

@@ -59,6 +59,22 @@ For `milestone`, only `title`, `description`, `targetDate`, and `status` are acc
 }
 ```
 
+Sub-Issue create accepts only `itemType`, `title`, optional `description`, required `parentTaskId`, optional `ownerId`, and optional `githubRepo`. The owner defaults to the token profile. Status is server-owned and starts as `Offen`; Initiative and Milestone derive from the parent Deliverable.
+
+```json
+{
+  "items": [
+    {
+      "itemType": "sub_issue",
+      "title": "Confirm the rollout window",
+      "description": "Coordinate the date with the delivery owner.",
+      "parentTaskId": "deliverable-id",
+      "githubRepo": "findmydoc-platform/management"
+    }
+  ]
+}
+```
+
 ```json
 {
   "items": [
@@ -82,7 +98,7 @@ PATCH processes only properties that are present in the request body. Omitted pr
 
 A Milestone PATCH accepts only `title`, `description`, `targetDate`, and `status`. A PATCH containing only `expectedUpdatedAt` is invalid and returns `400 Bad Request`.
 
-Deliverable and Sub-Issue PATCH requests additionally accept the work status `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, or `Erledigt`. Initiatives do not accept `status`; Milestones continue to use only `planned`, `active`, or `done`.
+Deliverable PATCH requests accept `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, or `Erledigt`. Sub-Issue PATCH requests use the separate four-state contract `Offen`, `In Arbeit`, `Blockiert`, or `Erledigt`; `Review` and `Nacharbeit` are rejected. Initiatives do not accept `status`; Milestones continue to use only `planned`, `active`, or `done`.
 
 `expectedUpdatedAt` is required for every update and compares against the current item version. A stale version returns `409 Conflict`. An exact idempotent replay is returned before this version check. The `itemType` is determined by the target and is immutable; a PATCH body must not contain it.
 
@@ -103,7 +119,9 @@ Status updates use the same endpoint, version check, update scope, and idempoten
 }
 ```
 
-`status: "Review"` performs the complete existing review request transition. The Deliverable must be approved, have a contributing Review Owner (directly or inherited from its Initiative), and must not belong to a score-locked Sprint or have a final score. A successful transition sets the review request timestamp, resets the score, keeps the score non-final, notifies the Review Owner, records activity and audit, and marks the GitHub projection `not_synced`. Preview returns these effects before the write. Sending the already-current status succeeds as a no-op without activity, audit, notification, or GitHub projection changes.
+For a Deliverable, `status: "Review"` performs the complete existing review request transition. The Deliverable must be approved, have a contributing Review Owner (directly or inherited from its Initiative), and must not belong to a score-locked Sprint or have a final score. A successful transition sets the review request timestamp, resets the score, keeps the score non-final, notifies the Review Owner, records activity and audit, and marks the GitHub projection `not_synced`. Preview returns these effects before the write. Sending the already-current status succeeds as a no-op without activity, audit, notification, or GitHub projection changes.
+
+Legacy Sub-Issues stored as `Review` or `Nacharbeit` are returned as `In Arbeit`. Legacy review, score, and Evidence values are ignored without being deleted. An explicit valid status PATCH persists the selected four-state value, including an explicit `In Arbeit` PATCH used to normalize a legacy state.
 
 The update preview returns `currentItem`, `normalizedPatch`, `resultingItem`, `changedFields`, and system effects such as approval revision, Sprint/review/score resets, derived hierarchy values, and GitHub projection status.
 
@@ -123,15 +141,22 @@ Delete commit uses `DELETE /api/team/planning-items/v1/items/{id}` plus `Idempot
 
 ## Type and permission boundaries
 
+| Type | Create and PATCH fields | Status contract | Derived or unavailable fields |
+| --- | --- | --- | --- |
+| Milestone | `title`, `description`, `targetDate`, `status` | `planned`, `active`, `done` | No parent, owner, RACI, Sprint, score, or GitHub fields |
+| Initiative | Brief, Milestone, owner/accountable/RACI, priority | No work status | Approval revision remains server-owned |
+| Deliverable | Brief, Initiative, owner, priority, workstream, dates, hours, work status | `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, `Erledigt` | Milestone derives from Initiative; review, score, and approval side effects remain server-owned |
+| Sub-Issue | `title`, `description`, `parentTaskId`, `ownerId`, `githubRepo`, and PATCH `status` | `Offen`, `In Arbeit`, `Blockiert`, `Erledigt` | Initiative, Milestone, approval, and RACI derive from parent; no priority, Sprint, schedule, estimate, workstream, task brief, Acceptance Criteria, Definition of Done, Evidence, review, or score writes |
+
 - An Initiative accepts its brief, Milestone, owner/accountable/RACI, and priority fields. Material brief or Milestone changes start a new approval revision.
 - A Milestone accepts only title, description, target date, and status. Only CEO and Deputy may preview or commit its creation, update, or empty-only deletion.
 - A Deliverable accepts its brief, Initiative, owner, priority, workstream, dates, hours, and work status. The Milestone derives from its Initiative. Material changes reset approval, Sprint, review, and score state.
-- A Sub-Issue accepts its brief, parent Deliverable, owner, priority, workstream, dates, hours, work status, and (before GitHub synchronization) `githubRepo`. Only Sub-Issues may select an allowed technical repository. Its Initiative and Milestone derive from the parent.
-- CEO and Deputy may update all allowed fields. A Founder may update only their own Initiative fields or the brief of an owned/assigned task, plus an owned/assigned Sub-Issue's parent.
+- A Sub-Issue accepts only title, context, parent Deliverable, owner, `githubRepo`, and its four work statuses. Only Sub-Issues may select an allowed technical repository. Its Initiative and Milestone derive from the parent.
+- CEO and Deputy may update all allowed fields. A Founder may update only their own Initiative fields or the brief of an owned/assigned Deliverable; for an owned or assigned Sub-Issue they may update title, context, parent, and ordinary work status.
 - CEO and Deputy may change ordinary work statuses. Founder may change ordinary work statuses only on owned or assigned Issues.
 - Only CEO may directly complete or reopen a Deliverable. CEO, Deputy, and Founder may complete any Sub-Issue or reopen it to `Offen`, provided its parent Deliverable is approved.
-- Active and final review locks, the restricted `Nacharbeit` transitions, parent approval, and optimistic concurrency remain enforced. `Review` is available only through the complete review request transition described above.
-- The API never accepts direct approval, Sprint configuration, Review Owner, review outcome, final-score, or GitHub synchronization fields. Review and reopen side effects are server-owned consequences of an allowed `status` transition.
+- Active and final review locks and restricted `Nacharbeit` transitions remain enforced for Deliverables. Sub-Issue legacy review states never lock updates. Parent approval and optimistic concurrency remain enforced for Sub-Issue status changes.
+- The API never accepts direct approval, Sprint configuration, Review Owner, review outcome, final-score, Evidence, or GitHub synchronization fields for Sub-Issues. Their reopen transition has no review or score side effects.
 
 Every commit validates the authorization, current version, hierarchy references, and GitHub repository policy again in the transaction.
 

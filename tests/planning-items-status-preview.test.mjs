@@ -45,6 +45,7 @@ const updates = await loadTranspiledModule(
     "@/features/reviews/model/task-review-state": reviewState,
     "@/features/tasks/model/task-route-update-helpers": routeHelpers,
     "@/lib/platform": { isOperationalLeadRole },
+    "@/lib/status": status,
     "@/features/planning-items/model/planning-items-contract": contract,
     "@/features/planning-items/model/planning-item-normalization": normalization,
   },
@@ -218,6 +219,44 @@ test("Sub-Issue status changes fail when the parent is not approved", async () =
   );
   assert.equal(result.ok, true);
   assert.equal(result.preview.errors.some((error) => error.includes("nicht freigegebenen Deliverable")), true);
+});
+
+test("Sub-Issue status preview rejects review states and rewrites legacy review state only on explicit change", async () => {
+  const parent = taskRow({ id: "parent-1", approval_status: "approved" });
+  const subIssue = taskRow({
+    task_type: "sub_issue",
+    parent_task_id: "parent-1",
+    approval_status: null,
+    status: "Review",
+    review_status: "requested",
+    score_points: 8,
+    score_final: true,
+  });
+
+  for (const invalidStatus of ["Review", "Nacharbeit"]) {
+    const invalid = await preview(
+      { id: "ceo", name: "CEO", platformRole: "ceo" },
+      subIssue,
+      invalidStatus,
+      { parents: [parent] },
+    );
+    assert.equal(invalid.ok, true);
+    assert.equal(invalid.preview.errors.some((error) => error.includes("Offen, In Arbeit, Blockiert oder Erledigt")), true);
+  }
+
+  const normalized = await preview(
+    { id: "owner", name: "Owner", platformRole: "founder" },
+    subIssue,
+    "In Arbeit",
+    { parents: [parent] },
+  );
+  assert.equal(normalized.ok, true);
+  assert.deepEqual(normalized.preview.errors, []);
+  assert.deepEqual(normalized.preview.changedFields, ["status"]);
+  assert.equal(normalized.preview.dbPatch.status, "In Arbeit");
+  assert.equal(normalized.preview.resultingItem.reviewStatus, "not_requested");
+  assert.equal(normalized.preview.resultingItem.scorePoints, 0);
+  assert.equal(normalized.preview.resultingItem.scoreFinal, false);
 });
 
 test("Review preview rejects missing owners and locked Sprints", async () => {

@@ -11,6 +11,7 @@ export type TaskDetailTabId = "overview" | "sub-issues" | "relationships" | "act
 
 export type TaskOverviewDraft = {
   title: string;
+  description: string;
   problemStatement: string;
   intendedOutcome: string;
   scopeConstraints: string;
@@ -44,7 +45,8 @@ function normalizedEvidenceLinks(values: string[]) {
 export function buildTaskOverviewDraft(task: Task): TaskOverviewDraft {
   return {
     title: task.title,
-    problemStatement: task.problemStatement || task.description || "",
+    description: task.description || "",
+    problemStatement: task.taskType === "sub_issue" ? "" : task.problemStatement || task.description || "",
     intendedOutcome: task.intendedOutcome || "",
     scopeConstraints: task.scopeConstraints || "",
     acceptanceCriteria: task.acceptanceCriteria || "",
@@ -71,23 +73,27 @@ export function taskOverviewPatch(
 
   if (permissions.canEditBrief) {
     assignWhenChanged("title");
-    assignWhenChanged("problemStatement");
-    assignWhenChanged("intendedOutcome");
-    assignWhenChanged("scopeConstraints");
-    assignWhenChanged("evidenceRequired");
+    if (task.taskType === "sub_issue") {
+      assignWhenChanged("description");
+    } else {
+      assignWhenChanged("problemStatement");
+      assignWhenChanged("intendedOutcome");
+      assignWhenChanged("scopeConstraints");
+      assignWhenChanged("evidenceRequired");
+    }
   }
-  if (permissions.canEditChecklist) {
+  if (permissions.canEditChecklist && task.taskType === "deliverable") {
     assignWhenChanged("acceptanceCriteria");
     assignWhenChanged("definitionOfDone");
   }
-  if (permissions.canEditEvidence) {
+  if (permissions.canEditEvidence && task.taskType === "deliverable") {
     const nextEvidenceLinks = normalizedEvidenceLinks(draft.evidenceLinks);
     const baselineEvidenceLinks = normalizedEvidenceLinks(baseline.evidenceLinks);
     if (JSON.stringify(nextEvidenceLinks) !== JSON.stringify(baselineEvidenceLinks)) {
       patch.evidenceLinks = nextEvidenceLinks;
     }
   }
-  if (permissions.canEditNotes) assignWhenChanged("note");
+  if (permissions.canEditNotes && task.taskType === "deliverable") assignWhenChanged("note");
 
   return patch;
 }
@@ -210,11 +216,11 @@ export function buildQuickSubIssueCreationDraft({
     assignee,
     priority: "P2",
     status: "Offen",
-    workstream: parent.workstream || "",
-    startDate: parent.startDate || "",
-    endDate: parent.endDate || "",
-    deadline: parent.deadline || "",
-    hours: 2,
+    workstream: "",
+    startDate: "",
+    endDate: "",
+    deadline: "",
+    hours: 0,
     definitionOfDone: "",
     createGitHubIssue: false,
     githubRepo: parent.githubRepo || "",

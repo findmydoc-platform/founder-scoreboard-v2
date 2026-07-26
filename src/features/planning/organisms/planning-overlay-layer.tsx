@@ -161,7 +161,14 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onUploadAttachment={(file) => uploadTaskAttachment(selectedTask, file)}
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
-          onCreateSubIssue={() => setTaskDialogDefaults({ taskType: "sub_issue", parentTaskId: selectedTask.id, milestoneId: selectedTask.milestoneId, packageId: selectedTask.packageId, assignee: selectedTask.assigneeId || selectedTask.assignee, status: "Offen" })}
+          onCreateSubIssue={() => setTaskDialogDefaults({
+            taskType: "sub_issue",
+            parentTaskId: selectedTask.id,
+            milestoneId: selectedTask.milestoneId,
+            packageId: selectedTask.packageId,
+            assignee: currentProfile?.id || "",
+            status: "Offen",
+          })}
           onSyncGitHub={(options) => syncTaskToGitHub(selectedTask, options)}
           onReview={reviewTask}
           onReopenReview={reopenReviewTask}
@@ -177,6 +184,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           defaults={taskDialogDefaults}
           data={data}
           canApproveNow={currentProfile?.platformRole === "ceo"}
+          currentProfileId={currentProfile?.id || ""}
           pending={isPending}
           onClose={() => setTaskDialogDefaults(null)}
           onCreate={createTask}
