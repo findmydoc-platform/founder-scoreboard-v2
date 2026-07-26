@@ -58,17 +58,25 @@ test("github issue body keeps explicit acceptance criteria and definition of don
 });
 
 test("Sub-Issue GitHub projection contains only optional context and the FounderOps source", async () => {
-  const { taskIssueBody, taskIssueLabels } = await githubModule();
-  const subIssue = task({
-    taskType: "sub_issue",
-    description: "Coordinate the rollout window.",
-    status: "Review",
-    priority: "P0",
-  });
-  const body = taskIssueBody(subIssue);
+  const previousAppUrl = process.env.APP_URL;
+  process.env.APP_URL = "https://founder-ops.findmydoc.eu";
 
-  assert.match(body, /^## Context\nCoordinate the rollout window\.\n\n---\nSource: FounderOps\./);
-  assert.match(body, /<!-- founderops-task-id:task-body-sections -->$/);
-  assert.doesNotMatch(body, /Problem Statement|Acceptance Criteria|Evidence Required|Definition of Done/);
-  assert.deepEqual(taskIssueLabels(subIssue), ["task", "sub-issue"]);
+  try {
+    const { taskIssueBody, taskIssueLabels } = await githubModule();
+    const subIssue = task({
+      taskType: "sub_issue",
+      description: "Coordinate the rollout window.",
+      status: "Review",
+      priority: "P0",
+    });
+    const body = taskIssueBody(subIssue);
+
+    assert.match(body, /^## Context\nCoordinate the rollout window\.\n\n---\nSource: \[FounderOps\]\(https:\/\/founder-ops\.findmydoc\.eu\/tasks\/task-body-sections\)\./);
+    assert.match(body, /<!-- founderops-task-id:task-body-sections -->$/);
+    assert.doesNotMatch(body, /Problem Statement|Acceptance Criteria|Evidence Required|Definition of Done/);
+    assert.deepEqual(taskIssueLabels(subIssue), ["task", "sub-issue"]);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
 });
