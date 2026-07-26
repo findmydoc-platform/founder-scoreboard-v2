@@ -59,6 +59,124 @@ test("updates a linked issue carrying the matching FounderOps marker", async () 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
 });
 
+test("preserves a legacy structured Sub-Issue body when context is mapped", async () => {
+  const task = sourceTask({
+    taskType: "sub_issue",
+    description: "Keep this established GitHub description.",
+    problemStatement: "Keep this established GitHub description.",
+    githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+  });
+  const existingBody = [
+    "## Problem Statement",
+    "Keep this established GitHub description.",
+    "",
+    "## Acceptance Criteria",
+    "- Existing detail remains available.",
+    "",
+    githubMarker(task.id),
+  ].join("\n");
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Sub-Issue] Validate linked target",
+    body: existingBody,
+  });
+
+  await github.upsertGitHubIssue(task, "installation-token");
+
+  assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+  assert.equal(requests[1].body.body, existingBody);
+});
+
+test("replaces a legacy body after context is explicitly migrated", async () => {
+  const task = sourceTask({
+    taskType: "sub_issue",
+    description: "New compact context.",
+    problemStatement: "",
+    githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+  });
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Sub-Issue] Validate linked target",
+    body: [
+      "## Problem Statement",
+      "Legacy description.",
+      "",
+      githubMarker(task.id),
+    ].join("\n"),
+  });
+
+  await github.upsertGitHubIssue(task, "installation-token");
+
+  assert.match(requests[1].body.body, /^## Context\nNew compact context\./);
+  assert.doesNotMatch(requests[1].body.body, /Legacy description/);
+});
+
+test("updates compact context containing a legacy-looking Markdown heading", async () => {
+  const task = sourceTask({
+    taskType: "sub_issue",
+    description: "Updated context.\n\n## Acceptance Criteria\nThis heading is context, not a legacy brief.",
+    problemStatement: "",
+    githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+  });
+  const existingBody = [
+    "## Context",
+    "Old context.",
+    "",
+    "## Acceptance Criteria",
+    "This heading is context, not a legacy brief.",
+    "",
+    "---",
+    "Source: FounderOps.",
+    githubMarker(task.id),
+  ].join("\n");
+  const { github, requests } = await loadGitHub({
+    number: 42,
+    html_url: task.githubIssueUrl,
+    title: "[Sub-Issue] Validate linked target",
+    body: existingBody,
+  });
+
+  await github.upsertGitHubIssue(task, "installation-token");
+
+  assert.match(requests[1].body.body, /^## Context\nUpdated context\./);
+  assert.doesNotMatch(requests[1].body.body, /Old context/);
+});
+
+test("adds the durable marker without replacing a legacy Sub-Issue description", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  process.env.APP_URL = "https://founder-ops.findmydoc.eu";
+
+  try {
+    const task = sourceTask({
+      taskType: "sub_issue",
+      description: "",
+      githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const existingBody = [
+      "## Problem Statement",
+      "Keep the legacy GitHub description.",
+      "",
+      `Source: [FounderOps](${process.env.APP_URL}/tasks/${task.id}).`,
+    ].join("\n");
+    const { github, requests } = await loadGitHub({
+      number: 42,
+      html_url: task.githubIssueUrl,
+      title: "[Sub-Issue] Validate linked target",
+      body: existingBody,
+    });
+
+    await github.upsertGitHubIssue(task, "installation-token");
+
+    assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+    assert.equal(requests[1].body.body, `${existingBody}\n\n${githubMarker(task.id)}`);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
+});
+
 test("rejects a loaded issue with a different number before patching", async () => {
   const task = sourceTask();
   const { github, requests } = await loadGitHub({

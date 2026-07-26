@@ -153,6 +153,28 @@ test("task brief fields stay together in the shared update payload", async () =>
   assert.equal(payload.definitionOfDone, "Qualitätsstandard");
 });
 
+test("explicit Sub-Issue context changes retire the legacy context fallback", async () => {
+  const { applySubIssueContextMigration } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+    "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
+    "@/lib/status": statusMock,
+  });
+
+  const update = { description: null };
+  applySubIssueContextMigration(update, "sub_issue", true);
+  assert.deepEqual(update, {
+    description: null,
+    problem_statement: null,
+  });
+
+  const unchangedLegacyBrief = {};
+  applySubIssueContextMigration(unchangedLegacyBrief, "sub_issue", false);
+  assert.deepEqual(unchangedLegacyBrief, {});
+
+  const deliverableUpdate = {};
+  applySubIssueContextMigration(deliverableUpdate, "deliverable", true);
+  assert.deepEqual(deliverableUpdate, {});
+});
+
 test("Sub-Issue parent updates keep CAS, activity, and sync state together", async () => {
   const { activityMessages, taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
     "@/features/planning/model/planning-app-model": planningAppModelMock,

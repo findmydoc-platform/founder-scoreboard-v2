@@ -8,6 +8,7 @@ import {
   applyFinalStatusReopen,
   founderOwnedTaskUpdateFields,
   applyTaskBriefUpdateFields,
+  applySubIssueContextMigration,
   applyTaskPriorityUpdate,
   applyTaskScoreUpdateFields,
   applyTaskSelfChecklistUpdateFields,
@@ -262,6 +263,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   applyTaskBriefUpdateFields(update, payload);
+  applySubIssueContextMigration(
+    update,
+    currentTask.task_type === "sub_issue" ? "sub_issue" : "deliverable",
+    payload.description !== undefined,
+  );
   if (payload.evidenceLinks !== undefined) {
     update.evidence_link = payload.evidenceLinks[0] || null;
     update.evidence_links = payload.evidenceLinks;

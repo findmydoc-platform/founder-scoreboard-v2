@@ -146,13 +146,16 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     })),
     tasks: tasks.map((task) => {
       const isSubIssue = task.task_type === "sub_issue";
+      const description = isSubIssue && !task.description?.trim()
+        ? task.problem_statement || ""
+        : task.description || "";
       const taskBlockers = blockersByTaskId.get(task.id) || [];
       const openBlockers = taskBlockers.filter((blocker) => blocker.status === "open");
       const taskRelationStats = relationStats.get(task.id) || { count: 0, blocks: 0, blockedBy: 0 };
       return {
         id: task.id,
         title: task.title,
-        description: task.description || "",
+        description,
         taskType: task.task_type || "deliverable",
         parentTaskId: task.parent_task_id || "",
         status: isSubIssue ? normalizeSubIssueStatus(task.status || "") : normalizeStatus(task.status || ""),

@@ -197,7 +197,7 @@ export function taskIssueMarker(taskId: string) {
 }
 
 export function taskIssueBody(task: Task) {
-  if (task.taskType === "sub_issue") {
+  if (task.taskType === "sub_issue" && !task.problemStatement?.trim()) {
     return [
       ...(task.description?.trim() ? ["## Context", task.description.trim(), ""] : []),
       "---",
@@ -225,6 +225,22 @@ export function taskIssueBody(task: Task) {
     sourceLine(task),
     taskIssueMarker(task.id),
   ].join("\n");
+}
+
+export function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
+  const desiredBody = taskIssueBody(task);
+  if (task.taskType !== "sub_issue" || !existingBody?.trim()) {
+    return desiredBody;
+  }
+
+  const marker = taskIssueMarker(task.id);
+  const preservesLegacyBrief = /^## Problem Statement(?:\r?\n|$)/.test(existingBody);
+  const projectsLegacyBrief = Boolean(task.problemStatement?.trim());
+  if ((preservesLegacyBrief && projectsLegacyBrief) || !task.description?.trim()) {
+    if (existingBody.includes(marker)) return existingBody;
+    return `${existingBody.trimEnd()}\n\n${marker}`;
+  }
+  return desiredBody;
 }
 
 export async function githubUserForToken(token: string) {
@@ -365,6 +381,7 @@ async function updateValidatedGitHubIssue(
     operation: "mutation",
     body: {
       ...payload,
+      body: taskIssueUpdateBody(task, target.body),
       labels: mergeGitHubIssueLabels(target.labels, payload.labels),
     },
     errorMessage,

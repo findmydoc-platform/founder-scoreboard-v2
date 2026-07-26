@@ -147,8 +147,9 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   assert.doesNotMatch(headerActions, /Aufgabe löschen/);
 });
 
-test("github issue export keeps Deliverable briefs and compact Sub-Issue context separate", async () => {
+test("github issue export keeps current Sub-Issue context compact and reconstructs legacy briefs", async () => {
   const github = await readFile("src/lib/github.ts", "utf8");
+  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const taskIssueBodySource = github.slice(
     github.indexOf("export function taskIssueBody"),
     github.indexOf("export async function githubUserForToken"),
@@ -161,8 +162,9 @@ test("github issue export keeps Deliverable briefs and compact Sub-Issue context
 
   assert.match(github, /taskIssueTitle/);
   assert.match(github, /taskIssueLabels/);
-  assert.match(github, /if \(task\.taskType === "sub_issue"\)/);
+  assert.match(github, /task\.taskType === "sub_issue"/);
   assert.match(github, /subIssueSourceLine/);
+  assert.match(syncRoute, /includeLegacySubIssueBrief: true/);
   assert.match(github, /review:ready/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Intended Outcome/);

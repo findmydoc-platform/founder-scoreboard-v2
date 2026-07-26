@@ -7,6 +7,7 @@ import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permis
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   applyFinalStatusReopen,
+  applySubIssueContextMigration,
   startsTaskReviewRequest,
   validateSubIssueStatusParentApproval,
   validateTaskStatusUpdate,
@@ -120,11 +121,14 @@ function publicPackage(row: DatabaseRow): UnknownRecord {
 
 function publicTask(row: DatabaseRow): UnknownRecord {
   const isSubIssue = row.task_type === "sub_issue";
+  const description = isSubIssue && !String(row.description || "").trim()
+    ? String(row.problem_statement || "")
+    : String(row.description || "");
   return {
     id: String(row.id || ""),
     itemType: isSubIssue ? "sub_issue" : "deliverable",
     title: String(row.title || ""),
-    description: String(row.description || ""),
+    description,
     problemStatement: isSubIssue ? "" : String(row.problem_statement || ""),
     intendedOutcome: isSubIssue ? "" : String(row.intended_outcome || ""),
     scopeConstraints: isSubIssue ? "" : String(row.scope_constraints || ""),
@@ -422,6 +426,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["githubRepo", "github_repo"],
   ];
   for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
+  applySubIssueContextMigration(dbPatch, itemType, changed.has("description"));
   if (changed.has("ownerId")) {
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;

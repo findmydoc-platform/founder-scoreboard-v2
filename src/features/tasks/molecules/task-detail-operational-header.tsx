@@ -283,7 +283,6 @@ export function TaskDetailOperationalHeader({
   task,
   initiative,
   milestone,
-  parentTask,
   profiles,
   subIssues,
   subIssuesKnown = true,
@@ -300,9 +299,7 @@ export function TaskDetailOperationalHeader({
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
   const itemTypeLabel = task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
-  const hierarchyLabel = task.taskType === "sub_issue"
-    ? parentTask?.title
-    : initiative?.title;
+  const hierarchyLabel = initiative?.title;
   const milestoneLabel = milestone?.title;
   const accountableLabel = task.taskType === "deliverable" && initiative
     ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
@@ -317,11 +314,11 @@ export function TaskDetailOperationalHeader({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <span>{itemTypeLabel}</span>
-            {(milestoneLabel || hierarchyLabel) && (
+            {task.taskType === "deliverable" && (milestoneLabel || hierarchyLabel) && (
               <>
                 <span aria-hidden="true">·</span>
                 <span className="normal-case tracking-normal text-slate-600">
-                  {task.taskType === "sub_issue" ? `Parent: ${hierarchyLabel || "Nicht gesetzt"}` : milestoneLabel || hierarchyLabel}
+                  {milestoneLabel || hierarchyLabel}
                 </span>
               </>
             )}

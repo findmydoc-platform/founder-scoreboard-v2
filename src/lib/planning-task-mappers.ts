@@ -8,6 +8,7 @@ type TaskProfileLookup = Profile[] | Map<string, string>;
 
 type MapTaskRowOptions = {
   defaultSprintId?: string;
+  includeLegacySubIssueBrief?: boolean;
   taskLinks?: DbTaskLink[];
 };
 
@@ -79,12 +80,18 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const status = taskType === "sub_issue"
     ? normalizeSubIssueStatus(row.status || "Offen")
     : row.status || "Offen";
+  const description = taskType === "sub_issue" && !row.description?.trim()
+    ? row.problem_statement || ""
+    : row.description || "";
+  const includeLegacySubIssueBrief = taskType === "sub_issue"
+    && Boolean(options.includeLegacySubIssueBrief)
+    && Boolean(row.problem_statement?.trim());
 
   return {
     id: row.id || "",
     order: row.sort_order || 0,
     title: row.title || "",
-    description: row.description || "",
+    description,
     status,
     priority: row.priority || "P2",
     assigneeId,
@@ -96,13 +103,13 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     workstream: row.workstream || "",
     packageId: row.package_id || "",
     deadline: row.deadline || "",
-    problemStatement: taskType === "sub_issue" ? "" : row.problem_statement || "",
-    intendedOutcome: taskType === "sub_issue" ? "" : row.intended_outcome || "",
-    scopeConstraints: taskType === "sub_issue" ? "" : row.scope_constraints || "",
-    acceptanceCriteria: taskType === "sub_issue" ? "" : row.acceptance_criteria || "",
-    evidenceRequired: taskType === "sub_issue" ? "" : row.evidence_required || "",
+    problemStatement: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.problem_statement || "",
+    intendedOutcome: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.intended_outcome || "",
+    scopeConstraints: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.scope_constraints || "",
+    acceptanceCriteria: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.acceptance_criteria || "",
+    evidenceRequired: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.evidence_required || "",
     dodTemplateVersion: taskType === "sub_issue" ? "" : row.dod_template_version || "founder-deliverable-v2",
-    definitionOfDone: taskType === "sub_issue" ? "" : row.definition_of_done || "",
+    definitionOfDone: taskType === "sub_issue" && !includeLegacySubIssueBrief ? "" : row.definition_of_done || "",
     dependsOn: row.task_dependencies?.map((item) => item.note).join("; ") || "",
     evidenceLink: taskType === "sub_issue" ? "" : evidenceLinks[0] || row.evidence_link || "",
     evidenceLinks,

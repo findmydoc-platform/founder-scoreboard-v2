@@ -81,6 +81,42 @@ test("legacy single evidence URL remains visible until migrated", () => {
   assert.equal(task.evidenceLink, "https://legacy.example/proof");
 });
 
+test("Sub-Issue context falls back to the legacy description field", () => {
+  const row = {
+    id: "sub-legacy-context",
+    task_type: "sub_issue",
+    description: "",
+    problem_statement: "Legacy Sub-Issue description",
+    intended_outcome: "Legacy outcome",
+    scope_constraints: "Legacy scope",
+    acceptance_criteria: "Legacy acceptance",
+    evidence_required: "Legacy evidence",
+    definition_of_done: "Legacy completion",
+  };
+  const task = mapTaskRow(row, new Map());
+
+  assert.equal(task.description, "Legacy Sub-Issue description");
+  assert.equal(task.problemStatement, "");
+
+  const githubProjection = mapTaskRow(row, new Map(), {
+    includeLegacySubIssueBrief: true,
+  });
+  assert.equal(githubProjection.problemStatement, "Legacy Sub-Issue description");
+  assert.equal(githubProjection.intendedOutcome, "Legacy outcome");
+  assert.equal(githubProjection.scopeConstraints, "Legacy scope");
+  assert.equal(githubProjection.acceptanceCriteria, "Legacy acceptance");
+  assert.equal(githubProjection.evidenceRequired, "Legacy evidence");
+  assert.equal(githubProjection.definitionOfDone, "Legacy completion");
+
+  const githubProjectionWithParallelContext = mapTaskRow({
+    ...row,
+    description: "Parallel compact context",
+  }, new Map(), {
+    includeLegacySubIssueBrief: true,
+  });
+  assert.equal(githubProjectionWithParallelContext.problemStatement, "Legacy Sub-Issue description");
+});
+
 test("Sub-Issue read model normalizes legacy review state and ignores review, score, and evidence data", () => {
   const task = mapTaskRow({
     id: "sub-legacy",

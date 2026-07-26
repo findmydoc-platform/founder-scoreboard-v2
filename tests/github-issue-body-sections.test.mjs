@@ -66,6 +66,12 @@ test("Sub-Issue GitHub projection contains only optional context and the Founder
     const subIssue = task({
       taskType: "sub_issue",
       description: "Coordinate the rollout window.",
+      problemStatement: "",
+      intendedOutcome: "",
+      scopeConstraints: "",
+      acceptanceCriteria: "",
+      evidenceRequired: "",
+      definitionOfDone: "",
       status: "Review",
       priority: "P0",
     });
@@ -79,4 +85,28 @@ test("Sub-Issue GitHub projection contains only optional context and the Founder
     if (previousAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = previousAppUrl;
   }
+});
+
+test("legacy Sub-Issue GitHub projection reconstructs every stored brief section", async () => {
+  const { taskIssueBody } = await githubModule();
+  const body = taskIssueBody(task({
+    taskType: "sub_issue",
+    description: "Legacy problem",
+    problemStatement: "Legacy problem",
+    intendedOutcome: "Legacy outcome",
+    scopeConstraints: "Legacy scope",
+    acceptanceCriteria: "Legacy acceptance",
+    evidenceRequired: "Legacy evidence",
+    definitionOfDone: "Legacy completion",
+  }));
+
+  assert.match(body, /^## Problem Statement\nLegacy problem/);
+  assert.match(body, /## Intended Outcome\nLegacy outcome/);
+  assert.match(body, /## Scope & Constraints\n- Legacy scope/);
+  assert.match(body, /## Acceptance Criteria\n- Legacy acceptance/);
+  assert.match(body, /## Evidence Required\nLegacy evidence/);
+  assert.match(body, /## Definition of Done\n- Legacy completion/);
+  assert.match(body, /Planning context: FounderOps\./);
+  assert.match(body, /<!-- founderops-task-id:task-body-sections -->$/);
+  assert.doesNotMatch(body, /^## Context/m);
 });

@@ -16,6 +16,7 @@ type Props = {
   canReport?: boolean;
   blockers: TaskBlocker[];
   blockerDraft: BlockerDraft;
+  embedded?: boolean;
   error?: string;
   loading?: boolean;
   unavailable?: boolean;
@@ -29,6 +30,7 @@ export function TaskDetailPanelBlockerSection({
   canReport = true,
   blockers,
   blockerDraft,
+  embedded = false,
   error = "",
   loading = false,
   unavailable = false,
@@ -92,7 +94,7 @@ export function TaskDetailPanelBlockerSection({
 
   if (compactEmpty) {
     return canReport ? (
-      <div className="flex justify-end border-b border-slate-100 py-5">
+      <div className={embedded ? "shrink-0" : "flex justify-end border-b border-slate-100 py-5"}>
         <UiButton id={triggerId} size="lg" className="h-11" onClick={openForm} aria-expanded="false" aria-controls={formId}>
           <Plus size={15} aria-hidden="true" />
           Blocker melden
@@ -102,7 +104,10 @@ export function TaskDetailPanelBlockerSection({
   }
 
   return (
-    <section className="border-b border-slate-100 py-5" aria-busy={loading}>
+    <section
+      className={embedded ? "border-t border-slate-100 pt-4 sm:col-span-2" : "border-b border-slate-100 py-5"}
+      aria-busy={loading}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950">
@@ -176,7 +181,7 @@ export function TaskDetailPanelBlockerSection({
                 onBlockerDraftChange({ impact: event.target.value });
               }}
               className="h-11 px-3"
-              placeholder="Auswirkung auf Sprint oder Review"
+              placeholder={embedded ? "Auswirkung auf die weitere Arbeit" : "Auswirkung auf Sprint oder Review"}
             />
           </UiField>
           <UiField>
