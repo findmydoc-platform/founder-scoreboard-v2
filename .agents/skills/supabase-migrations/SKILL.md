@@ -1,6 +1,6 @@
 ---
 name: supabase-migrations
-description: Use only when creating, reviewing, applying, squashing, or verifying this repository's Supabase migrations, app-to-database authorization alignment, RLS policies, grants, indexes, storage configuration, or migration-ledger repairs. Prefer additive timestamp migrations and ask before destructive database changes.
+description: Use only when creating, reviewing, applying, squashing, or verifying this repository's Supabase migrations, Authorization Parity, RLS policies, grants, indexes, storage configuration, or migration-ledger repairs. Prefer additive timestamp migrations and ask before destructive database changes.
 ---
 
 # Supabase Migrations
@@ -25,24 +25,14 @@ Codex may create and apply additive Supabase SQL to the local stack when the tas
 - rotating, exposing, or deleting credentials
 - changing production source of truth semantics
 
-## Authorization preflight
+## Authorization Parity
 
-Before writing authorization SQL, build an evidence matrix for every affected operation:
-
-| Evidence | Required answer |
-| --- | --- |
-| Caller | Browser, user-token client, server route, worker, or migration |
-| App guard | Exact authorization helper and allowed platform roles |
-| Database path | Table/RPC plus key or Postgres role used |
-| Row boundary | Team mapping, profile ownership, task ownership, or operational scope |
-| Fields | Mutable fields, especially role and identity fields |
-
-Follow the root `AGENTS.md` Database Authorization Contract. Treat missing evidence as deny-by-default. Do not add a client grant because a table is used by the app when the actual call uses the service role. Keep established personal self-service policies only when their direct client path and ownership predicate are proven.
+Follow the root `AGENTS.md` principle. Before broadening access, identify the real caller, app guard, database path, role or ownership boundary, and mutable fields. If there is no matching app action or the evidence is unclear, do not add user access.
 
 ## Workflow
 
 1. Inspect `supabase/migrations/`, `scripts/verify-*.mjs`, API routes, authorization helpers, browser clients, server clients, and data access code before writing SQL.
-2. For RLS or grants, finish the authorization evidence matrix and identify both allowed and forbidden direct Data API calls.
+2. For RLS, grants, or RPC execution, state the matching app action and identify both allowed and forbidden direct Data API calls.
 3. Run `pnpm run db:migration:new <clear_name>` so the pinned CLI creates the timestamp filename. Do not pass a standalone `--`; Supabase CLI 2.109 treats it as the end of arguments and reports a missing migration name.
 4. Edit only the generated file. Never add SQL directly under `supabase/`, recreate `supabase/schema.sql`, or reuse an existing timestamp.
 5. Keep additive migrations idempotent where practical with `if not exists`, `on conflict`, and guarded `do $$` blocks.
