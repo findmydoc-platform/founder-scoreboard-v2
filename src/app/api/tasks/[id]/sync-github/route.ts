@@ -213,7 +213,9 @@ async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<Lo
     }
   }
 
-  const task = mapTaskRow(data as TaskRowForMapping, profileNameById);
+  const task = mapTaskRow(data as TaskRowForMapping, profileNameById, {
+    includeLegacySubIssueBrief: true,
+  });
   if (task.taskType === "sub_issue" && task.parentTaskId) {
     const { data: parent } = await supabase.from(ACTIVE_TASKS_TABLE).select("approval_status").eq("id", task.parentTaskId).maybeSingle();
     task.parentApprovalStatus = (parent?.approval_status as Task["parentApprovalStatus"]) || null;

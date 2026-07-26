@@ -7,6 +7,7 @@ import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permis
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   applyFinalStatusReopen,
+  applySubIssueContextMigration,
   startsTaskReviewRequest,
   validateSubIssueStatusParentApproval,
   validateTaskStatusUpdate,
@@ -425,6 +426,7 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["githubRepo", "github_repo"],
   ];
   for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
+  applySubIssueContextMigration(dbPatch, itemType, changed.has("description"));
   if (changed.has("ownerId")) {
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;

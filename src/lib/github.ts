@@ -197,7 +197,7 @@ export function taskIssueMarker(taskId: string) {
 }
 
 export function taskIssueBody(task: Task) {
-  if (task.taskType === "sub_issue") {
+  if (task.taskType === "sub_issue" && !task.problemStatement?.trim()) {
     return [
       ...(task.description?.trim() ? ["## Context", task.description.trim(), ""] : []),
       "---",
@@ -234,8 +234,9 @@ export function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
   }
 
   const marker = taskIssueMarker(task.id);
-  const preservesLegacyBrief = /^## (?:Problem Statement|Intended Outcome|Scope & Constraints|Acceptance Criteria|Evidence Required|Definition of Done)\s*$/m.test(existingBody);
-  if (preservesLegacyBrief || !task.description?.trim()) {
+  const preservesLegacyBrief = /^## Problem Statement(?:\r?\n|$)/.test(existingBody);
+  const projectsLegacyBrief = Boolean(task.problemStatement?.trim());
+  if ((preservesLegacyBrief && projectsLegacyBrief) || !task.description?.trim()) {
     if (existingBody.includes(marker)) return existingBody;
     return `${existingBody.trimEnd()}\n\n${marker}`;
   }
