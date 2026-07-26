@@ -1,4 +1,4 @@
 {
-  "classification": "minor-ux",
-  "reason": "Simplifies the existing Sub-Issue workflow into lightweight Responsible work items without adding data, capabilities, or score-tracking steps."
+  "classification": "bug-fix",
+  "reason": "Restores previously stored legacy Sub-Issue brief fields in the existing detail view without adding a new workflow or capability."
 }
