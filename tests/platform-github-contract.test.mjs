@@ -164,7 +164,7 @@ test("github issue export keeps current Sub-Issue context compact and reconstruc
   assert.match(github, /taskIssueLabels/);
   assert.match(github, /task\.taskType === "sub_issue"/);
   assert.match(github, /subIssueSourceLine/);
-  assert.match(syncRoute, /includeLegacySubIssueBrief: true/);
+  assert.doesNotMatch(syncRoute, /includeLegacySubIssueBrief/);
   assert.match(github, /review:ready/);
   assert.match(github, /Problem Statement/);
   assert.match(github, /Intended Outcome/);

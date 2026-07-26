@@ -46,7 +46,7 @@ export function buildTaskOverviewDraft(task: Task): TaskOverviewDraft {
   return {
     title: task.title,
     description: task.description || "",
-    problemStatement: task.taskType === "sub_issue" ? "" : task.problemStatement || task.description || "",
+    problemStatement: task.problemStatement || (task.taskType === "deliverable" ? task.description || "" : ""),
     intendedOutcome: task.intendedOutcome || "",
     scopeConstraints: task.scopeConstraints || "",
     acceptanceCriteria: task.acceptanceCriteria || "",
