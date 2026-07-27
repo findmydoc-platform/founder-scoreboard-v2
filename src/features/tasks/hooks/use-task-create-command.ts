@@ -6,6 +6,7 @@ import {
   profileForAssigneeValue,
 } from "@/features/planning/model/planning-app-model";
 import * as taskApi from "@/features/tasks/model/task-api-client";
+import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { resolveTaskCreationHierarchy, taskCreationRequestPayload } from "@/features/tasks/model/task-creation-draft";
 import type { NewTaskCreateCallbacks, NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 
@@ -66,20 +67,29 @@ export function useTaskCreateCommand({
 
         if (creationDraft.createGitHubIssue && body.task.taskType === "deliverable") {
           const { response: syncResponse, body: syncBody } = await taskApi.syncTaskToGitHubRequest(apiClient, body.task.id, { createIfMissing: true });
-          if (!syncResponse.ok || !syncBody?.task) {
-            if (syncBody?.task) {
+          const classification = classifyTaskGitHubSyncResponse(syncResponse.status, syncBody);
+          if (classification.kind !== "success") {
+            if (classification.result.task) {
               applyPlanningDataUpdate((current) => ({
                 ...current,
-                tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),
+                tasks: current.tasks.map((task) => (
+                  task.id === body.task!.id
+                    ? { ...task, ...classification.result.task }
+                    : task
+                )),
               }));
             }
             throw new Error(
-              `${syncBody?.error || "GitHub Issue konnte nicht angelegt werden."} Die Aufgabe wurde gespeichert und kann erneut synchronisiert werden.`,
+              `${classification.result.error || "GitHub Issue konnte nicht angelegt werden."} Die Aufgabe wurde gespeichert und kann erneut synchronisiert werden.`,
             );
           }
           applyPlanningDataUpdate((current) => ({
             ...current,
-            tasks: current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...syncBody.task } : task)),
+            tasks: current.tasks.map((task) => (
+              task.id === body.task!.id
+                ? { ...task, ...classification.result.task }
+                : task
+            )),
           }));
         }
       } catch (error) {

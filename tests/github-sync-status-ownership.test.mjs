@@ -50,8 +50,9 @@ test("normal task update contract omits sync status and route rejects it before 
 });
 
 test("dedicated sync endpoint remains team-wide and its RPCs stay service-role only", async () => {
-  const [syncRoute, failurePersistence, authz, migration] = await Promise.all([
+  const [syncRoute, taskProjection, failurePersistence, authz, migration] = await Promise.all([
     readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),
+    readFile("src/lib/github-sync/task-projection.ts", "utf8"),
     readFile("src/lib/github-sync-failure-persistence.ts", "utf8"),
     readFile("src/lib/authz.ts", "utf8"),
     readSupabaseSchemaContract(),
@@ -59,9 +60,10 @@ test("dedicated sync endpoint remains team-wide and its RPCs stay service-role o
 
   assert.match(syncRoute, /requireTeamMember/);
   assert.match(authz, /requireTeamMember[\s\S]*\["ceo", "founder", "deputy", "viewer"\]/);
-  assert.match(syncRoute, /begin_github_issue_sync_transaction_v2/);
-  assert.match(syncRoute, /finalize_github_issue_sync_with_pull_requests_v1/);
-  assert.match(syncRoute, /persistGitHubSyncFailure/);
+  assert.match(syncRoute, /projectTaskToGitHub/);
+  assert.match(taskProjection, /begin_github_issue_sync_transaction_v2/);
+  assert.match(taskProjection, /finalize_github_issue_sync_with_pull_requests_v1/);
+  assert.match(taskProjection, /persistGitHubSyncFailure/);
   assert.match(failurePersistence, /fail_github_issue_sync_transaction/);
 
   for (const rpc of [

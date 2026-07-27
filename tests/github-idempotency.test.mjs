@@ -17,8 +17,8 @@ function task() {
 }
 
 test("github issue creation reuses an issue with the durable FounderOps marker", async () => {
-  const { taskIssueBody, taskIssueMarker, upsertGitHubIssue } = await loadTranspiledModule("src/lib/github.ts", {
-    "./github-repositories": {
+  const { projectTaskGitHubIssue } = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {
         const repository = value || "findmydoc-platform/management";
@@ -26,7 +26,7 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": {
+    "../github-issue-reference": {
       assertGitHubIssueRepository: () => {},
       parseGitHubIssueUrl: (value) => {
         const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
@@ -34,7 +34,8 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
       },
       resolveGitHubIssueNumber: (value) => value.githubIssueNumber || Number(value.issueNumber || 0) || null,
     },
-    "./github-http": {
+    "../github-http": {
+      GitHubApiError: class extends Error {},
       githubRequest: (url, options) => globalThis.fetch(url, {
         method: options.method || "GET",
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -49,7 +50,7 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
     },
   });
   const sourceTask = task();
-  const marker = taskIssueMarker(sourceTask.id);
+  const marker = `<!-- founderops-task-id:${sourceTask.id} -->`;
   const requests = [];
   const originalFetch = globalThis.fetch;
 
@@ -83,12 +84,12 @@ test("github issue creation reuses an issue with the durable FounderOps marker",
   };
 
   try {
-    const issue = await upsertGitHubIssue(sourceTask, "installation-token");
+    const issue = await projectTaskGitHubIssue({ task: sourceTask, token: "installation-token" });
 
     assert.equal(issue.number, 42);
     assert.equal(issue.recovered, true);
     assert.equal(issue.recreated, false);
-    assert.match(taskIssueBody(sourceTask), /<!-- founderops-task-id:task-idempotency-verification -->/);
+    assert.match(JSON.parse(requests.find((request) => request.method === "PATCH").body).body, /<!-- founderops-task-id:task-idempotency-verification -->/);
     assert.equal(requests.some((request) => request.method === "POST"), false);
     assert.equal(requests.filter((request) => request.method === "GET" && request.url.endsWith("/issues/42")).length, 1);
     assert.equal(requests.filter((request) => request.method === "PATCH").length, 1);
@@ -105,8 +106,8 @@ test("github issue creation reconciles a lost success response before another PO
   let created = false;
   let createCalls = 0;
   const requests = [];
-  const github = await loadTranspiledModule("src/lib/github.ts", {
-    "./github-repositories": {
+  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {
         const repository = value || "findmydoc-platform/management";
@@ -114,7 +115,7 @@ test("github issue creation reconciles a lost success response before another PO
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": {
+    "../github-issue-reference": {
       assertGitHubIssueRepository: () => {},
       parseGitHubIssueUrl: (value) => {
         const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
@@ -122,7 +123,8 @@ test("github issue creation reconciles a lost success response before another PO
       },
       resolveGitHubIssueNumber: () => null,
     },
-    "./github-http": {
+    "../github-http": {
+      GitHubApiError: class extends Error {},
       githubRequest: async (url) => {
         requests.push({ method: "GET", url });
         if (url.includes("/search/issues")) {
@@ -162,10 +164,10 @@ test("github issue creation reconciles a lost success response before another PO
   });
 
   await assert.rejects(
-    () => github.upsertGitHubIssue(sourceTask, "installation-token"),
+    () => github.projectTaskGitHubIssue({ task: sourceTask, token: "installation-token" }),
     /response lost/,
   );
-  const replayed = await github.upsertGitHubIssue(sourceTask, "installation-token");
+  const replayed = await github.projectTaskGitHubIssue({ task: sourceTask, token: "installation-token" });
 
   assert.equal(replayed.number, 42);
   assert.equal(replayed.recovered, true);

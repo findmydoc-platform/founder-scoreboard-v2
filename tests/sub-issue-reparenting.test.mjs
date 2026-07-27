@@ -49,7 +49,7 @@ test("task detail uses a custom Parent control and GitHub replaces the native pa
     readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8"),
     readFile("src/features/tasks/molecules/task-detail-planning-section.tsx", "utf8"),
     readFile("src/shared/atoms/custom-select.tsx", "utf8"),
-    readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),
+    readFile("src/lib/github-sync/task-projection.ts", "utf8"),
     readFile("src/lib/github.ts", "utf8"),
     readFile("docs/planning-hierarchy.md", "utf8"),
   ]);

@@ -5,7 +5,7 @@ import type { PlanningCommandContext } from "@/features/planning/hooks/planning-
 import { githubBulkSyncTasks } from "@/features/tasks/model/github-sync-queue";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import { rememberTaskServerRevision, type TaskServerRevisionStore } from "@/features/tasks/model/task-server-revision";
-import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
+import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { hasGitHubIssue } from "@/lib/platform";
 import type { Task } from "@/lib/types";
 
@@ -17,13 +17,6 @@ type UseTaskGitHubSyncCommandOptions = Pick<
 };
 
 const syncLockedMessage = "GitHub-Sync läuft bereits.";
-const syncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
-
-function retryableGitHubSyncMessage(status: number, code?: string, serverMessage?: string) {
-  if (status === 409 && code === "github_sync_stale") return serverMessage || syncStaleMessage;
-  if (status === 503 && code === "github_sync_state_persist_failed") return serverMessage || githubSyncStatePersistFailedMessage;
-  return "";
-}
 
 export function useTaskGitHubSyncCommand({
   apiClient,
@@ -70,28 +63,30 @@ export function useTaskGitHubSyncCommand({
       let serverTaskPatch: Partial<Task> | undefined;
       try {
         const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
-        serverTaskPatch = body?.task;
-        rememberTaskServerRevision(serverUpdatedAtByTask, task.id, body?.task?.updatedAt);
-        if (response.status === 409 && body?.code === "github_sync_locked") {
+        const classification = classifyTaskGitHubSyncResponse(response.status, body);
+        serverTaskPatch = classification.result.task;
+        rememberTaskServerRevision(serverUpdatedAtByTask, task.id, classification.result.task?.updatedAt);
+        if (classification.kind === "locked") {
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? {
               ...item,
               githubIssueSyncStatus: "pending",
-              githubIssueSyncError: body.error || syncLockedMessage,
+              githubIssueSyncError: classification.result.error || syncLockedMessage,
               githubIssueSyncPendingSince: syncStartedAt,
             } : item)),
           }));
-          if (!options.silent) setSaveError(body.error || syncLockedMessage);
+          if (!options.silent) setSaveError(classification.result.error || syncLockedMessage);
           return;
         }
-        const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
-        if (retryableMessage) {
+        if (classification.kind === "retryable") {
+          const retryableMessage = classification.result.error;
           setData((current) => ({
             ...current,
             tasks: current.tasks.map((item) => (item.id === task.id ? {
               ...item,
-              githubIssueSyncStatus: "not_synced",
+              ...classification.result.task,
+              githubIssueSyncStatus: classification.taskStatus,
               githubIssueSyncError: retryableMessage,
               githubIssueSyncPendingSince: "",
             } : item)),
@@ -99,13 +94,14 @@ export function useTaskGitHubSyncCommand({
           if (!options.silent) setSaveError(retryableMessage);
           return;
         }
-        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
+        if (classification.kind === "failure") throw new Error(classification.result.error);
+        const success = classification.result;
 
         setData((current) => ({
           ...current,
           tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...serverTaskPatch, githubIssueSyncPendingSince: "" } : item)),
         }));
-        if (!options.silent) setGithubSyncNotice(body.notices?.[0]?.message || "");
+        if (!options.silent) setGithubSyncNotice(success.notices[0]?.message || "");
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
         setData((current) => ({
@@ -196,30 +192,31 @@ export function useTaskGitHubSyncCommand({
         let serverTaskPatch: Partial<Task> | undefined;
         try {
           const { response, body } = await taskApi.syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: !hasGitHubIssue(task) });
-          serverTaskPatch = body?.task;
-          rememberTaskServerRevision(serverUpdatedAtByTask, task.id, body?.task?.updatedAt);
-          if (response.status === 409 && body?.code === "github_sync_locked") {
+          const classification = classifyTaskGitHubSyncResponse(response.status, body);
+          serverTaskPatch = classification.result.task;
+          rememberTaskServerRevision(serverUpdatedAtByTask, task.id, classification.result.task?.updatedAt);
+          if (classification.kind === "locked") {
             setData((current) => ({
               ...current,
               tasks: current.tasks.map((item) => (item.id === task.id ? {
                 ...item,
                 ...serverTaskPatch,
                 githubIssueSyncStatus: "pending",
-                githubIssueSyncError: body.error || syncLockedMessage,
+                githubIssueSyncError: classification.result.error || syncLockedMessage,
                 githubIssueSyncPendingSince: syncStartedAt,
               } : item)),
             }));
             if (task.taskType === "deliverable") failedParentTaskIds.add(task.id);
             continue;
           }
-          const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
-          if (retryableMessage) {
+          if (classification.kind === "retryable") {
+            const retryableMessage = classification.result.error;
             setData((current) => ({
               ...current,
               tasks: current.tasks.map((item) => (item.id === task.id ? {
                 ...item,
-                ...serverTaskPatch,
-                githubIssueSyncStatus: "not_synced",
+                ...classification.result.task,
+                githubIssueSyncStatus: classification.taskStatus,
                 githubIssueSyncError: retryableMessage,
                 githubIssueSyncPendingSince: "",
               } : item)),
@@ -228,17 +225,18 @@ export function useTaskGitHubSyncCommand({
             setSaveError(retryableMessage);
             continue;
           }
-          if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
+          if (classification.kind === "failure") throw new Error(classification.result.error);
+          const success = classification.result;
 
           setData((current) => ({
             ...current,
-            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...body.task, githubIssueSyncPendingSince: "" } : item)),
+            tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...success.task, githubIssueSyncPendingSince: "" } : item)),
           }));
-          commentDelivery.delivered += Number(body.commentDelivery?.delivered || 0);
-          commentDelivery.waitingForAuthorConnection += Number(body.commentDelivery?.waitingForAuthorConnection || 0);
-          commentDelivery.waitingForIssue += Number(body.commentDelivery?.waitingForIssue || 0);
-          commentDelivery.retryScheduled += Number(body.commentDelivery?.retryScheduled || 0);
-          commentDelivery.failed += Number(body.commentDelivery?.failed || 0);
+          commentDelivery.delivered += Number(success.commentDelivery.delivered || 0);
+          commentDelivery.waitingForAuthorConnection += Number(success.commentDelivery.waitingForAuthorConnection || 0);
+          commentDelivery.waitingForIssue += Number(success.commentDelivery.waitingForIssue || 0);
+          commentDelivery.retryScheduled += Number(success.commentDelivery.retryScheduled || 0);
+          commentDelivery.failed += Number(success.commentDelivery.failed || 0);
         } catch (error) {
           const message = error instanceof Error ? error.message : "GitHub-Sync konnte nicht ausgeführt werden.";
           setData((current) => ({

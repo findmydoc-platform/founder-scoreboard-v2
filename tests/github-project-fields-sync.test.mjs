@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
@@ -24,55 +23,90 @@ function fieldContext({
     { field: { name: "Priority" }, optionId: "priority-urgent" },
     { field: { name: "Start date" }, value: "2026-07-01" },
   ],
-  sprintIterations = [{ id: "sprint-6", title: "Sprint 6", startDate: "2026-07-17" }],
-  workstreamOptions = [{ id: "workstream-founderops", name: "FounderOps" }],
 } = {}) {
   return {
-    data: {
-      organization: {
-        projectV2: {
-          id: "project-21",
-          closed: false,
-          fields: {
-            nodes: [
-              { id: "field-status", name: "Status", dataType: "SINGLE_SELECT", options: statusOptions },
-              {
-                id: "field-sprint",
-                name: "Sprint",
-                dataType: "ITERATION",
-                configuration: { iterations: sprintIterations, completedIterations: [] },
-              },
-              { id: "field-workstream", name: "Workstream", dataType: "SINGLE_SELECT", options: workstreamOptions },
-              { id: "field-hours", name: "Estimate hours", dataType: "NUMBER" },
-              { id: "field-evidence", name: "Evidence URL", dataType: "TEXT" },
-            ],
-          },
-        },
-        issueFields: {
+    organization: {
+      projectV2: {
+        id: "project-21",
+        closed: false,
+        fields: {
           nodes: [
+            { id: "field-status", name: "Status", dataType: "SINGLE_SELECT", options: statusOptions },
             {
-              id: "issue-field-priority",
-              name: "Priority",
-              dataType: "SINGLE_SELECT",
-              options: [
-                { id: "priority-urgent", name: "Urgent" },
-                { id: "priority-high", name: "High" },
-                { id: "priority-medium", name: "Medium" },
-                { id: "priority-low", name: "Low" },
-              ],
+              id: "field-sprint",
+              name: "Sprint",
+              dataType: "ITERATION",
+              configuration: {
+                iterations: [{ id: "sprint-6", title: "Sprint 6", startDate: "2026-07-17" }],
+                completedIterations: [],
+              },
             },
-            { id: "issue-field-start", name: "Start date", dataType: "DATE" },
-            { id: "issue-field-target", name: "Target date", dataType: "DATE" },
-            { id: "issue-field-effort", name: "Effort", dataType: "SINGLE_SELECT", options: [{ id: "effort-high", name: "High" }] },
+            {
+              id: "field-workstream",
+              name: "Workstream",
+              dataType: "SINGLE_SELECT",
+              options: [{ id: "workstream-founderops", name: "FounderOps" }],
+            },
+            { id: "field-hours", name: "Estimate hours", dataType: "NUMBER" },
+            { id: "field-evidence", name: "Evidence URL", dataType: "TEXT" },
           ],
         },
       },
-      node: {
-        id: "item-1",
-        project: { id: "project-21" },
-        content: { id: "issue-1", issueFieldValues: { nodes: issueValues } },
-        fieldValues: { nodes: projectValues },
+      issueFields: {
+        nodes: [
+          {
+            id: "issue-field-priority",
+            name: "Priority",
+            dataType: "SINGLE_SELECT",
+            options: [
+              { id: "priority-urgent", name: "Urgent" },
+              { id: "priority-high", name: "High" },
+              { id: "priority-medium", name: "Medium" },
+              { id: "priority-low", name: "Low" },
+            ],
+          },
+          { id: "issue-field-start", name: "Start date", dataType: "DATE" },
+          { id: "issue-field-target", name: "Target date", dataType: "DATE" },
+          {
+            id: "issue-field-effort",
+            name: "Effort",
+            dataType: "SINGLE_SELECT",
+            options: [{ id: "effort-high", name: "High" }],
+          },
+        ],
       },
+    },
+    node: {
+      id: "item-1",
+      project: { id: "project-21" },
+      content: { id: "issue-1", issueFieldValues: { nodes: issueValues } },
+      fieldValues: { nodes: projectValues },
+    },
+  };
+}
+
+function supabaseFixture() {
+  return {
+    from(table) {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        single: async () => ({
+          data: {
+            github_project_owner: "findmydoc-platform",
+            github_project_number: 21,
+          },
+          error: null,
+        }),
+        maybeSingle: async () => ({
+          data: { name: "Sprint 6", start_date: "2026-07-17" },
+          error: null,
+        }),
+      };
+      if (table !== "projects" && table !== "sprints") {
+        throw new Error(`Unexpected table: ${table}`);
+      }
+      return builder;
     },
   };
 }
@@ -86,45 +120,66 @@ const task = {
   status: "Review",
   taskType: "deliverable",
   workstream: " founderops ",
+  sprintId: "sprint-6",
 };
 
-async function loadFieldModule(handler) {
-  return loadTranspiledModule("src/lib/github-project-fields.ts", {
-    "./github-http": { githubJson: handler },
+async function loadProjectProjection(handler) {
+  return loadTranspiledModule("src/lib/github-sync/project-projection.ts", {
+    "../github-graphql": { githubGraphql: handler },
+    "../github-project-config": {
+      validGitHubProjectOwner: (value) => typeof value === "string" && Boolean(value),
+      validGitHubProjectNumber: (value) => Number.isInteger(value) && value > 0,
+    },
+    "../github-repositories": {
+      splitGitHubRepository: (repository) => {
+        const [owner, repo] = repository.split("/");
+        return { owner, repo, repository };
+      },
+    },
   });
 }
 
-test("status and priority mappings cover every supported FounderOps value", async () => {
-  const fields = await loadFieldModule(async () => fieldContext());
-  assert.deepEqual(
-    ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"].map(fields.githubProjectStatusOption),
-    ["Todo", "In Progress", "Review", "Changes Requested", "Blocked", "Done"],
-  );
-  assert.deepEqual(
-    ["P0", "P1", "P2", "P3", "P4"].map(fields.githubIssuePriorityOption),
-    ["Urgent", "High", "Medium", "Low", "Low"],
-  );
-});
+function membershipData() {
+  return {
+    organization: { projectV2: { id: "project-21", closed: false } },
+    repository: {
+      issue: {
+        id: "issue-1",
+        projectItems: { nodes: [{ id: "item-1", project: { id: "project-21" } }] },
+      },
+    },
+  };
+}
 
-test("field sync writes exact values, clears blanks, preserves Effort, and includes zero hours", async () => {
-  const mutations = [];
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
-    mutations.push(options.body);
-    return { data: { ok: true } };
-  });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
-    task,
+function projectionInput(overrides = {}) {
+  return {
+    supabase: supabaseFixture(),
+    issueNumber: 42,
+    repository: "findmydoc-platform/management",
     token: "token",
+    task: { ...task, ...overrides },
+  };
+}
+
+test("Project projection writes exact values, clears blanks, preserves Effort, and serializes mutations", async () => {
+  const mutations = [];
+  let inFlight = 0;
+  let maximumInFlight = 0;
+  const project = await loadProjectProjection(async ({ query, variables }) => {
+    if (query.includes("FounderOpsProjectMembership")) return membershipData();
+    if (query.includes("FounderOpsProjectFields")) return fieldContext();
+    inFlight += 1;
+    maximumInFlight = Math.max(maximumInFlight, inFlight);
+    await Promise.resolve();
+    mutations.push({ query, variables });
+    inFlight -= 1;
+    return { ok: true };
   });
 
+  const result = await project.projectTaskToFounderOpsGitHubProject(projectionInput());
   assert.deepEqual(result.warnings, []);
+  assert.equal(maximumInFlight, 1);
+
   const byFieldId = new Map(mutations.map((mutation) => [mutation.variables.fieldId, mutation]));
   assert.deepEqual(byFieldId.get("field-status").variables.value, { singleSelectOptionId: "status-review" });
   assert.deepEqual(byFieldId.get("field-sprint").variables.value, { iterationId: "sprint-6" });
@@ -141,34 +196,31 @@ test("field sync writes exact values, clears blanks, preserves Effort, and inclu
   assert.equal(JSON.stringify(mutations).includes("issue-field-effort"), false);
 });
 
-test("Sub-Issue field sync projects only its working status", async () => {
+test("Sub-Issue Project projection changes only working status", async () => {
   const mutations = [];
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
-    mutations.push(options.body);
-    return { data: { ok: true } };
+  const project = await loadProjectProjection(async ({ query, variables }) => {
+    if (query.includes("FounderOpsProjectMembership")) return membershipData();
+    if (query.includes("FounderOpsProjectFields")) return fieldContext();
+    mutations.push({ query, variables });
+    return { ok: true };
   });
 
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
-    task: { ...task, status: "Blockiert", taskType: "sub_issue" },
-    token: "token",
-  });
-
+  const result = await project.projectTaskToFounderOpsGitHubProject(projectionInput({
+    status: "Blockiert",
+    taskType: "sub_issue",
+    sprintId: "",
+  }));
   assert.deepEqual(result.warnings, []);
   assert.equal(mutations.length, 1);
   assert.equal(mutations[0].variables.fieldId, "field-status");
   assert.deepEqual(mutations[0].variables.value, { singleSelectOptionId: "status-blocked" });
 });
 
-test("matching values make repeated field sync mutation-free", async () => {
+test("matching Project values make replay mutation-free", async () => {
   let mutations = 0;
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) {
+  const project = await loadProjectProjection(async ({ query }) => {
+    if (query.includes("FounderOpsProjectMembership")) return membershipData();
+    if (query.includes("FounderOpsProjectFields")) {
       return fieldContext({
         projectValues: [
           { field: { id: "field-status", name: "Status" }, optionId: "status-review" },
@@ -183,156 +235,27 @@ test("matching values make repeated field sync mutation-free", async () => {
       });
     }
     mutations += 1;
-    return { data: { ok: true } };
+    return { ok: true };
   });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
-    task,
-    token: "token",
-  });
-
-  assert.deepEqual(result.warnings, []);
+  const result = await project.projectTaskToFounderOpsGitHubProject(projectionInput());
+  assert.deepEqual(result, { changes: [], warnings: [] });
   assert.equal(mutations, 0);
 });
 
-test("field dry run reports exact changes without mutations", async () => {
-  let mutations = 0;
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
-    mutations += 1;
-    throw new Error("mutation must not run");
-  });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    dryRun: true,
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
-    task,
-    token: "token",
-  });
-
-  assert.deepEqual(result.warnings, []);
-  assert.deepEqual(result.changes, [
-    "Status",
-    "Sprint",
-    "Workstream",
-    "Estimate hours",
-    "Evidence URL",
-    "Priority",
-    "Start date",
-    "Target date",
-  ]);
-  assert.equal(mutations, 0);
-});
-
-test("empty planning values clear Sprint, Workstream, evidence, and both dates", async () => {
+test("one Project field failure becomes a warning while later fields continue", async () => {
   const mutations = [];
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) {
-      return fieldContext({
-        issueValues: [
-          { field: { name: "Priority" }, optionId: "priority-low" },
-          { field: { name: "Start date" }, value: "2026-07-01" },
-          { field: { name: "Target date" }, value: "2026-08-01" },
-        ],
-      });
-    }
-    mutations.push(options.body);
-    return { data: { ok: true } };
+  const project = await loadProjectProjection(async ({ query, variables }) => {
+    if (query.includes("FounderOpsProjectMembership")) return membershipData();
+    if (query.includes("FounderOpsProjectFields")) return fieldContext();
+    if (variables.fieldId === "field-hours") throw new Error("number update rejected");
+    mutations.push({ query, variables });
+    return { ok: true };
   });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: null,
-    task: { ...task, deadline: "", workstream: "" },
-    token: "token",
-  });
-
-  assert.deepEqual(result.warnings, []);
-  const projectClears = mutations
-    .filter((mutation) => mutation.query.includes("ClearFounderOpsProjectField"))
-    .map((mutation) => mutation.variables.fieldId);
-  assert.deepEqual(projectClears.sort(), ["field-evidence", "field-sprint", "field-workstream"].sort());
-  const issueDeletes = mutations
-    .filter((mutation) => mutation.query.includes("SetFounderOpsIssueField"))
-    .map((mutation) => mutation.variables.issueFields[0])
-    .filter((value) => value.delete);
-  assert.deepEqual(issueDeletes, [
-    { fieldId: "issue-field-start", delete: true },
-    { fieldId: "issue-field-target", delete: true },
-  ]);
-});
-
-test("missing Sprint and Workstream options clear old values and return warnings", async () => {
-  const mutations = [];
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) {
-      return fieldContext({ sprintIterations: [], workstreamOptions: [] });
-    }
-    mutations.push(options.body);
-    return { data: { ok: true } };
-  });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 99", startDate: "2026-12-01" },
-    task: { ...task, workstream: "Unknown Workstream" },
-    token: "token",
-  });
-
-  const cleared = mutations
-    .filter((mutation) => mutation.query.includes("ClearFounderOpsProjectField"))
-    .map((mutation) => mutation.variables.fieldId);
-  assert.equal(cleared.includes("field-sprint"), true);
-  assert.equal(cleared.includes("field-workstream"), true);
-  assert.equal(result.warnings.some((warning) => warning.includes("Sprint 99") && warning.includes("alter Wert wurde entfernt")), true);
-  assert.equal(result.warnings.some((warning) => warning.includes("Unknown Workstream") && warning.includes("alter Wert wurde entfernt")), true);
-});
-
-test("one optional field failure becomes a warning while later fields continue", async () => {
-  const mutations = [];
-  const fields = await loadFieldModule(async (_url, options) => {
-    if (options.body.query.includes("FounderOpsProjectFields")) return fieldContext();
-    if (options.body.variables.fieldId === "field-hours") throw new Error("number update rejected");
-    mutations.push(options.body);
-    return { data: { ok: true } };
-  });
-
-  const result = await fields.syncFounderOpsGitHubProjectFields({
-    itemId: "item-1",
-    projectId: "project-21",
-    projectNumber: 21,
-    projectOwner: "findmydoc-platform",
-    sprint: { title: "Sprint 6", startDate: "2026-07-17" },
-    task,
-    token: "token",
-  });
-
-  assert.equal(result.warnings.some((warning) => warning.includes("Estimate hours") && warning.includes("number update rejected")), true);
+  const result = await project.projectTaskToFounderOpsGitHubProject(projectionInput());
+  assert.equal(
+    result.warnings.some((warning) => warning.includes("Estimate hours") && warning.includes("number update rejected")),
+    true,
+  );
   assert.equal(mutations.some((mutation) => mutation.variables.fieldId === "field-evidence"), true);
   assert.equal(mutations.some((mutation) => mutation.query.includes("SetFounderOpsIssueField")), true);
-});
-
-test("task sync keeps Project membership hard and field failures warning-only", async () => {
-  const source = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const membership = source.indexOf("await ensureFounderOpsGitHubProjectItem");
-  const fields = source.indexOf("await syncFounderOpsGitHubProjectFields");
-  const failurePersistence = source.indexOf("persistGitHubSyncFailure", fields);
-  assert.ok(membership > 0 && fields > membership);
-  assert.match(source.slice(fields, failurePersistence), /\.catch\(\(error\) => \(\{/);
-  assert.match(source, /\.\.\.fieldSync\.warnings/);
 });

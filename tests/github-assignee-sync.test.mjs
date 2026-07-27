@@ -18,8 +18,8 @@ function task() {
 
 async function githubModule(assigneeStatus) {
   let patchBody;
-  const github = await loadTranspiledModule("src/lib/github.ts", {
-    "./github-repositories": {
+  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: () => ({
         owner: "findmydoc-platform",
@@ -27,7 +27,7 @@ async function githubModule(assigneeStatus) {
         repository: "findmydoc-platform/management",
       }),
     },
-    "./github-issue-reference": {
+    "../github-issue-reference": {
       assertGitHubIssueRepository: () => {},
       parseGitHubIssueUrl: (value) => {
         const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
@@ -35,7 +35,8 @@ async function githubModule(assigneeStatus) {
       },
       resolveGitHubIssueNumber: () => 42,
     },
-    "./github-http": {
+    "../github-http": {
+      GitHubApiError: class extends Error {},
       githubRequest: async () => {
         if (assigneeStatus instanceof Error) throw assigneeStatus;
         return new Response(null, { status: assigneeStatus });
@@ -64,7 +65,7 @@ async function githubModule(assigneeStatus) {
 test("github sync assigns a verified login", async () => {
   const github = await githubModule(204);
 
-  await github.upsertGitHubIssue(task(), "installation-token", { login: "founder" });
+  await github.projectTaskGitHubIssue({ task: task(), token: "installation-token", assigneeLogin: "founder" });
 
   assert.deepEqual(github.patchBody().assignees, ["founder"]);
 });
@@ -72,7 +73,7 @@ test("github sync assigns a verified login", async () => {
 test("github sync clears a stale assignee when the responsible profile has no login", async () => {
   const github = await githubModule(204);
 
-  const result = await github.upsertGitHubIssue(task(), "installation-token");
+  const result = await github.projectTaskGitHubIssue({ task: task(), token: "installation-token" });
 
   assert.deepEqual(github.patchBody().assignees, []);
   assert.match(result.warnings[0], /keinen GitHub-Login/);
@@ -81,7 +82,7 @@ test("github sync clears a stale assignee when the responsible profile has no lo
 test("github sync clears a stale assignee when the new login is not assignable", async () => {
   const github = await githubModule(404);
 
-  const result = await github.upsertGitHubIssue(task(), "installation-token", { login: "outside-user" });
+  const result = await github.projectTaskGitHubIssue({ task: task(), token: "installation-token", assigneeLogin: "outside-user" });
 
   assert.deepEqual(github.patchBody().assignees, []);
   assert.match(result.warnings[0], /nicht zuweisbar/);
@@ -90,7 +91,7 @@ test("github sync clears a stale assignee when the new login is not assignable",
 test("github sync preserves the existing assignee when validation fails transiently", async () => {
   const github = await githubModule(503);
 
-  const result = await github.upsertGitHubIssue(task(), "installation-token", { login: "founder" });
+  const result = await github.projectTaskGitHubIssue({ task: task(), token: "installation-token", assigneeLogin: "founder" });
 
   assert.equal(Object.hasOwn(github.patchBody(), "assignees"), false);
   assert.match(result.warnings[0], /konnte nicht geprüft werden/);
@@ -99,7 +100,7 @@ test("github sync preserves the existing assignee when validation fails transien
 test("github sync preserves the existing assignee when validation cannot reach GitHub", async () => {
   const github = await githubModule(new Error("network unavailable"));
 
-  const result = await github.upsertGitHubIssue(task(), "installation-token", { login: "founder" });
+  const result = await github.projectTaskGitHubIssue({ task: task(), token: "installation-token", assigneeLogin: "founder" });
 
   assert.equal(Object.hasOwn(github.patchBody(), "assignees"), false);
   assert.match(result.warnings[0], /konnte nicht geprüft werden/);

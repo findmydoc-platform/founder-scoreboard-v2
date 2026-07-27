@@ -3,6 +3,10 @@
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { TaskDetailData } from "@/lib/task-detail-data";
 import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation, TaskReview } from "@/lib/types";
+import type {
+  TaskGitHubProjectionResult,
+  TaskGitHubSyncCommand,
+} from "@/lib/github-sync/contract";
 
 export function decideTaskApprovalRequest(apiClient: BrowserApiClient, taskId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
   return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${taskId}/approval`, {
@@ -71,24 +75,14 @@ export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {
   });
 }
 
-export function syncTaskToGitHubRequest(apiClient: BrowserApiClient, taskId: string, options: { createIfMissing?: boolean } = {}) {
-  return apiClient.requestJson<{
-    code?: string;
-    error?: string;
-    task?: Partial<Task>;
-    commentDelivery?: {
-      delivered: number;
-      reconciled: number;
-      created: number;
-      waitingForAuthorConnection: number;
-      waitingForIssue: number;
-      retryScheduled: number;
-      failed: number;
-    };
-    notices?: Array<{ code: string; level: "info" | "warning"; message: string }>;
-  }>(`/api/tasks/${taskId}/sync-github`, {
+export function syncTaskToGitHubRequest(
+  apiClient: BrowserApiClient,
+  taskId: string,
+  command: TaskGitHubSyncCommand,
+) {
+  return apiClient.requestJson<TaskGitHubProjectionResult>(`/api/tasks/${taskId}/sync-github`, {
     method: "POST",
-    json: { createIfMissing: Boolean(options.createIfMissing) },
+    json: command,
   });
 }
 

@@ -9,6 +9,7 @@ import { GitHubAppUserTokenRequiredError, getGitHubUserTokenForProfile } from ".
 import { resolveGitHubIssueNumber } from "./github-issue-reference";
 import { canonicalizeProfileMentionsForGitHub } from "./mentions";
 import type { AuthenticatedProfile, GitHubCommentDeliveryStatus, PlatformRole } from "./types";
+import type { GitHubCommentDeliverySummary } from "./github-sync/contract";
 
 type ClaimedDelivery = {
   task_comment_id: number;
@@ -39,15 +40,7 @@ type ProfileRow = {
   github_login: string | null;
 };
 
-export type GitHubCommentDeliverySummary = {
-  delivered: number;
-  reconciled: number;
-  created: number;
-  waitingForAuthorConnection: number;
-  waitingForIssue: number;
-  retryScheduled: number;
-  failed: number;
-};
+export type { GitHubCommentDeliverySummary } from "./github-sync/contract";
 
 const emptySummary = (): GitHubCommentDeliverySummary => ({
   delivered: 0,

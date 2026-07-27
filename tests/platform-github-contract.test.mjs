@@ -22,8 +22,10 @@ test("platform migration contains the role, score and sync contracts", async () 
 
 test("github sync route is team-scoped and locked per github resource", async () => {
   const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const taskProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
+  const dependencyProjection = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const githubApp = await readFile("src/lib/github-app.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
+  const issueProjection = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const transactionalSyncMigration = await readSupabaseSchemaContract();
   const syncRenameMigration = await readSupabaseSchemaContract();
@@ -43,15 +45,15 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.doesNotMatch(route, /taskDetailPermissions/);
   assert.doesNotMatch(route, /getGitHubUserConnectionStatus/);
   assert.match(route, /getGitHubAppInstallationToken/);
-  assert.match(route, /githubInstallationToken/);
-  assert.match(route, /syncGitHubIssueDependencies/);
-  assert.match(route, /githubDependencyContext/);
-  assert.match(route, /githubSyncResourceKey/);
-  assert.match(route, /acquireGitHubSyncLock/);
-  assert.match(route, /releaseGitHubSyncLock/);
-  assert.match(route, /finally/);
-  assert.match(route, /github_sync_locked/);
-  assert.match(route, /GitHub-Sync läuft bereits/);
+  assert.match(route, /installationToken/);
+  assert.match(route, /projectTaskToGitHub/);
+  assert.match(dependencyProjection, /projectTaskGitHubDependencies/);
+  assert.match(taskProjection, /githubSyncResourceKey/);
+  assert.match(taskProjection, /acquireGitHubSyncLock/);
+  assert.match(taskProjection, /releaseGitHubSyncLock/);
+  assert.match(taskProjection, /GitHub-Sync-Lock konnte nicht freigegeben werden/);
+  assert.match(taskProjection, /github_sync_locked/);
+  assert.match(taskProjection, /GitHub-Sync läuft bereits/);
   assert.match(githubApp, /GITHUB_APP_INSTALLATION_ID/);
   assert.match(githubApp, /cachedInstallationToken/);
   assert.match(migration, /create table if not exists github_issue_sync_locks/);
@@ -80,19 +82,19 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.doesNotMatch(route, /buildSyncContext/);
   assert.doesNotMatch(route, /x-github-provider-token|provider_token|requireMatchingGitHubProviderToken/);
   assert.doesNotMatch(route, /requireOperationalLead/);
-  assert.match(route, /deliverPendingGitHubComments/);
-  assert.match(route, /commentDelivery/);
-  assert.doesNotMatch(route, /task_blockers/);
-  assert.doesNotMatch(route, /from\("task_activity"\)\.select/);
-  assert.match(route, /connectGitHubSubIssue/);
-  assert.match(route, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
+  assert.match(taskProjection, /deliverPendingGitHubComments/);
+  assert.match(taskProjection, /commentDelivery/);
+  assert.doesNotMatch(taskProjection, /task_blockers/);
+  assert.doesNotMatch(taskProjection, /from\("task_activity"\)\.select/);
+  assert.match(taskProjection, /connectGitHubSubIssue/);
+  assert.match(dependencyProjection, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.match(route, /createIfMissing/);
-  assert.match(route, /Diese Aufgabe hat noch kein GitHub Issue/);
-  assert.match(route, /Nur freigegebene Deliverables können mit GitHub synchronisiert werden/);
-  assert.match(route, /Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein/);
-  assert.match(route, /begin_github_issue_sync_transaction/);
-  assert.match(route, /finalize_github_issue_sync_with_pull_requests_v1/);
-  assert.match(route, /persistGitHubSyncFailure/);
+  assert.match(taskProjection, /Diese Aufgabe hat noch kein GitHub Issue/);
+  assert.match(taskProjection, /Nur freigegebene Deliverables können mit GitHub synchronisiert werden/);
+  assert.match(taskProjection, /Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein/);
+  assert.match(taskProjection, /begin_github_issue_sync_transaction/);
+  assert.match(taskProjection, /finalize_github_issue_sync_with_pull_requests_v1/);
+  assert.match(taskProjection, /persistGitHubSyncFailure/);
   assert.match(syncFailurePersistence, /fail_github_issue_sync_transaction/);
   assert.match(transactionalSyncMigration, /github_issue_sync_status = 'pending'/);
   assert.match(syncRenameMigration, /github_issue_sync_status = 'pending'/);
@@ -106,11 +108,11 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(reconcileRoute, /export async function GET/);
   assert.match(reconcileRoute, /previewPendingGitHubComments/);
   assert.match(reconcileRoute, /deliverPendingGitHubComments\(\{ supabase: context\.supabase, limit: 100 \}\)/);
-  assert.match(github, /state: task\.status === "Erledigt" \? "closed" : "open"/);
-  assert.match(github, /taskIssueMarker/);
-  assert.match(github, /findGitHubIssueByTaskMarker/);
-  assert.match(github, /founderops-task-id:/);
-  assert.match(github, /recovered: true/);
+  assert.match(issueProjection, /state: task\.status === "Erledigt" \? "closed" : "open"/);
+  assert.match(issueProjection, /taskIssueMarker/);
+  assert.match(issueProjection, /findGitHubIssueByTaskMarker/);
+  assert.match(issueProjection, /founderops-task-id:/);
+  assert.match(issueProjection, /recovered: true/);
 });
 
 test("planning items use the paper-bin workflow while legacy deletion artifacts remain available", async () => {
@@ -148,11 +150,12 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
 });
 
 test("github issue export keeps current Sub-Issue context compact and reconstructs legacy briefs", async () => {
-  const github = await readFile("src/lib/github.ts", "utf8");
+  const github = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
+  const dependencies = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
   const taskIssueBodySource = github.slice(
-    github.indexOf("export function taskIssueBody"),
-    github.indexOf("export async function githubUserForToken"),
+    github.indexOf("function taskIssueBody"),
+    github.indexOf("function taskIssueUpdateBody"),
   );
   const issueReferences = await readFile("src/lib/github-issue-reference.ts", "utf8");
   const ui = await readPlanningSurface();
@@ -177,8 +180,8 @@ test("github issue export keeps current Sub-Issue context compact and reconstruc
   assert.match(github, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(github, /Planning context:/);
   assert.match(github, /GitHub issue sync keeps the working issue aligned/);
-  assert.match(github, /syncGitHubIssueDependencies/);
-  assert.match(github, /dependencies\/blocked_by/);
+  assert.match(dependencies, /projectTaskGitHubDependencies/);
+  assert.match(dependencies, /dependencies\/blocked_by/);
   assert.doesNotMatch(github, /Score-relevant/);
   assert.doesNotMatch(github, /Offene Blocker/);
   assert.doesNotMatch(github, /Relationships/);
@@ -203,7 +206,7 @@ test("github issue export keeps current Sub-Issue context compact and reconstruc
 test("task relationships use github-like blocked by and blocking semantics", async () => {
   const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
+  const github = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const githubHttp = await readFile("src/lib/github-http.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -283,7 +286,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(github, /blockedIssueNumber/);
   assert.match(github, /blockingIssueNumber/);
-  assert.match(github, /desiredByBlocked/);
+  assert.match(github, /desiredBlockingCurrent/);
+  assert.match(github, /desiredBlockedByCurrent/);
+  assert.match(github, /listGitHubIssuesBlocking/);
   assert.match(github, /removeGitHubIssueBlockedBy/);
   assert.match(github, /GITHUB_ISSUE_DEPENDENCY_API_VERSION/);
   assert.match(githubHttp, /GITHUB_ISSUE_DEPENDENCY_API_VERSION = "2026-03-10"/);
@@ -296,8 +301,9 @@ test("github issue sync and comment delivery keep independent state", async () =
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
-  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
+  const syncRoute = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
+  const github = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
+  const dependencies = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const deliveryMigration = await readSupabaseSchemaContract();
 
   assert.match(taskRoutePolicy, /rejectClientGitHubSyncStatusUpdate/);
@@ -308,9 +314,9 @@ test("github issue sync and comment delivery keep independent state", async () =
   assert.match(deliveryMigration, /waiting_for_author_connection/);
   assert.match(blockersRoute, /github_issue_sync_status: "not_synced"/);
   assert.match(relationshipsRoute, /github_issue_sync_status: "not_synced"/);
-  assert.match(syncRoute, /task_relationship_edges/);
-  assert.match(syncRoute, /syncGitHubIssueDependencies/);
-  assert.match(syncRoute, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
+  assert.match(syncRoute, /projectTaskGitHubDependencies/);
+  assert.match(dependencies, /task_relationship_edges/);
+  assert.match(dependencies, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);
   assert.doesNotMatch(syncRoute, /activitiesResult/);
   assert.doesNotMatch(syncRoute, /profileNameById\.get\(relation\.task\?\.owner/);
   assert.match(github, /Problem Statement/);
@@ -320,15 +326,16 @@ test("github issue sync and comment delivery keep independent state", async () =
 });
 
 test("github sync maps the visible task assignee to native github assignees", async () => {
-  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const github = await readFile("src/lib/github.ts", "utf8");
+  const syncRoute = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
+  const github = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
 
-  assert.match(syncRoute, /profiles"\)\.select\("id,name,github_login"\)/);
+  assert.match(syncRoute, /\.from\("profiles"\)[\s\S]{0,100}\.select\("id,name,github_login"\)/);
   assert.match(syncRoute, /profileGitHubLoginById/);
   assert.match(syncRoute, /const assigneeProfileId = data\.assignee \|\| ""/);
-  assert.match(syncRoute, /upsertGitHubIssue\(task, githubInstallationToken, \{ login: assigneeLogin \}\)/);
-  assert.match(syncRoute, /const warnings = \[\.\.\.\(issue\.warnings \|\| \[\]\), \.\.\.sprintContext\.warnings, \.\.\.fieldSync\.warnings\]/);
+  assert.match(syncRoute, /projectTaskGitHubIssue/);
+  assert.match(syncRoute, /assigneeLogin/);
+  assert.match(syncRoute, /const warnings = \[\.\.\.issue\.warnings, \.\.\.project\.warnings\]/);
   assert.match(syncRoute, /Warnung:/);
   assert.match(syncRoute, /finalize_github_issue_sync_with_pull_requests_v1/);
   assert.match(syncRoute, /listGitHubIssueLinkedPullRequests/);
@@ -338,12 +345,12 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.doesNotMatch(syncRoute, /review_owner_profile_id/);
   assert.doesNotMatch(syncRoute, /packages"\)/);
 
-  assert.match(github, /GitHubIssueAssigneeInput/);
+  assert.match(github, /assigneeLogin\?: string/);
   assert.match(github, /repos\/\$\{owner\}\/\$\{repo\}\/assignees\/\$\{encodeURIComponent\(login\)\}/);
   assert.match(github, /response\.status === 204/);
   assert.match(github, /response\.status === 404/);
-  assert.match(github, /payload\.assignees = \[assigneeLogin\]/);
-  assert.match(github, /GitHub-Assignee @\$\{assigneeLogin\} ist im Repository nicht zuweisbar/);
+  assert.match(github, /payload\.assignees = \[normalizedAssigneeLogin\]/);
+  assert.match(github, /GitHub-Assignee @\$\{normalizedAssigneeLogin\} ist im Repository nicht zuweisbar/);
   assert.match(github, /GitHub-Assignee nicht gesetzt/);
   assert.match(github, /labels: taskIssueLabels\(task\)/);
   assert.doesNotMatch(github, /owner:assignee|assignee:owner|review-owner|initiative-owner/i);
@@ -612,7 +619,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskMutationContract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
-  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const syncRoute = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
   const ui = await readPlanningSurface();
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");

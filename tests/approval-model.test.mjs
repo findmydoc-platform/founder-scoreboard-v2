@@ -72,13 +72,13 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
 test("non-approved deliverables are gated from sprint review score and github", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
-  const githubRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const githubProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
   const sprintLock = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const board = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
 
   assert.match(taskRoute, /approval_status !== "approved"/);
   assert.match(reviewRoute, /approval_status !== "approved"/);
-  assert.match(githubRoute, /task\.approvalStatus !== "approved"/);
+  assert.match(githubProjection, /loaded\.task\.approvalStatus !== "approved"/);
   assert.match(sprintLock, /task\.approval_status === "approved"/);
   assert.match(board, /isTaskPlanningActive/);
 });
@@ -189,17 +189,18 @@ test("planning items publish an approval-aware repository contract", async () =>
 test("github projection uses the item repository and native sub issue relationships", async () => {
   const repositories = await readFile("src/lib/github-repositories.ts", "utf8");
   const github = await readFile("src/lib/github.ts", "utf8");
-  const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const taskProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
+  const issueProjection = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
 
   assert.match(repositories, /findmydoc-platform\/management/);
   assert.match(repositories, /findmydoc-platform\/website/);
-  assert.match(github, /splitGitHubRepository\(task\.githubRepo\)/);
+  assert.match(issueProjection, /splitGitHubRepository\(task\.githubRepo\)/);
   assert.match(github, /addSubIssue/);
   assert.match(github, /replaceParent: true/);
-  assert.match(route, /connectGitHubSubIssue/);
-  assert.match(route, /resolveTaskGitHubRepository/);
-  assert.match(route, /github:\$\{repository\}#/);
+  assert.match(taskProjection, /connectGitHubSubIssue/);
+  assert.match(taskProjection, /resolveTaskGitHubRepository/);
+  assert.match(taskProjection, /github:\$\{repository\}#/);
   assert.match(migration, /tasks_github_repo_allowed_check[^]*task_type = 'sub_issue'[^]*github_repo[^]*findmydoc-platform\/website/);
   assert.match(migration, /tasks_github_repo_allowed_check[^]*task_type = 'deliverable'[^]*github_repo = 'findmydoc-platform\/management'/);
 });

@@ -8,3 +8,4 @@
 - Keep service-role clients and provider tokens server-side. Never include secrets or authorization headers in logs or responses, and do not expose security-sensitive upstream details in new error paths.
 - Make retried external effects idempotent or lock-protected, and persist state transitions before reporting success.
 - Add focused tests for unauthenticated access, wrong roles, invalid input, missing dependencies, and relevant external-service failures.
+- GitHub projection routes are HTTP and authorization adapters only. They may acquire credentials and translate the typed result, but must not own projection steps, lock/CAS workflow, GitHub resource details, or GraphQL envelopes.
