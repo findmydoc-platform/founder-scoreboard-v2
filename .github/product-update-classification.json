@@ -1,4 +1,4 @@
 {
   "classification": "bug-fix",
-  "reason": "Restores previously stored legacy Sub-Issue brief fields in the existing detail view without adding a new workflow or capability."
+  "reason": "Restores optional Sub-Issue work brief editing and GitHub projection without adding a new workflow or capability."
 }
