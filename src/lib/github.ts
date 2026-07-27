@@ -196,10 +196,32 @@ export function taskIssueMarker(taskId: string) {
   return `<!-- founderops-task-id:${taskId} -->`;
 }
 
+function subIssueBriefSections(task: Task) {
+  const sections: string[] = [];
+  const textSection = (title: string, value?: string) => {
+    const content = value?.trim();
+    if (content) sections.push(`## ${title}\n${content}`);
+  };
+  const listSection = (title: string, value?: string) => {
+    const content = lines(value);
+    if (content.length) sections.push([`## ${title}`, ...content].join("\n"));
+  };
+
+  textSection("Context", task.description);
+  textSection("Problem Statement", task.problemStatement);
+  textSection("Intended Outcome", task.intendedOutcome);
+  listSection("Scope & Constraints", task.scopeConstraints);
+  listSection("Acceptance Criteria", task.acceptanceCriteria);
+  textSection("Evidence Required", task.evidenceRequired);
+  listSection("Definition of Done", task.definitionOfDone);
+  return sections;
+}
+
 export function taskIssueBody(task: Task) {
-  if (task.taskType === "sub_issue" && !task.problemStatement?.trim()) {
+  if (task.taskType === "sub_issue") {
+    const sections = subIssueBriefSections(task);
     return [
-      ...(task.description?.trim() ? ["## Context", task.description.trim(), ""] : []),
+      ...(sections.length ? [sections.join("\n\n"), ""] : []),
       "---",
       subIssueSourceLine(task),
       taskIssueMarker(task.id),
@@ -234,9 +256,7 @@ export function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
   }
 
   const marker = taskIssueMarker(task.id);
-  const preservesLegacyBrief = /^## Problem Statement(?:\r?\n|$)/.test(existingBody);
-  const projectsLegacyBrief = Boolean(task.problemStatement?.trim());
-  if ((preservesLegacyBrief && projectsLegacyBrief) || !task.description?.trim()) {
+  if (!subIssueBriefSections(task).length) {
     if (existingBody.includes(marker)) return existingBody;
     return `${existingBody.trimEnd()}\n\n${marker}`;
   }

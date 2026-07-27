@@ -221,6 +221,66 @@ test("Sub-Issue status changes fail when the parent is not approved", async () =
   assert.equal(result.preview.errors.some((error) => error.includes("nicht freigegebenen Deliverable")), true);
 });
 
+test("Sub-Issue work brief fields are returned, previewed, and persisted without review effects", async () => {
+  const parent = taskRow({ id: "parent-1", approval_status: "approved" });
+  const subIssue = taskRow({
+    task_type: "sub_issue",
+    owner: "owner",
+    assignee: "owner",
+    parent_task_id: "parent-1",
+    approval_status: null,
+    problem_statement: "Existing problem",
+    intended_outcome: "Existing outcome",
+    scope_constraints: "Existing scope",
+    acceptance_criteria: "Existing acceptance",
+    evidence_required: "Existing evidence context",
+    definition_of_done: "Existing quality standard",
+  });
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: updatedAt,
+    description: "Updated context",
+    problemStatement: "Updated problem",
+    intendedOutcome: "Updated outcome",
+    scopeConstraints: "Updated scope",
+    acceptanceCriteria: "Updated acceptance",
+    evidenceRequired: "Updated evidence context",
+    definitionOfDone: "Updated quality standard",
+  });
+  assert.equal(parsed.ok, true);
+
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "owner", name: "Owner", platformRole: "founder" },
+    itemId: subIssue.id,
+    parsed,
+    supabase: supabaseFor(subIssue, { parents: [parent] }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.preview.errors, []);
+  assert.deepEqual(result.preview.changedFields, [
+    "description",
+    "problemStatement",
+    "intendedOutcome",
+    "scopeConstraints",
+    "acceptanceCriteria",
+    "evidenceRequired",
+    "definitionOfDone",
+  ]);
+  assert.equal(result.preview.currentItem.problemStatement, "Existing problem");
+  assert.equal(result.preview.resultingItem.definitionOfDone, "Updated quality standard");
+  assert.deepEqual(result.preview.dbPatch, {
+    description: "Updated context",
+    problem_statement: "Updated problem",
+    intended_outcome: "Updated outcome",
+    scope_constraints: "Updated scope",
+    acceptance_criteria: "Updated acceptance",
+    evidence_required: "Updated evidence context",
+    definition_of_done: "Updated quality standard",
+  });
+  assert.equal(result.preview.resultingItem.reviewStatus, "not_requested");
+  assert.equal(result.preview.resultingItem.scorePoints, 0);
+});
+
 test("Sub-Issue status preview rejects review states and rewrites legacy review state only on explicit change", async () => {
   const parent = taskRow({ id: "parent-1", approval_status: "approved" });
   const subIssue = taskRow({

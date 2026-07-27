@@ -121,7 +121,7 @@
       },
       "PlanningItemCreate": {
         "type": "object",
-        "description": "Fields are type-specific. Sub-Issues accept only itemType, title, description, parentTaskId, ownerId, and githubRepo; parentTaskId is required and status defaults to Offen.",
+        "description": "Fields are type-specific. Sub-Issues accept itemType, title, description, optional work-brief text (problemStatement, intendedOutcome, scopeConstraints, acceptanceCriteria, evidenceRequired, definitionOfDone), parentTaskId, ownerId, and githubRepo; parentTaskId is required and status defaults to Offen. evidenceRequired is text context only.",
         "additionalProperties": false,
         "required": ["itemType", "title"],
         "properties": {

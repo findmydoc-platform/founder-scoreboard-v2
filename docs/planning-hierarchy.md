@@ -32,7 +32,7 @@ Responsible, Consulted, and Informed are profile lists. Sub-Issues do not have t
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum, Review und Evidence. Nur Deliverables werden bepunktet.
 
 ### Sub-Issue
-A small work step below one Deliverable. It has a required parent and title, one owner/assignee, optional context, an optional GitHub repository, and an optional first dependency. It does not have its own priority, Sprint, schedule, estimate, workstream, task brief, acceptance criteria, Definition of Done, Evidence, RACI, approval, review, review owner, or score. A Sub-Issue cannot contain another Sub-Issue.
+A small work step below one Deliverable. It has a required parent and title, one owner/assignee, optional context, an optional work brief (`Problem Statement`, `Intended Outcome`, `Scope & Constraints`, `Acceptance Criteria`, `Evidence Required`, and `Definition of Done`), an optional GitHub repository, and an optional first dependency. The work brief is optional working context only: it creates no review, score, manual Evidence, quality, or completion gate. A Sub-Issue does not have its own priority, Sprint, schedule, estimate, workstream, RACI, approval, review owner, or score, and cannot contain another Sub-Issue.
 
 Its only work statuses are `Offen`, `In Arbeit`, `Blockiert`, and `Erledigt`. Legacy `Review` and `Nacharbeit` values are projected as `In Arbeit` until an explicit status update persists one of the four valid states.
 
@@ -60,7 +60,7 @@ Projected Deliverable issues contain only the editable brief core:
 - `Definition of Done`
 - a short FounderOps backlink with the one-way sync note
 
-Projected Sub-Issues contain only their optional context and the FounderOps backlink. They never include Acceptance Criteria, Evidence, or Definition of Done sections. Native linked Pull Requests remain a read-only technical history and are not a completion requirement.
+Projected Sub-Issues contain their optional context, only the filled optional work-brief sections, and the FounderOps backlink. `Evidence Required` is text context only; it does not require manual Evidence or a linked Pull Request. Native linked Pull Requests remain a read-only technical history and are not a completion requirement.
 
 Struktur- und Steuerungsdaten wie Epic / Milestone, Initiative, Sprint, RACI, Status, Priorität, Blocker, Beziehungen und Kommentare sollen nicht als Text-Snapshot in die Issue-Beschreibung. Sie bleiben in FounderOps führend und können über native GitHub-Mittel wie Assignees, Milestones, Project-Felder, Dependencies, Sub-Issues oder Kommentare gespiegelt werden.
 
@@ -85,7 +85,7 @@ Approval is separate from work status. Initiatives and Deliverables use `draft`,
 - Proposed or rejected Deliverables cannot enter Sprint planning, Review, scoring, or GitHub projection.
 - While the parent Deliverable is approved, any CEO, Deputy, or Founder may close a Sub-Issue and reopen it to `Offen`, regardless of assignee, owner, or Initiative RACI. Viewers remain read-only, and all other work-status transitions retain their existing ownership and role rules.
 - No Sub-Issue status may change while its parent Deliverable is not approved.
-- Sub-Issue review, score, quality, and Evidence values from legacy storage are ignored and never lock the work step.
+- Sub-Issue review, score, quality, and manual Evidence values from legacy storage are ignored and never lock the work step. Stored work-brief text remains editable working context.
 - A Sub-Issue may be moved to another Deliverable by the CEO, a Deputy, or its current owner or assignee. It immediately inherits the target Initiative, Milestone, and effective approval state; the next explicit GitHub sync replaces the native parent relationship.
 
 ## GitHub item repositories

@@ -59,7 +59,7 @@ test("updates a linked issue carrying the matching FounderOps marker", async () 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
 });
 
-test("preserves a legacy structured Sub-Issue body when context is mapped", async () => {
+test("reconstructs a stored Sub-Issue work brief instead of preserving stale GitHub text", async () => {
   const task = sourceTask({
     taskType: "sub_issue",
     description: "Keep this established GitHub description.",
@@ -85,10 +85,12 @@ test("preserves a legacy structured Sub-Issue body when context is mapped", asyn
   await github.upsertGitHubIssue(task, "installation-token");
 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
-  assert.equal(requests[1].body.body, existingBody);
+  assert.match(requests[1].body.body, /^## Context\nKeep this established GitHub description\./);
+  assert.match(requests[1].body.body, /## Problem Statement\nKeep this established GitHub description\./);
+  assert.doesNotMatch(requests[1].body.body, /Existing detail remains available/);
 });
 
-test("replaces a legacy body after context is explicitly migrated", async () => {
+test("projects compact context when no optional work brief is stored", async () => {
   const task = sourceTask({
     taskType: "sub_issue",
     description: "New compact context.",

@@ -200,6 +200,26 @@ export function buildTaskUpdateResponsePatch(
   taskType: Task["taskType"] = "deliverable",
 ): (Partial<Task> & { id: string }) | undefined {
   const isSubIssue = taskType === "sub_issue";
+  const briefPatch = {
+    ...(update.problem_statement !== undefined ? {
+      problemStatement: typeof update.problem_statement === "string" ? update.problem_statement : "",
+    } : {}),
+    ...(update.intended_outcome !== undefined ? {
+      intendedOutcome: typeof update.intended_outcome === "string" ? update.intended_outcome : "",
+    } : {}),
+    ...(update.scope_constraints !== undefined ? {
+      scopeConstraints: typeof update.scope_constraints === "string" ? update.scope_constraints : "",
+    } : {}),
+    ...(update.acceptance_criteria !== undefined ? {
+      acceptanceCriteria: typeof update.acceptance_criteria === "string" ? update.acceptance_criteria : "",
+    } : {}),
+    ...(update.evidence_required !== undefined ? {
+      evidenceRequired: typeof update.evidence_required === "string" ? update.evidence_required : "",
+    } : {}),
+    ...(update.definition_of_done !== undefined ? {
+      definitionOfDone: typeof update.definition_of_done === "string" ? update.definition_of_done : "",
+    } : {}),
+  };
   const evidenceLinks = Array.isArray(update.evidence_links)
     ? update.evidence_links.filter((value): value is string => typeof value === "string")
     : undefined;
@@ -236,6 +256,7 @@ export function buildTaskUpdateResponsePatch(
       } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
+      ...briefPatch,
       ...evidencePatch,
     };
   }
@@ -249,6 +270,7 @@ export function buildTaskUpdateResponsePatch(
       ...(update.description !== undefined ? { description: typeof update.description === "string" ? update.description : "" } : {}),
       ...(update.task_type ? { taskType: String(update.task_type) as Task["taskType"] } : {}),
       ...(update.score_relevant !== undefined ? { scoreRelevant: Boolean(update.score_relevant) } : {}),
+      ...briefPatch,
       ...evidencePatch,
     };
   }
