@@ -20,8 +20,12 @@ test("GitHub sync keeps the route, task projection, and GraphQL seams stable", a
 
   assert.match(route, /@\/lib\/github-sync\/task-projection/);
   assert.equal((route.match(/projectTaskToGitHub/g) || []).length, 2);
+  assert.match(route, /parseTaskGitHubSyncCommand/);
   assert.doesNotMatch(route, /issue-projection|dependency-projection|project-projection/);
-  assert.doesNotMatch(route, /\.rpc\(|api\.github\.com|task_relationship_edges|projectTaskGitHubIssue/);
+  assert.doesNotMatch(
+    route,
+    /\.rpc\(|api\.github\.com|task_relationship_edges|projectTaskGitHubIssue|Boolean\(apiContext\.payload\.createIfMissing\)/,
+  );
 
   const graphqlUrlOwners = [];
   for (const file of await sourceFiles("src")) {

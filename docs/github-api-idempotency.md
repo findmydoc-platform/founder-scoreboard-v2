@@ -33,7 +33,7 @@ Sub-issue synchronization follows `observe → compare → apply → reconcile`:
 
 Once the child issue has been resolved, do not rebuild `subIssueUrl` as mutation input. Use the validated child node ID already returned by GitHub.
 
-Task relationship reconciliation lives in `src/lib/github-sync/dependency-projection.ts`. It resolves FounderOps edges and the complete managed GitHub set behind one interface. Native Sub-Issue parent reconciliation is invoked by `src/lib/github-sync/task-projection.ts` after its read-only parent preflight.
+Task relationship reconciliation lives in `src/lib/github-sync/dependency-projection.ts`. It resolves FounderOps edges and the complete managed GitHub set behind one interface. It observes both `/dependencies/blocked_by` and `/dependencies/blocking` for the current Issue so removing either an incoming or outgoing local edge is reconciled when either task is synchronized. The managed identity registry includes trashed tasks that still retain a GitHub reference. Native Sub-Issue parent reconciliation is invoked by `src/lib/github-sync/task-projection.ts` after its read-only parent preflight.
 
 ## Mutation checklist
 

@@ -1,5 +1,9 @@
 import type { LinkedPullRequest } from "../types";
 
+export type TaskGitHubSyncCommand = {
+  createIfMissing: boolean;
+};
+
 export type TaskGitHubSyncErrorCode =
   | "github_sync_unauthenticated"
   | "github_sync_forbidden"
@@ -69,6 +73,12 @@ export type TaskGitHubProjectionResult =
   | TaskGitHubProjectionSuccess
   | TaskGitHubProjectionFailure;
 
+export function parseTaskGitHubSyncCommand(input: unknown): TaskGitHubSyncCommand | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const createIfMissing = (input as { createIfMissing?: unknown }).createIfMissing;
+  return typeof createIfMissing === "boolean" ? { createIfMissing } : null;
+}
+
 const statusByErrorCode: Record<TaskGitHubSyncErrorCode, number> = {
   github_sync_unauthenticated: 401,
   github_sync_forbidden: 403,
@@ -113,7 +123,11 @@ export function taskGitHubSyncFailure(
 export type TaskGitHubSyncClientClassification =
   | { kind: "success"; result: TaskGitHubProjectionSuccess }
   | { kind: "locked"; result: TaskGitHubProjectionFailure; taskStatus: "pending" }
-  | { kind: "retryable"; result: TaskGitHubProjectionFailure; taskStatus: "not_synced" | "failed" }
+  | {
+      kind: "retryable";
+      result: TaskGitHubProjectionFailure;
+      taskStatus: NonNullable<TaskGitHubSyncPatch["githubIssueSyncStatus"]>;
+    }
   | { kind: "failure"; result: TaskGitHubProjectionFailure; taskStatus: "failed" };
 
 export function classifyTaskGitHubSyncResponse(
@@ -142,12 +156,11 @@ export function classifyTaskGitHubSyncResponse(
     return { kind: "locked", result, taskStatus: "pending" };
   }
   if (result.retryable) {
-    const taskStatus = result.code === "github_sync_stale"
-      || result.code === "github_sync_state_persist_failed"
-      ? "not_synced"
-      : result.task?.githubIssueSyncStatus === "not_synced"
+    const taskStatus = result.task?.githubIssueSyncStatus
+      || (result.code === "github_sync_stale"
+        || result.code === "github_sync_state_persist_failed"
         ? "not_synced"
-        : "failed";
+        : "failed");
     return { kind: "retryable", result, taskStatus };
   }
   return { kind: "failure", result, taskStatus: "failed" };

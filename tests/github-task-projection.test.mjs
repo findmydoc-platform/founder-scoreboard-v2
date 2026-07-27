@@ -3,6 +3,7 @@ import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
+const issueReferences = await loadTranspiledModule("src/lib/github-issue-reference.ts");
 
 function baseTask(overrides = {}) {
   return {
@@ -56,7 +57,7 @@ async function projectionFixture(options = {}) {
     try_acquire_github_issue_sync_lock: { data: options.locked === false ? null : "lock-token", error: options.lockError || null },
     begin_github_issue_sync_transaction_v2: options.begin || { data: { updated_at: "pending-revision" }, error: null },
     finalize_github_issue_sync_with_pull_requests_v1: options.finalize || { data: { updated_at: "final-revision" }, error: null },
-    release_github_issue_sync_lock: { data: true, error: null },
+    release_github_issue_sync_lock: options.release || { data: true, error: null },
   };
   const supabase = {
     from(table) {
@@ -75,6 +76,9 @@ async function projectionFixture(options = {}) {
       if (name === "begin_github_issue_sync_transaction_v2") calls.push("begin");
       if (name === "finalize_github_issue_sync_with_pull_requests_v1") calls.push("finalize");
       if (name === "release_github_issue_sync_lock") calls.push("release");
+      if (name === "release_github_issue_sync_lock" && options.releaseThrows) {
+        throw options.releaseThrows;
+      }
       const result = rpcResults[name];
       if (!result) throw new Error(`Unexpected RPC: ${name} ${JSON.stringify(params)}`);
       return result;
@@ -120,9 +124,7 @@ async function projectionFixture(options = {}) {
         };
       },
     },
-    "../github-issue-reference": {
-      resolveGitHubIssueNumber: (task) => task.githubIssueNumber || null,
-    },
+    "../github-issue-reference": issueReferences,
     "../github-repositories": {
       resolveTaskGitHubRepository: () => (
         options.invalidTarget
@@ -234,8 +236,46 @@ test("task projection does not treat a lookalike GitHub hostname as an existing 
   });
   const fixture = await projectionFixture({ tasks: [task, task] });
   const result = await fixture.project();
+  assert.equal(result.code, "github_sync_invalid_target");
+  assert.deepEqual(fixture.calls, ["activeInitial"]);
+});
+
+test("task projection requires explicit creation when no local issue reference exists", async () => {
+  const task = baseTask({
+    githubIssueNumber: null,
+    githubIssueUrl: "",
+    issueNumber: "",
+    issueUrl: "",
+  });
+  const fixture = await projectionFixture({ tasks: [task, task] });
+  const result = await fixture.project();
   assert.equal(result.code, "github_sync_creation_required");
   assert.deepEqual(fixture.calls, ["activeInitial"]);
+});
+
+test("task projection rejects contradictory local references before locking", async () => {
+  const task = baseTask({
+    githubIssueUrl: "https://github.com/findmydoc-platform/management/issues/43",
+  });
+  const fixture = await projectionFixture({ tasks: [task, task] });
+  const result = await fixture.project();
+  assert.equal(result.code, "github_sync_invalid_target");
+  assert.equal(result.retryable, false);
+  assert.deepEqual(fixture.calls, ["activeInitial"]);
+});
+
+test("task projection rejects contradictory references found during the locked reload", async () => {
+  const fixture = await projectionFixture({
+    tasks: [
+      baseTask(),
+      baseTask({
+        githubIssueUrl: "https://github.com/findmydoc-platform/management/issues/43",
+      }),
+    ],
+  });
+  const result = await fixture.project();
+  assert.equal(result.code, "github_sync_invalid_target");
+  assert.deepEqual(fixture.calls, ["activeInitial", "lock", "activeReload", "release"]);
 });
 
 test("task projection revalidates approval under the lock and always releases it", async () => {
@@ -331,3 +371,19 @@ test("failed error-state persistence returns the explicit unavailable state", as
   assert.equal(result.retryable, true);
   assert.equal(fixture.calls.at(-1), "release");
 });
+
+for (const [name, options] of [
+  ["returned RPC error", { release: { data: null, error: { message: "release unavailable" } } }],
+  ["unconfirmed RPC result", { release: { data: false, error: null } }],
+  ["thrown RPC error", { releaseThrows: new Error("release network failed") }],
+]) {
+  test(`lock release ${name} overrides success with a retryable unavailable result`, async () => {
+    const fixture = await projectionFixture(options);
+    const result = await fixture.project();
+    assert.equal(result.code, "github_sync_unavailable");
+    assert.equal(result.retryable, true);
+    assert.equal(result.task.githubIssueSyncStatus, "synced");
+    assert.match(result.error, /freigegeben|release network failed/);
+    assert.equal(fixture.calls.at(-1), "release");
+  });
+}

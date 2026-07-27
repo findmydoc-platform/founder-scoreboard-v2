@@ -34,7 +34,6 @@ type LoadedSyncTask = {
   data: TaskRowForMapping & { owner?: string | null; assignee?: string | null };
   task: Task;
   assigneeLogin: string;
-  hasExistingGitHubIssue: boolean;
 };
 
 const staleSyncMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
@@ -61,30 +60,16 @@ function commentDeliveryNotice(summary: GitHubCommentDeliverySummary) {
   return parts.length ? `Issue synchronisiert · Kommentare: ${parts.join(" · ")}.` : "";
 }
 
-function isGitHubWebUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname.toLowerCase() === "github.com";
-  } catch {
-    return false;
-  }
-}
-
-function hasLinkedGitHubIssue(task: Pick<Task, "githubIssueNumber" | "githubIssueUrl" | "issueNumber" | "issueUrl">) {
-  return Boolean(
-    task.githubIssueNumber
-    || task.githubIssueUrl
-    || task.issueNumber
-    || isGitHubWebUrl(task.issueUrl),
-  );
-}
-
-function githubSyncResourceKey(task: Task, createIfMissing: boolean, repository: string) {
-  const issueNumber = resolveGitHubIssueNumber(task, { repository });
+function githubSyncResourceKey(
+  taskId: string,
+  createIfMissing: boolean,
+  repository: string,
+  issueNumber: number | null,
+) {
   if (issueNumber) return `github:${repository}#${issueNumber}`;
   return createIfMissing
-    ? `task:${task.id}:${repository}:create-github-issue`
-    : `task:${task.id}:${repository}:github-sync`;
+    ? `task:${taskId}:${repository}:create-github-issue`
+    : `task:${taskId}:${repository}:github-sync`;
 }
 
 async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<LoadedSyncTask> {
@@ -126,7 +111,6 @@ async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<Lo
     data: data as TaskRowForMapping & { owner?: string | null; assignee?: string | null },
     task,
     assigneeLogin,
-    hasExistingGitHubIssue: hasLinkedGitHubIssue(task),
   };
 }
 
@@ -147,13 +131,31 @@ function validateTaskForProjection(loaded: LoadedSyncTask, createIfMissing: bool
       "Das Parent-Deliverable muss vor dem GitHub-Sync freigegeben sein.",
     );
   }
-  if (!loaded.hasExistingGitHubIssue && !createIfMissing) {
+  let issueNumber: number | null = null;
+  try {
+    issueNumber = resolveGitHubIssueNumber(loaded.task, {
+      repository: repository.repository,
+      requireConsistent: true,
+    }) || null;
+  } catch (error) {
+    return taskGitHubSyncFailure(
+      "github_sync_invalid_target",
+      error instanceof Error
+        ? error.message
+        : "Die lokale GitHub-Issue-Verknüpfung ist ungültig.",
+    );
+  }
+  if (!issueNumber && !createIfMissing) {
     return taskGitHubSyncFailure("github_sync_creation_required", creationRequiredMessage, {
       githubIssueSyncStatus: loaded.task.githubIssueSyncStatus,
       githubIssueSyncError: "",
     });
   }
-  return { ok: true as const, repository: repository.repository };
+  return {
+    ok: true as const,
+    repository: repository.repository,
+    issueNumber,
+  };
 }
 
 async function validateActiveTask(supabase: SupabaseClient, taskId: string) {
@@ -185,10 +187,20 @@ async function releaseGitHubSyncLock(
   resourceKey: string,
   lockToken: string,
 ) {
-  await supabase.rpc("release_github_issue_sync_lock", {
+  const { data, error } = await supabase.rpc("release_github_issue_sync_lock", {
     p_resource_key: resourceKey,
     p_lock_token: lockToken,
   });
+  if (error) {
+    throw new Error(
+      `GitHub-Sync-Lock konnte nicht freigegeben werden: ${error.message}`,
+    );
+  }
+  if (data !== true) {
+    throw new Error(
+      "GitHub-Sync-Lock konnte nicht freigegeben werden: Die Freigabe wurde nicht bestätigt.",
+    );
+  }
 }
 
 export async function projectTaskToGitHub({
@@ -219,7 +231,12 @@ export async function projectTaskToGitHub({
   const eligibility = validateTaskForProjection(loaded, createIfMissing);
   if (!eligibility.ok) return eligibility;
 
-  const resourceKey = githubSyncResourceKey(loaded.task, createIfMissing, eligibility.repository);
+  const resourceKey = githubSyncResourceKey(
+    loaded.task.id,
+    createIfMissing,
+    eligibility.repository,
+    eligibility.issueNumber,
+  );
   let lockToken = "";
   try {
     lockToken = await acquireGitHubSyncLock(
@@ -245,7 +262,7 @@ export async function projectTaskToGitHub({
     );
   }
 
-  try {
+  const runLockedTaskProjection = async (): Promise<TaskGitHubProjectionResult> => {
     const reloadedInactive = await validateActiveTask(supabase, taskId);
     if (reloadedInactive) return reloadedInactive;
 
@@ -261,7 +278,12 @@ export async function projectTaskToGitHub({
     if (!reloadedEligibility.ok) return reloadedEligibility;
     const { assigneeLogin, task } = loaded;
     const repository = reloadedEligibility.repository;
-    if (githubSyncResourceKey(task, createIfMissing, repository) !== resourceKey) {
+    if (githubSyncResourceKey(
+      task.id,
+      createIfMissing,
+      repository,
+      reloadedEligibility.issueNumber,
+    ) !== resourceKey) {
       return taskGitHubSyncFailure("github_sync_stale", staleSyncMessage, {
         githubIssueSyncStatus: "not_synced",
         githubIssueSyncError: staleSyncMessage,
@@ -411,6 +433,11 @@ export async function projectTaskToGitHub({
           }]
         : [],
     };
+  };
+
+  let projectionResult: TaskGitHubProjectionResult;
+  try {
+    projectionResult = await runLockedTaskProjection();
   } catch (error) {
     const message = error instanceof Error ? error.message : "GitHub-Sync fehlgeschlagen.";
     const failurePersistence = await persistGitHubSyncFailure(supabase, {
@@ -419,19 +446,31 @@ export async function projectTaskToGitHub({
       activityMessage: `GitHub-Sync fehlgeschlagen: ${message}`,
     });
     if (!failurePersistence.ok) {
-      return taskGitHubSyncFailure(
+      projectionResult = taskGitHubSyncFailure(
         "github_sync_state_persist_failed",
         githubSyncStatePersistFailedMessage,
       );
+    } else {
+      projectionResult = taskGitHubSyncFailure("github_sync_failed", message, {
+        githubIssueSyncStatus: "failed",
+        githubIssueSyncError: message,
+        updatedAt: typeof failurePersistence.data?.updated_at === "string"
+          ? failurePersistence.data.updated_at
+          : "",
+      });
     }
-    return taskGitHubSyncFailure("github_sync_failed", message, {
-      githubIssueSyncStatus: "failed",
-      githubIssueSyncError: message,
-      updatedAt: typeof failurePersistence.data?.updated_at === "string"
-        ? failurePersistence.data.updated_at
-        : "",
-    });
-  } finally {
-    await releaseGitHubSyncLock(supabase, resourceKey, lockToken).catch(() => undefined);
   }
+
+  try {
+    await releaseGitHubSyncLock(supabase, resourceKey, lockToken);
+  } catch (error) {
+    return taskGitHubSyncFailure(
+      "github_sync_unavailable",
+      error instanceof Error
+        ? error.message
+        : "GitHub-Sync-Lock konnte nicht freigegeben werden.",
+      projectionResult.task,
+    );
+  }
+  return projectionResult;
 }

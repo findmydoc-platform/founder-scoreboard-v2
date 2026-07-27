@@ -3,15 +3,12 @@ import { requireTeamMember } from "@/lib/authz";
 import { requireJsonApiContext } from "@/lib/api-response";
 import { getGitHubAppInstallationToken } from "@/lib/github-app";
 import {
+  parseTaskGitHubSyncCommand,
   taskGitHubSyncFailure,
   taskGitHubSyncHttpStatus,
   type TaskGitHubProjectionResult,
 } from "@/lib/github-sync/contract";
 import { projectTaskToGitHub } from "@/lib/github-sync/task-projection";
-
-type SyncRequestBody = {
-  createIfMissing?: boolean;
-};
 
 function apiContextFailure(
   status: number,
@@ -34,13 +31,20 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const apiContext = await requireJsonApiContext<SyncRequestBody>(
+  const apiContext = await requireJsonApiContext<unknown>(
     request,
     requireTeamMember,
-    {},
+    null,
   );
   if (!apiContext.ok) {
     return syncResponse(apiContextFailure(apiContext.status, apiContext.error));
+  }
+  const command = parseTaskGitHubSyncCommand(apiContext.payload);
+  if (!command) {
+    return syncResponse(taskGitHubSyncFailure(
+      "github_sync_invalid_target",
+      "createIfMissing muss als Boolean übergeben werden.",
+    ));
   }
 
   let installationToken = "";
@@ -61,7 +65,7 @@ export async function POST(
     installationToken,
     taskId: id,
     actorProfileId: apiContext.permission.profile?.id || "",
-    createIfMissing: Boolean(apiContext.payload.createIfMissing),
+    createIfMissing: command.createIfMissing,
   });
   return syncResponse(result);
 }

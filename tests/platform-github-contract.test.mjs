@@ -51,7 +51,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
   assert.match(taskProjection, /githubSyncResourceKey/);
   assert.match(taskProjection, /acquireGitHubSyncLock/);
   assert.match(taskProjection, /releaseGitHubSyncLock/);
-  assert.match(taskProjection, /finally/);
+  assert.match(taskProjection, /GitHub-Sync-Lock konnte nicht freigegeben werden/);
   assert.match(taskProjection, /github_sync_locked/);
   assert.match(taskProjection, /GitHub-Sync läuft bereits/);
   assert.match(githubApp, /GITHUB_APP_INSTALLATION_ID/);
@@ -286,7 +286,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.doesNotMatch(relationshipSection, /RelationshipPanelList/);
   assert.match(github, /blockedIssueNumber/);
   assert.match(github, /blockingIssueNumber/);
-  assert.match(github, /desiredByBlocked/);
+  assert.match(github, /desiredBlockingCurrent/);
+  assert.match(github, /desiredBlockedByCurrent/);
+  assert.match(github, /listGitHubIssuesBlocking/);
   assert.match(github, /removeGitHubIssueBlockedBy/);
   assert.match(github, /GITHUB_ISSUE_DEPENDENCY_API_VERSION/);
   assert.match(githubHttp, /GITHUB_ISSUE_DEPENDENCY_API_VERSION = "2026-03-10"/);

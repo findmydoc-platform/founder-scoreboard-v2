@@ -6,7 +6,6 @@ import {
 } from "../github-http";
 import { resolveGitHubIssueNumber } from "../github-issue-reference";
 import { splitGitHubRepository } from "../github-repositories";
-import { ACTIVE_TASKS_TABLE } from "../planning-read-model";
 
 type RelationshipRow = {
   id: number;
@@ -68,7 +67,7 @@ async function loadDependencyContext(
       .eq("related_task_id", taskId)
       .in("relation_type", ["blocked_by", "blocks"]),
     supabase
-      .from(ACTIVE_TASKS_TABLE)
+      .from("tasks")
       .select("id,github_repo,github_issue_number,github_issue_url,issue_number,issue_url"),
   ]);
 
@@ -119,6 +118,19 @@ async function listGitHubIssueBlockedBy(issueNumber: number, token: string, repo
       apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
       cache: "no-store",
       errorMessage: "GitHub Dependencies konnten nicht geladen werden",
+    },
+  );
+}
+
+async function listGitHubIssuesBlocking(issueNumber: number, token: string, repository: string) {
+  const { owner, repo } = splitGitHubRepository(repository);
+  return githubJson<GitHubIssueDependency[]>(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/dependencies/blocking?per_page=100`,
+    {
+      token,
+      apiVersion: GITHUB_ISSUE_DEPENDENCY_API_VERSION,
+      cache: "no-store",
+      errorMessage: "Von GitHub Issue blockierte Dependencies konnten nicht geladen werden",
     },
   );
 }
@@ -195,11 +207,15 @@ export async function projectTaskGitHubDependencies({
     repository,
   );
   const managedNumbers = new Set(managedIssueNumbers);
-  const desiredByBlocked = new Map<number, Set<number>>();
+  const desiredBlockingCurrent = new Set<number>();
+  const desiredBlockedByCurrent = new Set<number>();
   for (const dependency of desiredDependencies) {
-    const current = desiredByBlocked.get(dependency.blockedIssueNumber) || new Set<number>();
-    current.add(dependency.blockingIssueNumber);
-    desiredByBlocked.set(dependency.blockedIssueNumber, current);
+    if (dependency.blockedIssueNumber === currentIssueNumber) {
+      desiredBlockingCurrent.add(dependency.blockingIssueNumber);
+    }
+    if (dependency.blockingIssueNumber === currentIssueNumber) {
+      desiredBlockedByCurrent.add(dependency.blockedIssueNumber);
+    }
   }
 
   const issueCache = new Map<number, GitHubIssueReference>();
@@ -213,32 +229,59 @@ export async function projectTaskGitHubDependencies({
 
   let added = 0;
   let removed = 0;
-  const blockedIssueNumbers = new Set([
-    currentIssueNumber,
-    ...desiredDependencies.map((dependency) => dependency.blockedIssueNumber),
+  const [existingBlockedBy, existingBlocking] = await Promise.all([
+    listGitHubIssueBlockedBy(currentIssueNumber, token, repository),
+    listGitHubIssuesBlocking(currentIssueNumber, token, repository),
   ]);
-  for (const blockedIssueNumber of blockedIssueNumbers) {
-    const existing = await listGitHubIssueBlockedBy(blockedIssueNumber, token, repository);
-    const existingManaged = new Map(
-      existing
-        .filter((dependency) => managedNumbers.has(dependency.number))
-        .map((dependency) => [dependency.number, dependency]),
+  const existingManagedBlockedBy = new Map(
+    existingBlockedBy
+      .filter((dependency) => managedNumbers.has(dependency.number))
+      .map((dependency) => [dependency.number, dependency]),
+  );
+  const existingManagedBlocking = new Map(
+    existingBlocking
+      .filter((dependency) => managedNumbers.has(dependency.number))
+      .map((dependency) => [dependency.number, dependency]),
+  );
+
+  for (const blockingIssueNumber of desiredBlockingCurrent) {
+    if (existingManagedBlockedBy.has(blockingIssueNumber)) continue;
+    const blockingIssue = await issueReference(blockingIssueNumber);
+    await addGitHubIssueBlockedBy(currentIssueNumber, blockingIssue.id, token, repository);
+    added += 1;
+  }
+  for (const existingDependency of existingManagedBlockedBy.values()) {
+    if (desiredBlockingCurrent.has(existingDependency.number)) continue;
+    await removeGitHubIssueBlockedBy(
+      currentIssueNumber,
+      existingDependency.id,
+      token,
+      repository,
     );
-    const desiredBlockingNumbers = desiredByBlocked.get(blockedIssueNumber) || new Set<number>();
+    removed += 1;
+  }
 
-    for (const blockingIssueNumber of desiredBlockingNumbers) {
-      if (existingManaged.has(blockingIssueNumber)) continue;
-      const blockingIssue = await issueReference(blockingIssueNumber);
-      await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token, repository);
-      added += 1;
-    }
-
-    if (blockedIssueNumber !== currentIssueNumber) continue;
-    for (const existingDependency of existingManaged.values()) {
-      if (desiredBlockingNumbers.has(existingDependency.number)) continue;
-      await removeGitHubIssueBlockedBy(blockedIssueNumber, existingDependency.id, token, repository);
-      removed += 1;
-    }
+  let currentIssue: GitHubIssueReference | null = null;
+  const currentIssueReference = async () => {
+    currentIssue ||= await issueReference(currentIssueNumber);
+    return currentIssue;
+  };
+  for (const blockedIssueNumber of desiredBlockedByCurrent) {
+    if (existingManagedBlocking.has(blockedIssueNumber)) continue;
+    const blockingIssue = await currentIssueReference();
+    await addGitHubIssueBlockedBy(blockedIssueNumber, blockingIssue.id, token, repository);
+    added += 1;
+  }
+  for (const existingDependency of existingManagedBlocking.values()) {
+    if (desiredBlockedByCurrent.has(existingDependency.number)) continue;
+    const blockingIssue = await currentIssueReference();
+    await removeGitHubIssueBlockedBy(
+      existingDependency.number,
+      blockingIssue.id,
+      token,
+      repository,
+    );
+    removed += 1;
   }
 
   return { added, removed };

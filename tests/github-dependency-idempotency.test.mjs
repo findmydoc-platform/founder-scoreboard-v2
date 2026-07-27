@@ -30,7 +30,7 @@ function supabaseFixture({ relationships = [], tasks = [] } = {}) {
   return {
     from(table) {
       if (table === "task_relationship_edges") return resultBuilder(relationships);
-      if (table === "active_tasks") return resultBuilder(tasks);
+      if (table === "tasks") return resultBuilder(tasks);
       throw new Error(`Unexpected table: ${table}`);
     },
   };
@@ -46,9 +46,6 @@ async function loadDependencyProjection({ githubJson, githubRequest = async () =
     },
     "../github-issue-reference": {
       resolveGitHubIssueNumber: (row) => row.github_issue_number || null,
-    },
-    "../planning-read-model": {
-      ACTIVE_TASKS_TABLE: "active_tasks",
     },
     "../github-http": {
       GITHUB_ISSUE_DEPENDENCY_API_VERSION: "2026-03-10",
@@ -87,6 +84,7 @@ test("a lost dependency-add response is reconciled before another POST", async (
           html_url: "https://github.com/findmydoc-platform/management/issues/20",
         }] : [];
       }
+      if (url.includes("/dependencies/blocking?")) return [];
       if (url.endsWith("/issues/20") && (!options.method || options.method === "GET")) {
         return {
           id: 200,
@@ -123,11 +121,13 @@ test("a lost dependency-add response is reconciled before another POST", async (
 test("dependency removal accepts only the observed relationship's 404", async () => {
   let request;
   const projection = await loadDependencyProjection({
-    githubJson: async (url) => (
-      url.includes("/dependencies/blocked_by?")
-        ? [{ id: 200, number: 20, html_url: "managed" }]
-        : []
-    ),
+    githubJson: async (url) => {
+      if (url.includes("/dependencies/blocked_by?")) {
+        return [{ id: 200, number: 20, html_url: "managed" }];
+      }
+      if (url.includes("/dependencies/blocking?")) return [];
+      throw new Error(`Unexpected GitHub request: ${url}`);
+    },
     githubRequest: async (url, options) => {
       request = { url, options };
       return new Response(null, { status: 404 });
@@ -145,7 +145,11 @@ test("dependency removal accepts only the observed relationship's 404", async ()
 
 test("dependency removal does not suppress permission failures", async () => {
   const projection = await loadDependencyProjection({
-    githubJson: async () => [{ id: 200, number: 20, html_url: "managed" }],
+    githubJson: async (url) => (
+      url.includes("/dependencies/blocked_by?")
+        ? [{ id: 200, number: 20, html_url: "managed" }]
+        : []
+    ),
     githubRequest: async () => {
       throw new MockGitHubApiError("forbidden", 403);
     },
@@ -162,10 +166,14 @@ test("dependency removal does not suppress permission failures", async () => {
 test("dependency sync removes only stale relationships from the managed set", async () => {
   const removed = [];
   const projection = await loadDependencyProjection({
-    githubJson: async () => [
-      { id: 200, number: 20, html_url: "managed" },
-      { id: 990, number: 99, html_url: "unmanaged" },
-    ],
+    githubJson: async (url) => (
+      url.includes("/dependencies/blocked_by?")
+        ? [
+            { id: 200, number: 20, html_url: "managed" },
+            { id: 990, number: 99, html_url: "unmanaged" },
+          ]
+        : []
+    ),
     githubRequest: async (url) => {
       removed.push(url);
       return new Response(null, { status: 204 });
@@ -178,4 +186,113 @@ test("dependency sync removes only stale relationships from the managed set", as
   assert.deepEqual(result, { added: 0, removed: 1 });
   assert.equal(removed.length, 1);
   assert.match(removed[0], /\/blocked_by\/200$/);
+});
+
+test("syncing the blocking task removes a stale outgoing dependency", async () => {
+  const removed = [];
+  const projection = await loadDependencyProjection({
+    githubJson: async (url, options) => {
+      if (url.includes("/dependencies/blocked_by?")) return [];
+      if (url.includes("/dependencies/blocking?")) {
+        return [{ id: 200, number: 20, html_url: "managed" }];
+      }
+      if (url.endsWith("/issues/10") && (!options.method || options.method === "GET")) {
+        return { id: 100, number: 10, html_url: "current" };
+      }
+      throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+    },
+    githubRequest: async (url) => {
+      removed.push(url);
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  const result = await projection.projectTaskGitHubDependencies(projectionInput(
+    supabaseFixture({
+      tasks: [
+        linkedTasks()[0],
+        { ...linkedTasks()[1], trashed_at: "2026-07-27T00:00:00.000Z" },
+      ],
+    }),
+  ));
+
+  assert.deepEqual(result, { added: 0, removed: 1 });
+  assert.deepEqual(removed, [
+    "https://api.github.com/repos/findmydoc-platform/management/issues/20/dependencies/blocked_by/100",
+  ]);
+});
+
+test("syncing the blocking task creates a missing outgoing dependency", async () => {
+  const posts = [];
+  const projection = await loadDependencyProjection({
+    githubJson: async (url, options) => {
+      if (url.includes("/dependencies/blocked_by?")) return [];
+      if (url.includes("/dependencies/blocking?")) return [];
+      if (url.endsWith("/issues/10") && (!options.method || options.method === "GET")) {
+        return { id: 100, number: 10, html_url: "current" };
+      }
+      if (options.method === "POST") {
+        posts.push({ url, body: options.body });
+        return { id: 100, number: 10, html_url: "current" };
+      }
+      throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+    },
+  });
+  const supabase = supabaseFixture({
+    relationships: [{
+      id: 2,
+      task_id: "task-10",
+      related_task_id: "task-20",
+      relation_type: "blocks",
+    }],
+    tasks: linkedTasks(),
+  });
+
+  const result = await projection.projectTaskGitHubDependencies(projectionInput(supabase));
+
+  assert.deepEqual(result, { added: 1, removed: 0 });
+  assert.deepEqual(posts, [{
+    url: "https://api.github.com/repos/findmydoc-platform/management/issues/20/dependencies/blocked_by",
+    body: { issue_id: 100 },
+  }]);
+});
+
+test("a lost outgoing dependency-add response is reconciled before another POST", async () => {
+  let relationshipExists = false;
+  let addCalls = 0;
+  const projection = await loadDependencyProjection({
+    githubJson: async (url, options) => {
+      if (url.includes("/dependencies/blocked_by?")) return [];
+      if (url.includes("/dependencies/blocking?")) {
+        return relationshipExists
+          ? [{ id: 200, number: 20, html_url: "managed" }]
+          : [];
+      }
+      if (url.endsWith("/issues/10") && (!options.method || options.method === "GET")) {
+        return { id: 100, number: 10, html_url: "current" };
+      }
+      if (options.method === "POST") {
+        addCalls += 1;
+        relationshipExists = true;
+        throw new Error("response lost after outgoing dependency creation");
+      }
+      throw new Error(`Unexpected GitHub request: ${options.method || "GET"} ${url}`);
+    },
+  });
+  const supabase = supabaseFixture({
+    relationships: [{
+      id: 2,
+      task_id: "task-10",
+      related_task_id: "task-20",
+      relation_type: "blocks",
+    }],
+    tasks: linkedTasks(),
+  });
+
+  await assert.rejects(
+    () => projection.projectTaskGitHubDependencies(projectionInput(supabase)),
+    /response lost/,
+  );
+  await projection.projectTaskGitHubDependencies(projectionInput(supabase));
+  assert.equal(addCalls, 1);
 });

@@ -27,8 +27,27 @@ test("GitHub sync contract maps every error code to its status and retryability"
   }
 });
 
-test("GitHub sync client classifier handles success, lock, retryable, and terminal results", () => {
-  const success = {
+test("GitHub sync command requires an explicit boolean creation decision", () => {
+  assert.deepEqual(
+    contract.parseTaskGitHubSyncCommand({ createIfMissing: true }),
+    { createIfMissing: true },
+  );
+  assert.deepEqual(
+    contract.parseTaskGitHubSyncCommand({ createIfMissing: false }),
+    { createIfMissing: false },
+  );
+  for (const invalid of [
+    null,
+    {},
+    { createIfMissing: "false" },
+    { createIfMissing: 0 },
+    { createIfMissing: null },
+  ]) {
+    assert.equal(contract.parseTaskGitHubSyncCommand(invalid), null);
+  }
+});
+
+const success = {
     ok: true,
     code: "github_sync_succeeded",
     issue: {
@@ -50,34 +69,46 @@ test("GitHub sync client classifier handles success, lock, retryable, and termin
       failed: 0,
     },
     notices: [],
-  };
+};
+
+test("GitHub sync client classifier handles every contract code", () => {
   assert.equal(contract.classifyTaskGitHubSyncResponse(200, success).kind, "success");
-  assert.equal(
-    contract.classifyTaskGitHubSyncResponse(
-      409,
-      contract.taskGitHubSyncFailure("github_sync_locked", "locked"),
-    ).kind,
-    "locked",
+  const expected = new Map([
+    ["github_sync_unauthenticated", ["failure", "failed"]],
+    ["github_sync_forbidden", ["failure", "failed"]],
+    ["github_sync_not_found", ["failure", "failed"]],
+    ["github_sync_inactive", ["failure", "failed"]],
+    ["github_sync_invalid_target", ["failure", "failed"]],
+    ["github_sync_not_approved", ["failure", "failed"]],
+    ["github_sync_creation_required", ["failure", "failed"]],
+    ["github_sync_locked", ["locked", "pending"]],
+    ["github_sync_stale", ["retryable", "not_synced"]],
+    ["github_sync_failed", ["retryable", "failed"]],
+    ["github_sync_unavailable", ["retryable", "failed"]],
+    ["github_sync_state_persist_failed", ["retryable", "not_synced"]],
+  ]);
+  for (const [code, status] of errorCases) {
+    const classification = contract.classifyTaskGitHubSyncResponse(
+      status,
+      contract.taskGitHubSyncFailure(code, code),
+    );
+    assert.deepEqual(
+      [classification.kind, classification.taskStatus],
+      expected.get(code),
+      code,
+    );
+  }
+});
+
+test("retryable cleanup failures preserve an already finalized synced task patch", () => {
+  const classification = contract.classifyTaskGitHubSyncResponse(
+    503,
+    contract.taskGitHubSyncFailure(
+      "github_sync_unavailable",
+      "lock release failed",
+      { githubIssueSyncStatus: "synced", updatedAt: "revision-2" },
+    ),
   );
-  assert.equal(
-    contract.classifyTaskGitHubSyncResponse(
-      503,
-      contract.taskGitHubSyncFailure("github_sync_unavailable", "unavailable"),
-    ).kind,
-    "retryable",
-  );
-  assert.equal(
-    contract.classifyTaskGitHubSyncResponse(
-      503,
-      contract.taskGitHubSyncFailure("github_sync_state_persist_failed", "persistence"),
-    ).taskStatus,
-    "not_synced",
-  );
-  assert.equal(
-    contract.classifyTaskGitHubSyncResponse(
-      403,
-      contract.taskGitHubSyncFailure("github_sync_forbidden", "forbidden"),
-    ).kind,
-    "failure",
-  );
+  assert.equal(classification.kind, "retryable");
+  assert.equal(classification.taskStatus, "synced");
 });

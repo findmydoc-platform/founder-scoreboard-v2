@@ -44,6 +44,8 @@ projectTaskToGitHub({
 })
 ```
 
+The HTTP body uses the browser-safe `TaskGitHubSyncCommand` contract and must contain an explicit Boolean `createIfMissing`. The Route Handler rejects absent or non-Boolean creation intent before acquiring a GitHub token or entering the projection module.
+
 The order is contractual:
 
 1. Load the task and validate active state, repository, approval, creation intent, and local GitHub references.
@@ -60,6 +62,8 @@ The order is contractual:
 12. Release the lock on every exit after acquisition.
 
 Hard failures stop the workflow and persist `failed`. A stale compare-and-set result is retryable and is never persisted as a projection failure. Project field, linked Pull Request, and Comment delivery failures cannot roll back a successful core projection.
+
+Lock release is part of the typed outcome. A returned or thrown release error produces retryable `github_sync_unavailable` instead of reporting success; a finalized task patch is retained when the core projection already completed.
 
 ## Response contract
 
@@ -84,7 +88,7 @@ Every mutation follows `observe → compare → apply → reconcile`.
 
 - Issue creation searches the durable task marker before creating.
 - Issue updates validate repository, number, URL, resource kind, and ownership before patching.
-- Dependencies and Sub-Issue parents observe existing relationships and mutate only a difference.
+- Dependency projection observes both native `blocked_by` and `blocking` directions for the current Issue, uses the full task registry to recognize trashed FounderOps counterparts, and mutates only a difference involving the current Issue.
 - Project membership observes existing membership before adding.
 - Project and Issue fields compare current native values before serial updates.
 - Mutations are never blindly retried. After an ambiguous response, the next command observes GitHub again.
