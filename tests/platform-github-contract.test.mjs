@@ -349,25 +349,6 @@ test("github sync maps the visible task assignee to native github assignees", as
   assert.doesNotMatch(github, /owner:assignee|assignee:owner|review-owner|initiative-owner/i);
 });
 
-test("github sync verification is read-only and checks the management repo", async () => {
-  const script = await readFile("scripts/verify-github-sync.mjs", "utf8");
-  const pkg = await readFile("package.json", "utf8");
-
-  assert.match(pkg, /verify:github-sync/);
-  assert.match(script, /github_app_installation_token/);
-  assert.match(script, /GITHUB_SYNC_OWNER/);
-  assert.match(script, /GITHUB_SYNC_REPO/);
-  assert.match(script, /subIssues/);
-  assert.match(script, /isSyncEligible/);
-  assert.match(script, /approved_deliverables_and_sub_issues_parent_first/);
-  assert.match(script, /automaticSyncScope/);
-  assert.match(script, /syncQueuePreview/);
-  assert.match(script, /missingGitHubIssuePreview/);
-  assert.doesNotMatch(script, /method: "POST"/);
-  assert.doesNotMatch(script, /method: "PATCH"/);
-  assert.doesNotMatch(script, /method: "DELETE"/);
-});
-
 test("production deploy verifies the ledger, builds, migrates with lock guard, verifies, deploys and reconciles", async () => {
   const workflow = await readFile(".github/workflows/deploy-production.yml", "utf8");
   const migrationDeploy = await readFile("scripts/deploy-production-migrations.mjs", "utf8");

@@ -41,6 +41,4 @@ Run after release tooling changes:
 pnpm test
 pnpm run lint
 pnpm run build
-pnpm run verify:google-chat
-pnpm run verify:vercel-ready
 ```

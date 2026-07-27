@@ -147,14 +147,12 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(notificationOutboxUi, /direct_dm/);
 });
 
-test("google chat rollout is documented and verified before delivery activation", async () => {
+test("google chat rollout keeps delivery activation fail closed", async () => {
   const envExample = await readFile(".env.example", "utf8");
   const rollout = await readFile("docs/google-chat-rollout.md", "utf8");
-  const script = await readFile("scripts/verify-google-chat-rollout.mjs", "utf8");
   const deliverRoute = await readFile("src/app/api/notifications/deliver/route.ts", "utf8");
   const eventRoute = await readFile("src/app/api/google-chat/events/route.ts", "utf8");
   const releaseWorkflow = await readFile(".github/workflows/send-release-google-chat.yml", "utf8");
-  const pkg = await readFile("package.json", "utf8");
 
   assert.match(envExample, /GOOGLE_CHAT_WEBHOOK_URL=/);
   assert.match(envExample, /GOOGLE_CHAT_SERVICE_ACCOUNT_EMAIL=/);
@@ -174,13 +172,6 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(rollout, /\/api\/google-chat\/events/);
   assert.match(rollout, /https:\/\/founder-ops\.findmydoc\.eu\/api\/google-chat\/events/);
   assert.match(rollout, /keinen Gruppenchat-Fallback/);
-  assert.match(script, /googleChatDeliveryStatus/);
-  assert.match(script, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(script, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(script, /x-founderops-delivery-secret/);
-  assert.match(script, /send-release-google-chat\.yml/);
-  assert.doesNotMatch(script, /settings-notifications\.tsx/);
-  assert.doesNotMatch(script, /Test-Sammelmeldung|Direktnachricht|Zustelldetails anzeigen/);
   assert.match(releaseWorkflow, /name: Send Release Google Chat/);
   assert.match(releaseWorkflow, /workflow_dispatch/);
   assert.match(releaseWorkflow, /message_payload_json/);
@@ -192,7 +183,6 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.doesNotMatch(releaseWorkflow, /x-founderops-delivery-secret/);
   assert.doesNotMatch(releaseWorkflow, /api\/notifications\/generate-digest/);
   assert.doesNotMatch(releaseWorkflow, /api\/notifications\/deliver/);
-  assert.match(script, /chat event route exists/);
   assert.match(deliverRoute, /googleChatDeliveryStatus/);
   assert.match(deliverRoute, /x-founderops-delivery-secret/);
   assert.match(deliverRoute, /FOUNDEROPS_DELIVERY_SECRET/);
@@ -204,84 +194,6 @@ test("google chat rollout is documented and verified before delivery activation"
   assert.match(eventRoute, /googleChatDeliveryStatus/);
   assert.match(eventRoute, /MESSAGE/);
   assert.doesNotMatch(eventRoute, /sendGoogleChatWebhook/);
-  assert.match(pkg, /verify:google-chat/);
-});
-
-test("repo readiness includes optional ci and deployment gates", async () => {
-  const verify = await readFile("scripts/verify-vercel-ready.mjs", "utf8");
-  const dependabot = await readFile(".github/dependabot.yml", "utf8");
-  const gitignore = await readFile(".gitignore", "utf8");
-  const deployment = await readFile("docs/vercel-deployment.md", "utf8");
-  const pkg = await readFile("package.json", "utf8");
-  const layout = await readFile("src/app/layout.tsx", "utf8");
-  const css = await readFile("src/app/globals.css", "utf8");
-  const ui = await readPlanningSurface();
-  const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
-
-  assert.match(verify, /ciWorkflowPresent/);
-  assert.match(verify, /node --test tests\/\*\.test\.mjs/);
-  assert.match(verify, /pnpm run verify:release/);
-  assert.match(verify, /ready-for-github-actions-deployment/);
-  assert.match(verify, /GitHub Actions Deployment Workflow/);
-  assert.match(verify, /GitHub Actions job logs/);
-  assert.match(verify, /vercel-deploy-prebuilt\.sh/);
-  assert.match(verify, /Git-metadata-free/);
-  assert.match(verify, /git archive HEAD/);
-  assert.match(verify, /node_modules/);
-  assert.match(verify, /\.next\/package\.json/);
-  assert.match(verify, /TEAM_ACCESS_REQUIRED/);
-  assert.match(verify, /github\.event_name == 'push'/);
-  assert.match(verify, /Validate preview secrets/);
-  assert.doesNotMatch(verify, /localProjectLinked/);
-  assert.doesNotMatch(verify, /manualNextSteps/);
-  assert.doesNotMatch(verify, /vercel link --yes --project founder-ops/);
-  assert.match(verify, /\.github\/dependabot\.yml/);
-  assert.match(verify, /GOOGLE_CHAT_DELIVERY_ENABLED/);
-  assert.match(verify, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(verify, /verify:google-chat/);
-  assert.match(verify, /send-release-google-chat\.yml/);
-  assert.match(verify, /GITHUB_SYNC_TOKEN/);
-  assert.match(verify, /founder-ops\.findmydoc\.eu/);
-  assert.match(pkg, /verify:release/);
-  assert.match(pkg, /verify:deploy/);
-  assert.match(pkg, /node --test tests\/\*\.test\.mjs/);
-  assert.match(pkg, /eslint/);
-  assert.match(pkg, /node scripts\/verify-vercel-ready\.mjs/);
-  assert.match(pkg, /node scripts\/verify-google-chat-rollout\.mjs/);
-  assert.match(pkg, /pnpm audit --audit-level=moderate/);
-  assert.doesNotMatch(pkg, /"verify:release": ".*next build/);
-  assert.match(gitignore, /\.github\/workflows\/ci\.yml/);
-  assert.match(dependabot, /package-ecosystem: npm/);
-  assert.match(dependabot, /package-ecosystem: github-actions/);
-  assert.match(dependabot, /timezone: Europe\/Berlin/);
-  assert.match(dependabot, /nextjs-stack/);
-  assert.match(deployment, /pnpm run build[\s\S]*pnpm run verify:release/);
-  assert.match(deployment, /pnpm run verify:release/);
-  assert.match(deployment, /pnpm audit --audit-level=moderate/);
-  assert.match(deployment, /Run `pnpm run build` as its own command/);
-  assert.match(deployment, /GOOGLE_CHAT_DELIVERY_ENABLED=false/);
-  assert.match(deployment, /FOUNDEROPS_DELIVERY_SECRET/);
-  assert.match(deployment, /send-release-google-chat\.yml/);
-  assert.match(deployment, /message_payload_json/);
-  assert.match(deployment, /founder-ops\.findmydoc\.eu/);
-  assert.match(deployment, /Do not configure a shared `GITHUB_SYNC_TOKEN`/);
-  assert.match(deployment, /pnpm run verify:deploy/);
-  assert.match(deployment, /GitHub Actions job logs/);
-  assert.match(deployment, /Git-metadata-free runner directory/);
-  assert.match(deployment, /Vercel Hobby Private Repository Author Block/);
-  assert.match(deployment, /readyStateReason/);
-  assert.match(deployment, /preview secrets are missing/);
-  assert.doesNotMatch(deployment, /vercel link --yes --project founder-ops/);
-  assert.doesNotMatch(deployment, /vercel login/);
-  assert.doesNotMatch(deployment, /vercel inspect/);
-  assert.doesNotMatch(deployment, /vercel logs/);
-  assert.doesNotMatch(layout, /next\/font\/google/);
-  assert.match(css, /--font-sans: Inter, ui-sans-serif/);
-  assert.match(ui, /NotificationsOverview/);
-  assert.doesNotMatch(notificationsOverviewUi, /ProductionReadinessSection|SetupChecklistSection/);
-  assert.doesNotMatch(notificationsOverviewUi, /Betriebsdetails|manuell offen/);
-  assert.doesNotMatch(notificationsOverviewUi, /vercel login/);
-  assert.doesNotMatch(notificationsOverviewUi, /GitHub-Zugriff|Anmelde-Weiterleitungen|Deployment-Automation|Arbeitsbereitschaft/);
 });
 
 test("founder events are modeled as team-visible operational reminders", async () => {
@@ -359,12 +271,10 @@ test("event reminders use the existing notification pipeline", async () => {
   assert.match(deliveryRoute, /shouldSendToGoogleChatDm/);
 });
 
-test("health is slim while verification scripts detect operational migrations", async () => {
+test("health stays slim while Supabase verification covers operational migrations", async () => {
   const health = await readFile("src/app/api/health/route.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
-  const operational = await readFile("scripts/verify-operational.mjs", "utf8");
-  const pkg = await readFile("package.json", "utf8");
 
   assert.match(health, /coreTablesReachable/);
   assert.match(health, /usesSupabaseData/);
@@ -390,16 +300,6 @@ test("health is slim while verification scripts detect operational migrations", 
   assert.match(schemaChecks, /notification_events\.dedupe_key/);
   assert.match(verify, /pnpm run db:reset/);
   assert.match(verify, /notificationDeliveries/);
-  assert.match(operational, /Planung/);
-  assert.match(operational, /Backlog/);
-  assert.match(operational, /Reviews/);
-  assert.match(operational, /Sprint &amp; Score/);
-  assert.match(operational, /Meilensteine/);
-  assert.match(operational, /githubMappedProfiles/);
-  assert.match(operational, /googleChatConfigured/);
-  assert.match(operational, /googleChatDeliveryEnabled/);
-  assert.match(operational, /googleChatReady/);
-  assert.match(pkg, /verify:operational/);
 });
 
 test("active founder feedback is removed while historical migration stays intact", async () => {

@@ -80,11 +80,7 @@ GOOGLE_CHAT_WEBHOOK_URL=
 GOOGLE_CHAT_DELIVERY_ENABLED=false
 ```
 
-Der sichere Rollout steht in `docs/google-chat-rollout.md`. Der lokale Check läuft mit:
-
-```bash
-pnpm run verify:google-chat
-```
+Der sichere Rollout steht in `docs/google-chat-rollout.md`. Vor der Aktivierung werden der deaktivierte Versandpfad und eine einzelne kontrollierte Testzustellung geprüft.
 
 ## Supabase prüfen
 
@@ -102,20 +98,10 @@ pnpm run verify:auth
 
 Er meldet fehlende GitHub-Logins, fehlende Rollen oder veraltete `auth_user_id`-Verknüpfungen, bevor `REQUIRE_SUPABASE_AUTH=true` aktiviert wird.
 
-Der operative Smoke-Test prüft Supabase, Health, Server-Render und Kernmarker der UI:
-
-```bash
-pnpm run verify:operational
-```
-
-Der GitHub-Sync-Check prüft read-only, ob Supabase-Mapping, Sync Queue und App-only-Deliverables sauber erkennbar sind. Echte GitHub-Schreibrechte werden im Browser mit dem eingeloggten GitHub-User geprüft:
-
-```bash
-pnpm run verify:github-sync
-```
+GitHub-Sync-Verhalten wie Issue-Body, Parent-Beziehung, Abhängigkeiten, Projektfelder und Pull-Request-Projektion wird in der regulären Testsuite geprüft. Die echte GitHub-App-Installation, Sync Queue und Schreibrechte werden mit einer angemeldeten Team-Session nach der manuellen Abnahmecheckliste geprüft.
 
 Die manuelle Browser-Abnahme steht in `docs/acceptance-checklist.md`.
 
 ## Health Check
 
-Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Tiefere Schema-, Auth-, GitHub- und fachliche Rollout-Prüfungen laufen über `verify:supabase`, `verify:auth`, `verify:github-sync` und `verify:operational`.
+Die Route `/api/health` liefert eine kleine Basis-Readiness-Prüfung ohne Secrets. Sie prüft nur, ob Supabase konfiguriert ist, die App Supabase-Daten nutzt und die Core-Tabellen `profiles`, `packages` und `tasks` erreichbar sind. Tieferes Schema- und Auth-Verhalten wird über `verify:supabase` und `verify:auth` geprüft; Integrationen werden durch Verhaltenstests und kontrollierte manuelle Abnahme abgesichert.
