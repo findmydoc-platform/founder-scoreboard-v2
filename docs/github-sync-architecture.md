@@ -71,7 +71,7 @@ Lock release is part of the typed outcome. A returned or thrown release error pr
 
 - Success always uses `ok: true`, `code: "github_sync_succeeded"`, the projected Issue identity, the task patch, warnings, Comment delivery summary, and notices.
 - Failure always uses `ok: false`, a `TaskGitHubSyncErrorCode`, a public error, explicit retryability, and an optional task patch.
-- Authentication and infrastructure failures use the same union as projection failures.
+- Authentication and infrastructure failures use the same union as projection failures. Their API-context status metadata remains authoritative, including the existing `501` response when Supabase is not configured.
 - Task creation, detail, single-sync, and bulk-sync flows use `classifyTaskGitHubSyncResponse`; callers must not add status/code exceptions.
 
 ## Identities

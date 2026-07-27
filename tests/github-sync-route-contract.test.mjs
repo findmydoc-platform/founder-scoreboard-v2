@@ -7,6 +7,7 @@ const contract = await loadTranspiledModule("src/lib/github-sync/contract.ts");
 let payload;
 let tokenCalls;
 let projectionCalls;
+let apiContext;
 const route = await loadTranspiledModule(
   "src/app/api/tasks/[id]/sync-github/route.ts",
   {
@@ -24,12 +25,7 @@ const route = await loadTranspiledModule(
       requireTeamMember: () => ({ ok: true }),
     },
     "@/lib/api-response": {
-      requireJsonApiContext: async () => ({
-        ok: true,
-        supabase: {},
-        permission: { profile: { id: "profile-1" } },
-        payload,
-      }),
+      requireJsonApiContext: async () => apiContext,
     },
     "@/lib/github-app": {
       getGitHubAppInstallationToken: async () => {
@@ -54,6 +50,12 @@ test("sync route rejects a non-boolean creation decision before token acquisitio
   payload = { createIfMissing: "false" };
   tokenCalls = 0;
   projectionCalls = [];
+  apiContext = {
+    ok: true,
+    supabase: {},
+    permission: { profile: { id: "profile-1" } },
+    payload,
+  };
 
   const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
   const body = await response.json();
@@ -69,6 +71,12 @@ test("sync route forwards an explicit false creation decision unchanged", async 
   payload = { createIfMissing: false };
   tokenCalls = 0;
   projectionCalls = [];
+  apiContext = {
+    ok: true,
+    supabase: {},
+    permission: { profile: { id: "profile-1" } },
+    payload,
+  };
 
   const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
 
@@ -76,4 +84,23 @@ test("sync route forwards an explicit false creation decision unchanged", async 
   assert.equal(tokenCalls, 1);
   assert.equal(projectionCalls.length, 1);
   assert.equal(projectionCalls[0].createIfMissing, false);
+});
+
+test("sync route preserves API context infrastructure status metadata", async () => {
+  tokenCalls = 0;
+  projectionCalls = [];
+  apiContext = {
+    ok: false,
+    status: 501,
+    error: "Supabase env is not configured.",
+  };
+
+  const response = await route.POST({}, { params: Promise.resolve({ id: "task-1" }) });
+  const body = await response.json();
+
+  assert.equal(response.status, 501);
+  assert.equal(body.code, "github_sync_unavailable");
+  assert.equal(body.retryable, true);
+  assert.equal(tokenCalls, 0);
+  assert.deepEqual(projectionCalls, []);
 });

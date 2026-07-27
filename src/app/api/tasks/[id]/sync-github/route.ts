@@ -23,8 +23,11 @@ function apiContextFailure(
   return taskGitHubSyncFailure("github_sync_unavailable", error);
 }
 
-function syncResponse(result: TaskGitHubProjectionResult) {
-  return NextResponse.json(result, { status: taskGitHubSyncHttpStatus(result) });
+function syncResponse(
+  result: TaskGitHubProjectionResult,
+  status = taskGitHubSyncHttpStatus(result),
+) {
+  return NextResponse.json(result, { status });
 }
 
 export async function POST(
@@ -37,7 +40,10 @@ export async function POST(
     null,
   );
   if (!apiContext.ok) {
-    return syncResponse(apiContextFailure(apiContext.status, apiContext.error));
+    return syncResponse(
+      apiContextFailure(apiContext.status, apiContext.error),
+      apiContext.status,
+    );
   }
   const command = parseTaskGitHubSyncCommand(apiContext.payload);
   if (!command) {
