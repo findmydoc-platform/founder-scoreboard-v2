@@ -38,7 +38,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
   const guardedRoutes = [
     "src/app/api/tasks/[id]/route.ts",
     "src/app/api/tasks/[id]/approval/route.ts",
-    "src/app/api/tasks/[id]/sync-github/route.ts",
     "src/app/api/tasks/[id]/comments/route.ts",
     "src/app/api/tasks/[id]/github-comments/route.ts",
     "src/app/api/tasks/[id]/blockers/route.ts",
@@ -54,6 +53,8 @@ test("all high-risk task and initiative mutations use the centralized active gua
     const source = await read(route);
     assert.match(source, /requireActivePlanningItem/, `${route} must fail closed for trash mutations`);
   }
+  const syncProjection = await read("src/lib/github-sync/task-projection.ts");
+  assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
 });
 
 test("reparenting and relationship targets use active read models", async () => {

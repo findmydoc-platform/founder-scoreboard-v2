@@ -1,8 +1,11 @@
-import { githubJson } from "./github-http";
-import type { Task } from "./types";
-
-type GraphQLError = { message?: string };
-type GraphQLResult<T> = { data?: T; errors?: GraphQLError[] };
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { githubGraphql } from "../github-graphql";
+import {
+  validGitHubProjectNumber,
+  validGitHubProjectOwner,
+} from "../github-project-config";
+import { splitGitHubRepository } from "../github-repositories";
+import type { Task } from "../types";
 
 type ProjectField = {
   id: string;
@@ -57,12 +60,12 @@ type FieldContextData = {
   } | null;
 };
 
-export type FounderOpsGitHubSprint = {
+type FounderOpsGitHubSprint = {
   title: string;
   startDate: string;
 };
 
-export type FounderOpsGitHubProjectFieldInput = {
+type FounderOpsGitHubProjectFieldInput = {
   dryRun?: boolean;
   itemId: string;
   projectId: string;
@@ -90,11 +93,11 @@ const priorityOptions: Record<string, string> = {
   P4: "Low",
 };
 
-export function githubProjectStatusOption(status: string) {
+function githubProjectStatusOption(status: string) {
   return statusOptions[status] || "";
 }
 
-export function githubIssuePriorityOption(priority: string) {
+function githubIssuePriorityOption(priority: string) {
   return priorityOptions[priority] || "";
 }
 
@@ -204,25 +207,6 @@ const setIssueFieldMutation = `mutation SetFounderOpsIssueField($issueId: ID!, $
   setIssueFieldValue(input: { issueId: $issueId, issueFields: $issueFields }) { issue { id } }
 }`;
 
-function graphQLErrorMessage(errors?: GraphQLError[]) {
-  return (errors || []).map((error) => error.message?.trim()).filter(Boolean).join(" | ");
-}
-
-async function githubGraphql<T>(query: string, variables: Record<string, unknown>, token: string, operation: "read" | "mutation") {
-  const result = await githubJson<GraphQLResult<T>>("https://api.github.com/graphql", {
-    token,
-    method: "POST",
-    operation,
-    body: { query, variables },
-    cache: "no-store",
-    errorMessage: operation === "read" ? "GitHub Project-Felder konnten nicht gelesen werden" : "GitHub Project-Feld konnte nicht aktualisiert werden",
-  });
-  const message = graphQLErrorMessage(result.errors);
-  if (message) throw new Error(message);
-  if (!result.data) throw new Error("GitHub Project-Felder lieferten keine Daten.");
-  return result.data;
-}
-
 function sameCaseInsensitive(left: string, right: string) {
   return left.trim().localeCompare(right.trim(), undefined, { sensitivity: "accent" }) === 0;
 }
@@ -232,16 +216,23 @@ function warningMessage(field: string, error: unknown) {
   return `${field} konnte nicht synchronisiert werden: ${message}`;
 }
 
-export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubProjectFieldInput) {
+async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubProjectFieldInput) {
   const changes: string[] = [];
   const warnings: string[] = [];
   let data: FieldContextData;
   try {
-    data = await githubGraphql<FieldContextData>(fieldContextQuery, {
-      owner: input.projectOwner,
-      number: input.projectNumber,
-      itemId: input.itemId,
-    }, input.token, "read");
+    data = await githubGraphql<FieldContextData>({
+      query: fieldContextQuery,
+      variables: {
+        owner: input.projectOwner,
+        number: input.projectNumber,
+        itemId: input.itemId,
+      },
+      token: input.token,
+      operation: "read",
+      errorMessage: "GitHub Project-Felder konnten nicht gelesen werden",
+      missingDataMessage: "GitHub Project-Felder lieferten keine Daten.",
+    });
   } catch (error) {
     return { changes, warnings: [warningMessage("GitHub Project-Felder", error)] };
   }
@@ -275,23 +266,35 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
       if (current === undefined || current === null || current === "") return;
       changes.push(fieldName);
       if (input.dryRun) return;
-      await githubGraphql(clearProjectFieldMutation, {
-        projectId: project.id,
-        itemId: item.id,
-        fieldId: field.id,
-      }, input.token, "mutation");
+      await githubGraphql({
+        query: clearProjectFieldMutation,
+        variables: {
+          projectId: project.id,
+          itemId: item.id,
+          fieldId: field.id,
+        },
+        token: input.token,
+        operation: "mutation",
+        errorMessage: "GitHub Project-Feld konnte nicht entfernt werden",
+      });
       return;
     }
     const desired = Object.values(value)[0];
     if (current === desired) return;
     changes.push(fieldName);
     if (input.dryRun) return;
-    await githubGraphql(updateProjectFieldMutation, {
-      projectId: project.id,
-      itemId: item.id,
-      fieldId: field.id,
-      value,
-    }, input.token, "mutation");
+    await githubGraphql({
+      query: updateProjectFieldMutation,
+      variables: {
+        projectId: project.id,
+        itemId: item.id,
+        fieldId: field.id,
+        value,
+      },
+      token: input.token,
+      operation: "mutation",
+      errorMessage: "GitHub Project-Feld konnte nicht aktualisiert werden",
+    });
   };
 
   const reconcileProject = async (fieldName: string, expectedType: string, value: Record<string, unknown> | null, current: unknown) => {
@@ -353,10 +356,16 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
     if (value !== null && current === desired) return;
     changes.push(fieldName);
     if (input.dryRun) return;
-    await githubGraphql(setIssueFieldMutation, {
-      issueId: item.content!.id,
-      issueFields: [{ fieldId: field.id, ...(value || { delete: true }) }],
-    }, input.token, "mutation");
+    await githubGraphql({
+      query: setIssueFieldMutation,
+      variables: {
+        issueId: item.content!.id,
+        issueFields: [{ fieldId: field.id, ...(value || { delete: true }) }],
+      },
+      token: input.token,
+      operation: "mutation",
+      errorMessage: "GitHub Issue-Feld konnte nicht aktualisiert werden",
+    });
   };
 
   const reconcileIssue = async (fieldName: string, expectedType: string, value: Record<string, unknown> | null, current: unknown) => {
@@ -386,4 +395,175 @@ export async function syncFounderOpsGitHubProjectFields(input: FounderOpsGitHubP
   await reconcileIssue("Target date", "DATE", targetDate ? { dateValue: targetDate } : null, issueValues.get("Target date")?.value);
 
   return { changes, warnings };
+}
+
+const founderOpsProjectId = "findmydoc-founder-execution";
+
+type ProjectMembershipData = {
+  organization?: {
+    projectV2?: { id: string; closed: boolean } | null;
+  } | null;
+  repository?: {
+    issue?: {
+      id: string;
+      projectItems: {
+        nodes: Array<{ id: string; project: { id: string } }>;
+      };
+    } | null;
+  } | null;
+};
+
+const projectMembershipQuery = `query FounderOpsProjectMembership(
+  $projectOwner: String!,
+  $projectNumber: Int!,
+  $repositoryOwner: String!,
+  $repositoryName: String!,
+  $issueNumber: Int!
+) {
+  organization(login: $projectOwner) {
+    projectV2(number: $projectNumber) { id closed }
+  }
+  repository(owner: $repositoryOwner, name: $repositoryName) {
+    issue(number: $issueNumber) {
+      id
+      projectItems(first: 100) {
+        nodes { id project { id } }
+      }
+    }
+  }
+}`;
+
+const addProjectItemMutation = `mutation FounderOpsAddProjectItem($projectId: ID!, $contentId: ID!) {
+  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+    item { id }
+  }
+}`;
+
+async function loadGitHubProjectSettings(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("github_project_owner,github_project_number")
+    .eq("id", founderOpsProjectId)
+    .single<{ github_project_owner: string | null; github_project_number: number | null }>();
+  if (error || !data) throw new Error("FounderOps GitHub-Project-Konfiguration konnte nicht geladen werden.");
+  if (!validGitHubProjectOwner(data.github_project_owner) || !validGitHubProjectNumber(data.github_project_number)) {
+    throw new Error("FounderOps GitHub-Project-Konfiguration fehlt oder ist ungültig.");
+  }
+  return {
+    owner: data.github_project_owner,
+    number: data.github_project_number,
+  };
+}
+
+async function loadGitHubProjectSprint(supabase: SupabaseClient, sprintId: string) {
+  if (!sprintId) return { sprint: null as FounderOpsGitHubSprint | null, warnings: [] as string[] };
+  const { data, error } = await supabase
+    .from("sprints")
+    .select("name,start_date")
+    .eq("id", sprintId)
+    .maybeSingle<{ name: string | null; start_date: string | null }>();
+  if (error || !data?.name || !data.start_date) {
+    return {
+      sprint: undefined,
+      warnings: [`Sprint konnte nicht synchronisiert werden: FounderOps-Sprint ${sprintId} konnte nicht vollständig geladen werden.`],
+    };
+  }
+  return {
+    sprint: { title: data.name, startDate: data.start_date },
+    warnings: [] as string[],
+  };
+}
+
+async function ensureProjectMembership({
+  issueNumber,
+  projectNumber,
+  projectOwner,
+  repository,
+  token,
+}: {
+  issueNumber: number;
+  projectNumber: number;
+  projectOwner: string;
+  repository: string;
+  token: string;
+}) {
+  const { owner: repositoryOwner, repo: repositoryName } = splitGitHubRepository(repository);
+  const observed = await githubGraphql<ProjectMembershipData>({
+    query: projectMembershipQuery,
+    variables: {
+      projectOwner,
+      projectNumber,
+      repositoryOwner,
+      repositoryName,
+      issueNumber,
+    },
+    token,
+    operation: "read",
+    errorMessage: "GitHub Project-Mitgliedschaft konnte nicht gelesen werden",
+  });
+  const project = observed.organization?.projectV2;
+  if (!project) throw new Error(`GitHub Project ${projectOwner}#${projectNumber} wurde nicht gefunden oder ist für die App nicht erreichbar.`);
+  if (project.closed) throw new Error(`GitHub Project ${projectOwner}#${projectNumber} ist geschlossen.`);
+  const issue = observed.repository?.issue;
+  if (!issue) throw new Error(`GitHub Issue ${repository}#${issueNumber} konnte für die Project-Aufnahme nicht gelesen werden.`);
+
+  const existing = issue.projectItems.nodes.find((item) => item.project.id === project.id);
+  if (existing) return { itemId: existing.id, projectId: project.id };
+
+  const mutation = await githubGraphql<{
+    addProjectV2ItemById?: { item?: { id: string } | null } | null;
+  }>({
+    query: addProjectItemMutation,
+    variables: { projectId: project.id, contentId: issue.id },
+    token,
+    operation: "mutation",
+    errorMessage: "GitHub Project-Mitgliedschaft konnte nicht erstellt werden",
+  });
+  const itemId = mutation.addProjectV2ItemById?.item?.id;
+  if (!itemId) {
+    throw new Error(
+      `GitHub Issue ${repository}#${issueNumber} wurde nicht in Project ${projectOwner}#${projectNumber} aufgenommen.`,
+    );
+  }
+  return { itemId, projectId: project.id };
+}
+
+export async function projectTaskToFounderOpsGitHubProject({
+  supabase,
+  task,
+  issueNumber,
+  repository,
+  token,
+}: {
+  supabase: SupabaseClient;
+  task: Task;
+  issueNumber: number;
+  repository: string;
+  token: string;
+}) {
+  const project = await loadGitHubProjectSettings(supabase);
+  const item = await ensureProjectMembership({
+    issueNumber,
+    projectNumber: project.number,
+    projectOwner: project.owner,
+    repository,
+    token,
+  });
+  const sprint = await loadGitHubProjectSprint(supabase, task.sprintId);
+  const fields = await syncFounderOpsGitHubProjectFields({
+    itemId: item.itemId,
+    projectId: item.projectId,
+    projectNumber: project.number,
+    projectOwner: project.owner,
+    sprint: sprint.sprint,
+    task,
+    token,
+  }).catch((error) => ({
+    changes: [],
+    warnings: [`GitHub Project-Felder konnten nicht synchronisiert werden: ${error instanceof Error ? error.message : "unbekannter Fehler"}`],
+  }));
+  return {
+    changes: fields.changes,
+    warnings: [...sprint.warnings, ...fields.warnings],
+  };
 }

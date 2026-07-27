@@ -14,7 +14,7 @@ import {
 } from "@/features/tasks/model/task-detail-state";
 import { useTaskComments } from "@/features/tasks/hooks/use-task-comments";
 import { useTaskRelationships } from "@/features/tasks/hooks/use-task-relationships";
-import { githubSyncStatePersistFailedMessage } from "@/lib/github-sync-failure-persistence";
+import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 type UseTaskDetailWorkflowOptions = {
@@ -36,14 +36,6 @@ type UseTaskDetailWorkflowOptions = {
   commentImportNotice: string;
   initialCurrentProfile?: AuthenticatedProfile | null;
 };
-
-const githubSyncStaleMessage = "Die Aufgabe wurde während des GitHub-Syncs geändert. Bitte prüfe den aktuellen Stand und starte den Sync erneut.";
-
-function retryableGitHubSyncMessage(status: number, code?: string, serverMessage?: string) {
-  if (status === 409 && code === "github_sync_stale") return serverMessage || githubSyncStaleMessage;
-  if (status === 503 && code === "github_sync_state_persist_failed") return serverMessage || githubSyncStatePersistFailedMessage;
-  return "";
-}
 
 export function useTaskDetailWorkflow({
   task,
@@ -223,36 +215,39 @@ export function useTaskDetailWorkflow({
     startTransition(async () => {
       try {
         const { response, body } = await syncTaskToGitHubRequest(apiClient, task.id, { createIfMissing: Boolean(options.createIfMissing) });
-        if (body?.task?.updatedAt) updatedAtRef.current = body.task.updatedAt;
-        if (response.status === 409 && body?.code === "github_sync_locked") {
+        const classification = classifyTaskGitHubSyncResponse(response.status, body);
+        if (classification.result.task?.updatedAt) updatedAtRef.current = classification.result.task.updatedAt;
+        if (classification.kind === "locked") {
           setGithubState((current) => ({
             ...current,
             githubIssueSyncStatus: "pending",
-            githubIssueSyncError: body.error || "GitHub-Sync läuft bereits.",
+            githubIssueSyncError: classification.result.error || "GitHub-Sync läuft bereits.",
             githubIssueSyncPendingSince: syncStartedAt,
           }));
           return;
         }
-        const retryableMessage = retryableGitHubSyncMessage(response.status, body?.code, body?.error);
-        if (retryableMessage) {
+        if (classification.kind === "retryable") {
+          const retryableMessage = classification.result.error;
           setGithubState((current) => ({
             ...current,
-            githubIssueSyncStatus: "not_synced",
+            ...classification.result.task,
+            githubIssueSyncStatus: classification.taskStatus,
             githubIssueSyncError: retryableMessage,
             githubIssueSyncPendingSince: "",
           }));
           setError(retryableMessage);
           return;
         }
-        if (!response.ok || !body?.task) throw new Error(body?.error || "GitHub-Sync konnte nicht ausgeführt werden.");
+        if (classification.kind === "failure") throw new Error(classification.result.error);
+        const success = classification.result;
 
         setGithubState((current) => ({
-          githubRepo: body.task?.githubRepo || current.githubRepo,
-          githubIssueNumber: body.task?.githubIssueNumber ?? current.githubIssueNumber,
-          githubIssueUrl: body.task?.githubIssueUrl || current.githubIssueUrl,
-          githubIssueSyncStatus: body.task?.githubIssueSyncStatus || current.githubIssueSyncStatus,
-          githubIssueLastSyncedAt: body.task?.githubIssueLastSyncedAt || current.githubIssueLastSyncedAt,
-          githubIssueSyncError: body.task?.githubIssueSyncError || "",
+          githubRepo: success.task.githubRepo || current.githubRepo,
+          githubIssueNumber: success.task.githubIssueNumber ?? current.githubIssueNumber,
+          githubIssueUrl: success.task.githubIssueUrl || current.githubIssueUrl,
+          githubIssueSyncStatus: success.task.githubIssueSyncStatus || current.githubIssueSyncStatus,
+          githubIssueLastSyncedAt: success.task.githubIssueLastSyncedAt || current.githubIssueLastSyncedAt,
+          githubIssueSyncError: success.task.githubIssueSyncError || "",
           githubIssueSyncPendingSince: "",
         }));
       } catch (caught) {

@@ -50,15 +50,16 @@ async function loadGitHub(githubJson) {
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": {
-      assertGitHubIssueRepository: () => {},
-      parseGitHubIssueUrl: () => null,
-      resolveGitHubIssueNumber: () => null,
+    "./github-graphql": {
+      githubGraphql: async ({ query, variables }) => {
+        const result = await githubJson("", { body: { query, variables } });
+        if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).filter(Boolean).join(" | "));
+        return result.data;
+      },
     },
     "./github-http": {
-      githubJson,
-      githubRequest: () => {
-        throw new Error("Unexpected GitHub request");
+      githubJson: async () => {
+        throw new Error("Unexpected GitHub REST request");
       },
     },
   });

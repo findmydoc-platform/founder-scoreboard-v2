@@ -6,8 +6,9 @@ const transportFile = "src/lib/github-http.ts";
 const approvedAdapters = new Set([
   "src/lib/github.ts",
   "src/lib/github-app.ts",
-  "src/lib/github-project-fields.ts",
-  "src/lib/github-project.ts",
+  "src/lib/github-graphql.ts",
+  "src/lib/github-sync/dependency-projection.ts",
+  "src/lib/github-sync/issue-projection.ts",
   "src/lib/planning-github-lifecycle-github.ts",
 ]);
 const approvedGitHubApiFiles = new Set([transportFile, ...approvedAdapters]);
@@ -29,7 +30,7 @@ test("GitHub API calls stay behind the approved transport adapters", async () =>
     if (source.includes("api.github.com")) {
       assert.equal(approvedGitHubApiFiles.has(file), true, `${file} must use the GitHub transport or an approved resource adapter`);
     }
-    if (/from\s+["'](?:\.\/github-http|@\/lib\/github-http)["']/.test(source)) {
+    if (/from\s+["'](?:\.\.\/github-http|\.\/github-http|@\/lib\/github-http)["']/.test(source)) {
       assert.equal(approvedAdapters.has(file), true, `${file} must not import the GitHub transport directly`);
     }
     if (file !== transportFile) {

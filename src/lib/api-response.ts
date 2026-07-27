@@ -9,11 +9,11 @@ type ApiAuthorization = (request: NextRequest) => AuthzResult | Promise<AuthzRes
 
 type ApiContextResult =
   | { ok: true; supabase: ServerSupabase; permission: SuccessfulAuthzResult }
-  | { ok: false; response: NextResponse };
+  | { ok: false; response: NextResponse; status: number; error: string };
 
 type ApiJsonContextResult<T> =
   | { ok: true; supabase: ServerSupabase; permission: SuccessfulAuthzResult; payload: T }
-  | { ok: false; response: NextResponse };
+  | { ok: false; response: NextResponse; status: number; error: string };
 
 type ApiContextOptions = {
   supabaseUnavailableMessage?: string;
@@ -37,10 +37,20 @@ export async function requireApiContext(
   options: ApiContextOptions = {},
 ): Promise<ApiContextResult> {
   const supabase = getServerSupabase();
-  if (!supabase) return { ok: false, response: supabaseUnavailable(options.supabaseUnavailableMessage) };
+  if (!supabase) {
+    const error = options.supabaseUnavailableMessage || "Supabase env is not configured.";
+    return { ok: false, response: supabaseUnavailable(error), status: 501, error };
+  }
 
   const permission = await authorize(request);
-  if (!permission.ok) return { ok: false, response: authzError(permission) };
+  if (!permission.ok) {
+    return {
+      ok: false,
+      response: authzError(permission),
+      status: permission.status,
+      error: permission.error,
+    };
+  }
 
   return { ok: true, supabase, permission };
 }

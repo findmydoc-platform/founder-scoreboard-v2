@@ -32,8 +32,8 @@ async function loadGitHub({
 } = {}) {
   const requests = [];
   const task = sourceTask();
-  const github = await loadTranspiledModule("src/lib/github.ts", {
-    "./github-repositories": {
+  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {
         const repository = value || "findmydoc-platform/management";
@@ -41,7 +41,7 @@ async function loadGitHub({
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": {
+    "../github-issue-reference": {
       assertGitHubIssueRepository: () => {},
       parseGitHubIssueUrl: (value) => {
         const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/);
@@ -49,7 +49,7 @@ async function loadGitHub({
       },
       resolveGitHubIssueNumber: (value) => value.githubIssueNumber || null,
     },
-    "./github-http": {
+    "../github-http": {
       GitHubApiError: MockGitHubApiError,
       githubJson: async (url, options) => {
         requests.push({ kind: "json", url, ...options });
@@ -95,7 +95,7 @@ test("reuses a marker-owned issue after the linked issue returns 404", async () 
     }],
   });
 
-  const issue = await github.upsertGitHubIssue(task, "installation-token");
+  const issue = await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.equal(issue.number, 77);
   assert.equal(issue.recovered, true);
@@ -106,7 +106,7 @@ test("reuses a marker-owned issue after the linked issue returns 404", async () 
 test("creates one replacement only after a successful marker lookup confirms absence", async () => {
   const { github, requests, task } = await loadGitHub();
 
-  const issue = await github.upsertGitHubIssue(task, "installation-token");
+  const issue = await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.equal(issue.number, 88);
   assert.equal(issue.recovered, false);
@@ -117,7 +117,7 @@ test("creates one replacement only after a successful marker lookup confirms abs
 test("does not create a replacement when every marker lookup fails", async () => {
   const { github, requests, task } = await loadGitHub({ searchStatus: 503, fallbackStatus: 503 });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /Abwesenheit eines FounderOps-Issues konnte nicht bestätigt/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /Abwesenheit eines FounderOps-Issues konnte nicht bestätigt/);
   assert.equal(requests.some((request) => request.method === "POST"), false);
 });
 
@@ -130,7 +130,7 @@ for (const scenario of [
     const { github, requests, task } = await loadGitHub(scenario.options);
 
     await assert.rejects(
-      () => github.upsertGitHubIssue(task, "installation-token"),
+      () => github.projectTaskGitHubIssue({ task, token: "installation-token" }),
       /Abwesenheit eines FounderOps-Issues konnte nicht bestätigt/,
     );
     assert.equal(requests.some((request) => request.method === "POST"), false);
@@ -140,7 +140,7 @@ for (const scenario of [
 test("does not search or create when the linked issue update fails with a non-404 error", async () => {
   const { github, requests, task } = await loadGitHub({ updateStatus: 500 });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /missing/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /missing/);
   assert.equal(requests.some((request) => request.kind === "request"), false);
   assert.equal(requests.some((request) => request.method === "POST"), false);
 });

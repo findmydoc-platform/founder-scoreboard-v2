@@ -121,18 +121,16 @@ test("all task surfaces stop presenting expired pending syncs as running", async
 });
 
 test("route and clients preserve the explicit retryable persistence error contract", async () => {
-  const [route, commandHook, detailHook] = await Promise.all([
-    readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8"),
+  const [contract, commandHook, detailHook] = await Promise.all([
+    readFile("src/lib/github-sync/contract.ts", "utf8"),
     readFile("src/features/tasks/hooks/use-task-github-sync-command.ts", "utf8"),
     readFile("src/features/tasks/hooks/use-task-detail-workflow.ts", "utf8"),
   ]);
 
-  assert.match(route, /code: "github_sync_state_persist_failed"/);
-  assert.match(route, /status: 503/);
-  assert.match(commandHook, /code === "github_sync_state_persist_failed"/);
-  assert.match(commandHook, /githubIssueSyncStatus: "not_synced"/);
+  assert.match(contract, /github_sync_state_persist_failed: 503/);
+  assert.match(contract, /"github_sync_state_persist_failed"/);
+  assert.match(commandHook, /classifyTaskGitHubSyncResponse/);
   assert.match(commandHook, /githubIssueSyncPendingSince: syncStartedAt/);
-  assert.match(detailHook, /code === "github_sync_state_persist_failed"/);
-  assert.match(detailHook, /githubIssueSyncStatus: "not_synced"/);
+  assert.match(detailHook, /classifyTaskGitHubSyncResponse/);
   assert.match(detailHook, /githubIssueSyncPendingSince: syncStartedAt/);
 });

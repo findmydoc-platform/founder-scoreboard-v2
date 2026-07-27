@@ -23,8 +23,8 @@ function sourceTask(overrides = {}) {
 
 async function loadGitHub(target) {
   const requests = [];
-  const github = await loadTranspiledModule("src/lib/github.ts", {
-    "./github-repositories": {
+  const github = await loadTranspiledModule("src/lib/github-sync/issue-projection.ts", {
+    "../github-repositories": {
       requireAllowedGitHubRepository: (value) => value || "findmydoc-platform/management",
       splitGitHubRepository: (value) => {
         const repository = value || "findmydoc-platform/management";
@@ -32,8 +32,9 @@ async function loadGitHub(target) {
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": references,
-    "./github-http": {
+    "../github-issue-reference": references,
+    "../github-http": {
+      GitHubApiError: class extends Error {},
       githubRequest: async () => new Response(null, { status: 404 }),
       githubJson: async (url, options) => {
         requests.push({ url, ...options });
@@ -54,7 +55,7 @@ test("updates a linked issue carrying the matching FounderOps marker", async () 
     body: `Existing body\n${githubMarker(task.id)}`,
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
 });
@@ -82,7 +83,7 @@ test("reconstructs a stored Sub-Issue work brief instead of preserving stale Git
     body: existingBody,
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
   assert.match(requests[1].body.body, /^## Context\nKeep this established GitHub description\./);
@@ -109,7 +110,7 @@ test("projects compact context when no optional work brief is stored", async () 
     ].join("\n"),
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.match(requests[1].body.body, /^## Context\nNew compact context\./);
   assert.doesNotMatch(requests[1].body.body, /Legacy description/);
@@ -140,7 +141,7 @@ test("updates compact context containing a legacy-looking Markdown heading", asy
     body: existingBody,
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.match(requests[1].body.body, /^## Context\nUpdated context\./);
   assert.doesNotMatch(requests[1].body.body, /Old context/);
@@ -169,7 +170,7 @@ test("adds the durable marker without replacing a legacy Sub-Issue description",
       body: existingBody,
     });
 
-    await github.upsertGitHubIssue(task, "installation-token");
+    await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
     assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
     assert.equal(requests[1].body.body, `${existingBody}\n\n${githubMarker(task.id)}`);
@@ -210,7 +211,7 @@ test("clears a managed Sub-Issue body after all optional context and work-brief 
       ].join("\n"),
     });
 
-    await github.upsertGitHubIssue(task, "installation-token");
+    await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
     assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
     assert.equal(requests[1].body.body, [
@@ -233,7 +234,7 @@ test("rejects a loaded issue with a different number before patching", async () 
     body: githubMarker(task.id),
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /stimmt nicht mit der lokalen Verknüpfung/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /stimmt nicht mit der lokalen Verknüpfung/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -241,7 +242,7 @@ test("rejects contradictory local issue numbers and URLs without a GitHub write"
   const task = sourceTask({ githubIssueUrl: "https://github.com/findmydoc-platform/management/issues/43" });
   const { github, requests } = await loadGitHub({});
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /widersprechen sich/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /widersprechen sich/);
   assert.equal(requests.length, 0);
 });
 
@@ -249,7 +250,7 @@ test("rejects contradictory local issue number fields without a GitHub write", a
   const task = sourceTask({ issueNumber: "43" });
   const { github, requests } = await loadGitHub({});
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /widersprechen sich/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /widersprechen sich/);
   assert.equal(requests.length, 0);
 });
 
@@ -263,7 +264,7 @@ test("rejects pull requests before patching", async () => {
     pull_request: {},
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /Pull Request statt auf ein Issue/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /Pull Request statt auf ein Issue/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -276,7 +277,7 @@ test("allows a legacy link only when the issue title matches exactly", async () 
     body: "Legacy issue without a FounderOps marker",
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
 });
 
@@ -289,7 +290,7 @@ test("rejects a title-only legacy match after the task was synced before", async
     body: "Issue without a FounderOps marker",
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /gehört nicht zu dieser FounderOps-Aufgabe/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -306,7 +307,7 @@ test("repairs a previously synced legacy issue carrying the exact FounderOps tas
       body: `Planning context: [Open in FounderOps](${process.env.APP_URL}/tasks/${task.id}). GitHub issue sync keeps the working issue aligned.`,
     });
 
-    await github.upsertGitHubIssue(task, "installation-token");
+    await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
     assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
     assert.equal(requests[1].body.body.includes(githubMarker(task.id)), true);
@@ -329,7 +330,7 @@ test("repairs a previously synced oldest-format issue carrying the exact Founder
     ].join("\n"),
   });
 
-  await github.upsertGitHubIssue(task, "installation-token");
+  await github.projectTaskGitHubIssue({ task, token: "installation-token" });
 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
   assert.equal(requests[1].body.body.includes(githubMarker(task.id)), true);
@@ -348,7 +349,7 @@ test("rejects an oldest-format issue carrying a different Founder Scoreboard tas
     ].join("\n"),
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /gehört nicht zu dieser FounderOps-Aufgabe/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -366,7 +367,7 @@ test("rejects an oldest-format issue carrying matching and conflicting Founder S
     ].join("\n"),
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /gehört nicht zu dieser FounderOps-Aufgabe/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -379,7 +380,7 @@ test("rejects a loaded issue from another repository before patching", async () 
     body: githubMarker(task.id),
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /stimmt nicht mit der lokalen Verknüpfung/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /stimmt nicht mit der lokalen Verknüpfung/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 
@@ -392,7 +393,7 @@ test("rejects an unrelated issue even when its number and repository match", asy
     body: githubMarker("another-task"),
   });
 
-  await assert.rejects(() => github.upsertGitHubIssue(task, "installation-token"), /gehört nicht zu dieser FounderOps-Aufgabe/);
+  await assert.rejects(() => github.projectTaskGitHubIssue({ task, token: "installation-token" }), /gehört nicht zu dieser FounderOps-Aufgabe/);
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET"]);
 });
 

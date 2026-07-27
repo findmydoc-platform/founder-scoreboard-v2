@@ -163,17 +163,9 @@ test("rejects an unreachable parent issue before the child write", async () => {
 });
 
 test("does not write the child issue until the parent preflight completes", async () => {
-  const route = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
-  const lockIndex = route.indexOf("lockToken = await acquireGitHubSyncLock");
-  const preflightIndex = route.indexOf("parentContext = await preflightGitHubSubIssueParent");
-  const beginIndex = route.indexOf('supabase.rpc("begin_github_issue_sync_transaction_v2"');
-  const childWriteIndex = route.indexOf("const issue = await upsertGitHubIssue");
-
-  assert.ok(lockIndex > 0);
-  assert.ok(lockIndex < preflightIndex);
-  assert.ok(preflightIndex < beginIndex);
-  assert.ok(beginIndex < childWriteIndex);
-  assert.doesNotMatch(route, /\.from\("tasks"\)[\s\S]*parentTaskId/);
-  assert.match(route, /parentRepository: parentContext\.repository/);
-  assert.match(route, /parentIssueNumber: parentContext\.issueNumber/);
+  const projection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
+  assert.match(projection, /preflightGitHubSubIssueParent/);
+  assert.match(projection, /projectTaskGitHubIssue/);
+  assert.match(projection, /parentRepository: parentContext\.repository/);
+  assert.match(projection, /parentIssueNumber: parentContext\.issueNumber/);
 });

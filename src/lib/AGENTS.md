@@ -19,3 +19,5 @@
 - Execute mutating GitHub calls serially. Do not introduce mutating `Promise.all` batches; preserve retry and rate-limit metadata for the owning route, outbox, or workflow.
 - Add executable tests for repeated calls, a lost success response, already-present or already-absent state, wrong targets, and permission failures. Prose instructions are not a substitute for behavior tests.
 - Follow `docs/github-api-idempotency.md` when adding or changing a GitHub mutation.
+- `github-graphql.ts` is the only adapter for the GitHub GraphQL envelope, GraphQL errors, and missing data. Resource modules provide queries, variables, operation classification, and domain interpretation.
+- Task-to-GitHub orchestration belongs behind `projectTaskToGitHub` in `github-sync/task-projection.ts`; routes and unrelated library modules must not reconstruct its projection order.

@@ -48,6 +48,8 @@ Damit bleiben Kommentare und Historie verknüpfter Issues in GitHub erhalten, w�
 
 Die App bleibt führend. GitHub im Repo `findmydoc-platform/management` ist ein One-way-Backup und eine nachvollziehbare Dokumentation.
 
+The complete workflow lives behind `projectTaskToGitHub` in `src/lib/github-sync/task-projection.ts`; the Route Handler is only an HTTP and authorization adapter. Issue, Dependency, and Project projections are separate deep modules under `src/lib/github-sync/`. Hard projections run before warning-only Project fields, Pull Request reads, and independent Comment delivery. See `docs/github-sync-architecture.md` for the sequence and error classes.
+
 Jede gültige, einem Teamprofil zugeordnete Session darf den Issue-Sync auslösen, unabhängig von Rolle, Owner oder Assignee. Der Issue-Sync verwendet ausschließlich das GitHub-App-Installationstoken. Viewer bleiben für Task-Änderungen und neue Kommentare read-only.
 
 Projected Deliverable issues contain only the editable brief core:

@@ -245,7 +245,7 @@ test("only the CEO configures the live-validated global GitHub Project outside l
   const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");
   const githubProjectUi = await readFile("src/features/profile/molecules/profile-github-project-settings-section.tsx", "utf8");
   const settingsRoute = await readFile("src/app/api/founderops-settings/github-project/route.ts", "utf8");
-  const syncRoute = await readFile("src/app/api/tasks/[id]/sync-github/route.ts", "utf8");
+  const syncRoute = await readFile("src/lib/github-sync/project-projection.ts", "utf8");
   const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const ceoOnlyMigration = await readFile(
@@ -267,7 +267,7 @@ test("only the CEO configures the live-validated global GitHub Project outside l
   assert.match(settingsRoute, /validateFounderOpsGitHubProject/);
   assert.match(settingsRoute, /update_founderops_github_project_transaction/);
   assert.match(syncRoute, /loadGitHubProjectSettings/);
-  assert.match(syncRoute, /ensureFounderOpsGitHubProjectItem/);
+  assert.match(syncRoute, /projectTaskToFounderOpsGitHubProject/);
   assert.match(loader, /github_project_owner,github_project_number/);
   assert.match(migration, /github_project_owner text not null default 'findmydoc-platform'/);
   assert.match(migration, /github_project_number integer not null default 21/);

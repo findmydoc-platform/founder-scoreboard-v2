@@ -1,14 +1,10 @@
-import { githubJson } from "./github-http";
+import { githubGraphql } from "./github-graphql";
 import {
   FOUNDEROPS_GITHUB_PROJECT_FIELDS,
   FOUNDEROPS_GITHUB_REPOSITORIES,
   validGitHubProjectNumber,
   validGitHubProjectOwner,
 } from "./github-project-config";
-import { splitGitHubRepository } from "./github-repositories";
-
-type GraphQLError = { message?: string };
-type GraphQLResult<T> = { data?: T; errors?: GraphQLError[] };
 
 type ProjectField = {
   name: string;
@@ -44,25 +40,6 @@ export type GitHubProjectValidation = {
   fields: ProjectField[];
 };
 
-function graphQLErrorMessage(errors?: GraphQLError[]) {
-  return (errors || []).map((error) => error.message?.trim()).filter(Boolean).join(" | ");
-}
-
-async function githubGraphql<T>(query: string, variables: Record<string, unknown>, token: string, operation: "read" | "mutation") {
-  const result = await githubJson<GraphQLResult<T>>("https://api.github.com/graphql", {
-    token,
-    method: "POST",
-    operation,
-    body: { query, variables },
-    cache: "no-store",
-    errorMessage: operation === "read" ? "GitHub Project konnte nicht gelesen werden" : "GitHub Project konnte nicht aktualisiert werden",
-  });
-  const message = graphQLErrorMessage(result.errors);
-  if (message) throw new Error(message);
-  if (!result.data) throw new Error("GitHub Project lieferte keine Daten.");
-  return result.data;
-}
-
 const projectValidationQuery = `query FounderOpsProjectValidation($owner: String!, $number: Int!) {
   organization(login: $owner) {
     projectV2(number: $number) {
@@ -89,7 +66,14 @@ export async function validateFounderOpsGitHubProject(owner: string, number: num
     throw new Error("GitHub-Organisation oder Project-Nummer ist ungültig.");
   }
 
-  const data = await githubGraphql<ProjectValidationData>(projectValidationQuery, { owner, number }, token, "read");
+  const data = await githubGraphql<ProjectValidationData>({
+    query: projectValidationQuery,
+    variables: { owner, number },
+    token,
+    operation: "read",
+    errorMessage: "GitHub Project konnte nicht gelesen werden",
+    missingDataMessage: "GitHub Project lieferte keine Daten.",
+  });
   if (!data.organization) throw new Error(`GitHub-Organisation ${owner} wurde nicht gefunden oder ist für die App nicht erreichbar.`);
   const project = data.organization.projectV2;
   if (!project) throw new Error(`GitHub Project ${owner}#${number} wurde nicht gefunden oder ist für die App nicht erreichbar.`);
@@ -119,103 +103,4 @@ export async function validateFounderOpsGitHubProject(owner: string, number: num
     repositories,
     fields,
   };
-}
-
-type ProjectMembershipData = {
-  organization?: {
-    projectV2?: { id: string; closed: boolean } | null;
-  } | null;
-  repository?: {
-    issue?: {
-      id: string;
-      projectItems: {
-        nodes: Array<{ id: string; project: { id: string } }>;
-      };
-    } | null;
-  } | null;
-};
-
-const projectMembershipQuery = `query FounderOpsProjectMembership(
-  $projectOwner: String!,
-  $projectNumber: Int!,
-  $repositoryOwner: String!,
-  $repositoryName: String!,
-  $issueNumber: Int!
-) {
-  organization(login: $projectOwner) {
-    projectV2(number: $projectNumber) { id closed }
-  }
-  repository(owner: $repositoryOwner, name: $repositoryName) {
-    issue(number: $issueNumber) {
-      id
-      projectItems(first: 100) {
-        nodes { id project { id } }
-      }
-    }
-  }
-}`;
-
-const addProjectItemMutation = `mutation FounderOpsAddProjectItem($projectId: ID!, $contentId: ID!) {
-  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
-    item { id }
-  }
-}`;
-
-type FounderOpsGitHubProjectItemInput = {
-  issueNumber: number;
-  projectNumber: number;
-  projectOwner: string;
-  repository: string;
-  token: string;
-};
-
-export async function observeFounderOpsGitHubProjectItem({
-  issueNumber,
-  projectNumber,
-  projectOwner,
-  repository,
-  token,
-}: FounderOpsGitHubProjectItemInput) {
-  if (!validGitHubProjectOwner(projectOwner) || !validGitHubProjectNumber(projectNumber)) {
-    throw new Error("FounderOps GitHub-Project-Konfiguration fehlt oder ist ungültig.");
-  }
-  const { owner: repositoryOwner, repo: repositoryName } = splitGitHubRepository(repository);
-  const data = await githubGraphql<ProjectMembershipData>(projectMembershipQuery, {
-    projectOwner,
-    projectNumber,
-    repositoryOwner,
-    repositoryName,
-    issueNumber,
-  }, token, "read");
-  const project = data.organization?.projectV2;
-  if (!project) throw new Error(`GitHub Project ${projectOwner}#${projectNumber} wurde nicht gefunden oder ist für die App nicht erreichbar.`);
-  if (project.closed) throw new Error(`GitHub Project ${projectOwner}#${projectNumber} ist geschlossen.`);
-  const issue = data.repository?.issue;
-  if (!issue) throw new Error(`GitHub Issue ${repository}#${issueNumber} konnte für die Project-Aufnahme nicht gelesen werden.`);
-
-  const existing = issue.projectItems.nodes.find((item) => item.project.id === project.id);
-  return {
-    issueId: issue.id,
-    itemId: existing?.id || null,
-    projectId: project.id,
-  };
-}
-
-export async function ensureFounderOpsGitHubProjectItem(input: FounderOpsGitHubProjectItemInput) {
-  const observed = await observeFounderOpsGitHubProjectItem(input);
-  if (observed.itemId) return { added: false, itemId: observed.itemId, projectId: observed.projectId };
-
-  const mutation = await githubGraphql<{
-    addProjectV2ItemById?: { item?: { id: string } | null } | null;
-  }>(addProjectItemMutation, {
-    projectId: observed.projectId,
-    contentId: observed.issueId,
-  }, input.token, "mutation");
-  const itemId = mutation.addProjectV2ItemById?.item?.id;
-  if (!itemId) {
-    throw new Error(
-      `GitHub Issue ${input.repository}#${input.issueNumber} wurde nicht in Project ${input.projectOwner}#${input.projectNumber} aufgenommen.`,
-    );
-  }
-  return { added: true, itemId, projectId: observed.projectId };
 }

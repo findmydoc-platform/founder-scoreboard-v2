@@ -13,9 +13,10 @@ FounderOps treats GitHub mutations as resource-specific reconciliation, not as b
 | Ensure absent | Validated repository and resource identity | Delete once. A resource-specific `404` may mean success; authentication and target errors must still fail. |
 | Webhook projection | GitHub delivery ID | Deduplicate `X-GitHub-Delivery`, persist the event, and project it without triggering a blind write-back loop. |
 
-## Transport boundary
+## Transport and GraphQL adapters
 
 - `src/lib/github-http.ts` is the only transport for `api.github.com`.
+- `src/lib/github-graphql.ts` is the only adapter that interprets GraphQL `data` and `errors` envelopes or missing data.
 - Resource adapters build endpoints, validate domain ownership, and decide whether an observed state satisfies the request.
 - OAuth exchanges with `github.com/login/oauth` remain separate because they are not GitHub API resource calls.
 - Read operations, including GraphQL queries sent through `POST`, may retry once when the server permits a short wait.
@@ -32,6 +33,8 @@ Sub-issue synchronization follows `observe → compare → apply → reconcile`:
 
 Once the child issue has been resolved, do not rebuild `subIssueUrl` as mutation input. Use the validated child node ID already returned by GitHub.
 
+Task relationship reconciliation lives in `src/lib/github-sync/dependency-projection.ts`. It resolves FounderOps edges and the complete managed GitHub set behind one interface. Native Sub-Issue parent reconciliation is invoked by `src/lib/github-sync/task-projection.ts` after its read-only parent preflight.
+
 ## Mutation checklist
 
 Before adding a mutation, answer all of the following in code and tests:
@@ -46,8 +49,9 @@ Before adding a mutation, answer all of the following in code and tests:
 
 ## Examples
 
-- Issue creation uses `<!-- founderops-task-id:... -->`; a retry searches the repository and updates the marker-owned issue instead of creating another one.
+- Issue creation in `src/lib/github-sync/issue-projection.ts` uses `<!-- founderops-task-id:... -->`; a retry searches the repository and updates the marker-owned issue instead of creating another one.
 - Comment delivery uses `<!-- fmd-comment-id:... -->`; the outbox reconciles the marker before posting.
 - Sub-issue synchronization resolves both node IDs and queries the child's current parent before `addSubIssue`.
-- Dependency synchronization lists the managed set, adds missing relationships, and removes only stale managed relationships.
+- Dependency projection lists the managed set, adds missing relationships, and removes only stale managed relationships.
+- Project projection observes membership before adding it and compares each native field before a serial mutation.
 - Attachment uploads require a durable operation ID and deterministic GitHub path; this contract is implemented separately from the transport foundation.

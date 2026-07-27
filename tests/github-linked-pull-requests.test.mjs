@@ -12,16 +12,19 @@ async function loadGitHub(githubJson) {
         return { owner, repo, repository };
       },
     },
-    "./github-issue-reference": {
-      assertGitHubIssueRepository: () => {},
-      parseGitHubIssueUrl: () => null,
-      resolveGitHubIssueNumber: () => null,
+    "./github-graphql": {
+      githubGraphql: async ({ query, variables, operation }) => {
+        const result = await githubJson("https://api.github.com/graphql", {
+          operation,
+          body: { query, variables },
+        });
+        return result.data;
+      },
     },
     "./github-http": {
-      GITHUB_ISSUE_DEPENDENCY_API_VERSION: "2026-03-10",
-      GitHubApiError: Error,
-      githubJson,
-      githubRequest: async () => new Response(null, { status: 204 }),
+      githubJson: async () => {
+        throw new Error("Unexpected GitHub REST request");
+      },
     },
   });
 }
