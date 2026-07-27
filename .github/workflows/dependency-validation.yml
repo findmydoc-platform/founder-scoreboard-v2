@@ -55,6 +55,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -70,6 +72,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify Supabase Migration History
+        run: pnpm run verify:migrations
+
+      - name: Verify Product Updates
+        env:
+          PRODUCT_UPDATE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run verify:product-updates
 
       - name: Run tests
         run: pnpm test

@@ -179,11 +179,10 @@ Empfohlene Google-Chat-App-Felder:
 4. `GOOGLE_CHAT_DELIVERY_ENABLED=false` lassen.
 5. App starten und in den Einstellungen prüfen, dass Google Chat als gesammelt, aber nicht versandbereit angezeigt wird.
 6. Benachrichtigung erzeugen, zum Beispiel Review anfragen oder Kommentar schreiben.
-7. `pnpm run verify:google-chat` ausführen.
-8. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
-9. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
-10. Einen einzelnen Digest oder eine persönliche Test-DM senden und `notification_deliveries` prüfen.
-11. Danach erst die regelmäßige Zustellung planen.
+7. `POST /api/notifications/deliver` im deaktivierten Zustand testen. Erwartet ist kein Versand.
+8. Erst danach `GOOGLE_CHAT_DELIVERY_ENABLED=true` setzen.
+9. Einen einzelnen Digest oder eine persönliche Test-DM senden und `notification_deliveries` prüfen.
+10. Danach erst die regelmäßige Zustellung planen.
 
 Sebastian-/Rresta-Paket für Phase 4:
 

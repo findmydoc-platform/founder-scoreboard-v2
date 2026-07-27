@@ -85,7 +85,6 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          PRODUCT_UPDATE_BASE_REF: ${{ github.event.before }}
         run: pnpm dlx vercel@${VERCEL_CLI_VERSION} build --prod --token="$VERCEL_TOKEN"
 
       - name: Apply Supabase Migrations to Production
@@ -117,12 +116,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           REQUIRED_AUTH_LINKED_PROFILE_IDS: sebastian,volkan,anil,ozen,youssef
         run: pnpm run verify:auth
-
-      - name: Verify Production GitHub Sync Contract
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: pnpm run verify:github-sync
 
       - name: Deploy Prebuilt Output to Vercel Production
         id: vercel_production

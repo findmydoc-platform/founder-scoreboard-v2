@@ -82,6 +82,10 @@ Do not configure a shared `GITHUB_SYNC_TOKEN` for production. GitHub issue sync,
 
 ## GitHub Actions Workflow Shape
 
+Workflow: `.github/workflows/dependency-validation.yml`
+
+Every pull request targeting `main` runs the migration-history verifier, product-update verifier, regular tests, lint, and one native Next.js build in the secret-free validation job. The product-update verifier compares the pull request with its base commit. A separate job rebuilds the disposable local Supabase stack and exercises the authenticated application, RLS, and central role paths.
+
 Workflow: `.github/workflows/deploy-preview.yml`
 
 Preview deploys run for internal pull requests targeting `main` and for manual `workflow_dispatch` runs.
@@ -106,9 +110,9 @@ GitHub Actions executes the production flow in this order:
 - Verify the timestamp migration history and immutable production baseline.
 - Assert that the configured Vercel organization and project IDs match the FounderOps production project before contacting Vercel.
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
-- Build the production Vercel output from the GitHub Actions production job.
+- Build the production Vercel output from the GitHub Actions production job. The Vercel build command is only `pnpm run build`; it does not repeat tests, lint, or policy checks.
 - Run `pnpm run deploy:supabase-migrations`, guarded by `SCHEMA_DEPLOY_TARGET=production`. The deploy refuses a missing baseline ledger or an active GitHub issue sync lock, performs a CLI dry run, and pushes only pending migrations.
-- Verify the production Supabase schema, auth mapping, GitHub sync contract, and planning hierarchy.
+- Verify the live production database security contract, Supabase schema, RPC behavior, and Auth mapping.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
 - Explicitly promote the ready production deployment so the configured production domains receive the deployment. The `--prod` prebuilt upload alone is not treated as the domain cutover contract.
@@ -116,7 +120,7 @@ GitHub Actions executes the production flow in this order:
 - Reconcile the existing comment outbox idempotently through the protected canonical production endpoint. Do not call the Vercel deployment URL because deployment protection redirects that URL to Vercel SSO.
 - Publish the deployment URL to the workflow summary and the `production` environment URL.
 
-`pnpm run vercel:build` runs `pnpm run verify:deploy` before `pnpm run build`.
+`vercel.json` sets `buildCommand` to `pnpm run build`. Vercel still creates the environment-specific `.vercel/output` artifact for the prebuilt deployment, but it does not run the pull-request validation suite again.
 
 `supabase/migrations/20260713120959_production_baseline.sql` is an immutable dump of the deployed production schema. A fresh local database starts from that baseline and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
 
@@ -190,17 +194,22 @@ The maintenance job never deletes GitHub Issues. It retains FounderOps audit rec
 Run from the repository root:
 
 ```bash
+pnpm run verify:migrations
+pnpm run verify:product-updates
 pnpm test
 pnpm run lint
 pnpm run build
-pnpm run verify:release
-pnpm run verify:vercel-ready
-pnpm run vercel:build
 ```
 
-Run `pnpm run build` as its own command before `pnpm run verify:release` when diagnosing build failures, so Next.js compile errors are separated from release gate failures. The release gate also runs `pnpm audit --audit-level=moderate`.
+For the authenticated local end-to-end path, reset the disposable stack, run the integration verifier, and stop the stack afterward:
 
-If `pnpm run verify:vercel-ready` reports a readiness failure, inspect the GitHub Actions run logs, the workflow summary, and the configured GitHub Environment secrets. There is no local project-link step in this deployment path.
+```bash
+pnpm run local:reset
+pnpm run test:integration:local
+pnpm run local:stop
+```
+
+`pnpm audit --audit-level=moderate` is an optional manual dependency-security check. It is deliberately not a package wrapper and does not run in pull-request, preview, or production build gates because the advisory result can change without a source change.
 
 If production Supabase env is present locally, also run:
 
@@ -215,7 +224,7 @@ Check after a successful deployment:
 
 - Deployment URL opens.
 - `/api/health` returns `200` and `status: "ready"` for base Supabase readiness.
-- `pnpm run verify:supabase`, `pnpm run verify:auth`, and `pnpm run verify:operational` pass when production Supabase env is available locally.
+- The production workflow reports successful database-security, Supabase-schema, RPC, and Auth-mapping verification.
 - GitHub login works.
 - Reload with a valid session shows either the app or a loading shell, not the login gate.
 - GitHub App status stays connected after reload and the central header action reconnects when the encrypted user token is missing, revoked, expired beyond refresh, or mapped to a different GitHub login.
