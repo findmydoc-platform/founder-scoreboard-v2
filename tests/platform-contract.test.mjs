@@ -73,6 +73,11 @@ test("deployment workflows keep validation, artifact creation, and production sa
 
   assert.match(previewWorkflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(previewWorkflow, /Validate preview secrets/);
+  assert.match(
+    previewWorkflow,
+    /if \[\[ "\$ready" != "true" \]\]; then[\s\S]*::error title=Preview deployment blocked[\s\S]*exit 1/,
+  );
+  assert.match(previewWorkflow, /if \[\[ "\$PREVIEW_READY" != "true" \]\]; then[\s\S]*\*\*Status\*\*: Failed/);
   assert.match(previewWorkflow, /pull --yes --environment=preview/);
   assert.match(previewWorkflow, /assert-vercel-project-binding\.sh/);
   assert.match(previewWorkflow, /build --target=preview/);

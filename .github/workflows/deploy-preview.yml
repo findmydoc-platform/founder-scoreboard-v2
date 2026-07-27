@@ -68,6 +68,11 @@ jobs:
           echo "ready=$ready" >> "$GITHUB_OUTPUT"
           echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
+          if [[ "$ready" != "true" ]]; then
+            echo "::error title=Preview deployment blocked::${reason}"
+            exit 1
+          fi
+
       - name: Setup pnpm
         if: steps.preview_guard.outputs.ready == 'true'
         uses: pnpm/action-setup@v6
@@ -95,13 +100,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           bash ./.github/scripts/deploy/assert-vercel-project-binding.sh
-          pnpm dlx vercel@${VERCEL_CLI_VERSION} pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          pnpm dlx vercel@"${VERCEL_CLI_VERSION}" pull --yes --environment=preview --token="$VERCEL_TOKEN"
 
       - name: Build Vercel Output
         if: steps.preview_guard.outputs.ready == 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: pnpm dlx vercel@${VERCEL_CLI_VERSION} build --target=preview --token="$VERCEL_TOKEN"
+        run: pnpm dlx vercel@"${VERCEL_CLI_VERSION}" build --target=preview --token="$VERCEL_TOKEN"
 
       - name: Deploy Prebuilt Output to Vercel Preview
         if: steps.preview_guard.outputs.ready == 'true'
@@ -121,7 +126,7 @@ jobs:
           {
             echo "## Preview Deployment Summary"
             if [[ "$PREVIEW_READY" != "true" ]]; then
-              echo "- **Status**: Skipped"
+              echo "- **Status**: Failed"
               echo "- **Reason**: preview secrets are missing"
               if [[ -n "$PREVIEW_REASON" ]]; then
                 echo "- **Details**: ${PREVIEW_REASON}"
