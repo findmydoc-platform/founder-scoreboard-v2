@@ -179,6 +179,51 @@ test("adds the durable marker without replacing a legacy Sub-Issue description",
   }
 });
 
+test("clears a managed Sub-Issue body after all optional context and work-brief fields are removed", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  process.env.APP_URL = "https://founder-ops.findmydoc.eu";
+
+  try {
+    const task = sourceTask({
+      taskType: "sub_issue",
+      description: "",
+      problemStatement: "",
+      intendedOutcome: "",
+      scopeConstraints: "",
+      acceptanceCriteria: "",
+      evidenceRequired: "",
+      definitionOfDone: "",
+      githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const { github, requests } = await loadGitHub({
+      number: 42,
+      html_url: task.githubIssueUrl,
+      title: "[Sub-Issue] Validate linked target",
+      body: [
+        "## Context",
+        "Removed context.",
+        "",
+        "## Problem Statement",
+        "Removed brief.",
+        "",
+        githubMarker(task.id),
+      ].join("\n"),
+    });
+
+    await github.upsertGitHubIssue(task, "installation-token");
+
+    assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+    assert.equal(requests[1].body.body, [
+      "---",
+      `Source: [FounderOps](${process.env.APP_URL}/tasks/${task.id}).`,
+      githubMarker(task.id),
+    ].join("\n"));
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
+});
+
 test("rejects a loaded issue with a different number before patching", async () => {
   const task = sourceTask();
   const { github, requests } = await loadGitHub({

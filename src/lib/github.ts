@@ -257,7 +257,7 @@ export function taskIssueUpdateBody(task: Task, existingBody?: string | null) {
 
   const marker = taskIssueMarker(task.id);
   if (!subIssueBriefSections(task).length) {
-    if (existingBody.includes(marker)) return existingBody;
+    if (existingBody.includes(marker)) return desiredBody;
     return `${existingBody.trimEnd()}\n\n${marker}`;
   }
   return desiredBody;
