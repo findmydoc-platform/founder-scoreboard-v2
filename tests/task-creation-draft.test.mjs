@@ -79,7 +79,7 @@ test("task title validation stays quiet until the field is exposed", () => {
   assert.equal(taskCreationTitleError("Task title", true), "");
 });
 
-test("Sub-Issue create requests strip Deliverable-only planning, review, and evidence fields", () => {
+test("compact Sub-Issue creation keeps optional work brief fields for the edit form", () => {
   const payload = taskCreationRequestPayload({
     creationRequestId: "019fb484-68c2-7000-8000-000000000001",
     title: "Implement small work step",
@@ -115,7 +115,7 @@ test("Sub-Issue create requests strip Deliverable-only planning, review, and evi
   });
 });
 
-test("standard task API rejects every field outside the Sub-Issue create contract", () => {
+test("standard task API accepts optional Sub-Issue work brief fields but rejects operational fields", () => {
   const allowed = {
     creationRequestId: "019fb484-68c2-7000-8000-000000000001",
     title: "Implement small work step",
@@ -128,8 +128,17 @@ test("standard task API rejects every field outside the Sub-Issue create contrac
     relatedTaskId: "dependency-one",
     relationNote: "Wait for the API",
   };
-  assert.equal(unsupportedSubIssueCreateField(allowed), "");
-  for (const field of ["status", "priority", "acceptanceCriteria", "definitionOfDone", "evidenceLinks", "reviewStatus", "scorePoints"]) {
-    assert.equal(unsupportedSubIssueCreateField({ ...allowed, [field]: "forbidden" }), field);
+  const withBrief = {
+    ...allowed,
+    problemStatement: "Problem",
+    intendedOutcome: "Outcome",
+    scopeConstraints: "Scope",
+    acceptanceCriteria: "Acceptance",
+    evidenceRequired: "Evidence context",
+    definitionOfDone: "Quality standard",
+  };
+  assert.equal(unsupportedSubIssueCreateField(withBrief), "");
+  for (const field of ["status", "priority", "evidenceLinks", "reviewStatus", "scorePoints"]) {
+    assert.equal(unsupportedSubIssueCreateField({ ...withBrief, [field]: "forbidden" }), field);
   }
 });

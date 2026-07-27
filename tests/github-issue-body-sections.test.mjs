@@ -87,7 +87,7 @@ test("Sub-Issue GitHub projection contains only optional context and the Founder
   }
 });
 
-test("legacy Sub-Issue GitHub projection reconstructs every stored brief section", async () => {
+test("Sub-Issue GitHub projection writes every populated optional work-brief section", async () => {
   const previousAppUrl = process.env.APP_URL;
   process.env.APP_URL = "https://founder-ops.findmydoc.eu";
   try {
@@ -103,17 +103,35 @@ test("legacy Sub-Issue GitHub projection reconstructs every stored brief section
       definitionOfDone: "Legacy completion",
     }));
 
-    assert.match(body, /^## Problem Statement\nLegacy problem/);
+    assert.match(body, /^## Context\nLegacy problem/);
+    assert.match(body, /## Problem Statement\nLegacy problem/);
     assert.match(body, /## Intended Outcome\nLegacy outcome/);
     assert.match(body, /## Scope & Constraints\n- Legacy scope/);
     assert.match(body, /## Acceptance Criteria\n- Legacy acceptance/);
     assert.match(body, /## Evidence Required\nLegacy evidence/);
     assert.match(body, /## Definition of Done\n- Legacy completion/);
-    assert.match(body, /Planning context: \[Open in FounderOps\]\(https:\/\/founder-ops\.findmydoc\.eu\/tasks\/task-body-sections\)\./);
+    assert.match(body, /Source: \[FounderOps\]\(https:\/\/founder-ops\.findmydoc\.eu\/tasks\/task-body-sections\)\./);
     assert.match(body, /<!-- founderops-task-id:task-body-sections -->$/);
-    assert.doesNotMatch(body, /^## Context/m);
   } finally {
     if (previousAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = previousAppUrl;
   }
+});
+
+test("Sub-Issue GitHub projection omits empty optional work-brief sections", async () => {
+  const { taskIssueBody } = await githubModule();
+  const body = taskIssueBody(task({
+    taskType: "sub_issue",
+    description: "",
+    problemStatement: "Only this problem is useful.",
+    intendedOutcome: "",
+    scopeConstraints: "",
+    acceptanceCriteria: "",
+    evidenceRequired: "",
+    definitionOfDone: "",
+  }));
+
+  assert.match(body, /^## Problem Statement\nOnly this problem is useful\./);
+  assert.doesNotMatch(body, /## Context|## Intended Outcome|## Scope & Constraints|## Acceptance Criteria|## Evidence Required|## Definition of Done/);
+  assert.doesNotMatch(body, /_Nicht gesetzt\._/);
 });

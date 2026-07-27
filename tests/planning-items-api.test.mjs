@@ -309,6 +309,12 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     itemType: "sub_issue",
     title: "Confirm rollout",
     description: "Coordinate the date.",
+    problemStatement: "",
+    intendedOutcome: "",
+    scopeConstraints: "",
+    acceptanceCriteria: "",
+    evidenceRequired: "",
+    definitionOfDone: "",
     parentTaskId: "deliverable-parent",
     packageId: "initiative-one",
     milestoneId: "milestone-one",
@@ -320,17 +326,40 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     warnings: [],
   });
 
-  const [forbiddenSubIssuePreview] = await create.buildPlanningItemCreatePreview(
+  const [briefSubIssuePreview] = await create.buildPlanningItemCreatePreview(
     [{
       itemType: "sub_issue",
       title: "Confirm rollout",
       parentTaskId: "deliverable-parent",
-      evidenceRequired: "Legacy proof",
+      problemStatement: "Clarify the rollout window.",
+      intendedOutcome: "A confirmed date.",
+      scopeConstraints: "Only the date.",
+      acceptanceCriteria: ["Date is confirmed"],
+      evidenceRequired: "Calendar invite",
+      definitionOfDone: "The owner has informed the team.",
     }],
     { id: "founder", name: "Founder", platformRole: "founder", githubLogin: "" },
     supabase,
   );
-  assert.equal(forbiddenSubIssuePreview.errors.includes("evidenceRequired ist für sub_issue nicht zulässig."), true);
+  assert.deepEqual(
+    {
+      problemStatement: briefSubIssuePreview.problemStatement,
+      intendedOutcome: briefSubIssuePreview.intendedOutcome,
+      scopeConstraints: briefSubIssuePreview.scopeConstraints,
+      acceptanceCriteria: briefSubIssuePreview.acceptanceCriteria,
+      evidenceRequired: briefSubIssuePreview.evidenceRequired,
+      definitionOfDone: briefSubIssuePreview.definitionOfDone,
+    },
+    {
+      problemStatement: "Clarify the rollout window.",
+      intendedOutcome: "A confirmed date.",
+      scopeConstraints: "Only the date.",
+      acceptanceCriteria: "Date is confirmed",
+      evidenceRequired: "Calendar invite",
+      definitionOfDone: "The owner has informed the team.",
+    },
+  );
+  assert.deepEqual(briefSubIssuePreview.errors, []);
 
   const expectedUpdatedAt = "2026-07-14T12:00:00.000Z";
   assert.deepEqual(deletion.parsePlanningItemDeletePayload({ expectedUpdatedAt }), { ok: true, expectedUpdatedAt });

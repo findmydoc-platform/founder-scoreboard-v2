@@ -59,7 +59,7 @@ For `milestone`, only `title`, `description`, `targetDate`, and `status` are acc
 }
 ```
 
-Sub-Issue create accepts only `itemType`, `title`, optional `description`, required `parentTaskId`, optional `ownerId`, and optional `githubRepo`. The owner defaults to the token profile. Status is server-owned and starts as `Offen`; Initiative and Milestone derive from the parent Deliverable.
+Sub-Issue create accepts `itemType`, `title`, optional `description`, optional work-brief text (`problemStatement`, `intendedOutcome`, `scopeConstraints`, `acceptanceCriteria`, `evidenceRequired`, and `definitionOfDone`), required `parentTaskId`, optional `ownerId`, and optional `githubRepo`. The owner defaults to the token profile. Status is server-owned and starts as `Offen`; Initiative and Milestone derive from the parent Deliverable. `evidenceRequired` is text context only and does not create an Evidence requirement.
 
 ```json
 {
@@ -146,17 +146,17 @@ Delete commit uses `DELETE /api/team/planning-items/v1/items/{id}` plus `Idempot
 | Milestone | `title`, `description`, `targetDate`, `status` | `planned`, `active`, `done` | No parent, owner, RACI, Sprint, score, or GitHub fields |
 | Initiative | Brief, Milestone, owner/accountable/RACI, priority | No work status | Approval revision remains server-owned |
 | Deliverable | Brief, Initiative, owner, priority, workstream, dates, hours, work status | `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, `Erledigt` | Milestone derives from Initiative; review, score, and approval side effects remain server-owned |
-| Sub-Issue | `title`, `description`, `parentTaskId`, `ownerId`, `githubRepo`, and PATCH `status` | `Offen`, `In Arbeit`, `Blockiert`, `Erledigt` | Initiative, Milestone, approval, and RACI derive from parent; no priority, Sprint, schedule, estimate, workstream, task brief, Acceptance Criteria, Definition of Done, Evidence, review, or score writes |
+| Sub-Issue | `title`, `description`, optional work brief, `parentTaskId`, `ownerId`, `githubRepo`, and PATCH `status` | `Offen`, `In Arbeit`, `Blockiert`, `Erledigt` | Initiative, Milestone, approval, and RACI derive from parent; no priority, Sprint, schedule, estimate, workstream, review, score, manual-Evidence, or quality-gate writes |
 
 - An Initiative accepts its brief, Milestone, owner/accountable/RACI, and priority fields. Material brief or Milestone changes start a new approval revision.
 - A Milestone accepts only title, description, target date, and status. Only CEO and Deputy may preview or commit its creation, update, or empty-only deletion.
 - A Deliverable accepts its brief, Initiative, owner, priority, workstream, dates, hours, and work status. The Milestone derives from its Initiative. Material changes reset approval, Sprint, review, and score state.
-- A Sub-Issue accepts only title, context, parent Deliverable, owner, `githubRepo`, and its four work statuses. Only Sub-Issues may select an allowed technical repository. Its Initiative and Milestone derive from the parent.
-- CEO and Deputy may update all allowed fields. A Founder may update only their own Initiative fields or the brief of an owned/assigned Deliverable; for an owned or assigned Sub-Issue they may update title, context, parent, and ordinary work status.
+- A Sub-Issue accepts title, context, its optional work brief, parent Deliverable, owner, `githubRepo`, and its four work statuses. Only Sub-Issues may select an allowed technical repository. Its Initiative and Milestone derive from the parent.
+- CEO and Deputy may update all allowed fields. A Founder may update only their own Initiative fields or the brief of an owned/assigned Deliverable; for an owned or assigned Sub-Issue they may update title, context, work brief, parent, and ordinary work status.
 - CEO and Deputy may change ordinary work statuses. Founder may change ordinary work statuses only on owned or assigned Issues.
 - Only CEO may directly complete or reopen a Deliverable. CEO, Deputy, and Founder may complete any Sub-Issue or reopen it to `Offen`, provided its parent Deliverable is approved.
 - Active and final review locks and restricted `Nacharbeit` transitions remain enforced for Deliverables. Sub-Issue legacy review states never lock updates. Parent approval and optimistic concurrency remain enforced for Sub-Issue status changes.
-- The API never accepts direct approval, Sprint configuration, Review Owner, review outcome, final-score, Evidence, or GitHub synchronization fields for Sub-Issues. Their reopen transition has no review or score side effects.
+- The API never accepts direct approval, Sprint configuration, Review Owner, review outcome, final-score, manual Evidence links, or GitHub synchronization fields for Sub-Issues. Their reopen transition has no review or score side effects. `evidenceRequired` remains optional text in the work brief.
 
 Every commit validates the authorization, current version, hierarchy references, and GitHub repository policy again in the transaction.
 

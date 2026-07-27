@@ -59,7 +59,7 @@ test("updates a linked issue carrying the matching FounderOps marker", async () 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
 });
 
-test("preserves a legacy structured Sub-Issue body when context is mapped", async () => {
+test("reconstructs a stored Sub-Issue work brief instead of preserving stale GitHub text", async () => {
   const task = sourceTask({
     taskType: "sub_issue",
     description: "Keep this established GitHub description.",
@@ -85,10 +85,12 @@ test("preserves a legacy structured Sub-Issue body when context is mapped", asyn
   await github.upsertGitHubIssue(task, "installation-token");
 
   assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
-  assert.equal(requests[1].body.body, existingBody);
+  assert.match(requests[1].body.body, /^## Context\nKeep this established GitHub description\./);
+  assert.match(requests[1].body.body, /## Problem Statement\nKeep this established GitHub description\./);
+  assert.doesNotMatch(requests[1].body.body, /Existing detail remains available/);
 });
 
-test("replaces a legacy body after context is explicitly migrated", async () => {
+test("projects compact context when no optional work brief is stored", async () => {
   const task = sourceTask({
     taskType: "sub_issue",
     description: "New compact context.",
@@ -171,6 +173,51 @@ test("adds the durable marker without replacing a legacy Sub-Issue description",
 
     assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
     assert.equal(requests[1].body.body, `${existingBody}\n\n${githubMarker(task.id)}`);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
+});
+
+test("clears a managed Sub-Issue body after all optional context and work-brief fields are removed", async () => {
+  const previousAppUrl = process.env.APP_URL;
+  process.env.APP_URL = "https://founder-ops.findmydoc.eu";
+
+  try {
+    const task = sourceTask({
+      taskType: "sub_issue",
+      description: "",
+      problemStatement: "",
+      intendedOutcome: "",
+      scopeConstraints: "",
+      acceptanceCriteria: "",
+      evidenceRequired: "",
+      definitionOfDone: "",
+      githubIssueLastSyncedAt: "2026-07-26T10:00:00.000Z",
+    });
+    const { github, requests } = await loadGitHub({
+      number: 42,
+      html_url: task.githubIssueUrl,
+      title: "[Sub-Issue] Validate linked target",
+      body: [
+        "## Context",
+        "Removed context.",
+        "",
+        "## Problem Statement",
+        "Removed brief.",
+        "",
+        githubMarker(task.id),
+      ].join("\n"),
+    });
+
+    await github.upsertGitHubIssue(task, "installation-token");
+
+    assert.deepEqual(requests.map((request) => request.method || "GET"), ["GET", "PATCH"]);
+    assert.equal(requests[1].body.body, [
+      "---",
+      `Source: [FounderOps](${process.env.APP_URL}/tasks/${task.id}).`,
+      githubMarker(task.id),
+    ].join("\n"));
   } finally {
     if (previousAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = previousAppUrl;

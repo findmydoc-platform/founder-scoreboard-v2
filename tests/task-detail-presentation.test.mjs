@@ -137,7 +137,7 @@ test("taskOverviewPatch includes only changed fields allowed by permissions", ()
   );
 });
 
-test("Sub-Issue overview edits only title and context", () => {
+test("Sub-Issue overview edits title, context, and its optional work brief", () => {
   const baseline = task({
     taskType: "sub_issue",
     problemStatement: "Legacy problem",
@@ -163,19 +163,25 @@ test("Sub-Issue overview edits only title and context", () => {
     ...buildTaskOverviewDraft(baseline),
     title: "Changed work step",
     description: "Updated context",
-    problemStatement: "Must be ignored",
-    intendedOutcome: "Must be ignored",
-    scopeConstraints: "Must be ignored",
-    acceptanceCriteria: "Must be ignored",
-    evidenceRequired: "Must be ignored",
+    problemStatement: "Updated problem",
+    intendedOutcome: "Updated outcome",
+    scopeConstraints: "Updated scope",
+    acceptanceCriteria: "Updated acceptance",
+    evidenceRequired: "Updated evidence context",
     evidenceLinks: ["https://proof.example/evidence"],
-    definitionOfDone: "Must be ignored",
+    definitionOfDone: "Updated quality standard",
     note: "Must be ignored",
   };
 
   assert.deepEqual(taskOverviewPatch(baseline, draft, fullPermissions), {
     title: "Changed work step",
     description: "Updated context",
+    problemStatement: "Updated problem",
+    intendedOutcome: "Updated outcome",
+    scopeConstraints: "Updated scope",
+    acceptanceCriteria: "Updated acceptance",
+    evidenceRequired: "Updated evidence context",
+    definitionOfDone: "Updated quality standard",
   });
 });
 

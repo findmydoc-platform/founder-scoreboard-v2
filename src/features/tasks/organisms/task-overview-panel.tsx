@@ -26,6 +26,12 @@ const overviewFields = [
   { key: "note", label: "Interne Notiz", placeholder: "Entscheidung, Kontext oder nächster interner Hinweis", permission: "canEditNotes" },
 ] as const;
 
+const subIssueBriefFields = overviewFields
+  .filter(({ key }) => key !== "note")
+  .map((field) => field.key === "evidenceRequired"
+    ? { ...field, placeholder: "Optionaler Hinweis zum gewünschten Nachweis oder Verlauf" }
+    : field);
+
 function ChecklistReadValue({ value }: { value: string }) {
   const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return null;
@@ -264,12 +270,12 @@ export function TaskOverviewPanel({
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
   const isSubIssue = task.taskType === "sub_issue";
-  const hasLegacySubIssueBrief = isSubIssue && Boolean(draft.problemStatement.trim());
-  const hasDistinctSubIssueContext = hasLegacySubIssueBrief
+  const hasSubIssueBrief = isSubIssue && subIssueBriefFields.some(({ key }) => Boolean(draft[key].trim()));
+  const hasDistinctSubIssueContext = hasSubIssueBrief
     && Boolean(draft.description.trim())
     && draft.description.trim() !== draft.problemStatement.trim();
   const hasReadContent = isSubIssue
-    ? Boolean(draft.description.trim() || hasLegacySubIssueBrief || linkedPullRequests.length > 0 || riskContent)
+    ? Boolean(draft.description.trim() || hasSubIssueBrief || linkedPullRequests.length > 0 || riskContent)
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
       || linkedPullRequests.length > 0
@@ -321,8 +327,8 @@ export function TaskOverviewPanel({
             <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
             <p className="mt-1 text-sm text-slate-500">
               {isSubIssue
-                ? hasLegacySubIssueBrief
-                  ? "Historischer Aufgabenbrief, Blocker und automatisch verknüpfte Pull Requests."
+                ? hasSubIssueBrief
+                  ? "Arbeitsbrief, Blocker und automatisch verknüpfte Pull Requests."
                   : "Kontext, Blocker und automatisch verknüpfte Pull Requests."
                 : "Ziel, Abnahme und notwendige Nachweise für die Umsetzung."}
             </p>
@@ -356,6 +362,7 @@ export function TaskOverviewPanel({
 
           {isSubIssue ? (
             permissions.canEditBrief ? (
+              <>
               <UiField>
                 Kontext <span className="font-normal text-slate-400">(optional)</span>
                 <UiTextArea
@@ -369,6 +376,29 @@ export function TaskOverviewPanel({
                   placeholder="Relevante Hinweise, Hintergründe oder Absprachen"
                 />
               </UiField>
+
+              <fieldset className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+                <legend className="px-1 text-sm font-semibold text-slate-950">Arbeitsbrief <span className="font-normal text-slate-500">(optional)</span></legend>
+                <p className="-mt-2 text-sm leading-6 text-slate-500">
+                  Diese Angaben unterstützen die zuständige Person. Sie erzeugen weder Review, Score noch eine Nachweis- oder Abschlussbedingung.
+                </p>
+                {subIssueBriefFields.map(({ key, label, placeholder }) => (
+                  <UiField key={key}>
+                    {label}
+                    <UiTextArea
+                      data-task-overview-field
+                      value={draft[key]}
+                      disabled={saving}
+                      onChange={(event) => onChange({ [key]: event.target.value })}
+                      minHeight="lg"
+                      inputPadding="md"
+                      leading="relaxed"
+                      placeholder={placeholder}
+                    />
+                  </UiField>
+                ))}
+              </fieldset>
+              </>
             ) : null
           ) : overviewFields.map(({ key, label, placeholder, permission }) => permissions[permission] ? (
               <UiField key={key}>
@@ -458,27 +488,20 @@ export function TaskOverviewPanel({
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
           {isSubIssue ? (
             <>
-              {hasLegacySubIssueBrief ? (
+              {hasSubIssueBrief ? (
                 <>
                   <UiNotice tone="neutral" className="my-4">
-                    <span className="font-semibold text-slate-700">Historischer Aufgabenbrief.</span>{" "}
-                    Diese Angaben bleiben als Kontext sichtbar. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
+                    <span className="font-semibold text-slate-700">Arbeitsbrief.</span>{" "}
+                    Diese Angaben sind optionaler Kontext. Für Sub-Issues entstehen daraus weder Review, Score noch verpflichtende Nachweise.
                   </UiNotice>
                   {hasDistinctSubIssueContext ? <ReadSection label="Kontext" value={draft.description} /> : null}
-                  <section className="grid gap-4 border-b border-slate-100 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-950">Problem</h3>
-                      <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7 text-slate-700">
-                        {draft.problemStatement}
-                      </div>
-                    </div>
-                    {riskContent}
-                  </section>
+                  <ReadSection label="Problem" value={draft.problemStatement} />
                   <ReadSection label="Zielbild" value={draft.intendedOutcome} />
                   <ReadSection label="Umfang & Grenzen" value={draft.scopeConstraints} />
                   <ReadSection label="Abnahmekriterien" value={draft.acceptanceCriteria} checklist />
                   <ReadSection label="Erforderlicher Nachweis" value={draft.evidenceRequired} />
                   <ReadSection label="Qualitätsstandard" value={draft.definitionOfDone} checklist />
+                  {riskContent}
                 </>
               ) : (
                 <section className="grid gap-4 border-b border-slate-100 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">

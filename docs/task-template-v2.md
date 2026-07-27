@@ -23,9 +23,9 @@ Die Initiative trägt den Mini-RACI-Kontext: genau ein Accountable-Profil sowie 
 Konkrete Aufgabe mit Owner, Sprint, Priorität, Zeitraum und Review. Nur Deliverables sind scoring-relevant.
 
 ## Sub-Issue
-A small work step below one Deliverable. It requires a title and parent, defaults its owner to the current user, and may include short context, a GitHub repository, and one initial dependency. It has only `Offen`, `In Arbeit`, `Blockiert`, and `Erledigt` status. It has no task brief, Acceptance Criteria, Definition of Done, Evidence, review, score, RACI, Sprint, schedule, estimate, priority, or nested Sub-Issues.
+A small work step below one Deliverable. It requires a title and parent, defaults its owner to the current user, and may include short context, an optional work brief, a GitHub repository, and one initial dependency. It has only `Offen`, `In Arbeit`, `Blockiert`, and `Erledigt` status. Its optional work brief uses the sections below only as working context; it has no mandatory Evidence, review, score, quality gate, RACI, Sprint, schedule, estimate, priority, or nested Sub-Issues.
 
-The template sections below apply to Deliverables, not Sub-Issues.
+The template sections below are required planning content for Deliverables. For Sub-Issues they are optional and never form a completion condition.
 
 ## Problem Statement
 Beschreibt den aktuellen Zustand, das konkrete Problem oder den Pain Point und warum es jetzt relevant ist. Keine Lösung, Umsetzungsschritte oder technische Vorgaben in das Problem Statement schreiben.

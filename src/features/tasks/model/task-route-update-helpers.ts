@@ -1,6 +1,6 @@
 import { taskAssignedToProfile, type TaskUpdatePayload } from "@/features/tasks/model/task-mutation-contract";
 import { isSubIssueStatus, isTaskStatusChange, normalizeStatus, taskStatuses } from "@/lib/status";
-import type { AuthenticatedProfile, Task } from "@/lib/types";
+import type { AuthenticatedProfile } from "@/lib/types";
 
 export type TaskRouteDbUpdate = Record<string, unknown>;
 
@@ -18,6 +18,12 @@ const subIssueAllowedUpdateFields = new Set([
   "expectedUpdatedAt",
   "title",
   "description",
+  "problemStatement",
+  "intendedOutcome",
+  "scopeConstraints",
+  "acceptanceCriteria",
+  "evidenceRequired",
+  "definitionOfDone",
   "status",
   "assignee",
   "owner",
@@ -232,14 +238,6 @@ export function applyTaskBriefUpdateFields(update: TaskRouteDbUpdate, payload: T
   if (payload.evidenceRequired !== undefined) update.evidence_required = payload.evidenceRequired.trim().slice(0, 4000) || null;
   if (payload.definitionOfDone !== undefined) update.definition_of_done = payload.definitionOfDone.trim().slice(0, 4000) || null;
   if (payload.evidenceLink !== undefined) update.evidence_link = payload.evidenceLink.trim().slice(0, 4000) || null;
-}
-
-export function applySubIssueContextMigration(
-  update: TaskRouteDbUpdate,
-  taskType: Task["taskType"],
-  descriptionChanged: boolean,
-) {
-  if (taskType === "sub_issue" && descriptionChanged) update.problem_statement = null;
 }
 
 export function applyReviewStatusUpdate(update: TaskRouteDbUpdate, payload: TaskUpdatePayload): RouteGuardResult {

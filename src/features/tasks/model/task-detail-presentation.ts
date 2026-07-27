@@ -75,6 +75,12 @@ export function taskOverviewPatch(
     assignWhenChanged("title");
     if (task.taskType === "sub_issue") {
       assignWhenChanged("description");
+      assignWhenChanged("problemStatement");
+      assignWhenChanged("intendedOutcome");
+      assignWhenChanged("scopeConstraints");
+      assignWhenChanged("acceptanceCriteria");
+      assignWhenChanged("evidenceRequired");
+      assignWhenChanged("definitionOfDone");
     } else {
       assignWhenChanged("problemStatement");
       assignWhenChanged("intendedOutcome");

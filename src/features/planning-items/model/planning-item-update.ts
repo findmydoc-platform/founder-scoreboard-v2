@@ -7,7 +7,6 @@ import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permis
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   applyFinalStatusReopen,
-  applySubIssueContextMigration,
   startsTaskReviewRequest,
   validateSubIssueStatusParentApproval,
   validateTaskStatusUpdate,
@@ -75,7 +74,8 @@ const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>
     "endDate", "deadline", "hours", "status",
   ]),
   sub_issue: new Set([
-    "title", "description", "parentTaskId", "ownerId", "githubRepo", "status",
+    "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
+    "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "githubRepo", "status",
   ]),
 };
 
@@ -129,12 +129,12 @@ function publicTask(row: DatabaseRow): UnknownRecord {
     itemType: isSubIssue ? "sub_issue" : "deliverable",
     title: String(row.title || ""),
     description,
-    problemStatement: isSubIssue ? "" : String(row.problem_statement || ""),
-    intendedOutcome: isSubIssue ? "" : String(row.intended_outcome || ""),
-    scopeConstraints: isSubIssue ? "" : String(row.scope_constraints || ""),
-    acceptanceCriteria: isSubIssue ? "" : String(row.acceptance_criteria || ""),
-    evidenceRequired: isSubIssue ? "" : String(row.evidence_required || ""),
-    definitionOfDone: isSubIssue ? "" : String(row.definition_of_done || ""),
+    problemStatement: String(row.problem_statement || ""),
+    intendedOutcome: String(row.intended_outcome || ""),
+    scopeConstraints: String(row.scope_constraints || ""),
+    acceptanceCriteria: String(row.acceptance_criteria || ""),
+    evidenceRequired: String(row.evidence_required || ""),
+    definitionOfDone: String(row.definition_of_done || ""),
     parentTaskId: String(row.parent_task_id || ""),
     packageId: String(row.package_id || ""),
     milestoneId: String(row.milestone_id || ""),
@@ -426,7 +426,6 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["githubRepo", "github_repo"],
   ];
   for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
-  applySubIssueContextMigration(dbPatch, itemType, changed.has("description"));
   if (changed.has("ownerId")) {
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;

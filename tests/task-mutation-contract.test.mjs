@@ -153,26 +153,34 @@ test("task brief fields stay together in the shared update payload", async () =>
   assert.equal(payload.definitionOfDone, "Qualitätsstandard");
 });
 
-test("explicit Sub-Issue context changes retire the legacy context fallback", async () => {
-  const { applySubIssueContextMigration } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
+test("Sub-Issue context changes preserve stored work brief fields", async () => {
+  const { applyTaskBriefUpdateFields, validateTaskTypeUpdateFields } = await loadTranspiledModule("src/features/tasks/model/task-route-update-helpers.ts", {
     "@/features/tasks/model/task-mutation-contract": { taskAssignedToProfile: () => true },
     "@/lib/status": statusMock,
   });
 
-  const update = { description: null };
-  applySubIssueContextMigration(update, "sub_issue", true);
+  const update = { problem_statement: "Stored problem", intended_outcome: "Stored outcome" };
+  applyTaskBriefUpdateFields(update, { description: "Updated context" });
   assert.deepEqual(update, {
-    description: null,
-    problem_statement: null,
+    description: "Updated context",
+    problem_statement: "Stored problem",
+    intended_outcome: "Stored outcome",
   });
 
-  const unchangedLegacyBrief = {};
-  applySubIssueContextMigration(unchangedLegacyBrief, "sub_issue", false);
-  assert.deepEqual(unchangedLegacyBrief, {});
-
-  const deliverableUpdate = {};
-  applySubIssueContextMigration(deliverableUpdate, "deliverable", true);
-  assert.deepEqual(deliverableUpdate, {});
+  assert.deepEqual(
+    validateTaskTypeUpdateFields(
+      { task_type: "sub_issue" },
+      { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", acceptanceCriteria: "Optional criterion" },
+    ),
+    { ok: true },
+  );
+  assert.equal(
+    validateTaskTypeUpdateFields(
+      { task_type: "sub_issue" },
+      { expectedUpdatedAt: "2026-07-14T10:00:00.000Z", evidenceLinks: ["https://example.com"] },
+    ).ok,
+    false,
+  );
 });
 
 test("Sub-Issue parent updates keep CAS, activity, and sync state together", async () => {
