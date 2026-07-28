@@ -13,12 +13,13 @@ const publicPaths = [
   "/api/team/planning-items/v1/items/{id}/preview",
   "/api/team/planning-items/v1/items/{id}/delete/preview",
   "/api/team/planning-items/v1/items/{id}",
+  "/api/team/planning-items/v1/items/{id}/github-sync",
   "/api/team/planning-items/v1/tokens",
   "/api/team/planning-items/v1/tokens/{id}",
 ];
 
-test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contracts", async () => {
-  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, updatePreviewRoute, deletePreviewRoute, updateRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
+test("Planning Items API exposes create, PATCH, GitHub sync, and empty Milestone DELETE contracts", async () => {
+  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, updatePreviewRoute, deletePreviewRoute, updateRoute, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
     read("src/features/projects/model/milestone-contract.ts"),
     read("src/app/api/team/planning-items/v1/context/route.ts"),
@@ -27,6 +28,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
     read("src/app/api/team/planning-items/v1/items/[id]/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
+    read("src/app/api/team/planning-items/v1/items/[id]/github-sync/route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/[id]/route.ts"),
     read("src/features/profile/organisms/profile-planning-items-tokens.tsx"),
@@ -38,6 +40,7 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.match(contract, /"write:planning-items:create"/);
   assert.match(contract, /"write:planning-items:update"/);
   assert.match(contract, /"write:planning-items:delete-empty"/);
+  assert.match(contract, /"write:planning-items:github-sync"/);
   assert.match(contract, /"milestone"/);
   assert.match(contextRoute, /"read:planning-context"/);
   assert.match(createPreviewRoute, /"write:planning-items:create"/);
@@ -53,25 +56,34 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
   assert.match(updateRoute, /team_planning_item_update_requests/);
   assert.match(updateRoute, /existingRequest/);
   assert.match(updateRoute, /replayCheck/);
-  assert.match(tokensRoute, /create_team_planning_items_token_v2/);
+  assert.match(updateRoute, /after\(/);
+  assert.match(createRoute, /after\(/);
+  assert.match(githubSyncRoute, /"write:planning-items:github-sync"/);
+  assert.match(githubSyncRoute, /githubSyncMode/);
+  assert.doesNotMatch(githubSyncRoute, /idempotency-key/i);
+  assert.match(tokensRoute, /create_team_planning_items_token_v3/);
   assert.match(tokensRoute, /allowUpdates/);
   assert.match(tokensRoute, /allowEmptyMilestoneDeletes/);
+  assert.match(tokensRoute, /allowGitHubSync/);
   assert.match(tokensRoute, /Nur CEO oder Deputy/);
   assert.match(tokensRoute, /!payload \|\| typeof payload !== "object" \|\| Array\.isArray\(payload\)/);
   assert.match(tokensRoute, /Token-Payload muss ein JSON-Objekt sein/);
   assert.match(tokenUi, /canIssueEmptyMilestoneDeletes/);
   assert.match(tokenUi, /Leere Meilensteine löschen/);
+  assert.match(tokenUi, /GitHub synchronisieren/);
   assert.match(tokenRoute, /revoke_team_planning_items_token/);
 
   const document = JSON.parse(openapi);
   assert.equal(document.info.title, "FounderOps Planning Items API");
-  assert.equal(document.info.version, "1.3.0");
+  assert.equal(document.info.version, "1.4.0");
   assert.deepEqual(Object.keys(document.paths), publicPaths);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.operationId, "updatePlanningItem");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyMilestone");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/preview"].post.operationId, "previewPlanningItemUpdate");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/delete/preview"].post.operationId, "previewEmptyMilestoneDelete");
   assert.equal(document.paths["/api/team/planning-items/v1/tokens"].post.operationId, "createPlanningItemsToken");
+  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/github-sync"].post.operationId, "syncPlanningItemToGitHub");
+  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/github-sync"].post.parameters.length, 1);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "milestone");
@@ -83,14 +95,29 @@ test("Planning Items API exposes create, PATCH, and empty Milestone DELETE contr
     { $ref: "#/components/schemas/SubIssueStatus" },
   ]);
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.default, false);
+  assert.equal(document.components.schemas.CreateTokenPayload.properties.allowGitHubSync.default, false);
+  assert.deepEqual(document.components.schemas.GitHubSyncMode.enum, ["async", "wait"]);
+  assert.equal(document.components.schemas.GitHubSyncCommand.properties.createIfMissing.type, "boolean");
   assert.match(documentation, /PATCH processes only properties that are present/);
   assert.match(documentation, /write:planning-items:delete-empty/);
+  assert.match(documentation, /write:planning-items:github-sync/);
+  assert.match(documentation, /Async execution is best effort/);
   assert.match(documentation, /valid: false/);
   assert.match(documentation, /No legacy HTTP aliases or parallel planning-item creation routes are retained/);
   assert.match(documentation, /Existing update-enabled tokens continue to work without rotation/);
   assert.match(documentation, /status: "Review"/);
   assert.match(documentation, /separate four-state contract/);
   assert.match(documentation, /complete any Sub-Issue/);
+});
+
+test("GitHub sync scope migration backfills only active tokens and keeps issuance explicit", async () => {
+  const migration = await read("supabase/migrations/20260728181747_planning_items_github_sync_scope.sql");
+  assert.match(migration, /write:planning-items:github-sync/);
+  assert.match(migration, /where revoked_at is null\s+and expires_at > now\(\)/i);
+  assert.match(migration, /create or replace function public\.create_team_planning_items_token_v3/i);
+  assert.match(migration, /p_allow_github_sync boolean default false/i);
+  assert.match(migration, /grant execute on function public\.create_team_planning_items_token_v3[^]*to service_role/i);
+  assert.doesNotMatch(migration, /grant execute[^]*to anon/i);
 });
 
 test("legacy public Team Task Intake routes and source modules are absent", async () => {
@@ -206,6 +233,9 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
       "@/features/reviews/model/task-review-state": {
         isReviewStateLocked: () => false,
         reviewStateLockMessage: () => "Review locked",
+      },
+      "@/features/planning-items/model/planning-items-github-sync-preview": {
+        previewPlanningItemGitHubSync: () => ({ status: "accepted" }),
       },
     },
   );

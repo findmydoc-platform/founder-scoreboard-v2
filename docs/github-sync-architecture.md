@@ -6,8 +6,10 @@ FounderOps and Supabase are authoritative. GitHub is a one-way projection used f
 
 ```mermaid
 flowchart LR
-  Client["Task clients"] --> Route["POST /api/tasks/[id]/sync-github"]
-  Route --> Task["Task projection"]
+Client["Task clients"] --> Route["POST /api/tasks/[id]/sync-github"]
+Planning["Planning API clients"] --> PlanningRoute["POST /api/team/planning-items/v1/items/[id]/github-sync"]
+PlanningRoute --> Task
+Route --> Task["Task projection"]
   Task --> Issue["Issue projection"]
   Task --> Dependency["Dependency projection"]
   Task --> Project["Project projection"]
@@ -43,6 +45,13 @@ projectTaskToGitHub({
   createIfMissing,
 })
 ```
+
+Planning API async calls use the same interface in preflight-only mode before
+returning HTTP `202`, then execute the full projection through Next.js
+`after()`. This is best-effort continuation in the same Vercel invocation, not
+a queue or scheduled retry. Embedded Create and PATCH commands persist their
+per-item response classification without making GitHub part of the FounderOps
+database transaction.
 
 The HTTP body uses the browser-safe `TaskGitHubSyncCommand` contract and must contain an explicit Boolean `createIfMissing`. The Route Handler rejects absent or non-Boolean creation intent before acquiring a GitHub token or entering the projection module.
 

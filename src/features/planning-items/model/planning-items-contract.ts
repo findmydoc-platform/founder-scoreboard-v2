@@ -14,14 +14,15 @@ export const TEAM_PLANNING_ITEM_SCOPES = [
   "write:planning-items:create",
   "write:planning-items:update",
   "write:planning-items:delete-empty",
+  "write:planning-items:github-sync",
 ] as const;
+export const TEAM_PLANNING_ITEM_GITHUB_SYNC_MODES = ["async", "wait"] as const;
 export const TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES = [
   "approval",
   "score",
   "final-review",
   "review-owner",
   "sprint-configuration",
-  "github-sync",
 ] as const;
 
 export const PLANNING_ITEM_FIELD_RULES = {
@@ -94,6 +95,33 @@ export type TeamPlanningItemType = (typeof TEAM_PLANNING_ITEM_TYPES)[number];
 export type TeamPlanningItemGenericTaskType = (typeof TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES)[number];
 export type PlanningItemFieldKey = keyof typeof PLANNING_ITEM_FIELD_RULES;
 export type TeamPlanningItemPatchField = (typeof TEAM_PLANNING_ITEM_PATCH_FIELDS)[number];
+export type TeamPlanningItemGitHubSyncMode =
+  (typeof TEAM_PLANNING_ITEM_GITHUB_SYNC_MODES)[number];
+
+export type PlanningItemGitHubSyncCommand = {
+  createIfMissing: boolean;
+};
+
+export type PlanningItemGitHubSyncResult =
+  | { status: "accepted" }
+  | {
+    status: "synced";
+    code: "github_sync_succeeded";
+    issue: {
+      repository: string;
+      number: number;
+      url: string;
+      recovered: boolean;
+      recreated: boolean;
+    };
+    warnings: string[];
+  }
+  | {
+    status: "notEligible" | "failed";
+    code: string;
+    error: string;
+    retryable: boolean;
+  };
 
 export type TeamPlanningItemTokenRecord = {
   id: string;
@@ -110,4 +138,27 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 
 export function isUuid(value: string) {
   return uuidPattern.test(value);
+}
+
+export function parsePlanningItemGitHubSyncCommand(
+  value: unknown,
+): { ok: true; command: PlanningItemGitHubSyncCommand } | { ok: false; error: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "githubSync muss ein Objekt sein." };
+  }
+  const keys = Object.keys(value);
+  if (keys.some((key) => key !== "createIfMissing")) {
+    return { ok: false, error: "githubSync enthält unbekannte Felder." };
+  }
+  const createIfMissing = (value as { createIfMissing?: unknown }).createIfMissing;
+  if (typeof createIfMissing !== "boolean") {
+    return { ok: false, error: "githubSync.createIfMissing muss wahr oder falsch sein." };
+  }
+  return { ok: true, command: { createIfMissing } };
+}
+
+export function parsePlanningItemGitHubSyncMode(
+  value: unknown,
+): TeamPlanningItemGitHubSyncMode | null {
+  return value === "async" || value === "wait" ? value : null;
 }

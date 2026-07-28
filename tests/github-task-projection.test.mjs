@@ -193,8 +193,30 @@ async function projectionFixture(options = {}) {
       actorProfileId: "profile-1",
       createIfMissing,
     }),
+    preflight: (createIfMissing = false) => taskProjectionModule.projectTaskToGitHub({
+      supabase,
+      taskId: "task-1",
+      actorProfileId: "profile-1",
+      createIfMissing,
+      preflightOnly: true,
+    }),
   };
 }
+
+test("task projection preflight validates local eligibility without locking or mutating", async () => {
+  const fixture = await projectionFixture();
+  const result = await fixture.preflight();
+
+  assert.deepEqual(result, {
+    ok: true,
+    code: "github_sync_ready",
+    target: {
+      repository: "findmydoc-platform/management",
+      issueNumber: 42,
+    },
+  });
+  assert.deepEqual(fixture.calls, ["activeInitial"]);
+});
 
 test("task projection executes hard projections before warning-only projections and finalizes once", async () => {
   const fixture = await projectionFixture();

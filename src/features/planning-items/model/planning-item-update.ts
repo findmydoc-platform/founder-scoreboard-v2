@@ -17,7 +17,11 @@ import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
+  parsePlanningItemGitHubSyncCommand,
+  parsePlanningItemGitHubSyncMode,
+  type PlanningItemGitHubSyncCommand,
   type TeamPlanningItemPatchField,
+  type TeamPlanningItemGitHubSyncMode,
   type TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
 import {
@@ -55,6 +59,7 @@ export type PlanningItemUpdatePreview = {
   warnings: string[];
   errors: string[];
   dbPatch: UnknownRecord;
+  githubSyncParentApprovalStatus?: unknown;
 };
 
 type TargetLoadResult =
@@ -210,19 +215,44 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
     return { ok: false as const, error: "PATCH-Payload muss ein Objekt sein." };
   }
   const raw = payload as UnknownRecord;
-  const unknownKey = Object.keys(raw).find((key) => key !== "expectedUpdatedAt" && key !== "itemType" && !patchFields.has(key));
+  const unknownKey = Object.keys(raw).find((key) => (
+    key !== "expectedUpdatedAt"
+    && key !== "itemType"
+    && key !== "githubSync"
+    && key !== "githubSyncMode"
+    && !patchFields.has(key)
+  ));
   if (unknownKey) return { ok: false as const, error: `PATCH-Payload enthält das unbekannte Feld ${unknownKey}.` };
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
   if (typeof raw.expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(raw.expectedUpdatedAt))) {
     return { ok: false as const, error: "expectedUpdatedAt muss ein gültiger Zeitstempel sein." };
   }
+  const hasGitHubSync = Object.hasOwn(raw, "githubSync");
+  let githubSync: PlanningItemGitHubSyncCommand | null = null;
+  if (hasGitHubSync) {
+    const sync = parsePlanningItemGitHubSyncCommand(raw.githubSync);
+    if (!sync.ok) return { ok: false as const, error: sync.error };
+    githubSync = sync.command;
+  }
+  const hasMode = Object.hasOwn(raw, "githubSyncMode");
+  const githubSyncMode = parsePlanningItemGitHubSyncMode(raw.githubSyncMode);
+  if (hasGitHubSync && !githubSyncMode) {
+    return { ok: false as const, error: "githubSyncMode muss bei GitHub-Sync async oder wait sein." };
+  }
+  if (!hasGitHubSync && hasMode) {
+    return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
+  }
   const presentFields = Object.keys(raw).filter((key): key is TeamPlanningItemPatchField => patchFields.has(key));
-  if (!presentFields.length) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld." };
+  if (!presentFields.length && !githubSync) {
+    return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
+  }
   return {
     ok: true as const,
     expectedUpdatedAt: raw.expectedUpdatedAt,
     presentFields,
     raw,
+    githubSync,
+    githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null,
   };
 }
 
@@ -731,6 +761,9 @@ export async function buildPlanningItemUpdatePreview({
       warnings,
       errors,
       dbPatch,
+      ...(target.itemType === "sub_issue"
+        ? { githubSyncParentApprovalStatus: statusParent?.approval_status }
+        : {}),
     },
   };
 }

@@ -28,10 +28,11 @@ export function createPlanningItemsToken(
   label: string,
   allowUpdates: boolean,
   allowEmptyMilestoneDeletes: boolean,
+  allowGitHubSync: boolean,
 ) {
   return apiClient.requestJson<TokenCreateResponse>(tokensEndpoint, {
     method: "POST",
-    json: { label, allowUpdates, allowEmptyMilestoneDeletes },
+    json: { label, allowUpdates, allowEmptyMilestoneDeletes, allowGitHubSync },
   });
 }
 

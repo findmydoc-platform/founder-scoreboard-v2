@@ -8,6 +8,7 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
+import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
@@ -17,6 +18,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
+    if (parsed.githubSyncMode
+      && !permission.scopes.includes("write:planning-items:github-sync")) {
+      return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
+    }
 
     const result = await buildPlanningItemUpdatePreview({
       actor: permission.profile,
@@ -40,6 +45,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       systemEffects: preview.systemEffects,
       errors: preview.errors,
       warnings: preview.warnings,
+      ...(parsed.githubSync ? {
+        githubSync: previewPlanningItemGitHubSync({
+          itemType: preview.itemType,
+          approvalStatus: preview.resultingItem.approvalStatus,
+          parentApprovalStatus: preview.githubSyncParentApprovalStatus,
+        }),
+      } : {}),
     }, preview.errors.length ? 400 : 200);
   });
 }

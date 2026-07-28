@@ -1,4 +1,4 @@
 {
-  "classification": "bug-fix",
-  "reason": "Restores optional Sub-Issue work brief editing and GitHub projection without adding a new workflow or capability."
+  "classification": "minor-ux",
+  "reason": "Adds one permission toggle for an API capability without introducing a new end-user workflow."
 }

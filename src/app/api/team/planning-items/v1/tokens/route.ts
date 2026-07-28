@@ -12,6 +12,7 @@ type CreateTokenPayload = {
   label?: unknown;
   allowUpdates?: unknown;
   allowEmptyMilestoneDeletes?: unknown;
+  allowGitHubSync?: unknown;
 };
 
 type TokenRecordRow = Parameters<typeof mapTeamPlanningItemsTokenRecord>[0];
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
     "label",
     "allowUpdates",
     "allowEmptyMilestoneDeletes",
+    "allowGitHubSync",
   ].includes(key));
   if (unknownField) return apiError(`Token-Payload enthält das unbekannte Feld ${unknownField}.`, 400);
 
@@ -86,6 +88,9 @@ export async function POST(request: NextRequest) {
   if (payload.allowEmptyMilestoneDeletes !== undefined && typeof payload.allowEmptyMilestoneDeletes !== "boolean") {
     return apiError("allowEmptyMilestoneDeletes muss wahr oder falsch sein.", 400);
   }
+  if (payload.allowGitHubSync !== undefined && typeof payload.allowGitHubSync !== "boolean") {
+    return apiError("allowGitHubSync muss wahr oder falsch sein.", 400);
+  }
   const canIssueEmptyMilestoneDeletes = permission.profile?.platformRole === "ceo"
     || permission.profile?.platformRole === "deputy";
   if (payload.allowEmptyMilestoneDeletes === true && !canIssueEmptyMilestoneDeletes) {
@@ -93,13 +98,14 @@ export async function POST(request: NextRequest) {
   }
 
   const generated = createTeamPlanningItemsToken();
-  const { data, error } = await supabase.rpc("create_team_planning_items_token_v2", {
+  const { data, error } = await supabase.rpc("create_team_planning_items_token_v3", {
     p_profile_id: profileId,
     p_label: label,
     p_token_hash: generated.tokenHash,
     p_token_hint: generated.tokenHint,
     p_allow_updates: payload.allowUpdates === true,
     p_allow_empty_milestone_deletes: payload.allowEmptyMilestoneDeletes === true,
+    p_allow_github_sync: payload.allowGitHubSync === true,
   });
 
   if (error) {
