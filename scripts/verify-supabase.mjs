@@ -514,6 +514,11 @@ async function verifyPlanningItemsRpcs() {
     p_token_hint: "…verify",
     p_allow_updates: false,
   };
+  const tokenV3Params = {
+    ...tokenParams,
+    p_allow_empty_milestone_deletes: false,
+    p_allow_github_sync: false,
+  };
   const authParams = {
     p_token_hash: "c".repeat(64),
     p_scope: "read:planning-context",
@@ -545,9 +550,24 @@ async function verifyPlanningItemsRpcs() {
     p_request_ip: null,
     p_user_agent: null,
   };
-  const [token, anonToken, auth, anonAuth, revoke, anonRevoke, create, anonCreate, update, anonUpdate] = await Promise.all([
+  const [
+    token,
+    anonToken,
+    tokenV3,
+    anonTokenV3,
+    auth,
+    anonAuth,
+    revoke,
+    anonRevoke,
+    create,
+    anonCreate,
+    update,
+    anonUpdate,
+  ] = await Promise.all([
     supabase.rpc("create_team_planning_items_token", tokenParams),
     anonSupabase.rpc("create_team_planning_items_token", tokenParams),
+    supabase.rpc("create_team_planning_items_token_v3", tokenV3Params),
+    anonSupabase.rpc("create_team_planning_items_token_v3", tokenV3Params),
     supabase.rpc("authenticate_team_planning_items_token", authParams),
     anonSupabase.rpc("authenticate_team_planning_items_token", authParams),
     supabase.rpc("revoke_team_planning_items_token", revokeParams),
@@ -565,7 +585,16 @@ async function verifyPlanningItemsRpcs() {
       error: token.error?.code !== "P0002"
         ? token.error?.message || "token RPC unexpectedly accepted a missing profile"
         : !anonToken.error
-          ? "token RPC unexpectedly allowed anonymous execution"
+            ? "token RPC unexpectedly allowed anonymous execution"
+            : "",
+    },
+    {
+      name: "create_team_planning_items_token_v3",
+      ok: tokenV3.error?.code === "P0002" && Boolean(anonTokenV3.error),
+      error: tokenV3.error?.code !== "P0002"
+        ? tokenV3.error?.message || "token v3 RPC unexpectedly accepted a missing profile"
+        : !anonTokenV3.error
+          ? "token v3 RPC unexpectedly allowed anonymous execution"
           : "",
     },
     {

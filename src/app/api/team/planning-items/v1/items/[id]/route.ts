@@ -1,6 +1,9 @@
 import { auditRequestMetadata } from "@/lib/api-input";
-import type { NextRequest } from "next/server";
-import { isUuid } from "@/features/planning-items/model/planning-items-contract";
+import { after, type NextRequest } from "next/server";
+import {
+  isUuid,
+  type PlanningItemGitHubSyncResult,
+} from "@/features/planning-items/model/planning-items-contract";
 import {
   parsePlanningItemDeletePayload,
   planningItemMilestoneDeleteHash,
@@ -17,6 +20,11 @@ import {
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
 import {
+  executePlanningItemGitHubSyncs,
+  preflightPlanningItemGitHubSync,
+  type PlanningItemGitHubSyncTarget,
+} from "@/features/planning-items/model/planning-items-github-sync";
+import {
   isMilestoneNotEmptyDatabaseError,
   loadMilestoneChildCounts,
   loadProjectMilestone,
@@ -29,6 +37,7 @@ type UpdateTransactionResult = {
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
+  githubSync?: PlanningItemGitHubSyncResult;
 };
 
 type StoredUpdateRequest = {
@@ -67,8 +76,23 @@ function updateResponse(
     item,
     changedFields: transaction.changedFields || fallbackChangedFields,
     systemEffects: transaction.systemEffects || fallbackSystemEffects,
+    ...(transaction.githubSync ? { githubSync: transaction.githubSync } : {}),
     itemLink: itemLink(request, itemType, String(item.id || fallbackItemId)),
   });
+}
+
+async function persistUpdateResponse(
+  supabase: Parameters<typeof executePlanningItemGitHubSyncs>[0]["supabase"],
+  tokenId: string,
+  idempotencyKey: string,
+  transaction: UpdateTransactionResult,
+) {
+  const { error } = await supabase
+    .from("team_planning_item_update_requests")
+    .update({ response: transaction })
+    .eq("token_id", tokenId)
+    .eq("idempotency_key", idempotencyKey);
+  if (error) throw new Error(`GitHub-Sync-Ergebnis konnte nicht gespeichert werden: ${error.message}`);
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -82,6 +106,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
+    if (parsed.githubSyncMode
+      && !permission.scopes.includes("write:planning-items:github-sync")) {
+      return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
+    }
 
     const loadStoredRequest = () => permission.supabase
       .from("team_planning_item_update_requests")
@@ -164,7 +192,71 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const transaction = data as UpdateTransactionResult | null;
     if (!transaction) throw new Error("Planning-Items-Update lieferte kein Ergebnis zurück.");
-    return updateResponse(request, itemId, transaction, preview.itemType, preview.changedFields, preview.systemEffects);
+    if (!parsed.githubSync || !parsed.githubSyncMode) {
+      return updateResponse(request, itemId, transaction, preview.itemType, preview.changedFields, preview.systemEffects);
+    }
+
+    const target: PlanningItemGitHubSyncTarget = {
+      itemId,
+      itemType: preview.itemType,
+      command: parsed.githubSync,
+    };
+    if (parsed.githubSyncMode === "wait") {
+      const results = await executePlanningItemGitHubSyncs({
+        supabase: permission.supabase,
+        actorProfileId: permission.profile.id,
+        targets: [target],
+      });
+      const enriched = {
+        ...transaction,
+        githubSync: results.get(itemId),
+      };
+      await persistUpdateResponse(
+        permission.supabase,
+        permission.tokenId,
+        idempotencyKey,
+        enriched,
+      );
+      return updateResponse(request, itemId, enriched, preview.itemType, preview.changedFields, preview.systemEffects);
+    }
+
+    const preflight = await preflightPlanningItemGitHubSync(
+      permission.supabase,
+      permission.profile.id,
+      target,
+    );
+    const accepted = {
+      ...transaction,
+      githubSync: preflight,
+    };
+    await persistUpdateResponse(
+      permission.supabase,
+      permission.tokenId,
+      idempotencyKey,
+      accepted,
+    );
+    if (preflight.status === "accepted") {
+      after(async () => {
+        const results = await executePlanningItemGitHubSyncs({
+          supabase: permission.supabase,
+          actorProfileId: permission.profile.id,
+          targets: [target],
+        });
+        const finalResult = results.get(itemId);
+        if (!finalResult) return;
+        try {
+          await persistUpdateResponse(
+            permission.supabase,
+            permission.tokenId,
+            idempotencyKey,
+            { ...transaction, githubSync: finalResult },
+          );
+        } catch {
+          // The Task projection remains authoritative when response snapshot refresh fails.
+        }
+      });
+    }
+    return updateResponse(request, itemId, accepted, preview.itemType, preview.changedFields, preview.systemEffects);
   });
 }
 

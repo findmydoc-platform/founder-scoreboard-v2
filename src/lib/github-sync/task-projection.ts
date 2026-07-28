@@ -19,6 +19,7 @@ import {
   taskGitHubSyncFailure,
   type GitHubCommentDeliverySummary,
   type TaskGitHubProjectionResult,
+  type TaskGitHubSyncPreflightResult,
 } from "./contract";
 import { projectTaskGitHubDependencies } from "./dependency-projection";
 import { projectTaskGitHubIssue } from "./issue-projection";
@@ -203,19 +204,40 @@ async function releaseGitHubSyncLock(
   }
 }
 
-export async function projectTaskToGitHub({
-  supabase,
-  installationToken,
-  taskId,
-  actorProfileId,
-  createIfMissing,
-}: {
+type TaskGitHubProjectionInput = {
   supabase: SupabaseClient;
   installationToken: string;
   taskId: string;
   actorProfileId: string;
   createIfMissing: boolean;
-}): Promise<TaskGitHubProjectionResult> {
+  preflightOnly?: false;
+};
+
+type TaskGitHubPreflightInput = {
+  supabase: SupabaseClient;
+  taskId: string;
+  actorProfileId: string;
+  createIfMissing: boolean;
+  preflightOnly: true;
+  installationToken?: never;
+};
+
+export function projectTaskToGitHub(
+  input: TaskGitHubPreflightInput,
+): Promise<TaskGitHubSyncPreflightResult>;
+export function projectTaskToGitHub(
+  input: TaskGitHubProjectionInput,
+): Promise<TaskGitHubProjectionResult>;
+export async function projectTaskToGitHub({
+  supabase,
+  installationToken = "",
+  taskId,
+  actorProfileId,
+  createIfMissing,
+  preflightOnly = false,
+}: TaskGitHubProjectionInput | TaskGitHubPreflightInput): Promise<
+  TaskGitHubProjectionResult | TaskGitHubSyncPreflightResult
+> {
   const inactive = await validateActiveTask(supabase, taskId);
   if (inactive) return inactive;
 
@@ -230,6 +252,16 @@ export async function projectTaskToGitHub({
   }
   const eligibility = validateTaskForProjection(loaded, createIfMissing);
   if (!eligibility.ok) return eligibility;
+  if (preflightOnly) {
+    return {
+      ok: true,
+      code: "github_sync_ready",
+      target: {
+        repository: eligibility.repository,
+        issueNumber: eligibility.issueNumber,
+      },
+    };
+  }
 
   const resourceKey = githubSyncResourceKey(
     loaded.task.id,

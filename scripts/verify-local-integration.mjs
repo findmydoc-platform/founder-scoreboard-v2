@@ -243,6 +243,82 @@ async function verifyDirectProfileMutationDenied(supabase, userId) {
   }
 }
 
+async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
+  const issuedTokenIds = [];
+  const issueToken = async (allowGitHubSync) => {
+    const response = await apiRequest(
+      "/api/team/planning-items/v1/tokens",
+      sessionToken,
+      "sebastian",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          label: allowGitHubSync ? "Local GitHub sync verification" : "Local default scope verification",
+          allowGitHubSync,
+        }),
+      },
+    );
+    assertStatus(response, 200, `Planning API token issuance (${allowGitHubSync ? "enabled" : "disabled"})`);
+    const body = await response.json();
+    if (!body.token || !body.tokenRecord?.id || !Array.isArray(body.tokenRecord.scopes)) {
+      throw new Error("Planning API token issuance returned an incomplete response.");
+    }
+    issuedTokenIds.push(body.tokenRecord.id);
+    return body;
+  };
+
+  try {
+    const defaultToken = await issueToken(false);
+    if (defaultToken.tokenRecord.scopes.includes("write:planning-items:github-sync")) {
+      throw new Error("New Planning API token unexpectedly received the GitHub sync scope by default.");
+    }
+    const denied = await apiRequest(
+      `/api/team/planning-items/v1/items/${taskId}/github-sync`,
+      defaultToken.token,
+      "",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          githubSyncMode: "async",
+          createIfMissing: false,
+        }),
+      },
+    );
+    assertStatus(denied, 403, "Planning API GitHub sync without scope");
+
+    const enabledToken = await issueToken(true);
+    if (!enabledToken.tokenRecord.scopes.includes("write:planning-items:github-sync")) {
+      throw new Error("Planning API token did not receive the explicitly requested GitHub sync scope.");
+    }
+    const ineligible = await apiRequest(
+      `/api/team/planning-items/v1/items/${taskId}/github-sync`,
+      enabledToken.token,
+      "",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          githubSyncMode: "async",
+          createIfMissing: false,
+        }),
+      },
+    );
+    assertStatus(ineligible, 409, "Planning API GitHub sync preflight");
+  } finally {
+    for (const tokenId of issuedTokenIds.reverse()) {
+      const response = await apiRequest(
+        `/api/team/planning-items/v1/tokens/${tokenId}`,
+        sessionToken,
+        "sebastian",
+        { method: "DELETE" },
+      );
+      assertStatus(response, 200, "Planning API verification token cleanup");
+    }
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -279,6 +355,7 @@ async function main() {
     if (signInError || !signInData.session) throw new Error("Seeded local Auth user could not sign in.");
     const token = signInData.session.access_token;
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
+    await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
 
     const expectedProfiles = [
       ["", "ceo"],

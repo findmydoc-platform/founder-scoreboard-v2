@@ -73,6 +73,19 @@ export type TaskGitHubProjectionResult =
   | TaskGitHubProjectionSuccess
   | TaskGitHubProjectionFailure;
 
+export type TaskGitHubSyncPreflightSuccess = {
+  ok: true;
+  code: "github_sync_ready";
+  target: {
+    repository: string;
+    issueNumber: number | null;
+  };
+};
+
+export type TaskGitHubSyncPreflightResult =
+  | TaskGitHubSyncPreflightSuccess
+  | TaskGitHubProjectionFailure;
+
 export function parseTaskGitHubSyncCommand(input: unknown): TaskGitHubSyncCommand | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const createIfMissing = (input as { createIfMissing?: unknown }).createIfMissing;

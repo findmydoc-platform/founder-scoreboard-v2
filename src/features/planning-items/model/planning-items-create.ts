@@ -10,8 +10,14 @@ import {
   TEAM_PLANNING_ITEM_CREATE_FIELDS,
   TEAM_PLANNING_MILESTONE_STATUSES,
   TEAM_PLANNING_ITEM_TYPES,
+  parsePlanningItemGitHubSyncCommand,
+  parsePlanningItemGitHubSyncMode,
+  type PlanningItemGitHubSyncCommand,
+  type PlanningItemGitHubSyncResult,
+  type TeamPlanningItemGitHubSyncMode,
   type TeamPlanningItemType,
 } from "@/features/planning-items/model/planning-items-contract";
+import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
 import {
   intakeDate,
   intakeHours,
@@ -49,6 +55,7 @@ export type PlanningItemCreateInput = {
   githubRepo?: unknown;
   targetDate?: unknown;
   status?: unknown;
+  githubSync?: unknown;
 };
 
 export type PlanningItemCreatePreviewItem = {
@@ -81,14 +88,15 @@ export type PlanningItemCreatePreviewItem = {
   status?: string;
   approvalStatus: "proposed" | null;
   scoreRelevant?: false;
+  githubSync?: PlanningItemGitHubSyncResult;
   errors: string[];
   warnings: string[];
 };
 
 const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
-const inputKeys = new Set<string>(TEAM_PLANNING_ITEM_CREATE_FIELDS);
+const inputKeys = new Set<string>([...TEAM_PLANNING_ITEM_CREATE_FIELDS, "githubSync"]);
 const milestoneStatuses = new Set<string>(TEAM_PLANNING_MILESTONE_STATUSES);
-const milestoneCreateFields = new Set(["itemType", "title", "description", "targetDate", "status"]);
+const milestoneCreateFields = new Set(["itemType", "title", "description", "targetDate", "status", "githubSync"]);
 const subIssueCreateFields = new Set([
   "itemType",
   "title",
@@ -102,6 +110,7 @@ const subIssueCreateFields = new Set([
   "parentTaskId",
   "ownerId",
   "githubRepo",
+  "githubSync",
 ]);
 
 export function planningItemCreateRequiresOperationalLead(items: PlanningItemCreateInput[]) {
@@ -112,13 +121,15 @@ export function parsePlanningItemCreatePayload(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false as const, error: "Payload muss ein Objekt mit items sein." };
   }
-  if (Object.keys(payload).some((key) => key !== "items")) {
+  if (Object.keys(payload).some((key) => !["items", "githubSyncMode"].includes(key))) {
     return { ok: false as const, error: "Payload enthält unbekannte Felder." };
   }
   const items = (payload as { items?: unknown }).items;
   if (!Array.isArray(items) || items.length < 1 || items.length > TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE) {
     return { ok: false as const, error: "items muss 1 bis 30 Einträge enthalten." };
   }
+  const normalizedItems: PlanningItemCreateInput[] = [];
+  let hasGitHubSync = false;
   for (const [index, item] of items.entries()) {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       return { ok: false as const, error: `Eintrag ${index + 1} muss ein Objekt sein.` };
@@ -127,8 +138,32 @@ export function parsePlanningItemCreatePayload(payload: unknown) {
     if (unknownKey) {
       return { ok: false as const, error: `Eintrag ${index + 1} enthält das unbekannte Feld ${unknownKey}.` };
     }
+    const input = item as PlanningItemCreateInput;
+    if (Object.hasOwn(input, "githubSync")) {
+      const sync = parsePlanningItemGitHubSyncCommand(input.githubSync);
+      if (!sync.ok) {
+        return { ok: false as const, error: `Eintrag ${index + 1}: ${sync.error}` };
+      }
+      hasGitHubSync = true;
+      normalizedItems.push({ ...input, githubSync: sync.command });
+    } else {
+      normalizedItems.push(input);
+    }
   }
-  return { ok: true as const, items: items as PlanningItemCreateInput[] };
+  const payloadRecord = payload as { githubSyncMode?: unknown };
+  const hasMode = Object.hasOwn(payloadRecord, "githubSyncMode");
+  const githubSyncMode = parsePlanningItemGitHubSyncMode(payloadRecord.githubSyncMode);
+  if (hasGitHubSync && !githubSyncMode) {
+    return { ok: false as const, error: "githubSyncMode muss bei GitHub-Sync async oder wait sein." };
+  }
+  if (!hasGitHubSync && hasMode) {
+    return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
+  }
+  return {
+    ok: true as const,
+    items: normalizedItems,
+    githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null,
+  };
 }
 
 export async function buildPlanningItemCreatePreview(
@@ -168,6 +203,16 @@ export async function buildPlanningItemCreatePreview(
     let milestoneId = intakeText(raw.milestoneId, 120);
     const parentTaskId = intakeText(raw.parentTaskId, 120);
     const parent = parentTaskId ? parents.get(parentTaskId) : null;
+    const githubSyncCommand = raw.githubSync as PlanningItemGitHubSyncCommand | undefined;
+    const githubSync = githubSyncCommand
+      ? previewPlanningItemGitHubSync({
+        itemType,
+        approvalStatus: itemType === "deliverable" ? "proposed" : null,
+        parentApprovalStatus: itemType === "sub_issue"
+          ? parent?.approval_status
+          : undefined,
+      })
+      : undefined;
 
     if (itemType === "initiative" && !["ceo", "deputy"].includes(actor.platformRole)) {
       errors.push("Nur CEO oder Deputy können Initiativen vorschlagen.");
@@ -221,6 +266,7 @@ export async function buildPlanningItemCreatePreview(
         targetDate,
         status,
         approvalStatus: null,
+        ...(githubSync ? { githubSync } : {}),
         errors,
         warnings,
       };
@@ -265,6 +311,7 @@ export async function buildPlanningItemCreatePreview(
         githubRepo,
         approvalStatus: null,
         scoreRelevant: false,
+        ...(githubSync ? { githubSync } : {}),
         errors,
         warnings,
       };
@@ -305,6 +352,7 @@ export async function buildPlanningItemCreatePreview(
       githubRepo,
       approvalStatus: "proposed",
       scoreRelevant: false,
+      ...(githubSync ? { githubSync } : {}),
       errors,
       warnings,
     };
@@ -315,11 +363,28 @@ export function planningItemCreateCommitItem(item: PlanningItemCreatePreviewItem
   const result = { ...item } as Partial<PlanningItemCreatePreviewItem>;
   delete result.errors;
   delete result.warnings;
+  delete result.githubSync;
   return result;
 }
 
-export function planningItemCreateHash(items: PlanningItemCreatePreviewItem[]) {
+export function planningItemCreateHash(
+  items: PlanningItemCreatePreviewItem[],
+  githubSyncMode: TeamPlanningItemGitHubSyncMode | null = null,
+  githubSyncCommands: Array<PlanningItemGitHubSyncCommand | null> = [],
+) {
+  const committedItems = items.map(planningItemCreateCommitItem);
+  const hashInput = githubSyncMode || githubSyncCommands.some(Boolean)
+    ? { items: committedItems, githubSyncMode, githubSyncCommands }
+    : committedItems;
   return createHash("sha256")
-    .update(JSON.stringify(items.map(planningItemCreateCommitItem)), "utf8")
+    .update(JSON.stringify(hashInput), "utf8")
     .digest("hex");
+}
+
+export function planningItemCreateGitHubSyncCommands(items: PlanningItemCreateInput[]) {
+  return items.map((item) => (
+    Object.hasOwn(item, "githubSync")
+      ? item.githubSync as PlanningItemGitHubSyncCommand
+      : null
+  ));
 }

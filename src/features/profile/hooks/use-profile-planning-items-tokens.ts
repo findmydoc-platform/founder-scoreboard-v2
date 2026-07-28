@@ -24,6 +24,7 @@ export function useProfilePlanningItemsTokens({
   const [label, setLabel] = useState("");
   const [allowUpdates, setAllowUpdates] = useState(false);
   const [allowEmptyMilestoneDeletes, setAllowEmptyMilestoneDeletes] = useState(false);
+  const [allowGitHubSync, setAllowGitHubSync] = useState(false);
   const [canIssueEmptyMilestoneDeletes, setCanIssueEmptyMilestoneDeletes] = useState(false);
   const [visibleToken, setVisibleToken] = useState("");
   const [message, setMessage] = useState("");
@@ -85,6 +86,7 @@ export function useProfilePlanningItemsTokens({
         label.trim(),
         allowUpdates,
         canIssueEmptyMilestoneDeletes && allowEmptyMilestoneDeletes,
+        allowGitHubSync,
       );
       if (!response.ok || !body?.token || !body.tokenRecord) throw new Error(body?.error || "Planning-API-Token konnte nicht erstellt werden.");
       setTokens((current) => [body.tokenRecord!, ...current]);
@@ -92,6 +94,7 @@ export function useProfilePlanningItemsTokens({
       setLabel("");
       setAllowUpdates(false);
       setAllowEmptyMilestoneDeletes(false);
+      setAllowGitHubSync(false);
       setMessageTone("success");
       setMessage("Token erstellt. Kopiere ihn jetzt; er wird nicht erneut angezeigt.");
     } catch (error) {
@@ -135,6 +138,7 @@ export function useProfilePlanningItemsTokens({
   return {
     activeTokenCount: activeTokens.length,
     allowEmptyMilestoneDeletes,
+    allowGitHubSync,
     allowUpdates,
     canIssueEmptyMilestoneDeletes,
     canCreate,
@@ -150,6 +154,7 @@ export function useProfilePlanningItemsTokens({
     revokeToken,
     setAllowUpdates,
     setAllowEmptyMilestoneDeletes,
+    setAllowGitHubSync,
     setLabel,
     tokens,
     visibleToken,

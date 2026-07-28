@@ -24,7 +24,7 @@ export function ProfilePlanningItemsTokens({
     <SettingsPane
       eyebrow="Persönlicher API-Zugang"
       title="Team-Planungs-API"
-      description="Erstelle persönliche Tokens für externe Codex- oder ChatGPT-Clients. Sie lesen den Planungskontext und erstellen Planungselemente in deinem Namen. Bestehende Elemente bleiben ohne ausdrückliche Freigabe unveränderbar."
+      description="Erstelle persönliche Tokens für die Team-Planungs-API. Sie lesen den Planungskontext und führen freigegebene Aktionen in deinem Namen aus. Bestehende Elemente und GitHub bleiben ohne ausdrückliche Freigabe unveränderbar."
     >
       {source !== "supabase" ? (
         <div className="px-5 py-5">
@@ -34,7 +34,7 @@ export function ProfilePlanningItemsTokens({
         <>
           <SettingsRow
             label="Neuen Token erstellen"
-            description={`Bezeichne den Client eindeutig. Pro Profil sind maximal ${TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS} aktive Tokens möglich; jedes Token läuft nach ${TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS} Tagen ab.`}
+            description={`Bezeichne den Zugang eindeutig. Pro Profil sind maximal ${TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS} aktive Tokens möglich; jedes Token läuft nach ${TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS} Tagen ab.`}
             align="start"
           >
             <div className="grid min-w-0 gap-3 text-left md:min-w-80">
@@ -57,6 +57,18 @@ export function ProfilePlanningItemsTokens({
                   disabled={tokens.pending || tokens.activeTokenCount >= TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS}
                   label="Bestehende Planungselemente bearbeiten"
                   onChange={tokens.setAllowUpdates}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium text-slate-900">GitHub synchronisieren</div>
+                  <div className="text-xs leading-5 text-slate-500">Erlaubt diesem Token, GitHub-Syncs für Deliverables und Sub-Issues anzustoßen.</div>
+                </div>
+                <ToggleSwitch
+                  checked={tokens.allowGitHubSync}
+                  disabled={tokens.pending || tokens.activeTokenCount >= TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS}
+                  label="GitHub synchronisieren"
+                  onChange={tokens.setAllowGitHubSync}
                 />
               </div>
               {tokens.canIssueEmptyMilestoneDeletes && (
@@ -107,7 +119,7 @@ export function ProfilePlanningItemsTokens({
 
           <SettingsRow
             label="Persönliche Tokens"
-            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen, aktualisieren oder leere Meilensteine löschen darf."
+            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen, aktualisieren, GitHub synchronisieren oder leere Meilensteine löschen darf."
             align="start"
           >
             <div className="grid min-w-0 gap-2 text-left md:min-w-[32rem]">
