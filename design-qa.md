@@ -534,3 +534,73 @@ No actionable P0, P1, or P2 differences remain.
 ## Final Result
 
 final result: passed
+
+## Sidebar and Header Visual Pass — 2026-07-30
+
+### Comparison target
+
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019fb378-110a-7413-b650-d0512a892d65/exec-e0ed22a5-6ee8-4a46-b8dc-19e954b9b9d9.png` (1487x1058).
+- Implementation desktop screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/founderops-sidebar-desktop-final.png` (captured at 1440x1024 CSS viewport).
+- Implementation mobile screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/founderops-sidebar-mobile-final.png` (captured at 390x844 CSS viewport).
+- Side-by-side comparison: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/founderops-sidebar-design-comparison-final.png` (source and implementation normalized to 1429x1016 pixels).
+
+### Findings
+
+- The desktop sidebar now uses the selected fixed-width navigation treatment: 256px expanded, 64px collapsed, explicit chevron control, and no hover-driven resizing.
+- The `FounderOps` identifier remains below the `findmydoc` logo as a muted 11px subline with a short teal rule. The former red badge is not rendered in the app sidebar.
+- Navigation is grouped as `Work`, `Deliver`, and `People`; the former bottom access card is removed on desktop and mobile.
+- The live header preserves its product controls while using a compact, right-aligned action cluster. At desktop width it stays on one row; at mobile width it wraps without horizontal overflow.
+- Visual fidelity passes for the requested shell: typography, slate/blue/teal color system, section spacing, logo asset, icon system, and information hierarchy align with the approved target.
+- The target's illustrative planning table intentionally differs from the existing live planning board. The task was limited to the navigation shell and header treatment; no board data or workflow was changed.
+- No actionable P0, P1, or P2 visual differences remain.
+
+### Runtime checks
+
+- Verified desktop expand and collapse interaction, including 256px and 64px layout alignment.
+- Verified collapsed preference persists after reload and restored the expanded state for the delivered preview.
+- Verified mobile navigation opens correctly, contains no access card, and has no horizontal page overflow at 390px width.
+- Checked browser console errors after the final interaction pass; none were present.
+
+### Comparison history
+
+1. Initial real-data review showed the header action controls wrapping earlier than the visual target.
+2. The header was refined with a desktop no-wrap action cluster, bounded action width, and tighter responsive spacing.
+3. A final desktop/mobile interaction and visual pass confirmed the corrected layout.
+
+### Final result
+
+final result: passed
+
+## Navigation Information Architecture and Label Refinement — 2026-07-30
+
+### Comparison target
+
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019fb378-110a-7413-b650-d0512a892d65/exec-e0ed22a5-6ee8-4a46-b8dc-19e954b9b9d9.png` (1487x1058 pixels).
+- Desktop implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/navigation-labels/01-desktop-updated-navigation.png` (1269x714 pixels at the browser's default desktop viewport).
+- Mobile implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/navigation-labels/02-mobile-updated-navigation.png` (379x820 pixels, captured from a 390x844 CSS viewport).
+- Full-view comparison: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb378-110a-7413-b650-d0512a892d65/navigation-labels/03-source-vs-updated-navigation.png` (2538x714 pixels; source normalized to 1269x714 pixels before comparison).
+- Focused comparison was not needed: the revised labels and section headings are fully readable in the desktop and mobile full views.
+
+### Findings
+
+- The source visual's navigation treatment remains intact: fixed white sidebar, current-page treatment, icon rhythm, group separation, FounderOps subline, and explicit collapse control.
+- Copy intentionally differs from the source to reflect the approved information architecture: `Planung`, `Steuerung`, and `Team & Ressourcen`; `Meilensteine & Initiativen`, `Termine & Erinnerungen`, `Benachrichtigungen`, and `Links & Tools` replace the less specific labels.
+- The longer labels remain single-line and legible in the 256px desktop sidebar and in the mobile drawer. No clipping or horizontal overflow was observed.
+- No actionable P0, P1, or P2 visual differences remain.
+
+### Runtime checks
+
+- Verified the desktop navigation structure and every updated accessible link label.
+- Opened the 390px mobile navigation drawer and verified all three groups and all labels.
+- Opened `Meilensteine & Initiativen`; it navigated to `/projects` and rendered the matching page heading.
+- Restored the planning preview, reset the temporary viewport override, and checked browser console errors; none were present.
+
+### Comparison history
+
+1. The prior shell pass established the fixed sidebar and the original three visual groups.
+2. The information-architecture audit identified that `Deliver` contained planning and resource surfaces rather than delivery work.
+3. This pass regrouped and relabeled the visible navigation without changing its interaction or visual system; desktop and mobile captures confirmed the new copy fits.
+
+### Final result
+
+final result: passed

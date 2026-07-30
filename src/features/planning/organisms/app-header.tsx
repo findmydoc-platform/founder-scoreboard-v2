@@ -25,8 +25,8 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       {notices}
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4 lg:items-center lg:px-6">
-        <div className="flex min-w-0 max-w-full items-start gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-5 lg:flex-nowrap lg:items-center lg:px-8">
+        <div className="flex min-w-0 max-w-full items-start gap-3 lg:flex-1">
           <button
             type="button"
             onClick={onOpenMobileNav}
@@ -37,13 +37,13 @@ export function AppHeader({
             <Menu size={19} />
           </button>
           <div className="min-w-0">
-            {eyebrow && <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</div>}
-            <h1 className="truncate text-xl font-semibold text-slate-950">{title}</h1>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{description}</p>
+            {eyebrow && <div className="text-xs font-medium text-slate-500">{eyebrow}</div>}
+            <h1 className="truncate text-3xl font-semibold tracking-tight text-slate-950">{title}</h1>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">{description}</p>
           </div>
         </div>
         {actions && (
-          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end lg:ml-auto lg:max-w-[52%]">
             {actions}
           </div>
         )}

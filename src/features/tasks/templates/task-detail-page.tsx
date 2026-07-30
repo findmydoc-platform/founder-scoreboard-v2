@@ -66,7 +66,7 @@ export function TaskDetailPage({
   };
 
   return (
-    <main className="min-h-screen bg-white text-slate-950 lg:pl-16">
+    <main className="app-sidebar-main min-h-screen bg-white text-slate-950">
       <AppSidebar
         activeWorkspace="planning"
         source={source}

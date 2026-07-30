@@ -207,7 +207,7 @@ test("founder events are modeled as team-visible operational reminders", async (
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(routes, /id: "events"/);
-  assert.match(routes, /label: "Events"/);
+  assert.match(routes, /label: "Termine & Erinnerungen"/);
   assert.match(routes, /href: "\/events"/);
   assert.match(app, /workspace === "events"/);
   assert.match(app, /EventsOverview/);

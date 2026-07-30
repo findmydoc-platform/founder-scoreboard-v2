@@ -25,7 +25,7 @@ export function PlanningTrashTaskDetailPage({
     : "Kein GitHub-Issue verknüpft.";
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
+    <main className="app-sidebar-main min-h-screen bg-slate-50 text-slate-950">
       <AppSidebar activeWorkspace="planning" source="supabase" currentPlatformRole={currentPlatformRole || ""} />
       <PlanningItemReadOnlyHeader eyebrow={task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable"} title={task.title} trashed />
 

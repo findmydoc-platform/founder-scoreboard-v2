@@ -7,10 +7,32 @@ type Props = {
   className?: string;
   textClassName?: string;
   size?: "default" | "login";
+  founderOpsVariant?: "badge" | "subline";
 };
 
-export function AppBrand({ href, className = "", textClassName = "", size = "default" }: Props) {
+export function AppBrand({
+  href,
+  className = "",
+  textClassName = "",
+  size = "default",
+  founderOpsVariant,
+}: Props) {
   const isLogin = size === "login";
+  const resolvedFounderOpsVariant = founderOpsVariant || (isLogin ? "badge" : "subline");
+  const founderOpsLabel = resolvedFounderOpsVariant === "subline" ? (
+    <span className="mt-1.5 flex flex-col items-start gap-1">
+      <span className="text-[11px] font-medium leading-none tracking-[0.02em] text-slate-500">FounderOps</span>
+      <span className="h-0.5 w-7 rounded-full bg-emerald-400" aria-hidden="true" />
+    </span>
+  ) : (
+    <span className={isLogin
+      ? "mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#FF2D2D] bg-[#5A000A] px-2.5 py-1 text-[10px] font-bold uppercase leading-none tracking-[0.1em] text-white"
+      : "mt-0.5 inline-flex items-center gap-1 rounded-full border border-[#FF2D2D] bg-[#5A000A] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white"}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-[#FF2D2D]" aria-hidden="true" />
+      FounderOps
+    </span>
+  );
   const content = (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -27,18 +49,12 @@ export function AppBrand({ href, className = "", textClassName = "", size = "def
         >
           findmydoc
         </span>
-        <span className={isLogin
-          ? "mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#FF2D2D] bg-[#5A000A] px-2.5 py-1 text-[10px] font-bold uppercase leading-none tracking-[0.1em] text-white"
-          : "mt-0.5 inline-flex items-center gap-1 rounded-full border border-[#FF2D2D] bg-[#5A000A] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-white"}
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-[#FF2D2D]" aria-hidden="true" />
-          FounderOps
-        </span>
+        {founderOpsLabel}
       </span>
     </>
   );
 
-  const classes = `flex items-center ${isLogin ? "gap-5" : "gap-3"} ${className}`;
+  const classes = `flex ${resolvedFounderOpsVariant === "subline" ? "items-start" : "items-center"} ${isLogin ? "gap-5" : "gap-3"} ${className}`;
 
   if (href) {
     return (

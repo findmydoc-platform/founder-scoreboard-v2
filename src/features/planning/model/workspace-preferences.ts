@@ -1,13 +1,13 @@
 export const appWorkspaceIds = [
   "planning",
   "backlog",
+  "projects",
+  "sprint",
   "decision-log",
   "events",
-  "sprint",
-  "projects",
-  "tools",
   "team",
   "notifications",
+  "tools",
   "profile",
 ] as const;
 

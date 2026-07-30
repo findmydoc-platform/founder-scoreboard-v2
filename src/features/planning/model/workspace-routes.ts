@@ -35,25 +35,34 @@ type WorkspaceRoute = {
   label: string;
   icon: LucideIcon;
   href: string;
+  navigationSection: AppNavigationSection;
   ceoOnly?: boolean;
   hidden?: boolean;
 };
+
+export const appNavigationSections = [
+  { id: "planning", label: "Planung" },
+  { id: "steering", label: "Steuerung" },
+  { id: "team-resources", label: "Team & Ressourcen" },
+] as const;
+
+type AppNavigationSection = (typeof appNavigationSections)[number]["id"];
 
 function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute & { id: VisibleAppWorkspace; hidden?: false } {
   return !route.hidden;
 }
 
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
-  { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning" },
-  { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog" },
-  { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log" },
-  { id: "events", label: "Events", icon: CalendarClock, href: "/events" },
-  { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint" },
-  { id: "projects", label: "Meilensteine", icon: Archive, href: "/projects" },
-  { id: "tools", label: "Quicklinks", icon: Link2, href: "/tools" },
-  { id: "team", label: "Team", icon: Users, href: "/team" },
-  { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications" },
-  { id: "profile", label: "Mein Profil", icon: UserCircle, href: "/profile", hidden: true },
+  { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning", navigationSection: "planning" },
+  { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog", navigationSection: "planning" },
+  { id: "projects", label: "Meilensteine & Initiativen", icon: Archive, href: "/projects", navigationSection: "planning" },
+  { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint", navigationSection: "steering" },
+  { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log", navigationSection: "steering" },
+  { id: "events", label: "Termine & Erinnerungen", icon: CalendarClock, href: "/events", navigationSection: "steering" },
+  { id: "team", label: "Team", icon: Users, href: "/team", navigationSection: "team-resources" },
+  { id: "notifications", label: "Benachrichtigungen", icon: Bell, href: "/notifications", navigationSection: "team-resources" },
+  { id: "tools", label: "Links & Tools", icon: Link2, href: "/tools", navigationSection: "team-resources" },
+  { id: "profile", label: "Mein Profil", icon: UserCircle, href: "/profile", navigationSection: "team-resources", hidden: true },
 ];
 
 export const appNavItems = workspaceRoutes.filter(isVisibleWorkspaceRoute);

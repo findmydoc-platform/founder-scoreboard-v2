@@ -42,7 +42,7 @@ export function PlanningBootShell({
         authAvailable={authAvailable}
         authUserEmail={authUserEmail}
       />
-      <main className="lg:pl-16">
+      <main className="app-sidebar-main">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur lg:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
