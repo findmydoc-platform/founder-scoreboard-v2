@@ -5,10 +5,9 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
-import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
 import { taskPlanningAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
 import { dateRange, taskAssigneeOptions } from "@/lib/display";
-import { hasGitHubIssue, hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
+import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
 import type { Profile, Sprint, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
@@ -43,14 +42,6 @@ function attentionTone(signal: TaskAttentionSignal): TableRiskSignal["tone"] {
   return "amber";
 }
 
-function githubRiskSignal(task: Task): TableRiskSignal | null {
-  if (!hasGitHubIssue(task)) return { id: "github-missing", label: "Kein GitHub Issue", tone: "amber" };
-  if (task.githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending(task)) return { id: "github-pending", label: "Sync läuft", tone: "amber" };
-  if (task.githubIssueSyncStatus === "failed") return { id: "github-failed", label: "Sync fehlgeschlagen", tone: "red" };
-  if (task.githubIssueSyncStatus !== "synced") return { id: "github-open", label: "GitHub offen", tone: "blue" };
-  return null;
-}
-
 function TaskTableRiskBadges({
   task,
   relations,
@@ -67,9 +58,7 @@ function TaskTableRiskBadges({
   const relationGroups = taskRelationsFor(task.id, relations);
   const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
   const signals = [
-    githubRiskSignal(task),
     ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
-      .filter((signal) => signal.id !== "sync-failed")
       .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
     relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
     relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,

@@ -1,8 +1,8 @@
 import { ChevronRight } from "lucide-react";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
+import { groupSubIssuesByParent } from "@/features/tasks/model/task-card-presentation";
 import { initiativeMetaLabel } from "@/lib/display";
-import { normalizeStatus } from "@/lib/status";
-import type { Package, Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Task, TaskBlocker, TaskRelation } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
@@ -13,11 +13,8 @@ type TaskStructureViewProps = {
   allTasks: Task[];
   blockers: TaskBlocker[];
   expandedPackages: Record<string, boolean>;
-  canChangeTaskStatus: (task: Task) => boolean;
-  statusOptionsForTask: (task: Task) => TaskStatus[];
   ownerColorForTask: (task: Task) => string;
   onOpenTask: (taskId: string) => void;
-  onUpdateTask: (task: Task, patch: Partial<Task>) => void;
   onTogglePackage: (packageId: string) => void;
   onSetAllPackageCollapse: (collapsed: boolean) => void;
 };
@@ -29,14 +26,13 @@ export function TaskStructureView({
   allTasks,
   blockers,
   expandedPackages,
-  canChangeTaskStatus,
-  statusOptionsForTask,
   ownerColorForTask,
   onOpenTask,
-  onUpdateTask,
   onTogglePackage,
   onSetAllPackageCollapse,
 }: TaskStructureViewProps) {
+  const subIssuesByParent = groupSubIssuesByParent(allTasks);
+
   return (
     <div className="grid gap-4">
       <div className="flex justify-end gap-2">
@@ -67,26 +63,18 @@ export function TaskStructureView({
             </div>
             {expanded && (
               <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-                {tasks.map((task) => {
-                  const canUpdateStatus = canChangeTaskStatus(task);
-                  return (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      pack={pack}
-                      ownerColor={ownerColorForTask(task)}
-                      relations={relations}
-                      allTasks={allTasks}
-                      blockers={blockers}
-                      statusOptions={canUpdateStatus ? statusOptionsForTask(task) : [normalizeStatus(task.status)]}
-                      statusDisabled={!canUpdateStatus}
-                      showStatus={false}
-                      showStatusControl={false}
-                      onOpenTask={onOpenTask}
-                      onStatusChange={(nextTask, nextStatus) => onUpdateTask(nextTask, { status: nextStatus })}
-                    />
-                  );
-                })}
+                {tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    ownerColor={ownerColorForTask(task)}
+                    relations={relations}
+                    allTasks={allTasks}
+                    blockers={blockers}
+                    subIssues={subIssuesByParent.get(task.id) || []}
+                    onOpenTask={onOpenTask}
+                  />
+                ))}
               </div>
             )}
           </DataSurface>

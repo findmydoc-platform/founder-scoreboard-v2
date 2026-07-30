@@ -1,4 +1,4 @@
 {
   "classification": "minor-ux",
-  "reason": "Adds one permission toggle for an API capability without introducing a new end-user workflow."
+  "reason": "Refines the existing Planning Kanban card hierarchy and density without adding a new user workflow."
 }

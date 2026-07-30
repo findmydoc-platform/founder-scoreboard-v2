@@ -938,6 +938,11 @@ test("board tasks can be dragged between status columns", async () => {
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
 
   assert.match(taskCard, /draggable=\{Boolean\(onDragStart\)\}/);
+  assert.match(ui, /const isEmpty = tasks\.length === 0/);
+  assert.match(ui, /data-collapsed=\{isEmpty\}/);
+  assert.match(ui, /min-w-24 max-w-24 basis-24/);
+  assert.match(ui, /isAvailableEmptyTarget/);
+  assert.match(ui, /Hier ablegen/);
   assert.match(ui, /onDrop=\{\(event\) => onDropTask\(status, event\)\}/);
   assert.match(ui, /onDropTask=\{dropTaskOnStatus\}/);
   assert.match(ui, /event\.dataTransfer\.setData\("text\/plain", task\.id\)/);

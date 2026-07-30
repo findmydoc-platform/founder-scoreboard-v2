@@ -23,7 +23,7 @@ test("working status stays ownership-bound while Sub-Issue final transitions are
   assert.match(app, /canManageFinalTaskStatus/);
   assert.match(app, /taskBelongsToProfile\(task, currentProfile\)/);
   assert.match(app, /onDragStart=\{canUpdateStatus && onDragStart \? onDragStart : undefined\}/);
-  assert.match(taskCard, /statusDisabled/);
+  assert.doesNotMatch(taskCard, /TaskStatusControl|statusDisabled/);
   assert.match(detailPanel, /TaskDetailSurface/);
   assert.match(detailSurface, /permissions\.canUpdateStatus/);
   assert.match(detailSurface, /permissions\.canCompleteSubIssue/);

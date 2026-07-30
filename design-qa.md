@@ -2,6 +2,202 @@
 result: passed
 ---
 
+# Planning Kanban Card Density - Design QA
+
+## Variant 2 rollup and shared card addendum
+
+### Evidence
+
+- Selected source visual truth: `/Users/razorspoint/.codex/generated_images/019faf44-bf37-78c1-8495-ba22c80b0cb8/call_7TJukMBkkpM9ytwjzunGeOns.png`
+- Collapsed Board implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/board-collapsed.png`
+- Expanded Board implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/board-expanded.png`
+- Full expanded Board implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/board-expanded-full.png`
+- Shared Structure implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/structure-shared-card.png`
+- Focused reference and implementation comparison: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/reference-vs-implementation.png`
+
+### Comparison and findings
+
+- The selected target keeps the same `3 von 5 Sub-Issues`, `60%`, 4-pixel progress rail, `2 offen · 3 erledigt`, icon sizes, and disclosure-row typography in both states. Only the chevron direction and child-list visibility change, eliminating the previous size jump.
+- The expanded child list uses the card's white base without an accordion box, outer list border, rounded list shell, or per-row separators. One restrained rule separates unfinished from completed work.
+- Board and Structure now render the same `TaskCard` implementation with the same shell, GitHub reference, exception-only badges, Sub-Issue rollup, owner, and date hierarchy. The previous visual variant and display-control prop branches were removed.
+- Sub-Issue grouping is shared through one pure feature-model helper instead of being duplicated by each view.
+- The normalized focused comparison confirms the selected hierarchy and content order. The implementation preserves the product's denser 320-pixel Board lane rather than scaling the isolated mockup card to its presentation canvas.
+- No actionable P0, P1, or P2 findings remain.
+
+### Runtime checks
+
+- The disclosure opens and closes in place with stable header and summary typography.
+- The parent Board card remains `draggable="true"`.
+- The disclosure trigger and all five child links remain `draggable="false"`, preserving the existing drag-and-drop gesture boundary.
+- The Structure view shows the same simulated GitHub reference and five-Sub-Issue rollup from the same card component.
+- Browser console: no warnings or errors.
+
+### Final result
+
+final result: passed
+
+## Sub-Issue card disclosure addendum
+
+### Evidence
+
+- Closed-state source visual truth: `/Users/razorspoint/.codex/generated_images/019faf44-bf37-78c1-8495-ba22c80b0cb8/call_EXu4XMtQ7i5xiQnkC4zwsLMh.png`
+- Expanded-state source visual truth: `/Users/razorspoint/.codex/generated_images/019faf44-bf37-78c1-8495-ba22c80b0cb8/call_IWs0lFzmXz7jcZeoWtcMASgy.png`
+- Closed implementation screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-closed-full.png`
+- Expanded implementation screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-expanded-full.png`
+- Closed focused crop: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-closed.png`
+- Expanded focused crop: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-expanded.png`
+- Closed comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-qa-closed.png`
+- Expanded comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hybrid-qa-expanded.png`
+- Compact-hierarchy feedback source: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-04bc3451-b5f9-4fdf-9912-5685fe1acf23.png`
+- Compact closed implementation: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hierarchy-compact-closed.png`
+- Compact before/after comparison: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/sub-issue-hierarchy-compact-comparison.png`
+- GitHub-status ownership implementation: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/github-sync-card-cleanup/board-without-routine-github-status.png`
+- GitHub-status ownership focused crop: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/github-sync-card-cleanup/card-without-routine-github-status.png`
+- GitHub-status ownership comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/github-sync-card-cleanup/before-after-card-comparison.png`
+- Compact-trigger feedback source: `/var/folders/q5/4tfj719d17d39dfk6lq_7m8h0000gn/T/codex-clipboard-a5399870-8bc1-435c-8c1d-d5f6e0c73b2b.png`
+- Compact-trigger implementation: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/github-sync-card-cleanup/compact-subissue-trigger/card-compact-subissue-trigger.png`
+- Endpoint-rollup source visual truth: `/Users/razorspoint/.codex/generated_images/019faf44-bf37-78c1-8495-ba22c80b0cb8/call_qVAJ5fL9wRuvgkurkMzMwk01.png`
+- Endpoint-rollup full implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/subissue-endpoint-rollup/board-variant-3.png`
+- Endpoint-rollup focused implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/subissue-endpoint-rollup/card-variant-3.png`
+- Endpoint-rollup comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/subissue-endpoint-rollup/comparison-variant-3.png`
+- Expanded implementation after endpoint-rollup change: `/Users/razorspoint/.codex/visualizations/2026/07/30/019faf44-bf37-78c1-8495-ba22c80b0cb8/subissue-endpoint-rollup/board-variant-3-expanded.png`
+
+### Comparison setup
+
+- Source images: 1299 x 1211 pixels. Focused source crops were normalized to 330 pixels wide and placed beside the implementation crops.
+- Browser viewport: 1280 x 720 CSS pixels at device pixel ratio 2. Browser output was normalized to 1269 x 714 pixels.
+- Focused implementation crops: 330 x 281 pixels closed and 330 x 455 pixels expanded.
+- State: local Planning Board with one Deliverable containing five simulated Sub-Issues: two unfinished and three completed.
+- The selected target intentionally combines the compact closed trigger from option 3 with the inline worklist from option 1.
+- Endpoint-rollup pass: 1444 x 1085 source image and 1023 x 954 browser implementation from a 1034 x 964 CSS viewport at device pixel ratio 2. Both focused card regions were normalized to 302 x 221 pixels and placed in the same comparison input.
+
+### Findings and comparison history
+
+#### Pass 1
+
+- The closed state preserves the selected compact summary, status marks, right-facing disclosure affordance, progress bar, owner, and dates.
+- The expanded state keeps the list inside the card, orders unfinished items before completed items, truncates every title to one line, and retains readable status labels plus semantic color.
+- The expanded summary row remains as the reversible accordion header. This is an intentional interaction adaptation of the selected hybrid, not visual drift.
+- At this comparison pass, the live local card additionally showed `GitHub offen` because the simulated record was not marked synced. The later GitHub-status ownership pass removes this routine integration state from planning surfaces.
+- No actionable P0, P1, or P2 findings remain. No code-level visual correction loop was required.
+
+#### Pass 2 - compact hierarchy
+
+- P2: the closed Sub-Issue area occupied too much vertical space and competed visually with the parent title, GitHub state, and priority.
+- Fix: reduced the rollup to 10-pixel medium-weight metadata, reduced the progress bar from 6 to 4 pixels, and reduced the closed disclosure row to about 28 pixels with a near-neutral surface and lighter border.
+- Post-fix evidence: the closed card height fell from about 253 to 240 pixels while the open state, exact counts, status colors, focus treatment, and canonical child links remained intact.
+- The focused before/after comparison shows the parent title and exception badges reclaiming the primary hierarchy. No actionable P0, P1, or P2 finding remains.
+
+#### Pass 3 - GitHub status ownership
+
+- P2: `GitHub offen`, `Kein GitHub Issue`, and `Sync läuft` duplicated the global Sync Center, competed with task priority and Sub-Issue progress, and made an internal projection state look like task status.
+- Fix: routine GitHub sync states were removed from cards, the planning table, and the sprint table. The direct repository-and-issue link remains on linked board cards. `Sync fehlgeschlagen` remains available through the critical task-attention signal.
+- Source pixels: 666 x 590 at 144 dpi. The 603 x 505 card crop was normalized to 302 x 253 pixels. The implementation card is 302 x 240 CSS pixels; both were placed in the same comparison input.
+- Browser viewport: 1034 x 964 CSS pixels at device pixel ratio 2. The in-app Browser capture is normalized to 1023 x 954 pixels.
+- Post-fix evidence: all 14 visible board cards and all planning table rows contain zero occurrences of the three routine sync labels. The direct `management #9999` link remains, while the header Sync Center still exposes 19 actions.
+- No actionable P0, P1, or P2 finding remains.
+
+#### Pass 4 - closed trigger density
+
+- P2: the closed disclosure still rendered as a full-width bordered surface and inherited a 16-pixel native button font, so it remained visually heavier than the surrounding card metadata.
+- Fix: the closed state is now a borderless inline metadata action. Its content is explicitly 10 pixels with a 10-pixel line height inside a 24-pixel-high, approximately 140-pixel-wide click target. The expanded full-width header and inline list remain unchanged.
+- Post-fix evidence: the closed card height fell from about 240 to 224 pixels. The count, semantic open/completed icons, disclosure chevron, keyboard focus ring, and accessible name remain present.
+- No actionable P0, P1, or P2 finding remains.
+
+#### Pass 5 - endpoint rollup
+
+- P2: the compact disclosure still grouped both state counts at the left edge, making them read like a separate metadata sentence instead of belonging to the progress rail.
+- Fix: the closed state now labels the rail with `Sub-Issues` and `3/5 · 60%`, uses a 3-pixel rail, and places `2 offen` and `3 erledigt` at the corresponding visual endpoints. All closed-state type is 9 pixels, while the full-width button retains its keyboard focus treatment and accessible name.
+- Post-fix evidence: the card is 302 x 221 CSS pixels. The focused comparison matches the selected option's hierarchy and alignment without increasing the card height. The expanded state retains the previously selected inline worklist.
+- No actionable P0, P1, or P2 finding remains.
+
+### Required fidelity surfaces
+
+- Fonts and typography: the existing product type stack, 9-pixel closed rollup metadata, title weight, tabular counts, one-line truncation, and status hierarchy are preserved.
+- Spacing and layout rhythm: the card remains 302 pixels inside the 320-pixel board lane. It measures about 221 pixels closed and 412 pixels expanded, with no horizontal overflow or nested card treatment.
+- Colors and visual tokens: blue indicates active work, slate indicates open work, emerald indicates completion, and the existing focus-ring and border tokens remain unchanged.
+- Image quality and asset fidelity: the changed component contains no raster assets. Status and disclosure affordances use the installed Lucide icon set; no custom SVG or CSS artwork was introduced.
+- Copy and content: the closed state says `Sub-Issues`, `3/5 · 60%`, `2 offen`, and `3 erledigt`; the expanded state shows all five exact titles, their normalized statuses, and no duplicate parent metadata.
+- Interaction and accessibility: the trigger exposes `aria-expanded` and `aria-controls`; its accessible name includes both counts. A child row opens the canonical task detail dialog. The parent card remains draggable, while the trigger and child links explicitly remain non-draggable so card drag-and-drop keeps a clear gesture boundary.
+- GitHub status hierarchy: routine integration copy is absent from planning cards and tables. The direct issue reference retains its explicit accessible name, and only a failed sync may re-enter the card as a critical exception.
+
+### Runtime checks
+
+- Clicking the trigger opened and closed the inline list.
+- Clicking `404-Regressionstest ergänzen` opened the existing task detail dialog without changing the board route.
+- Browser attributes confirmed `draggable="true"` on the card and `draggable="false"` on the disclosure trigger and child links.
+- The endpoint-rollup browser pass reported no warning or error.
+- The fixed board-lane width, `min-w-0`, and title truncation preserve the established narrow-screen horizontal-board behavior. A separate responsive source target was not supplied for this component.
+- The final local pass opened and closed the Sub-Issue list, switched to the planning table and back to the board, and reported no browser errors.
+
+### Final result
+
+final result: passed
+
+## Evidence
+
+- Source visual truth: `/Users/razorspoint/.codex/generated_images/019faf44-bf37-78c1-8495-ba22c80b0cb8/call_nWqtxSEefdGvxU6CcT9woJDF.png`
+- Implementation screenshot: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/implementation-desktop-final.png`
+- Desktop board crop: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/implementation-desktop-board-final.png`
+- Responsive evidence: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/implementation-mobile-board-final.png`
+- Collapsed-column desktop evidence: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/implementation-collapsed-columns-desktop.png`
+- Collapsed-column responsive evidence: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/implementation-collapsed-columns-mobile.png`
+- Full-view comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/comparison-final.png`
+- Focused card comparison input: `/Users/razorspoint/.codex/visualizations/2026/07/29/019faf44-bf37-78c1-8495-ba22c80b0cb8/kanban-card-density/comparison-card-focus-final.png`
+
+## Comparison setup
+
+- Source pixels: 1488 x 1058, normalized to 1440 x 1024 for the full-view comparison.
+- Implementation pixels: 1429 x 1016 from a 1440 x 1024 CSS viewport at device pixel ratio 1, normalized to 1440 x 1024.
+- Responsive viewport: 390 x 844 CSS pixels at device pixel ratio 1.
+- State: Planning Board with the local development dataset. One Deliverable carries a simulated GitHub Issue and five simulated Sub-Issues so the direct link and 60 percent rollup are visible. The remaining statuses are empty and exercise the compact drop-rail state.
+
+## Findings and comparison history
+
+### Pass 1
+
+- P2: the canonical task link still rendered an unlabeled panel glyph next to every board title, duplicating the title affordance and weakening the separate GitHub action.
+- Fix: board cards now suppress that glyph while preserving the accessible canonical task link and drawer behavior.
+- The browser-only Next.js development indicator was identified as non-product chrome. The handoff crops exclude it without altering the application UI.
+
+### Pass 2
+
+- The final desktop and focused card comparisons show the intended dense hierarchy: title, exception-only badges, Sub-Issue rollup area, responsible person, and date.
+- Board columns fit four lanes at the desktop target while preserving horizontal scrolling for the remaining states.
+- No actionable P0, P1, or P2 findings remain.
+
+### Pass 3 - empty columns and drag targets
+
+- Empty status columns now collapse to stable 96-pixel full-height rails instead of consuming card-width space.
+- The status, zero count, and status-specific create action remain visible and accessible.
+- A drag session does not resize the rails. Empty destinations gain an explicit drop treatment, and the hovered target changes to `Loslassen`.
+
+## Required fidelity surfaces
+
+- Fonts and typography: the existing Inter/system stack, title weight, compact metadata scale, and two-line wrapping are preserved. Titles remain visually dominant over signals and dates.
+- Spacing and layout rhythm: board lanes shrink from 360 to 320 pixels; card and lane gaps are reduced without collisions. The card footer remains separated by one restrained rule.
+- Colors and visual tokens: the existing white, slate, blue, and semantic warning tokens are retained. The responsible-person color is reduced to a narrow functional spine and dot instead of a card-wide gradient.
+- Image quality and asset fidelity: the changed surface contains no raster assets. The direct external action uses the installed official GitHub icon and the existing icon library; no custom SVG or CSS artwork was introduced.
+- Copy and content: status is not repeated inside its lane. P2/P3 priority, initiative text, and uncounted comment/file icons are removed from board cards. Linked cards expose a direct repository-and-issue reference; zero and non-zero Sub-Issue states use explicit counts.
+- Interaction and accessibility: the task title opens the canonical detail panel, the panel closes with Escape, direct GitHub links open in a new tab with an explicit accessible name, progress uses native progressbar semantics, and focus rings remain visible. Every status column has a descriptive region label, and each create action names its target status.
+
+## Responsive and runtime checks
+
+- The 390 x 844 capture keeps the selected view, search/filter controls, first lane, and dense card hierarchy usable without card compression.
+- Horizontal board scrolling remains the explicit mobile interaction.
+- The local browser pass opened and closed a task detail panel successfully.
+- Empty columns remain 96-pixel rails at 390 pixels, preserving a visible next-status affordance without compressing the populated card column.
+- Browser console: no warnings or errors in the final desktop pass.
+- The simulated GitHub reference and non-zero Sub-Issue rollup are visible in the captured local seed state.
+
+## Final result
+
+passed
+
+final result: passed
+
+---
+
 # Review in Issue - Design QA
 
 ## Sources and implementation

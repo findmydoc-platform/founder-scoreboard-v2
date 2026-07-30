@@ -1,6 +1,6 @@
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
-import { packageById, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
 import { TaskBoardView } from "@/features/tasks/organisms/task-board-view";
@@ -45,8 +45,6 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <TaskBoardView
           statuses={planningBoardStatuses}
           visibleTasks={planningBoardTasks}
-          packages={data.packages}
-          profiles={data.profiles}
           relations={data.taskRelations}
           allTasks={data.tasks}
           blockers={data.taskBlockers}
@@ -54,12 +52,9 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           selectedTaskId={selectedTaskId}
           dragOverStatus={dragOverStatus}
           canChangeTaskStatus={canChangeTaskStatus}
-          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
-          packageForTask={(task) => packageById(data.packages, task.packageId)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={openTaskPanel}
           onCreateTask={setTaskDialogDefaults}
-          onUpdateTask={updateTask}
           onDragOverStatus={setDragOverStatus}
           onDropTask={dropTaskOnStatus}
           onDragStart={startTaskDrag}
@@ -75,11 +70,8 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           allTasks={data.tasks}
           blockers={data.taskBlockers}
           expandedPackages={expandedPackages}
-          canChangeTaskStatus={canChangeTaskStatus}
-          statusOptionsForTask={(task) => statusOptionsForRole(task.status, canManageTaskMeta, canManageFinalTaskStatus)}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={openTaskPanel}
-          onUpdateTask={updateTask}
           onTogglePackage={togglePackageCollapse}
           onSetAllPackageCollapse={setAllPackageCollapse}
         />

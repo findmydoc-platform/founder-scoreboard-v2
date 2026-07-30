@@ -245,7 +245,8 @@ test("badge tone policy stays semantic and primitive based", async () => {
   assert.match(status, /priorityBadgeTone/);
   assert.doesNotMatch(status, /border-|bg-|text-/);
   assert.match(taskCard, /UiBadge/);
-  assert.match(taskCard, /statusBadgeTone/);
+  assert.match(taskCard, /priorityBadgeTone/);
+  assert.doesNotMatch(taskCard, /statusBadgeTone/);
   assert.doesNotMatch(taskDetailPanelHeader, /statusBadgeTone|priorityBadgeTone/);
   assert.match(notifications, /notificationBadgeTone/);
   assert.match(notifications, /UiBadge/);
