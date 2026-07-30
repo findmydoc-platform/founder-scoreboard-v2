@@ -29,6 +29,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - After meaningful frontend or API changes, run `pnpm test`, `pnpm run lint`, and `pnpm run build`.
 - Prefer a deterministic helper, test, verifier, or nearest regional rule for repeated patterns. Add a project skill only when `.agents/skills/AGENTS.md` admits it.
 
+## Maintainability Review System
+
+- Read-only maintainability reviewers live under `.codex/agents/`. Before a run, use `pnpm run review:route -- --base origin/main --format json`, state the selected and omitted reviewers with reasons, and obtain explicit user confirmation.
+- The main agent selects and starts only relevant specialists in parallel, normally at most three. It deduplicates by underlying cause without inventing or strengthening findings.
+- Present every retained finding before proposing or applying fixes. Findings never block handoff or merge automatically; the user decides whether to fix, defer, or reject each one.
+- Validate approved fixes deterministically. Do not rerun reviewers by routine; rerun only after an explicitly requested review or a material scope expansion that receives new confirmation.
+- Keep router output ephemeral. Do not persist manifests, reviewer transcripts, findings, or local review artifacts in the repository.
+- Do not report style-only, metric-only, low-confidence, or pre-existing-debt findings. Do not convert broad SOLID, DRY, Clean Code, YAGNI, coverage, file-length, or clone-count preferences into review rules.
+- Keep deterministic architecture and contract invariants in tests or CI. Keep context-dependent judgment in reviewer agents.
+
 ## Authorization Parity
 
 - Every database path reachable with user credentials must enforce the same or stricter permissions as the corresponding app action. Match RLS, grants, and RPC execution to the app's real role and ownership checks; if the app exposes no action, the database must not expose one. Authentication alone is not authorization.
