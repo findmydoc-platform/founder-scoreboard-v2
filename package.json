@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "review:route": "node scripts/route-maintainability-review.mjs",
     "verify:migrations": "node scripts/verify-supabase-migrations.mjs",
     "verify:milestone-crud": "node scripts/verify-milestone-crud.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
