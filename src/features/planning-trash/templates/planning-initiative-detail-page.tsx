@@ -28,7 +28,7 @@ export function PlanningInitiativeDetailPage({
     : "Keine GitHub-Issues mit Deliverables dieser Initiative verknüpft.";
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950 lg:pl-16">
+    <main className="app-sidebar-main min-h-screen bg-slate-50 text-slate-950">
       <AppSidebar activeWorkspace="planning" source="supabase" currentPlatformRole={currentPlatformRole || ""} />
       <PlanningItemReadOnlyHeader eyebrow="Initiative" title={initiative.title} trashed={Boolean(detail.trash)} />
 

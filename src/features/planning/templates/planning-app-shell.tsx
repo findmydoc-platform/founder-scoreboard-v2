@@ -91,7 +91,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
         onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <main className="lg:pl-16">
+      <main className="app-sidebar-main">
         <PlanningHeader controller={controller} />
 
         <FeatureTourProvider

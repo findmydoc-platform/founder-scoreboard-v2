@@ -63,6 +63,17 @@ button {
   cursor: pointer;
 }
 
+@media (min-width: 1024px) {
+  .app-sidebar-main {
+    padding-left: 16rem;
+    transition: padding-left 200ms ease-out;
+  }
+
+  .app-sidebar-peer[data-sidebar-state="collapsed"] ~ .app-sidebar-main {
+    padding-left: 4rem;
+  }
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-box-orient: vertical;

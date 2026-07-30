@@ -1,4 +1,4 @@
 {
-  "classification": "minor-ux",
-  "reason": "Refines the existing Planning Kanban card hierarchy and density without adding a new user workflow."
+  "classification": "visual-polish",
+  "reason": "Refines the existing FounderOps navigation layout, grouping, labels, and header without adding a new user workflow."
 }

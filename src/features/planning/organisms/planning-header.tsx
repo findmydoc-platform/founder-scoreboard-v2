@@ -80,6 +80,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     <AppHeader
       mobileNavOpen={mobileNavOpen}
       onOpenMobileNav={() => setMobileNavOpen(true)}
+      eyebrow="FounderOps"
       description={description}
       title={title}
       notices={(

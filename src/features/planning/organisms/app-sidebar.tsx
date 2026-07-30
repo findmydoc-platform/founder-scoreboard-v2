@@ -1,9 +1,9 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import Link from "next/link";
-import { forwardRef, useEffect } from "react";
-import { appNavItems, appWorkspaceIds, hiddenWorkspaceIds, type AppWorkspace, type VisibleAppWorkspace } from "@/features/planning/model/workspace-routes";
+import { forwardRef, useEffect, useState } from "react";
+import { appNavigationSections, appNavItems, appWorkspaceIds, hiddenWorkspaceIds, type AppWorkspace, type VisibleAppWorkspace } from "@/features/planning/model/workspace-routes";
 import { AppBrand } from "@/shared/atoms/app-brand";
 
 export { appNavItems, appWorkspaceIds, hiddenWorkspaceIds };
@@ -21,37 +21,27 @@ type AppSidebarProps = {
   onRequestNavigation?: (href: string) => void;
 };
 
-function AccessCard({
-  authAvailable,
-  authUserEmail,
-  className = "",
-}: {
-  authAvailable: boolean;
-  authUserEmail: string;
-  className?: string;
-}) {
-  if (!authAvailable) return null;
-
-  return (
-    <div className={className}>
-      <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
-        <div className="font-semibold text-slate-800">Teamzugriff</div>
-        <div className="mt-1 truncate">{authUserEmail || "Nicht angemeldet"}</div>
-      </div>
-    </div>
-  );
-}
+const DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY = "founderops.desktop-sidebar-expanded";
 
 export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppSidebar({
   activeWorkspace = "planning",
-  authAvailable = false,
-  authUserEmail = "",
   currentPlatformRole = "",
   mobileOpen = false,
   onMobileClose,
   onMouseLeave,
   onRequestNavigation,
 }, ref) {
+  const [desktopSidebarExpanded, setDesktopSidebarExpanded] = useState(true);
+
+  useEffect(() => {
+    try {
+      const storedValue = window.localStorage.getItem(DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY);
+      if (storedValue === "false") setDesktopSidebarExpanded(false);
+    } catch {
+      // The default expanded state remains usable when storage is unavailable.
+    }
+  }, []);
+
   useEffect(() => {
     if (!mobileOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -61,10 +51,30 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mobileOpen, onMobileClose]);
 
+  const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
+  const visibleNavigationSections = appNavigationSections.map((section) => ({
+    ...section,
+    items: visibleNavItems.filter((item) => item.navigationSection === section.id),
+  })).filter((section) => section.items.length > 0);
+
+  const toggleDesktopSidebar = () => {
+    setDesktopSidebarExpanded((expanded) => {
+      const nextExpanded = !expanded;
+      try {
+        window.localStorage.setItem(DESKTOP_SIDEBAR_EXPANDED_STORAGE_KEY, String(nextExpanded));
+      } catch {
+        // The current session still reflects the requested sidebar state.
+      }
+      return nextExpanded;
+    });
+  };
+
   const renderNavItem = (item: (typeof appNavItems)[number], variant: "desktop" | "mobile") => {
     const Icon = item.icon;
     const active = activeWorkspace === item.id;
-    const desktopClassName = `flex h-10 w-full items-center justify-center gap-0 rounded-md px-3 text-left text-sm font-medium transition-colors group-hover:justify-start group-hover:gap-3 group-focus-within:justify-start group-focus-within:gap-3 ${
+    const desktopClassName = `flex h-10 w-full items-center rounded-md text-left text-sm font-medium transition-colors ${
+      desktopSidebarExpanded ? "gap-3 px-3" : "justify-center px-3"
+    } ${
       active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
     }`;
     const mobileClassName = `flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition-colors ${
@@ -74,7 +84,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
     const content = (
       <>
         <Icon size={18} className="shrink-0" />
-        <span className={variant === "desktop" ? "w-0 overflow-hidden whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover:w-auto group-hover:opacity-100 group-focus-within:w-auto group-focus-within:opacity-100" : "truncate"}>{item.label}</span>
+        <span className={variant === "desktop" ? (desktopSidebarExpanded ? "truncate" : "sr-only") : "truncate"}>{item.label}</span>
       </>
     );
     return (
@@ -94,26 +104,47 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       </Link>
     );
   };
-  const visibleNavItems = appNavItems.filter((item) => !item.ceoOnly || currentPlatformRole === "ceo");
+
+  const renderNavigationSections = (variant: "desktop" | "mobile") => visibleNavigationSections.map((section, index) => (
+    <div
+      key={section.id}
+      className={variant === "desktop" && !desktopSidebarExpanded
+        ? (index === 0 ? "" : "mt-3 border-t border-slate-100 pt-3")
+        : (index === 0 ? "" : "mt-5")}
+    >
+      <div className={variant === "desktop" && !desktopSidebarExpanded ? "sr-only" : "px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500"}>
+        {section.label}
+      </div>
+      <div className="space-y-1">{section.items.map((item) => renderNavItem(item, variant))}</div>
+    </div>
+  ));
 
   return (
     <>
       <aside
         ref={ref}
         onMouseLeave={onMouseLeave}
-        className="group fixed inset-y-0 left-0 z-30 hidden w-16 overflow-hidden border-r border-slate-200 bg-white shadow-none transition-[width,box-shadow] duration-200 ease-out hover:w-64 hover:shadow-xl focus-within:w-64 focus-within:shadow-xl lg:block"
+        data-sidebar-state={desktopSidebarExpanded ? "expanded" : "collapsed"}
+        className={`app-sidebar-peer fixed inset-y-0 left-0 z-30 hidden flex-col overflow-hidden border-r border-slate-200 bg-white shadow-none transition-[width] duration-200 ease-out lg:flex ${
+          desktopSidebarExpanded ? "w-64" : "w-16"
+        }`}
       >
-        <div className="border-b border-slate-100 px-3 py-5">
-          <AppBrand textClassName="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100" />
+        <div className={`border-b border-slate-100 ${desktopSidebarExpanded ? "flex items-start justify-between gap-3 px-4 py-4" : "flex flex-col items-center gap-3 px-3 py-4"}`}>
+          <AppBrand textClassName={desktopSidebarExpanded ? "" : "hidden"} />
+          <button
+            type="button"
+            onClick={toggleDesktopSidebar}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            aria-label={desktopSidebarExpanded ? "Navigation einklappen" : "Navigation ausklappen"}
+            aria-pressed={desktopSidebarExpanded}
+            title={desktopSidebarExpanded ? "Navigation einklappen" : "Navigation ausklappen"}
+          >
+            {desktopSidebarExpanded ? <ChevronsLeft size={17} aria-hidden="true" /> : <ChevronsRight size={17} aria-hidden="true" />}
+          </button>
         </div>
-        <nav className="space-y-1 px-3 py-4" aria-label="Hauptnavigation">
-          {visibleNavItems.map((item) => renderNavItem(item, "desktop"))}
+        <nav className={`flex-1 overflow-y-auto py-4 ${desktopSidebarExpanded ? "px-3" : "px-2"}`} aria-label="Hauptnavigation">
+          {renderNavigationSections("desktop")}
         </nav>
-        <AccessCard
-          authAvailable={authAvailable}
-          authUserEmail={authUserEmail}
-          className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-        />
       </aside>
 
       {mobileOpen && (
@@ -126,14 +157,9 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
                 <X size={18} />
               </button>
             </div>
-            <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4" aria-label="Mobile Hauptnavigation">
-              {visibleNavItems.map((item) => renderNavItem(item, "mobile"))}
+            <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Mobile Hauptnavigation">
+              {renderNavigationSections("mobile")}
             </nav>
-            <AccessCard
-              authAvailable={authAvailable}
-              authUserEmail={authUserEmail}
-              className="border-t border-slate-100 p-4"
-            />
           </aside>
         </div>
       )}

@@ -223,7 +223,7 @@ export function WorkspaceLoadingShell({ workspace = "planning", variant = worksp
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
       <AppSidebar activeWorkspace={workspace} />
-      <main className="lg:pl-16">
+      <main className="app-sidebar-main">
         {detailVariant ? (
           <div className="mx-auto max-w-7xl px-6 py-6">
             <WorkspaceContentSkeleton variant={variant} />

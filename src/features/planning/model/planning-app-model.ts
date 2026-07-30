@@ -76,12 +76,12 @@ export const workspaceLabels: Record<Workspace, string> = {
   planning: "Projekt",
   backlog: "Backlog",
   "decision-log": "Decision Log",
-  events: "Events",
+  events: "Termine & Erinnerungen",
   sprint: "Sprint & Score",
   projects: "Meilensteine & Initiativen",
-  tools: "Quicklinks",
+  tools: "Links & Tools",
   team: "Team",
-  notifications: "Notifications",
+  notifications: "Benachrichtigungen",
   profile: "Mein Profil",
 };
 
