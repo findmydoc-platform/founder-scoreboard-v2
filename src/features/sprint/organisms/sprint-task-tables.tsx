@@ -4,9 +4,8 @@ import { useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
-import { GitHubMissingBadge } from "@/features/tasks/molecules/task-card";
 import { taskAssigneeLabel } from "@/lib/display";
-import { hasGitHubIssue, reviewLabel } from "@/lib/platform";
+import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
@@ -140,10 +139,9 @@ export function SprintTaskTables({
                   </DataCell>
                   <DataCell>
                     <div className="flex flex-wrap gap-1">
-                      {!hasGitHubIssue(task) && <GitHubMissingBadge />}
                       {task.carriedFromSprintId && <UiBadge tone="blue" size="xs" className="text-[11px]">Carry-over</UiBadge>}
                       {task.sprintOutcome && <UiBadge tone="slate" size="xs" className="text-[11px]">{task.sprintOutcome}</UiBadge>}
-                      {hasGitHubIssue(task) && !task.carriedFromSprintId && !task.sprintOutcome && <span className="text-xs text-slate-400">-</span>}
+                      {!task.carriedFromSprintId && !task.sprintOutcome && <span className="text-xs text-slate-400">-</span>}
                     </div>
                   </DataCell>
                   <DataCell>

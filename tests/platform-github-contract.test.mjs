@@ -383,24 +383,30 @@ test("production deploy verifies the ledger, builds, migrates with lock guard, v
   assert.doesNotMatch(workflow, /Restore Previous GitHub Sync Fields|rollback:github-sync-fields/);
 });
 
-test("app-only tasks are visibly marked without creating github issues", async () => {
+test("github sync operations stay in the sync center without routine card duplication", async () => {
   const ui = await readPlanningSurface();
   const panel = await readFile("src/features/tasks/organisms/task-detail-panel.tsx", "utf8");
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const taskTable = await readFile("src/features/tasks/organisms/task-table-view.tsx", "utf8");
+  const sprintTaskTables = await readFile("src/features/sprint/organisms/sprint-task-tables.tsx", "utf8");
+  const taskSignals = await readFile("src/features/tasks/model/task-attention-signals.ts", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
   const queue = await readFile("src/features/tasks/organisms/task-github-sync-queue.tsx", "utf8");
 
-  assert.match(ui, /GitHubMissingBadge/);
   assert.match(ui, /TaskGitHubSyncQueue/);
-  assert.match(taskCard, /Kein GitHub Issue/);
-  assert.match(taskCard, /GitHub offen/);
-  assert.match(taskCard, /Sync läuft/);
-  assert.match(taskCard, /Sync fehlgeschlagen/);
+  assert.doesNotMatch(ui, /GitHubMissingBadge|GitHubIssueSyncStatusBadge/);
+  assert.doesNotMatch(taskCard, /Kein GitHub Issue|GitHub offen|Sync läuft/);
+  assert.doesNotMatch(taskTable, /Kein GitHub Issue|GitHub offen|Sync läuft/);
+  assert.doesNotMatch(sprintTaskTables, /GitHubMissingBadge|Kein GitHub Issue/);
+  assert.match(taskSignals, /Sync fehlgeschlagen/);
+  assert.doesNotMatch(taskCard, /signal\.id !== "sync-failed"/);
+  assert.doesNotMatch(taskTable, /signal\.id !== "sync-failed"/);
   assert.doesNotMatch(notificationsOverviewUi, /task\.taskType === "deliverable"/);
   assert.doesNotMatch(notificationsOverviewUi, /Extern anlegen|Keine Aufgaben ohne externe Ablage/);
+  assert.match(queue, /GitHub Issue fehlt/);
   assert.match(queue, /Issue anlegen/);
   assert.match(queue, /Aktionen.*ausführen/);
   assert.match(queue, /Sync läuft bereits/);

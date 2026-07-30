@@ -105,7 +105,7 @@ test("uses the client sync start instead of an old task revision for optimistic 
   }, now), true);
 });
 
-test("all task surfaces stop presenting expired pending syncs as running", async () => {
+test("operational sync surfaces stop presenting expired pending syncs as running", async () => {
   const [card, table, queue, headerActions] = await Promise.all([
     readFile("src/features/tasks/molecules/task-card.tsx", "utf8"),
     readFile("src/features/tasks/organisms/task-table-view.tsx", "utf8"),
@@ -113,11 +113,12 @@ test("all task surfaces stop presenting expired pending syncs as running", async
     readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8"),
   ]);
 
-  for (const surface of [card, table, queue, headerActions]) {
+  for (const surface of [queue, headerActions]) {
     assert.match(surface, /isExpiredGitHubSyncPending/);
   }
-  assert.match(card, /githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending\(task\)/);
-  assert.match(table, /githubIssueSyncStatus === "pending" && !isExpiredGitHubSyncPending\(task\)/);
+  for (const planningSurface of [card, table]) {
+    assert.doesNotMatch(planningSurface, /isExpiredGitHubSyncPending|githubIssueSyncStatus === "pending"|Sync läuft/);
+  }
 });
 
 test("route and clients preserve the explicit retryable persistence error contract", async () => {

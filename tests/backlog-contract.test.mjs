@@ -253,6 +253,8 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
 test("planning board keeps non-approved items out of the board columns", async () => {
   const renderer = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
   const board = await readFile("src/features/tasks/organisms/task-board-view.tsx", "utf8");
+  const structure = await readFile("src/features/tasks/organisms/task-structure-view.tsx", "utf8");
+  const card = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
 
   assert.match(renderer, /planningBoardStatuses = taskStatuses/);
   assert.match(renderer, /planningBoardTasks = visibleTasks\.filter\(isTaskPlanningActive\)/);
@@ -261,5 +263,11 @@ test("planning board keeps non-approved items out of the board columns", async (
   assert.match(renderer, /statuses=\{planningBoardStatuses\}/);
   assert.match(renderer, /visibleTasks=\{planningBoardTasks\}/);
   assert.match(board, /taskType: "deliverable"/);
+  assert.match(board, /task\.taskType === "deliverable"/);
+  assert.match(board, /subIssuesByParent/);
+  assert.match(board, /groupSubIssuesByParent/);
+  assert.match(structure, /groupSubIssuesByParent/);
+  assert.match(structure, /subIssues=\{subIssuesByParent\.get\(task\.id\) \|\| \[\]\}/);
+  assert.doesNotMatch([board, structure, card].join("\n"), /variant="board"|variant\?: "default" \| "board"/);
   assert.doesNotMatch(board, /taskType: status === "Vorschlag" \? "proposal" : "deliverable"/);
 });

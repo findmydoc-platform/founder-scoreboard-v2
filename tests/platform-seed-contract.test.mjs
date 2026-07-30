@@ -24,6 +24,8 @@ test("local seed covers planning roles and stable core data", async () => {
   const profileById = new Map(source.profiles.map((profile) => [profile.id, profile]));
   const packageIds = new Set(source.packages.map((item) => item.id));
   const taskIds = source.tasks.map((task) => task.id);
+  const simulatedRollupParent = source.tasks.find((task) => task.id === "sebastian-contact-404-beheben-oder-links-umstellen");
+  const simulatedRollupChildren = source.tasks.filter((task) => task.parentTaskId === simulatedRollupParent?.id);
 
   assert.equal(source.project.id, "findmydoc-founder-execution");
   assert.deepEqual(source.packages.map((item) => item.id), ["GC1", "GC2", "GC3", "GC4", "GC5"]);
@@ -32,6 +34,12 @@ test("local seed covers planning roles and stable core data", async () => {
   assert.ok(taskIds.includes("sebastian-contact-404-beheben-oder-links-umstellen"));
   assert.ok(source.tasks.every((task) => packageIds.has(task.packageId)));
   assert.ok(source.tasks.every((task) => profileById.has(task.assigneeId)));
+  assert.equal(simulatedRollupParent?.githubIssueNumber, 9999);
+  assert.equal(simulatedRollupParent?.githubIssueUrl, "https://github.com/findmydoc-platform/management/issues/9999");
+  assert.equal(simulatedRollupParent?.githubIssueSyncStatus, "synced");
+  assert.equal(simulatedRollupChildren.length, 5);
+  assert.equal(simulatedRollupChildren.filter((task) => task.status === "Erledigt").length, 3);
+  assert.ok(simulatedRollupChildren.every((task) => task.taskType === "sub_issue" && task.scoreRelevant === false));
   assert.equal(source.fmdTools.length, 11);
   assert.equal(profileById.get("volkan")?.platformRole, "ceo");
   assert.equal(profileById.get("local-deputy")?.platformRole, "deputy");
