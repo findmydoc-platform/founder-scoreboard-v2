@@ -209,3 +209,153 @@ test("replay versioning and package preference translation are additive", async 
   assert.match(updateRoute, /contract_version/);
   assert.match(documentation, /flat `goal`, `successCriteria`, and `scopeConstraints` fields/);
 });
+
+test("v1 create replays return the immutable snapshot before canonical preview validation", async () => {
+  let rpcCalls = 0;
+  let previewCalls = 0;
+  const stored = {
+    id: "batch-v1",
+    request_hash: "legacy-hash",
+    response_tasks: [{ itemType: "milestone", item: { id: "milestone-v1", title: "Legacy" } }],
+    contract_version: 1,
+  };
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: stored, error: null }; },
+  };
+  const route = await loadTranspiledModule(
+    "src/app/api/team/planning-items/v1/items/route.ts",
+    {
+      "next/server": { after: () => undefined },
+      "@/lib/api-input": { auditRequestMetadata: () => ({}) },
+      "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-items-route": {
+        handlePlanningItemsRequest: async (_request, _scope, _message, handler) => handler({
+          tokenId: "token-v1",
+          scopes: [],
+          profile: { id: "ceo", platformRole: "ceo" },
+          supabase: {
+            from: () => query,
+            rpc: async () => { rpcCalls += 1; return { data: null, error: null }; },
+          },
+        }),
+        planningItemsError: (error, status) => ({ body: { error }, status }),
+        planningItemsJson: (body, status = 200) => ({ body, status }),
+      },
+      "@/features/planning-items/model/planning-items-create": {
+        parsePlanningItemCreatePayload: () => ({
+          ok: true,
+          items: [{ itemType: "milestone", title: "Legacy" }],
+          githubSyncMode: null,
+        }),
+        planningItemCreateRequiresOperationalLead: () => true,
+        planningItemLegacyCreateHash: () => "legacy-hash",
+        buildPlanningItemCreatePreview: async () => { previewCalls += 1; return []; },
+        planningItemCreateGitHubSyncCommands: () => [],
+        planningItemCreateHash: () => "canonical-hash",
+        planningItemCreateCommitItem: (item) => item,
+      },
+      "@/features/planning-items/model/planning-items-github-sync": {},
+    },
+  );
+  const response = await route.POST({
+    headers: { get: () => "idempotency-key" },
+    json: async () => ({}),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.replayed, true);
+  assert.equal(response.body.items[0].itemType, "milestone");
+  assert.equal(previewCalls, 0);
+  assert.equal(rpcCalls, 0);
+});
+
+test("v1 update and delete replays use legacy response mapping", async () => {
+  const storedUpdate = {
+    request_hash: "legacy-update-hash",
+    contract_version: 1,
+    response: {
+      itemType: "initiative",
+      item: { id: "package-v1", goal: "Legacy goal" },
+      changedFields: ["intendedOutcome"],
+      systemEffects: [],
+    },
+  };
+  let deleteRpcCalls = 0;
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: storedUpdate, error: null }; },
+  };
+  const route = await loadTranspiledModule(
+    "src/app/api/team/planning-items/v1/items/[id]/route.ts",
+    {
+      "next/server": { after: () => undefined },
+      "@/lib/api-input": { auditRequestMetadata: () => ({}) },
+      "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-item-delete": {
+        parsePlanningItemDeletePayload: () => ({ ok: true, expectedUpdatedAt: "2026-07-01T08:00:00.000Z" }),
+        planningItemMilestoneDeleteHash: () => "legacy-delete-hash",
+      },
+      "@/features/planning-items/model/planning-item-update": {
+        parsePlanningItemPatchPayload: () => ({
+          ok: true,
+          expectedUpdatedAt: "2026-07-01T08:00:00.000Z",
+          raw: { intendedOutcome: "Legacy goal" },
+          githubSync: null,
+          githubSyncMode: null,
+        }),
+        planningItemUpdateHash: () => "legacy-update-hash",
+        mapLegacyPlanningItemDatabaseRow: (itemType, item) => ({ id: item.id, itemType, mapped: "legacy" }),
+        mapPlanningItemDatabaseRow: () => { throw new Error("canonical mapper must not handle v1 replay"); },
+        buildPlanningItemUpdatePreview: async () => { throw new Error("preview must not run for v1 replay"); },
+      },
+      "@/features/planning-items/model/planning-items-route": {
+        handlePlanningItemsRequest: async (_request, _scope, _message, handler) => handler({
+          tokenId: "token-v1",
+          scopes: [],
+          profile: { id: "ceo", platformRole: "ceo" },
+          supabase: {
+            from: () => query,
+            rpc: async () => {
+              deleteRpcCalls += 1;
+              return {
+                data: {
+                  replayed: true,
+                  itemType: "milestone",
+                  item: { id: "milestone-v1", title: "Legacy" },
+                  children: { initiatives: 0, tasks: 0 },
+                },
+                error: null,
+              };
+            },
+          },
+        }),
+        planningItemsError: (error, status) => ({ body: { error }, status }),
+        planningItemsJson: (body, status = 200) => ({ body, status }),
+      },
+      "@/features/planning-items/model/planning-items-github-sync": {},
+      "@/features/projects/model/milestone-server": {
+        isMilestoneNotEmptyDatabaseError: () => false,
+        loadMilestoneChildCounts: async () => ({ ok: true, counts: { initiatives: 0, tasks: 0 } }),
+        loadProjectMilestone: async () => ({ data: null, error: null }),
+        milestoneNotEmptyError: () => ({}),
+      },
+    },
+  );
+  const request = {
+    headers: { get: () => "idempotency-key" },
+    json: async () => ({}),
+    nextUrl: { origin: "http://localhost:3000" },
+  };
+  const updateResponse = await route.PATCH(request, { params: Promise.resolve({ id: "package-v1" }) });
+  assert.equal(updateResponse.status, 200);
+  assert.equal(updateResponse.body.itemType, "initiative");
+  assert.equal(updateResponse.body.item.mapped, "legacy");
+
+  const deleteResponse = await route.DELETE(request, { params: Promise.resolve({ id: "milestone-v1" }) });
+  assert.equal(deleteResponse.status, 200);
+  assert.equal(deleteResponse.body.itemType, "milestone");
+  assert.equal(deleteResponse.body.item.mapped, "legacy");
+  assert.equal(deleteRpcCalls, 1);
+});
