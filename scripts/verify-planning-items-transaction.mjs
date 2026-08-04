@@ -272,6 +272,271 @@ try {
   const afterFailedBatch = await client.query("select count(*)::integer as count from public.tasks where id like $1", [`${ceoId}-planning-items-v1-%`]);
   assert.equal(afterFailedBatch.rows[0]?.count, beforeFailedBatch.rows[0]?.count, "A failed batch must not partially create planning items.");
 
+  const legacyMilestoneId = `legacy-milestone-${suffix}`;
+  const legacyPackageId = `legacy-package-${suffix}`;
+  const trashedPackageId = `legacy-trashed-package-${suffix}`;
+  const legacyDeliverableId = `legacy-deliverable-${suffix}`;
+  const trashedDeliverableId = `legacy-trashed-deliverable-${suffix}`;
+  const trashedSubIssueId = `legacy-trashed-sub-issue-${suffix}`;
+  const invalidPackageId = `legacy-invalid-package-${suffix}`;
+
+  await expectCode(client, "23514", async () => {
+    await client.query(
+      `insert into public.packages (
+         id, project_id, title, goal, owner_id, accountable_profile_id,
+         responsible_profile_ids, approval_status, approval_revision
+       ) values ($1, $2, 'Invalid orphan', 'Must fail atomically', $3, $3, array[$3], 'approved', 1)`,
+      [invalidPackageId, projectId, ownerId],
+    );
+    await client.query("select public.backfill_unified_planning_hierarchy()");
+  });
+  const invalidMapping = await client.query(
+    "select count(*)::integer as count from public.planning_item_legacy_ids where source_kind = 'package' and legacy_id = $1",
+    [invalidPackageId],
+  );
+  assert.equal(invalidMapping.rows[0]?.count, 0, "Invalid legacy input must not leave a partial id mapping.");
+
+  await client.query(
+    `insert into public.milestones (
+       id, project_id, title, description, target_date, status, sort_order, created_at, updated_at
+     ) values ($1, $2, 'Legacy launch', 'Lossless Epic description', '2026-11-30', 'active', 41, '2026-07-01T08:00:00Z', '2026-07-02T09:00:00Z')`,
+    [legacyMilestoneId, projectId],
+  );
+  await client.query(
+    `insert into public.packages (
+       id, project_id, title, goal, priority, sort_order, milestone_id, owner_id, status,
+       target_date, success_criteria, scope_constraints, accountable_profile_id,
+       responsible_profile_ids, consulted_profile_ids, informed_profile_ids,
+       approval_status, approval_revision, proposed_by, proposed_at, decided_by, decided_at, decision_note
+     ) values (
+       $1, $2, 'Legacy active Initiative', 'Legacy goal', 'P1', 51, $3, $4, 'active',
+       '2026-10-31', 'Legacy success', 'Legacy scope', $5,
+       array[$4], array[$5], array[$4], 'approved', 3, $5, '2026-07-03T08:00:00Z', $5, '2026-07-04T08:00:00Z', 'Approved legacy fixture'
+     )`,
+    [legacyPackageId, projectId, legacyMilestoneId, ownerId, ceoId],
+  );
+  const trashedAt = "2026-07-05T08:00:00.000Z";
+  await client.query("select set_config('app.planning_hierarchy_backfill', 'true', true)");
+  await client.query("select set_config('founderops.trash_lifecycle_write', 'on', true)");
+  await client.query(
+    `insert into public.packages (
+       id, project_id, title, goal, priority, sort_order, milestone_id, owner_id, status,
+       target_date, success_criteria, scope_constraints, accountable_profile_id,
+       responsible_profile_ids, approval_status, approval_revision, proposed_by, proposed_at,
+       trashed_at, trashed_by, trash_reason, trash_cause, purge_after, trash_root_type, trash_root_id, trash_revision
+     ) values (
+       $1, $2, 'Legacy trashed Initiative', 'Trashed goal', 'P2', 52, $3, $4, 'paused',
+       '2026-12-15', 'Trashed success', 'Trashed scope', $5,
+       array[$4], 'proposed', 2, $5, '2026-07-04T08:00:00Z',
+       $6::timestamptz, $5, 'Superseded fixture', 'withdrawn', $6::timestamptz + interval '90 days', 'initiative', $1, 4
+     )`,
+    [trashedPackageId, projectId, legacyMilestoneId, ownerId, ceoId, trashedAt],
+  );
+  await client.query(
+    `insert into public.tasks (
+       id, project_id, package_id, milestone_id, title, description, status, priority,
+       owner, assignee, task_type, parent_task_id, approval_status, approval_revision,
+       score_relevant, review_status, github_repo
+     ) values ($1, $2, $3, $4, 'Legacy Deliverable', 'Preserve operational fields', 'In Arbeit', 'P1',
+       $5, $5, 'deliverable', null, 'approved', 2, false, 'not_requested', 'findmydoc-platform/management')`,
+    [legacyDeliverableId, projectId, legacyPackageId, legacyMilestoneId, ownerId],
+  );
+  await client.query(
+    `insert into public.tasks (
+       id, project_id, package_id, milestone_id, title, description, status, priority,
+       owner, assignee, task_type, parent_task_id, approval_status, approval_revision,
+       score_relevant, review_status, github_repo,
+       trashed_at, trashed_by, trash_reason, trash_cause, purge_after, trash_root_type, trash_root_id, trash_revision
+     ) values ($1, $2, $3, $4, 'Legacy trashed Deliverable', 'Preserve trash tree', 'Offen', 'P2',
+       $5, $5, 'deliverable', null, 'proposed', 2, false, 'not_requested', 'findmydoc-platform/management',
+       $6::timestamptz, $7, 'Superseded fixture', 'withdrawn', $6::timestamptz + interval '90 days', 'initiative', $3, 4)`,
+    [trashedDeliverableId, projectId, trashedPackageId, legacyMilestoneId, ownerId, trashedAt, ceoId],
+  );
+  await client.query(
+    `insert into public.tasks (
+       id, project_id, package_id, milestone_id, title, description, status, priority,
+       owner, assignee, task_type, parent_task_id, approval_status, approval_revision,
+       score_relevant, review_status, github_repo,
+       trashed_at, trashed_by, trash_reason, trash_cause, purge_after, trash_root_type, trash_root_id, trash_revision
+     ) values ($1, $2, $3, $4, 'Legacy trashed Sub-Issue', 'Preserve direct child', 'Offen', 'P2',
+       $5, $5, 'sub_issue', $6, null, 1, false, 'not_requested', 'findmydoc-platform/management',
+       $7::timestamptz, $8, 'Superseded fixture', 'withdrawn', $7::timestamptz + interval '90 days', 'initiative', $3, 4)`,
+    [trashedSubIssueId, projectId, trashedPackageId, legacyMilestoneId, ownerId, trashedDeliverableId, trashedAt, ceoId],
+  );
+  await client.query("select set_config('app.planning_hierarchy_backfill', 'false', true)");
+  await client.query("select set_config('founderops.trash_lifecycle_write', 'off', true)");
+
+  await client.query(
+    `insert into public.profile_ui_preferences (profile_id, planning_filters, expanded_package_ids)
+     values ($1, jsonb_build_object('query', '', 'packageId', $2::text), array[$2::text, 'Alle', 'unknown-package'])
+     on conflict (profile_id) do update
+     set planning_filters = excluded.planning_filters,
+         expanded_package_ids = excluded.expanded_package_ids`,
+    [ownerId, legacyPackageId],
+  );
+
+  const backfillResult = await client.query("select public.backfill_unified_planning_hierarchy() as result");
+  assert.ok(Number(backfillResult.rows[0]?.result?.milestones) >= 1);
+  assert.ok(Number(backfillResult.rows[0]?.result?.initiatives) >= 2);
+
+  const mappings = await client.query(
+    `select source_kind, legacy_id, task_id
+     from public.planning_item_legacy_ids
+     where (source_kind = 'milestone' and legacy_id = $1)
+        or (source_kind = 'package' and legacy_id = any($2::text[]))`,
+    [legacyMilestoneId, [legacyPackageId, trashedPackageId]],
+  );
+  const mappedIds = new Map(mappings.rows.map((row) => [`${row.source_kind}:${row.legacy_id}`, row.task_id]));
+  const epicId = mappedIds.get(`milestone:${legacyMilestoneId}`);
+  const initiativeId = mappedIds.get(`package:${legacyPackageId}`);
+  const trashedInitiativeId = mappedIds.get(`package:${trashedPackageId}`);
+  assert.ok(epicId && initiativeId && trashedInitiativeId, "Every legacy root must retain a canonical id mapping.");
+  assert.notEqual(epicId, legacyMilestoneId);
+  assert.notEqual(initiativeId, legacyPackageId);
+
+  const epicBackfill = await client.query(
+    `select title, description, status, target_date::text as target_date, sort_order,
+            task_type, parent_task_id, priority, github_issue_sync_status
+     from public.tasks where id = $1`,
+    [epicId],
+  );
+  const milestoneSource = await client.query(
+    "select sort_order from public.milestones where id = $1",
+    [legacyMilestoneId],
+  );
+  assert.deepEqual(epicBackfill.rows[0], {
+    title: "Legacy launch",
+    description: "Lossless Epic description",
+    status: "In Arbeit",
+    target_date: "2026-11-30",
+    sort_order: milestoneSource.rows[0]?.sort_order,
+    task_type: "epic",
+    parent_task_id: null,
+    priority: null,
+    github_issue_sync_status: "not_applicable",
+  });
+
+  const initiativeBackfill = await client.query(
+    `select task.title, task.description, task.status, task.priority, task.owner,
+            task.target_date::text as target_date, task.parent_task_id, task.approval_status,
+            task.approval_revision, strategy.goal, strategy.success_criteria, strategy.scope_constraints
+     from public.tasks task
+     join public.planning_item_strategy strategy on strategy.task_id = task.id
+     where task.id = $1`,
+    [initiativeId],
+  );
+  assert.deepEqual(initiativeBackfill.rows[0], {
+    title: "Legacy active Initiative",
+    description: "Legacy goal",
+    status: "In Arbeit",
+    priority: "P1",
+    owner: ownerId,
+    target_date: "2026-10-31",
+    parent_task_id: epicId,
+    approval_status: "approved",
+    approval_revision: 3,
+    goal: "Legacy goal",
+    success_criteria: "Legacy success",
+    scope_constraints: "Legacy scope",
+  });
+  const raciBackfill = await client.query(
+    `select profile_id, role, sort_order
+     from public.planning_item_raci_assignments
+     where task_id = $1
+     order by role, sort_order, profile_id`,
+    [initiativeId],
+  );
+  assert.deepEqual(raciBackfill.rows, [
+    { profile_id: ceoId, role: "accountable", sort_order: 0 },
+    { profile_id: ceoId, role: "consulted", sort_order: 1 },
+    { profile_id: ownerId, role: "informed", sort_order: 1 },
+    { profile_id: ownerId, role: "responsible", sort_order: 1 },
+  ]);
+
+  const hierarchyBackfill = await client.query(
+    `select id, parent_task_id, trash_root_id, trashed_at is not null as trashed
+     from public.tasks
+     where id = any($1::text[])
+     order by id`,
+    [[legacyDeliverableId, trashedDeliverableId, trashedSubIssueId, trashedInitiativeId]],
+  );
+  const hierarchyById = new Map(hierarchyBackfill.rows.map((row) => [row.id, row]));
+  assert.equal(hierarchyById.get(legacyDeliverableId)?.parent_task_id, initiativeId);
+  assert.equal(hierarchyById.get(trashedInitiativeId)?.parent_task_id, epicId);
+  assert.equal(hierarchyById.get(trashedInitiativeId)?.trash_root_id, trashedInitiativeId);
+  assert.equal(hierarchyById.get(trashedDeliverableId)?.parent_task_id, trashedInitiativeId);
+  assert.equal(hierarchyById.get(trashedDeliverableId)?.trash_root_id, trashedInitiativeId);
+  assert.equal(hierarchyById.get(trashedSubIssueId)?.parent_task_id, trashedDeliverableId);
+  assert.equal(hierarchyById.get(trashedSubIssueId)?.trash_root_id, trashedInitiativeId);
+  assert.equal(hierarchyById.get(trashedSubIssueId)?.trashed, true);
+
+  const migratedPreference = await client.query(
+    `select planning_filters->>'packageId' as package_id, expanded_package_ids
+     from public.profile_ui_preferences where profile_id = $1`,
+    [ownerId],
+  );
+  assert.equal(migratedPreference.rows[0]?.package_id, initiativeId);
+  assert.deepEqual(migratedPreference.rows[0]?.expanded_package_ids, [initiativeId, "Alle", "unknown-package"]);
+
+  const secondBackfill = await client.query("select public.backfill_unified_planning_hierarchy() as result");
+  assert.deepEqual(secondBackfill.rows[0]?.result, backfillResult.rows[0]?.result, "Backfill must be idempotent.");
+
+  const legacyReplayCreateKey = randomUUID();
+  const legacyReplayUpdateKey = randomUUID();
+  const legacyReplayDeleteKey = randomUUID();
+  const legacyCreateHash = hash([{ itemType: "milestone", title: "Legacy replay" }]);
+  const legacyUpdateHash = hash({ itemId: legacyMilestoneId, itemType: "milestone", expectedUpdatedAt: "2026-07-02T09:00:00.000Z", patch: { title: "Legacy replay" } });
+  const legacyDeleteHash = hash({ itemId: legacyMilestoneId, expectedUpdatedAt: "2026-07-02T09:00:00.000Z" });
+  await client.query(
+    `insert into public.team_task_intake_batches (
+       token_id, profile_id, idempotency_key, request_hash, task_ids, response_tasks, contract_version
+     ) values ($1, $2, $3, $4, array[$5], $6::jsonb, 1)`,
+    [token.id, ceoId, legacyReplayCreateKey, legacyCreateHash, legacyMilestoneId, JSON.stringify([{ itemType: "milestone", item: { id: legacyMilestoneId, title: "Legacy replay" } }])],
+  );
+  await client.query(
+    `insert into public.team_planning_item_update_requests (
+       token_id, profile_id, item_type, item_id, expected_updated_at, idempotency_key, request_hash, response, contract_version
+     ) values ($1, $2, 'milestone', $3, $4::timestamptz, $5, $6, $7::jsonb, 1)`,
+    [token.id, ceoId, legacyMilestoneId, "2026-07-02T09:00:00.000Z", legacyReplayUpdateKey, legacyUpdateHash, JSON.stringify({ itemType: "milestone", item: { id: legacyMilestoneId, title: "Legacy replay" } })],
+  );
+  await client.query(
+    `insert into public.team_planning_milestone_delete_requests (
+       token_id, profile_id, milestone_id, expected_updated_at, idempotency_key, request_hash, response, contract_version
+     ) values ($1, $2, $3, $4::timestamptz, $5, $6, $7::jsonb, 1)`,
+    [token.id, ceoId, legacyMilestoneId, "2026-07-02T09:00:00.000Z", legacyReplayDeleteKey, legacyDeleteHash, JSON.stringify({ itemType: "milestone", item: { id: legacyMilestoneId, title: "Legacy replay" }, children: { initiatives: 0, tasks: 0 } })],
+  );
+  const replayCreate = await client.query(
+    "select public.create_team_planning_items_transaction($1, $2, $3, $4, $5::jsonb) as result",
+    [token.id, ceoId, legacyReplayCreateKey, legacyCreateHash, JSON.stringify([{ itemType: "milestone", title: "Legacy replay" }])],
+  );
+  const replayUpdate = await client.query(
+    `select public.update_team_planning_item_transaction(
+       $1, $2, 'milestone', $3, $4::timestamptz, $5, $6, $7::jsonb, '[]'::jsonb, '[]'::jsonb
+     ) as result`,
+    [token.id, ceoId, legacyMilestoneId, "2026-07-02T09:00:00.000Z", legacyReplayUpdateKey, legacyUpdateHash, JSON.stringify({ title: "Legacy replay" })],
+  );
+  const replayDelete = await client.query(
+    `select public.delete_team_planning_milestone_transaction(
+       $1, $2, $3, $4::timestamptz, $5, $6
+     ) as result`,
+    [token.id, ceoId, legacyMilestoneId, "2026-07-02T09:00:00.000Z", legacyReplayDeleteKey, legacyDeleteHash],
+  );
+  assert.equal(replayCreate.rows[0]?.result?.replayed, true);
+  assert.equal(replayCreate.rows[0]?.result?.items?.[0]?.itemType, "milestone");
+  assert.equal(replayUpdate.rows[0]?.result?.replayed, true);
+  assert.equal(replayUpdate.rows[0]?.result?.itemType, "milestone");
+  assert.equal(replayDelete.rows[0]?.result?.replayed, true);
+  assert.equal(replayDelete.rows[0]?.result?.itemType, "milestone");
+  const replayVersions = await client.query(
+    `select
+       (select contract_version from public.team_task_intake_batches where id = $1) as current_create,
+       (select contract_version from public.team_task_intake_batches where token_id = $2 and idempotency_key = $3) as legacy_create,
+       (select contract_version from public.team_planning_item_update_requests where token_id = $2 and idempotency_key = $4) as legacy_update,
+       (select contract_version from public.team_planning_milestone_delete_requests where token_id = $2 and idempotency_key = $5) as legacy_delete`,
+    [firstBatch.batchId, token.id, legacyReplayCreateKey, legacyReplayUpdateKey, legacyReplayDeleteKey],
+  );
+  assert.deepEqual(replayVersions.rows[0], { current_create: 2, legacy_create: 1, legacy_update: 1, legacy_delete: 1 });
+
   const backfill = await client.query(
     `select
        (select count(*)::integer from public.milestones) as legacy_milestones,
