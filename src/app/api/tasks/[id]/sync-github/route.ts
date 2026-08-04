@@ -60,7 +60,10 @@ export async function POST(
     .select("task_type")
     .eq("id", id)
     .maybeSingle();
-  if (taskError || !task) {
+  if (taskError) {
+    return syncResponse(taskGitHubSyncFailure("github_sync_unavailable", "Planungselement konnte nicht geladen werden."));
+  }
+  if (!task) {
     return syncResponse(taskGitHubSyncFailure("github_sync_not_found", "Planungselement wurde nicht gefunden."));
   }
   if (task.task_type === "epic" || task.task_type === "initiative") {

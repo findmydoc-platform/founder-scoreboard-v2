@@ -93,6 +93,120 @@ test("task detail is active-first and falls back to a read-only trash surface", 
   assert.match(banner, /Bereinigung ab/);
   assert.match(banner, /Papierkorb-Wurzel/);
   assert.match(banner, /GitHub-Lifecycle/);
+  assert.match(taskTemplate, /Initiativenstrategie/);
+  assert.match(taskTemplate, /task\.strategy\?\.goal/);
+  assert.match(taskTemplate, /raciIds\("accountable"\)/);
+  assert.match(taskTemplate, /typeLabels\[task\.taskType\]/);
+});
+
+test("canonical trashed Initiatives retain strategy, RACI, parent, and direct children", async () => {
+  const trashDetail = await loadTranspiledModule(
+    "src/lib/planning-trash-detail.ts",
+    {
+      "@/lib/planning-profile-mappers": { mapMilestone: (row) => row, mapPackage: (row) => row },
+      "@/lib/planning-task-mappers": {
+        mapTaskRow: (row, _profiles, options) => ({
+          id: row.id,
+          title: row.title,
+          taskType: row.task_type,
+          approvalStatus: row.approval_status,
+          status: row.status,
+          priority: row.priority,
+          owner: "Sebastian",
+          assignee: "Sebastian",
+          description: row.description,
+          strategy: options.strategy ? {
+            goal: options.strategy.goal,
+            successCriteria: options.strategy.success_criteria,
+            scopeConstraints: options.strategy.scope_constraints,
+          } : undefined,
+          raciAssignments: options.raciAssignments.map((assignment) => ({
+            profileId: assignment.profile_id,
+            role: assignment.role,
+            sortOrder: assignment.sort_order,
+          })),
+          githubIssueNumber: null,
+          githubIssueUrl: "",
+          issueNumber: "",
+          issueUrl: "",
+          trashedAt: row.trashed_at,
+          trashedById: row.trashed_by,
+          trashReason: row.trash_reason,
+          trashCause: row.trash_cause,
+          purgeAfter: row.purge_after,
+          trashRootType: row.trash_root_type,
+          trashRootId: row.trash_root_id,
+          trashRevision: row.trash_revision,
+        }),
+      },
+      "@/lib/planning-data-row-types": { taskRowSelect: "task-columns" },
+    },
+  );
+  const initiativeRow = {
+    id: "initiative-1",
+    title: "Strategic initiative",
+    description: "Fallback",
+    task_type: "initiative",
+    parent_task_id: "epic-1",
+    package_id: null,
+    milestone_id: null,
+    status: "In Arbeit",
+    priority: "P1",
+    approval_status: "approved",
+    trashed_at: "2026-08-01T09:00:00.000Z",
+    trashed_by: "ceo",
+    trash_reason: "Superseded",
+    trash_cause: "withdrawn",
+    purge_after: "2026-09-01T09:00:00.000Z",
+    trash_root_type: "initiative",
+    trash_root_id: "initiative-1",
+    trash_revision: 2,
+  };
+  const strategy = {
+    task_id: "initiative-1",
+    goal: "Reach launch readiness",
+    success_criteria: "All gates are green",
+    scope_constraints: "No product expansion",
+  };
+  const raci = [{ task_id: "initiative-1", profile_id: "ceo", role: "accountable", sort_order: 0 }];
+  const supabase = {
+    from(table) {
+      const filters = {};
+      const builder = {
+        select() { return this; },
+        eq(field, value) { filters[field] = value; return this; },
+        order() { return this; },
+        async maybeSingle() {
+          if (table === "tasks" && filters.id === "initiative-1") return { data: initiativeRow, error: null };
+          if (table === "tasks" && filters.id === "epic-1") {
+            return { data: { id: "epic-1", title: "Launch Epic", task_type: "epic", approval_status: null, trashed_at: null }, error: null };
+          }
+          if (table === "planning_item_strategy") return { data: strategy, error: null };
+          return { data: null, error: null };
+        },
+        async returns() {
+          if (table === "tasks" && filters.parent_task_id === "initiative-1") {
+            return { data: [{ id: "deliverable-1", title: "Ship", task_type: "deliverable", approval_status: "approved", trashed_at: initiativeRow.trashed_at }], error: null };
+          }
+          if (table === "planning_item_raci_assignments") return { data: raci, error: null };
+          return { data: [], error: null };
+        },
+      };
+      return builder;
+    },
+  };
+
+  const result = await trashDetail.loadPlanningTrashTaskDetail(
+    supabase,
+    "initiative-1",
+    [{ id: "ceo", name: "Sebastian" }],
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.detail.task.taskType, "initiative");
+  assert.equal(result.detail.task.strategy.goal, "Reach launch readiness");
+  assert.deepEqual(result.detail.task.raciAssignments, [{ profileId: "ceo", role: "accountable", sortOrder: 0 }]);
+  assert.equal(result.detail.parent.taskType, "epic");
+  assert.equal(result.detail.children[0].taskType, "deliverable");
 });
 
 test("legacy initiative details redirect into the common task detail surface", async () => {
