@@ -129,6 +129,89 @@ function materializeTasks(source) {
   });
 }
 
+function strategicStatusFromLegacy(status) {
+  if (status === "active") return "In Arbeit";
+  if (status === "paused") return "Pausiert";
+  if (status === "done") return "Erledigt";
+  return "Offen";
+}
+
+function canonicalSeedEpics(source) {
+  return (source.epics || []).map((epic) => ({
+    id: epic.id,
+    project_id: source.project.id,
+    title: epic.title,
+    description: nullable(epic.description),
+    status: epic.status || "Offen",
+    priority: null,
+    owner: nullable(epic.ownerId),
+    assignee: nullable(epic.ownerId),
+    sort_order: epic.sortOrder || 0,
+    target_date: nullable(epic.targetDate),
+    task_type: "epic",
+    parent_task_id: null,
+    approval_status: null,
+    approval_revision: 1,
+    github_issue_sync_status: "not_applicable",
+    score_relevant: false,
+    review_status: "not_requested",
+  }));
+}
+
+function canonicalSeedInitiatives(source) {
+  return source.packages.map((item) => ({
+    id: item.id,
+    project_id: source.project.id,
+    title: item.title,
+    description: nullable(item.goal),
+    status: strategicStatusFromLegacy(item.status),
+    priority: item.priority || "P2",
+    owner: nullable(item.ownerId),
+    assignee: nullable(item.ownerId),
+    sort_order: item.sortOrder || 0,
+    target_date: nullable(item.targetDate),
+    task_type: "initiative",
+    parent_task_id: nullable(item.milestoneId),
+    approval_status: item.approvalStatus || "approved",
+    approval_revision: item.approvalRevision || 1,
+    proposed_by: nullable(item.proposedById) || nullable(item.ownerId),
+    proposed_at: nullable(item.proposedAt) || new Date().toISOString(),
+    decided_by: nullable(item.decidedById),
+    decided_at: nullable(item.decidedAt),
+    decision_note: nullable(item.decisionNote),
+    github_issue_sync_status: "not_applicable",
+    score_relevant: false,
+    review_status: "not_requested",
+  }));
+}
+
+function canonicalSeedRaciRows(initiatives) {
+  return initiatives.flatMap((item) => [
+    item.accountableProfileId ? { task_id: item.id, profile_id: item.accountableProfileId, role: "accountable", sort_order: 0 } : null,
+    ...(item.responsibleProfileIds || []).map((profileId, index) => ({ task_id: item.id, profile_id: profileId, role: "responsible", sort_order: index })),
+    ...(item.consultedProfileIds || []).map((profileId, index) => ({ task_id: item.id, profile_id: profileId, role: "consulted", sort_order: index })),
+    ...(item.informedProfileIds || []).map((profileId, index) => ({ task_id: item.id, profile_id: profileId, role: "informed", sort_order: index })),
+  ].filter(Boolean));
+}
+
+async function replacePlanningItemRaciRows(client, initiatives) {
+  const initiativeIds = initiatives.map((item) => item.id);
+  if (!initiativeIds.length) return;
+  await client.query("delete from planning_item_raci_assignments where task_id = any($1::text[])", [initiativeIds]);
+  const rows = canonicalSeedRaciRows(initiatives);
+  if (!rows.length) return;
+  const values = [];
+  const tuples = rows.map((row) => {
+    values.push(row.task_id, row.profile_id, row.role, row.sort_order);
+    const offset = values.length - 3;
+    return `($${offset},$${offset + 1},$${offset + 2},$${offset + 3})`;
+  });
+  await client.query(
+    `insert into planning_item_raci_assignments (task_id,profile_id,role,sort_order) values ${tuples.join(",")}`,
+    values,
+  );
+}
+
 function quoteIdentifier(identifier) {
   if (!/^[a-z_]+$/.test(identifier)) throw new Error(`Unsafe SQL identifier: ${identifier}`);
   return `"${identifier}"`;
@@ -234,30 +317,11 @@ async function seedPlanningData(status) {
       preview_image_source: tool.previewImageSource || "none",
       sort_order: tool.sortOrder || 0,
     })));
-    await upsertRows(client, "packages", ["id", "project_id", "milestone_id", "owner_id", "accountable_profile_id", "responsible_profile_ids", "consulted_profile_ids", "informed_profile_ids", "title", "goal", "priority", "status", "target_date", "success_criteria", "scope_constraints", "sort_order", "approval_status", "approval_revision"], source.packages.map((item) => ({
-      id: item.id,
-      project_id: source.project.id,
-      milestone_id: nullable(item.milestoneId),
-      owner_id: nullable(item.ownerId),
-      accountable_profile_id: nullable(item.accountableProfileId),
-      responsible_profile_ids: item.responsibleProfileIds || [],
-      consulted_profile_ids: item.consultedProfileIds || [],
-      informed_profile_ids: item.informedProfileIds || [],
-      title: item.title,
-      goal: nullable(item.goal),
-      priority: nullable(item.priority),
-      status: item.status || "planned",
-      target_date: nullable(item.targetDate),
-      success_criteria: item.successCriteria || "",
-      scope_constraints: item.scopeConstraints || "",
-      sort_order: item.sortOrder || 0,
-      approval_status: item.approvalStatus || "approved",
-      approval_revision: item.approvalRevision || 1,
-    })));
+    const epicRows = canonicalSeedEpics(source);
+    const initiativeRows = canonicalSeedInitiatives(source);
     const taskRows = tasks.map((task) => ({
       id: task.id,
       project_id: source.project.id,
-      package_id: nullable(task.packageId),
       title: task.title,
       description: nullable(task.description),
       status: task.status,
@@ -287,9 +351,8 @@ async function seedPlanningData(status) {
       github_issue_last_synced_at: nullable(task.githubIssueLastSyncedAt),
       github_issue_sync_error: nullable(task.githubIssueSyncError),
       task_type: task.taskType,
-      parent_task_id: nullable(task.parentTaskId),
+      parent_task_id: nullable(task.taskType === "deliverable" ? task.packageId : task.parentTaskId),
       score_relevant: Boolean(task.scoreRelevant),
-      milestone_id: nullable(task.milestoneId),
       review_owner_profile_id: nullable(task.reviewOwnerProfileId),
       review_requested_at: nullable(task.reviewRequestedAt),
       problem_statement: nullable(task.problemStatement),
@@ -311,9 +374,19 @@ async function seedPlanningData(status) {
       approval_status: task.approvalStatus,
       approval_revision: task.approvalRevision || 1,
     }));
-    const taskColumns = Object.keys(taskRows[0]);
-    const parentFirst = taskRows.sort((left, right) => Number(Boolean(left.parent_task_id)) - Number(Boolean(right.parent_task_id)));
-    for (const row of parentFirst) await upsertRows(client, "tasks", taskColumns, [row]);
+    const allTaskRows = [...epicRows, ...initiativeRows, ...taskRows];
+    const taskTypeOrder = { epic: 0, initiative: 1, deliverable: 2, sub_issue: 3 };
+    const parentFirst = allTaskRows.sort((left, right) => taskTypeOrder[left.task_type] - taskTypeOrder[right.task_type]);
+    for (const row of parentFirst) {
+      await upsertRows(client, "tasks", Object.keys(row), [row]);
+    }
+    await upsertRows(client, "planning_item_strategy", ["task_id", "goal", "success_criteria", "scope_constraints"], source.packages.map((item) => ({
+      task_id: item.id,
+      goal: item.goal || "",
+      success_criteria: item.successCriteria || "",
+      scope_constraints: item.scopeConstraints || "",
+    })), "task_id");
+    await replacePlanningItemRaciRows(client, source.packages);
     await upsertRows(client, "task_notes", ["task_id", "note"], tasks.map((task) => ({ task_id: task.id, note: task.note || "" })), "task_id");
     const taskIds = tasks.map((task) => task.id);
     await client.query("delete from task_dependencies where task_id = any($1::text[])", [taskIds]);
@@ -346,7 +419,7 @@ async function seedPlanningData(status) {
       }
     }
     await client.query("commit");
-    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${source.packages.length} initiatives, ${tasks.length} tasks.`);
+    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${(source.epics || []).length} epics, ${source.packages.length} initiatives, ${tasks.length} delivery items.`);
   } catch (error) {
     await client.query("rollback");
     throw error;

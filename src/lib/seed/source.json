@@ -87,9 +87,21 @@
       "color": "#64748b"
     }
   ],
+  "epics": [
+    {
+      "id": "epic-founder-readiness",
+      "title": "Founder readiness",
+      "description": "Strategische Vorbereitung von Produkt, Markt, Governance und Finanzierung.",
+      "ownerId": "volkan",
+      "status": "In Arbeit",
+      "targetDate": "2026-07-31",
+      "sortOrder": 1
+    }
+  ],
   "packages": [
     {
       "id": "GC1",
+      "milestoneId": "epic-founder-readiness",
       "title": "Go-Live: MVP & Legal Ready",
       "goal": "Website, Formulare, Trust-/Legal-Basis und echte Klinik-Onboarding-Fähigkeit herstellen.",
       "priority": "P0",
@@ -116,6 +128,7 @@
     },
     {
       "id": "GC2",
+      "milestoneId": "epic-founder-readiness",
       "title": "Klinikpipeline: Prospects, Outreach & Expo",
       "goal": "Warme Kontakte, Bookimed/Grey Prospects und Düsseldorf Expo in Calls, LOIs und Pilotkliniken übersetzen.",
       "priority": "P0",
@@ -142,6 +155,7 @@
     },
     {
       "id": "GC3",
+      "milestoneId": "epic-founder-readiness",
       "title": "Investor Readiness & Funding",
       "goal": "Pitchdeck, Investor-Follow-ups, Funding-Narrative und Malta Enterprise paketfähig machen.",
       "priority": "P1",
@@ -167,6 +181,7 @@
     },
     {
       "id": "GC4",
+      "milestoneId": "epic-founder-readiness",
       "title": "Company, Governance & Operating System",
       "goal": "Founder-Struktur, IP/Marke, Notion/CRM und Teamtransparenz sauber aufsetzen.",
       "priority": "P1",
@@ -190,6 +205,7 @@
     },
     {
       "id": "GC5",
+      "milestoneId": "epic-founder-readiness",
       "title": "Marketing, Content & Competitive Research",
       "goal": "Website-Copy, Blog, LinkedIn, Konkurrenzanalyse und GTM-Materialien vorbereiten.",
       "priority": "P2",

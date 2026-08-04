@@ -9,6 +9,7 @@ import {
   type TaskGitHubProjectionResult,
 } from "@/lib/github-sync/contract";
 import { projectTaskToGitHub } from "@/lib/github-sync/task-projection";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 
 function apiContextFailure(
   status: number,
@@ -53,6 +54,22 @@ export async function POST(
     ));
   }
 
+  const { id } = await context.params;
+  const { data: task, error: taskError } = await apiContext.supabase
+    .from(ACTIVE_TASKS_TABLE)
+    .select("task_type")
+    .eq("id", id)
+    .maybeSingle();
+  if (taskError) {
+    return syncResponse(taskGitHubSyncFailure("github_sync_unavailable", "Planungselement konnte nicht geladen werden."));
+  }
+  if (!task) {
+    return syncResponse(taskGitHubSyncFailure("github_sync_not_found", "Planungselement wurde nicht gefunden."));
+  }
+  if (task.task_type === "epic" || task.task_type === "initiative") {
+    return syncResponse(taskGitHubSyncFailure("github_sync_invalid_target", "Strategische Planungselemente werden nicht mit GitHub synchronisiert."));
+  }
+
   let installationToken = "";
   try {
     installationToken = await getGitHubAppInstallationToken();
@@ -65,7 +82,6 @@ export async function POST(
     ));
   }
 
-  const { id } = await context.params;
   const result = await projectTaskToGitHub({
     supabase: apiContext.supabase,
     installationToken,

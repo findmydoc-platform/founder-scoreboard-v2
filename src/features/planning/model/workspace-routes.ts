@@ -55,7 +55,7 @@ function isVisibleWorkspaceRoute(route: WorkspaceRoute): route is WorkspaceRoute
 export const workspaceRoutes: readonly WorkspaceRoute[] = [
   { id: "planning", label: "Planung", icon: LayoutDashboard, href: "/planning", navigationSection: "planning" },
   { id: "backlog", label: "Backlog", icon: ListOrdered, href: "/backlog", navigationSection: "planning" },
-  { id: "projects", label: "Meilensteine & Initiativen", icon: Archive, href: "/projects", navigationSection: "planning" },
+  { id: "projects", label: "Strategische Planung", icon: Archive, href: "/backlog?backlog.level=epic", navigationSection: "planning", hidden: true },
   { id: "sprint", label: "Sprint & Score", icon: GanttChart, href: "/sprint", navigationSection: "steering" },
   { id: "decision-log", label: "Decision Log", icon: BookOpenCheck, href: "/decision-log", navigationSection: "steering" },
   { id: "events", label: "Termine & Erinnerungen", icon: CalendarClock, href: "/events", navigationSection: "steering" },
@@ -66,7 +66,7 @@ export const workspaceRoutes: readonly WorkspaceRoute[] = [
 ];
 
 export const appNavItems = workspaceRoutes.filter(isVisibleWorkspaceRoute);
-export const hiddenWorkspaceIds = ["profile"] as const satisfies readonly AppWorkspace[];
+export const hiddenWorkspaceIds = ["projects", "profile"] as const satisfies readonly AppWorkspace[];
 export const visibleWorkspaceIds = appNavItems.map((route) => route.id) as VisibleAppWorkspace[];
 
 export function workspacePath(workspace: AppWorkspace) {

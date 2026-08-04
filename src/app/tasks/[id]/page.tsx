@@ -60,6 +60,7 @@ export default async function TaskPage({ params }: Props) {
     return (
       <PlanningTrashTaskDetailPage
         detail={trashDetailResult.detail}
+        profiles={data.profiles}
         currentPlatformRole={authProfile?.platformRole}
       />
     );

@@ -85,7 +85,7 @@ export function PlanningInitiativeDetailPage({
                 <ReadOnlyDetailField label="Arbeitsstatus">{value(initiative.status)}</ReadOnlyDetailField>
                 <ReadOnlyDetailField label="Priorität">{value(initiative.priority)}</ReadOnlyDetailField>
                 <ReadOnlyDetailField label="Zieldatum">{value(initiative.targetDate)}</ReadOnlyDetailField>
-                <ReadOnlyDetailField label="Meilenstein">{value(detail.milestone?.title)}</ReadOnlyDetailField>
+                <ReadOnlyDetailField label="Epic">{value(detail.milestone?.title)}</ReadOnlyDetailField>
               </dl>
             </UiPanel>
 

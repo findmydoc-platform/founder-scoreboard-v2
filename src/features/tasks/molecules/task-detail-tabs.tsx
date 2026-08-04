@@ -36,7 +36,6 @@ export type TaskDetailTabsProps = {
 
 const tabLabels: Record<TaskDetailTabId, string> = {
   overview: "Übersicht",
-  subIssues: "Sub-Issues",
   relationships: "Beziehungen",
   activity: "Aktivität",
 };

@@ -4,6 +4,8 @@ import type { User } from "@supabase/supabase-js";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
 import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
+import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
+import { usePlanningRemoteChanges } from "@/features/planning/hooks/use-planning-remote-changes";
 import { usePlanningHeaderData } from "@/features/planning/hooks/use-planning-header-data";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
@@ -114,10 +116,19 @@ export function usePlanningBootstrapState({
     source,
     workspace,
   });
+  const focusMode = usePlanningFocusMode();
+  const remoteChanges = usePlanningRemoteChanges({
+    apiClient: requestContext.apiClient,
+    enabled: source === "supabase" && auth.protectedDataLoaded && (workspace === "planning" || workspace === "backlog"),
+    refreshPlanningData: dataRefresh.refreshPlanningData,
+    tasks: data.tasks,
+  });
 
   return {
     ...auth,
     ...dataRefresh,
+    ...focusMode,
+    ...remoteChanges,
     ...requestContext,
     ...viewState,
     authAvailable,

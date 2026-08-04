@@ -23,9 +23,9 @@ export function useProfilePlanningItemsTokens({
   const [tokens, setTokens] = useState<TeamPlanningItemTokenRecord[]>([]);
   const [label, setLabel] = useState("");
   const [allowUpdates, setAllowUpdates] = useState(false);
-  const [allowEmptyMilestoneDeletes, setAllowEmptyMilestoneDeletes] = useState(false);
+  const [allowEmptyEpicDeletes, setAllowEmptyEpicDeletes] = useState(false);
   const [allowGitHubSync, setAllowGitHubSync] = useState(false);
-  const [canIssueEmptyMilestoneDeletes, setCanIssueEmptyMilestoneDeletes] = useState(false);
+  const [canIssueEmptyEpicDeletes, setCanIssueEmptyEpicDeletes] = useState(false);
   const [visibleToken, setVisibleToken] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "warning">("success");
@@ -59,7 +59,9 @@ export function useProfilePlanningItemsTokens({
       if (!response.ok || !body?.tokens) throw new Error(body?.error || "Planning-API-Tokens konnten nicht geladen werden.");
       if (!mounted.current) return;
       setTokens(body.tokens);
-      setCanIssueEmptyMilestoneDeletes(Boolean(body.capabilities?.canIssueEmptyMilestoneDeletes));
+      setCanIssueEmptyEpicDeletes(Boolean(
+        body.capabilities?.canIssueEmptyEpicDeletes ?? body.capabilities?.canIssueEmptyMilestoneDeletes,
+      ));
       setLoaded(true);
     } catch (error) {
       if (!mounted.current) return;
@@ -85,7 +87,7 @@ export function useProfilePlanningItemsTokens({
         apiClient,
         label.trim(),
         allowUpdates,
-        canIssueEmptyMilestoneDeletes && allowEmptyMilestoneDeletes,
+        canIssueEmptyEpicDeletes && allowEmptyEpicDeletes,
         allowGitHubSync,
       );
       if (!response.ok || !body?.token || !body.tokenRecord) throw new Error(body?.error || "Planning-API-Token konnte nicht erstellt werden.");
@@ -93,7 +95,7 @@ export function useProfilePlanningItemsTokens({
       setVisibleToken(body.token);
       setLabel("");
       setAllowUpdates(false);
-      setAllowEmptyMilestoneDeletes(false);
+      setAllowEmptyEpicDeletes(false);
       setAllowGitHubSync(false);
       setMessageTone("success");
       setMessage("Token erstellt. Kopiere ihn jetzt; er wird nicht erneut angezeigt.");
@@ -137,10 +139,10 @@ export function useProfilePlanningItemsTokens({
 
   return {
     activeTokenCount: activeTokens.length,
-    allowEmptyMilestoneDeletes,
+    allowEmptyEpicDeletes,
     allowGitHubSync,
     allowUpdates,
-    canIssueEmptyMilestoneDeletes,
+    canIssueEmptyEpicDeletes,
     canCreate,
     copyToken,
     createToken,
@@ -153,7 +155,7 @@ export function useProfilePlanningItemsTokens({
     pending,
     revokeToken,
     setAllowUpdates,
-    setAllowEmptyMilestoneDeletes,
+    setAllowEmptyEpicDeletes,
     setAllowGitHubSync,
     setLabel,
     tokens,

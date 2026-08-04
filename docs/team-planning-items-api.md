@@ -1,27 +1,38 @@
 # FounderOps Planning Items API
 
-The FounderOps Planning Items API lets CEO, Deputy, and Founder profiles read safe planning context, create planning items, and—when a token explicitly includes the corresponding scope—update existing items or trigger their GitHub projection. Milestone creation and updates are restricted to CEO and Deputy. A separate, default-off capability lets those two roles delete an empty Milestone. Each request is attributed to the profile that created the personal token. Viewer profiles cannot create tokens or use this API.
+The FounderOps Planning Items API exposes the current planning hierarchy through personal tokens. Its active source is `tasks`; Epic, Initiative, Deliverable, and Sub-Issue are all planning-item types in that one model. The API never writes to the retained legacy `milestones` or `packages` tables.
 
-## Authentication and token scopes
+`/api/team/planning-items/v1/items` is the sole supported API contract for automated planning-item creation.
 
-Create and revoke personal tokens in **My Profile → API Access** and send the token as a bearer credential:
+```text
+Epic
+└── Initiative
+    └── Deliverable
+        └── Sub-Issue
+```
+
+CEO, Deputy, and Founder profiles can read safe planning context and create planning items within their role. Viewer profiles cannot issue or use tokens. Every request is attributed to the profile that issued its personal token.
+
+## Authentication and scopes
+
+Create and revoke personal tokens in **My Profile → API Access**, then send the token as a bearer credential:
 
 ```http
 Authorization: Bearer fmd_ti_<opaque-token>
 ```
 
-Every token always includes:
+Every token includes:
 
 - `read:planning-context`
 - `write:planning-items:create`
 
-The UI exposes a separate **Allow updates** choice when a token is created. Only that explicit choice adds `write:planning-items:update`. Task status updates use this existing scope. Existing update-enabled tokens continue to work without rotation; read/create-only tokens remain unable to update any field.
+Optional, default-off scopes are issued only when selected while creating the token:
 
-CEO and Deputy also see **Allow empty Milestone deletes**. Enabling it adds `write:planning-items:delete-empty`. Founder and Viewer profiles cannot request or see this capability. It permits only deletion of a Milestone with zero Initiative and zero Task references; it never moves, detaches, or deletes child items. Existing tokens never gain this delete scope implicitly.
+- `write:planning-items:update` — update an existing item.
+- `write:planning-items:delete-empty` — CEO and Deputy only; delete an empty Epic.
+- `write:planning-items:github-sync` — request GitHub projection for a Deliverable or Sub-Issue only.
 
-**GitHub synchronisieren** adds `write:planning-items:github-sync`. It is default-off for newly issued tokens. Active, non-revoked, non-expired tokens that existed when the scope was deployed received it once so existing integrations continued to work without rotation.
-
-Create, update, and delete commits require a UUID idempotency key. Replaying the same canonical request with the same key returns the stored response and never starts an embedded GitHub sync again. Reusing the key for another request—including another GitHub mode or creation decision—returns `409 Conflict`. The standalone GitHub sync is already idempotent and lock-protected and therefore does not require this header.
+Create, update, and delete commits require a UUID `Idempotency-Key`. Repeating the same canonical request with the same key returns the stored response. Reusing it for different input returns `409 Conflict`.
 
 ```http
 Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
@@ -29,40 +40,53 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 
 ## Endpoints
 
-- `GET /api/team/planning-items/v1/context` reads non-sensitive planning context.
-- `POST /api/team/planning-items/v1/items/preview` validates and normalizes one to 30 new items without writing.
-- `POST /api/team/planning-items/v1/items` validates and creates a complete batch atomically.
-- `POST /api/team/planning-items/v1/items/{id}/preview` validates and previews an update without writing.
-- `PATCH /api/team/planning-items/v1/items/{id}` commits one partial update.
-- `POST /api/team/planning-items/v1/items/{id}/github-sync` synchronizes one Deliverable or Sub-Issue.
-- `POST /api/team/planning-items/v1/items/{id}/delete/preview` checks whether a Milestone is empty without writing.
-- `DELETE /api/team/planning-items/v1/items/{id}` deletes one empty Milestone.
-- `GET` and `POST /api/team/planning-items/v1/tokens` list or create the caller's tokens.
-- `DELETE /api/team/planning-items/v1/tokens/{id}` revokes one active token.
+- `GET /api/team/planning-items/v1/context` — reads non-sensitive planning context.
+- `POST /api/team/planning-items/v1/items/preview` — validates one to 30 new items without writing.
+- `POST /api/team/planning-items/v1/items` — creates a complete batch atomically.
+- `POST /api/team/planning-items/v1/items/{id}/preview` — validates and previews a partial update.
+- `PATCH /api/team/planning-items/v1/items/{id}` — commits a partial update.
+- `POST /api/team/planning-items/v1/items/{id}/github-sync` — syncs one Deliverable or Sub-Issue.
+- `POST /api/team/planning-items/v1/items/{id}/delete/preview` — checks whether one Epic is empty.
+- `DELETE /api/team/planning-items/v1/items/{id}` — deletes one empty Epic.
+- `GET` and `POST /api/team/planning-items/v1/tokens` — lists or creates the caller’s tokens.
+- `DELETE /api/team/planning-items/v1/tokens/{id}` — revokes one active token.
 
-No legacy HTTP aliases or parallel planning-item creation routes are retained. This is the sole supported API contract for automated planning-item creation.
+## Context and canonical references
+
+The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). `parentTaskId` is the only canonical hierarchy reference. The transitional `initiatives` convenience list additionally retains the former flat `goal`, `successCriteria`, and `scopeConstraints` fields. New clients should read the nested `strategy` object from `items` instead.
+
+The retained response field `milestones` and the input type `milestone` are deprecated compatibility aliases. They resolve to an Epic before any validation or write. `milestoneId` and `packageId` are also accepted only during transition and resolve to `parentTaskId`; new clients must use `parentTaskId`.
 
 ## Create payload
 
-Create uses the collection endpoint with the strict shape `{"items":[...]}` and `itemType = milestone | initiative | deliverable | sub_issue`. An item may include `githubSync: {"createIfMissing": true|false}`. If any item includes that command, the top-level `githubSyncMode` is required and must be `async` or `wait`. Supplying a mode without a command is invalid.
-
-For `milestone`, only `title`, `description`, `targetDate`, and `status` are accepted. `status` is `planned`, `active`, or `done` and defaults to `planned`. The project, identifier, and sort position are server-owned. Milestones have no approval, owner, RACI, Initiative parent, Sprint, score, or GitHub fields.
+The collection endpoint has the strict shape `{"items":[...]}`. Canonical `itemType` values are `epic`, `initiative`, `deliverable`, and `sub_issue`.
 
 ```json
 {
   "items": [
     {
-      "itemType": "milestone",
+      "itemType": "epic",
       "title": "Market readiness",
       "description": "Prepare the operating model.",
+      "ownerId": "profile-id",
       "targetDate": "2026-10-31",
-      "status": "planned"
+      "status": "Offen"
+    },
+    {
+      "itemType": "initiative",
+      "title": "Legal launch readiness",
+      "ownerId": "profile-id",
+      "parentTaskId": "epic-id",
+      "intendedOutcome": "A launch-ready legal foundation.",
+      "status": "Offen"
     }
   ]
 }
 ```
 
-Sub-Issue create accepts `itemType`, `title`, optional `description`, optional work-brief text (`problemStatement`, `intendedOutcome`, `scopeConstraints`, `acceptanceCriteria`, `evidenceRequired`, and `definitionOfDone`), required `parentTaskId`, optional `ownerId`, and optional `githubRepo`. The owner defaults to the token profile. Status is server-owned and starts as `Offen`; Initiative and Milestone derive from the parent Deliverable. `evidenceRequired` is text context only and does not create an Evidence requirement.
+Epics and Initiatives require an owner when they are created. Only CEO and Deputy may create them. An Initiative or Deliverable may be proposed without a parent, but an Initiative needs an Epic and a Deliverable needs an approved Initiative before approval can succeed. A Sub-Issue always requires an approved Deliverable parent.
+
+Use `githubSync` only on Deliverables and Sub-Issues. If any item includes `githubSync`, the top-level `githubSyncMode` must be `async` or `wait`.
 
 ```json
 {
@@ -70,143 +94,61 @@ Sub-Issue create accepts `itemType`, `title`, optional `description`, optional w
     {
       "itemType": "sub_issue",
       "title": "Confirm the rollout window",
-      "description": "Coordinate the date with the delivery owner.",
       "parentTaskId": "deliverable-id",
       "githubRepo": "findmydoc-platform/management",
-      "githubSync": {
-        "createIfMissing": true
-      }
+      "githubSync": { "createIfMissing": true }
     }
   ],
   "githubSyncMode": "async"
 }
 ```
 
-```json
-{
-  "items": [
-    {
-      "itemType": "deliverable",
-      "title": "Clarify onboarding risks",
-      "packageId": "initiative-id",
-      "problemStatement": "The current risk list is incomplete.",
-      "intendedOutcome": "The team has a reviewable risk register.",
-      "acceptanceCriteria": ["The main risks are listed."],
-      "evidenceRequired": "Link to the risk register.",
-      "definitionOfDone": "The Initiative Accountable can make a decision."
-    }
-  ]
-}
-```
+## Status, approval, and hierarchy rules
+
+| Type | Working statuses | Approval | Parent rule |
+| --- | --- | --- | --- |
+| Epic | `Offen`, `In Arbeit`, `Pausiert`, `Blockiert`, `Erledigt` | None | No parent |
+| Initiative | `Offen`, `In Arbeit`, `Pausiert`, `Blockiert`, `Erledigt` | `draft`, `proposed`, `approved`, `rejected` | An Epic is required at approval time |
+| Deliverable | `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, `Erledigt` | Existing approval flow | An approved Initiative is required at approval time |
+| Sub-Issue | `Offen`, `In Arbeit`, `Blockiert`, `Erledigt` | None | An approved Deliverable is always required |
+
+Initiative approval additionally requires exactly one Accountable and at least one Responsible RACI assignment. `draft` is reserved for a return-for-rework state; new Initiative and Deliverable proposals start as `proposed`.
+
+Changing the parent of an approved Initiative or Deliverable creates a new `proposed` approval revision while preserving its work status and children. Parent and child working statuses stay independent: an Epic or Initiative may be completed while direct children are still open.
 
 ## PATCH semantics
 
-PATCH processes only properties that are present in the request body. Omitted properties are never changed. Optional string, date, and reference fields may be set to `null` (or a blank string) to clear them; required fields such as `title` and Initiative `responsibleProfileIds` cannot be cleared. `acceptanceCriteria` accepts a string or an array of strings. `0` is a valid value for `hours`.
-
-A Milestone PATCH accepts only `title`, `description`, `targetDate`, and `status`. A PATCH containing only `expectedUpdatedAt` is invalid and returns `400 Bad Request`; a PATCH containing `expectedUpdatedAt` plus a valid GitHub sync command is accepted as a sync-only update request.
-
-Deliverable PATCH requests accept `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, or `Erledigt`. Sub-Issue PATCH requests use the separate four-state contract `Offen`, `In Arbeit`, `Blockiert`, or `Erledigt`; `Review` and `Nacharbeit` are rejected. Initiatives do not accept `status`; Milestones continue to use only `planned`, `active`, or `done`.
-
-`expectedUpdatedAt` is required for every update and compares against the current item version. A stale version returns `409 Conflict`. An exact idempotent replay is returned before this version check. The `itemType` is determined by the target and is immutable; a PATCH body must not contain it.
+PATCH processes only properties present in the request body. Omitted properties do not change. Nullable text, date, and reference fields can be cleared with `null` or a blank string. `expectedUpdatedAt` is required and provides optimistic concurrency; a stale value returns `409 Conflict`. `itemType` is immutable.
 
 ```json
 {
-  "expectedUpdatedAt": "2026-07-13T18:30:00.000Z",
-  "priority": "P1",
-  "deadline": null
+  "expectedUpdatedAt": "2026-07-30T09:30:00.000Z",
+  "parentTaskId": "initiative-id"
 }
 ```
 
-Status updates use the same endpoint, version check, update scope, and idempotency key:
+Strategic items accept only strategic fields. They do not accept Review, score, Evidence gates, Sprint, repository, or GitHub fields. Deliverables retain their existing Review and scoring transitions. Sub-Issues retain their separate four-state status contract and never accept Review or Nacharbeit.
+
+## GitHub projection
+
+GitHub projection is intentionally unavailable for Epics and Initiatives. The API rejects strategic GitHub commands before writing; no strategic item can create a GitHub queue, outbox entry, sync warning, comment import, or GitHub attachment.
+
+Deliverables and Sub-Issues retain the existing GitHub behavior. `wait` completes eligible projections before returning; `async` schedules best-effort work through the current request lifecycle. GitHub failure never rolls back a successful FounderOps create or update.
+
+## Empty Epic deletion
+
+The preview and delete endpoints require `write:planning-items:delete-empty`, a CEO or Deputy actor, and `expectedUpdatedAt`.
 
 ```json
 {
-  "expectedUpdatedAt": "2026-07-22T09:30:00.000Z",
-  "status": "In Arbeit"
+  "expectedUpdatedAt": "2026-07-30T12:00:00.000Z"
 }
 ```
 
-For a Deliverable, `status: "Review"` performs the complete existing review request transition. The Deliverable must be approved, have a contributing Review Owner (directly or inherited from its Initiative), and must not belong to a score-locked Sprint or have a final score. A successful transition sets the review request timestamp, resets the score, keeps the score non-final, notifies the Review Owner, records activity and audit, and marks the GitHub projection `not_synced`. Preview returns these effects before the write. Sending the already-current status succeeds as a no-op without activity, audit, notification, or GitHub projection changes.
+Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and code `MILESTONE_NOT_EMPTY` for legacy wire compatibility. The operation never moves, detaches, or deletes children.
 
-Legacy Sub-Issues stored as `Review` or `Nacharbeit` are returned as `In Arbeit`. Legacy review, score, and Evidence values are ignored without being deleted. An explicit valid status PATCH persists the selected four-state value, including an explicit `In Arbeit` PATCH used to normalize a legacy state.
+## Compatibility window
 
-The update preview returns `currentItem`, `normalizedPatch`, `resultingItem`, `changedFields`, and system effects such as approval revision, Sprint/review/score resets, derived hierarchy values, and GitHub projection status.
-
-## GitHub sync
-
-Embedded Create and PATCH commands require `write:planning-items:github-sync` in addition to the endpoint's create or update scope:
-
-```json
-{
-  "expectedUpdatedAt": "2026-07-22T09:30:00.000Z",
-  "githubSyncMode": "wait",
-  "githubSync": {
-    "createIfMissing": false
-  }
-}
-```
-
-`createIfMissing: true` explicitly permits Issue creation. `false` reconciles only an already linked Issue and returns `github_sync_creation_required` when the local item has no Issue identity.
-
-- `wait` runs the requested projections before responding.
-- `async` performs a local preflight, responds after the FounderOps commit, and continues through Next.js `after()` in the same Vercel invocation.
-- Async execution is best effort. There is no queue, cron, or automatic later retry.
-- GitHub failure never rolls back a successful FounderOps Create or PATCH.
-- Each requested item returns `githubSync.status = accepted | synced | notEligible | failed`, plus the existing public GitHub error code and explanation when applicable.
-- Preview endpoints report local eligibility but never execute a GitHub mutation.
-
-New Deliverables are `proposed`, so an immediate embedded sync returns `notEligible` with `github_sync_not_approved`. A Sub-Issue is eligible only when its Parent-Deliverable is approved. Milestones and Initiatives return `github_sync_invalid_target`.
-
-The standalone endpoint uses the same command without an idempotency header:
-
-```http
-POST /api/team/planning-items/v1/items/{id}/github-sync
-Authorization: Bearer fmd_ti_<opaque-token>
-Content-Type: application/json
-```
-
-```json
-{
-  "githubSyncMode": "async",
-  "createIfMissing": true
-}
-```
-
-Async acceptance returns HTTP `202`. Locally visible eligibility conflicts return their existing `409` contract. Wait mode returns the existing GitHub projection status. Failed or interrupted async work remains visible through the item's sync state and can be retried through the UI or another standalone call.
-
-## Empty Milestone deletion
-
-Both delete endpoints require `write:planning-items:delete-empty`, a CEO or Deputy actor, a fixed-project Milestone, and `expectedUpdatedAt`.
-
-```json
-{
-  "expectedUpdatedAt": "2026-07-14T12:00:00.000Z"
-}
-```
-
-Delete preview is read-only. An empty Milestone returns HTTP `200` with `valid: true` and `canDelete: true`. A non-empty Milestone also returns HTTP `200`, but with `valid: false`, `canDelete: false`, code `MILESTONE_NOT_EMPTY`, and current Initiative and Task counts. The preview states explicitly that no child is moved or deleted.
-
-Delete commit uses `DELETE /api/team/planning-items/v1/items/{id}` plus `Idempotency-Key`. A non-empty Milestone returns HTTP `409` with the same public code and fresh child counts. Active and trashed Initiatives and Tasks both count because the base-table references are authoritative. Stale versions and incompatible idempotency replays also return `409` without changing the Milestone or any child reference.
-
-## Type and permission boundaries
-
-| Type | Create and PATCH fields | Status contract | Derived or unavailable fields |
-| --- | --- | --- | --- |
-| Milestone | `title`, `description`, `targetDate`, `status` | `planned`, `active`, `done` | No parent, owner, RACI, Sprint, score, or GitHub fields |
-| Initiative | Brief, Milestone, owner/accountable/RACI, priority | No work status | Approval revision remains server-owned |
-| Deliverable | Brief, Initiative, owner, priority, workstream, dates, hours, work status | `Offen`, `In Arbeit`, `Review`, `Nacharbeit`, `Blockiert`, `Erledigt` | Milestone derives from Initiative; review, score, and approval side effects remain server-owned |
-| Sub-Issue | `title`, `description`, optional work brief, `parentTaskId`, `ownerId`, `githubRepo`, and PATCH `status` | `Offen`, `In Arbeit`, `Blockiert`, `Erledigt` | Initiative, Milestone, approval, and RACI derive from parent; no priority, Sprint, schedule, estimate, workstream, review, score, manual-Evidence, or quality-gate writes |
-
-- An Initiative accepts its brief, Milestone, owner/accountable/RACI, and priority fields. Material brief or Milestone changes start a new approval revision.
-- A Milestone accepts only title, description, target date, and status. Only CEO and Deputy may preview or commit its creation, update, or empty-only deletion.
-- A Deliverable accepts its brief, Initiative, owner, priority, workstream, dates, hours, and work status. The Milestone derives from its Initiative. Material changes reset approval, Sprint, review, and score state.
-- A Sub-Issue accepts title, context, its optional work brief, parent Deliverable, owner, `githubRepo`, and its four work statuses. Only Sub-Issues may select an allowed technical repository. Its Initiative and Milestone derive from the parent.
-- CEO and Deputy may update all allowed fields. A Founder may update only their own Initiative fields or the brief of an owned/assigned Deliverable; for an owned or assigned Sub-Issue they may update title, context, work brief, parent, and ordinary work status.
-- CEO and Deputy may change ordinary work statuses. Founder may change ordinary work statuses only on owned or assigned Issues.
-- Only CEO may directly complete or reopen a Deliverable. CEO, Deputy, and Founder may complete any Sub-Issue or reopen it to `Offen`, provided its parent Deliverable is approved.
-- Active and final review locks and restricted `Nacharbeit` transitions remain enforced for Deliverables. Sub-Issue legacy review states never lock updates. Parent approval and optimistic concurrency remain enforced for Sub-Issue status changes.
-- The API never accepts direct approval, Sprint configuration, Review Owner, review outcome, final-score, manual Evidence links, or raw GitHub synchronization metadata for Sub-Issues. It accepts only the explicit `githubSync` command envelope. Their reopen transition has no review or score side effects. `evidenceRequired` remains optional text in the work brief.
-
-Every commit validates the authorization, current version, hierarchy references, and GitHub repository policy again in the transaction.
+The old database tables and legacy HTTP-shaped values remain read-only compatibility and recovery data during the transition. They are not a second write path. New integrations must use canonical types and `parentTaskId`; compatibility aliases will be removed only in a separately approved cleanup.
 
 The OpenAPI document is available at `/founderops-team-planning-items-openapi.json`.

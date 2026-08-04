@@ -7,7 +7,7 @@ import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
 import { formatDate, profileNameById, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Milestone, Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge } from "@/shared/atoms/ui-primitives";
@@ -20,7 +20,6 @@ export type TaskDetailRelationshipRow = {
 export type TaskDetailOperationalHeaderProps = {
   task: Task;
   initiative?: Package;
-  milestone?: Milestone;
   parentTask?: Task;
   profiles: Profile[];
   subIssues: Task[];
@@ -72,15 +71,15 @@ function OperationalFact({
   );
 }
 
-function SubIssueProgress({ completed, total }: { completed: number; total: number }) {
+function DirectChildProgress({ completed, label, total }: { completed: number; label: string; total: number }) {
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <OperationalFact label="Sub-Issue-Fortschritt" hideLabel icon={<ListChecks size={16} />}>
+    <OperationalFact label={`${label}-Fortschritt`} hideLabel icon={<ListChecks size={16} />}>
       <div
         className="w-40"
         role="progressbar"
-        aria-label={`${completed} von ${total} Sub-Issues erledigt`}
+        aria-label={`${completed} von ${total} ${label} erledigt`}
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={completed}
@@ -282,7 +281,7 @@ export function TaskDetailDependencyBand({
 export function TaskDetailOperationalHeader({
   task,
   initiative,
-  milestone,
+  parentTask,
   profiles,
   subIssues,
   subIssuesKnown = true,
@@ -298,15 +297,25 @@ export function TaskDetailOperationalHeader({
 }: TaskDetailOperationalHeaderProps) {
   const generatedTitleId = useId();
   const resolvedTitleId = titleId || generatedTitleId;
-  const itemTypeLabel = task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
-  const hierarchyLabel = initiative?.title;
-  const milestoneLabel = milestone?.title;
-  const accountableLabel = task.taskType === "deliverable" && initiative
-    ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
-    : "";
-  const directSubIssues = subIssues.filter((subIssue) => subIssue.parentTaskId === task.id);
-  const completedSubIssues = directSubIssues.filter((subIssue) => normalizeStatus(subIssue.status) === "Erledigt").length;
-  const showDeadline = canManageTaskMeta || Boolean(task.deadline);
+  const itemTypeLabel = task.taskType === "epic" ? "Epic" : task.taskType === "initiative" ? "Initiative" : task.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
+  const hierarchyLabel = task.taskType === "initiative"
+    ? parentTask?.title || "Ohne Epic"
+    : task.taskType === "deliverable"
+      ? initiative?.title || parentTask?.title || "Ohne Initiative"
+      : task.taskType === "sub_issue"
+        ? parentTask?.title || "Parent fehlt"
+        : "";
+  const accountableAssignment = task.raciAssignments?.find((assignment) => assignment.role === "accountable");
+  const accountableLabel = task.taskType === "initiative"
+    ? profileNameById(profiles, accountableAssignment?.profileId || "")
+    : task.taskType === "deliverable" && initiative
+      ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
+      : "";
+  const directChildren = subIssues.filter((item) => item.parentTaskId === task.id);
+  const completedChildren = directChildren.filter((item) => normalizeStatus(item.status) === "Erledigt").length;
+  const directChildLabel = task.taskType === "epic" ? "Initiativen" : task.taskType === "initiative" ? "Deliverables" : "Sub-Issues";
+  const targetDate = task.targetDate || task.deadline;
+  const showTargetDate = canManageTaskMeta || Boolean(targetDate);
 
   return (
     <header aria-labelledby={resolvedTitleId} className={classNames("bg-white", className)}>
@@ -314,11 +323,11 @@ export function TaskDetailOperationalHeader({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <span>{itemTypeLabel}</span>
-            {task.taskType === "deliverable" && (milestoneLabel || hierarchyLabel) && (
+            {task.taskType !== "epic" && hierarchyLabel && (
               <>
                 <span aria-hidden="true">·</span>
                 <span className="normal-case tracking-normal text-slate-600">
-                  {milestoneLabel || hierarchyLabel}
+                  {hierarchyLabel}
                 </span>
               </>
             )}
@@ -367,9 +376,9 @@ export function TaskDetailOperationalHeader({
           <OperationalFact label="Zuständig" emphasized icon={<UserRound size={16} />}>{taskAssigneeLabel(task)}</OperationalFact>
         )}
 
-        {task.taskType === "deliverable" ? (
+        {task.taskType !== "sub_issue" ? (
           <>
-            {canManageTaskMeta ? (
+            {task.taskType !== "epic" && (canManageTaskMeta ? (
               <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
                 <CustomSelect
                   value={task.priority}
@@ -384,24 +393,24 @@ export function TaskDetailOperationalHeader({
               <OperationalFact label="Priorität" hideLabel icon={<Flag size={16} />}>
                 <UiBadge tone={priorityBadgeTone(task.priority)}>{task.priority}</UiBadge>
               </OperationalFact>
-            )}
+            ))}
 
-            {showDeadline && (canManageTaskMeta ? (
+            {showTargetDate && (canManageTaskMeta ? (
               <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>
                 <CustomDatePicker
-                  value={task.deadline || ""}
+                  value={targetDate || ""}
                   disabled={pending}
                   className="h-8 w-36 text-sm"
                   aria-label="Zieltermin ändern"
-                  onChange={(deadline) => onUpdate({ deadline })}
+                  onChange={(value) => onUpdate(task.taskType === "deliverable" ? { deadline: value } : { targetDate: value })}
                 />
               </OperationalFact>
             ) : (
-              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>{formatDate(task.deadline, { includeYear: true })}</OperationalFact>
+              <OperationalFact label="Ziel" icon={<CalendarDays size={16} />}>{formatDate(targetDate, { includeYear: true })}</OperationalFact>
             ))}
 
-            {subIssuesKnown && directSubIssues.length > 0 && (
-              <SubIssueProgress completed={completedSubIssues} total={directSubIssues.length} />
+            {subIssuesKnown && directChildren.length > 0 && (
+              <DirectChildProgress completed={completedChildren} label={directChildLabel} total={directChildren.length} />
             )}
           </>
         ) : null}

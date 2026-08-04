@@ -23,7 +23,7 @@ export function mapTaskComment(row: DbTaskComment): TaskComment {
     taskId: row.task_id,
     profileId: row.profile_id || "",
     comment: row.comment,
-    githubDeliveryStatus: delivery?.status || "pending",
+    githubDeliveryStatus: row.github_delivery_applicable === false ? "not_applicable" : delivery?.status || "pending",
     githubCommentUrl: delivery?.github_comment_url || "",
     createdAt: row.created_at,
   };

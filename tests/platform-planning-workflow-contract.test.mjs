@@ -501,7 +501,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   assert.match(authz, /review_owner_profile_id/);
   assert.match(createTaskRoute, /reviewOwnerProfileId/);
   assert.match(createTaskContract, /review_owner_profile_id: input\.reviewOwnerProfileId \|\| null/);
-  assert.match(createTaskRoute, /accountable_profile_id/);
+  assert.match(createTaskRoute, /planning_item_raci_assignments/);
   assert.match(taskRoute, /accountable_profile_id/);
   assert.match(taskRoute, /update\.review_owner_profile_id/);
   assert.match(taskRoute, /Nur der CEO kann den Review Owner ändern/);

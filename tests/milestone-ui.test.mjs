@@ -10,6 +10,9 @@ test("project header exposes ordered milestone actions only to allowed roles", a
   const { usePlanningHeaderActions } = await loadTranspiledModule(
     "src/features/planning/hooks/use-planning-header-actions.ts",
     {
+      "@/features/planning/model/planning-level": {
+        planningLevelCreateLabel: (level) => level === "initiative" ? "Neue Initiative" : `Neues ${level === "epic" ? "Epic" : "Deliverable"}`,
+      },
       "@/features/projects/model/milestone-policy": {
         canManageMilestones: (role, source) => source === "seed" || role === "ceo" || role === "deputy",
       },

@@ -29,14 +29,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
 
-  let githubInstallationToken = "";
-  try {
-    githubInstallationToken = await getGitHubAppInstallationToken();
-  } catch (tokenError) {
-    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
-    return apiError(message, 401);
-  }
-
   const { data: task, error: taskError } = await supabase
     .from("tasks")
     .select("id,title,assignee,owner,review_owner_profile_id,review_status,score_final,evidence_link,issue_url,github_repo,github_issue_number,issue_number,task_type")
@@ -44,6 +36,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  if (task.task_type === "epic" || task.task_type === "initiative") {
+    return apiError("Strategische Planungselemente haben keine GitHub-Kommentare.", 400);
+  }
+
+  let githubInstallationToken = "";
+  try {
+    githubInstallationToken = await getGitHubAppInstallationToken();
+  } catch (tokenError) {
+    const message = tokenError instanceof Error ? tokenError.message : "GitHub-Verbindung konnte nicht geprüft werden.";
+    return apiError(message, 401);
+  }
 
   const issueNumber = resolveGitHubIssueNumber(task, { repository: task.github_repo });
   if (issueNumber === null || !Number.isInteger(issueNumber) || issueNumber <= 0) {

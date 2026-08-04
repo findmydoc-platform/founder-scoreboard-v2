@@ -11,6 +11,8 @@ import { TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT } from "@/features/planning-ite
 type CreateTokenPayload = {
   label?: unknown;
   allowUpdates?: unknown;
+  allowEmptyEpicDeletes?: unknown;
+  /** @deprecated Accepted only while clients move to the Epic terminology. */
   allowEmptyMilestoneDeletes?: unknown;
   allowGitHubSync?: unknown;
 };
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
   const { permission, supabase } = context;
   const profileId = permission.profile?.id || "";
   if (!profileId) return apiError("Profil konnte nicht bestimmt werden.", 403);
-  const canIssueEmptyMilestoneDeletes = permission.profile?.platformRole === "ceo"
+  const canIssueEmptyEpicDeletes = permission.profile?.platformRole === "ceo"
     || permission.profile?.platformRole === "deputy";
 
   const now = new Date().toISOString();
@@ -51,10 +53,15 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    capabilities: { canIssueEmptyMilestoneDeletes },
+    capabilities: {
+      canIssueEmptyEpicDeletes,
+      // Deprecated response alias for existing clients. The scope still maps
+      // to empty canonical Epic deletion.
+      canIssueEmptyMilestoneDeletes: canIssueEmptyEpicDeletes,
+    },
     tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[])
       .map(mapTeamPlanningItemsTokenRecord)
-      .map((token) => canIssueEmptyMilestoneDeletes
+      .map((token) => canIssueEmptyEpicDeletes
         ? token
         : { ...token, scopes: token.scopes.filter((scope) => scope !== "write:planning-items:delete-empty") }),
   });
@@ -75,6 +82,7 @@ export async function POST(request: NextRequest) {
   const unknownField = Object.keys(payload).find((key) => ![
     "label",
     "allowUpdates",
+    "allowEmptyEpicDeletes",
     "allowEmptyMilestoneDeletes",
     "allowGitHubSync",
   ].includes(key));
@@ -85,16 +93,25 @@ export async function POST(request: NextRequest) {
   if (payload.allowUpdates !== undefined && typeof payload.allowUpdates !== "boolean") {
     return apiError("allowUpdates muss wahr oder falsch sein.", 400);
   }
+  if (payload.allowEmptyEpicDeletes !== undefined && typeof payload.allowEmptyEpicDeletes !== "boolean") {
+    return apiError("allowEmptyEpicDeletes muss wahr oder falsch sein.", 400);
+  }
   if (payload.allowEmptyMilestoneDeletes !== undefined && typeof payload.allowEmptyMilestoneDeletes !== "boolean") {
     return apiError("allowEmptyMilestoneDeletes muss wahr oder falsch sein.", 400);
   }
   if (payload.allowGitHubSync !== undefined && typeof payload.allowGitHubSync !== "boolean") {
     return apiError("allowGitHubSync muss wahr oder falsch sein.", 400);
   }
-  const canIssueEmptyMilestoneDeletes = permission.profile?.platformRole === "ceo"
+  if (payload.allowEmptyEpicDeletes !== undefined
+    && payload.allowEmptyMilestoneDeletes !== undefined
+    && payload.allowEmptyEpicDeletes !== payload.allowEmptyMilestoneDeletes) {
+    return apiError("allowEmptyEpicDeletes und allowEmptyMilestoneDeletes widersprechen sich.", 400);
+  }
+  const allowEmptyEpicDeletes = payload.allowEmptyEpicDeletes ?? payload.allowEmptyMilestoneDeletes;
+  const canIssueEmptyEpicDeletes = permission.profile?.platformRole === "ceo"
     || permission.profile?.platformRole === "deputy";
-  if (payload.allowEmptyMilestoneDeletes === true && !canIssueEmptyMilestoneDeletes) {
-    return apiError("Nur CEO oder Deputy können Tokens zum Löschen leerer Meilensteine erstellen.", 403);
+  if (allowEmptyEpicDeletes === true && !canIssueEmptyEpicDeletes) {
+    return apiError("Nur CEO oder Deputy können Tokens zum Löschen leerer Epics erstellen.", 403);
   }
 
   const generated = createTeamPlanningItemsToken();
@@ -104,7 +121,7 @@ export async function POST(request: NextRequest) {
     p_token_hash: generated.tokenHash,
     p_token_hint: generated.tokenHint,
     p_allow_updates: payload.allowUpdates === true,
-    p_allow_empty_milestone_deletes: payload.allowEmptyMilestoneDeletes === true,
+    p_allow_empty_milestone_deletes: allowEmptyEpicDeletes === true,
     p_allow_github_sync: payload.allowGitHubSync === true,
   });
 

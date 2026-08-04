@@ -9,7 +9,7 @@ import {
   type TaskGitHubProjectionFailure,
 } from "@/lib/github-sync/contract";
 import { projectTaskToGitHub } from "@/lib/github-sync/task-projection";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import {
   type PlanningItemGitHubSyncCommand,
   type PlanningItemGitHubSyncResult,
@@ -37,8 +37,8 @@ function invalidTypeResult(itemType: TeamPlanningItemType): PlanningItemGitHubSy
   return {
     status: "notEligible",
     code: "github_sync_invalid_target",
-    error: itemType === "milestone"
-      ? "Meilensteine können nicht mit GitHub synchronisiert werden."
+    error: itemType === "epic"
+      ? "Epics können nicht mit GitHub synchronisiert werden."
       : "Initiativen können nicht mit GitHub synchronisiert werden.",
     retryable: false,
   };
@@ -65,31 +65,20 @@ export async function loadPlanningItemGitHubSyncTarget(
     return { ok: false, result: failureResult(failure), status: taskGitHubSyncHttpStatus(failure) };
   }
   if (task.data) {
+    const itemType = task.data.task_type as TeamPlanningItemType;
+    if (itemType === "epic" || itemType === "initiative") {
+      return { ok: false, result: invalidTypeResult(itemType), status: 409 };
+    }
     return {
       ok: true,
       target: {
         itemId,
-        itemType: task.data.task_type === "sub_issue" ? "sub_issue" : "deliverable",
+        itemType,
         command,
       },
     };
   }
 
-  const [milestone, initiative] = await Promise.all([
-    supabase.from("milestones").select("id").eq("id", itemId).maybeSingle(),
-    supabase.from(ACTIVE_PACKAGES_TABLE).select("id").eq("id", itemId).maybeSingle(),
-  ]);
-  if (milestone.error || initiative.error) {
-    const failure = taskGitHubSyncFailure(
-      "github_sync_unavailable",
-      "Planungselement konnte nicht geladen werden.",
-    );
-    return { ok: false, result: failureResult(failure), status: taskGitHubSyncHttpStatus(failure) };
-  }
-  if (milestone.data || initiative.data) {
-    const itemType: TeamPlanningItemType = milestone.data ? "milestone" : "initiative";
-    return { ok: false, result: invalidTypeResult(itemType), status: 409 };
-  }
   const failure = taskGitHubSyncFailure(
     "github_sync_not_found",
     "Planungselement wurde nicht gefunden oder ist im Papierkorb.",
@@ -102,7 +91,7 @@ export async function preflightPlanningItemGitHubSync(
   actorProfileId: string,
   target: PlanningItemGitHubSyncTarget,
 ): Promise<PlanningItemGitHubSyncResult> {
-  if (target.itemType === "milestone" || target.itemType === "initiative") {
+  if (target.itemType === "epic" || target.itemType === "initiative") {
     return invalidTypeResult(target.itemType);
   }
   const result = await projectTaskToGitHub({
@@ -153,7 +142,7 @@ export async function executePlanningItemGitHubSyncs({
   const results = new Map<string, PlanningItemGitHubSyncResult>();
   const executable: PlanningItemGitHubSyncTarget[] = [];
   for (const target of targets) {
-    if (target.itemType === "milestone" || target.itemType === "initiative") {
+    if (target.itemType === "epic" || target.itemType === "initiative") {
       results.set(target.itemId, invalidTypeResult(target.itemType));
       continue;
     }

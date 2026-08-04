@@ -3,6 +3,8 @@ import type { Task } from "@/lib/types";
 export const googleChatUrl = "https://chat.google.com";
 
 export function taskShareTypeLabel(taskType: Task["taskType"]) {
+  if (taskType === "epic") return "Epic";
+  if (taskType === "initiative") return "Initiative";
   return taskType === "sub_issue" ? "Sub-Issue" : "Deliverable";
 }
 
@@ -26,18 +28,19 @@ export function taskShareRequestLabel(task: Pick<Task, "approvalStatus" | "revie
   if (task.reviewStatus === "requested" || task.status === "Review") {
     return "Bitte prüfen und den Review freigeben.";
   }
-  if (task.taskType === "deliverable" && (task.approvalStatus === "proposed" || !task.approvalStatus)) {
+  if ((task.taskType === "initiative" || task.taskType === "deliverable")
+    && (task.approvalStatus === "proposed" || !task.approvalStatus)) {
     return "Bitte den Vorschlag prüfen und bei Zustimmung freigeben, damit er eingeplant werden kann.";
   }
   return "Bitte ansehen und bei Bedarf kurz Rückmeldung geben.";
 }
 
-export function buildTaskShareMessage(task: Pick<Task, "approvalStatus" | "deadline" | "priority" | "reviewStatus" | "status" | "taskType" | "title">, taskUrl: string) {
+export function buildTaskShareMessage(task: Pick<Task, "approvalStatus" | "deadline" | "priority" | "reviewStatus" | "status" | "targetDate" | "taskType" | "title">, taskUrl: string) {
   const metadata = [
     taskShareTypeLabel(task.taskType),
     task.status,
     task.priority,
-    task.deadline ? `Ziel: ${taskShareDeadlineLabel(task.deadline)}` : "",
+    task.targetDate || task.deadline ? `Ziel: ${taskShareDeadlineLabel(task.targetDate || task.deadline)}` : "",
   ].filter(Boolean).join(" · ");
 
   return [

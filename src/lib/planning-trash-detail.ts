@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapMilestone, mapPackage } from "@/lib/planning-profile-mappers";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
-import { taskRowSelect, type DbMilestone, type DbPackage, type DbTask } from "@/lib/planning-data-row-types";
+import {
+  taskRowSelect,
+  type DbMilestone,
+  type DbPackage,
+  type DbPlanningItemRaciAssignment,
+  type DbPlanningItemStrategy,
+  type DbTask,
+} from "@/lib/planning-data-row-types";
 import type { Milestone, Package, Profile, Task, TrashCause, TrashRootType } from "@/lib/types";
 
 const packageDetailSelect = "id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,trashed_at,trashed_by,trash_reason,trash_cause,purge_after,trash_root_type,trash_root_id,trash_revision";
@@ -34,7 +41,7 @@ export type PlanningTrashTaskDetail = {
   initiative: Package | null;
   milestone: Milestone | null;
   parent: PlanningTrashTaskSummary | null;
-  subIssues: PlanningTrashTaskSummary[];
+  children: PlanningTrashTaskSummary[];
   trash: PlanningTrashMetadata;
   githubLifecycle: "not_linked" | "server_managed_close";
 };
@@ -91,11 +98,12 @@ function trashMetadata(
 }
 
 function taskSummary(row: TaskSummaryRow): PlanningTrashTaskSummary {
+  const taskType = row.task_type;
   return {
     id: row.id,
     title: row.title,
-    taskType: row.task_type === "sub_issue" ? "sub_issue" : "deliverable",
-    approvalStatus: row.task_type === "sub_issue" ? null : row.approval_status,
+    taskType,
+    approvalStatus: taskType === "initiative" || taskType === "deliverable" ? row.approval_status : null,
     trashed: Boolean(row.trashed_at),
   };
 }
@@ -124,21 +132,30 @@ export async function loadPlanningTrashTaskDetail(
   if (!taskResult.data?.trashed_at) return { ok: false, status: 404, error: "Aufgabe wurde nicht gefunden." };
 
   const row = taskResult.data;
-  const [initiativeResult, milestoneResult, parentResult, subIssueResult] = await Promise.all([
+  const [initiativeResult, milestoneResult, parentResult, childResult, strategyResult, raciResult] = await Promise.all([
     loadOptionalPackage(supabase, row.package_id),
     loadOptionalMilestone(supabase, row.milestone_id),
     row.parent_task_id
       ? supabase.from("tasks").select("id,title,task_type,approval_status,trashed_at").eq("id", row.parent_task_id).maybeSingle<TaskSummaryRow>()
       : Promise.resolve({ data: null as TaskSummaryRow | null, error: null }),
-    row.task_type === "deliverable"
+    row.task_type !== "sub_issue"
       ? supabase.from("tasks").select("id,title,task_type,approval_status,trashed_at").eq("parent_task_id", row.id).order("sort_order").returns<TaskSummaryRow[]>()
       : Promise.resolve({ data: [] as TaskSummaryRow[], error: null }),
+    row.task_type === "initiative"
+      ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", row.id).maybeSingle<DbPlanningItemStrategy>()
+      : Promise.resolve({ data: null as DbPlanningItemStrategy | null, error: null }),
+    row.task_type === "initiative"
+      ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", row.id).order("sort_order").returns<DbPlanningItemRaciAssignment[]>()
+      : Promise.resolve({ data: [] as DbPlanningItemRaciAssignment[], error: null }),
   ]);
 
-  const relatedError = initiativeResult.error || milestoneResult.error || parentResult.error || subIssueResult.error;
+  const relatedError = initiativeResult.error || milestoneResult.error || parentResult.error || childResult.error || strategyResult.error || raciResult.error;
   if (relatedError) return { ok: false, status: 500, error: relatedError.message };
 
-  const task = mapTaskRow(row, profiles);
+  const task = mapTaskRow(row, profiles, {
+    strategy: strategyResult.data || undefined,
+    raciAssignments: raciResult.data || [],
+  });
   const trash = trashMetadata(task, profiles);
   if (!trash) return { ok: false, status: 500, error: "Papierkorb-Metadaten der Aufgabe sind unvollständig." };
 
@@ -149,7 +166,7 @@ export async function loadPlanningTrashTaskDetail(
       initiative: initiativeResult.data ? mapPackage(initiativeResult.data) : null,
       milestone: milestoneResult.data ? mapMilestone(milestoneResult.data) : null,
       parent: parentResult.data ? taskSummary(parentResult.data) : null,
-      subIssues: (subIssueResult.data || []).map(taskSummary),
+      children: (childResult.data || []).map(taskSummary),
       trash,
       githubLifecycle: task.githubIssueNumber || task.githubIssueUrl || task.issueNumber || task.issueUrl.includes("github.com")
         ? "server_managed_close"

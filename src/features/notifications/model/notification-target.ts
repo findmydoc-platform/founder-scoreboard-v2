@@ -32,11 +32,11 @@ export function notificationTarget(event: NotificationTargetInput): Notification
   }
   if (entityType === "initiative") {
     if (event.type === "planning_item.returned") {
-      return { workspace: "projects", href: "/projects" };
+      return { workspace: "backlog", href: "/backlog?backlog.level=initiative" };
     }
     return {
       workspace: "planning",
-      href: entityId ? `/initiatives/${encodeURIComponent(entityId)}` : "/planning",
+      href: entityId ? `/initiatives/${encodeURIComponent(entityId)}` : "/backlog?backlog.level=initiative",
     };
   }
   if (entityType === "fmd_tool") {

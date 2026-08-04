@@ -133,6 +133,42 @@ test("sprint eligibility preserves approval, source-lock, target-lock, reassignm
   assert.equal(getBacklogSprintAssignmentEligibility(scheduled, null, { sourceSprintLocked: true }).reason, "source_locked");
 });
 
+test("bulk Sprint action state allows mixed no-op assignments and exposes every blocking policy", async () => {
+  const { getBacklogBulkSprintAssignmentState } = await loadPlanningState();
+  const target = { id: "sprint-next", scoreLocked: false };
+  const alreadyAssigned = planningTask({ sprintId: "sprint-next" });
+  const assignable = planningTask({ sprintId: "" });
+
+  assert.deepEqual(
+    getBacklogBulkSprintAssignmentState([alreadyAssigned, assignable], target, { canManage: true }),
+    { disabled: false },
+  );
+  assert.deepEqual(
+    getBacklogBulkSprintAssignmentState([alreadyAssigned], target, { canManage: true }),
+    { disabled: true, disabledReason: "Alle ausgewählten Deliverables sind diesem Sprint bereits zugeordnet." },
+  );
+  assert.equal(
+    getBacklogBulkSprintAssignmentState([assignable], target, { canManage: false }).disabledReason,
+    "Nur CEO oder Deputy können Aufgaben einem Sprint zuordnen.",
+  );
+  assert.equal(
+    getBacklogBulkSprintAssignmentState([assignable], { ...target, scoreLocked: true }, { canManage: true }).disabledReason,
+    "Gelockte Sprints können nicht mehr zugewiesen werden.",
+  );
+  assert.equal(
+    getBacklogBulkSprintAssignmentState(
+      [planningTask({ sprintId: "sprint-current" })],
+      target,
+      { canManage: true, sourceSprintLocked: () => true },
+    ).disabledReason,
+    "Aufgaben aus einem gelockten Sprint können nicht umgeplant werden.",
+  );
+  assert.deepEqual(
+    getBacklogBulkSprintAssignmentState([assignable], target, { canManage: true, isPending: true }),
+    { disabled: true, disabledReason: "Sprint-Zuordnungen werden gerade gespeichert." },
+  );
+});
+
 test("backlog view model reports explicit readiness and sprint capacity over the full sprint duration", async () => {
   const planningState = await loadPlanningState();
   const { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } = await loadTranspiledModule("src/features/backlog/model/backlog-view-model.ts", {

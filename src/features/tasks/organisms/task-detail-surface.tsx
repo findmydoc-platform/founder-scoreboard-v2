@@ -6,7 +6,9 @@ import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
 import { isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 import {
   canApproveDeliverableApproval,
+  canDecideInitiativeApproval,
   canRejectDeliverableApproval,
+  canReturnInitiativeForRevision,
   canReturnDeliverableForRevision,
   isTaskPlanningActive,
 } from "@/features/planning/model/approval-domain";
@@ -20,15 +22,15 @@ import {
   TaskDetailOperationalHeader,
 } from "@/features/tasks/molecules/task-detail-operational-header";
 import { TaskDetailPanelBlockerSection } from "@/features/tasks/molecules/task-detail-panel-blocker-section";
-import { TaskDetailPanelSubIssuesSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
+import { TaskDetailPanelChildrenSection } from "@/features/tasks/molecules/task-detail-panel-sub-issues-section";
 import { TaskDetailPlanningSection } from "@/features/tasks/molecules/task-detail-planning-section";
 import { TaskDetailTabs, type TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
 import { TaskDetailWorkflowStrips } from "@/features/tasks/molecules/task-detail-workflow-strips";
 import {
-  partitionSubIssues,
   uniqueRelationshipCount,
   visibleTaskActivityCount,
 } from "@/features/tasks/model/task-detail-presentation";
+import { canReviewPlanningItem, canSyncPlanningItemToGitHub } from "@/features/tasks/model/planning-item-capabilities";
 import { taskOwnedByProfile, taskStatusOptionsForPermissions } from "@/features/tasks/model/task-detail-permissions";
 import { buildTaskRelationshipRows, relationTargetOptionsForTask } from "@/features/tasks/model/task-detail-state";
 import { taskDetailAvailableTabs } from "@/features/tasks/model/task-detail-tabs-model";
@@ -136,9 +138,20 @@ export function TaskDetailSurface({
   });
   const reviewActive = task.taskType === "deliverable" && isTaskReviewActive(task);
   const reviewLocked = task.taskType === "deliverable" && isTaskReviewLocked(task);
-  const currentPackage = packages.find((item) => item.id === task.packageId) || pack;
-  const currentMilestoneId = task.milestoneId || currentPackage?.milestoneId || "";
-  const currentMilestone = milestones.find((item) => item.id === currentMilestoneId);
+  const directChildType = task.taskType === "epic"
+    ? "initiative"
+    : task.taskType === "initiative"
+      ? "deliverable"
+      : task.taskType === "deliverable"
+        ? "sub_issue"
+        : null;
+  const directChildren = directChildType
+    ? subIssues.filter((item) => item.parentTaskId === task.id && item.taskType === directChildType)
+    : [];
+  const canCreateDirectChild = directChildType === "sub_issue"
+    ? controller.permissions.canCreateSubIssue
+    : Boolean(directChildType && controller.permissions.canManageTaskMeta);
+  const currentPackage = packages.find((item) => item.id === (task.taskType === "initiative" ? task.id : task.parentTaskId || task.packageId)) || pack;
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
   const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: false });
@@ -149,9 +162,15 @@ export function TaskDetailSurface({
   } : baseRelationshipAccess;
   const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const canApprove = canApproveDeliverableApproval(task, currentPackage, currentProfile);
-  const canReject = canRejectDeliverableApproval(task, currentPackage, currentProfile);
-  const canReturnToDraft = canReturnDeliverableForRevision(task, currentPackage, currentProfile);
+  const canApprove = task.taskType === "initiative"
+    ? canDecideInitiativeApproval({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
+    : canApproveDeliverableApproval(task, currentPackage, currentProfile);
+  const canReject = task.taskType === "initiative"
+    ? canDecideInitiativeApproval({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
+    : canRejectDeliverableApproval(task, currentPackage, currentProfile);
+  const canReturnToDraft = task.taskType === "initiative"
+    ? canReturnInitiativeForRevision({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
+    : canReturnDeliverableForRevision(task, currentPackage, currentProfile);
   const canWithdrawTask = !reviewLocked && task.taskType === "deliverable" && canWithdrawPlanningRoot({
     rootType: "deliverable",
     approvalStatus: task.approvalStatus,
@@ -166,7 +185,7 @@ export function TaskDetailSurface({
     canReopenSubIssue: controller.permissions.canReopenSubIssue,
     canUpdateWorkingStatus: controller.permissions.canUpdateWorkingStatus,
   }, task.taskType);
-  const effectivelyApproved = isTaskPlanningActive(task);
+  const effectivelyApproved = task.taskType === "epic" || task.taskType === "initiative" || isTaskPlanningActive(task);
   const canSelectNextStatus = statusOptions.some((status) => status !== normalizeStatus(task.status));
   const statusLockedReason = reviewLocked
     ? reviewLockMessage(task)
@@ -174,7 +193,6 @@ export function TaskDetailSurface({
     ? task.taskType === "sub_issue" ? "Parent-Deliverable ist noch nicht freigegeben." : "Deliverable ist noch nicht freigegeben."
     : !controller.permissions.canUpdateStatus ? "Deine Rolle darf diesen Status nicht ändern."
       : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
-  const { completed: completedSubIssues } = partitionSubIssues(subIssues);
   const detailDataKnown = !detailDataLoading && !detailDataError;
   const detailDataUnavailable = Boolean(detailDataError);
   const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
@@ -183,13 +201,10 @@ export function TaskDetailSurface({
   const availableTabs = taskDetailAvailableTabs({
     activityCount,
     activityKnown: detailDataKnown,
-    allowsSubIssues: task.taskType === "deliverable",
     canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
     canComment: controller.permissions.canComment,
-    canCreateSubIssue: controller.permissions.canCreateSubIssue,
     relationshipCount,
     relationshipsKnown: detailDataKnown,
-    subIssueCount: subIssues.length,
   });
 
   const detailDirty = controller.overviewDirty || reviewDraftDirty;
@@ -309,14 +324,6 @@ export function TaskDetailSurface({
         />
       </>
     ),
-    subIssues: (
-      <TaskDetailPanelSubIssuesSection
-        canCreate={controller.permissions.canCreateSubIssue}
-        subIssues={subIssues}
-        onCreateSubIssue={onCreateSubIssue}
-        onOpenTask={openTask}
-      />
-    ),
     relationships: (
       <TaskRelationshipsSection
         task={task}
@@ -365,11 +372,11 @@ export function TaskDetailSurface({
         pending={pending}
         importPending={commentImportPending}
         readOnly={!controller.permissions.canComment}
-        onImportGitHubComments={onImportGitHubComments}
-        onUploadAttachment={onUploadAttachment}
+        onImportGitHubComments={canSyncPlanningItemToGitHub(task) ? onImportGitHubComments : undefined}
+        onUploadAttachment={canSyncPlanningItemToGitHub(task) ? onUploadAttachment : undefined}
         onAddComment={onAddComment}
         title="Aktivität"
-        description="Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline."
+        description={canSyncPlanningItemToGitHub(task) ? "Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline." : "Kommentare und relevante Änderungen in einer gemeinsamen Timeline."}
         footer={<TaskDetailHistorySummary task={task} profiles={teamProfiles} />}
       />
     ),
@@ -379,10 +386,9 @@ export function TaskDetailSurface({
     <TaskDetailOperationalHeader
       task={task}
       initiative={currentPackage}
-      milestone={currentMilestone}
       parentTask={parentTask}
       profiles={teamProfiles}
-      subIssues={subIssues}
+      subIssues={directChildren}
       statusOptions={statusOptions}
       canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
       statusLockedReason={statusLockedReason}
@@ -393,7 +399,7 @@ export function TaskDetailSurface({
         <TaskDetailHeaderActions
           task={task}
           canEditOverview={canEditOverview && !controller.overviewEditing}
-          canManageReviewOwner={!reviewActive && controller.permissions.canManageReviewOwner}
+        canManageReviewOwner={canReviewPlanningItem(task) && !reviewActive && controller.permissions.canManageReviewOwner}
           canWithdrawTask={canWithdrawTask}
           githubInstallationAvailable={githubInstallationAvailable}
           pending={pending}
@@ -432,14 +438,25 @@ export function TaskDetailSurface({
         pack={currentPackage}
         teamProfiles={teamProfiles}
         packages={packages}
-        parentDeliverables={allTasks.filter((item) => item.taskType === "deliverable")}
+        allTasks={allTasks}
         sprints={sprints}
-        milestones={milestones}
         canManageTaskMeta={controller.permissions.canManageTaskMeta}
         canReparentSubIssue={controller.permissions.canReparentSubIssue}
         pending={pending}
         onUpdate={onUpdate}
       />
+
+      {directChildType ? (
+        <div className="mt-5">
+          <TaskDetailPanelChildrenSection
+            canCreate={canCreateDirectChild}
+            childItems={directChildren}
+            childType={directChildType}
+            onCreateChild={onCreateSubIssue}
+            onOpenTask={openTask}
+          />
+        </div>
+      ) : null}
 
       {!reviewActive ? (
         <TaskDetailDependencyBand
@@ -451,14 +468,14 @@ export function TaskDetailSurface({
         />
       ) : null}
 
-      {task.taskType === "deliverable" ? (
+      {task.taskType === "initiative" || task.taskType === "deliverable" ? (
         <TaskDetailWorkflowStrips
           task={task}
           teamProfiles={teamProfiles}
           canApprove={canApprove}
           canReject={canReject}
           canReturnToDraft={canReturnToDraft}
-          canManageReviewOwner={controller.permissions.canManageReviewOwner}
+          canManageReviewOwner={task.taskType === "deliverable" && controller.permissions.canManageReviewOwner}
           forceReviewSetup={reviewSetupOpen}
           pending={pending}
           onUpdate={onUpdate}
@@ -486,7 +503,6 @@ export function TaskDetailSurface({
         className={reviewActive ? "mt-2" : "mt-5"}
         tabListClassName="sticky top-0 z-10 bg-white/95 backdrop-blur"
         counts={{
-          subIssues: subIssues.length ? `${completedSubIssues.length}/${subIssues.length}` : "",
           relationships: detailDataKnown && relationshipCount > 0 ? relationshipCount : "",
           activity: detailDataKnown && activityCount > 0 ? activityCount : "",
         }}

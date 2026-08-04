@@ -2,10 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { approvalTransactionError, validateApprovalDecision, type ApprovalDecisionPayload } from "@/lib/approval-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
-import { mapPackage } from "@/lib/planning-profile-mappers";
-import type { DbPackage } from "@/lib/planning-data-row-types";
-import { attemptPlanningGitHubLifecycleDrain, loadOutstandingPlanningGitHubLifecycleTaskIds } from "@/lib/planning-github-lifecycle-trigger";
-import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
+import {
+  legacyInitiativeFromCanonical,
+  loadCanonicalStrategicItem,
+} from "@/features/projects/model/planning-legacy-adapters";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -17,24 +17,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für Freigaben ist nicht konfiguriert.", 503);
-  const activeItem = await requireActivePlanningItem(serviceSupabase, "packages", id);
-  if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
-  const { data, error } = await serviceSupabase.rpc("decide_initiative_approval_transaction", {
-    p_initiative_id: id,
+  const current = await loadCanonicalStrategicItem(serviceSupabase, id, "initiative");
+  if (!current) return apiError("Initiative wurde nicht gefunden.", 404);
+
+  const { error } = await serviceSupabase.rpc("decide_planning_item_approval_transaction", {
+    p_task_id: current.id,
     p_expected_revision: decision.expectedRevision,
     p_action: decision.action,
     p_actor_profile_id: apiContext.permission.profile?.id || "",
     p_note: decision.note,
   });
   if (error) return approvalTransactionError(error, "Initiative");
-  const lifecycleScope = await loadOutstandingPlanningGitHubLifecycleTaskIds(serviceSupabase, "initiative", id);
-  const lifecycle = lifecycleScope.error
-    ? { attempted: false, completed: false, error: lifecycleScope.error }
-    : await attemptPlanningGitHubLifecycleDrain({
-        rootType: "initiative",
-        rootId: id,
-        taskIds: lifecycleScope.taskIds,
-        supabase: serviceSupabase,
-      });
-  return NextResponse.json({ ok: true, initiative: mapPackage(data as DbPackage), lifecycle });
+
+  const updated = await loadCanonicalStrategicItem(serviceSupabase, current.id, "initiative");
+  if (!updated) return apiError("Initiative konnte nicht geladen werden.", 500);
+  // Strategic items deliberately have no GitHub lifecycle drain or delivery
+  // notification side effect.
+  return NextResponse.json({ ok: true, initiative: legacyInitiativeFromCanonical(updated), lifecycle: null });
 }

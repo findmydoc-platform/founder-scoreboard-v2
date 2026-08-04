@@ -1,6 +1,6 @@
 import { reviewOwnerForTask, taskAssigneePatch } from "@/features/planning/model/planning-app-model";
 import { slugify } from "@/lib/slug";
-import type { Package, Profile, Task } from "@/lib/types";
+import type { Package, PlanningItemRaciAssignment, PlanningStrategy, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
   expectedUpdatedAt?: string;
@@ -31,6 +31,9 @@ export type TaskUpdatePayload = {
   scoreFinal?: boolean;
   sprintId?: string;
   parentTaskId?: string;
+  targetDate?: string | null;
+  strategy?: Partial<PlanningStrategy>;
+  raciAssignments?: PlanningItemRaciAssignment[];
   selfDodChecked?: boolean;
   selfEvidenceChecked?: boolean;
   selfDocumentedChecked?: boolean;
@@ -135,6 +138,9 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
     sprintId: patch.sprintId,
     parentTaskId: patch.parentTaskId,
+    targetDate: patch.targetDate,
+    strategy: patch.strategy,
+    raciAssignments: patch.raciAssignments,
     milestoneId: patch.parentTaskId !== undefined ? undefined : patch.milestoneId,
     dependsOn: patch.dependsOn,
     evidenceLink: patch.evidenceLink,

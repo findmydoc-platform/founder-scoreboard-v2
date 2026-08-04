@@ -1,11 +1,8 @@
-import { ArrowDown, ArrowUp, CalendarPlus, ChevronsDown, ChevronsUp, GripVertical, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, GripVertical } from "lucide-react";
 import type { DragEvent } from "react";
-import {
-  backlogSprintAssignmentMessage,
-  getBacklogSprintAssignmentEligibility,
-} from "@/features/backlog/model/backlog-planning-state";
 import type { BacklogMoveAction, BacklogMoveResult } from "@/features/backlog/hooks/use-backlog-ordering";
 import type { BacklogItem, BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
+import { buildBacklogSprintActionGroup } from "@/features/backlog/molecules/backlog-sprint-actions";
 import type { Sprint, Task } from "@/lib/types";
 import { CustomActionMenu, type CustomActionMenuGroup } from "@/shared/molecules/custom-action-menu";
 
@@ -31,10 +28,6 @@ function rankDisabledReason({ canManageBacklog, canReorder, isReordering }: Pick
   return "";
 }
 
-function currentSprintLocked(task: Task, sprintById: ReadonlyMap<string, Sprint>) {
-  return Boolean(task.sprintId && sprintById.get(task.sprintId)?.scoreLocked);
-}
-
 export function BacklogTaskActions({
   buckets,
   canManageBacklog,
@@ -53,7 +46,6 @@ export function BacklogTaskActions({
   const rankDisabled = Boolean(rankReason);
   const topDisabled = rankDisabled || index === 0;
   const bottomDisabled = rankDisabled || index === total - 1;
-  const sourceSprintLocked = currentSprintLocked(item.task, sprintById);
   const sprintGroups: CustomActionMenuGroup[] = [
     {
       id: "rank",
@@ -93,47 +85,13 @@ export function BacklogTaskActions({
         },
       ],
     },
-    {
-      id: "sprint",
-      label: "Sprint",
-      items: [
-        ...buckets.map((bucket) => {
-          const eligibility = getBacklogSprintAssignmentEligibility(item.task, bucket.sprint, {
-            canManage: canManageBacklog,
-            sourceSprintLocked,
-          });
-          const alreadyAssigned = eligibility.action === "noop" && eligibility.reason === "already_assigned";
-          return {
-            id: `sprint-${bucket.sprint.id}`,
-            label: `In ${bucket.sprint.name}${bucket.isCurrent ? " (aktuell)" : ""} einplanen`,
-            icon: <CalendarPlus size={15} />,
-            disabled: !eligibility.ok || eligibility.action === "noop",
-            disabledReason: !eligibility.ok || eligibility.action === "noop"
-              ? alreadyAssigned
-                ? "Die Aufgabe ist diesem Sprint bereits zugeordnet."
-                : backlogSprintAssignmentMessage(eligibility.reason)
-              : undefined,
-            onSelect: () => onAssignTaskToSprint(item.task, bucket.sprint),
-          };
-        }),
-        (() => {
-          const eligibility = getBacklogSprintAssignmentEligibility(item.task, null, {
-            canManage: canManageBacklog,
-            sourceSprintLocked,
-          });
-          return {
-            id: "unassign-sprint",
-            label: "Aus Sprint entfernen",
-            icon: <X size={15} />,
-            disabled: !eligibility.ok || eligibility.action === "noop",
-            disabledReason: !eligibility.ok || eligibility.action === "noop"
-              ? backlogSprintAssignmentMessage(eligibility.reason)
-              : undefined,
-            onSelect: () => onAssignTaskToSprint(item.task, null),
-          };
-        })(),
-      ],
-    },
+    buildBacklogSprintActionGroup({
+      buckets,
+      canManageBacklog,
+      onAssignTaskToSprint,
+      sprintById,
+      task: item.task,
+    }),
   ];
 
   return (

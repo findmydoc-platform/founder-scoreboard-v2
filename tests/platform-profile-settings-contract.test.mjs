@@ -16,7 +16,7 @@ test("profile workspace is hidden from sidebar but reachable from account menu",
 
   assert.match(workspacePreferences, /appWorkspaceIds = \[/);
   assert.match(workspacePreferences, /"profile"/);
-  assert.match(routes, /hiddenWorkspaceIds = \["profile"\]/);
+  assert.match(routes, /hiddenWorkspaceIds = \["projects", "profile"\]/);
   assert.match(routes, /href: "\/profile"/);
   assert.match(routes, /id: "profile".*hidden: true/s);
   assert.doesNotMatch(routes, /id: "execution"|label: "Execution"/);
@@ -114,6 +114,7 @@ test("URL filters hydrate without silently changing saved profile defaults", asy
   const profileBoard = await readFile("src/features/profile/molecules/profile-board-section.tsx", "utf8");
 
   assert.match(profileSync, /if \(!hasPlanningFilterUrlState\)/);
+  assert.match(profileSync, /hasPlanningBoardUrlState \? "board" : preference\.defaultTaskView/);
   assert.doesNotMatch(profileSync, /updateProfileUiPreferenceRequest|saveProfileUiPreference|planningFilters:/);
   assert.doesNotMatch(profileBoard, /onCurrentBoardSave|Aktuelle Ansicht|Aktuelle Board-Ansicht/);
 });
@@ -155,11 +156,14 @@ test("driver tour waits for rendered targets and acknowledges only after popover
   assert.match(provider, /MutationObserver/);
   assert.match(provider, /selectNextFeatureTour\(featureTours, workspace/);
   assert.doesNotMatch(provider, /targetWorkspace/);
-  assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[0\]\)/);
+  assert.match(provider, /waitForElement\(initialSelector\)/);
   assert.match(provider, /waitForElement\(activeTour\.requiredSelectors\[1\]\)/);
+  assert.match(provider, /activeTour\.startWorkspace !== workspace/);
+  assert.match(provider, /persistFeatureTourResume\(\{[\s\S]*stepIndex: 0/);
+  assert.match(provider, /value\.stepIndex! < 0/);
   assert.match(provider, /fmd:open-account-menu/);
   assert.match(provider, /onPopoverRender/);
-  assert.match(provider, /if \(index === 0\) markSeen\(\)/);
+  assert.match(provider, /if \(stepIndex === 0\) markSeen\(\)/);
   assert.match(provider, /setWorkspace\(activeTour\.doneWorkspace\)/);
   assert.match(client, /markProfileFeatureTourSeenRequest/);
 });

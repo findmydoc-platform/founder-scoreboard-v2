@@ -34,12 +34,15 @@ export function FilterToolbar({
   isDirty,
   results,
   filterCount = activeFilters.length,
+  leadingControls,
+  contextControls,
   primaryControls,
   children,
   className,
   panelId,
   density = "default",
   variant = "standalone",
+  compactMobile = false,
 }: {
   searchLabel: string;
   searchPlaceholder: string;
@@ -53,15 +56,23 @@ export function FilterToolbar({
   isDirty?: boolean;
   results: FilterResult[];
   filterCount?: number;
+  leadingControls?: ReactNode;
+  contextControls?: ReactNode;
   primaryControls?: ReactNode;
   children?: ReactNode;
   className?: string;
   panelId?: string;
   density?: "default" | "compact";
   variant?: "standalone" | "embedded";
+  compactMobile?: boolean;
 }) {
   const generatedId = useId();
   const resolvedPanelId = panelId || `${generatedId}-filters`;
+  const toolbarGrid = leadingControls && contextControls
+    ? "md:grid-cols-2 xl:grid-cols-[minmax(190px,auto)_minmax(240px,1fr)_minmax(220px,auto)_auto_auto]"
+    : leadingControls || contextControls
+      ? "md:grid-cols-2 lg:grid-cols-[minmax(190px,auto)_minmax(260px,1fr)_auto_auto]"
+      : "lg:grid-cols-[minmax(260px,1fr)_auto_auto]";
   const content = (
     <>
       {primaryControls && (
@@ -69,8 +80,22 @@ export function FilterToolbar({
           {primaryControls}
         </div>
       )}
-      <div className={classNames("grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto_auto] lg:items-center", density === "compact" ? "px-3 py-2.5" : "px-4 py-3")}>
-        <label className="relative min-w-0">
+      <div className={classNames(
+        "grid gap-3 lg:items-center",
+        toolbarGrid,
+        compactMobile && "grid-cols-[minmax(0,1fr)_auto]",
+        density === "compact" ? "px-3 py-2.5" : "px-4 py-3",
+      )}>
+        {leadingControls ? (
+          <div className={classNames("min-w-0", compactMobile && "col-span-2 md:col-span-1")}>
+            {leadingControls}
+          </div>
+        ) : null}
+        <label className={classNames(
+          "relative min-w-0",
+          compactMobile && "col-span-2 md:col-span-1",
+          compactMobile && !expanded && "hidden md:block",
+        )}>
           <span className="sr-only">{searchLabel}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <UiTextInput
@@ -94,7 +119,12 @@ export function FilterToolbar({
             </button>
           )}
         </label>
-        <div className="flex items-center gap-2">
+        {contextControls ? (
+          <div className={classNames("min-w-0", compactMobile && "col-span-2 md:col-span-1")}>
+            {contextControls}
+          </div>
+        ) : null}
+        <div className={classNames("flex min-w-0 items-center gap-2", compactMobile && "col-start-1 md:col-start-auto")}>
           <UiButton
             onClick={() => onExpandedChange(!expanded)}
             aria-expanded={expanded}
@@ -111,7 +141,10 @@ export function FilterToolbar({
             </UiButton>
           )}
         </div>
-        <div className="flex flex-wrap justify-start gap-x-3 gap-y-1 whitespace-nowrap text-sm text-slate-500 lg:justify-end" aria-live="polite" aria-atomic="true">
+        <div className={classNames(
+          "flex flex-wrap justify-start gap-x-3 gap-y-1 whitespace-nowrap text-sm text-slate-500 xl:justify-end",
+          compactMobile && "col-start-2 justify-self-end md:col-start-auto md:justify-self-auto",
+        )} aria-live="polite" aria-atomic="true">
           {results.map((result) => (
             <span key={result.id}>
               {result.label && <span>{result.label}: </span>}

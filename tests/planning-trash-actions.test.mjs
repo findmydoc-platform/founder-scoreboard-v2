@@ -49,7 +49,7 @@ test("paper-bin routes share centralized RPC and fail-closed permission contract
   assert.match(trashApi, /requirePlanningContributor/);
   assert.match(trashApi, /requireOperationalLead/);
   assert.match(trashApi, /root\.proposed_by !== profile\.id/);
-  assert.match(trashApi, /root\.task_type !== "deliverable"/);
+  assert.match(trashApi, /root\.task_type !== rootType/);
   assert.match(trashApi, /Sub-Issues können nicht unabhängig zurückgezogen werden/);
   assert.match(trashApi, /isWithdrawableApprovalStatus/);
   assert.match(trashApi, /withdraw_planning_item_transaction/);
@@ -108,12 +108,15 @@ test("approval decisions drain lifecycle jobs and rejected roots leave active UI
   assert.match(trigger, /scope:/);
   assert.doesNotMatch(trigger, /limit: 100/);
   assert.doesNotMatch(trigger, /registeredDrain|registerPlanningGitHubLifecycleDrain/);
-  for (const route of [taskRoute, initiativeRoute]) {
+  for (const route of [taskRoute]) {
     assert.match(route, /getServerServiceRoleSupabase/);
     assert.match(route, /attemptPlanningGitHubLifecycleDrain/);
     assert.match(route, /lifecycle/);
     assert.match(route, /loadOutstandingPlanningGitHubLifecycleTaskIds/);
   }
+  assert.match(initiativeRoute, /decide_planning_item_approval_transaction/);
+  assert.match(initiativeRoute, /lifecycle: null/);
+  assert.doesNotMatch(initiativeRoute, /attemptPlanningGitHubLifecycleDrain|loadOutstandingPlanningGitHubLifecycleTaskIds/);
   assert.match(taskCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "deliverable", task\.id\)/);
   assert.match(initiativeCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "initiative", initiative\.id\)/);
 });

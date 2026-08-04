@@ -7,7 +7,7 @@ import type {
   TaskRelation,
 } from "@/lib/types";
 
-export type TaskDetailTabId = "overview" | "sub-issues" | "relationships" | "activity";
+export type TaskDetailTabId = "overview" | "relationships" | "activity";
 
 export type TaskOverviewDraft = {
   title: string;
@@ -20,6 +20,9 @@ export type TaskOverviewDraft = {
   evidenceLinks: string[];
   definitionOfDone: string;
   note: string;
+  strategyGoal: string;
+  strategySuccessCriteria: string;
+  strategyScopeConstraints: string;
 };
 
 export type TaskOverviewEditPermissions = {
@@ -54,6 +57,9 @@ export function buildTaskOverviewDraft(task: Task): TaskOverviewDraft {
     evidenceLinks: task.evidenceLinks?.length ? [...task.evidenceLinks] : task.evidenceLink ? [task.evidenceLink] : [],
     definitionOfDone: task.definitionOfDone || "",
     note: task.note || "",
+    strategyGoal: task.strategy?.goal || "",
+    strategySuccessCriteria: task.strategy?.successCriteria || "",
+    strategyScopeConstraints: task.strategy?.scopeConstraints || "",
   };
 }
 
@@ -73,7 +79,23 @@ export function taskOverviewPatch(
 
   if (permissions.canEditBrief) {
     assignWhenChanged("title");
-    if (task.taskType === "sub_issue") {
+    if (task.taskType === "epic") {
+      assignWhenChanged("description");
+    } else if (task.taskType === "initiative") {
+      assignWhenChanged("description");
+      const baselineStrategy = buildTaskOverviewDraft(task);
+      if (
+        normalizedDraftValue(draft.strategyGoal) !== normalizedDraftValue(baselineStrategy.strategyGoal)
+        || normalizedDraftValue(draft.strategySuccessCriteria) !== normalizedDraftValue(baselineStrategy.strategySuccessCriteria)
+        || normalizedDraftValue(draft.strategyScopeConstraints) !== normalizedDraftValue(baselineStrategy.strategyScopeConstraints)
+      ) {
+        patch.strategy = {
+          goal: draft.strategyGoal,
+          successCriteria: draft.strategySuccessCriteria,
+          scopeConstraints: draft.strategyScopeConstraints,
+        };
+      }
+    } else if (task.taskType === "sub_issue") {
       assignWhenChanged("description");
       assignWhenChanged("problemStatement");
       assignWhenChanged("intendedOutcome");
@@ -226,6 +248,7 @@ export function buildQuickSubIssueCreationDraft({
     startDate: "",
     endDate: "",
     deadline: "",
+    targetDate: "",
     hours: 0,
     definitionOfDone: "",
     createGitHubIssue: false,

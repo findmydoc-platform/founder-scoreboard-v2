@@ -116,6 +116,12 @@ async function loadTaskForSync(supabase: SupabaseClient, id: string): Promise<Lo
 }
 
 function validateTaskForProjection(loaded: LoadedSyncTask, createIfMissing: boolean) {
+  if (loaded.task.taskType !== "deliverable" && loaded.task.taskType !== "sub_issue") {
+    return taskGitHubSyncFailure(
+      "github_sync_invalid_target",
+      "Strategische Planungselemente werden nicht mit GitHub synchronisiert.",
+    );
+  }
   const repository = resolveTaskGitHubRepository(loaded.task.taskType, loaded.task.githubRepo);
   if (!repository.ok) {
     return taskGitHubSyncFailure("github_sync_invalid_target", repository.error);
@@ -148,7 +154,9 @@ function validateTaskForProjection(loaded: LoadedSyncTask, createIfMissing: bool
   }
   if (!issueNumber && !createIfMissing) {
     return taskGitHubSyncFailure("github_sync_creation_required", creationRequiredMessage, {
-      githubIssueSyncStatus: loaded.task.githubIssueSyncStatus,
+      githubIssueSyncStatus: loaded.task.githubIssueSyncStatus === "not_applicable"
+        ? "not_synced"
+        : loaded.task.githubIssueSyncStatus,
       githubIssueSyncError: "",
     });
   }

@@ -1,4 +1,4 @@
-import type { Milestone, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ViewMode } from "./types";
+import type { Milestone, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, Task, ViewMode } from "./types";
 import type { DbMilestone, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-data-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
@@ -149,6 +149,62 @@ export function mapMilestone(row: DbMilestone): Milestone {
     status: row.status,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at || "",
+  };
+}
+
+export function mapLegacyPackageFromInitiative(item: Task): Package {
+  const raci = item.raciAssignments || [];
+  const firstAssignment = (role: "accountable" | "responsible" | "consulted" | "informed") => raci
+    .filter((assignment) => assignment.role === role)
+    .sort((left, right) => left.sortOrder - right.sortOrder)[0]?.profileId || "";
+  const assignments = (role: "accountable" | "responsible" | "consulted" | "informed") => raci
+    .filter((assignment) => assignment.role === role)
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((assignment) => assignment.profileId);
+
+  return {
+    id: item.id,
+    milestoneId: item.parentTaskId,
+    ownerId: item.ownerId,
+    accountableProfileId: firstAssignment("accountable"),
+    responsibleProfileIds: assignments("responsible"),
+    consultedProfileIds: assignments("consulted"),
+    informedProfileIds: assignments("informed"),
+    title: item.title,
+    goal: item.strategy?.goal || item.description,
+    priority: item.priority || "P2",
+    status: item.status === "In Arbeit" ? "active" : item.status === "Erledigt" ? "done" : item.status === "Pausiert" ? "paused" : "planned",
+    targetDate: item.targetDate || "",
+    successCriteria: item.strategy?.successCriteria || "",
+    scopeConstraints: item.strategy?.scopeConstraints || "",
+    sortOrder: item.order,
+    approvalStatus: item.approvalStatus || "proposed",
+    approvalRevision: item.approvalRevision,
+    proposedById: item.proposedById,
+    proposedAt: item.proposedAt,
+    decidedById: item.decidedById,
+    decidedAt: item.decidedAt,
+    decisionNote: item.decisionNote,
+    trashedAt: item.trashedAt,
+    trashedById: item.trashedById,
+    trashReason: item.trashReason,
+    trashCause: item.trashCause,
+    purgeAfter: item.purgeAfter,
+    trashRootType: item.trashRootType,
+    trashRootId: item.trashRootId,
+    trashRevision: item.trashRevision,
+  };
+}
+
+export function mapLegacyMilestoneFromEpic(item: Task): Milestone {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    targetDate: item.targetDate || "",
+    status: item.status === "In Arbeit" ? "active" : item.status === "Erledigt" ? "done" : "planned",
+    sortOrder: item.order,
+    updatedAt: item.updatedAt || "",
   };
 }
 

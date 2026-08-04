@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Maximize2, Minimize2, Plus, RefreshCw, X } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { AppHeader } from "@/features/planning/organisms/app-header";
 import { DevRoleSwitch } from "@/features/planning/molecules/dev-role-switch";
@@ -23,6 +23,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     dismissNotification,
     filters,
     filtersAvailable,
+    focusModeActive,
     githubConnectionState,
     githubInstallationAvailable,
     githubSyncQueueOpen,
@@ -31,6 +32,9 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     mobileNavOpen,
     openNotification,
     openNotificationInbox,
+    planningRemoteChangesAvailable,
+    planningRemoteChangesRefreshing,
+    refreshPlanningRemoteChanges,
     saveError,
     setDevProfileId,
     setFilters,
@@ -45,6 +49,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
     signIn,
     signOut,
     statusGuardNotice,
+    toggleFocusMode,
     view,
     workspace,
   } = controller;
@@ -53,6 +58,19 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
   const description = workspace === "planning"
     ? `${workspaceDescriptions.planning} Zeitraum: ${data.project.range}.`
     : workspaceDescriptions[workspace];
+  const focusModeAvailable = workspace === "planning" || workspace === "backlog";
+  const focusModeButton = focusModeAvailable ? (
+    <button
+      type="button"
+      onClick={toggleFocusMode}
+      aria-pressed={focusModeActive}
+      title={focusModeActive ? "Fokusmodus beenden" : "Fokusmodus im Vollbild starten"}
+      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+    >
+      {focusModeActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+      <span className={focusModeActive ? "inline" : "sr-only"}>{focusModeActive ? "Fokusmodus beenden" : "Fokusmodus"}</span>
+    </button>
+  ) : null;
   const actionButtons = headerActions.map((action) => (
     <button
       key={action.id}
@@ -78,6 +96,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
 
   return (
     <AppHeader
+      compact={focusModeActive}
       mobileNavOpen={mobileNavOpen}
       onOpenMobileNav={() => setMobileNavOpen(true)}
       eyebrow="FounderOps"
@@ -85,6 +104,20 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       title={title}
       notices={(
         <>
+          {planningRemoteChangesAvailable && (
+            <div role="status" className="flex items-center justify-between gap-3 border-b border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 lg:px-6">
+              <span>Neue Änderungen an Planungselementen sind verfügbar.</span>
+              <button
+                type="button"
+                disabled={planningRemoteChangesRefreshing}
+                onClick={() => void refreshPlanningRemoteChanges()}
+                className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <RefreshCw size={14} className={planningRemoteChangesRefreshing ? "animate-spin" : undefined} aria-hidden="true" />
+                {planningRemoteChangesRefreshing ? "Wird aktualisiert …" : "Aktualisieren"}
+              </button>
+            </div>
+          )}
           {saveError && (
             <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 lg:px-6">
               {saveError}
@@ -106,7 +139,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
         </>
       )}
       actions={(
-        <>
+        focusModeActive ? focusModeButton : <>
           {devRoleSwitchAvailable && (
             <DevRoleSwitch
               profiles={data.profiles}
@@ -115,6 +148,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               onChange={setDevProfileId}
             />
           )}
+          {focusModeButton}
           <PlanningHeaderDataActions
             headerData={headerData}
             notificationsOpen={showNotifications}
@@ -150,7 +184,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
             <div className="grid min-w-0 flex-1 gap-2">
               <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2" data-tour-id="planning-task-scope">
                 <div className="text-xs font-semibold uppercase text-slate-500">Aufgaben</div>
-                <div className="flex min-w-0 flex-wrap gap-2">
+                <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                   {[
                     { id: "", label: "Alle" },
                     { id: "mine", label: "Meine" },
@@ -180,7 +214,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
               </div>
               <div className="grid max-w-full grid-cols-[74px_minmax(0,1fr)] items-center gap-2">
                 <div className="text-xs font-semibold uppercase text-slate-500">Ansicht</div>
-                <div className="flex min-w-0 flex-wrap gap-2">
+                <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                   {viewTabs.map((tab) => {
                     const Icon = tab.icon;
                     const active = view === tab.id;
@@ -201,7 +235,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap md:shrink-0 md:justify-end">
+            <div className={`grid items-center gap-2 sm:flex sm:flex-wrap md:shrink-0 md:justify-end ${headerActions.length > 1 ? "grid-cols-2" : "grid-cols-[max-content]"}`}>
               {actionButtons}
             </div>
           </div>
@@ -209,7 +243,7 @@ export function PlanningHeader({ controller }: { controller: PlanningAppControll
       )}
       {!filtersAvailable && headerActions.length > 0 && workspace !== "notifications" && (
         <div className="flex justify-end border-t border-slate-100 px-4 py-3 lg:px-6">
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">{actionButtons}</div>
+          <div className={`grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap ${headerActions.length > 1 ? "grid-cols-2" : "grid-cols-[max-content]"}`}>{actionButtons}</div>
         </div>
       )}
     </AppHeader>

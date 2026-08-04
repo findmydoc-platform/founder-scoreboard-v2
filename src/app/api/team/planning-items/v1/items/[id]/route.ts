@@ -10,9 +10,11 @@ import {
 } from "@/features/planning-items/model/planning-item-delete";
 import {
   buildPlanningItemUpdatePreview,
+  mapLegacyPlanningItemDatabaseRow,
   mapPlanningItemDatabaseRow,
   parsePlanningItemPatchPayload,
   planningItemUpdateHash,
+  type PlanningItemReplayType,
 } from "@/features/planning-items/model/planning-item-update";
 import {
   handlePlanningItemsRequest,
@@ -33,7 +35,7 @@ import {
 
 type UpdateTransactionResult = {
   replayed?: boolean;
-  itemType?: "milestone" | "initiative" | "deliverable" | "sub_issue";
+  itemType?: PlanningItemReplayType;
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
@@ -43,17 +45,17 @@ type UpdateTransactionResult = {
 type StoredUpdateRequest = {
   request_hash: string;
   response: UpdateTransactionResult | null;
+  contract_version: number | null;
 };
 
 type DeleteTransactionResult = {
   replayed?: boolean;
-  itemType?: "milestone";
+  itemType?: "epic" | "milestone";
   item?: Record<string, unknown>;
   children?: { initiatives?: number; tasks?: number };
 };
 
-function itemLink(request: NextRequest, itemType: "milestone" | "initiative" | "deliverable" | "sub_issue", itemId: string) {
-  if (itemType === "milestone" || itemType === "initiative") return `${request.nextUrl.origin}/?workspace=projects`;
+function itemLink(request: NextRequest, _itemType: PlanningItemReplayType, itemId: string) {
   return `${request.nextUrl.origin}/tasks/${encodeURIComponent(itemId)}`;
 }
 
@@ -61,14 +63,17 @@ function updateResponse(
   request: NextRequest,
   fallbackItemId: string,
   transaction: UpdateTransactionResult,
-  fallbackItemType: "milestone" | "initiative" | "deliverable" | "sub_issue",
+  fallbackItemType: PlanningItemReplayType,
   fallbackChangedFields: string[] = [],
   fallbackSystemEffects: unknown[] = [],
+  contractVersion = 2,
 ) {
   const itemType = transaction.itemType || fallbackItemType;
   const rawItem = transaction.item;
   if (!rawItem || !itemType) throw new Error("Planning-Items-Update lieferte kein Element zurück.");
-  const item = mapPlanningItemDatabaseRow(itemType, rawItem);
+  const item = contractVersion === 1 || itemType === "milestone"
+    ? mapLegacyPlanningItemDatabaseRow(itemType, rawItem)
+    : mapPlanningItemDatabaseRow(itemType, rawItem);
   return planningItemsJson({
     ok: true,
     replayed: Boolean(transaction.replayed),
@@ -113,15 +118,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const loadStoredRequest = () => permission.supabase
       .from("team_planning_item_update_requests")
-      .select("request_hash,response")
+      .select("request_hash,response,contract_version")
       .eq("token_id", permission.tokenId)
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
     const storedResponse = (stored: StoredUpdateRequest) => {
       const itemType = stored.response?.itemType;
       if (!itemType) throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
-      if (itemType === "milestone" && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
-        return planningItemsError("Nur CEO oder Deputy können Meilensteine bearbeiten.", 403);
+      if ((itemType === "epic" || itemType === "milestone") && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
+        return planningItemsError("Nur CEO oder Deputy können Epics bearbeiten.", 403);
       }
       const requestHash = planningItemUpdateHash({
         itemId,
@@ -132,7 +137,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (requestHash !== stored.request_hash) {
         return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       }
-      return updateResponse(request, itemId, { ...stored.response, replayed: true }, itemType);
+      return updateResponse(
+        request,
+        itemId,
+        { ...stored.response, replayed: true },
+        itemType,
+        [],
+        [],
+        Number(stored.contract_version || 1),
+      );
     };
     const existingRequest = await loadStoredRequest();
     if (existingRequest.error) {
@@ -173,11 +186,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       p_token_id: permission.tokenId,
       p_profile_id: permission.profile.id,
       p_item_type: preview.itemType,
-      p_item_id: itemId,
+      p_item_id: preview.itemId,
       p_expected_updated_at: preview.expectedUpdatedAt,
       p_idempotency_key: idempotencyKey,
       p_request_hash: planningItemUpdateHash({
-        itemId,
+        itemId: preview.itemId,
         itemType: preview.itemType,
         expectedUpdatedAt: preview.expectedUpdatedAt,
         patch: parsed.raw,
@@ -197,7 +210,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
 
     const target: PlanningItemGitHubSyncTarget = {
-      itemId,
+      itemId: preview.itemId,
       itemType: preview.itemType,
       command: parsed.githubSync,
     };
@@ -209,7 +222,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       });
       const enriched = {
         ...transaction,
-        githubSync: results.get(itemId),
+        githubSync: results.get(preview.itemId),
       };
       await persistUpdateResponse(
         permission.supabase,
@@ -242,7 +255,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           actorProfileId: permission.profile.id,
           targets: [target],
         });
-        const finalResult = results.get(itemId);
+        const finalResult = results.get(preview.itemId);
         if (!finalResult) return;
         try {
           await persistUpdateResponse(
@@ -270,7 +283,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       const itemId = id.trim();
       if (!itemId) return planningItemsError("Planungselement-ID ist erforderlich.", 400);
       if (!["ceo", "deputy"].includes(permission.profile.platformRole)) {
-        return planningItemsError("Nur CEO oder Deputy können Meilensteine löschen.", 403);
+        return planningItemsError("Nur CEO oder Deputy können Epics löschen.", 403);
       }
 
       const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
@@ -310,17 +323,20 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
       const transaction = data as DeleteTransactionResult | null;
       if (!transaction?.item) throw new Error("Planning-Items-Löschung lieferte kein Ergebnis zurück.");
-      const item = mapPlanningItemDatabaseRow("milestone", transaction.item);
+      const itemType = transaction.itemType === "milestone" ? "milestone" : "epic";
+      const item = itemType === "milestone"
+        ? mapLegacyPlanningItemDatabaseRow(itemType, transaction.item)
+        : mapPlanningItemDatabaseRow(itemType, transaction.item);
       return planningItemsJson({
         ok: true,
         replayed: Boolean(transaction.replayed),
-        itemType: "milestone",
+        itemType,
         item,
         children: {
           initiatives: Number(transaction.children?.initiatives || 0),
           tasks: Number(transaction.children?.tasks || 0),
         },
-        itemLink: itemLink(request, "milestone", String(item.id || itemId)),
+        itemLink: itemLink(request, itemType, String(item.id || itemId)),
       });
     },
   );

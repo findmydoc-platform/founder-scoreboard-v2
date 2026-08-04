@@ -18,6 +18,9 @@ export type TaskGitHubRepositoryPolicy =
   | { ok: false; error: string };
 
 export function resolveTaskGitHubRepository(taskType: TaskType, value?: string | null): TaskGitHubRepositoryPolicy {
+  if (taskType === "epic" || taskType === "initiative") {
+    return { ok: false, error: "Strategische Planungselemente werden nicht mit GitHub synchronisiert." };
+  }
   const repository = normalizeGitHubRepository(value);
   if (!repository) return { ok: false, error: "GitHub-Ziel-Repository ist nicht freigegeben." };
   if (taskType === "deliverable" && repository !== defaultGitHubRepository) {

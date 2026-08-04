@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Planning Items API",
-    "version": "1.4.0",
-    "description": "Personal-token API for safe planning context, approval-aware creation, role-guarded updates, optional per-item GitHub projection, and empty-only Milestone deletion."
+    "version": "2.0.0",
+    "description": "Personal-token API for the canonical Epic, Initiative, Deliverable, and Sub-Issue hierarchy. GitHub projection is available only for Deliverables and Sub-Issues; CEO and Deputy may delete an empty Epic."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
   "paths": {
@@ -42,12 +42,12 @@
     },
     "/api/team/planning-items/v1/items/{id}/delete/preview": {
       "post": {
-        "operationId": "previewEmptyMilestoneDelete",
+        "operationId": "previewEmptyEpicDelete",
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
         "responses": {
-          "200": { "description": "Delete preview; a non-empty Milestone returns valid false and canDelete false", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePreviewResponse" } } } },
+          "200": { "description": "Delete preview; a non-empty Epic returns valid false and canDelete false", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePreviewResponse" } } } },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -61,12 +61,12 @@
         "responses": { "200": { "description": "Updated planning item or an idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
       },
       "delete": {
-        "operationId": "deleteEmptyMilestone",
+        "operationId": "deleteEmptyEpic",
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
         "responses": {
-          "200": { "description": "Deleted empty Milestone or an idempotent replay" },
+          "200": { "description": "Deleted empty Epic or an idempotent replay" },
           "409": { "$ref": "#/components/responses/DeleteConflict" }
         }
       }
@@ -114,14 +114,14 @@
     "responses": {
       "BadRequest": { "description": "Invalid request" },
       "Conflict": { "description": "Stale version or incompatible idempotency replay" },
-      "MilestoneNotEmpty": {
-        "description": "The Milestone still has Initiative or Task children",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MilestoneNotEmptyResponse" } } }
+      "EpicNotEmpty": {
+        "description": "The Epic still has Initiative or Deliverable children",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EpicNotEmptyResponse" } } }
       },
       "DeleteConflict": {
-        "description": "The Milestone is non-empty, the version is stale, or the idempotency key conflicts",
+        "description": "The Epic is non-empty, the version is stale, or the idempotency key conflicts",
         "content": { "application/json": { "schema": { "oneOf": [
-          { "$ref": "#/components/schemas/MilestoneNotEmptyResponse" },
+          { "$ref": "#/components/schemas/EpicNotEmptyResponse" },
           { "$ref": "#/components/schemas/ErrorResponse" }
         ] } } }
       }
@@ -139,21 +139,21 @@
       },
       "PlanningItemCreate": {
         "type": "object",
-        "description": "Fields are type-specific. Sub-Issues accept itemType, title, description, optional work-brief text (problemStatement, intendedOutcome, scopeConstraints, acceptanceCriteria, evidenceRequired, definitionOfDone), parentTaskId, ownerId, and githubRepo; parentTaskId is required and status defaults to Offen. evidenceRequired is text context only.",
+        "description": "Fields are type-specific. Canonical hierarchy references use parentTaskId. Strategic items do not accept GitHub, Sprint, Review, score, or Evidence fields. A Sub-Issue requires an approved Deliverable parent; evidenceRequired is text context only.",
         "additionalProperties": false,
         "required": ["itemType", "title"],
         "properties": {
-          "itemType": { "type": "string", "enum": ["milestone", "initiative", "deliverable", "sub_issue"] },
+          "itemType": { "type": "string", "enum": ["epic", "initiative", "deliverable", "sub_issue", "milestone"], "description": "milestone is a deprecated input alias for epic." },
           "title": { "type": "string", "minLength": 3, "maxLength": 240 },
           "description": { "type": "string" }, "problemStatement": { "type": "string" }, "intendedOutcome": { "type": "string" },
           "scopeConstraints": { "type": "string" }, "acceptanceCriteria": { "$ref": "#/components/schemas/AcceptanceCriteria" },
           "evidenceRequired": { "type": "string" }, "definitionOfDone": { "type": "string" }, "parentTaskId": { "type": "string" },
-          "packageId": { "type": "string" }, "milestoneId": { "type": "string" }, "ownerId": { "type": "string" },
+          "packageId": { "type": "string", "deprecated": true, "description": "Deprecated alias for a Deliverable parentTaskId." }, "milestoneId": { "type": "string", "deprecated": true, "description": "Deprecated alias for an Initiative parentTaskId." }, "ownerId": { "type": "string" },
           "accountableProfileId": { "type": "string" }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "priority": { "$ref": "#/components/schemas/Priority" }, "workstream": { "type": "string" }, "startDate": { "type": "string", "format": "date" },
           "endDate": { "type": "string", "format": "date" }, "deadline": { "type": "string", "format": "date" }, "hours": { "type": "integer", "minimum": 0, "maximum": 200 }, "githubRepo": { "type": "string" },
-          "targetDate": { "type": ["string", "null"], "format": "date" }, "status": { "$ref": "#/components/schemas/MilestoneStatus" },
+          "targetDate": { "type": ["string", "null"], "format": "date" }, "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] },
           "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" }
         }
       },
@@ -169,7 +169,7 @@
           "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
           "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
           "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
-          "packageId": { "type": ["string", "null"] }, "milestoneId": { "type": ["string", "null"] }, "ownerId": { "type": ["string", "null"] },
+          "packageId": { "type": ["string", "null"], "deprecated": true, "description": "Deprecated alias for a Deliverable parentTaskId." }, "milestoneId": { "type": ["string", "null"], "deprecated": true, "description": "Deprecated alias for an Initiative parentTaskId." }, "ownerId": { "type": ["string", "null"] },
           "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },
@@ -177,9 +177,9 @@
           "hours": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 }, "githubRepo": { "type": ["string", "null"] },
           "targetDate": { "type": ["string", "null"], "format": "date" },
           "status": {
-            "description": "Milestones use MilestoneStatus; Deliverables use TaskStatus; Sub-Issues use SubIssueStatus. Initiatives do not accept status.",
+            "description": "Epics and Initiatives use StrategicStatus; Deliverables use TaskStatus; Sub-Issues use SubIssueStatus.",
             "oneOf": [
-              { "$ref": "#/components/schemas/MilestoneStatus" },
+              { "$ref": "#/components/schemas/StrategicStatus" },
               { "$ref": "#/components/schemas/TaskStatus" },
               { "$ref": "#/components/schemas/SubIssueStatus" }
             ]
@@ -192,7 +192,7 @@
         "required": ["expectedUpdatedAt"],
         "properties": { "expectedUpdatedAt": { "type": "string", "format": "date-time" } }
       },
-      "MilestoneChildCounts": {
+      "EpicChildCounts": {
         "type": "object",
         "additionalProperties": false,
         "required": ["initiatives", "tasks"],
@@ -206,19 +206,19 @@
         "required": ["ok", "valid", "canDelete", "itemId", "itemType", "currentItem", "children", "warnings"],
         "properties": {
           "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" },
-          "itemId": { "type": "string" }, "itemType": { "const": "milestone" }, "currentItem": { "type": "object" },
-          "children": { "$ref": "#/components/schemas/MilestoneChildCounts" },
+          "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" },
+          "children": { "$ref": "#/components/schemas/EpicChildCounts" },
           "code": { "type": ["string", "null"], "enum": ["MILESTONE_NOT_EMPTY", null] },
           "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } }
         }
       },
-      "MilestoneNotEmptyResponse": {
+      "EpicNotEmptyResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": ["ok", "code", "error", "children"],
         "properties": {
           "ok": { "const": false }, "code": { "const": "MILESTONE_NOT_EMPTY" }, "error": { "type": "string" },
-          "children": { "$ref": "#/components/schemas/MilestoneChildCounts" }
+          "children": { "$ref": "#/components/schemas/EpicChildCounts" }
         }
       },
       "ErrorResponse": {
@@ -230,7 +230,7 @@
       "NullableAcceptanceCriteria": { "oneOf": [{ "$ref": "#/components/schemas/AcceptanceCriteria" }, { "type": "null" }] },
       "ProfileIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
       "Priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
-      "MilestoneStatus": { "type": "string", "enum": ["planned", "active", "done"] },
+      "StrategicStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"] },
       "TaskStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
       "SubIssueStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Blockiert", "Erledigt"] },
       "GitHubSyncMode": { "type": "string", "enum": ["async", "wait"] },
@@ -256,7 +256,7 @@
           { "type": "object", "required": ["status", "code", "error", "retryable"], "properties": { "status": { "type": "string", "enum": ["notEligible", "failed"] }, "code": { "type": "string" }, "error": { "type": "string" }, "retryable": { "type": "boolean" } } }
         ]
       },
-      "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false }, "allowEmptyMilestoneDeletes": { "type": "boolean", "default": false, "description": "CEO and Deputy only; adds write:planning-items:delete-empty." }, "allowGitHubSync": { "type": "boolean", "default": false, "description": "Adds write:planning-items:github-sync." } } },
+      "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false }, "allowEmptyEpicDeletes": { "type": "boolean", "default": false, "description": "CEO and Deputy only; adds write:planning-items:delete-empty." }, "allowEmptyMilestoneDeletes": { "type": "boolean", "default": false, "deprecated": true, "description": "Deprecated alias for allowEmptyEpicDeletes." }, "allowGitHubSync": { "type": "boolean", "default": false, "description": "Adds write:planning-items:github-sync for Deliverables and Sub-Issues only." } } },
       "ContextResponse": { "type": "object", "properties": { "ok": { "const": true }, "context": { "type": "object" } }, "required": ["ok", "context"] }
     }
   }

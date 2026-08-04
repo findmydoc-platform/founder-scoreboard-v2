@@ -9,11 +9,13 @@ export type BacklogSort = "rank" | "priority" | "title" | "approval" | "initiati
 export type BacklogReadinessFilter = "all" | "ready" | "incomplete";
 
 export type BacklogTableFilters = {
+  level: "epic" | "initiative" | "deliverable";
   query: string;
   scope: BacklogScope;
   status: string;
   readiness: BacklogReadinessFilter;
   priority: string;
+  epic: string;
   initiative: string;
   assignee: string;
   sort: BacklogSort;
@@ -21,11 +23,13 @@ export type BacklogTableFilters = {
 };
 
 export const DEFAULT_BACKLOG_FILTERS: BacklogTableFilters = {
+  level: "deliverable",
   query: "",
   scope: "all",
   status: "Alle",
   readiness: "all",
   priority: "Alle",
+  epic: "Alle",
   initiative: "Alle",
   assignee: "Alle",
   sort: "rank",
@@ -185,7 +189,7 @@ function planningSprints(data: PlanningData) {
 export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
   const initiativeById = new Map(data.packages.map((initiative) => [initiative.id, initiative]));
   const orderedTasks = data.tasks
-    .filter((task) => task.taskType !== "sub_issue" && !taskIsDone(task))
+    .filter((task) => task.taskType === "deliverable" && !taskIsDone(task))
     .sort(byBacklogOrder);
   const allItems = orderedTasks.map((task, index) => buildBacklogItem(task, initiativeById, index + 1));
   const visibleItems = allItems.filter((item) => filterItem(item, scope));

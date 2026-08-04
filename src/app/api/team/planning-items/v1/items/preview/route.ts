@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
     if (planningItemCreateRequiresOperationalLead(parsed.items)
       && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
-      return planningItemsError("Nur CEO oder Deputy können Meilensteine anlegen.", 403);
+      return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
     }
     const items = await buildPlanningItemCreatePreview(parsed.items, permission.profile, permission.supabase);
     return planningItemsJson({ ok: true, valid: items.every((item) => !item.errors.length), items });

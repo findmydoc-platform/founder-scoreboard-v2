@@ -71,17 +71,17 @@ export function ProfilePlanningItemsTokens({
                   onChange={tokens.setAllowGitHubSync}
                 />
               </div>
-              {tokens.canIssueEmptyMilestoneDeletes && (
+              {tokens.canIssueEmptyEpicDeletes && (
                 <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                   <div>
-                    <div className="text-sm font-medium text-slate-900">Leere Meilensteine löschen</div>
-                    <div className="text-xs leading-5 text-slate-500">Erlaubt nur das Löschen eines Meilensteins ohne zugeordnete Initiativen oder Aufgaben.</div>
+                    <div className="text-sm font-medium text-slate-900">Leere Epics löschen</div>
+                    <div className="text-xs leading-5 text-slate-500">Erlaubt nur das Löschen eines Epics ohne zugeordnete Initiativen oder Deliverables.</div>
                   </div>
                   <ToggleSwitch
-                    checked={tokens.allowEmptyMilestoneDeletes}
+                    checked={tokens.allowEmptyEpicDeletes}
                     disabled={tokens.pending || tokens.activeTokenCount >= TEAM_PLANNING_ITEMS_MAX_ACTIVE_TOKENS}
-                    label="Leere Meilensteine löschen"
-                    onChange={tokens.setAllowEmptyMilestoneDeletes}
+                    label="Leere Epics löschen"
+                    onChange={tokens.setAllowEmptyEpicDeletes}
                   />
                 </div>
               )}
@@ -119,7 +119,7 @@ export function ProfilePlanningItemsTokens({
 
           <SettingsRow
             label="Persönliche Tokens"
-            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen, aktualisieren, GitHub synchronisieren oder leere Meilensteine löschen darf."
+            description="Alle aktiven Tokens bleiben sichtbar und widerrufbar. Die Berechtigungen zeigen, ob ein Token lesen, erstellen, aktualisieren, GitHub synchronisieren oder leere Epics löschen darf."
             align="start"
           >
             <div className="grid min-w-0 gap-2 text-left md:min-w-[32rem]">

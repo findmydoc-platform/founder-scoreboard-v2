@@ -48,11 +48,11 @@ test("normal planning reads use the centralized active read models", async () =>
 
   assert.match(readModel, /ACTIVE_PACKAGES_TABLE = "active_packages"/);
   assert.match(readModel, /ACTIVE_TASKS_TABLE = "active_tasks"/);
-  for (const source of [loader, planningContext, planningItemsCreate]) {
-    assert.match(source, /ACTIVE_PACKAGES_TABLE/);
-  }
   for (const source of [loader, planningContext, planningItemsCreate, taskDetail]) {
     assert.match(source, /ACTIVE_TASKS_TABLE/);
+  }
+  for (const source of [loader, planningContext, planningItemsCreate]) {
+    assert.doesNotMatch(source, /ACTIVE_PACKAGES_TABLE/);
   }
 });
 

@@ -80,9 +80,10 @@ test("approval routes and UI share the reason contract", async () => {
 
   assert.match(api, /validateApprovalDecisionNote/);
   assert.match(initiativeRoute, /requirePlanningContributor/);
-  assert.match(initiativeRoute, /decide_initiative_approval_transaction/);
+  assert.match(initiativeRoute, /decide_planning_item_approval_transaction/);
+  assert.match(initiativeRoute, /loadCanonicalStrategicItem/);
   assert.match(taskRoute, /requirePlanningContributor/);
-  assert.match(taskRoute, /decide_deliverable_approval_transaction/);
+  assert.match(taskRoute, /decide_planning_item_approval_transaction/);
   assert.match(dialog, /maxLength=\{APPROVAL_DECISION_NOTE_MAX_LENGTH\}/);
   assert.match(dialog, /required/);
   assert.match(projects, /canReturnInitiativeForRevision/);

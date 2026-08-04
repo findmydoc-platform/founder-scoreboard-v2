@@ -12,7 +12,7 @@ import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/
 type TaskRow = {
   id: string;
   project_id: string;
-  package_id: string | null;
+  parent_task_id: string | null;
   title: string;
   description: string | null;
   status: string;
@@ -40,7 +40,6 @@ type TaskRow = {
   score_relevant: boolean | null;
   carryover_count: number | null;
   original_sprint_id: string | null;
-  milestone_id: string | null;
   problem_statement: string | null;
   intended_outcome: string | null;
   scope_constraints: string | null;
@@ -165,7 +164,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: tasks, error: tasksError } = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,project_id,package_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,milestone_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
+    .select("id,project_id,parent_task_id,title,description,status,priority,owner,assignee,workstream,sort_order,start_date,end_date,deadline,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome")
     .eq("sprint_id", id);
 
   if (tasksError) return apiError(tasksError.message, 500);
@@ -212,8 +211,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       carryoverInserts.push(buildTaskInsertRow({
         id: `${task.id}-carryover-${nextSprint.id}`,
         projectId: task.project_id,
-        packageId: task.package_id,
-        milestoneId: task.milestone_id,
+        parentTaskId: task.parent_task_id,
         title: task.title,
         description: task.description,
         problemStatement: task.problem_statement,

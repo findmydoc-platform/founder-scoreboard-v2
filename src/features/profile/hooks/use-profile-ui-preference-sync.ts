@@ -6,6 +6,7 @@ import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/ty
 type ProfileUiPreferenceSyncOptions = {
   currentProfileId: string;
   data: PlanningData;
+  hasPlanningBoardUrlState: boolean;
   hasPlanningFilterUrlState: boolean;
   setExpandedPackageIds: (packageIds: string[]) => void;
   setFilters: (filters: PlanningFilterPreferences) => void;
@@ -15,6 +16,7 @@ type ProfileUiPreferenceSyncOptions = {
 export function useProfileUiPreferenceSync({
   currentProfileId,
   data,
+  hasPlanningBoardUrlState,
   hasPlanningFilterUrlState,
   setExpandedPackageIds,
   setFilters,
@@ -31,7 +33,7 @@ export function useProfileUiPreferenceSync({
     hydratedProfileRef.current = currentProfileId;
     if (!preference) return;
 
-    setView(preference.defaultTaskView);
+    setView(hasPlanningBoardUrlState ? "board" : preference.defaultTaskView);
     if (!hasPlanningFilterUrlState) {
       setFilters({
         ...preference.planningFilters,
@@ -42,5 +44,5 @@ export function useProfileUiPreferenceSync({
       });
     }
     setExpandedPackageIds(preference.expandedPackageIds);
-  }, [currentProfileId, hasPlanningFilterUrlState, preference, setExpandedPackageIds, setFilters, setView]);
+  }, [currentProfileId, hasPlanningBoardUrlState, hasPlanningFilterUrlState, preference, setExpandedPackageIds, setFilters, setView]);
 }

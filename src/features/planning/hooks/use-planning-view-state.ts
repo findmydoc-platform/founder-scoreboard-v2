@@ -6,6 +6,7 @@ import type { MilestoneDeleteTarget } from "@/features/projects/organisms/milest
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
+import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 import { addDaysIso } from "@/lib/planning-schedule";
 import { dateUrlField, enumUrlField, multiEnumUrlField, stringUrlField, useTableUrlState, type TableUrlHistoryMode, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
@@ -29,6 +30,11 @@ export const DEFAULT_PLANNING_FILTERS: PlanningFilters = {
   direction: "asc",
 };
 
+type PlanningBoardUrlState = {
+  level: PlanningLevel;
+  parentId: string;
+};
+
 const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
   query: stringUrlField(),
   assignee: stringUrlField("Alle"),
@@ -44,6 +50,11 @@ const planningFilterSchema: TableUrlSchema<PlanningFilters> = {
   targetTo: dateUrlField(),
   sort: enumUrlField<string>("priority", ["priority", "title", "status", "assignee", "sprint", "start", "deadline"]),
   direction: enumUrlField("asc", ["asc", "desc"] as const),
+};
+
+const planningBoardUrlSchema: TableUrlSchema<PlanningBoardUrlState> = {
+  level: enumUrlField("deliverable", ["epic", "initiative", "deliverable"] as const),
+  parentId: stringUrlField("all"),
 };
 
 type UsePlanningViewStateOptions = {
@@ -70,17 +81,31 @@ export function usePlanningViewState({
     targetSprintNumber: 0,
   });
   const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema });
+  const {
+    state: planningBoardUrlState,
+    updateState: updatePlanningBoardUrlState,
+    hasUrlState: hasPlanningBoardUrlState,
+  } = useTableUrlState({ namespace: "board", schema: planningBoardUrlSchema });
   const setFilters = useCallback((next: SetStateAction<PlanningFilters>, history: TableUrlHistoryMode = "push") => {
     updateFilters((current) => typeof next === "function" ? next(current) : next, history);
   }, [updateFilters]);
+  const setPlanningLevel = useCallback((level: PlanningLevel) => {
+    updatePlanningBoardUrlState({ level, parentId: "all" });
+  }, [updatePlanningBoardUrlState]);
+  const setPlanningParentFilterId = useCallback((parentId: string) => {
+    updatePlanningBoardUrlState({ parentId });
+  }, [updatePlanningBoardUrlState]);
 
   return {
     filters,
+    hasPlanningBoardUrlState,
     hasPlanningFilterUrlState,
     initiativeDialogDefaults,
     milestoneDeleteTarget,
     milestoneDialogDefaults,
     mobileNavOpen,
+    planningLevel: planningBoardUrlState.level,
+    planningParentFilterId: planningBoardUrlState.parentId,
     resetFilters,
     selectedTaskId,
     setFilters,
@@ -88,6 +113,8 @@ export function usePlanningViewState({
     setMilestoneDeleteTarget,
     setMilestoneDialogDefaults,
     setMobileNavOpen,
+    setPlanningLevel,
+    setPlanningParentFilterId,
     setSelectedTaskId,
     setShowFilters,
     setShowNotifications,

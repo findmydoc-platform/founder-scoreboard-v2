@@ -12,12 +12,12 @@ export function previewPlanningItemGitHubSync({
   approvalStatus?: unknown;
   parentApprovalStatus?: unknown;
 }): PlanningItemGitHubSyncResult {
-  if (itemType === "milestone" || itemType === "initiative") {
+  if (itemType === "epic" || itemType === "initiative") {
     return {
       status: "notEligible",
       code: "github_sync_invalid_target",
-      error: itemType === "milestone"
-        ? "Meilensteine können nicht mit GitHub synchronisiert werden."
+      error: itemType === "epic"
+        ? "Epics können nicht mit GitHub synchronisiert werden."
         : "Initiativen können nicht mit GitHub synchronisiert werden.",
       retryable: false,
     };

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useBacklogOrdering } from "@/features/backlog/hooks/use-backlog-ordering";
+import { useBacklogBulkSprintAssignment } from "@/features/backlog/hooks/use-backlog-bulk-sprint-assignment";
 import { useBacklogSprintAssignment } from "@/features/backlog/hooks/use-backlog-sprint-assignment";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Sprint, Task } from "@/lib/types";
@@ -44,9 +45,18 @@ export function useBacklogCommands({
     setMessage,
     sprintById,
   });
+  const bulkSprintAssignment = useBacklogBulkSprintAssignment({
+    apiClient,
+    canManageBacklog,
+    refreshPlanningData,
+    setData,
+    setMessage,
+  });
 
   return {
+    assignTasksToSprint: bulkSprintAssignment.assignTasksToSprint,
     assignTaskToSprint: sprintAssignment.assignTaskToSprint,
+    isBulkAssigningSprint: bulkSprintAssignment.isBulkAssigningSprint,
     isReordering: ordering.isReordering,
     message,
     moveTask: ordering.moveTask,

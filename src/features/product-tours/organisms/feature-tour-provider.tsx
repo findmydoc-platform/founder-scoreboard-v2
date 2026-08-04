@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement } from "@/lib/types";
+import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement, ViewMode } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import {
@@ -22,6 +22,7 @@ type FeatureTourProviderProps = {
   openTaskPanel: (taskId: string) => void;
   selectedTaskId: string | null;
   setData: Dispatch<SetStateAction<PlanningData>>;
+  setView: (view: ViewMode) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "supabase";
   workspace: AppWorkspace;
@@ -31,6 +32,44 @@ type TourStatus = {
   kind: "error" | "loading";
   message: string;
 } | null;
+
+type FeatureTourResume = {
+  stepIndex: number;
+  tourId: string;
+  view?: ViewMode;
+};
+
+const featureTourResumeStorageKey = "founderops.feature-tour.resume-v1";
+
+function readFeatureTourResume(): FeatureTourResume | null {
+  try {
+    const raw = window.sessionStorage.getItem(featureTourResumeStorageKey);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<FeatureTourResume>;
+    if (typeof value.tourId !== "string" || !Number.isInteger(value.stepIndex) || value.stepIndex! < 0) return null;
+    if (value.view !== undefined && !["board", "structure", "table", "gantt"].includes(value.view)) return null;
+    return { tourId: value.tourId, stepIndex: value.stepIndex!, view: value.view };
+  } catch {
+    return null;
+  }
+}
+
+function clearFeatureTourResume() {
+  try {
+    window.sessionStorage.removeItem(featureTourResumeStorageKey);
+  } catch {
+    // A blocked session storage must not prevent a regular one-page tour.
+  }
+}
+
+function persistFeatureTourResume(resume: FeatureTourResume) {
+  try {
+    window.sessionStorage.setItem(featureTourResumeStorageKey, JSON.stringify(resume));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function waitForElement(selector: string, timeoutMs = 8000) {
   const existing = document.querySelector(selector);
@@ -75,6 +114,7 @@ export function FeatureTourProvider({
   openTaskPanel,
   selectedTaskId,
   setData,
+  setView,
   setWorkspace,
   source,
   workspace,
@@ -88,6 +128,7 @@ export function FeatureTourProvider({
     ? featureTours.find((definition) => definition.id === requestedTourId)
     : nextTour;
   const [tourRequested, setTourRequested] = useState(false);
+  const [resumeStepIndex, setResumeStepIndex] = useState(0);
   const [tourStatus, setTourStatus] = useState<TourStatus>(null);
   const startedTourRef = useRef("");
   const openTaskPanelRef = useRef(openTaskPanel);
@@ -99,6 +140,28 @@ export function FeatureTourProvider({
     selectedTaskIdRef.current = selectedTaskId;
     tasksRef.current = data.tasks;
   }, [data.tasks, openTaskPanel, selectedTaskId]);
+
+  useEffect(() => {
+    const resume = readFeatureTourResume();
+    if (!resume) {
+      clearFeatureTourResume();
+      return;
+    }
+    const resumedTour = featureTours.find((definition) => definition.id === resume.tourId);
+    if (!resumedTour || !resumedTour.steps[resume.stepIndex]) {
+      clearFeatureTourResume();
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      clearFeatureTourResume();
+      if (resume.view) setView(resume.view);
+      setResumeStepIndex(resume.stepIndex);
+      setRequestedTourId(resume.tourId);
+      setTourStatus({ kind: "loading", message: "Hilfe-Tour wird fortgesetzt …" });
+      setTourRequested(true);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [setView, workspace]);
 
   useEffect(() => {
     const startFeatureTour = (event: Event) => {
@@ -116,6 +179,8 @@ export function FeatureTourProvider({
         return;
       }
       if (startedTourRef.current === selectedTour.id) return;
+      clearFeatureTourResume();
+      setResumeStepIndex(0);
       setRequestedTourId(selectedTour.id);
       setTourStatus({ kind: "loading", message: "Hilfe-Tour wird vorbereitet …" });
       setTourRequested(true);
@@ -169,12 +234,35 @@ export function FeatureTourProvider({
     };
 
     async function startTour() {
-      if (activeTour.startWorkspace) {
-        setWorkspace(activeTour.startWorkspace);
+      const startingStepIndex = resumeStepIndex;
+      const tourSteps = activeTour.steps.slice(startingStepIndex);
+      if (!tourSteps.length) {
+        failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+        return;
       }
 
-      if (activeTour.openTaskDetail) {
-        const taskId = selectedTaskIdRef.current || tasksRef.current.find((task) => !task.trashedAt)?.id;
+      if (
+        startingStepIndex === 0
+        && activeTour.startWorkspace
+        && activeTour.startWorkspace !== workspace
+      ) {
+        const resumeStored = persistFeatureTourResume({
+          tourId: activeTour.id,
+          stepIndex: 0,
+        });
+        if (!resumeStored) {
+          failTour("Hilfe-Tour konnte nicht fortgesetzt werden. Bitte versuche es erneut.");
+          return;
+        }
+        setWorkspace(activeTour.startWorkspace);
+        return;
+      }
+
+      if (startingStepIndex === 0 && activeTour.openTaskDetail) {
+        const taskId = selectedTaskIdRef.current || tasksRef.current.find((task) => (
+          !task.trashedAt
+          && (!activeTour.openTaskShare || task.taskType === "deliverable" || task.taskType === "sub_issue")
+        ))?.id;
         if (!taskId) {
           failTour("Für diese Hilfe-Tour wird mindestens ein Issue benötigt.");
           return;
@@ -182,14 +270,18 @@ export function FeatureTourProvider({
         openTaskPanelRef.current(taskId);
       }
 
-      const trigger = await waitForElement(activeTour.requiredSelectors[0]);
+      const initialStep = tourSteps[0];
+      const initialSelector = startingStepIndex === 0
+        ? activeTour.requiredSelectors[0]
+        : typeof initialStep?.element === "string" ? initialStep.element : "";
+      const trigger = initialSelector ? await waitForElement(initialSelector) : null;
       if (!runIsActive()) return;
       if (!trigger) {
         failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
         return;
       }
 
-      if (activeTour.openTaskShare) {
+      if (startingStepIndex === 0 && activeTour.openTaskShare) {
         if (!(trigger instanceof HTMLElement)) {
           failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
           return;
@@ -203,7 +295,7 @@ export function FeatureTourProvider({
         }
       }
 
-      if (activeTour.openAccountMenu) {
+      if (startingStepIndex === 0 && activeTour.openAccountMenu) {
         window.dispatchEvent(new CustomEvent("fmd:open-account-menu"));
         const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
         if (!runIsActive()) return;
@@ -213,7 +305,7 @@ export function FeatureTourProvider({
         }
       }
 
-      if (activeTour.openHelpMenu) {
+      if (startingStepIndex === 0 && activeTour.openHelpMenu) {
         window.dispatchEvent(new CustomEvent("fmd:open-help-menu"));
         const menuItem = await waitForElement(activeTour.requiredSelectors[1]);
         if (!runIsActive()) return;
@@ -223,7 +315,7 @@ export function FeatureTourProvider({
         }
       }
 
-      if (activeTour.openProfileProcessSettings) {
+      if (startingStepIndex === 0 && activeTour.openProfileProcessSettings) {
         if (!(trigger instanceof HTMLElement)) {
           failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
           return;
@@ -239,6 +331,7 @@ export function FeatureTourProvider({
 
       const { driver } = await import("driver.js");
       if (!runIsActive()) return;
+      let stepTransitionPending = false;
       const driverObject = driver({
         allowClose: true,
         animate: true,
@@ -252,13 +345,16 @@ export function FeatureTourProvider({
         onDestroyed: () => {
           if (startedTourRef.current === activeTour.id) startedTourRef.current = "";
           setRequestedTourId(null);
+          setResumeStepIndex(0);
         },
-        steps: activeTour.steps.map((step, index) => ({
+        steps: tourSteps.map((step, index) => {
+          const stepIndex = startingStepIndex + index;
+          return ({
           ...step,
           popover: {
             ...step.popover,
             onPopoverRender: () => {
-              if (index === 0) markSeen().catch(() => undefined);
+              if (stepIndex === 0) markSeen().catch(() => undefined);
             },
             onDoneClick: (_element, _step, opts) => {
               opts.driver.destroy();
@@ -266,8 +362,50 @@ export function FeatureTourProvider({
                 setWorkspace(activeTour.doneWorkspace);
               }
             },
+            onNextClick: (_element, _step, opts) => {
+              const transition = activeTour.stepTransitions?.[stepIndex];
+              if (!transition) {
+                opts.driver.moveNext();
+                return;
+              }
+              if (stepTransitionPending) return;
+              stepTransitionPending = true;
+              void (async () => {
+                const nextStepIndex = stepIndex + 1;
+                const movesWorkspace = Boolean(transition.workspace && transition.workspace !== workspace);
+                if (movesWorkspace) {
+                  const resumeStored = persistFeatureTourResume({
+                    tourId: activeTour.id,
+                    stepIndex: nextStepIndex,
+                    ...(transition.view ? { view: transition.view } : {}),
+                  });
+                  if (!resumeStored) {
+                    opts.driver.destroy();
+                    failTour("Hilfe-Tour konnte nicht fortgesetzt werden. Bitte versuche es erneut.");
+                    return;
+                  }
+                  opts.driver.destroy();
+                  setWorkspace(transition.workspace!);
+                  return;
+                }
+                if (transition.view) setView(transition.view);
+                const nextStep = activeTour.steps[nextStepIndex];
+                const nextSelector = typeof nextStep?.element === "string" ? nextStep.element : "";
+                const target = nextSelector ? await waitForElement(nextSelector) : null;
+                if (!runIsActive()) return;
+                if (!target) {
+                  opts.driver.destroy();
+                  failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+                  return;
+                }
+                opts.driver.moveNext();
+              })().finally(() => {
+                stepTransitionPending = false;
+              });
+            },
           },
-        })),
+          });
+        }),
       });
 
       run.driverStarted = true;
@@ -286,7 +424,7 @@ export function FeatureTourProvider({
         startedTourRef.current = "";
       }
     };
-  }, [apiClient, currentProfile, setData, setWorkspace, source, tour, tourRequested]);
+  }, [apiClient, currentProfile, resumeStepIndex, setData, setView, setWorkspace, source, tour, tourRequested, workspace]);
 
   if (!tourStatus) return null;
 

@@ -15,6 +15,9 @@ const permissions = await loadTranspiledModule(
   "src/features/tasks/model/task-detail-permissions.ts",
   {
     "@/lib/platform": { isOperationalLeadRole },
+    "@/features/tasks/model/planning-item-capabilities": {
+      strategicPlanningStatuses: ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"],
+    },
     "@/features/reviews/model/task-review-state": reviewState,
     "@/lib/status": status,
   },
@@ -56,6 +59,7 @@ const updatedAt = "2026-07-22T09:30:00.000Z";
 function taskRow(overrides = {}) {
   return {
     id: "task-1",
+    project_id: "findmydoc-founder-execution",
     title: "Status API task",
     task_type: "deliverable",
     status: "In Arbeit",
@@ -64,7 +68,7 @@ function taskRow(overrides = {}) {
     owner: "owner",
     assignee: "owner",
     package_id: "initiative-1",
-    parent_task_id: null,
+    parent_task_id: "initiative-1",
     review_status: "not_requested",
     review_owner_profile_id: "reviewer",
     review_requested_at: null,
@@ -87,18 +91,29 @@ function supabaseFor(target, overrides = {}) {
   ];
   const initiatives = overrides.initiatives || [{
     id: "initiative-1",
+    project_id: "findmydoc-founder-execution",
     milestone_id: "milestone-1",
     approval_status: "approved",
     owner_id: "owner",
     accountable_profile_id: "reviewer",
   }];
-  const parents = overrides.parents || [];
+  const parents = overrides.parents || [{
+    id: "initiative-1",
+    project_id: "findmydoc-founder-execution",
+    task_type: "initiative",
+    parent_task_id: "epic-1",
+    approval_status: "approved",
+    owner: "owner",
+    review_status: "not_requested",
+    score_final: false,
+  }];
   const rows = {
     profiles,
     milestones: [{ id: "milestone-1" }],
     active_packages: initiatives,
     active_tasks: parents,
     sprints: overrides.sprints || [],
+    planning_item_raci_assignments: overrides.raciAssignments || [],
   };
 
   return {
@@ -150,7 +165,7 @@ test("Planning Items Review preview exposes the complete server-owned transition
   assert.equal(result.preview.resultingItem.reviewOwnerProfileId, "reviewer");
   assert.equal(Number.isNaN(Date.parse(result.preview.resultingItem.reviewRequestedAt)), false);
   assert.equal(result.preview.dbPatch.status, "Review");
-  assert.equal(result.preview.dbPatch.review_status, "requested");
+  assert.equal(result.preview.dbPatch.review_status, undefined);
   assert.equal(result.preview.dbPatch.github_issue_sync_status, undefined);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "notification"), true);
   assert.equal(result.preview.systemEffects.some((effect) => effect.field === "activity"), true);
@@ -322,7 +337,7 @@ test("Sub-Issue status preview rejects review states and rewrites legacy review 
 test("Review preview rejects missing owners and locked Sprints", async () => {
   const noOwner = await preview(
     { id: "ceo", name: "CEO", platformRole: "ceo" },
-    taskRow({ review_owner_profile_id: null, package_id: null }),
+    taskRow({ review_owner_profile_id: null, package_id: null, parent_task_id: null }),
     "Review",
     { initiatives: [] },
   );

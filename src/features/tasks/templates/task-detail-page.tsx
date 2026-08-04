@@ -126,10 +126,13 @@ export function TaskDetailPage({
           onImportGitHubComments={() => controller.importGitHubComments(task)}
           onReportBlocker={(payload) => controller.reportTaskBlocker(task, payload)}
           onCreateSubIssue={() => controller.setTaskDialogDefaults({
-            taskType: "sub_issue",
+            taskType: task.taskType === "epic"
+              ? "initiative"
+              : task.taskType === "initiative"
+                ? "deliverable"
+                : "sub_issue",
             parentTaskId: task.id,
-            milestoneId: task.milestoneId,
-            packageId: task.packageId,
+            packageId: task.taskType === "initiative" ? task.id : task.packageId,
             assignee: controller.currentProfile?.id || "",
             status: "Offen",
           })}

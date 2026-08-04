@@ -85,7 +85,8 @@ test("conditional tabs, visible lock reasons, and modal scrolling preserve hiera
   assert.match(surface, /overflow-y-auto overscroll-contain/);
   assert.match(tabs, /renderedTabs/);
   assert.match(tabs, /resolveTaskDetailTab/);
-  assert.match(tabModel, /if \(allowsSubIssues && \(subIssueCount > 0 \|\| canCreateSubIssue\)\)/);
+  assert.match(tabModel, /taskDetailTabOrder = \["overview", "relationships", "activity"\]/);
+  assert.doesNotMatch(tabModel, /subIssues/);
   assert.match(status, /aria-describedby=\{reasonId\}/);
   assert.match(status, /\{reason\}/);
 });

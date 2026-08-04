@@ -45,6 +45,25 @@ export function moveBacklogTaskRequest(apiClient: BrowserApiClient, move: Backlo
   });
 }
 
+export type BulkSprintAssignmentRequest = {
+  assignments: Array<{ taskId: string; expectedUpdatedAt: string }>;
+  sprintId: string;
+};
+
+export type BulkSprintAssignmentUpdate = {
+  id: string;
+  scoreRelevant: boolean;
+  sprintId: string;
+  updatedAt: string;
+};
+
+export function assignBacklogTasksToSprintRequest(apiClient: BrowserApiClient, payload: BulkSprintAssignmentRequest) {
+  return apiClient.requestJson<{ error?: string; updates?: BulkSprintAssignmentUpdate[] }>("/api/tasks/bulk-sprint-assignment", {
+    method: "PATCH",
+    json: payload,
+  });
+}
+
 export function withdrawTaskRequest(apiClient: BrowserApiClient, taskId: string, expectedRevision: number, reason: string) {
   return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${taskId}/withdraw`, {
     method: "POST",

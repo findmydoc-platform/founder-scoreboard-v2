@@ -8,6 +8,9 @@ const { taskDetailPermissions, taskStatusOptionsForPermissions } = await loadTra
     "@/lib/platform": {
       isOperationalLeadRole: (role) => role === "ceo" || role === "deputy",
     },
+    "@/features/tasks/model/planning-item-capabilities": {
+      strategicPlanningStatuses: ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"],
+    },
     "@/lib/status": {
       normalizeStatus: (status) => status,
       normalizeSubIssueStatus: (status) => status === "Review" || status === "Nacharbeit" ? "In Arbeit" : status,

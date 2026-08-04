@@ -54,7 +54,7 @@ test("workspace routes include every navigable workspace while persisted default
   for (const workspace of workspacePreferences.persistedWorkspaceIds) {
     assert.equal(
       workspacePreferences.rootWorkspaceFromPreference(workspace),
-      workspace,
+      workspace === "projects" ? "backlog" : workspace,
     );
   }
 
