@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import pg from "pg";
 
 const projectId = "findmydoc-founder-execution";
@@ -173,12 +174,19 @@ async function verifyEpicCrud(config) {
   }
 }
 
-try {
-  const config = localEpicDatabaseConfig();
-  assertLocalDatabaseTarget(config);
-  await verifyEpicCrud(config);
-  console.log("Epic CRUD verification passed; local test data was rolled back.");
-} catch (error) {
-  console.error(`Epic CRUD verification failed: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
+const isDirectExecution = Boolean(
+  process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href,
+);
+
+if (isDirectExecution) {
+  try {
+    const config = localEpicDatabaseConfig();
+    assertLocalDatabaseTarget(config);
+    await verifyEpicCrud(config);
+    console.log("Epic CRUD verification passed; local test data was rolled back.");
+  } catch (error) {
+    console.error(`Epic CRUD verification failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
 }
