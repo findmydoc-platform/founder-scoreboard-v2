@@ -10,9 +10,11 @@ import {
 } from "@/features/planning-items/model/planning-item-delete";
 import {
   buildPlanningItemUpdatePreview,
+  mapLegacyPlanningItemDatabaseRow,
   mapPlanningItemDatabaseRow,
   parsePlanningItemPatchPayload,
   planningItemUpdateHash,
+  type PlanningItemReplayType,
 } from "@/features/planning-items/model/planning-item-update";
 import {
   handlePlanningItemsRequest,
@@ -33,7 +35,7 @@ import {
 
 type UpdateTransactionResult = {
   replayed?: boolean;
-  itemType?: "epic" | "initiative" | "deliverable" | "sub_issue";
+  itemType?: PlanningItemReplayType;
   item?: Record<string, unknown>;
   changedFields?: string[];
   systemEffects?: unknown[];
@@ -43,16 +45,17 @@ type UpdateTransactionResult = {
 type StoredUpdateRequest = {
   request_hash: string;
   response: UpdateTransactionResult | null;
+  contract_version: number | null;
 };
 
 type DeleteTransactionResult = {
   replayed?: boolean;
-  itemType?: "epic";
+  itemType?: "epic" | "milestone";
   item?: Record<string, unknown>;
   children?: { initiatives?: number; tasks?: number };
 };
 
-function itemLink(request: NextRequest, _itemType: "epic" | "initiative" | "deliverable" | "sub_issue", itemId: string) {
+function itemLink(request: NextRequest, _itemType: PlanningItemReplayType, itemId: string) {
   return `${request.nextUrl.origin}/tasks/${encodeURIComponent(itemId)}`;
 }
 
@@ -60,14 +63,17 @@ function updateResponse(
   request: NextRequest,
   fallbackItemId: string,
   transaction: UpdateTransactionResult,
-  fallbackItemType: "epic" | "initiative" | "deliverable" | "sub_issue",
+  fallbackItemType: PlanningItemReplayType,
   fallbackChangedFields: string[] = [],
   fallbackSystemEffects: unknown[] = [],
+  contractVersion = 2,
 ) {
   const itemType = transaction.itemType || fallbackItemType;
   const rawItem = transaction.item;
   if (!rawItem || !itemType) throw new Error("Planning-Items-Update lieferte kein Element zurück.");
-  const item = mapPlanningItemDatabaseRow(itemType, rawItem);
+  const item = contractVersion === 1 || itemType === "milestone"
+    ? mapLegacyPlanningItemDatabaseRow(itemType, rawItem)
+    : mapPlanningItemDatabaseRow(itemType, rawItem);
   return planningItemsJson({
     ok: true,
     replayed: Boolean(transaction.replayed),
@@ -112,14 +118,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const loadStoredRequest = () => permission.supabase
       .from("team_planning_item_update_requests")
-      .select("request_hash,response")
+      .select("request_hash,response,contract_version")
       .eq("token_id", permission.tokenId)
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
     const storedResponse = (stored: StoredUpdateRequest) => {
       const itemType = stored.response?.itemType;
       if (!itemType) throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
-      if (itemType === "epic" && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
+      if ((itemType === "epic" || itemType === "milestone") && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
         return planningItemsError("Nur CEO oder Deputy können Epics bearbeiten.", 403);
       }
       const requestHash = planningItemUpdateHash({
@@ -131,7 +137,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (requestHash !== stored.request_hash) {
         return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       }
-      return updateResponse(request, itemId, { ...stored.response, replayed: true }, itemType);
+      return updateResponse(
+        request,
+        itemId,
+        { ...stored.response, replayed: true },
+        itemType,
+        [],
+        [],
+        Number(stored.contract_version || 1),
+      );
     };
     const existingRequest = await loadStoredRequest();
     if (existingRequest.error) {
@@ -309,17 +323,20 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
       const transaction = data as DeleteTransactionResult | null;
       if (!transaction?.item) throw new Error("Planning-Items-Löschung lieferte kein Ergebnis zurück.");
-      const item = mapPlanningItemDatabaseRow("epic", transaction.item);
+      const itemType = transaction.itemType === "milestone" ? "milestone" : "epic";
+      const item = itemType === "milestone"
+        ? mapLegacyPlanningItemDatabaseRow(itemType, transaction.item)
+        : mapPlanningItemDatabaseRow(itemType, transaction.item);
       return planningItemsJson({
         ok: true,
         replayed: Boolean(transaction.replayed),
-        itemType: "epic",
+        itemType,
         item,
         children: {
           initiatives: Number(transaction.children?.initiatives || 0),
           tasks: Number(transaction.children?.tasks || 0),
         },
-        itemLink: itemLink(request, "epic", String(item.id || itemId)),
+        itemLink: itemLink(request, itemType, String(item.id || itemId)),
       });
     },
   );

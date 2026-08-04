@@ -53,7 +53,7 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 
 ## Context and canonical references
 
-The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). `parentTaskId` is the only canonical hierarchy reference.
+The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). `parentTaskId` is the only canonical hierarchy reference. The transitional `initiatives` convenience list additionally retains the former flat `goal`, `successCriteria`, and `scopeConstraints` fields. New clients should read the nested `strategy` object from `items` instead.
 
 The retained response field `milestones` and the input type `milestone` are deprecated compatibility aliases. They resolve to an Epic before any validation or write. `milestoneId` and `packageId` are also accepted only during transition and resolve to `parentTaskId`; new clients must use `parentTaskId`.
 

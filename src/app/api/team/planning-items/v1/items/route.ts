@@ -8,6 +8,7 @@ import {
   parsePlanningItemCreatePayload,
   planningItemCreateCommitItem,
   planningItemCreateHash,
+  planningItemLegacyCreateHash,
   planningItemCreateRequiresOperationalLead,
 } from "@/features/planning-items/model/planning-items-create";
 import {
@@ -22,7 +23,7 @@ import type {
 } from "@/features/planning-items/model/planning-items-contract";
 
 type CreateResponseItem = {
-  itemType: TeamPlanningItemType;
+  itemType: TeamPlanningItemType | "milestone";
   item: Record<string, unknown>;
   githubSync?: PlanningItemGitHubSyncResult;
 };
@@ -31,6 +32,13 @@ type CreateTransactionResult = {
   batchId: string;
   replayed?: boolean;
   items: CreateResponseItem[];
+};
+
+type StoredCreateRequest = {
+  id: string;
+  request_hash: string;
+  response_tasks: CreateResponseItem[];
+  contract_version: number | null;
 };
 
 function createSyncTargets(
@@ -86,19 +94,59 @@ export async function POST(request: NextRequest) {
       && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
       return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
     }
+    const existingRequest = await permission.supabase
+      .from("team_task_intake_batches")
+      .select("id,request_hash,response_tasks,contract_version")
+      .eq("token_id", permission.tokenId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existingRequest.error) {
+      throw Object.assign(new Error(existingRequest.error.message), { code: existingRequest.error.code });
+    }
+    const stored = existingRequest.data as StoredCreateRequest | null;
+    if (stored && Number(stored.contract_version || 1) === 1) {
+      const legacyHash = planningItemLegacyCreateHash({
+        items: parsed.items,
+        responses: stored.response_tasks,
+        actorProfileId: permission.profile.id,
+        githubSyncMode: parsed.githubSyncMode,
+      });
+      if (!legacyHash || legacyHash !== stored.request_hash) {
+        return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+      }
+      return planningItemsJson({
+        ok: true,
+        batchId: stored.id,
+        replayed: true,
+        items: stored.response_tasks,
+      });
+    }
+
     const items = await buildPlanningItemCreatePreview(parsed.items, permission.profile, permission.supabase);
     if (items.some((item) => item.errors.length)) return planningItemsJson({ ok: false, error: "Planning-Items-Erstellung enthält ungültige Einträge.", items }, 400);
     const githubSyncCommands = planningItemCreateGitHubSyncCommands(parsed.items);
+    const requestHash = planningItemCreateHash(
+      items,
+      parsed.githubSyncMode,
+      githubSyncCommands,
+    );
+    if (stored) {
+      if (requestHash !== stored.request_hash) {
+        return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+      }
+      return planningItemsJson({
+        ok: true,
+        batchId: stored.id,
+        replayed: true,
+        items: stored.response_tasks,
+      });
+    }
     const metadata = auditRequestMetadata(request);
     const { data, error } = await permission.supabase.rpc("create_team_planning_items_transaction", {
       p_token_id: permission.tokenId,
       p_profile_id: permission.profile.id,
       p_idempotency_key: idempotencyKey,
-      p_request_hash: planningItemCreateHash(
-        items,
-        parsed.githubSyncMode,
-        githubSyncCommands,
-      ),
+      p_request_hash: requestHash,
       p_items: items.map(planningItemCreateCommitItem),
       p_request_ip: metadata.request_ip,
       p_user_agent: metadata.user_agent || null,

@@ -407,6 +407,142 @@ export function planningItemCreateHash(
   return createHash("sha256").update(JSON.stringify(hashInput), "utf8").digest("hex");
 }
 
+type LegacyCreateResponseItem = {
+  itemType?: string;
+  item?: Record<string, unknown>;
+};
+
+function legacyResponseText(
+  response: LegacyCreateResponseItem | undefined,
+  camelKey: string,
+  snakeKey: string,
+) {
+  const item = response?.item;
+  return intakeText(item?.[camelKey] ?? item?.[snakeKey], 120);
+}
+
+function planningItemLegacyCreateCommitItem({
+  raw,
+  index,
+  actorProfileId,
+  response,
+}: {
+  raw: PlanningItemCreateInput;
+  index: number;
+  actorProfileId: string;
+  response?: LegacyCreateResponseItem;
+}) {
+  const itemType = intakeText(raw.itemType, 40);
+  if (!["milestone", "initiative", "deliverable", "sub_issue"].includes(itemType)) return null;
+
+  const title = intakeText(raw.title, 240);
+  if (itemType === "milestone") {
+    return {
+      clientId: `planning-items-create-${index + 1}`,
+      itemType,
+      title,
+      description: intakeText(raw.description, 4_000),
+      targetDate: intakeDate(raw.targetDate),
+      status: intakeText(raw.status, 40) || "planned",
+      approvalStatus: null,
+    };
+  }
+
+  const ownerId = intakeText(raw.ownerId, 120) || (itemType === "sub_issue" ? actorProfileId : "");
+  const requestedGitHubRepo = intakeText(raw.githubRepo, 120);
+  const repository = itemType === "initiative"
+    ? defaultGitHubRepository
+    : resolveTaskGitHubRepository(itemType === "sub_issue" ? "sub_issue" : "deliverable", requestedGitHubRepo);
+  const githubRepo = typeof repository === "string"
+    ? repository
+    : repository.ok ? repository.repository : defaultGitHubRepository;
+  const storedPackageId = legacyResponseText(response, "packageId", "package_id");
+  const storedMilestoneId = legacyResponseText(response, "milestoneId", "milestone_id");
+
+  if (itemType === "sub_issue") {
+    return {
+      clientId: `planning-items-create-${index + 1}`,
+      itemType,
+      title,
+      description: intakeText(raw.description, 4_000),
+      problemStatement: intakeText(raw.problemStatement, 4_000),
+      intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
+      scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
+      acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
+        ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
+        : intakeText(raw.acceptanceCriteria, 6_000),
+      evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
+      definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
+      parentTaskId: intakeText(raw.parentTaskId, 120),
+      packageId: storedPackageId,
+      milestoneId: storedMilestoneId,
+      ownerId,
+      githubRepo,
+      approvalStatus: null,
+      scoreRelevant: false,
+    };
+  }
+
+  return {
+    clientId: `planning-items-create-${index + 1}`,
+    itemType,
+    title,
+    description: intakeText(raw.description, 4_000),
+    problemStatement: intakeText(raw.problemStatement, 4_000),
+    intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
+    scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
+    acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
+      ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
+      : intakeText(raw.acceptanceCriteria, 6_000),
+    evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
+    definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
+    parentTaskId: "",
+    packageId: itemType === "initiative" ? "" : intakeText(raw.packageId, 120) || storedPackageId,
+    milestoneId: intakeText(raw.milestoneId, 120) || storedMilestoneId,
+    ownerId,
+    accountableProfileId: intakeText(raw.accountableProfileId, 120) || ownerId,
+    responsibleProfileIds: normalizedTextList(raw.responsibleProfileIds),
+    consultedProfileIds: normalizedTextList(raw.consultedProfileIds),
+    informedProfileIds: normalizedTextList(raw.informedProfileIds),
+    priority: intakePriority(raw.priority),
+    workstream: intakeText(raw.workstream, 120),
+    startDate: intakeDate(raw.startDate),
+    endDate: intakeDate(raw.endDate),
+    deadline: intakeDate(raw.deadline),
+    hours: intakeHours(raw.hours),
+    githubRepo,
+    approvalStatus: "proposed",
+    scoreRelevant: false,
+  };
+}
+
+export function planningItemLegacyCreateHash({
+  items,
+  responses,
+  actorProfileId,
+  githubSyncMode,
+}: {
+  items: PlanningItemCreateInput[];
+  responses: LegacyCreateResponseItem[];
+  actorProfileId: string;
+  githubSyncMode: TeamPlanningItemGitHubSyncMode | null;
+}) {
+  const committedItems = items.map((raw, index) => planningItemLegacyCreateCommitItem({
+    raw,
+    index,
+    actorProfileId,
+    response: responses[index],
+  }));
+  if (committedItems.some((item) => !item)) return null;
+  const githubSyncCommands = items.map((item) => (
+    Object.hasOwn(item, "githubSync") ? item.githubSync as PlanningItemGitHubSyncCommand : null
+  ));
+  const hashInput = githubSyncMode || githubSyncCommands.some(Boolean)
+    ? { items: committedItems, githubSyncMode, githubSyncCommands }
+    : committedItems;
+  return createHash("sha256").update(JSON.stringify(hashInput), "utf8").digest("hex");
+}
+
 export function planningItemCreateGitHubSyncCommands(items: PlanningItemCreateInput[]) {
   return items.map((item) => {
     const itemType = normalizeTeamPlanningItemType(intakeText(item.itemType, 40));

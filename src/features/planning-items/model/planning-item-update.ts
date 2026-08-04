@@ -40,6 +40,7 @@ import {
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 type UnknownRecord = Record<string, unknown>;
 type DatabaseRow = Record<string, unknown>;
+export type PlanningItemReplayType = TeamPlanningItemType | "milestone";
 
 type StrategyRow = {
   task_id: string;
@@ -241,10 +242,93 @@ function publicTask(row: DatabaseRow): UnknownRecord {
   };
 }
 
+function publicLegacyMilestone(row: DatabaseRow): UnknownRecord {
+  return {
+    id: String(row.id || ""),
+    itemType: "milestone",
+    title: String(row.title || ""),
+    description: String(row.description || ""),
+    targetDate: String(row.target_date || ""),
+    status: String(row.status || "planned"),
+    sortOrder: Number(row.sort_order || 0),
+    updatedAt: String(row.updated_at || ""),
+    approvalStatus: null,
+  };
+}
+
+function publicLegacyInitiative(row: DatabaseRow): UnknownRecord {
+  return {
+    id: String(row.id || ""),
+    itemType: "initiative",
+    title: String(row.title || ""),
+    intendedOutcome: String(row.goal || ""),
+    scopeConstraints: String(row.scope_constraints || ""),
+    acceptanceCriteria: String(row.success_criteria || ""),
+    milestoneId: String(row.milestone_id || ""),
+    ownerId: String(row.owner_id || ""),
+    accountableProfileId: String(row.accountable_profile_id || ""),
+    responsibleProfileIds: Array.isArray(row.responsible_profile_ids) ? row.responsible_profile_ids : [],
+    consultedProfileIds: Array.isArray(row.consulted_profile_ids) ? row.consulted_profile_ids : [],
+    informedProfileIds: Array.isArray(row.informed_profile_ids) ? row.informed_profile_ids : [],
+    priority: String(row.priority || "P2"),
+    approvalStatus: row.approval_status || "proposed",
+    approvalRevision: Number(row.approval_revision || 1),
+    updatedAt: String(row.updated_at || ""),
+  };
+}
+
+function publicLegacyTask(row: DatabaseRow): UnknownRecord {
+  const isSubIssue = row.task_type === "sub_issue";
+  const description = isSubIssue && !String(row.description || "").trim()
+    ? String(row.problem_statement || "")
+    : String(row.description || "");
+  return {
+    id: String(row.id || ""),
+    itemType: isSubIssue ? "sub_issue" : "deliverable",
+    title: String(row.title || ""),
+    description,
+    problemStatement: String(row.problem_statement || ""),
+    intendedOutcome: String(row.intended_outcome || ""),
+    scopeConstraints: String(row.scope_constraints || ""),
+    acceptanceCriteria: String(row.acceptance_criteria || ""),
+    evidenceRequired: String(row.evidence_required || ""),
+    definitionOfDone: String(row.definition_of_done || ""),
+    parentTaskId: String(row.parent_task_id || ""),
+    packageId: String(row.package_id || ""),
+    milestoneId: String(row.milestone_id || ""),
+    ownerId: String(row.owner || row.assignee || ""),
+    priority: String(row.priority || "P2"),
+    workstream: String(row.workstream || ""),
+    startDate: String(row.start_date || ""),
+    endDate: String(row.end_date || ""),
+    deadline: String(row.deadline || ""),
+    hours: Number(row.estimate_hours || 0),
+    status: isSubIssue ? normalizeSubIssueStatus(String(row.status || "Offen")) : String(row.status || "Offen"),
+    githubRepo: String(row.github_repo || ""),
+    approvalStatus: row.approval_status || null,
+    approvalRevision: Number(row.approval_revision || 1),
+    sprintId: String(row.sprint_id || ""),
+    reviewStatus: isSubIssue ? "not_requested" : String(row.review_status || "not_requested"),
+    reviewOwnerProfileId: isSubIssue ? "" : String(row.review_owner_profile_id || ""),
+    reviewRequestedAt: isSubIssue ? "" : String(row.review_requested_at || ""),
+    scorePoints: isSubIssue ? 0 : Number(row.score_points || 0),
+    scoreFinal: !isSubIssue && Boolean(row.score_final),
+    scoreRelevant: !isSubIssue && Boolean(row.score_relevant),
+    githubIssueSyncStatus: String(row.github_issue_sync_status || "not_synced"),
+    updatedAt: String(row.updated_at || ""),
+  };
+}
+
 export function mapPlanningItemDatabaseRow(itemType: TeamPlanningItemType, row: DatabaseRow, strategy?: StrategyRow, raciAssignments: RaciRow[] = []) {
   if (itemType === "epic") return publicEpic(row);
   if (itemType === "initiative") return publicInitiative(row, strategy, raciAssignments);
   return publicTask(row);
+}
+
+export function mapLegacyPlanningItemDatabaseRow(itemType: PlanningItemReplayType, row: DatabaseRow) {
+  if (itemType === "milestone") return publicLegacyMilestone(row);
+  if (itemType === "initiative") return publicLegacyInitiative(row);
+  return publicLegacyTask(row);
 }
 
 function stableJson(value: unknown): string {
@@ -258,7 +342,7 @@ function stableJson(value: unknown): string {
 
 export function planningItemUpdateHash({ itemId, itemType, expectedUpdatedAt, patch }: {
   itemId: string;
-  itemType: TeamPlanningItemType;
+  itemType: PlanningItemReplayType;
   expectedUpdatedAt: string;
   patch: UnknownRecord;
 }) {
