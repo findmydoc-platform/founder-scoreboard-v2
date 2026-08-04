@@ -1,5 +1,6 @@
 import { isOperationalLeadRole } from "@/lib/platform";
 import { isTaskReviewFinal, isTaskReviewLocked } from "@/features/reviews/model/task-review-state";
+import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, normalizeSubIssueStatus, SUB_ISSUE_STATUSES, taskStatuses } from "@/lib/status";
 import type { AuthenticatedProfile, Profile, Task, TaskStatus } from "@/lib/types";
 
@@ -59,21 +60,22 @@ export function taskDetailPermissions({
   unrestricted?: boolean;
 }): TaskDetailPermissions {
   const isSubIssue = task.taskType === "sub_issue";
-  const reviewLocked = !isSubIssue && isTaskReviewLocked(task);
-  const reviewFinal = !isSubIssue && isTaskReviewFinal(task);
+  const isDeliverable = task.taskType === "deliverable";
+  const reviewLocked = isDeliverable && isTaskReviewLocked(task);
+  const reviewFinal = isDeliverable && isTaskReviewFinal(task);
   if (unrestricted) {
     return {
       canComment: true,
-      canCreateSubIssue: !reviewLocked && !isSubIssue,
+      canCreateSubIssue: !reviewLocked && isDeliverable,
       canEditBrief: !reviewLocked,
-      canEditChecklist: !reviewLocked && !isSubIssue,
-      canEditEvidence: !reviewLocked && !isSubIssue,
+      canEditChecklist: !reviewLocked && isDeliverable,
+      canEditEvidence: !reviewLocked && isDeliverable,
       canEditNotes: !reviewLocked && !isSubIssue,
       canCompleteSubIssue: !reviewLocked && isSubIssue,
       canManageFinalStatus: !reviewLocked && !isSubIssue,
-      canManageReviewOwner: !reviewFinal && !isSubIssue,
+      canManageReviewOwner: !reviewFinal && isDeliverable,
       canManageTaskMeta: !reviewLocked,
-      canOpenReview: !isSubIssue,
+      canOpenReview: isDeliverable,
       canReopenSubIssue: !reviewLocked && isSubIssue,
       canReportBlocker: !reviewLocked,
       canReparentSubIssue: !reviewLocked && isSubIssue,
@@ -92,16 +94,16 @@ export function taskDetailPermissions({
 
   return {
     canComment: Boolean(role && role !== "viewer"),
-    canCreateSubIssue: !reviewLocked && !isSubIssue && Boolean(role && role !== "viewer"),
+    canCreateSubIssue: !reviewLocked && isDeliverable && Boolean(role && role !== "viewer"),
     canEditBrief: !reviewLocked && canWorkOnTask,
-    canEditChecklist: !reviewLocked && !isSubIssue && canWorkOnTask,
-    canEditEvidence: !reviewLocked && !isSubIssue && canWorkOnTask,
+    canEditChecklist: !reviewLocked && isDeliverable && canWorkOnTask,
+    canEditEvidence: !reviewLocked && isDeliverable && canWorkOnTask,
     canEditNotes: !reviewLocked && !isSubIssue && canWorkOnTask,
     canCompleteSubIssue: !reviewLocked && canManageSubIssueFinalStatus,
     canManageFinalStatus: !reviewLocked && !isSubIssue && isCeo,
-    canManageReviewOwner: !isSubIssue && isCeo && !reviewFinal,
+    canManageReviewOwner: isDeliverable && isCeo && !reviewFinal,
     canManageTaskMeta: !reviewLocked && isOperationalLead,
-    canOpenReview: !isSubIssue && (isOperationalLead || Boolean(role && role !== "viewer" && profile?.id && task.reviewOwnerProfileId === profile.id)),
+    canOpenReview: isDeliverable && (isOperationalLead || Boolean(role && role !== "viewer" && profile?.id && task.reviewOwnerProfileId === profile.id)),
     canReopenSubIssue: !reviewLocked && canManageSubIssueFinalStatus,
     canReportBlocker: !reviewLocked && canWorkOnTask,
     canReparentSubIssue: !reviewLocked && task.taskType === "sub_issue" && canWorkOnTask,
@@ -119,9 +121,10 @@ export function taskStatusOptionsForPermissions(
   taskType: Task["taskType"] = "deliverable",
 ): TaskStatus[] {
   const isSubIssue = taskType === "sub_issue";
+  const isStrategic = taskType === "epic" || taskType === "initiative";
   const normalized = isSubIssue ? normalizeSubIssueStatus(status) : normalizeStatus(status);
-  const availableStatuses: TaskStatus[] = isSubIssue ? [...SUB_ISSUE_STATUSES] : taskStatuses;
-  if (permissions.canManageFinalStatus) return taskStatuses;
+  const availableStatuses: TaskStatus[] = isSubIssue ? [...SUB_ISSUE_STATUSES] : isStrategic ? strategicPlanningStatuses : taskStatuses;
+  if (permissions.canManageFinalStatus) return availableStatuses;
   if (normalized === "Erledigt") {
     return permissions.canReopenSubIssue ? ["Erledigt", "Offen"] : ["Erledigt"];
   }
@@ -129,9 +132,9 @@ export function taskStatusOptionsForPermissions(
   const workingOptions = permissions.canUpdateWorkingStatus
     ? isSubIssue
       ? availableStatuses.filter((item) => item !== "Erledigt")
-      : normalized === "Nacharbeit"
+      : !isStrategic && normalized === "Nacharbeit"
       ? (["In Arbeit", "Review", "Blockiert"] as TaskStatus[])
-      : taskStatuses.filter((item) => item !== "Erledigt")
+      : availableStatuses.filter((item) => item !== "Erledigt")
     : [normalized];
 
   return permissions.canCompleteSubIssue && !workingOptions.includes("Erledigt")

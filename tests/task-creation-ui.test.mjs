@@ -20,7 +20,7 @@ test("Sub-Issue creation exposes only the compact work-step fields", async () =>
   const subIssueForm = dialog.slice(dialog.indexOf("function SubIssueForm"), dialog.indexOf("export function NewTaskDialog"));
 
   assert.match(subIssueForm, /Übergeordnetes Deliverable/);
-  assert.match(subIssueForm, /Initiative, Epic \/ Meilenstein, Freigabe und RACI werden vom Parent-Deliverable übernommen/);
+  assert.match(subIssueForm, /Initiative, Epic und Freigabe werden vom Parent-Deliverable übernommen/);
   assert.match(subIssueForm, /Zuständig/);
   assert.match(subIssueForm, /Kontext/);
   assert.match(subIssueForm, /GitHub-Repository/);

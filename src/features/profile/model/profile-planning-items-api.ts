@@ -6,6 +6,8 @@ type TokenListResponse = {
   error?: string;
   tokens?: TeamPlanningItemTokenRecord[];
   capabilities?: {
+    canIssueEmptyEpicDeletes?: boolean;
+    /** @deprecated API transition alias. */
     canIssueEmptyMilestoneDeletes?: boolean;
   };
 };
@@ -27,12 +29,12 @@ export function createPlanningItemsToken(
   apiClient: BrowserApiClient,
   label: string,
   allowUpdates: boolean,
-  allowEmptyMilestoneDeletes: boolean,
+  allowEmptyEpicDeletes: boolean,
   allowGitHubSync: boolean,
 ) {
   return apiClient.requestJson<TokenCreateResponse>(tokensEndpoint, {
     method: "POST",
-    json: { label, allowUpdates, allowEmptyMilestoneDeletes, allowGitHubSync },
+    json: { label, allowUpdates, allowEmptyEpicDeletes, allowGitHubSync },
   });
 }
 

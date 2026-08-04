@@ -21,7 +21,7 @@ function capabilityLabels(token: TeamPlanningItemTokenRecord) {
     token.scopes.includes("read:planning-context") ? "Lesen" : "",
     token.scopes.includes("write:planning-items:create") ? "Erstellen" : "",
     token.scopes.includes("write:planning-items:update") ? "Aktualisieren" : "",
-    token.scopes.includes("write:planning-items:delete-empty") ? "Leere Meilensteine löschen" : "",
+    token.scopes.includes("write:planning-items:delete-empty") ? "Leere Epics löschen" : "",
     token.scopes.includes("write:planning-items:github-sync") ? "GitHub synchronisieren" : "",
   ].filter(Boolean);
 }

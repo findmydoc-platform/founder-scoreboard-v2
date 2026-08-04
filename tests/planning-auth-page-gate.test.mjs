@@ -6,13 +6,18 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const protectedPages = [
   "src/app/(workspaces)/workspace-page.tsx",
   "src/app/tasks/[id]/page.tsx",
-  "src/app/initiatives/[id]/page.tsx",
 ];
 
 test("legacy review detail links redirect into the protected task detail page", async () => {
   const source = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
   assert.match(source, /permanentRedirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
   assert.doesNotMatch(source, /requiresSupabaseAuth|ReviewDetailPage/);
+});
+
+test("legacy initiative links redirect into the protected task detail page", async () => {
+  const source = await readFile("src/app/initiatives/[id]/page.tsx", "utf8");
+  assert.match(source, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
+  assert.doesNotMatch(source, /requiresSupabaseAuth/);
 });
 
 test("strict auth pages gate only on REQUIRE_SUPABASE_AUTH", async () => {

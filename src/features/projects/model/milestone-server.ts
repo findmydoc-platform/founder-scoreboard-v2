@@ -2,9 +2,11 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mapMilestone } from "@/lib/planning-profile-mappers";
-import type { DbMilestone } from "@/lib/planning-data-row-types";
+import { mapLegacyMilestoneFromEpic, mapMilestone } from "@/lib/planning-profile-mappers";
+import type { DbMilestone, DbTask } from "@/lib/planning-data-row-types";
+import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
+import { resolveCanonicalStrategicItemId } from "@/features/projects/model/planning-legacy-adapters";
 import {
   MILESTONE_NOT_EMPTY_CODE,
   MILESTONE_STATUSES,
@@ -19,7 +21,9 @@ import {
 import { milestoneNotEmptyMessage, normalizeMilestoneChildCounts } from "./milestone-policy";
 
 export const MILESTONE_PROJECT_ID = "findmydoc-founder-execution";
-export const MILESTONE_SELECT = "id,title,description,target_date,status,sort_order,updated_at";
+// The endpoint name remains a compatibility surface.  Its rows are Epics
+// stored in tasks, never active records in the retained milestones table.
+export const MILESTONE_SELECT = "id,title,description,target_date,status,sort_order,updated_at,task_type";
 
 const CREATE_FIELDS = new Set(["title", "description", "targetDate", "status"]);
 const PATCH_FIELDS = new Set(["expectedUpdatedAt", "title", "description", "targetDate", "status"]);
@@ -193,7 +197,7 @@ export function parseMilestoneDeleteRequest(payload: unknown): MilestoneValidati
 
 export function createMilestoneId(title: string) {
   const slug = slugify(title, { maxLength: 60 }) || "neu";
-  return `milestone-${slug}-${randomUUID()}`;
+  return `epic-${slug}-${randomUUID()}`;
 }
 
 export function buildMilestoneInsert(input: NormalizedMilestoneCreate, id = createMilestoneId(input.title)) {
@@ -216,37 +220,63 @@ export function buildMilestoneUpdate(input: NormalizedMilestonePatch["update"]) 
   return update;
 }
 
-export function mapMilestoneRow(row: DbMilestone): MilestoneDto {
+export function mapMilestoneRow(row: DbMilestone | DbTask): MilestoneDto {
+  if ("task_type" in row) {
+    return mapLegacyMilestoneFromEpic(mapTaskRow(row, new Map()));
+  }
   return mapMilestone(row);
 }
 
 export async function listProjectMilestones(supabase: SupabaseClient) {
   return supabase
-    .from("milestones")
+    .from("tasks")
     .select(MILESTONE_SELECT)
     .eq("project_id", MILESTONE_PROJECT_ID)
+    .eq("task_type", "epic")
+    .is("trashed_at", null)
     .order("sort_order")
     .order("id")
-    .returns<DbMilestone[]>();
+    .returns<DbTask[]>();
 }
 
 export async function loadProjectMilestone(supabase: SupabaseClient, id: string) {
+  const canonicalId = await resolveCanonicalStrategicItemId(supabase, id, "epic");
+  if (!canonicalId) return { data: null, error: null };
   return supabase
-    .from("milestones")
+    .from("tasks")
     .select(MILESTONE_SELECT)
     .eq("project_id", MILESTONE_PROJECT_ID)
-    .eq("id", id)
-    .maybeSingle<DbMilestone>();
+    .eq("id", canonicalId)
+    .eq("task_type", "epic")
+    .is("trashed_at", null)
+    .maybeSingle<DbTask>();
 }
 
-export async function insertProjectMilestone(supabase: SupabaseClient, input: NormalizedMilestoneCreate) {
+export async function insertProjectMilestone(
+  supabase: SupabaseClient,
+  input: NormalizedMilestoneCreate,
+  actorProfileId: string,
+) {
   const insert = buildMilestoneInsert(input);
-  const result = await supabase
-    .from("milestones")
-    .insert(insert)
-    .select(MILESTONE_SELECT)
-    .single<DbMilestone>();
-  return { ...result, insert };
+  const { data, error } = await supabase.rpc("create_planning_item_transaction", {
+    p_item: {
+      id: insert.id,
+      project_id: insert.project_id,
+      task_type: "epic",
+      title: insert.title,
+      description: insert.description || "",
+      status: input.status === "active" ? "In Arbeit" : input.status === "done" ? "Erledigt" : "Offen",
+      owner: actorProfileId,
+      assignee: actorProfileId,
+      target_date: insert.target_date || null,
+      sort_order: 0,
+    },
+    p_strategy: null,
+    p_raci_assignments: [],
+    p_actor_profile_id: actorProfileId,
+  });
+  const row = (data as { task?: DbTask } | null)?.task || null;
+  return { data: row, error, insert };
 }
 
 export async function updateProjectMilestone(
@@ -254,28 +284,40 @@ export async function updateProjectMilestone(
   id: string,
   expectedUpdatedAt: string,
   input: NormalizedMilestonePatch["update"],
+  actorProfileId: string,
 ) {
-  const update = buildMilestoneUpdate(input);
-  const result = await supabase
-    .from("milestones")
-    .update(update)
-    .eq("project_id", MILESTONE_PROJECT_ID)
-    .eq("id", id)
-    .eq("updated_at", expectedUpdatedAt)
-    .select(MILESTONE_SELECT)
-    .maybeSingle<DbMilestone>();
-  return { ...result, update };
+  const legacyUpdate = buildMilestoneUpdate(input);
+  const update: Record<string, string | null> = { ...legacyUpdate };
+  if (legacyUpdate.status !== undefined) {
+    update.status = legacyUpdate.status === "active" ? "In Arbeit" : legacyUpdate.status === "done" ? "Erledigt" : "Offen";
+  }
+  const { data, error } = await supabase.rpc("update_planning_item_transaction", {
+    p_task_id: id,
+    p_expected_updated_at: expectedUpdatedAt,
+    p_patch: update,
+    p_strategy: null,
+    p_raci_assignments: null,
+    p_actor_profile_id: actorProfileId,
+  });
+  const row = (data as { task?: DbTask } | null)?.task || null;
+  return { data: row, error, update };
 }
 
-export async function deleteProjectMilestone(supabase: SupabaseClient, id: string, expectedUpdatedAt: string) {
-  return supabase
-    .from("milestones")
-    .delete()
-    .eq("project_id", MILESTONE_PROJECT_ID)
-    .eq("id", id)
-    .eq("updated_at", expectedUpdatedAt)
-    .select(MILESTONE_SELECT)
-    .maybeSingle<DbMilestone>();
+export async function deleteProjectMilestone(
+  supabase: SupabaseClient,
+  id: string,
+  expectedUpdatedAt: string,
+  actorProfileId: string,
+) {
+  const { data, error } = await supabase.rpc("delete_empty_epic_transaction", {
+    p_task_id: id,
+    p_expected_updated_at: expectedUpdatedAt,
+    p_actor_profile_id: actorProfileId,
+  });
+  return {
+    data: ((data as { task?: DbTask } | null)?.task || null) as DbTask | null,
+    error,
+  };
 }
 
 export async function loadMilestoneChildCounts(
@@ -285,17 +327,29 @@ export async function loadMilestoneChildCounts(
   | { ok: true; counts: MilestoneChildCounts }
   | { ok: false; error: DatabaseErrorLike }
 > {
-  const [initiativeResult, taskResult] = await Promise.all([
-    supabase.from("packages").select("id", { count: "exact", head: true }).eq("milestone_id", milestoneId),
-    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("milestone_id", milestoneId),
-  ]);
-  const error = initiativeResult.error || taskResult.error;
+  const { data: rows, error } = await supabase
+    .from("tasks")
+    .select("id,parent_task_id,task_type")
+    .eq("project_id", MILESTONE_PROJECT_ID);
   if (error) return { ok: false, error };
+  const children = rows || [];
+  const descendants = new Set<string>([milestoneId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of children) {
+      if (row.parent_task_id && descendants.has(row.parent_task_id) && !descendants.has(row.id)) {
+        descendants.add(row.id);
+        changed = true;
+      }
+    }
+  }
+  const descendantRows = children.filter((row) => row.id !== milestoneId && descendants.has(row.id));
   return {
     ok: true,
     counts: normalizeMilestoneChildCounts({
-      initiatives: initiativeResult.count || 0,
-      tasks: taskResult.count || 0,
+      initiatives: descendantRows.filter((row) => row.task_type === "initiative").length,
+      tasks: descendantRows.filter((row) => row.task_type === "deliverable" || row.task_type === "sub_issue").length,
     }),
   };
 }

@@ -5,7 +5,7 @@ import { requirePlanningContributor } from "@/lib/authz";
 import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
 import type { AuthenticatedProfile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import { taskIdsHaveReviewLock } from "@/lib/task-review-lock";
 
@@ -24,14 +24,79 @@ type RelationshipTaskRow = {
   task_type: Task["taskType"];
   assignee: string | null;
   owner: string | null;
-  package_id: string | null;
+  parent_task_id: string | null;
   review_status: Task["reviewStatus"] | null;
 };
 
 type RelationshipInitiativeRow = {
-  owner_id: string | null;
-  accountable_profile_id: string | null;
+  owner: string | null;
 };
+
+async function loadCanonicalInitiativeForRelationship(
+  supabase: SupabaseClient,
+  task: RelationshipTaskRow,
+): Promise<{ initiative: { ownerId: string; accountableProfileId: string } | undefined; error: string | null }> {
+  let initiativeId = task.task_type === "initiative"
+    ? task.id
+    : task.task_type === "deliverable"
+      ? task.parent_task_id
+      : null;
+
+  if (task.task_type === "sub_issue" && task.parent_task_id) {
+    const { data: parent, error: parentError } = await supabase
+      .from(ACTIVE_TASKS_TABLE)
+      .select("task_type,parent_task_id")
+      .eq("id", task.parent_task_id)
+      .maybeSingle<{ task_type: Task["taskType"]; parent_task_id: string | null }>();
+    if (parentError) return { initiative: undefined, error: parentError.message };
+    if (parent?.task_type === "deliverable") initiativeId = parent.parent_task_id;
+  }
+  if (!initiativeId) return { initiative: undefined, error: null };
+
+  const [initiativeResult, accountableResult] = await Promise.all([
+    supabase
+      .from(ACTIVE_TASKS_TABLE)
+      .select("id,owner,task_type")
+      .eq("id", initiativeId)
+      .maybeSingle<RelationshipInitiativeRow & { id: string; task_type: Task["taskType"] }>(),
+    supabase
+      .from("planning_item_raci_assignments")
+      .select("profile_id")
+      .eq("task_id", initiativeId)
+      .eq("role", "accountable")
+      .order("sort_order")
+      .limit(1)
+      .maybeSingle<{ profile_id: string }>(),
+  ]);
+  if (initiativeResult.error || accountableResult.error) {
+    return { initiative: undefined, error: initiativeResult.error?.message || accountableResult.error?.message || "Initiative konnte nicht geladen werden." };
+  }
+  if (!initiativeResult.data || initiativeResult.data.task_type !== "initiative") return { initiative: undefined, error: null };
+  return {
+    initiative: {
+      ownerId: initiativeResult.data.owner || "",
+      accountableProfileId: accountableResult.data?.profile_id || initiativeResult.data.owner || "",
+    },
+    error: null,
+  };
+}
+
+async function markDeliveryGitHubSyncDirty(supabase: SupabaseClient, taskIds: string[]) {
+  const { data: rows, error: loadError } = await supabase
+    .from("tasks")
+    .select("id,task_type")
+    .in("id", taskIds);
+  if (loadError) return loadError;
+  const githubTaskIds = (rows || [])
+    .filter((task) => task.task_type === "deliverable" || task.task_type === "sub_issue")
+    .map((task) => task.id);
+  if (!githubTaskIds.length) return null;
+  const { error } = await supabase.from("tasks").update({
+    github_issue_sync_status: "not_synced",
+    github_issue_sync_error: null,
+  }).in("id", githubTaskIds);
+  return error;
+}
 
 async function loadRelationshipAccess(
   supabase: SupabaseClient,
@@ -40,21 +105,13 @@ async function loadRelationshipAccess(
 ) {
   const { data: task, error: taskError } = await supabase
     .from(ACTIVE_TASKS_TABLE)
-    .select("id,title,task_type,assignee,owner,package_id,review_status")
+    .select("id,title,task_type,assignee,owner,parent_task_id,review_status")
     .eq("id", taskId)
     .single<RelationshipTaskRow>();
   if (taskError || !task) return { ok: false as const, response: apiError("Aufgabe wurde nicht gefunden.", 404) };
 
-  let initiative: RelationshipInitiativeRow | null = null;
-  if (task.package_id) {
-    const initiativeResult = await supabase
-      .from(ACTIVE_PACKAGES_TABLE)
-      .select("owner_id,accountable_profile_id")
-      .eq("id", task.package_id)
-      .maybeSingle<RelationshipInitiativeRow>();
-    if (initiativeResult.error) return { ok: false as const, response: apiError(initiativeResult.error.message, 500) };
-    initiative = initiativeResult.data;
-  }
+  const initiativeResult = await loadCanonicalInitiativeForRelationship(supabase, task);
+  if (initiativeResult.error) return { ok: false as const, response: apiError(initiativeResult.error, 500) };
 
   const access = taskRelationshipAccess({
     task: {
@@ -63,10 +120,7 @@ async function loadRelationshipAccess(
       assignee: task.assignee || "",
       owner: task.owner || "",
     },
-    initiative: initiative ? {
-      ownerId: initiative.owner_id || "",
-      accountableProfileId: initiative.accountable_profile_id || "",
-    } : undefined,
+    initiative: initiativeResult.initiative,
     profile,
     unrestricted: !profile,
   });
@@ -128,10 +182,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return apiError(duplicate ? "Diese Abhängigkeit existiert bereits." : error?.message || "Abhängigkeit konnte nicht gespeichert werden.", duplicate ? 409 : 500);
   }
 
-  await supabase.from("tasks").update({
-    github_issue_sync_status: "not_synced",
-    github_issue_sync_error: null,
-  }).in("id", [id, relatedTaskId]);
+  await markDeliveryGitHubSyncDirty(supabase, [id, relatedTaskId]);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,
@@ -203,10 +254,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const { error } = await supabase.from("task_relationship_edges").delete().eq("id", relationId);
   if (error) return apiError(error.message, 500);
 
-  await supabase.from("tasks").update({
-    github_issue_sync_status: "not_synced",
-    github_issue_sync_error: null,
-  }).in("id", [relation.task_id, relation.related_task_id]);
+  await markDeliveryGitHubSyncDirty(supabase, [relation.task_id, relation.related_task_id]);
 
   await supabase.from("audit_log").insert({
     actor_profile_id: permission.profile?.id || null,

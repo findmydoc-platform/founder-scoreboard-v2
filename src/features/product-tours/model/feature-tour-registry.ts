@@ -1,5 +1,11 @@
 import type { DriveStep } from "driver.js";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
+import type { ViewMode } from "@/lib/types";
+
+export type FeatureTourStepTransition = {
+  view?: ViewMode;
+  workspace?: AppWorkspace;
+};
 
 export type FeatureTourDefinition = {
   doneWorkspace?: AppWorkspace;
@@ -12,6 +18,8 @@ export type FeatureTourDefinition = {
   productUpdateId?: string;
   requiredSelectors: readonly string[];
   startWorkspace?: AppWorkspace;
+  /** Transition after the step at the matching index, before the next step is shown. */
+  stepTransitions?: readonly (FeatureTourStepTransition | undefined)[];
   steps: readonly DriveStep[];
   workspaceScope?: AppWorkspace;
 };
@@ -27,8 +35,38 @@ export const issueSharingTourId = "issue-sharing-v1";
 export const modalOverlayStackTourId = "modal-overlay-stack-v1";
 export const githubProjectSettingsTourId = "github-project-settings-v1";
 export const taskEvidenceLinksTourId = "task-evidence-links-v1";
+export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
 
 export const featureTours = [
+  {
+    id: unifiedPlanningHierarchyTourId,
+    productUpdateId: "2026-07-30-unified-planning-hierarchy",
+    startWorkspace: "backlog",
+    workspaceScope: "backlog",
+    requiredSelectors: ["[data-tour-id='backlog-level-switch']"],
+    stepTransitions: [{ workspace: "planning", view: "board" }],
+    steps: [
+      {
+        element: "[data-tour-id='backlog-level-switch']",
+        popover: {
+          title: "Planungsebene wählen",
+          description: "Epics und Initiativen sind jetzt gemeinsam mit Deliverables direkt im Backlog erreichbar.",
+          side: "bottom",
+          align: "start",
+        },
+      },
+      {
+        element: "[data-tour-id='planning-kanban-level-switch']",
+        popover: {
+          title: "Epics und Initiativen im Kanban",
+          description: "Auch im Kanban wechselst du direkt zwischen den Planungsebenen. Weitere Verbesserungen unterstützen Filterung, Fortschritt und Bedienung.",
+          side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: taskEvidenceLinksTourId,
     productUpdateId: "2026-07-24-evidence-links",

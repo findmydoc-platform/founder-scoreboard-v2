@@ -7,12 +7,17 @@ import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dia
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
+import type { PlanningTaskRevision } from "@/features/planning/model/planning-data-revision";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
 export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
   return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
+}
+
+export function requestPlanningDataRevision(apiClient: BrowserApiClient) {
+  return apiClient.requestJson<{ error?: string; revision?: PlanningTaskRevision }>("/api/planning-data/revision");
 }
 
 export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {

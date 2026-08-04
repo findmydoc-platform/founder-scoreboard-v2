@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Lock } from "lucide-react";
+import { CalendarPlus, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import {
   backlogSprintAssignmentMessage,
@@ -9,7 +9,7 @@ import {
 import type { BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
 import { formatDate } from "@/lib/display";
 import type { Sprint, Task } from "@/lib/types";
-import { classNames, UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
+import { classNames, UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
 type DropState = {
@@ -42,6 +42,10 @@ export function BacklogSprintPane({
   sprintById,
 }: BacklogSprintPaneProps) {
   const [dropState, setDropState] = useState<DropState | null>(null);
+  const [showAllSprints, setShowAllSprints] = useState(false);
+  const sprintHorizon = 5;
+  const visibleBuckets = showAllSprints || draggedTask ? buckets : buckets.slice(0, sprintHorizon);
+  const hiddenSprintCount = Math.max(0, buckets.length - visibleBuckets.length);
 
   return (
     <DataSurface
@@ -57,8 +61,10 @@ export function BacklogSprintPane({
           Keine offenen Sprints. Lege zuerst einen Sprint an oder öffne einen geplanten Sprint.
         </UiEmptyState>
       ) : (
-        <div className="grid divide-y divide-slate-200 lg:flex lg:divide-x lg:divide-y-0 lg:overflow-x-auto xl:grid xl:divide-x-0 xl:divide-y xl:overflow-visible">
-          {buckets.map((bucket, index) => {
+        <>
+          <div className="grid divide-y divide-slate-200 lg:flex lg:divide-x lg:divide-y-0 lg:overflow-x-auto xl:grid xl:divide-x-0 xl:divide-y xl:overflow-visible">
+          {visibleBuckets.map((bucket) => {
+            const bucketIndex = buckets.findIndex((item) => item.sprint.id === bucket.sprint.id);
             const eligibility = draggedTask
               ? getBacklogSprintAssignmentEligibility(draggedTask, bucket.sprint, {
                   canManage: canManageBacklog,
@@ -103,7 +109,7 @@ export function BacklogSprintPane({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`h-2.5 w-2.5 rounded-full ${bucket.isCurrent ? "bg-blue-700" : "bg-slate-500"}`} />
-                      <h3 className="font-semibold text-slate-950">{bucket.isCurrent ? "Aktuell" : `Planung ${index + 1}`} · {bucket.sprint.name}</h3>
+                      <h3 className="font-semibold text-slate-950">{bucket.isCurrent ? "Aktuell" : `Planung ${bucketIndex + 1}`} · {bucket.sprint.name}</h3>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">{formatDate(bucket.sprint.startDate)} bis {formatDate(bucket.sprint.endDate)}</p>
                   </div>
@@ -134,7 +140,22 @@ export function BacklogSprintPane({
               </section>
             );
           })}
-        </div>
+          </div>
+          {buckets.length > sprintHorizon && !draggedTask ? (
+            <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3">
+              <UiButton
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                aria-expanded={showAllSprints}
+                onClick={() => setShowAllSprints((current) => !current)}
+              >
+                {showAllSprints ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
+                {showAllSprints ? "Weitere Sprints ausblenden" : `Weitere ${hiddenSprintCount} Sprints anzeigen`}
+              </UiButton>
+            </div>
+          ) : null}
+        </>
       )}
     </DataSurface>
   );

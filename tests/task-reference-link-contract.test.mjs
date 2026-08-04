@@ -68,6 +68,8 @@ test("drawer focus navigation and full-page overlay remain available", async () 
 
 test("FounderOps tasks and GitHub issues use unambiguous labels", async () => {
   const taskCard = await readFile("src/features/tasks/molecules/task-card.tsx", "utf8");
+  const childProgress = await readFile("src/features/tasks/atoms/task-child-progress.tsx", "utf8");
+  const sharedPresentation = await readFile("src/features/tasks/model/task-card-presentation.ts", "utf8");
   const files = [
     "src/features/tasks/molecules/task-card.tsx",
     "src/features/tasks/organisms/task-github-sync-queue.tsx",
@@ -81,19 +83,23 @@ test("FounderOps tasks and GitHub issues use unambiguous labels", async () => {
   assert.match(taskCard, /TaskCardGitHubLink/);
   assert.match(taskCard, /target="_blank"/);
   assert.match(taskCard, /SiGithub/);
-  assert.match(taskCard, /TaskCardSubIssueRollup/);
-  assert.match(taskCard, /role="progressbar"/);
+  assert.match(taskCard, /TaskCardChildRollup/);
+  assert.match(taskCard, /TaskChildProgress/);
+  assert.match(childProgress, /role="progressbar"/);
+  assert.match(taskCard, /directChildPluralLabel/);
   assert.match(taskCard, /aria-expanded=\{isExpanded\}/);
-  assert.match(taskCard, /\{unfinished\} offen/);
-  assert.match(taskCard, /\{completed\} erledigt/);
-  assert.match(taskCard, /mt-2 flex min-h-6 w-full/);
-  assert.match(taskCard, /border border-transparent/);
-  assert.match(taskCard, /\{completed\} von \{total\} Sub-Issues/);
-  assert.doesNotMatch(taskCard, /\$\{completed\}\/\$\{total\} · \$\{percentage\}%/);
-  assert.doesNotMatch(taskCard, /text-\[9px\]|h-\[3px\]/);
+  assert.match(taskCard, /aria-controls=\{listId\}/);
+  assert.match(taskCard, /childStatusPresentation/);
+  assert.match(sharedPresentation, /Sub-Issues/);
+  assert.match(sharedPresentation, /Initiativen/);
+  assert.match(sharedPresentation, /Deliverables/);
   assert.doesNotMatch(taskCard, /rounded-md border border-slate-200 bg-white/);
-  assert.match(taskCard, /firstDone !== secondDone/);
+  assert.match(taskCard, /task\.taskType === "epic" \|\| task\.taskType === "initiative"/);
   assert.match(taskCard, /onOpenTask=\{onOpenTask\}/);
+  assert.match(taskCard, /onClick=\{\(event\) => \{/);
+  assert.match(taskCard, /taskCardControlSelector/);
+  assert.match(taskCard, /event\.target\.closest\(taskCardControlSelector\)/);
+  assert.match(taskCard, /onOpenTask\(task\.id\)/);
 });
 
 test("planning card is one shared visual unit across board and structure", async () => {
@@ -104,9 +110,9 @@ test("planning card is one shared visual unit across board and structure", async
 
   assert.match(board, /TaskCard/);
   assert.match(structure, /TaskCard/);
-  assert.match(board, /groupSubIssuesByParent/);
+  assert.match(board, /groupDirectChildrenByParent/);
+  assert.match(sharedPresentation, /groupDirectChildrenByParent/);
   assert.match(structure, /groupSubIssuesByParent/);
-  assert.match(sharedPresentation, /task\.taskType !== "sub_issue"/);
   assert.doesNotMatch(
     taskCard,
     /variant\?:|showEffort\?:|showDescription\?:|showOpenButton\?:|showStatusControl\?:|statusOptions:/,

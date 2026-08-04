@@ -27,17 +27,21 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url")
+    .select("id,title,task_type,assignee,owner,github_issue_number,github_issue_url,issue_number,issue_url")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
 
-  const { data: transaction, error: insertError } = await supabase.rpc("create_task_comment_with_github_delivery", {
+  const isStrategic = task.task_type === "epic" || task.task_type === "initiative";
+  const { data: transaction, error: insertError } = await supabase.rpc(
+    isStrategic ? "create_task_comment_local" : "create_task_comment_with_github_delivery",
+    {
     p_task_id: id,
     p_profile_id: permission.profile?.id || "",
     p_comment: comment,
-  });
+    },
+  );
   const created = transaction?.comment as {
     id: number;
     task_id: string;
@@ -48,13 +52,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (insertError || !created) return apiError(insertError?.message || "Kommentar konnte nicht gespeichert werden.", 500);
 
-  await deliverPendingGitHubComments({ supabase, taskId: id, limit: 20 }).catch(() => undefined);
-  const { data: delivery } = await supabase
-    .from("task_comment_github_deliveries")
-    .select("status,github_comment_url")
-    .eq("task_comment_id", created.id)
-    .maybeSingle<{ status: string; github_comment_url: string | null }>();
-  const deliveryStatus = delivery?.status || transaction?.deliveryStatus || "pending";
+  if (!isStrategic) {
+    await deliverPendingGitHubComments({ supabase, taskId: id, limit: 20 }).catch(() => undefined);
+  }
+  const delivery = isStrategic
+    ? null
+    : await supabase
+      .from("task_comment_github_deliveries")
+      .select("status,github_comment_url")
+      .eq("task_comment_id", created.id)
+      .maybeSingle<{ status: string; github_comment_url: string | null }>();
+  const deliveryStatus = isStrategic
+    ? "not_applicable"
+    : delivery?.data?.status || transaction?.deliveryStatus || "pending";
 
   const { data: profiles } = await supabase.from("profiles").select("id,name,github_login,platform_role");
   const mentionedRecipients = new Set(mentionedProfileIds(
@@ -109,10 +119,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       profileId: created.profile_id || "",
       comment: created.comment,
       githubDeliveryStatus: deliveryStatus,
-      githubCommentUrl: delivery?.github_comment_url || "",
+      githubCommentUrl: delivery?.data?.github_comment_url || "",
       createdAt: created.created_at,
     },
-    notice: deliveryStatus === "waiting_for_author_connection" ? {
+    notice: !isStrategic && deliveryStatus === "waiting_for_author_connection" ? {
       code: "github_author_connection_required",
       level: "info",
       message: "Kommentar gespeichert. Veröffentlichung wartet auf deine GitHub-Verbindung.",

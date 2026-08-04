@@ -2,6 +2,265 @@
 result: passed
 ---
 
+# Backlog Direct-Child Progress and Sprint Drag - Design QA
+
+## Comparison target
+
+- Selected source visual truth: `/Users/razorspoint/.codex/generated_images/019fb2b2-0782-7740-aea4-ceb4699674ac/exec-8a2f67e5-82d9-494f-a4dd-d424baeb4316.png`
+- Initiative implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/rollup-progress-implementation/backlog-initiatives.png`
+- Deliverable and Sprint implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/rollup-progress-implementation/backlog-deliverables.png`
+- Epic implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/rollup-progress-implementation/backlog-epics.png`
+- Mobile Epic implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/rollup-progress-implementation/backlog-epics-mobile.png`
+- Combined reference and implementation input: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/rollup-progress-implementation/design-comparison.png`
+- Local route: `http://localhost:3002/backlog`
+- Desktop viewport and source pixels: 1672 x 941.
+- Responsive viewport: 390 x 844 CSS pixels.
+- State: light theme, authenticated local development data, real planning hierarchy. Strategic children are currently incomplete, so their zero-percent rails intentionally match the data. The Deliverable evidence contains the real 3-of-5, 60-percent Sub-Issue fill.
+
+## Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- The selected compact treatment is implemented as one shared direct-child progress component: responsible owner and exact completion count on one line, percentage at the right edge, and a thin continuous blue rail below.
+- Epic, Initiative, and Deliverable rows compute only their direct children. The displayed nouns change to Initiatives, Deliverables, and Sub-Issues without counting deeper descendants.
+- The implementation preserves the selected pale group surface, cobalt left rail, restrained row separators, sentence-case group titles, and compact status hierarchy.
+- Deliverable rows remain the drag source for Sprint assignment. The visible row now exposes the drag affordance and the existing Sprint pane remains the drop destination.
+- The shared Task card uses the same progress atom while retaining its established expandable direct-child list. The Backlog remains a compact planning summary and does not add a Sub-Issue list.
+
+## Required fidelity surfaces
+
+- Typography and density: the implementation reuses the existing Task-card 10-pixel rollup typography, tabular percentage, and 4-pixel rail instead of introducing another visual language.
+- Layout rhythm: owner, completion count, and percentage align on one row as in the selected source. The rail remains bounded to the readable item-metadata width rather than stretching through empty row space.
+- Colors and assets: the existing slate and blue tokens and installed Lucide drag grip are used. No custom SVG, CSS illustration, emoji, placeholder, or generated UI asset was introduced.
+- Accessibility: every rail exposes a named `progressbar` with current, minimum, and maximum values. Group and row disclosures remain separate controls with independent `aria-expanded` state.
+- Responsiveness: the level control, filters, group header, item metadata, rollup rail, and target date remain within the 390-pixel viewport without horizontal clipping.
+
+## Primary interactions tested
+
+- Verified exact direct-child labels and values on Epic, Initiative, and Deliverable levels.
+- Collapsed and reopened the first Deliverable group; its expanded state returned to `true` and sibling groups remained visible.
+- Confirmed all 14 visible Deliverable rows expose `draggable="true"` and the grab cursor.
+- Completed a native drag gesture from a visible Deliverable row without dropping it; the board returned to its stable state with no visible error.
+- Confirmed the open Sprint pane and `Deliverable hier ablegen` destination remain visible next to the Deliverable tree.
+- Confirmed the real 3-of-5 rollup exposes `aria-valuenow="3"` and a 60-percent visual fill.
+- Browser runtime check after the drag gesture: no visible application error.
+
+## Comparison history
+
+### Pass 1
+
+- The combined input showed the selected hierarchy and rail treatment, but the responsible owner was initially placed below the progress block instead of on the source's progress metadata line.
+- Correction: the shared progress component gained an optional leading metadata slot, and Backlog rows now place the owner before the completion count while keeping a target date below when present.
+- The second combined input matches the selected metadata order. Remaining scale differences come from the real product's established type density and are intentionally preserved.
+
+## Final result
+
+final result: passed
+
+## Kanban Card Status Row — 2026-08-01
+
+### Implementation evidence
+
+- Deliverable desktop with the status menu open: `output/playwright/status-row/kanban-status-menu-desktop.png` (1440x1000 CSS viewport).
+- Initiative desktop across open and active columns: `output/playwright/status-row/kanban-status-row-initiative-desktop.png` (1440x1000 CSS viewport).
+- Deliverable mobile with the status menu open: `output/playwright/status-row/kanban-status-menu-mobile.png` (390x844 CSS viewport).
+- Before/after comparison at the same 1440x1000 viewport: `output/playwright/status-row/status-row-before-after.png`.
+
+### Findings
+
+- The mutable status control now has a dedicated bottom row with a subtle separator, a stable label, and a compact state-colored trigger.
+- Owner and target date remain together in the metadata row and no longer compete with status or risk badges.
+- The same card treatment is present for Initiatives and Deliverables; the shared card keeps the behavior aligned for Epics as well.
+- The menu remains inside the viewport at desktop and mobile sizes. The 390px board keeps its existing horizontal-scroll behavior without introducing page overflow.
+- The checked planning cards remain draggable, so Kanban status movement is unchanged.
+- Browser console errors: none.
+- No actionable P0, P1, or P2 visual differences remain.
+
+### Final result
+
+final result: passed
+
+## Planning and Backlog UX Reviewer Fixes — 2026-07-31
+
+### Comparison target
+
+- Review baseline: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/ui-ux-review-2026-07-31/`.
+- Final implementation captures: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/ui-ux-fixes-2026-07-31/`.
+- Combined before/after comparison: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/ui-ux-fixes-2026-07-31/comparison-before-after.png`.
+- Desktop viewport: `1440 x 1000`; mobile viewport: `390 x 844`.
+
+### Findings resolved
+
+- The Planning create action now follows the active Board level (`Neues Epic`, `Neue Initiative`, or `Neues Deliverable`). Structure, Table, and Gantt explicitly state that they remain Deliverable-only and use the Deliverable create action.
+- Planning cards expose a keyboard-accessible status menu without removing drag-and-drop. Strategic items offer only `Offen`, `In Arbeit`, `Pausiert`, `Blockiert`, and `Erledigt`; Review and Nacharbeit remain Deliverable-only.
+- Deliverable rows in the Backlog expose an explicit Sprint assignment menu while retaining the existing drag target and drag-and-drop assignment.
+- Strategic Backlog levels use the full content width. The Sprint pane remains exclusive to the Deliverable level.
+- Direct-child roll-up labels use the established card language with a more legible `12px` label and `6px` progress track.
+- Mobile headers no longer remain sticky while scrolling. Scope and view controls stay horizontally reachable, filters reveal search only when opened, and the single create action no longer truncates.
+- Backlog groups remain independently collapsible on desktop and mobile.
+
+### Runtime and interaction checks
+
+- Verified Planning level switching, context-specific create labels, status-menu expansion, and strategic status options without mutating task data.
+- Verified the Deliverable-only Table notice and create action.
+- Verified Backlog Sprint-menu expansion, disabled current-Sprint state, and removal affordance without changing Sprint assignment.
+- Verified strategic full-width Backlog, direct-child progress, mobile filter expansion, mobile non-sticky scrolling, and group collapse.
+- Browser console errors and warnings: none.
+- No actionable P0, P1, or P2 visual differences remain.
+
+### Validation
+
+- `pnpm test`: 594 passed.
+- `pnpm run lint`: passed.
+- `pnpm run build`: passed.
+- `pnpm run verify:product-updates`: passed.
+- `git diff --check`: passed.
+
+### Final result
+
+final result: passed
+
+# Backlog Group Disclosure - Design QA
+
+## Comparison target
+
+- Source visual truth path: `/Users/razorspoint/.codex/generated_images/019fb2b2-0782-7740-aea4-ceb4699674ac/exec-70892f11-337f-4cab-a264-91a0ee5dd98f.png`
+- Matching expanded implementation: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-groups-expanded-menu.png`
+- Collapsed implementation evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-group-collapsed-final.png`
+- Full-view comparison evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-groups-comparison.png`
+- Focused group-header comparison: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-groups-header-comparison.png`
+- Local route: `http://localhost:3002/backlog`
+- Viewport: 1280 x 720 CSS pixels in the in-app Browser.
+- Source pixels: 1487 x 1058, normalized to 1269 x 714 with a top-aligned fill crop for the full comparison.
+- Implementation pixels: 1269 x 714. The focused comparison places source and implementation headers on equal 1000 x 100 canvases without distorting either crop.
+- State: light theme, authenticated local development data, Deliverables selected, level menu expanded, first Backlog group expanded. The separate collapsed capture verifies the added interaction state.
+
+## Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- The full group header now acts as the disclosure control, matching the preview's header-level affordance instead of adding another control inside the item rows.
+- The header preserves the selected pale surface, blue left rail, restrained border, explicit item count, and right-aligned state chevron.
+- The count chip now spells out `Epic`, `Initiative`, or `Deliverable` with the correct German plural instead of showing only a number.
+- Group disclosure is independent from the existing item-level direct-child disclosure. Collapsing a group hides only that group's rows and leaves sibling groups unchanged.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing FounderOps type tokens remain unchanged. Group titles and count chips preserve the source hierarchy and stay legible at the real application density.
+- Spacing and layout rhythm: the disclosure control occupies the existing header bounds; no extra row or vertical chrome was introduced. Expanded and collapsed states keep the same header height.
+- Colors and visual tokens: the existing slate surface, cobalt rail, white count chip, and focus-visible blue ring remain aligned with the selected preview and adjacent FounderOps controls.
+- Image quality and asset fidelity: this interaction uses the installed Lucide chevrons. No raster asset, custom SVG, CSS drawing, emoji, or placeholder was introduced.
+- Copy and content: group counts include their item type and switch singular/plural correctly. Accessible labels state whether the group will open or close.
+
+## Primary interactions tested
+
+- Collapsed and reopened a Deliverable group; `aria-expanded` changed from `true` to `false` and back, and its two rows disappeared and returned.
+- Repeated the group disclosure on the Initiative and Epic levels.
+- Verified a collapsed group does not hide the next group.
+- Verified the existing row chevrons remain separate controls for direct children.
+- The in-app interaction path completed without a visible runtime error or navigation failure.
+
+## Comparison history
+
+### Pass 1
+
+- The combined full view compares the same open-menu and expanded-group state.
+- The focused comparison confirms the header surface, left rail, count noun, and state chevron.
+- The collapsed state has no separate source frame, so it was validated as the inverse interaction state of the visible expanded control.
+- No P0, P1, or P2 correction loop was required.
+
+## Implementation checklist
+
+- [x] Make every Backlog group header keyboard-operable.
+- [x] Keep groups expanded by default.
+- [x] Store disclosure state independently per level and group.
+- [x] Preserve direct-child item disclosure.
+- [x] Verify Epic, Initiative, and Deliverable groups in the browser.
+
+## Follow-up polish
+
+- None required for this interaction.
+
+## Final result
+
+final result: passed
+
+# Planning Level Toolbar and Backlog Groups - Design QA
+
+## Comparison target
+
+- Source visual truth path: `/Users/razorspoint/.codex/generated_images/019fb2b2-0782-7740-aea4-ceb4699674ac/exec-70892f11-337f-4cab-a264-91a0ee5dd98f.png`
+- Implementation screenshot path: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-variant-1-open-menu.png`
+- Closed Backlog evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/backlog-variant-1-implemented.png`
+- Kanban evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/kanban-level-dropdown-implemented.png`
+- Full-view comparison evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/design-comparison.png`
+- Focused comparison evidence: `/Users/razorspoint/.codex/visualizations/2026/07/30/019fb2b2-0782-7740-aea4-ceb4699674ac/design-comparison-focus.png`
+- Local route: `http://localhost:3002/backlog`
+- Viewport: 1280 x 720 CSS pixels in the in-app Browser; responsive check at 390 x 844 CSS pixels.
+- Source pixels: 1487 x 1058. The full comparison normalizes the source to 1269 x 714 with a top-aligned fill crop.
+- Implementation pixels: 1269 x 714 from the 1280 x 720 CSS viewport. The in-app Browser reported device pixel ratio 2 and returned an effective approximately 1x raster excluding browser scrollbars.
+- Density normalization: source and implementation were both normalized to 1269 x 714 before the full comparison. Focused source and implementation regions were placed on equal 1269 x 520 canvases.
+- State: light theme, authenticated local development data, Deliverables selected, level menu expanded, Parent-Initiative set to all, first Backlog groups visible.
+
+## Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- The implementation preserves the selected information order: level, search, direct Parent context, further filters, result count.
+- The selected light grouping treatment is present: pale group header, blue left rail, white rows, restrained border and shadow, and no black or navy group bars.
+- The implementation intentionally retains the existing Sprint pane and application chrome, which were omitted from the isolated source concept but remain required product functionality.
+- Resolved: the implementation count chip now matches the source's explicit `2 Deliverables` wording and adapts the noun to each planning level.
+- P3: the existing sliders icon remains on the shared Filter action instead of the source funnel icon. It stays consistent with the established FounderOps control family.
+
+## Required fidelity surfaces
+
+- Fonts and typography: the existing product font stack and type scale remain consistent with adjacent FounderOps surfaces. The group title uses sentence case and a medium visual weight instead of the rejected uppercase white-on-black treatment. Toolbar labels, selected values, row titles, badges, and metadata retain a clear descending hierarchy without broken wrapping.
+- Spacing and layout rhythm: all five toolbar elements fit one desktop row in the real application width. The level and Parent controls use matched 40-pixel heights, the search retains the flexible track, and group spacing remains aligned with the Sprint pane. At 390 x 844 the toolbar controls stack inside a measured 347-pixel surface without clipping.
+- Colors and visual tokens: the implementation uses existing slate, white, blue, emerald, amber, and status tokens. The cobalt rail carries grouping emphasis while the pale header preserves contrast and visual continuity with the rest of the application.
+- Image quality and asset fidelity: this interface contains no illustrative or photographic assets. Existing findmydoc branding and installed Lucide icons remain sharp; no custom SVG, CSS drawing, emoji, or placeholder artwork was introduced.
+- Copy and content: level names and counts match the source. Parent labels change contextually between Epic and Initiative. Strategic views remove Review, Nacharbeit, Sprint, GitHub search copy, and GitHub card indicators.
+- Icons and affordances: the custom level selector exposes the selected state and check mark. Backlog row chevrons continue to open only direct children; Kanban cards continue to expose the established inline child disclosure.
+- Interaction and accessibility: both level controls use the existing keyboard-accessible custom combobox/listbox. Labels and Parent filters have explicit accessible names. Backlog direct-child controls expose `aria-expanded`; card child disclosures remain keyboard reachable.
+- Responsiveness: desktop and 390-pixel toolbar bounds were checked. Kanban preserves its intentional horizontal lane scrolling instead of compressing cards.
+
+## Primary interactions tested
+
+- Opened the Backlog level menu and verified the three counted options.
+- Switched Backlog from Deliverables to Initiatives and verified the Parent-Epic control plus five grouped Initiative rows.
+- Expanded an Initiative and verified that only its two direct Deliverables appeared.
+- Switched Kanban from Deliverables to Initiatives and verified the Parent-Epic control.
+- Verified strategic Kanban columns are Offen, In Arbeit, Pausiert, Blockiert, and Erledigt; Review and Nacharbeit are absent.
+- Verified strategic Kanban cards contain no GitHub Issue action and still expand their direct Deliverables.
+- Verified the 390 x 844 toolbar stack remains inside the content surface.
+- Browser console warnings and errors checked: none.
+
+## Comparison history
+
+### Pass 1
+
+- The full and focused combined comparisons show the selected hierarchy, light group surfaces, toolbar order, menu state, item density, and semantic colors.
+- The differences in app chrome, Sprint pane, compact count copy, and shared Filter icon are intentional product-context adaptations or P3 polish only.
+- No P0, P1, or P2 issue was found, so no visual correction loop was required.
+
+## Open questions
+
+- None blocking.
+
+## Implementation checklist
+
+- [x] Replace level tabs with one counted custom dropdown in Backlog and Kanban.
+- [x] Place the level control in the shared filter row before search.
+- [x] Show the direct Parent filter only when the selected level has a Parent.
+- [x] Apply the selected light Backlog grouping style.
+- [x] Make every Backlog group independently collapsible.
+- [x] Preserve the existing shared cards and direct-child disclosures.
+- [x] Verify desktop, mobile toolbar bounds, interactions, and browser console.
+
+## Follow-up polish
+
+- None required for the selected group treatment.
+
+## Final result
+
+final result: passed
+
 # Planning Kanban Card Density - Design QA
 
 ## Variant 2 rollup and shared card addendum

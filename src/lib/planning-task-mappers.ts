@@ -1,5 +1,5 @@
 import type { LinkedPullRequest, Profile, Task, TaskReview } from "./types";
-import type { DbTask, DbTaskLink, DbTaskReview } from "./planning-data-row-types";
+import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask, DbTaskLink, DbTaskReview } from "./planning-data-row-types";
 import { profileNameById } from "./planning-profile-mappers";
 import { normalizeSubIssueStatus } from "./status";
 
@@ -9,6 +9,8 @@ type TaskProfileLookup = Profile[] | Map<string, string>;
 type MapTaskRowOptions = {
   defaultSprintId?: string;
   taskLinks?: DbTaskLink[];
+  strategy?: DbPlanningItemStrategy;
+  raciAssignments?: DbPlanningItemRaciAssignment[];
 };
 
 function isHttpUrl(value: string) {
@@ -71,11 +73,21 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   const assignee = profileName(profiles, assigneeId);
   const owner = profileName(profiles, ownerId) || assignee;
   const createdBy = profileName(profiles, row.created_by);
-  const taskType: Task["taskType"] = row.task_type === "sub_issue" ? "sub_issue" : "deliverable";
-  const approvalStatus = taskType === "sub_issue" ? null : row.approval_status || "approved";
+  const taskType: Task["taskType"] = row.task_type === "epic"
+    || row.task_type === "initiative"
+    || row.task_type === "sub_issue"
+    ? row.task_type
+    : "deliverable";
+  const isStrategic = taskType === "epic" || taskType === "initiative";
+  const isDeliverable = taskType === "deliverable";
+  const approvalStatus = taskType === "epic" || taskType === "sub_issue"
+    ? null
+    : row.approval_status || "proposed";
   const taskLinks = taskLinkProjection(row, options.taskLinks);
-  const evidenceLinks = taskType === "sub_issue" ? [] : taskLinks.evidenceLinks;
-  const linkedPullRequests = taskLinks.linkedPullRequests;
+  const evidenceLinks = isDeliverable ? taskLinks.evidenceLinks : [];
+  // Sub-Issues intentionally keep their GitHub projection and linked pull
+  // requests, while evidence gates remain a Deliverable-only concern.
+  const linkedPullRequests = isStrategic ? [] : taskLinks.linkedPullRequests;
   const status = taskType === "sub_issue"
     ? normalizeSubIssueStatus(row.status || "Offen")
     : row.status || "Offen";
@@ -89,7 +101,7 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     title: row.title || "",
     description,
     status,
-    priority: row.priority || "P2",
+    priority: row.priority || "",
     assigneeId,
     assignee,
     ownerId,
@@ -97,17 +109,18 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     createdById,
     createdBy,
     workstream: row.workstream || "",
-    packageId: row.package_id || "",
+    packageId: isDeliverable ? row.parent_task_id || row.package_id || "" : row.package_id || "",
+    targetDate: row.target_date || "",
     deadline: row.deadline || "",
     problemStatement: row.problem_statement || "",
     intendedOutcome: row.intended_outcome || "",
     scopeConstraints: row.scope_constraints || "",
     acceptanceCriteria: row.acceptance_criteria || "",
     evidenceRequired: row.evidence_required || "",
-    dodTemplateVersion: taskType === "sub_issue" ? "" : row.dod_template_version || "founder-deliverable-v2",
+    dodTemplateVersion: isDeliverable ? row.dod_template_version || "founder-deliverable-v2" : "",
     definitionOfDone: row.definition_of_done || "",
     dependsOn: row.task_dependencies?.map((item) => item.note).join("; ") || "",
-    evidenceLink: taskType === "sub_issue" ? "" : evidenceLinks[0] || row.evidence_link || "",
+    evidenceLink: isDeliverable ? evidenceLinks[0] || row.evidence_link || "" : "",
     evidenceLinks,
     linkedPullRequests,
     issueNumber: row.issue_number || "",
@@ -117,21 +130,33 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     hours: row.estimate_hours || 0,
     startDate: row.start_date || "",
     endDate: row.end_date || "",
-    sprintId: row.sprint_id || options.defaultSprintId || "",
+    sprintId: isDeliverable ? row.sprint_id || options.defaultSprintId || "" : "",
     milestoneId: row.milestone_id || "",
-    reviewStatus: taskType === "sub_issue" ? "not_requested" : row.review_status || "not_requested",
-    reviewOwnerProfileId: taskType === "sub_issue" ? "" : row.review_owner_profile_id || "",
-    reviewRequestedAt: taskType === "sub_issue" ? "" : row.review_requested_at || "",
-    scorePoints: taskType === "sub_issue" ? 0 : row.score_points || 0,
-    scoreFinal: taskType === "deliverable" && Boolean(row.score_final),
-    githubRepo: row.github_repo || "findmydoc-platform/management",
-    githubIssueNumber: row.github_issue_number ?? null,
-    githubIssueUrl: row.github_issue_url || row.issue_url || "",
-    githubIssueSyncStatus: row.github_issue_sync_status || "not_synced",
-    githubIssueLastSyncedAt: row.github_issue_last_synced_at || "",
-    githubIssueSyncError: row.github_issue_sync_error || "",
+    reviewStatus: isDeliverable ? row.review_status || "not_requested" : "not_requested",
+    reviewOwnerProfileId: isDeliverable ? row.review_owner_profile_id || "" : "",
+    reviewRequestedAt: isDeliverable ? row.review_requested_at || "" : "",
+    scorePoints: isDeliverable ? row.score_points || 0 : 0,
+    scoreFinal: isDeliverable && Boolean(row.score_final),
+    githubRepo: isStrategic ? "" : row.github_repo || "findmydoc-platform/management",
+    githubIssueNumber: isStrategic ? null : row.github_issue_number ?? null,
+    githubIssueUrl: isStrategic ? "" : row.github_issue_url || row.issue_url || "",
+    githubIssueSyncStatus: isStrategic ? "not_applicable" : row.github_issue_sync_status || "not_synced",
+    githubIssueLastSyncedAt: isStrategic ? "" : row.github_issue_last_synced_at || "",
+    githubIssueSyncError: isStrategic ? "" : row.github_issue_sync_error || "",
     taskType,
     parentTaskId: row.parent_task_id || "",
+    strategy: taskType === "initiative" ? {
+      goal: options.strategy?.goal || "",
+      successCriteria: options.strategy?.success_criteria || "",
+      scopeConstraints: options.strategy?.scope_constraints || "",
+    } : undefined,
+    raciAssignments: taskType === "initiative"
+      ? (options.raciAssignments || []).map((assignment) => ({
+        profileId: assignment.profile_id,
+        role: assignment.role,
+        sortOrder: assignment.sort_order,
+      }))
+      : [],
     approvalStatus,
     approvalRevision: Number(row.approval_revision || 1),
     proposedById: row.proposed_by || "",
@@ -140,18 +165,19 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
     decidedAt: row.decided_at || "",
     decisionNote: row.decision_note || "",
     parentApprovalStatus: null,
-    scoreRelevant: taskType === "deliverable" && approvalStatus === "approved" && row.score_relevant !== false,
-    originalSprintId: row.original_sprint_id || "",
-    carriedFromTaskId: row.carried_from_task_id || "",
-    carriedFromSprintId: row.carried_from_sprint_id || "",
-    carryoverReason: row.carryover_reason || "",
-    carryoverCount: row.carryover_count || 0,
-    sprintOutcome: row.sprint_outcome || "",
-    selfDodChecked: taskType === "deliverable" && Boolean(row.self_dod_checked),
-    selfEvidenceChecked: taskType === "deliverable" && Boolean(row.self_evidence_checked),
-    selfDocumentedChecked: taskType === "deliverable" && Boolean(row.self_documented_checked),
-    selfBlockersChecked: taskType === "deliverable" && Boolean(row.self_blockers_checked),
+    scoreRelevant: isDeliverable && approvalStatus === "approved" && row.score_relevant !== false,
+    originalSprintId: isDeliverable ? row.original_sprint_id || "" : "",
+    carriedFromTaskId: isDeliverable ? row.carried_from_task_id || "" : "",
+    carriedFromSprintId: isDeliverable ? row.carried_from_sprint_id || "" : "",
+    carryoverReason: isDeliverable ? row.carryover_reason || "" : "",
+    carryoverCount: isDeliverable ? row.carryover_count || 0 : 0,
+    sprintOutcome: isDeliverable ? row.sprint_outcome || "" : "",
+    selfDodChecked: isDeliverable && Boolean(row.self_dod_checked),
+    selfEvidenceChecked: isDeliverable && Boolean(row.self_evidence_checked),
+    selfDocumentedChecked: isDeliverable && Boolean(row.self_documented_checked),
+    selfBlockersChecked: isDeliverable && Boolean(row.self_blockers_checked),
     updatedAt: row.updated_at || "",
+    createdAt: row.created_at || "",
     trashedAt: row.trashed_at || "",
     trashedById: row.trashed_by || "",
     trashReason: row.trash_reason || "",
@@ -163,8 +189,13 @@ export function mapTaskRow(row: TaskRowForMapping, profiles: TaskProfileLookup, 
   };
 }
 
-export function mapTask(row: DbTask, profiles: Profile[], taskLinks: DbTaskLink[] = []): Task {
-  return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1", taskLinks });
+export function mapTask(
+  row: DbTask,
+  profiles: Profile[],
+  taskLinks: DbTaskLink[] = [],
+  options: Omit<MapTaskRowOptions, "defaultSprintId" | "taskLinks"> = {},
+): Task {
+  return mapTaskRow(row, profiles, { defaultSprintId: "sprint-1", taskLinks, ...options });
 }
 
 export function mapTaskReview(row: DbTaskReview): TaskReview {

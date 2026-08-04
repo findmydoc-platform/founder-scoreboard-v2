@@ -35,7 +35,7 @@ export function buildPlanningTaskTableViewModel({
     const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
     const matchesSprint = filters.sprintId === "Alle" || task.sprintId === filters.sprintId;
     const matchesWorkstream = filters.workstream === "Alle" || task.workstream === filters.workstream;
-    const deadline = task.deadline || task.endDate || "";
+    const deadline = task.targetDate || task.deadline || task.endDate || "";
     const matchesTargetFrom = !filters.targetFrom || deadline >= filters.targetFrom;
     const matchesTargetTo = !filters.targetTo || deadline <= filters.targetTo;
     const matchesRisk = filters.risk === "Alle"

@@ -37,9 +37,10 @@ export async function PATCH(request: NextRequest, routeContext: MilestoneRouteCo
 
   const { data, error } = await updateProjectMilestone(
     context.supabase,
-    id,
+    current.milestone.id,
     parsed.value.expectedUpdatedAt,
     parsed.value.update,
+    context.permission.profile?.id || "",
   );
   if (error) return apiError("Meilenstein konnte nicht gespeichert werden.", 500);
   if (!data) return apiError("Meilenstein wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
@@ -48,7 +49,7 @@ export async function PATCH(request: NextRequest, routeContext: MilestoneRouteCo
     actor_profile_id: context.permission.profile?.id || null,
     action: "milestone.update",
     entity_type: "milestone",
-    entity_id: id,
+    entity_id: current.milestone.id,
     before_data: current.milestone,
     after_data: data,
     ...auditRequestMetadata(request),
@@ -68,18 +69,23 @@ export async function DELETE(request: NextRequest, routeContext: MilestoneRouteC
   const current = await loadMilestoneOrResponse(context.supabase, id);
   if (!current.ok) return current.response;
 
-  const childCounts = await loadMilestoneChildCounts(context.supabase, id);
+  const childCounts = await loadMilestoneChildCounts(context.supabase, current.milestone.id);
   if (!childCounts.ok) return apiError("Meilenstein-Zuordnungen konnten nicht geprüft werden.", 500);
   const deletePolicy = buildMilestoneDeletePolicy(childCounts.counts);
   if (!deletePolicy.canDelete) {
     return NextResponse.json(milestoneNotEmptyError(deletePolicy.children), { status: 409 });
   }
 
-  const { data, error } = await deleteProjectMilestone(context.supabase, id, parsed.value.expectedUpdatedAt);
+  const { data, error } = await deleteProjectMilestone(
+    context.supabase,
+    current.milestone.id,
+    parsed.value.expectedUpdatedAt,
+    context.permission.profile?.id || "",
+  );
   if (error && isMilestoneNotEmptyDatabaseError(error)) {
     const [freshTarget, freshChildren] = await Promise.all([
-      loadProjectMilestone(context.supabase, id),
-      loadMilestoneChildCounts(context.supabase, id),
+      loadProjectMilestone(context.supabase, current.milestone.id),
+      loadMilestoneChildCounts(context.supabase, current.milestone.id),
     ]);
     if (!freshTarget.error && freshTarget.data && freshChildren.ok) {
       const freshPolicy = buildMilestoneDeletePolicy(freshChildren.counts);
@@ -95,7 +101,7 @@ export async function DELETE(request: NextRequest, routeContext: MilestoneRouteC
     actor_profile_id: context.permission.profile?.id || null,
     action: "milestone.delete",
     entity_type: "milestone",
-    entity_id: id,
+    entity_id: current.milestone.id,
     before_data: data,
     ...auditRequestMetadata(request),
   });

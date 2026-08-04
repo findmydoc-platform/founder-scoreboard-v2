@@ -9,6 +9,7 @@ import {
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
 import { previewPlanningItemGitHubSync } from "@/features/planning-items/model/planning-items-github-sync-preview";
+import { isStrategicPlanningItemType } from "@/features/planning-items/model/planning-items-contract";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht geprüft werden.", async (permission) => {
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       systemEffects: preview.systemEffects,
       errors: preview.errors,
       warnings: preview.warnings,
-      ...(parsed.githubSync ? {
+      ...(parsed.githubSync && !isStrategicPlanningItemType(preview.itemType) ? {
         githubSync: previewPlanningItemGitHubSync({
           itemType: preview.itemType,
           approvalStatus: preview.resultingItem.approvalStatus,

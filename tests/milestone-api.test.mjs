@@ -19,6 +19,19 @@ const server = await loadTranspiledModule(
         sortOrder: row.sort_order,
         updatedAt: row.updated_at || "",
       }),
+      mapLegacyMilestoneFromEpic: (row) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description || "",
+        targetDate: row.target_date || "",
+        status: row.status === "In Arbeit" ? "active" : row.status === "Erledigt" ? "done" : "planned",
+        sortOrder: row.sort_order || 0,
+        updatedAt: row.updated_at || "",
+      }),
+    },
+    "@/lib/planning-task-mappers": { mapTaskRow: (row) => row },
+    "@/features/projects/model/planning-legacy-adapters": {
+      resolveCanonicalStrategicItemId: async (_supabase, id) => id,
     },
     "@/lib/slug": {
       slugify: (value) => String(value).trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, ""),
@@ -111,22 +124,15 @@ test("Milestone inserts own project and ID while leaving sort allocation to the 
     status: "planned",
   });
   assert.equal(Object.hasOwn(insert, "sort_order"), false);
-  assert.match(server.createMilestoneId("Market readiness"), /^milestone-market-readiness-[0-9a-f-]{36}$/);
+  assert.match(server.createMilestoneId("Market readiness"), /^epic-market-readiness-[0-9a-f-]{36}$/);
 });
 
-test("Milestone update and delete helpers put project, ID, and updated_at in the mutation predicate", async () => {
+test("Legacy Milestone helpers delegate writes to canonical Epic RPCs", async () => {
   const calls = [];
   const supabase = {
-    from(table) {
-      calls.push(["from", table]);
-      const builder = {
-        update(value) { calls.push(["update", value]); return builder; },
-        delete() { calls.push(["delete"]); return builder; },
-        eq(field, value) { calls.push(["eq", field, value]); return builder; },
-        select(value) { calls.push(["select", value]); return builder; },
-        maybeSingle() { calls.push(["maybeSingle"]); return Promise.resolve({ data: null, error: null }); },
-      };
-      return builder;
+    rpc(name, input) {
+      calls.push(["rpc", name, input]);
+      return Promise.resolve({ data: { task: { id: input.p_task_id } }, error: null });
     },
   };
 
@@ -135,26 +141,40 @@ test("Milestone update and delete helpers put project, ID, and updated_at in the
     "milestone-one",
     "2026-07-14T12:00:00.000Z",
     { title: "Updated title" },
+    "ceo",
   );
-  await server.deleteProjectMilestone(supabase, "milestone-one", "2026-07-14T12:00:00.000Z");
+  await server.deleteProjectMilestone(supabase, "milestone-one", "2026-07-14T12:00:00.000Z", "ceo");
 
-  const equalityPredicates = calls.filter(([operation]) => operation === "eq");
-  assert.deepEqual(equalityPredicates.slice(0, 3), [
-    ["eq", "project_id", "findmydoc-founder-execution"],
-    ["eq", "id", "milestone-one"],
-    ["eq", "updated_at", "2026-07-14T12:00:00.000Z"],
+  assert.deepEqual(calls, [
+    ["rpc", "update_planning_item_transaction", {
+      p_task_id: "milestone-one",
+      p_expected_updated_at: "2026-07-14T12:00:00.000Z",
+      p_patch: { title: "Updated title" },
+      p_strategy: null,
+      p_raci_assignments: null,
+      p_actor_profile_id: "ceo",
+    }],
+    ["rpc", "delete_empty_epic_transaction", {
+      p_task_id: "milestone-one",
+      p_expected_updated_at: "2026-07-14T12:00:00.000Z",
+      p_actor_profile_id: "ceo",
+    }],
   ]);
-  assert.deepEqual(equalityPredicates.slice(3), equalityPredicates.slice(0, 3));
 });
 
-test("Milestone child counts use both base tables, including trashed rows", async () => {
+test("Legacy Milestone child counts traverse the canonical task tree", async () => {
   const tables = [];
   const supabase = {
     from(table) {
       tables.push(table);
-      const result = table === "packages"
-        ? { data: null, error: null, count: 2 }
-        : { data: null, error: null, count: 1 };
+      const result = {
+        data: [
+          { id: "initiative-one", parent_task_id: "milestone-one", task_type: "initiative" },
+          { id: "deliverable-one", parent_task_id: "initiative-one", task_type: "deliverable" },
+          { id: "sub-issue-one", parent_task_id: "deliverable-one", task_type: "sub_issue" },
+        ],
+        error: null,
+      };
       const builder = {
         select() { return builder; },
         eq() { return builder; },
@@ -166,9 +186,9 @@ test("Milestone child counts use both base tables, including trashed rows", asyn
 
   assert.deepEqual(await server.loadMilestoneChildCounts(supabase, "milestone-one"), {
     ok: true,
-    counts: { initiatives: 2, tasks: 1 },
+    counts: { initiatives: 1, tasks: 2 },
   });
-  assert.deepEqual(tables, ["packages", "tasks"]);
+  assert.deepEqual(tables, ["tasks"]);
 });
 
 test("Known database conflicts share one public non-empty contract without raw messages", () => {
@@ -198,5 +218,6 @@ test("Session routes use the narrow role guards and never return raw database er
   assert.match(itemRoute, /freshChildren/);
   assert.match(serverSource, /import "server-only"/);
   assert.match(serverSource, /\.eq\("project_id", MILESTONE_PROJECT_ID\)/);
-  assert.match(serverSource, /\.eq\("updated_at", expectedUpdatedAt\)/);
+  assert.match(serverSource, /update_planning_item_transaction/);
+  assert.match(serverSource, /delete_empty_epic_transaction/);
 });

@@ -6,6 +6,7 @@ import {
   buildTaskShareMessage,
   buildTaskShareUrl,
   googleChatUrl,
+  taskShareTypeLabel,
 } from "@/features/tasks/model/task-share-message";
 import type { Task } from "@/lib/types";
 import { UiButton, UiTextArea } from "@/shared/atoms/ui-primitives";
@@ -41,6 +42,7 @@ export function TaskSharePopover({ task }: { task: Task }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const itemLabel = taskShareTypeLabel(task.taskType);
 
   useEffect(() => () => {
     if (feedbackTimeoutRef.current !== null) window.clearTimeout(feedbackTimeoutRef.current);
@@ -131,13 +133,13 @@ export function TaskSharePopover({ task }: { task: Task }) {
       {open ? (
         <div
           role="dialog"
-          aria-label="Issue teilen"
+          aria-label={`${itemLabel} teilen`}
           data-tour-id="task-share-popover"
           className="absolute left-0 top-12 z-50 w-[min(88vw,420px)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl sm:left-auto sm:right-0 sm:p-4"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-950">Issue teilen</h3>
+              <h3 className="text-sm font-semibold text-slate-950">{itemLabel} teilen</h3>
               <p className="mt-1 text-xs leading-5 text-slate-500">Nachricht prüfen und bei Bedarf anpassen.</p>
             </div>
             <button
@@ -145,7 +147,7 @@ export function TaskSharePopover({ task }: { task: Task }) {
               onClick={closePopover}
               disabled={busy}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
-              aria-label="Teilen schließen"
+              aria-label={`${itemLabel} teilen schließen`}
             >
               <X size={16} aria-hidden="true" />
             </button>

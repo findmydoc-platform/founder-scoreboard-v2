@@ -20,7 +20,7 @@ import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/
 
 type PlanningTrashRootRow = {
   id: string;
-  task_type?: "deliverable" | "sub_issue" | null;
+  task_type?: "initiative" | "deliverable" | "sub_issue" | null;
   approval_status: ApprovalStatus | null;
   approval_revision: number | null;
   proposed_by: string | null;
@@ -49,13 +49,13 @@ function planningTrashRootLabel(rootType: TrashRootType) {
 }
 
 function planningTrashRootTable(rootType: TrashRootType) {
-  return rootType === "initiative" ? "packages" : "tasks";
+  void rootType;
+  return "tasks";
 }
 
 function planningTrashRootSelect(rootType: TrashRootType) {
-  return rootType === "initiative"
-    ? "id,approval_status,approval_revision,proposed_by,trashed_at,trash_revision"
-    : "id,task_type,approval_status,approval_revision,proposed_by,review_status,score_final,trashed_at,trash_revision";
+  void rootType;
+  return "id,task_type,approval_status,approval_revision,proposed_by,review_status,score_final,trashed_at,trash_revision";
 }
 
 function planningTrashTransactionError(
@@ -140,8 +140,8 @@ export async function handlePlanningTrashWithdraw(
   const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
   if (rootError) return apiError(rootError.message, 500);
   if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
-  if (rootType === "deliverable" && root.task_type !== "deliverable") {
-    return apiError("Sub-Issues können nicht unabhängig zurückgezogen werden.", 400);
+  if (root.task_type !== rootType) {
+    return apiError(rootType === "initiative" ? "Initiative wurde nicht gefunden." : "Sub-Issues können nicht unabhängig zurückgezogen werden.", 400);
   }
   if (root.trashed_at) return apiError(`${planningTrashRootLabel(rootType)} liegt bereits im Papierkorb.`, 409);
   if (rootType === "deliverable" && isReviewStateLocked(root.review_status, root.score_final)) {
@@ -192,8 +192,8 @@ export async function handlePlanningTrashRestore(
   const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
   if (rootError) return apiError(rootError.message, 500);
   if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
-  if (rootType === "deliverable" && root.task_type !== "deliverable") {
-    return apiError("Sub-Issues können nicht unabhängig wiederhergestellt werden.", 400);
+  if (root.task_type !== rootType) {
+    return apiError(rootType === "initiative" ? "Initiative wurde nicht gefunden." : "Sub-Issues können nicht unabhängig wiederhergestellt werden.", 400);
   }
   if (!root.trashed_at) return apiError(`${planningTrashRootLabel(rootType)} liegt nicht im Papierkorb.`, 409);
   if (Number(root.trash_revision || 0) !== Number(context.payload.expectedTrashRevision)) {

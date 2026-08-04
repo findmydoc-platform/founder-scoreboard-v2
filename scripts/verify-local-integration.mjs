@@ -73,12 +73,16 @@ async function verifySeedConvergence(status, source) {
       ["local-stale-sprint", source.project.id, "Local Stale Sprint"],
     );
     await client.query(
-      "insert into packages (id,project_id,title) values ($1,$2,$3)",
-      ["local-stale-package", source.project.id, "Local Stale Initiative"],
+      "insert into tasks (id,project_id,title,status,task_type,score_relevant,approval_status) values ($1,$2,$3,'Offen','epic',false,null)",
+      ["local-stale-epic", source.project.id, "Local Stale Epic"],
     );
     await client.query(
-      "insert into tasks (id,project_id,package_id,title,status,priority,sprint_id,task_type,score_relevant,approval_status) values ($1,$2,$3,$4,'Offen','P3',$5,'deliverable',true,'approved')",
-      ["local-stale-task", source.project.id, "local-stale-package", "Local Stale Task", "local-stale-sprint"],
+      "insert into tasks (id,project_id,parent_task_id,title,status,priority,task_type,score_relevant,approval_status) values ($1,$2,$3,$4,'Offen','P2','initiative',false,'proposed')",
+      ["local-stale-initiative", source.project.id, "local-stale-epic", "Local Stale Initiative"],
+    );
+    await client.query(
+      "insert into tasks (id,project_id,parent_task_id,title,status,priority,sprint_id,task_type,score_relevant,approval_status) values ($1,$2,$3,$4,'Offen','P3',$5,'deliverable',false,'proposed')",
+      ["local-stale-task", source.project.id, "local-stale-initiative", "Local Stale Task", "local-stale-sprint"],
     );
     await client.query(
       "insert into meetings (sprint_id,title,meeting_at) values ($1,$2,now())",
@@ -101,8 +105,11 @@ async function verifySeedConvergence(status, source) {
       `select
         (select count(*)::integer from profiles) as profiles,
         (select count(*)::integer from fmd_tools) as tools,
-        (select count(*)::integer from packages where project_id=$1) as packages,
         (select count(*)::integer from tasks where project_id=$1) as tasks,
+        (select count(*)::integer from tasks where project_id=$1 and task_type='epic') as epics,
+        (select count(*)::integer from tasks where project_id=$1 and task_type='initiative') as initiatives,
+        (select count(*)::integer from tasks where project_id=$1 and task_type='deliverable') as deliverables,
+        (select count(*)::integer from tasks where project_id=$1 and task_type='sub_issue') as sub_issues,
         (select count(*)::integer from sprints where project_id=$1) as sprints,
         (select count(*)::integer from meetings where sprint_id in (select id from sprints where project_id=$1)) as meetings,
         (select github_project_owner from projects where id=$1) as github_project_owner,
@@ -113,8 +120,11 @@ async function verifySeedConvergence(status, source) {
     const expected = {
       profiles: source.profiles.length,
       tools: source.fmdTools.length,
-      packages: source.packages.length,
-      tasks: source.tasks.length,
+      tasks: source.epics.length + source.packages.length + source.tasks.length,
+      epics: source.epics.length,
+      initiatives: source.packages.length,
+      deliverables: source.tasks.filter((task) => (task.taskType || "deliverable") === "deliverable").length,
+      sub_issues: source.tasks.filter((task) => task.taskType === "sub_issue").length,
       sprints: source.sprints.length,
       meetings: source.meetings.length,
     };
@@ -325,6 +335,7 @@ async function main() {
   const status = localStatus();
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
+  execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   await verifyGitHubProjectRoleBoundary(status, source);
   await verifyUnmappedAuthReadBoundary(status);
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
@@ -343,6 +354,8 @@ async function main() {
 
     const unauthenticated = await apiRequest("/api/planning-data?workspace=planning", "", "");
     assertStatus(unauthenticated, 401, "Unauthenticated planning data");
+    const unauthenticatedRevision = await apiRequest("/api/planning-data/revision", "", "");
+    assertStatus(unauthenticatedRevision, 401, "Unauthenticated planning revision");
 
     const localLogin = await fetch(`${appOrigin}/api/auth/local-login`, { method: "POST" });
     assertStatus(localLogin, 200, "Simulated local login");
@@ -368,7 +381,8 @@ async function main() {
       assertStatus(response, 200, `${role} planning data`);
       const body = await response.json();
       if (body.currentProfile?.platformRole !== role) throw new Error(`${role} profile override was not applied.`);
-      if (body.data?.tasks?.length !== source.tasks.length) throw new Error(`${role} did not receive the complete DB seed.`);
+      const expectedPlanningItems = source.epics.length + source.packages.length + source.tasks.length;
+      if (body.data?.tasks?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {
@@ -386,6 +400,23 @@ async function main() {
         body: "{}",
       });
       assertStatus(response, 400, `${profileId || "ceo"} milestone validation`);
+    }
+
+    for (const profileId of ["sebastian", "local-viewer"]) {
+      const response = await apiRequest("/api/tasks/bulk-sprint-assignment", token, profileId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      assertStatus(response, 403, `${profileId} bulk Sprint assignment authorization`);
+    }
+    for (const profileId of ["", "local-deputy"]) {
+      const response = await apiRequest("/api/tasks/bulk-sprint-assignment", token, profileId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      assertStatus(response, 400, `${profileId || "ceo"} bulk Sprint assignment validation`);
     }
 
     const viewerToolWrite = await apiRequest("/api/tools", token, "local-viewer", {

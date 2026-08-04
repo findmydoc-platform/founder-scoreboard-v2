@@ -50,7 +50,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
   if (hasOpenWaitingRelation(task.id, data.tasks, data.taskRelations)) {
     signals.push({ id: "waiting", label: "Wartet", kind: "critical" });
   }
-  if (task.githubIssueSyncStatus === "failed") {
+  if ((task.taskType === "deliverable" || task.taskType === "sub_issue") && task.githubIssueSyncStatus === "failed") {
     signals.push({ id: "sync-failed", label: "Sync fehlgeschlagen", kind: "critical" });
   }
 
@@ -58,7 +58,7 @@ export function taskCriticalAttentionSignals(task: Task, data: SignalData): Task
 }
 
 export function taskQualityAttentionSignals(task: Task): TaskAttentionSignal[] {
-  if (task.taskType === "sub_issue") return [];
+  if (task.taskType !== "deliverable") return [];
   const signals: TaskAttentionSignal[] = [];
 
   if (!task.acceptanceCriteria?.trim()) {
@@ -75,7 +75,7 @@ export function taskQualityAttentionSignals(task: Task): TaskAttentionSignal[] {
 }
 
 export function taskReviewAttentionSignals(task: Task): TaskAttentionSignal[] {
-  if (task.taskType === "sub_issue") return [];
+  if (task.taskType !== "deliverable") return [];
   const signals: TaskAttentionSignal[] = [];
 
   if (reviewIsOverdue(task)) {

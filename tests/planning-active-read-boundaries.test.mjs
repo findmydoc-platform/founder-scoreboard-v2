@@ -20,11 +20,13 @@ test("operational planning readers use centralized active views", async () => {
   }
 
   const initiativeRoute = await readFile("src/app/api/initiatives/route.ts", "utf8");
+  // The legacy Initiative endpoint is a read-only compatibility adapter over
+  // the canonical Initiative-task projection, not the old packages table.
   assert.match(initiativeRoute, /ACTIVE_PACKAGES_TABLE/);
   assert.doesNotMatch(initiativeRoute, /\.from\("packages"\)\s*\.select/);
 
   const createTaskRoute = sources[0];
-  assert.match(createTaskRoute, /ACTIVE_PACKAGES_TABLE/);
+  assert.match(createTaskRoute, /ACTIVE_TASKS_TABLE/);
   assert.doesNotMatch(createTaskRoute, /\.from\("tasks"\)\s*\.select/);
 
   const digest = sources[1];

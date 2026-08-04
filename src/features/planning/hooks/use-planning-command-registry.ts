@@ -28,6 +28,7 @@ type UsePlanningCommandRegistryOptions = {
   commandContext: PlanningCommandContext;
   currentProfileId: string;
   data: PlanningData;
+  hasPlanningBoardUrlState: boolean;
   hasPlanningFilterUrlState: boolean;
   openTaskPanel: (taskId: string) => void;
   refreshPlanningData: () => Promise<void>;
@@ -52,6 +53,7 @@ export function usePlanningCommandRegistry({
   commandContext,
   currentProfileId,
   data,
+  hasPlanningBoardUrlState,
   hasPlanningFilterUrlState,
   openTaskPanel,
   refreshPlanningData,
@@ -102,6 +104,7 @@ export function usePlanningCommandRegistry({
   useProfileUiPreferenceSync({
     currentProfileId,
     data,
+    hasPlanningBoardUrlState,
     hasPlanningFilterUrlState,
     setExpandedPackageIds: boardState.setExpandedPackageIds,
     setFilters,

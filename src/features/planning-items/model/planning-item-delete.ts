@@ -18,9 +18,9 @@ type DatabaseRow = Record<string, unknown>;
 
 export const MILESTONE_DELETE_SCOPE_WARNING = "Zugeordnete Initiativen oder Aufgaben werden weder verschoben noch gelöscht.";
 
-export type PlanningItemMilestoneDeletePreview = {
+export type PlanningItemEpicDeletePreview = {
   itemId: string;
-  itemType: "milestone";
+  itemType: "epic";
   expectedUpdatedAt: string;
   currentItem: Record<string, unknown>;
   children: MilestoneChildCounts;
@@ -64,18 +64,18 @@ export async function loadPlanningItemMilestoneDeletePreview({
   expectedUpdatedAt: string;
   supabase: SupabaseServer;
 }): Promise<
-  | { ok: true; preview: PlanningItemMilestoneDeletePreview }
+  | { ok: true; preview: PlanningItemEpicDeletePreview }
   | { ok: false; status: 403 | 404 | 409; error: string }
 > {
   if (!["ceo", "deputy"].includes(actor.platformRole)) {
-    return { ok: false, status: 403, error: "Nur CEO oder Deputy können Meilensteine löschen." };
+    return { ok: false, status: 403, error: "Nur CEO oder Deputy können Epics löschen." };
   }
 
   const { data, error } = await loadProjectMilestone(supabase, itemId);
   if (error) throw databaseError(error);
-  if (!data) return { ok: false, status: 404, error: "Meilenstein wurde nicht gefunden." };
+  if (!data) return { ok: false, status: 404, error: "Epic wurde nicht gefunden." };
   if (String(data.updated_at || "") !== expectedUpdatedAt) {
-    return { ok: false, status: 409, error: "Meilenstein wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };
+    return { ok: false, status: 409, error: "Epic wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };
   }
 
   const childResult = await loadMilestoneChildCounts(supabase, itemId);
@@ -87,9 +87,9 @@ export async function loadPlanningItemMilestoneDeletePreview({
     ok: true,
     preview: {
       itemId,
-      itemType: "milestone",
+      itemType: "epic",
       expectedUpdatedAt,
-      currentItem: mapPlanningItemDatabaseRow("milestone", data as DatabaseRow),
+      currentItem: mapPlanningItemDatabaseRow("epic", data as DatabaseRow),
       children,
       valid: canDelete,
       canDelete,

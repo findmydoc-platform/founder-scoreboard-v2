@@ -34,7 +34,7 @@ test("tabs remain available for content, actions, and unresolved detail data", (
       canAddRelationship: true,
       canCreateSubIssue: true,
     }),
-    ["overview", "subIssues", "relationships", "activity"],
+    ["overview", "relationships", "activity"],
   );
   assert.deepEqual(
     taskDetailAvailableTabs({

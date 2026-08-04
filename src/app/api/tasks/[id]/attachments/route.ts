@@ -44,11 +44,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: task, error: taskError } = await supabase
     .from("tasks")
-    .select("id,title,github_repo,github_issue_number,issue_number")
+    .select("id,title,task_type,github_repo,github_issue_number,issue_number")
     .eq("id", id)
     .single();
 
   if (taskError || !task) return apiError("Aufgabe wurde nicht gefunden.", 404);
+  if (task.task_type === "epic" || task.task_type === "initiative") {
+    return apiError("Strategische Planungselemente unterstützen keine GitHub-Anhänge.", 400);
+  }
 
   const formData = await request.formData();
   const file = formData.get("file");

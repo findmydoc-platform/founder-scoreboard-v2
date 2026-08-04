@@ -45,13 +45,18 @@ test("all high-risk task and initiative mutations use the centralized active gua
     "src/app/api/tasks/[id]/attachments/route.ts",
     "src/app/api/tasks/[id]/review/route.ts",
     "src/app/api/tasks/[id]/review/reopen/route.ts",
-    "src/app/api/initiatives/[id]/route.ts",
-    "src/app/api/initiatives/[id]/approval/route.ts",
   ];
 
   for (const route of guardedRoutes) {
     const source = await read(route);
     assert.match(source, /requireActivePlanningItem/, `${route} must fail closed for trash mutations`);
+  }
+  for (const route of [
+    "src/app/api/initiatives/[id]/route.ts",
+    "src/app/api/initiatives/[id]/approval/route.ts",
+  ]) {
+    const source = await read(route);
+    assert.match(source, /loadCanonicalStrategicItem/, `${route} must use the active canonical item adapter`);
   }
   const syncProjection = await read("src/lib/github-sync/task-projection.ts");
   assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
@@ -90,10 +95,11 @@ test("task detail is active-first and falls back to a read-only trash surface", 
   assert.match(banner, /GitHub-Lifecycle/);
 });
 
-test("initiative details require a team session and expose no mutation surface", async () => {
+test("legacy initiative details redirect into the common task detail surface", async () => {
   const page = await read("src/app/initiatives/[id]/page.tsx");
-  assert.match(page, /getServerPlanningAuth\(\["ceo", "founder", "deputy", "viewer"\]\)/);
-  assert.match(page, /loadPlanningInitiativeDetail/);
+  assert.match(page, /planning_item_legacy_ids/);
+  assert.match(page, /source_kind", "package"/);
+  assert.match(page, /redirect\(`\/tasks\//);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
@@ -107,7 +113,7 @@ test("notifications keep rejected initiative details read-only and return revisi
   assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
   assert.deepEqual(
     notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),
-    { workspace: "projects", href: "/projects" },
+    { workspace: "backlog", href: "/backlog?backlog.level=initiative" },
   );
   assert.equal(
     notificationTarget({ type: "planning_item.rejected", entityType: "initiative", entityId: "initiative/1" }).href,

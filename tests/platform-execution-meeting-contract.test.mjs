@@ -267,8 +267,11 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.match(createCommand, /setTaskDialogDefaults\(null\)/);
   assert.match(createCommand, /if \(!response\.ok \|\| !body\?\.task\)/);
   assert.doesNotMatch(route, /Founder können nur eigene Deliverables verfeinern/);
-  assert.match(route, /new Set<TaskType>\(\["deliverable", "sub_issue"\]\)/);
-  assert.match(route, /Deliverables brauchen eine Initiative/);
+  assert.match(route, /new Set<TaskType>\(\["epic", "initiative", "deliverable", "sub_issue"\]\)/);
+  assert.match(route, /const isStrategic = requestedType === "epic" \|\| requestedType === "initiative"/);
+  assert.match(route, /create_planning_item_transaction/);
+  assert.match(route, /if \(taskType === "deliverable" && parentTaskId\)/);
+  assert.doesNotMatch(route, /Deliverables brauchen eine Initiative/);
   assert.match(route, /In einer abgelehnten Initiative/);
   assert.match(route, /Nur der CEO kann beim Erstellen direkt freigeben/);
   assert.match(updateRoute, /getBacklogSprintAssignmentEligibility/);
@@ -290,7 +293,8 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.match(newTaskUi, /relatedTaskId/);
   assert.match(newTaskUi, /Zieltermin/);
   assert.match(ui, /createIfMissing: true/);
-  assert.match(types, /TaskType = "deliverable" \| "sub_issue"/);
+  assert.match(types, /PlanningItemType = "epic" \| "initiative" \| "deliverable" \| "sub_issue"/);
+  assert.match(types, /TaskType = PlanningItemType/);
   assert.match(types, /ApprovalStatus = "draft" \| "proposed" \| "approved" \| "rejected"/);
 });
 

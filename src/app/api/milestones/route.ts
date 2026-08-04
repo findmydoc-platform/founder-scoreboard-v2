@@ -28,7 +28,11 @@ export async function POST(request: NextRequest) {
   const parsed = parseMilestoneCreateRequest(context.payload);
   if (!parsed.ok) return apiError(parsed.error, 400);
 
-  const { data, error } = await insertProjectMilestone(context.supabase, parsed.value);
+  const { data, error } = await insertProjectMilestone(
+    context.supabase,
+    parsed.value,
+    context.permission.profile?.id || "",
+  );
   if (error || !data) return apiError("Meilenstein konnte nicht erstellt werden.", 500);
 
   await context.supabase.from("audit_log").insert({

@@ -13,7 +13,8 @@ test("Sub-Issue reparenting stays guarded by task type, ownership, and CAS", asy
   assert.match(route, /payload\.parentTaskId !== undefined/);
   assert.match(route, /currentTask\.task_type !== "sub_issue"/);
   assert.match(route, /detailPermissions\.canReparentSubIssue/);
-  assert.match(route, /nextParent\.task_type !== "deliverable"/);
+  assert.match(route, /const requiredParentType = currentTask\.task_type === "sub_issue" \? "deliverable" : "initiative"/);
+  assert.match(route, /nextParent\.task_type !== requiredParentType/);
   assert.match(route, /p_expected_updated_at: payload\.expectedUpdatedAt/);
   assert.match(permissions, /task\.taskType === "sub_issue" && canWorkOnTask/);
   assert.match(migration, /v_before_task\.updated_at <> p_expected_updated_at/);

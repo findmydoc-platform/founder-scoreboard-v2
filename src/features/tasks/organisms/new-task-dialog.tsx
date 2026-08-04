@@ -4,9 +4,9 @@ import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { taskCreationTitleError, withSubIssueParentHierarchy } from "@/features/tasks/model/task-creation-draft";
+import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import {
   initiativeOptions,
-  milestoneOptions,
   parentDeliverableOptions,
   priorityOptions,
   relatedTaskOptions,
@@ -15,7 +15,7 @@ import {
 } from "@/features/tasks/model/task-form-options";
 import { allowedGitHubRepositories, defaultGitHubRepository } from "@/lib/github-repositories";
 import { taskAssigneeOptions } from "@/lib/display";
-import type { PlanningData, TaskRelationType } from "@/lib/types";
+import type { PlanningData, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
@@ -29,7 +29,7 @@ export type NewTaskDraft = {
   scopeConstraints: string;
   acceptanceCriteria: string;
   evidenceRequired: string;
-  taskType: "deliverable" | "sub_issue";
+  taskType: TaskType;
   parentTaskId: string;
   milestoneId: string;
   packageId: string;
@@ -41,6 +41,7 @@ export type NewTaskDraft = {
   startDate: string;
   endDate: string;
   deadline: string;
+  targetDate: string;
   hours: number;
   definitionOfDone: string;
   createGitHubIssue: boolean;
@@ -56,7 +57,7 @@ export type NewTaskCreateCallbacks = {
 };
 
 type DraftSetter = Dispatch<SetStateAction<NewTaskDraft>>;
-type TaskDialogData = Pick<PlanningData, "milestones" | "packages" | "profiles" | "sprints" | "tasks">;
+type TaskDialogData = Pick<PlanningData, "packages" | "profiles" | "sprints" | "tasks">;
 
 function SectionHeading({ children, accent = false }: { children: string; accent?: boolean }) {
   return (
@@ -267,15 +268,16 @@ function DeliverableForm({
   titleError: string;
   titleValidationId: string;
 }) {
-  const selectedInitiative = data.packages.find((pack) => pack.id === draft.packageId);
+  const selectedInitiative = data.packages.find((pack) => pack.id === (draft.parentTaskId || draft.packageId));
   const initiativeApproved = selectedInitiative?.approvalStatus === "approved";
   const githubHelpId = useId();
 
-  const selectInitiative = (packageId: string) => {
-    const nextInitiative = data.packages.find((pack) => pack.id === packageId);
+  const selectInitiative = (parentTaskId: string) => {
+    const nextInitiative = data.packages.find((pack) => pack.id === parentTaskId);
     setDraft((current) => ({
       ...current,
-      packageId,
+      parentTaskId,
+      packageId: parentTaskId,
       approveNow: nextInitiative?.approvalStatus === "approved" ? current.approveNow : false,
       createGitHubIssue: nextInitiative?.approvalStatus === "approved" ? current.createGitHubIssue : false,
     }));
@@ -331,18 +333,11 @@ function DeliverableForm({
         <section className="grid gap-3">
           <SectionHeading>Struktur</SectionHeading>
           <UiSelectField
-            label={<RequiredLabel>Initiative</RequiredLabel>}
-            value={draft.packageId}
+            label="Initiative"
+            value={draft.parentTaskId || draft.packageId}
             onChange={selectInitiative}
-            options={initiativeOptions(data.packages)}
-            aria-label="Initiative, Pflichtfeld"
-            aria-required
-          />
-          <UiSelectField
-            label="Epic / Meilenstein"
-            value={draft.milestoneId}
-            onChange={(value) => setDraft((current) => ({ ...current, milestoneId: value }))}
-            options={milestoneOptions(data.milestones, "Ohne Epic")}
+            options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiativeOptions(data.packages)]}
+            aria-label="Initiative"
           />
           {selectedInitiative ? (
             <div className="rounded-md border border-slate-200 bg-white p-3">
@@ -383,6 +378,156 @@ function DeliverableForm({
   );
 }
 
+function StrategicItemForm({
+  data,
+  draft,
+  onTitleBlur,
+  setDraft,
+  titleError,
+  titleValidationId,
+}: {
+  data: TaskDialogData;
+  draft: NewTaskDraft;
+  onTitleBlur: () => void;
+  setDraft: DraftSetter;
+  titleError: string;
+  titleValidationId: string;
+}) {
+  const isInitiative = draft.taskType === "initiative";
+  const strategicStatusOptions = strategicPlanningStatuses.map((status) => ({ value: status, label: status }));
+  const epicOptions = [
+    { value: "", label: "Ohne Epic – als Vorschlag" },
+    ...data.tasks
+      .filter((task) => task.taskType === "epic")
+      .map((task) => ({ value: task.id, label: task.title })),
+  ];
+
+  return (
+    <div className="grid min-h-0 gap-0 lg:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]">
+      <div className="grid content-start gap-5 p-5 sm:p-6 lg:border-r lg:border-slate-200">
+        <p className="text-xs font-medium text-slate-500"><span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld</p>
+        <UiField>
+          <RequiredLabel>Titel</RequiredLabel>
+          <UiTextInput
+            data-autofocus
+            data-task-title
+            required
+            minLength={3}
+            value={draft.title}
+            aria-describedby={titleError ? titleValidationId : undefined}
+            aria-errormessage={titleError ? titleValidationId : undefined}
+            aria-invalid={titleError ? true : undefined}
+            onBlur={onTitleBlur}
+            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+            inputSize="lg"
+            inputPadding="md"
+            className={titleError ? "border-red-300 focus:border-red-500 focus:ring-red-100" : undefined}
+            placeholder={isInitiative ? "Klar abgegrenzte strategische Initiative" : "Strategisches Ziel oder Epic"}
+          />
+          {titleError ? <span id={titleValidationId} aria-live="polite" className="text-red-700">{titleError}</span> : null}
+        </UiField>
+
+        <UiField>
+          Kontext <span className="font-normal text-slate-400">(optional)</span>
+          <UiTextArea
+            value={draft.description}
+            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+            minHeight="md"
+            inputPadding="md"
+            leading="relaxed"
+            placeholder="Worum geht es, warum ist es wichtig und welcher Rahmen gilt?"
+          />
+        </UiField>
+
+        {isInitiative ? (
+          <section className="grid gap-4">
+            <div>
+              <SectionHeading>Strategie</SectionHeading>
+              <p className="mt-2 text-xs leading-5 text-slate-500">Zielbild, Erfolg und klare Grenzen machen die Initiative später freigabefähig.</p>
+            </div>
+            <UiField>
+              Zielbild
+              <UiTextArea
+                value={draft.intendedOutcome}
+                onChange={(event) => setDraft((current) => ({ ...current, intendedOutcome: event.target.value }))}
+                minHeight="sm"
+                inputPadding="md"
+                leading="relaxed"
+                placeholder="Welcher strategische Zustand soll erreicht werden?"
+              />
+            </UiField>
+            <UiField>
+              Erfolgskriterien
+              <UiTextArea
+                value={draft.acceptanceCriteria}
+                onChange={(event) => setDraft((current) => ({ ...current, acceptanceCriteria: event.target.value }))}
+                minHeight="md"
+                inputPadding="md"
+                leading="relaxed"
+                placeholder="Woran erkennen wir, dass die Initiative erfolgreich ist?"
+              />
+            </UiField>
+            <UiField>
+              Scope &amp; Grenzen
+              <UiTextArea
+                value={draft.scopeConstraints}
+                onChange={(event) => setDraft((current) => ({ ...current, scopeConstraints: event.target.value }))}
+                minHeight="sm"
+                inputPadding="md"
+                leading="relaxed"
+                placeholder="Was gehört ausdrücklich dazu und was nicht?"
+              />
+            </UiField>
+          </section>
+        ) : null}
+      </div>
+
+      <div className="grid content-start gap-5 bg-slate-50/40 p-5 sm:p-6">
+        <section className="grid gap-3">
+          <SectionHeading>Einordnung</SectionHeading>
+          {isInitiative ? (
+            <UiSelectField
+              label="Parent-Epic"
+              value={draft.parentTaskId}
+              onChange={(parentTaskId) => setDraft((current) => ({ ...current, parentTaskId }))}
+              options={epicOptions}
+              aria-label="Parent-Epic"
+            />
+          ) : null}
+          <UiSelectField
+            label="Zuständig"
+            value={draft.assignee}
+            onChange={(assignee) => setDraft((current) => ({ ...current, assignee }))}
+            options={taskAssigneeOptions(draft.taskType, data.profiles)}
+          />
+          {isInitiative ? (
+            <UiSelectField
+              label="Priorität"
+              value={draft.priority}
+              onChange={(priority) => setDraft((current) => ({ ...current, priority }))}
+              options={priorityOptions}
+            />
+          ) : null}
+          <UiSelectField
+            label="Status"
+            value={draft.status}
+            onChange={(status) => setDraft((current) => ({ ...current, status: status as TaskStatus }))}
+            options={strategicStatusOptions}
+          />
+          <UiDateField label="Zieltermin" value={draft.targetDate} onChange={(targetDate) => setDraft((current) => ({ ...current, targetDate }))} />
+        </section>
+
+        {isInitiative ? (
+          <section className="grid gap-2 rounded-md border border-slate-200 bg-white p-3">
+            <SectionHeading>RACI</SectionHeading>
+            <p className="text-xs leading-5 text-slate-500">Die zuständige Person wird beim Erstellen als Accountable und Responsible gesetzt. Weitere Rollen lassen sich im Detail ergänzen.</p>
+          </section>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function SubIssueForm({
   data,
   draft,
@@ -416,7 +561,7 @@ function SubIssueForm({
       />
 
       <p className="-mt-2 text-xs leading-5 text-slate-500">
-        Initiative, Epic / Meilenstein, Freigabe und RACI werden vom Parent-Deliverable übernommen.
+        Initiative, Epic und Freigabe werden vom Parent-Deliverable übernommen.
       </p>
 
       <UiField>
@@ -507,9 +652,7 @@ export function NewTaskDialog({
   const [draft, setDraft] = useState<NewTaskDraft>(() => {
     const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
     const fallbackAssignee = currentProfileId || data.profiles[0]?.id || "";
-    const defaultMilestoneId = defaults.milestoneId || data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
-    const initiativesForDefaultMilestone = data.packages.filter((pack) => !defaultMilestoneId || !pack.milestoneId || pack.milestoneId === defaultMilestoneId);
-    const initialPackageId = defaults.packageId || initiativesForDefaultMilestone[0]?.id || data.packages[0]?.id || "";
+    const initialPackageId = defaults.parentTaskId || defaults.packageId || data.packages[0]?.id || "";
     const initialInitiativeApproved = data.packages.find((pack) => pack.id === initialPackageId)?.approvalStatus === "approved";
     const initialDraft: NewTaskDraft = {
       creationRequestId: defaults.creationRequestId || globalThis.crypto.randomUUID(),
@@ -521,8 +664,8 @@ export function NewTaskDialog({
       acceptanceCriteria: defaults.acceptanceCriteria || "",
       evidenceRequired: defaults.evidenceRequired || "",
       taskType: initialTaskType,
-      parentTaskId: defaults.parentTaskId || "",
-      milestoneId: defaultMilestoneId,
+      parentTaskId: defaults.parentTaskId || (initialTaskType === "deliverable" ? initialPackageId : ""),
+      milestoneId: "",
       packageId: initialPackageId,
       sprintId: defaults.sprintId || "",
       assignee: defaults.assignee || fallbackAssignee,
@@ -532,6 +675,7 @@ export function NewTaskDialog({
       startDate: defaults.startDate || activeSprint?.startDate || "",
       endDate: defaults.endDate || activeSprint?.endDate || "",
       deadline: defaults.deadline || "",
+      targetDate: defaults.targetDate || "",
       hours: defaults.hours || 2,
       definitionOfDone: defaults.definitionOfDone || "",
       createGitHubIssue: initialTaskType === "deliverable" && canApproveNow && initialInitiativeApproved && Boolean(defaults.approveNow) && Boolean(defaults.createGitHubIssue),
@@ -561,11 +705,37 @@ export function NewTaskDialog({
           createGitHubIssue: false,
           approveNow: false,
         }, data.tasks, initialDraft.parentTaskId)
-      : initialDraft;
+      : initialTaskType === "epic"
+        ? {
+            ...initialDraft,
+            parentTaskId: "",
+            packageId: "",
+            milestoneId: "",
+            priority: "",
+            startDate: "",
+            endDate: "",
+            deadline: "",
+            hours: 0,
+            createGitHubIssue: false,
+            approveNow: false,
+          }
+        : initialTaskType === "initiative"
+          ? {
+              ...initialDraft,
+              packageId: "",
+              milestoneId: "",
+              startDate: "",
+              endDate: "",
+              deadline: "",
+              hours: 0,
+              createGitHubIssue: false,
+              approveNow: false,
+            }
+          : initialDraft;
   });
 
-  const selectedInitiative = data.packages.find((pack) => pack.id === draft.packageId);
-  const deliverableNeedsStructure = draft.taskType === "deliverable" && !draft.packageId;
+  const selectedInitiative = data.packages.find((pack) => pack.id === (draft.parentTaskId || draft.packageId));
+  const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
   const invalidTitle = draft.title.trim().length < 3;
   const invalidDateRange = Boolean(draft.startDate && draft.endDate && draft.startDate > draft.endDate);
@@ -581,10 +751,20 @@ export function NewTaskDialog({
           : ""
     : "";
   const canApproveSelectedInitiative = canApproveNow && selectedInitiative?.approvalStatus === "approved";
-  const title = draft.taskType === "sub_issue" ? "Neues Sub-Issue" : "Neues Deliverable";
+  const title = draft.taskType === "sub_issue"
+    ? "Neues Sub-Issue"
+    : draft.taskType === "initiative"
+      ? "Neue Initiative"
+      : draft.taskType === "epic"
+        ? "Neues Epic"
+        : "Neues Deliverable";
   const description = draft.taskType === "sub_issue"
     ? "Konkreten Arbeitsschritt unter einem Deliverable anlegen."
-    : "Ergebnis, Abnahme und Verantwortlichkeit festlegen.";
+    : draft.taskType === "initiative"
+      ? "Strategisches Vorhaben mit Zielbild und verantwortlicher Person anlegen."
+      : draft.taskType === "epic"
+        ? "Übergeordnetes strategisches Ziel anlegen."
+        : "Ergebnis, Abnahme und Verantwortlichkeit festlegen.";
 
   useEffect(() => {
     if (!submitError) return;
@@ -626,7 +806,7 @@ export function NewTaskDialog({
         <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-700">
-              Item erstellen <span aria-hidden="true" className="px-1 text-slate-300">·</span> {draft.taskType === "sub_issue" ? "Sub-Issue" : "Deliverable"}
+              Item erstellen <span aria-hidden="true" className="px-1 text-slate-300">·</span> {draft.taskType === "sub_issue" ? "Sub-Issue" : draft.taskType === "initiative" ? "Initiative" : draft.taskType === "epic" ? "Epic" : "Deliverable"}
             </div>
             <h2 id={titleId} className="mt-1 text-xl font-semibold text-slate-950">{title}</h2>
             <p id={descriptionId} className="mt-1 text-sm text-slate-500">{description}</p>
@@ -658,7 +838,18 @@ export function NewTaskDialog({
                   titleValidationId={titleValidationId}
                 />
               )
-            : (
+            : draft.taskType === "epic" || draft.taskType === "initiative"
+              ? (
+                <StrategicItemForm
+                  data={data}
+                  draft={draft}
+                  onTitleBlur={() => setTitleTouched(true)}
+                  setDraft={setDraft}
+                  titleError={titleError}
+                  titleValidationId={titleValidationId}
+                />
+              )
+              : (
                 <DeliverableForm
                   canApproveNow={canApproveNow}
                   data={data}
@@ -701,9 +892,13 @@ export function NewTaskDialog({
                 ? "Wird erstellt..."
                 : draft.taskType === "sub_issue"
                   ? "Sub-Issue erstellen"
-                  : draft.approveNow
-                    ? "Erstellen und freigeben"
-                    : "Deliverable vorschlagen"}
+                  : draft.taskType === "epic"
+                    ? "Epic erstellen"
+                    : draft.taskType === "initiative"
+                      ? "Initiative vorschlagen"
+                      : draft.approveNow
+                        ? "Erstellen und freigeben"
+                        : "Deliverable vorschlagen"}
             </UiButton>
           </div>
         </footer>

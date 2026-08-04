@@ -9,6 +9,8 @@ export const priorityOptions: CustomSelectOption[] = ["P0", "P1", "P2", "P3", "P
 }));
 
 export const taskTypeOptions: Array<CustomSelectOption & { value: TaskType }> = [
+  { value: "epic", label: "Epic" },
+  { value: "initiative", label: "Initiative" },
   { value: "deliverable", label: "Deliverable" },
   { value: "sub_issue", label: "Sub-Issue" },
 ];

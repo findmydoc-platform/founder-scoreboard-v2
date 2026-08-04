@@ -4,19 +4,34 @@ export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
 export type ReviewDecision = Exclude<ReviewStatus, "not_requested" | "requested">;
-export type GitHubIssueSyncStatus = "not_synced" | "synced" | "pending" | "failed";
-export type GitHubCommentDeliveryStatus = "pending" | "waiting_for_issue" | "waiting_for_author_connection" | "processing" | "retry_scheduled" | "delivered" | "failed";
+export type GitHubIssueSyncStatus = "not_applicable" | "not_synced" | "synced" | "pending" | "failed";
+export type GitHubCommentDeliveryStatus = "not_applicable" | "pending" | "waiting_for_issue" | "waiting_for_author_connection" | "processing" | "retry_scheduled" | "delivered" | "failed";
 export type CommitmentLevel = "Lite" | "Standard" | "Heavy" | "Away";
 export type StrikeEventType = "strike_added" | "strike_reset" | "away_neutral" | "fulfilled_no_change" | "governance_review_required";
 export type ScoreObjectionStatus = "open" | "reviewed" | "dismissed" | "accepted";
 export type ApprovalStatus = "draft" | "proposed" | "approved" | "rejected";
 export type ApprovalDecisionAction = "approve" | "reject" | "return_to_draft";
-export type TaskType = "deliverable" | "sub_issue";
+export type PlanningItemType = "epic" | "initiative" | "deliverable" | "sub_issue";
+export type TaskType = PlanningItemType;
 export type TaskRelationType = "blocked_by" | "blocks" | "relates_to";
 export type TrashCause = "withdrawn" | "rejected";
 export type TrashRootType = "initiative" | "deliverable";
 
-export type TaskStatus = "Offen" | "In Arbeit" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
+export type TaskStatus = "Offen" | "In Arbeit" | "Pausiert" | "Review" | "Nacharbeit" | "Blockiert" | "Erledigt";
+
+export type PlanningStrategy = {
+  goal: string;
+  successCriteria: string;
+  scopeConstraints: string;
+};
+
+export type PlanningItemRaciRole = "accountable" | "responsible" | "consulted" | "informed";
+
+export type PlanningItemRaciAssignment = {
+  profileId: string;
+  role: PlanningItemRaciRole;
+  sortOrder: number;
+};
 
 export type Profile = {
   id: string;
@@ -106,6 +121,7 @@ export type Task = {
   createdBy?: string;
   workstream: string;
   packageId: string;
+  targetDate?: string;
   deadline: string;
   problemStatement?: string;
   intendedOutcome?: string;
@@ -141,6 +157,8 @@ export type Task = {
   githubIssueSyncPendingSince?: string;
   taskType: TaskType;
   parentTaskId: string;
+  strategy?: PlanningStrategy;
+  raciAssignments?: PlanningItemRaciAssignment[];
   approvalStatus: ApprovalStatus | null;
   approvalRevision: number;
   proposedById?: string;
@@ -161,6 +179,7 @@ export type Task = {
   selfDocumentedChecked?: boolean;
   selfBlockersChecked?: boolean;
   updatedAt?: string;
+  createdAt?: string;
   trashedAt?: string;
   trashedById?: string;
   trashReason?: string;
@@ -170,6 +189,8 @@ export type Task = {
   trashRootId?: string;
   trashRevision?: number;
 };
+
+export type PlanningItem = Task;
 
 export type AuthenticatedProfile = Pick<Profile, "id" | "name" | "platformRole" | "githubLogin">;
 

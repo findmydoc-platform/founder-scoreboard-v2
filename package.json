@@ -19,6 +19,7 @@
     "verify:planning-trash-purge": "node scripts/verify-planning-trash-purge-transaction.mjs",
     "verify:task-creation": "node scripts/verify-task-creation-transaction.mjs",
     "verify:planning-items": "node scripts/verify-planning-items-transaction.mjs",
+    "verify:backlog-bulk-sprint": "node scripts/verify-backlog-bulk-sprint-assignment.mjs",
     "verify:planning-batches": "node scripts/verify-planning-batch-transactions.mjs",
     "verify:planning-trash-lifecycle": "node scripts/verify-planning-trash-lifecycle-transaction.mjs",
     "verify:sprint-finalization": "node scripts/verify-sprint-finalization-transaction.mjs",

@@ -88,6 +88,9 @@ test("buildTaskOverviewDraft uses the description fallback and empty optional va
     evidenceLinks: [],
     definitionOfDone: "",
     note: "",
+    strategyGoal: "",
+    strategySuccessCriteria: "",
+    strategyScopeConstraints: "",
   });
   assert.equal(
     buildTaskOverviewDraft(task({ problemStatement: "Explicit problem" })).problemStatement,
@@ -158,6 +161,9 @@ test("Sub-Issue overview edits title, context, and its optional work brief", () 
     evidenceLinks: ["https://example.com/evidence"],
     definitionOfDone: "Legacy completion",
     note: "Keep the scope narrow",
+    strategyGoal: "",
+    strategySuccessCriteria: "",
+    strategyScopeConstraints: "",
   });
   const draft = {
     ...buildTaskOverviewDraft(baseline),
@@ -275,6 +281,7 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
       startDate: "",
       endDate: "",
       deadline: "",
+      targetDate: "",
       hours: 0,
       definitionOfDone: "",
       createGitHubIssue: false,

@@ -162,10 +162,13 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onImportGitHubComments={() => importGitHubComments(selectedTask)}
           onReportBlocker={(payload) => reportTaskBlocker(selectedTask, payload)}
           onCreateSubIssue={() => setTaskDialogDefaults({
-            taskType: "sub_issue",
+            taskType: selectedTask.taskType === "epic"
+              ? "initiative"
+              : selectedTask.taskType === "initiative"
+                ? "deliverable"
+                : "sub_issue",
             parentTaskId: selectedTask.id,
-            milestoneId: selectedTask.milestoneId,
-            packageId: selectedTask.packageId,
+            packageId: selectedTask.taskType === "initiative" ? selectedTask.id : selectedTask.packageId,
             assignee: currentProfile?.id || "",
             status: "Offen",
           })}

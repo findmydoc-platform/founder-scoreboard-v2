@@ -13,13 +13,14 @@ export function isExpiredGitHubSyncPending(
 }
 
 export function taskNeedsGitHubSync(task: Task, openCommentTaskIds: Set<string>) {
+  if (task.taskType !== "deliverable" && task.taskType !== "sub_issue") return false;
   return !hasGitHubIssue(task) || task.githubIssueSyncStatus !== "synced" || openCommentTaskIds.has(task.id);
 }
 
 export function isGitHubSyncEligible(task: Task) {
-  return task.taskType === "deliverable"
-    ? task.approvalStatus === "approved"
-    : task.parentApprovalStatus === "approved";
+  if (task.taskType === "deliverable") return task.approvalStatus === "approved";
+  if (task.taskType === "sub_issue") return task.parentApprovalStatus === "approved";
+  return false;
 }
 
 export function sortGitHubSyncTasks(tasks: Task[], allTasks: Task[] = tasks) {

@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mapAuditEntry, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapMilestone, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapPackage, mapProfile, mapProfileFeatureTourAcknowledgement, mapProfileUiPreference, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskAuditActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
+import { mapAuditEntry, mapFmdTool, mapFounderEvent, mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapNotificationDelivery, mapNotificationEvent, mapNotificationPreference, mapProfile, mapProfileFeatureTourAcknowledgement, mapProfileUiPreference, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent, mapTask, mapTaskAuditActivity, mapTaskBlocker, mapTaskComment, mapTaskExternalComment, mapTaskFocusItem, mapTaskRelation } from "./planning-data-mappers";
 import { taskRowSelect } from "./planning-data-row-types";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "./planning-read-model";
-import type { DbAuditEntry, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbMilestone, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskAuditActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskLink, DbTaskRelation } from "./planning-data-row-types";
+import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
+import type { DbAuditEntry, DbFmdTool, DbFounderEvent, DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference, DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent, DbTask, DbTaskAuditActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskLink, DbTaskRelation } from "./planning-data-row-types";
 import type { PlanningData } from "./types";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "./sprint-review-window";
+import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "./planning-profile-mappers";
 
 const founderProjectId = "findmydoc-founder-execution";
 
@@ -52,17 +53,28 @@ function skippedListResult<Row>() {
 }
 
 export async function loadPlanningDataRows(supabase: SupabaseClient, scope: PlanningDataQueryScope = fullPlanningDataQueryScope) {
-  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, taskLinkResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, profileUiPreferenceResult, profileFeatureTourAcknowledgementResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult] = await Promise.all([
+  const shouldLoadItems = shouldLoad(scope, "tasks") || shouldLoad(scope, "packages") || shouldLoad(scope, "milestones");
+  const [projectResult, profileResult, packageResult, milestoneResult, taskResult, strategyResult, raciAssignmentResult, taskLinkResult, sprintResult, sprintCommitmentResult, founderSprintScoreResult, founderStrikeStateResult, strikeEventResult, scoreObjectionResult, taskCommentResult, taskExternalCommentResult, taskBlockerResult, taskRelationResult, taskActivityResult, taskFocusResult, notificationResult, notificationDeliveryResult, notificationPreferenceResult, profileUiPreferenceResult, profileFeatureTourAcknowledgementResult, fmdToolResult, eventResult, meetingResult, meetingAttendanceResult, auditResult] = await Promise.all([
     supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", founderProjectId).single(),
     supabase.from("profiles").select("id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled").order("name"),
-    shouldLoad(scope, "packages") ? supabase.from(ACTIVE_PACKAGES_TABLE).select("id,milestone_id,owner_id,accountable_profile_id,responsible_profile_ids,consulted_profile_ids,informed_profile_ids,title,goal,priority,status,target_date,success_criteria,scope_constraints,sort_order,approval_status,approval_revision,proposed_by,proposed_at,decided_by,decided_at,decision_note,trashed_at,trashed_by,trash_reason,trash_cause,purge_after,trash_root_type,trash_root_id,trash_revision").order("sort_order") : Promise.resolve(skippedListResult<DbPackage>()),
-    shouldLoad(scope, "milestones") ? supabase.from("milestones").select("id,title,description,target_date,status,sort_order,updated_at").eq("project_id", founderProjectId).order("sort_order").order("id") : Promise.resolve(skippedListResult<DbMilestone>()),
-    shouldLoad(scope, "tasks") ? supabase
+    Promise.resolve(skippedListResult<never>()),
+    Promise.resolve(skippedListResult<never>()),
+    shouldLoadItems ? supabase
       .from(ACTIVE_TASKS_TABLE)
       .select(taskRowSelect)
       .eq("project_id", founderProjectId)
       .order("sort_order") : Promise.resolve(skippedListResult<DbTask>()),
-    shouldLoad(scope, "tasks") ? supabase
+    shouldLoadItems ? supabase
+      .from("planning_item_strategy")
+      .select("task_id,goal,success_criteria,scope_constraints")
+      : Promise.resolve(skippedListResult<DbPlanningItemStrategy>()),
+    shouldLoadItems ? supabase
+      .from("planning_item_raci_assignments")
+      .select("task_id,profile_id,role,sort_order")
+      .order("task_id")
+      .order("sort_order")
+      : Promise.resolve(skippedListResult<DbPlanningItemRaciAssignment>()),
+    shouldLoadItems ? supabase
       .from("task_links")
       .select("id,task_id,type,label,url,position,metadata")
       .order("position")
@@ -73,7 +85,7 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
     shouldLoad(scope, "founderStrikeStates") ? supabase.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at").order("profile_id") : Promise.resolve(skippedListResult<DbFounderStrikeState>()),
     shouldLoad(scope, "strikeEvents") ? supabase.from("strike_events").select("id,profile_id,sprint_id,event_type,previous_strike_level,next_strike_level,reason,created_at,created_by").order("created_at", { ascending: false }).limit(500) : Promise.resolve(skippedListResult<DbStrikeEvent>()),
     shouldLoad(scope, "scoreObjections") ? supabase.from("score_objections").select("id,sprint_id,profile_id,founder_sprint_score_id,status,comment,resolution_comment,reviewed_by,reviewed_at,resolved_delivery_points,resolved_form_points,resolved_weekly_points,second_reviewer_profile_id,second_review_decision,second_reviewed_at,created_at").order("created_at", { ascending: false }).limit(300) : Promise.resolve(skippedListResult<DbScoreObjection>()),
-    shouldLoad(scope, "taskComments") ? supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,task_comment_github_deliveries(status,github_comment_url)").order("created_at", { ascending: false }).limit(200) : Promise.resolve(skippedListResult<DbTaskComment>()),
+    shouldLoad(scope, "taskComments") ? supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,github_delivery_applicable,task_comment_github_deliveries(status,github_comment_url)").order("created_at", { ascending: false }).limit(200) : Promise.resolve(skippedListResult<DbTaskComment>()),
     shouldLoad(scope, "taskExternalComments") ? supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").order("created_at", { ascending: false }).limit(300) : Promise.resolve(skippedListResult<DbTaskExternalComment>()),
     shouldLoad(scope, "taskBlockers") ? supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").order("created_at", { ascending: false }).limit(200) : Promise.resolve(skippedListResult<DbTaskBlocker>()),
     shouldLoad(scope, "taskRelations") ? supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).limit(500) : Promise.resolve(skippedListResult<DbTaskRelation>()),
@@ -97,6 +109,8 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
     packageResult,
     milestoneResult,
     taskResult,
+    strategyResult,
+    raciAssignmentResult,
     taskLinkResult,
     sprintResult,
     sprintCommitmentResult,
@@ -126,7 +140,7 @@ export async function loadPlanningDataRows(supabase: SupabaseClient, scope: Plan
 export type PlanningDataRows = Awaited<ReturnType<typeof loadPlanningDataRows>>;
 
 export function hasCorePlanningDataError(rows: PlanningDataRows) {
-  return Boolean(rows.projectResult.error || rows.profileResult.error || rows.packageResult.error || rows.taskResult.error || rows.taskLinkResult.error);
+  return Boolean(rows.projectResult.error || rows.profileResult.error || rows.taskResult.error || rows.strategyResult.error || rows.raciAssignmentResult.error || rows.taskLinkResult.error);
 }
 
 export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
@@ -142,7 +156,20 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
     taskLinks.push(taskLink);
     taskLinksByTaskId.set(taskLink.task_id, taskLinks);
   }
-  const tasks = (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles, taskLinksByTaskId.get(row.id) || []));
+  const strategiesByTaskId = new Map<string, DbPlanningItemStrategy>();
+  for (const strategy of (rows.strategyResult.data || []) as DbPlanningItemStrategy[]) {
+    strategiesByTaskId.set(strategy.task_id, strategy);
+  }
+  const raciAssignmentsByTaskId = new Map<string, DbPlanningItemRaciAssignment[]>();
+  for (const assignment of (rows.raciAssignmentResult.data || []) as DbPlanningItemRaciAssignment[]) {
+    const assignments = raciAssignmentsByTaskId.get(assignment.task_id) || [];
+    assignments.push(assignment);
+    raciAssignmentsByTaskId.set(assignment.task_id, assignments);
+  }
+  const tasks = (rows.taskResult.data as unknown as DbTask[]).map((row) => mapTask(row, profiles, taskLinksByTaskId.get(row.id) || [], {
+    strategy: strategiesByTaskId.get(row.id),
+    raciAssignments: raciAssignmentsByTaskId.get(row.id) || [],
+  }));
   const approvalByTaskId = new Map(tasks.map((task) => [task.id, task.approvalStatus]));
   const activeTaskIds = new Set(tasks.map((task) => task.id));
   const belongsToActiveTask = (row: { task_id: string }) => activeTaskIds.has(row.task_id);
@@ -157,9 +184,9 @@ export function mapPlanningDataRows(rows: PlanningDataRows): PlanningData {
       githubProjectNumber: Number(project.github_project_number || 21),
     },
     profiles,
-    packages: (rows.packageResult.data as DbPackage[]).map(mapPackage),
-    milestones: rows.milestoneResult.error ? [] : (rows.milestoneResult.data as DbMilestone[]).map(mapMilestone),
-    tasks: tasks.map((task) => task.taskType === "sub_issue"
+    packages: tasks.filter((task) => task.taskType === "initiative").map(mapLegacyPackageFromInitiative),
+    milestones: tasks.filter((task) => task.taskType === "epic").map(mapLegacyMilestoneFromEpic),
+    tasks: tasks.map((task) => task.parentTaskId
       ? { ...task, parentApprovalStatus: approvalByTaskId.get(task.parentTaskId) || null }
       : task),
     sprints: rows.sprintResult.error ? [] : (rows.sprintResult.data as DbSprint[]).map(mapSprint),

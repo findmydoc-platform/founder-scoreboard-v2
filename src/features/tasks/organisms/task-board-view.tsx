@@ -1,14 +1,15 @@
 import { ArrowDownToLine, Plus } from "lucide-react";
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
-import { groupSubIssuesByParent } from "@/features/tasks/model/task-card-presentation";
+import { groupDirectChildrenByParent } from "@/features/tasks/model/task-card-presentation";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { normalizeStatus } from "@/lib/status";
 import type { Task, TaskBlocker, TaskRelation, TaskStatus } from "@/lib/types";
 
 type TaskBoardViewProps = {
   statuses: TaskStatus[];
+  itemType: Task["taskType"];
   visibleTasks: Task[];
   relations: TaskRelation[];
   allTasks: Task[];
@@ -20,14 +21,18 @@ type TaskBoardViewProps = {
   ownerColorForTask: (task: Task) => string;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (defaults: Partial<NewTaskDraft>) => void;
+  onChangeTaskStatus: (task: Task, status: TaskStatus) => void;
   onDragOverStatus: (status: TaskStatus | null) => void;
   onDropTask: (status: TaskStatus, event: DragEvent<HTMLElement>) => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
+  statusOptionsForTask: (task: Task) => TaskStatus[];
+  showParentContext?: boolean;
 };
 
 export function TaskBoardView({
   statuses,
+  itemType,
   visibleTasks,
   relations,
   allTasks,
@@ -39,12 +44,18 @@ export function TaskBoardView({
   ownerColorForTask,
   onOpenTask,
   onCreateTask,
+  onChangeTaskStatus,
   onDragOverStatus,
   onDropTask,
   onDragStart,
   onDragEnd,
+  statusOptionsForTask,
+  showParentContext = false,
 }: TaskBoardViewProps) {
-  const subIssuesByParent = groupSubIssuesByParent(allTasks);
+  const directChildrenByParent = groupDirectChildrenByParent(allTasks);
+  const itemLabel = itemType === "epic" ? "Epic" : itemType === "initiative" ? "Initiative" : "Deliverable";
+  const [expandedCompletedItemType, setExpandedCompletedItemType] = useState<Task["taskType"] | null>(null);
+  const completedCardLimit = 20;
 
   return (
     <div
@@ -54,7 +65,20 @@ export function TaskBoardView({
       aria-label="Board horizontal und vertikal scrollen"
     >
       {statuses.map((status) => {
-        const tasks = visibleTasks.filter((task) => task.taskType === "deliverable" && normalizeStatus(task.status) === status);
+        const tasks = visibleTasks.filter((task) => task.taskType === itemType && normalizeStatus(task.status) === status);
+        const orderedTasks = status === "Erledigt"
+          ? [...tasks].sort((left, right) => {
+              const updatedDifference = Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "");
+              return Number.isNaN(updatedDifference) || updatedDifference === 0
+                ? left.order - right.order
+                : updatedDifference;
+            })
+          : tasks;
+        const completedExpanded = expandedCompletedItemType === itemType;
+        const renderedTasks = status === "Erledigt" && !completedExpanded
+          ? orderedTasks.slice(0, completedCardLimit)
+          : orderedTasks;
+        const hiddenCompletedCount = status === "Erledigt" ? tasks.length - renderedTasks.length : 0;
         const isEmpty = tasks.length === 0;
         const isDropTarget = dragOverStatus === status;
         const isAvailableEmptyTarget = Boolean(draggedTaskId) && isEmpty;
@@ -63,7 +87,7 @@ export function TaskBoardView({
             key={status}
             data-board-column-status={status}
             data-collapsed={isEmpty}
-            aria-label={`${status}, ${tasks.length} ${tasks.length === 1 ? "Aufgabe" : "Aufgaben"}${isEmpty ? ", eingeklappt" : ""}`}
+            aria-label={`${status}, ${tasks.length} ${tasks.length === 1 ? itemLabel : `${itemLabel}s`}${isEmpty ? ", eingeklappt" : ""}`}
             onDragOver={(event) => {
               event.preventDefault();
               event.dataTransfer.dropEffect = "move";
@@ -98,15 +122,15 @@ export function TaskBoardView({
               </div>
               <button
                 type="button"
-                onClick={() => onCreateTask({ status, taskType: "deliverable" })}
+                onClick={() => onCreateTask({ status, taskType: itemType })}
                 className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                aria-label={`Aufgabe in ${status} hinzufügen`}
+                aria-label={`${itemLabel} in ${status} hinzufügen`}
               >
                 <Plus size={15} />
               </button>
             </div>
             <div className={isEmpty ? "flex min-h-72 flex-1 justify-center px-2 py-5" : "grid min-w-0 gap-2 p-2"}>
-              {tasks.length ? tasks.map((task) => {
+              {tasks.length ? renderedTasks.map((task) => {
                 const canUpdateStatus = canChangeTaskStatus(task);
                 return (
                   <TaskCard
@@ -116,10 +140,13 @@ export function TaskBoardView({
                     relations={relations}
                     allTasks={allTasks}
                     blockers={blockers}
-                    subIssues={subIssuesByParent.get(task.id) || []}
+                    childItems={directChildrenByParent.get(task.id) || []}
                     onOpenTask={onOpenTask}
+                    onStatusChange={canUpdateStatus ? (status) => onChangeTaskStatus(task, status) : undefined}
                     onDragStart={canUpdateStatus && onDragStart ? onDragStart : undefined}
                     onDragEnd={onDragEnd}
+                    statusOptions={canUpdateStatus ? statusOptionsForTask(task) : undefined}
+                    showParentContext={showParentContext}
                     isSelected={selectedTaskId === task.id}
                     isDragging={draggedTaskId === task.id}
                   />
@@ -138,6 +165,16 @@ export function TaskBoardView({
                   )}
                 </div>
               )}
+              {status === "Erledigt" && tasks.length > completedCardLimit ? (
+                <button
+                  type="button"
+                  aria-expanded={completedExpanded}
+                  onClick={() => setExpandedCompletedItemType(completedExpanded ? null : itemType)}
+                  className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  {completedExpanded ? "Ältere erledigte ausblenden" : `Weitere ${hiddenCompletedCount} erledigte anzeigen`}
+                </button>
+              ) : null}
             </div>
           </section>
         );

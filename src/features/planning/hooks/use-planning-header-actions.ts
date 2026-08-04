@@ -5,7 +5,8 @@ import { canManageMilestones } from "@/features/projects/model/milestone-policy"
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
-import type { PlanningData, Profile, Sprint } from "@/lib/types";
+import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
+import type { PlanningData, Profile, Sprint, ViewMode } from "@/lib/types";
 
 export type HeaderAction = {
   id: string;
@@ -20,9 +21,11 @@ type UsePlanningHeaderActionsOptions = {
   activeSprint?: Sprint;
   currentProfile: Profile | null;
   data: PlanningData;
+  planningLevel?: PlanningLevel;
   setInitiativeDialogDefaults: (defaults: Partial<InitiativeDraft> | null) => void;
   setMilestoneDialogDefaults: (defaults: Partial<MilestoneDraft> | null) => void;
   setTaskDialogDefaults: (defaults: Partial<NewTaskDraft> | null) => void;
+  view?: ViewMode;
   workspace: AppWorkspace;
 };
 
@@ -30,17 +33,20 @@ export function usePlanningHeaderActions({
   activeSprint,
   currentProfile,
   data,
+  planningLevel = "deliverable",
   setInitiativeDialogDefaults,
   setMilestoneDialogDefaults,
   setTaskDialogDefaults,
+  view = "board",
   workspace,
 }: UsePlanningHeaderActionsOptions): HeaderAction[] {
   if (workspace === "planning") {
+    const taskType = view === "board" ? planningLevel : "deliverable";
     return [{
       id: "new-task",
-      label: "Neue Aufgabe",
+      label: planningLevelCreateLabel(taskType),
       variant: "secondary",
-      onClick: () => setTaskDialogDefaults({ taskType: "deliverable" }),
+      onClick: () => setTaskDialogDefaults({ taskType }),
     }];
   }
 

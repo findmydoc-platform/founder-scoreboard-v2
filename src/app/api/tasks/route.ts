@@ -5,13 +5,15 @@ import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers"
 import { slugify } from "@/lib/slug";
 import { taskStatuses } from "@/lib/status";
 import { buildTaskInsertRow } from "@/lib/task-insert-row";
-import type { Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
+import type { PlanningItemRaciAssignment, Task, TaskRelation, TaskRelationType, TaskType } from "@/lib/types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { createNotificationPayload } from "@/lib/notification-catalog";
 import { resolveTaskGitHubRepository } from "@/lib/github-repositories";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
 import { unsupportedSubIssueCreateField } from "@/features/tasks/model/task-creation-draft";
+import { isOperationalLeadRole } from "@/lib/platform";
+import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 
 type CreateTaskPayload = {
   title?: string;
@@ -42,9 +44,20 @@ type CreateTaskPayload = {
   relationNote?: string;
   approveNow?: boolean;
   githubRepo?: string;
+  targetDate?: string;
+  strategy?: {
+    goal?: string;
+    successCriteria?: string;
+    scopeConstraints?: string;
+  };
+  raciAssignments?: Array<{
+    profileId?: string;
+    role?: PlanningItemRaciAssignment["role"];
+    sortOrder?: number;
+  }>;
 };
 
-const taskTypes = new Set<TaskType>(["deliverable", "sub_issue"]);
+const taskTypes = new Set<TaskType>(["epic", "initiative", "deliverable", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
 type CreateTaskTransactionResult = {
@@ -71,6 +84,13 @@ function profileId(value?: string) {
   return slugify(value || "");
 }
 
+function validIsoDate(value?: string) {
+  if (!value) return "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+    ? value
+    : "";
+}
+
 export async function POST(request: NextRequest) {
   const context = await requireJsonApiContext<CreateTaskPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
@@ -85,6 +105,88 @@ export async function POST(request: NextRequest) {
 
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
+  const isStrategic = requestedType === "epic" || requestedType === "initiative";
+  if (isStrategic) {
+    if (!isOperationalLeadRole(permission.profile?.platformRole)) {
+      return apiError(requestedType === "epic" ? "Epics können nur von CEO oder Deputy erstellt werden." : "Initiativen können nur von CEO oder Deputy erstellt werden.", 403);
+    }
+    if (payload.approveNow) return apiError("Strategische Planungselemente werden nicht direkt beim Erstellen freigegeben.", 400);
+    const status = payload.status && allowedPlanningItemStatuses(requestedType).includes(payload.status as never)
+      ? payload.status
+      : "Offen";
+    const targetDate = validIsoDate(payload.targetDate);
+    if (payload.targetDate && !targetDate) return apiError("Zieldatum ist ungültig.", 400);
+    const idBase = `${permission.profile?.id || "planning"}-${slugify(title, { maxLength: 70 }) || "neues-planungselement"}`;
+    const id = `${idBase}-${creationRequestId.replaceAll("-", "").slice(0, 12)}`;
+    const owner = profileId(payload.owner || payload.assignee) || permission.profile?.id || "";
+    const suppliedRaciAssignments = (payload.raciAssignments || []).map((assignment, index) => ({
+      profileId: profileId(assignment.profileId),
+      role: assignment.role,
+      sortOrder: Number.isInteger(assignment.sortOrder) && (assignment.sortOrder || 0) >= 0
+        ? assignment.sortOrder
+        : index,
+    }));
+    const raciAssignments = requestedType === "initiative" && suppliedRaciAssignments.length === 0 && owner
+      ? [
+          { profileId: owner, role: "accountable" as const, sortOrder: 0 },
+          { profileId: owner, role: "responsible" as const, sortOrder: 1 },
+        ]
+      : suppliedRaciAssignments;
+    const { data, error } = await supabase.rpc("create_planning_item_transaction", {
+      p_item: {
+        id,
+        project_id: "findmydoc-founder-execution",
+        task_type: requestedType,
+        title,
+        description: cleanText(payload.description, 4000),
+        status,
+        priority: requestedType === "initiative" && payload.priority && priorities.has(payload.priority) ? payload.priority : "P2",
+        owner,
+        assignee: owner,
+        parent_task_id: payload.parentTaskId || null,
+        target_date: targetDate || null,
+        sort_order: 0,
+      },
+      p_strategy: requestedType === "initiative" ? {
+        goal: cleanText(payload.strategy?.goal || payload.intendedOutcome, 4000),
+        successCriteria: cleanText(payload.strategy?.successCriteria || payload.acceptanceCriteria, 6000),
+        scopeConstraints: cleanText(payload.strategy?.scopeConstraints || payload.scopeConstraints, 4000),
+      } : null,
+      p_raci_assignments: requestedType === "initiative" ? raciAssignments : [],
+      p_actor_profile_id: permission.profile?.id || null,
+    });
+    if (error || !data?.task) {
+      if (error?.code === "23505") return apiError("Planungselement existiert bereits.", 409);
+      if (error?.code === "23514" || error?.code === "22023") return apiError(error.message || "Planungselement ist ungültig.", 400);
+      return apiError(error?.message || "Planungselement konnte nicht erstellt werden.", 500);
+    }
+    const created = data.task as TaskRowForMapping;
+    const profileIds = [created.assignee, created.owner, created.created_by]
+      .filter((value): value is string => typeof value === "string" && Boolean(value));
+    const { data: profileRows } = profileIds.length
+      ? await supabase.from("profiles").select("id,name").in("id", [...new Set(profileIds)])
+      : { data: [] };
+    const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+    return NextResponse.json({
+      ok: true,
+      task: mapTaskRow(created, profileNameById, {
+        strategy: requestedType === "initiative" ? {
+          task_id: id,
+          goal: cleanText(payload.strategy?.goal || payload.intendedOutcome, 4000),
+          success_criteria: cleanText(payload.strategy?.successCriteria || payload.acceptanceCriteria, 6000),
+          scope_constraints: cleanText(payload.strategy?.scopeConstraints || payload.scopeConstraints, 4000),
+        } : undefined,
+        raciAssignments: requestedType === "initiative" ? raciAssignments.map((assignment) => ({
+          task_id: id,
+          profile_id: assignment.profileId,
+          role: assignment.role || "responsible",
+          sort_order: assignment.sortOrder ?? 0,
+        })) : [],
+      }),
+      relation: null,
+      relatedTask: null,
+    });
+  }
   if (requestedType === "sub_issue") {
     const forbiddenField = unsupportedSubIssueCreateField(payload as Record<string, unknown>);
     if (forbiddenField) {
@@ -97,30 +199,14 @@ export async function POST(request: NextRequest) {
   const isCeo = permission.profile?.platformRole === "ceo";
   if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
   const packageId = payload.packageId || null;
-  let effectivePackageId = packageId;
   let parentApprovalStatus: Task["parentApprovalStatus"] = null;
-  let milestoneId = payload.milestoneId || null;
-  let initiative: { id: string; milestone_id: string | null; owner_id?: string | null; accountable_profile_id?: string | null; approval_status?: string | null } | null = null;
+  let initiative: { id: string; milestone_id: string | null; owner?: string | null; approval_status?: string | null } | null = null;
   const startDate = payload.startDate || null;
   const endDate = payload.endDate || null;
 
   if (startDate && endDate && startDate > endDate) {
     return apiError("Das Startdatum darf nicht nach dem Enddatum liegen.", 400);
   }
-
-  if (packageId) {
-    const { data: initiativeRow, error: initiativeError } = await supabase
-      .from(ACTIVE_PACKAGES_TABLE)
-      .select("id,milestone_id,owner_id,accountable_profile_id,approval_status")
-      .eq("id", packageId)
-      .maybeSingle();
-    if (initiativeError || !initiativeRow) {
-      return apiError("Initiative wurde nicht gefunden.", 404);
-    }
-    initiative = initiativeRow;
-    milestoneId = milestoneId || initiative.milestone_id || null;
-  }
-
 
   const taskType: TaskType = requestedType;
   const scoreRelevant = false;
@@ -131,14 +217,54 @@ export async function POST(request: NextRequest) {
     ? "P2"
     : payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
   const assignee = profileId(payload.assignee || payload.owner) || permission.profile?.id || null;
-  const reviewOwnerProfileId = taskType === "sub_issue"
-    ? null
-    : packageId ? initiative?.accountable_profile_id || initiative?.owner_id || null : null;
-  const parentTaskId = taskType === "sub_issue" ? payload.parentTaskId || "" : "";
+  let parentTaskId = taskType === "sub_issue" || taskType === "deliverable" ? payload.parentTaskId || "" : "";
 
-  if (taskType === "deliverable" && !packageId) {
-    return apiError("Deliverables brauchen eine Initiative.", 400);
+  if (taskType === "deliverable" && !parentTaskId && packageId) {
+    const { data: canonicalParent, error: canonicalParentError } = await supabase
+      .from(ACTIVE_TASKS_TABLE)
+      .select("id,task_type")
+      .eq("id", packageId)
+      .maybeSingle();
+    if (canonicalParentError) return apiError(canonicalParentError.message, 500);
+    if (canonicalParent?.task_type === "initiative") {
+      parentTaskId = canonicalParent.id;
+    } else {
+      const { data: legacyParent, error: legacyParentError } = await supabase
+      .from("planning_item_legacy_ids")
+      .select("task_id")
+      .eq("source_kind", "package")
+      .eq("legacy_id", packageId)
+      .maybeSingle();
+      if (legacyParentError) return apiError(legacyParentError.message, 500);
+      parentTaskId = legacyParent?.task_id || "";
+    }
   }
+
+  if (taskType === "deliverable" && parentTaskId) {
+    const { data: initiativeRow, error: initiativeError } = await supabase
+      .from(ACTIVE_TASKS_TABLE)
+      .select("id,milestone_id,owner,approval_status,task_type")
+      .eq("id", parentTaskId)
+      .maybeSingle();
+    if (initiativeError || !initiativeRow || initiativeRow.task_type !== "initiative") {
+      return apiError("Initiative wurde nicht gefunden.", 404);
+    }
+    initiative = initiativeRow;
+    parentApprovalStatus = (initiative.approval_status as Task["parentApprovalStatus"]) || null;
+  }
+
+  let reviewOwnerProfileId: string | null = null;
+  if (taskType === "deliverable" && initiative) {
+    const { data: accountable, error: accountableError } = await supabase
+      .from("planning_item_raci_assignments")
+      .select("profile_id")
+      .eq("task_id", initiative.id)
+      .eq("role", "accountable")
+      .maybeSingle();
+    if (accountableError) return apiError(accountableError.message, 500);
+    reviewOwnerProfileId = accountable?.profile_id || initiative.owner || null;
+  }
+
   if (taskType === "deliverable" && initiative?.approval_status === "rejected") {
     return apiError("In einer abgelehnten Initiative können keine Deliverables vorgeschlagen werden.", 409);
   }
@@ -159,8 +285,6 @@ export async function POST(request: NextRequest) {
     if (isReviewStateLocked(parent.review_status, parent.score_final)) {
       return apiError(reviewStateLockMessage(parent.review_status, parent.score_final), 409);
     }
-    effectivePackageId = parent.package_id || null;
-    milestoneId = parent.milestone_id || null;
     parentApprovalStatus = (parent.approval_status as Task["parentApprovalStatus"]) || null;
   }
 
@@ -185,8 +309,8 @@ export async function POST(request: NextRequest) {
   const insert = buildTaskInsertRow({
     id,
     creationRequestId,
-    packageId: effectivePackageId,
-    milestoneId,
+    // parent_task_id is canonical. package_id and milestone_id remain
+    // trigger-derived legacy comparison fields after the cutover.
     title,
     description: cleanText(payload.description, 4000),
     problemStatement: cleanText(payload.problemStatement, 4000),
@@ -273,7 +397,7 @@ export async function POST(request: NextRequest) {
   const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
 
   const task: Task = mapTaskRow(created as TaskRowForMapping, profileNameById);
-  if (task.taskType === "sub_issue") task.parentApprovalStatus = parentApprovalStatus;
+  if (task.parentTaskId) task.parentApprovalStatus = parentApprovalStatus;
   const relation: TaskRelation | null = transaction?.relation
     ? {
         id: transaction.relation.id,

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PlanningTrashActionDialog } from "@/features/planning/molecules/planning-trash-action-dialog";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { isExpiredGitHubSyncPending } from "@/features/tasks/model/github-sync-queue";
+import { canReviewPlanningItem, canSyncPlanningItemToGitHub } from "@/features/tasks/model/planning-item-capabilities";
 import { TaskSharePopover } from "@/features/tasks/molecules/task-share-popover";
 import { splitGitHubRepository } from "@/lib/github-repositories";
 import { hasGitHubIssue } from "@/lib/platform";
@@ -46,7 +47,9 @@ export function TaskDetailHeaderActions({
   onWithdraw,
 }: Props) {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const linkedIssue = hasGitHubIssue(task);
+  const supportsGitHub = canSyncPlanningItemToGitHub(task);
+  const supportsReview = canReviewPlanningItem(task);
+  const linkedIssue = supportsGitHub && hasGitHubIssue(task);
   const issueUrl = task.githubIssueUrl || task.issueUrl;
   const githubRepository = linkedIssue ? splitGitHubRepository(task.githubRepo) : null;
   const repositoryLabel = githubRepository?.repo || "";
@@ -65,18 +68,14 @@ export function TaskDetailHeaderActions({
           ? "Keine GitHub-Installation verfügbar."
           : undefined;
 
-  const groups: CustomActionMenuGroup[] = [
-    {
-      id: "workflow",
-      label: "Workflow",
-      items: [
-        ...(canManageReviewOwner ? [{
+  const workflowItems = [
+    ...(supportsReview && canManageReviewOwner ? [{
           id: "review-owner",
           label: "Review-Verantwortung festlegen",
           icon: <UserCheck size={16} />,
           onSelect: onShowReviewSetup,
         }] : []),
-        {
+    ...(supportsGitHub ? [{
           id: "github-sync",
           label: externalSyncPending
             ? "Synchronisierung läuft …"
@@ -85,9 +84,14 @@ export function TaskDetailHeaderActions({
           disabled: Boolean(syncDisabledReason),
           disabledReason: syncDisabledReason,
           onSelect: () => onSyncGitHub(linkedIssue ? undefined : { createIfMissing: true }),
-        },
-      ],
-    },
+        }] : []),
+  ];
+  const groups: CustomActionMenuGroup[] = [
+    ...(workflowItems.length ? [{
+      id: "workflow",
+      label: "Workflow",
+      items: workflowItems,
+    }] : []),
     ...(canWithdrawTask ? [{
       id: "planning",
       label: "Planung",

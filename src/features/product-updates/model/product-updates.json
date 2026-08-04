@@ -1,5 +1,26 @@
 [
   {
+    "id": "2026-07-30-unified-planning-hierarchy",
+    "releasedAt": "2026-07-30",
+    "expiresAt": "2026-08-29",
+    "featureTourId": "unified-planning-hierarchy-v1",
+    "title": "Epics und Initiativen direkt in der Planung",
+    "summary": "Epics und Initiativen sind jetzt in Backlog und Kanban integriert. Weitere kleinere Verbesserungen vereinheitlichen die Bedienung der Planung.",
+    "slides": [
+      {
+        "id": "planning-hierarchy-kanban",
+        "title": "Strategische Ebenen in Backlog und Kanban",
+        "description": "Wechsle direkt zwischen Epics, Initiativen und Deliverables. Kleinere Verbesserungen an Filtern, Fortschritt und Bedienung runden die gemeinsame Planung ab.",
+        "image": {
+          "src": "/product-updates/2026-07-30-unified-planning-hierarchy/planning-hierarchy.jpg",
+          "alt": "Initiativen-Kanban mit Ebenenwechsel und sichtbarem Parent-Epic-Filter",
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-24-evidence-links",
     "releasedAt": "2026-07-24",
     "expiresAt": "2026-08-23",

@@ -4,8 +4,15 @@ export const TEAM_PLANNING_ITEMS_TOKEN_HISTORY_LIMIT = 20;
 export const TEAM_PLANNING_ITEMS_TOKEN_TTL_DAYS = 90;
 export const FOUNDEROPS_PLANNING_PROJECT_ID = "findmydoc-founder-execution";
 
-export const TEAM_PLANNING_ITEM_TYPES = ["milestone", "initiative", "deliverable", "sub_issue"] as const;
+export const TEAM_PLANNING_ITEM_TYPES = ["epic", "initiative", "deliverable", "sub_issue"] as const;
+/**
+ * Accepted only while external Planning API clients move to the canonical
+ * hierarchy. The value is normalized to `epic` before any write occurs.
+ */
+export const TEAM_PLANNING_LEGACY_ITEM_TYPE_ALIASES = ["milestone"] as const;
 export const TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES = ["deliverable", "sub_issue"] as const;
+export const TEAM_PLANNING_STRATEGIC_STATUSES = ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"] as const;
+/** @deprecated Only translates retained `milestone` API payloads. */
 export const TEAM_PLANNING_MILESTONE_STATUSES = ["planned", "active", "done"] as const;
 export const TEAM_PLANNING_TASK_STATUSES = ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] as const;
 export const TEAM_PLANNING_SUB_ISSUE_STATUSES = ["Offen", "In Arbeit", "Blockiert", "Erledigt"] as const;
@@ -34,7 +41,7 @@ export const PLANNING_ITEM_FIELD_RULES = {
   acceptanceCriteria: { kind: "string-or-string-array", maxLength: 6_000 },
   evidenceRequired: { kind: "string", maxLength: 4_000 },
   definitionOfDone: { kind: "string", maxLength: 4_000 },
-  taskType: { kind: "enum", values: TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES },
+  taskType: { kind: "enum", values: TEAM_PLANNING_ITEM_TYPES },
   parentTaskId: { kind: "string", maxLength: 120 },
   packageId: { kind: "string", maxLength: 120 },
   milestoneId: { kind: "string", maxLength: 120 },
@@ -47,7 +54,7 @@ export const PLANNING_ITEM_FIELD_RULES = {
   consultedProfileIds: { kind: "string-array", maxLength: 120 },
   informedProfileIds: { kind: "string-array", maxLength: 120 },
   priority: { kind: "enum", values: ["P0", "P1", "P2", "P3", "P4"] },
-  status: { kind: "enum", values: TEAM_PLANNING_MILESTONE_STATUSES },
+  status: { kind: "enum", values: [...TEAM_PLANNING_STRATEGIC_STATUSES, ...TEAM_PLANNING_TASK_STATUSES] },
   targetDate: { kind: "date" },
   workstream: { kind: "string", maxLength: 120 },
   startDate: { kind: "date" },
@@ -92,11 +99,23 @@ export const TEAM_PLANNING_ITEM_PATCH_FIELDS = TEAM_PLANNING_ITEM_CREATE_FIELDS.
 
 export type TeamPlanningItemScope = (typeof TEAM_PLANNING_ITEM_SCOPES)[number];
 export type TeamPlanningItemType = (typeof TEAM_PLANNING_ITEM_TYPES)[number];
+export type TeamPlanningLegacyItemType = (typeof TEAM_PLANNING_LEGACY_ITEM_TYPE_ALIASES)[number];
 export type TeamPlanningItemGenericTaskType = (typeof TEAM_PLANNING_ITEM_GENERIC_TASK_TYPES)[number];
 export type PlanningItemFieldKey = keyof typeof PLANNING_ITEM_FIELD_RULES;
 export type TeamPlanningItemPatchField = (typeof TEAM_PLANNING_ITEM_PATCH_FIELDS)[number];
 export type TeamPlanningItemGitHubSyncMode =
   (typeof TEAM_PLANNING_ITEM_GITHUB_SYNC_MODES)[number];
+
+export function normalizeTeamPlanningItemType(value: unknown): TeamPlanningItemType | null {
+  if (value === "milestone") return "epic";
+  return TEAM_PLANNING_ITEM_TYPES.includes(value as TeamPlanningItemType)
+    ? value as TeamPlanningItemType
+    : null;
+}
+
+export function isStrategicPlanningItemType(value: TeamPlanningItemType) {
+  return value === "epic" || value === "initiative";
+}
 
 export type PlanningItemGitHubSyncCommand = {
   createIfMissing: boolean;

@@ -67,12 +67,13 @@ export type DbTask = {
   title: string;
   description: string | null;
   status: string;
-  priority: string;
+  priority: string | null;
   owner: string | null;
   assignee: string | null;
   created_by: string | null;
   workstream: string | null;
   package_id: string | null;
+  target_date: string | null;
   deadline: string | null;
   problem_statement: string | null;
   intended_outcome: string | null;
@@ -130,6 +131,7 @@ export type DbTask = {
   self_documented_checked: boolean | null;
   self_blockers_checked: boolean | null;
   updated_at: string;
+  created_at: string | null;
   task_dependencies?: { note: string }[];
   task_notes?: { note: string } | null;
 };
@@ -170,6 +172,7 @@ export const taskRowColumns = [
   "created_by",
   "workstream",
   "package_id",
+  "target_date",
   "deadline",
   "problem_statement",
   "intended_outcome",
@@ -227,10 +230,25 @@ export const taskRowColumns = [
   "self_documented_checked",
   "self_blockers_checked",
   "updated_at",
+  "created_at",
 ] as const satisfies readonly DbTaskScalarColumn[];
 
 export const taskRelationSelect = "task_dependencies(note), task_notes(note)";
 export const taskRowSelect: string = `${taskRowColumns.join(",")}, ${taskRelationSelect}`;
+
+export type DbPlanningItemStrategy = {
+  task_id: string;
+  goal: string | null;
+  success_criteria: string | null;
+  scope_constraints: string | null;
+};
+
+export type DbPlanningItemRaciAssignment = {
+  task_id: string;
+  profile_id: string;
+  role: "accountable" | "responsible" | "consulted" | "informed";
+  sort_order: number;
+};
 
 export type DbSprint = {
   id: string;
@@ -333,6 +351,7 @@ export type DbTaskComment = {
   profile_id: string | null;
   comment: string;
   created_at: string;
+  github_delivery_applicable?: boolean | null;
   task_comment_github_deliveries?: {
     status: TaskComment["githubDeliveryStatus"];
     github_comment_url: string | null;

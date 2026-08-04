@@ -18,7 +18,7 @@ const loadingTitles: Record<AppWorkspace, string> = {
   "decision-log": "Decision Log wird geladen",
   events: "Events werden geladen",
   sprint: "Sprint & Score wird geladen",
-  projects: "Meilensteine werden geladen",
+  projects: "Epics werden geladen",
   tools: "Quicklinks werden geladen",
   team: "Team wird geladen",
   notifications: "Notifications werden geladen",

@@ -323,7 +323,7 @@ async function verifyGitHubCommentDeliveryRpcs() {
 }
 
 async function verifyPlanningBatchRpcs() {
-  const [backlog, backlogMove, anonymousBacklogMove, sprintPlan] = await Promise.all([
+  const [backlog, backlogMove, anonymousBacklogMove, bulkSprintAssignment, anonymousBulkSprintAssignment, sprintPlan] = await Promise.all([
     supabase.rpc("update_backlog_order_transaction", {
       p_updates: [],
       p_actor_profile_id: null,
@@ -350,6 +350,20 @@ async function verifyPlanningBatchRpcs() {
       p_request_ip: null,
       p_user_agent: null,
     }),
+    supabase.rpc("assign_backlog_tasks_to_sprint_transaction", {
+      p_assignments: [],
+      p_sprint_id: "",
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
+    anonSupabase.rpc("assign_backlog_tasks_to_sprint_transaction", {
+      p_assignments: [],
+      p_sprint_id: "",
+      p_actor_profile_id: null,
+      p_request_ip: null,
+      p_user_agent: null,
+    }),
     supabase.rpc("create_sprint_plan_transaction", {
       p_sprints: [],
       p_meetings: [],
@@ -363,6 +377,7 @@ async function verifyPlanningBatchRpcs() {
   return [
     { name: "update_backlog_order_transaction", result: backlog },
     { name: "move_backlog_task_transaction", result: backlogMove },
+    { name: "assign_backlog_tasks_to_sprint_transaction", result: bulkSprintAssignment },
     { name: "create_sprint_plan_transaction", result: sprintPlan },
   ].map(({ name, result: rpcResult }) => ({
     name,
@@ -372,6 +387,10 @@ async function verifyPlanningBatchRpcs() {
     name: "move_backlog_task_transaction anonymous execution",
     ok: Boolean(anonymousBacklogMove.error),
     error: anonymousBacklogMove.error ? "" : "backlog move RPC unexpectedly allowed anonymous execution",
+  }, {
+    name: "assign_backlog_tasks_to_sprint_transaction anonymous execution",
+    ok: Boolean(anonymousBulkSprintAssignment.error),
+    error: anonymousBulkSprintAssignment.error ? "" : "bulk Sprint assignment RPC unexpectedly allowed anonymous execution",
   });
 }
 

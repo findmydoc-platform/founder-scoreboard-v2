@@ -24,6 +24,7 @@ type Props = {
 };
 
 function approvalTitle(task: Task) {
+  if (task.taskType === "initiative") return task.parentTaskId ? "Initiative wartet auf Freigabe" : "Parent-Epic für Freigabe ergänzen";
   if (task.taskType === "sub_issue") return "Parent wartet auf Freigabe";
   if (task.approvalStatus === "rejected") return "Freigabe abgelehnt";
   if (task.approvalStatus === "draft") return "Noch nicht zur Freigabe";
@@ -43,11 +44,12 @@ export function TaskDetailWorkflowStrips({
   onDecideApproval,
 }: Props) {
   const [decisionAction, setDecisionAction] = useState<ApprovalReasonAction | null>(null);
-  const effectivelyApproved = isTaskPlanningActive(task);
-  const reviewOpen = task.reviewStatus === "requested";
+  const effectivelyApproved = task.taskType === "initiative" ? task.approvalStatus === "approved" : isTaskPlanningActive(task);
+  const reviewOpen = task.taskType === "deliverable" && task.reviewStatus === "requested";
   const showApproval = !effectivelyApproved && !reviewOpen;
   const decisionReason = currentApprovalDecisionReason(task);
-  const showReview = !reviewOpen
+  const showReview = task.taskType === "deliverable"
+    && !reviewOpen
     && !task.scoreFinal
     && task.reviewStatus === "not_requested"
     && (forceReviewSetup || Boolean(task.reviewOwnerProfileId));
@@ -65,7 +67,7 @@ export function TaskDetailWorkflowStrips({
             <div className="min-w-0">
               <div className="text-sm font-semibold text-blue-950">{approvalTitle(task)}</div>
               <div className="mt-0.5 text-xs text-slate-600">
-                {task.taskType === "deliverable" ? `Revision ${task.approvalRevision || 1}` : "Das Sub-Issue wird mit dem Parent aktiv."}
+                {task.taskType === "initiative" || task.taskType === "deliverable" ? `Revision ${task.approvalRevision || 1}` : "Das Sub-Issue wird mit dem Parent aktiv."}
                 {decisionReason ? ` · ${decisionReason}` : ""}
               </div>
             </div>
@@ -120,7 +122,7 @@ export function TaskDetailWorkflowStrips({
       {decisionAction ? (
         <ApprovalDecisionDialog
           action={decisionAction}
-          entityLabel="Deliverable"
+          entityLabel={task.taskType === "initiative" ? "Initiative" : "Deliverable"}
           pending={pending}
           onClose={() => setDecisionAction(null)}
           onConfirm={(note) => {

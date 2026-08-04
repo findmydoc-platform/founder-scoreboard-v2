@@ -373,17 +373,19 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(routes, /href: "\/events"/);
   assert.doesNotMatch(routes, /ceo-intake|href: "\/ceo-intake"/);
   assert.match(routes, /href: "\/sprint"/);
-  assert.match(routes, /href: "\/projects"/);
+  assert.match(routes, /href: "\/backlog\?backlog\.level=epic"/);
   assert.match(routes, /href: "\/tools"/);
   assert.match(routes, /href: "\/team"/);
   assert.match(routes, /href: "\/notifications"/);
   assert.doesNotMatch(routes, /href: "\/settings"/);
   assert.match(routes, /href: "\/profile"/);
-  for (const page of workspacePages.filter((page) => !/redirect\("\/notifications"\)/.test(page))) {
+  for (const page of workspacePages.filter((page) => !/redirect\(/.test(page))) {
     assert.match(page, /renderWorkspacePage/);
     assert.match(page, /dynamic = "force-dynamic"/);
   }
-  assert.match(workspacePages.find((page) => /redirect\("\/notifications"\)/.test(page)) || "", /dynamic = "force-dynamic"/);
+  for (const page of workspacePages.filter((page) => /redirect\(/.test(page))) {
+    assert.match(page, /dynamic = "force-dynamic"/);
+  }
   assert.match(executionPage, /redirect\("\/planning"\)/);
   assert.match(rootPage, /getServerPlanningHomeWorkspace/);
   assert.match(rootPage, /redirect\(workspacePath\(workspace\)\)/);
@@ -480,7 +482,8 @@ test("header actions are workspace aware", async () => {
   assert.match(model, /planning: "Zeigt die Gesamtplanung/);
   assert.match(model, /backlog: "Priorisiert Aufgaben, bereitet Vorschläge vor/);
   assert.doesNotMatch(model, /workspaceSubtitles/);
-  assert.match(ui, /label: "Neue Aufgabe"/);
+  assert.match(ui, /label: planningLevelCreateLabel\(taskType\)/);
+  assert.match(ui, /const taskType = view === "board" \? planningLevel : "deliverable"/);
   assert.match(ui, /label: "Aufgabe hinzufügen"/);
   assert.match(ui, /label: "Neuer Meilenstein"/);
   assert.match(ui, /label: "Neue Initiative"/);

@@ -1,297 +1,289 @@
+import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
-import { loadLocalEnv } from "./lib/env.mjs";
 
-await loadLocalEnv();
-
-const password = process.env.SUPABASE_DB_PASSWORD;
-const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
-const port = Number(process.env.SUPABASE_DB_PORT || 5432);
-const user = process.env.SUPABASE_DB_USER || "postgres";
-const database = process.env.SUPABASE_DB_NAME || "postgres";
-const ssl = process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false };
-
-if (!password) {
-  console.error("Missing SUPABASE_DB_PASSWORD.");
-  process.exit(1);
-}
-
-const client = new pg.Client({ host, port, user, password, database, ssl });
+const projectId = "findmydoc-founder-execution";
+const config = {
+  host: "127.0.0.1",
+  port: 54322,
+  user: "postgres",
+  password: "postgres",
+  database: "postgres",
+  ssl: false,
+};
 
 function hash(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-async function expectDatabaseCode(run, expectedCode, message) {
-  const savepoint = `expected_error_${randomUUID().replaceAll("-", "")}`;
+async function expectCode(client, code, operation) {
+  const savepoint = `planning_expected_${randomUUID().replaceAll("-", "")}`;
   await client.query(`savepoint ${savepoint}`);
   try {
-    await run();
+    await operation();
   } catch (error) {
     await client.query(`rollback to savepoint ${savepoint}`);
     await client.query(`release savepoint ${savepoint}`);
-    if (error?.code === expectedCode) return;
-    throw error;
+    assert.equal(error?.code, code, `Expected SQLSTATE ${code}, received ${error?.code || "none"}.`);
+    return;
   }
+  await client.query(`rollback to savepoint ${savepoint}`);
   await client.query(`release savepoint ${savepoint}`);
-  throw new Error(message);
+  throw new Error(`Expected SQLSTATE ${code}, but the operation succeeded.`);
 }
 
-function deliverableItem(packageId, milestoneId, ownerId) {
-  return [{
-    itemType: "deliverable",
-    title: "Planning Items transaction verification",
-    problemStatement: "A transactional verification is required.",
-    intendedOutcome: "The complete batch is committed once.",
-    scopeConstraints: "Verification only.",
-    acceptanceCriteria: "The batch is replayable.",
-    evidenceRequired: "Database assertions.",
-    definitionOfDone: "All assertions pass.",
-    packageId,
-    milestoneId,
-    ownerId,
-    priority: "P2",
-  }];
+async function createBatch(client, { tokenId, profileId, items }) {
+  const key = randomUUID();
+  const result = await client.query(
+    "select public.create_team_planning_items_transaction($1, $2, $3, $4, $5::jsonb, null, 'canonical planning verifier') as result",
+    [tokenId, profileId, key, hash(items), JSON.stringify(items)],
+  );
+  return result.rows[0]?.result;
 }
 
+async function updateItem(client, { tokenId, profileId, itemType, itemId, updatedAt, patch, changedFields = Object.keys(patch) }) {
+  const key = randomUUID();
+  const result = await client.query(
+    "select public.update_team_planning_item_transaction($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, '[]'::jsonb, null, 'canonical planning verifier') as result",
+    [tokenId, profileId, itemType, itemId, updatedAt, key, hash({ itemType, itemId, updatedAt, patch }), JSON.stringify(patch), JSON.stringify(changedFields)],
+  );
+  return result.rows[0]?.result;
+}
+
+const client = new pg.Client(config);
 await client.connect();
 await client.query("begin");
 
 try {
-  const profileId = "planning-items-verifier-ceo";
+  const suffix = randomUUID().replaceAll("-", "");
+  const ceoId = `planning-hierarchy-ceo-${suffix}`;
+  const ownerId = `planning-hierarchy-owner-${suffix}`;
   await client.query(
-    `insert into public.profiles (id, name, role, platform_role) values
-      ('planning-items-verifier-ceo', 'Planning Items Verifier CEO', 'admin', 'ceo'),
-      ('planning-items-verifier-deputy', 'Planning Items Verifier Deputy', 'member', 'deputy'),
-      ('planning-items-verifier-owner', 'Planning Items Verifier Owner', 'member', 'founder'),
-      ('planning-items-verifier-other', 'Planning Items Verifier Other', 'member', 'founder')
-     on conflict (id) do nothing`,
+    `insert into public.profiles (id, name, role, platform_role)
+     values ($1, 'Planning hierarchy CEO', 'admin', 'ceo'), ($2, 'Planning hierarchy Owner', 'member', 'founder')`,
+    [ceoId, ownerId],
   );
   await client.query(
-    "insert into public.projects (id, name) values ('findmydoc-founder-execution', 'Planning Items verification') on conflict (id) do nothing",
+    "insert into public.projects (id, name) values ($1, 'Planning hierarchy verification') on conflict (id) do nothing",
+    [projectId],
   );
-  await client.query(
-    "insert into public.milestones (id, project_id, title, status) values ('planning-items-verifier-milestone', 'findmydoc-founder-execution', 'Planning Items verification', 'active')",
-  );
-  await client.query(
-    `insert into public.packages (
-      id, project_id, title, milestone_id, owner_id, accountable_profile_id,
-      responsible_profile_ids, approval_status, priority
-    ) values (
-      'planning-items-verifier-initiative', 'findmydoc-founder-execution', 'Planning Items verification',
-      'planning-items-verifier-milestone', 'planning-items-verifier-owner', 'planning-items-verifier-ceo',
-      array['planning-items-verifier-owner']::text[], 'approved', 'P2'
-    )`,
-  );
-  const initiative = { id: "planning-items-verifier-initiative", milestone_id: "planning-items-verifier-milestone" };
-
-  const tokenHash = createHash("sha256").update(`verification-${randomUUID()}`).digest("hex");
   const tokenResult = await client.query(
-    "select public.create_team_planning_items_token($1, $2, $3, $4, true) as result",
-    [profileId, "Planning Items verification", tokenHash, "…verify"],
+    "select public.create_team_planning_items_token_v2($1, $2, $3, $4, true, true) as result",
+    [ceoId, "Planning hierarchy verifier", hash(`token-${suffix}`), "verify-plan"],
   );
   const token = tokenResult.rows[0]?.result;
-  if (!token?.id || token.token_hash || !token.scopes?.includes("write:planning-items:update")) {
-    throw new Error("Planning Items token RPC did not return update-scoped safe metadata.");
-  }
+  assert.ok(token?.id, "Planning verifier token must be created.");
 
-  const items = deliverableItem(initiative.id, initiative.milestone_id, profileId);
-  const createKey = randomUUID();
-  const createResult = await client.query(
-    "select public.create_team_planning_items_transaction($1, $2, $3, $4, $5::jsonb, null, 'transaction verifier') as result",
-    [token.id, profileId, createKey, hash(items), JSON.stringify(items)],
-  );
-  const created = createResult.rows[0]?.result;
-  const taskId = created?.items?.[0]?.item?.id;
-  if (created?.replayed !== false || !taskId) throw new Error("Planning Items create was not committed atomically.");
+  const firstBatch = await createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [{
+      itemType: "epic",
+      title: "Canonical hierarchy epic",
+      description: "Local transactional verifier.",
+      ownerId: ceoId,
+      targetDate: "2026-12-31",
+      status: "Offen",
+    }],
+  });
+  const epic = firstBatch?.items?.[0]?.item;
+  assert.equal(firstBatch?.items?.[0]?.itemType, "epic");
+  assert.equal(epic?.task_type, "epic");
+  assert.equal(epic?.github_issue_sync_status, "not_applicable");
+  assert.equal(epic?.github_repo, null);
 
-  const persisted = await client.query(
-    "select title, updated_at::text as updated_at, task_type, approval_status, sprint_id, score_relevant from public.tasks where id = $1",
-    [taskId],
-  );
-  const task = persisted.rows[0];
-  if (task?.task_type !== "deliverable" || task.approval_status !== "proposed" || task.sprint_id !== null || task.score_relevant !== false) {
-    throw new Error("Planning Items create did not preserve the approval gate.");
-  }
+  const initiativeBatch = await createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [{
+      itemType: "initiative",
+      title: "Parent-free proposal",
+      intendedOutcome: "Be approved only after an Epic is attached.",
+      ownerId,
+      accountableProfileId: ceoId,
+      responsibleProfileIds: [ownerId],
+      priority: "P1",
+      status: "Offen",
+    }],
+  });
+  const initiative = initiativeBatch?.items?.[0]?.item;
+  assert.equal(initiativeBatch?.items?.[0]?.itemType, "initiative");
+  assert.equal(initiative?.task_type, "initiative");
+  assert.equal(initiative?.parent_task_id, null);
+  await expectCode(client, "23514", () => client.query(
+    "select public.decide_planning_item_approval_transaction($1, 1, 'approve', $2, null)",
+    [initiative.id, ceoId],
+  ));
 
-  const patch = { priority: "P1" };
-  const updateKey = randomUUID();
-  const updateArgs = [
-    token.id, profileId, "deliverable", taskId, task.updated_at, updateKey,
-    hash({ itemId: taskId, itemType: "deliverable", expectedUpdatedAt: task.updated_at, normalizedPatch: patch }),
-    JSON.stringify({ priority: "P1" }), JSON.stringify(["priority"]), JSON.stringify([]),
-  ];
-  const updatedResult = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, null, 'transaction verifier') as result",
-    updateArgs,
+  const linkedInitiative = await updateItem(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    itemType: "initiative",
+    itemId: initiative.id,
+    updatedAt: initiative.updated_at,
+    patch: { parent_task_id: epic.id },
+  });
+  assert.equal(linkedInitiative?.item?.parent_task_id, epic.id);
+  const approvedInitiative = await client.query(
+    "select public.decide_planning_item_approval_transaction($1, $2, 'approve', $3, null) as result",
+    [initiative.id, Number(linkedInitiative?.item?.approval_revision), ceoId],
   );
-  const updated = updatedResult.rows[0]?.result;
-  if (updated?.replayed !== false || updated?.item?.priority !== "P1") throw new Error("Planning Items PATCH did not update the requested property.");
+  assert.equal(approvedInitiative.rows[0]?.result?.task?.approval_status, "approved");
 
-  const replayedResult = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, null, 'transaction verifier') as result",
-    updateArgs,
-  );
-  if (replayedResult.rows[0]?.result?.replayed !== true) throw new Error("Planning Items PATCH did not return its immutable idempotent replay.");
+  const deliveryBatch = await createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [{
+      itemType: "deliverable",
+      title: "Parent-free Deliverable proposal",
+      ownerId,
+      priority: "P2",
+      status: "Offen",
+      definitionOfDone: "Verifier complete.",
+    }],
+  });
+  const delivery = deliveryBatch?.items?.[0]?.item;
+  assert.equal(delivery?.parent_task_id, null);
+  await expectCode(client, "23514", () => client.query(
+    "select public.decide_planning_item_approval_transaction($1, 1, 'approve', $2, null)",
+    [delivery.id, ceoId],
+  ));
 
-  const statusKey = randomUUID();
-  const statusPatch = { status: "In Arbeit" };
-  const statusArgs = [
-    token.id, profileId, "deliverable", taskId, updated.item.updated_at, statusKey,
-    hash({ itemId: taskId, itemType: "deliverable", expectedUpdatedAt: updated.item.updated_at, normalizedPatch: statusPatch }),
-    JSON.stringify(statusPatch), JSON.stringify(["status"]), JSON.stringify([
-      { field: "githubIssueSyncStatus", before: "not_synced", after: "not_synced", reason: "projection" },
-    ]),
-  ];
-  const statusResult = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, null, 'transaction verifier') as result",
-    statusArgs,
+  const linkedDelivery = await updateItem(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    itemType: "deliverable",
+    itemId: delivery.id,
+    updatedAt: delivery.updated_at,
+    patch: { parent_task_id: initiative.id },
+  });
+  assert.equal(linkedDelivery?.item?.parent_task_id, initiative.id);
+  assert.equal(linkedDelivery?.item?.approval_status, "proposed");
+  const approvedDelivery = await client.query(
+    "select public.decide_planning_item_approval_transaction($1, $2, 'approve', $3, null) as result",
+    [delivery.id, Number(linkedDelivery?.item?.approval_revision), ceoId],
   );
-  const statusUpdated = statusResult.rows[0]?.result;
-  if (statusUpdated?.item?.status !== "In Arbeit" || statusUpdated?.item?.github_issue_sync_status !== "not_synced") {
-    throw new Error("Planning Items status PATCH did not persist the work status and GitHub projection reset.");
-  }
-  const statusEvidence = await client.query(
-    `select
-      exists(select 1 from public.audit_log where entity_id = $1 and action = 'task.status_changed') as activity,
-      exists(select 1 from public.audit_log where entity_id = $1 and action = 'team.planning_items.update') as audit`,
-    [taskId],
-  );
-  if (!statusEvidence.rows[0]?.activity || !statusEvidence.rows[0]?.audit) {
-    throw new Error("Planning Items status PATCH did not atomically persist activity and audit evidence.");
-  }
-  const statusReplay = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, $3, $4, $5::timestamptz, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, null, 'transaction verifier') as result",
-    statusArgs,
-  );
-  if (statusReplay.rows[0]?.result?.replayed !== true) {
-    throw new Error("Planning Items status PATCH did not replay idempotently.");
-  }
+  assert.equal(approvedDelivery.rows[0]?.result?.task?.approval_status, "approved");
 
-  const reviewReady = await client.query(
-    `update public.tasks
-     set approval_status = 'approved',
-         review_owner_profile_id = $2,
-         updated_at = clock_timestamp()
-     where id = $1
-     returning updated_at::text as updated_at`,
-    [taskId, profileId],
-  );
-  const reviewExpectedUpdatedAt = reviewReady.rows[0]?.updated_at;
-  const reviewKey = randomUUID();
-  const reviewResult = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, 'deliverable', $3, $4::timestamptz, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, null, 'transaction verifier') as result",
-    [
-      token.id,
-      profileId,
-      taskId,
-      reviewExpectedUpdatedAt,
-      reviewKey,
-      hash({ itemId: taskId, status: "Review", expectedUpdatedAt: reviewExpectedUpdatedAt }),
-      JSON.stringify({ status: "Review" }),
-      JSON.stringify(["status"]),
-      JSON.stringify([{ field: "notification", before: null, after: { type: "task.review_requested" }, reason: "review" }]),
-    ],
-  );
-  const reviewed = reviewResult.rows[0]?.result?.item;
-  if (reviewed?.status !== "Review" || reviewed.review_status !== "requested" || reviewed.score_points !== 0 || reviewed.score_final !== false || !reviewed.review_requested_at) {
-    throw new Error("Planning Items Review status did not execute the complete review transition.");
-  }
-  const reviewNotification = await client.query(
-    "select count(*)::int as count from public.notification_events where entity_id = $1 and type = 'task.review_requested' and recipient_profile_id = $2",
-    [taskId, profileId],
-  );
-  if (reviewNotification.rows[0]?.count !== 1) {
-    throw new Error("Planning Items Review status did not notify the Review Owner exactly once.");
-  }
+  const subIssueBatch = await createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [{
+      itemType: "sub_issue",
+      title: "Direct child only",
+      parentTaskId: delivery.id,
+      ownerId,
+      status: "Offen",
+    }],
+  });
+  const subIssue = subIssueBatch?.items?.[0]?.item;
+  assert.equal(subIssue?.task_type, "sub_issue");
+  assert.equal(subIssue?.parent_task_id, delivery.id);
 
-  const deputyTokenResult = await client.query(
-    "select public.create_team_planning_items_token($1, $2, $3, $4, true) as result",
-    ["planning-items-verifier-deputy", "Planning Items Deputy verification", createHash("sha256").update(`deputy-${randomUUID()}`).digest("hex"), "…deputy"],
-  );
-  const founderTokenResult = await client.query(
-    "select public.create_team_planning_items_token($1, $2, $3, $4, true) as result",
-    ["planning-items-verifier-other", "Planning Items Founder verification", createHash("sha256").update(`founder-${randomUUID()}`).digest("hex"), "…founder"],
-  );
-  const deputyToken = deputyTokenResult.rows[0]?.result;
-  const founderToken = founderTokenResult.rows[0]?.result;
-
-  const permissionItems = deliverableItem(initiative.id, initiative.milestone_id, "planning-items-verifier-owner");
-  const permissionCreate = await client.query(
-    "select public.create_team_planning_items_transaction($1, $2, $3, $4, $5::jsonb, null, 'transaction verifier') as result",
-    [token.id, profileId, randomUUID(), hash(permissionItems), JSON.stringify(permissionItems)],
-  );
-  const permissionTaskId = permissionCreate.rows[0]?.result?.items?.[0]?.item?.id;
-  const approvedParent = await client.query(
-    `update public.tasks
-     set approval_status = 'approved', updated_at = clock_timestamp()
-     where id = $1
-     returning updated_at::text as updated_at`,
-    [permissionTaskId],
-  );
-  const parentUpdatedAt = approvedParent.rows[0]?.updated_at;
-
-  await expectDatabaseCode(
-    () => client.query(
-      "select public.update_team_planning_item_transaction($1, $2, 'deliverable', $3, $4::timestamptz, $5, $6, $7::jsonb, '[\"status\"]'::jsonb, '[]'::jsonb) as result",
-      [deputyToken.id, "planning-items-verifier-deputy", permissionTaskId, parentUpdatedAt, randomUUID(), hash({ role: "deputy-final" }), JSON.stringify({ status: "Erledigt" })],
-    ),
-    "P0007",
-    "Deputy unexpectedly completed a Deliverable.",
-  );
-  await expectDatabaseCode(
-    () => client.query(
-      "select public.update_team_planning_item_transaction($1, $2, 'deliverable', $3, $4::timestamptz, $5, $6, $7::jsonb, '[\"status\"]'::jsonb, '[]'::jsonb) as result",
-      [founderToken.id, "planning-items-verifier-other", permissionTaskId, parentUpdatedAt, randomUUID(), hash({ role: "unrelated-founder" }), JSON.stringify({ status: "Blockiert" })],
-    ),
-    "P0007",
-    "Unrelated Founder unexpectedly changed a Deliverable status.",
-  );
-
-  const subIssueItems = [{
-    itemType: "sub_issue",
-    title: "Planning Items status permission verification",
-    parentTaskId: permissionTaskId,
-    ownerId: "planning-items-verifier-owner",
-    priority: "P2",
-  }];
-  const subIssueCreate = await client.query(
-    "select public.create_team_planning_items_transaction($1, $2, $3, $4, $5::jsonb, null, 'transaction verifier') as result",
-    [token.id, profileId, randomUUID(), hash(subIssueItems), JSON.stringify(subIssueItems)],
-  );
-  const subIssue = subIssueCreate.rows[0]?.result?.items?.[0]?.item;
-  const subIssueComplete = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, 'sub_issue', $3, $4::timestamptz, $5, $6, $7::jsonb, '[\"status\"]'::jsonb, '[]'::jsonb) as result",
-    [founderToken.id, "planning-items-verifier-other", subIssue.id, subIssue.updated_at, randomUUID(), hash({ role: "sub-issue-complete" }), JSON.stringify({ status: "Erledigt" })],
-  );
-  const completedSubIssue = subIssueComplete.rows[0]?.result?.item;
-  if (completedSubIssue?.status !== "Erledigt") {
-    throw new Error("Unrelated Founder could not use the Sub-Issue completion exception.");
-  }
-  const subIssueReopen = await client.query(
-    "select public.update_team_planning_item_transaction($1, $2, 'sub_issue', $3, $4::timestamptz, $5, $6, $7::jsonb, '[\"status\"]'::jsonb, '[]'::jsonb) as result",
-    [founderToken.id, "planning-items-verifier-other", subIssue.id, completedSubIssue.updated_at, randomUUID(), hash({ role: "sub-issue-reopen" }), JSON.stringify({ status: "Offen" })],
-  );
-  const reopenedSubIssue = subIssueReopen.rows[0]?.result?.item;
-  if (reopenedSubIssue?.status !== "Offen") {
-    throw new Error("Unrelated Founder could not use the Sub-Issue reopen exception.");
-  }
-
+  const approvedSecondInitiativeBatch = await createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [{
+      itemType: "initiative",
+      title: "Second approved Initiative",
+      ownerId,
+      accountableProfileId: ceoId,
+      responsibleProfileIds: [ownerId],
+      parentTaskId: epic.id,
+      status: "Offen",
+    }],
+  });
+  const secondInitiative = approvedSecondInitiativeBatch?.items?.[0]?.item;
   await client.query(
-    "update public.tasks set approval_status = 'proposed', updated_at = clock_timestamp() where id = $1",
-    [permissionTaskId],
+    "select public.decide_planning_item_approval_transaction($1, $2, 'approve', $3, null)",
+    [secondInitiative.id, Number(secondInitiative?.approval_revision), ceoId],
   );
-  await expectDatabaseCode(
-    () => client.query(
-      "select public.update_team_planning_item_transaction($1, $2, 'sub_issue', $3, $4::timestamptz, $5, $6, $7::jsonb, '[\"status\"]'::jsonb, '[]'::jsonb) as result",
-      [founderToken.id, "planning-items-verifier-other", subIssue.id, reopenedSubIssue.updated_at, randomUUID(), hash({ parent: "not-approved" }), JSON.stringify({ status: "Erledigt" })],
-    ),
-    "P0008",
-    "Sub-Issue status unexpectedly changed below an unapproved parent.",
+  const reparentedDelivery = await updateItem(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    itemType: "deliverable",
+    itemId: delivery.id,
+    updatedAt: approvedDelivery.rows[0]?.result?.task?.updated_at,
+    patch: { parent_task_id: secondInitiative.id },
+  });
+  assert.equal(reparentedDelivery?.item?.approval_status, "proposed");
+  assert.equal(
+    Number(reparentedDelivery?.item?.approval_revision),
+    Number(approvedDelivery.rows[0]?.result?.task?.approval_revision) + 1,
+    "Reparenting an approved Deliverable must create exactly one new approval revision.",
   );
+  const childCount = await client.query("select count(*)::integer as count from public.tasks where parent_task_id = $1", [delivery.id]);
+  assert.equal(childCount.rows[0]?.count, 1, "Parent changes must preserve direct children.");
 
-  console.log("Planning Items transaction verification passed; all test data will be rolled back.");
+  const reapprovedDelivery = await client.query(
+    "select public.decide_planning_item_approval_transaction($1, $2, 'approve', $3, null) as result",
+    [delivery.id, Number(reparentedDelivery?.item?.approval_revision), ceoId],
+  );
+  const reapprovedTask = reapprovedDelivery.rows[0]?.result?.task;
+  assert.equal(reapprovedTask?.approval_status, "approved");
+  const titleOnlyUpdate = await updateItem(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    itemType: "deliverable",
+    itemId: delivery.id,
+    updatedAt: reapprovedTask.updated_at,
+    patch: { title: "Deliverable title change keeps approval" },
+  });
+  assert.equal(titleOnlyUpdate?.item?.approval_status, "approved", "Only a parent change may reset a Deliverable approval.");
+  assert.equal(titleOnlyUpdate?.item?.approval_revision, reapprovedTask.approval_revision, "Brief changes must not create a new approval revision.");
+  const reviewRequest = await updateItem(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    itemType: "deliverable",
+    itemId: delivery.id,
+    updatedAt: titleOnlyUpdate?.item?.updated_at,
+    patch: { status: "Review" },
+  });
+  assert.equal(reviewRequest?.item?.status, "Review");
+  assert.equal(reviewRequest?.item?.review_status, "requested");
+  assert.equal(reviewRequest?.item?.review_owner_profile_id, ceoId, "Review owner must resolve from Initiative RACI.");
+  const reviewNotifications = await client.query(
+    "select count(*)::integer as count from public.notification_events where type = 'task.review_requested' and entity_id = $1 and recipient_profile_id = $2",
+    [delivery.id, ceoId],
+  );
+  assert.equal(reviewNotifications.rows[0]?.count, 1, "Team Planning review must retain the existing review notification.");
+
+  const localComment = await client.query(
+    "select public.create_task_comment_local($1, $2, 'Local strategic note') as result",
+    [epic.id, ceoId],
+  );
+  assert.equal(localComment.rows[0]?.result?.deliveryStatus, "not_applicable");
+  const strategicDeliveryRows = await client.query(
+    `select
+       (select count(*)::integer from public.planning_github_lifecycle_outbox outbox join public.tasks task on task.id = outbox.task_id where task.task_type in ('epic', 'initiative')) as lifecycle,
+       (select count(*)::integer from public.task_comment_github_deliveries delivery join public.task_comments comment on comment.id = delivery.task_comment_id join public.tasks task on task.id = comment.task_id where task.task_type in ('epic', 'initiative')) as comments`,
+  );
+  assert.deepEqual(strategicDeliveryRows.rows[0], { lifecycle: 0, comments: 0 });
+
+  const beforeFailedBatch = await client.query("select count(*)::integer as count from public.tasks where id like $1", [`${ceoId}-planning-items-v1-%`]);
+  await expectCode(client, "23514", () => createBatch(client, {
+    tokenId: token.id,
+    profileId: ceoId,
+    items: [
+      { itemType: "epic", title: "Must roll back", ownerId: ceoId, status: "Offen" },
+      { itemType: "sub_issue", title: "Invalid child", parentTaskId: "missing", ownerId, status: "Offen" },
+    ],
+  }));
+  const afterFailedBatch = await client.query("select count(*)::integer as count from public.tasks where id like $1", [`${ceoId}-planning-items-v1-%`]);
+  assert.equal(afterFailedBatch.rows[0]?.count, beforeFailedBatch.rows[0]?.count, "A failed batch must not partially create planning items.");
+
+  const backfill = await client.query(
+    `select
+       (select count(*)::integer from public.milestones) as legacy_milestones,
+       (select count(*)::integer from public.planning_item_legacy_ids where source_kind = 'milestone') as epic_mappings,
+       (select count(*)::integer from public.packages) as legacy_packages,
+       (select count(*)::integer from public.planning_item_legacy_ids where source_kind = 'package') as initiative_mappings`,
+  );
+  assert.equal(backfill.rows[0]?.legacy_milestones, backfill.rows[0]?.epic_mappings);
+  assert.equal(backfill.rows[0]?.legacy_packages, backfill.rows[0]?.initiative_mappings);
+
+  console.log("Canonical planning hierarchy transaction verification passed; local test data will be rolled back.");
 } finally {
-  await client.query("rollback").catch(() => {});
+  await client.query("rollback").catch(() => undefined);
   await client.end();
 }

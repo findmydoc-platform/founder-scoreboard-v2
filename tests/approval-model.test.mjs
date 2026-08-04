@@ -8,7 +8,8 @@ test("approval model separates active task type from approval state", async () =
   const types = await readFile("src/lib/types.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
 
-  assert.match(types, /TaskType = "deliverable" \| "sub_issue"/);
+  assert.match(types, /PlanningItemType = "epic" \| "initiative" \| "deliverable" \| "sub_issue"/);
+  assert.match(types, /TaskType = PlanningItemType/);
   assert.doesNotMatch(types, /TaskType = [^\n]*proposal/);
   assert.match(types, /ApprovalStatus = "draft" \| "proposed" \| "approved" \| "rejected"/);
   assert.match(migration, /tasks_approval_status_by_type_check[^]*task_type = 'sub_issue'[^]*approval_status is null/);
@@ -26,7 +27,7 @@ test("proposal is not an operational task status", async () => {
   ]);
   const status = await loadTranspiledModule("src/lib/status.ts");
 
-  assert.match(types, /TaskStatus = "Offen" \| "In Arbeit" \| "Review" \| "Nacharbeit" \| "Blockiert" \| "Erledigt"/);
+  assert.match(types, /TaskStatus = "Offen" \| "In Arbeit" \| "Pausiert" \| "Review" \| "Nacharbeit" \| "Blockiert" \| "Erledigt"/);
   assert.deepEqual(status.taskStatuses, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
   assert.equal(status.normalizeStatus("Vorschlag"), "Offen");
   assert.equal(status.normalizeStatus("draft"), "Offen");
@@ -45,7 +46,7 @@ test("production baseline excludes legacy proposal storage and the v1 intake RPC
     readFile("scripts/deploy-production-migrations.mjs", "utf8"),
   ]);
 
-  assert.match(schema, /tasks_task_type_check[^]*'deliverable'[^]*'sub_issue'/);
+  assert.match(schema, /tasks_task_type_check[^]*'epic'[^]*'initiative'[^]*'deliverable'[^]*'sub_issue'/);
   assert.doesNotMatch(schema, /legacy_proposal_unresolved/);
   assert.doesNotMatch(schema, /create_team_task_intake_batch_transaction/);
   assert.match(deploy, /productionBaseline/);
@@ -60,13 +61,13 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
 
   assert.match(migration, /approval_revision <> p_expected_revision/);
   assert.match(migration, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
-  assert.match(migration, /v_actor_role not in \('ceo', 'deputy'\)[^]*v_initiative\.accountable_profile_id/);
-  assert.match(migration, /v_initiative\.accountable_profile_id/);
-  assert.match(migration, /initiative must be approved first/);
+  assert.match(migration, /planning_item_raci_assignments/);
+  assert.match(migration, /initiative approval requires one accountable and at least one responsible RACI assignment/);
+  assert.match(migration, /deliverable approval requires an approved initiative/);
   assert.match(migration, /task\.approval_reset/);
   assert.match(migration, /task\.approval_resubmitted/);
-  assert.match(initiativeRoute, /decide_initiative_approval_transaction/);
-  assert.match(taskRoute, /decide_deliverable_approval_transaction/);
+  assert.match(initiativeRoute, /decide_planning_item_approval_transaction/);
+  assert.match(taskRoute, /decide_planning_item_approval_transaction/);
 });
 
 test("non-approved deliverables are gated from sprint review score and github", async () => {
@@ -182,8 +183,9 @@ test("planning items publish an approval-aware repository contract", async () =>
   assert.equal(openapi.paths["/api/team/task-intake/v2/commit"], undefined);
   assert.match(previewRoute, /buildPlanningItemCreatePreview/);
   assert.match(commitRoute, /create_team_planning_items_transaction/);
-  assert.match(intakeDocs, /itemType = milestone \| initiative \| deliverable \| sub_issue/);
-  assert.match(intakeDocs, /Only Sub-Issues may select an allowed technical/);
+  assert.match(intakeDocs, /Canonical `itemType` values are `epic`, `initiative`, `deliverable`, and `sub_issue`/);
+  assert.match(intakeDocs, /input type `milestone` are deprecated compatibility aliases/);
+  assert.match(intakeDocs, /Sub-Issue.*approved Deliverable/);
 });
 
 test("github projection uses the item repository and native sub issue relationships", async () => {

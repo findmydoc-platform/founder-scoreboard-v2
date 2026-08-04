@@ -40,7 +40,7 @@ function createSyncTargets(
   return items.flatMap((entry, index): PlanningItemGitHubSyncTarget[] => {
     const command = commands[index];
     const itemId = String(entry.item?.id || "");
-    return command && itemId
+    return command && itemId && (entry.itemType === "deliverable" || entry.itemType === "sub_issue")
       ? [{ itemId, itemType: entry.itemType, command }]
       : [];
   });
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
     if (planningItemCreateRequiresOperationalLead(parsed.items)
       && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
-      return planningItemsError("Nur CEO oder Deputy können Meilensteine anlegen.", 403);
+      return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
     }
     const items = await buildPlanningItemCreatePreview(parsed.items, permission.profile, permission.supabase);
     if (items.some((item) => item.errors.length)) return planningItemsJson({ ok: false, error: "Planning-Items-Erstellung enthält ungültige Einträge.", items }, 400);

@@ -1,10 +1,12 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { useState, type DragEvent, type ReactNode } from "react";
+import { Plus, X } from "lucide-react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { BacklogMoveAction, BacklogMoveResult, BacklogPlacement } from "@/features/backlog/hooks/use-backlog-ordering";
 import { BacklogReadiness } from "@/features/backlog/molecules/backlog-readiness";
+import { BacklogBulkSprintAssignmentMenu } from "@/features/backlog/molecules/backlog-sprint-actions";
 import { BacklogTaskActions } from "@/features/backlog/molecules/backlog-task-actions";
+import { getBacklogPlanningState } from "@/features/backlog/model/backlog-planning-state";
 import { backlogTableColumnCount, backlogTableMinWidth } from "@/features/backlog/model/backlog-table-layout";
 import type { BacklogItem, BacklogReadinessFilter, BacklogSort, BacklogSprintBucket, BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
@@ -30,9 +32,11 @@ type BacklogRankTableProps = {
   draggedTaskId: string;
   filters: BacklogTableFilters;
   initiativeOptions: CustomSelectOption[];
+  isBulkAssigningSprint: boolean;
   isReordering: boolean;
   items: BacklogItem[];
   onAssignTaskToSprint: (task: Task, sprint: Sprint | null) => void;
+  onAssignTasksToSprint: (tasks: Task[], sprint: Sprint) => Promise<boolean>;
   onDragTaskEnd: () => void;
   onDragTaskStart: (taskId: string) => void;
   onFiltersChange: (patch: Partial<BacklogTableFilters>) => void;
@@ -44,8 +48,45 @@ type BacklogRankTableProps = {
   readinessOptions: CustomSelectOption[];
   sprintById: ReadonlyMap<string, Sprint>;
   statusOptions: CustomSelectOption[];
-  toolbar: ReactNode;
 };
+
+function SelectionCheckbox({
+  checked,
+  disabled = false,
+  indeterminate = false,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  indeterminate?: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      aria-label={label}
+      onChange={onChange}
+      className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 accent-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+    />
+  );
+}
+
+function canSelectForBulkSprintAssignment(task: Task, canManageBacklog: boolean, sprintById: ReadonlyMap<string, Sprint>) {
+  if (!canManageBacklog) return false;
+  const state = getBacklogPlanningState(task);
+  if (state.kind !== "ready" && state.kind !== "scheduled") return false;
+  return !task.sprintId || !sprintById.get(task.sprintId)?.scoreLocked;
+}
 
 function dragTaskId(event: DragEvent<HTMLElement>) {
   return event.dataTransfer.getData("text/plain");
@@ -122,9 +163,11 @@ export function BacklogRankTable({
   draggedTaskId,
   filters,
   initiativeOptions,
+  isBulkAssigningSprint,
   isReordering,
   items,
   onAssignTaskToSprint,
+  onAssignTasksToSprint,
   onDragTaskEnd,
   onDragTaskStart,
   onFiltersChange,
@@ -136,9 +179,31 @@ export function BacklogRankTable({
   readinessOptions,
   sprintById,
   statusOptions,
-  toolbar,
 }: BacklogRankTableProps) {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const selectableItems = items.filter((item) => canSelectForBulkSprintAssignment(item.task, canManageBacklog, sprintById));
+  const selectableTaskIds = new Set(selectableItems.map((item) => item.task.id));
+  const selectedTasks = items.filter((item) => selectableTaskIds.has(item.task.id) && selectedTaskIds.has(item.task.id)).map((item) => item.task);
+  const allSelectableSelected = selectableItems.length > 0 && selectableItems.every((item) => selectedTaskIds.has(item.task.id));
+  const someSelectableSelected = selectableItems.some((item) => selectedTaskIds.has(item.task.id));
+  const toggleTaskSelection = (taskId: string) => setSelectedTaskIds((current) => {
+    const next = new Set(current);
+    if (next.has(taskId)) next.delete(taskId);
+    else next.add(taskId);
+    return next;
+  });
+  const toggleAllSelectable = () => setSelectedTaskIds((current) => {
+    const next = new Set(current);
+    if (allSelectableSelected) selectableItems.forEach((item) => next.delete(item.task.id));
+    else selectableItems.forEach((item) => next.add(item.task.id));
+    return next;
+  });
+  const assignSelectedTasksToSprint = async (tasks: Task[], sprint: Sprint) => {
+    const saved = await onAssignTasksToSprint(tasks, sprint);
+    if (saved) setSelectedTaskIds(new Set());
+    return saved;
+  };
   const actionProps = {
     buckets,
     canManageBacklog,
@@ -165,22 +230,55 @@ export function BacklogRankTable({
 
   return (
     <div className="order-1 min-w-0" data-tour-id="backlog-rank-table">
+      {selectedTasks.length ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-x border-t-4 border-blue-700 bg-blue-50 px-4 py-3" role="region" aria-label="Mehrfachauswahl für Sprint-Zuordnung">
+          <div>
+            <div className="text-sm font-semibold text-blue-950">{selectedTasks.length} Deliverables ausgewählt</div>
+            <div className="text-xs text-blue-700">Die Sprint-Zuordnung wird gemeinsam oder gar nicht gespeichert.</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <BacklogBulkSprintAssignmentMenu
+              buckets={buckets}
+              canManageBacklog={canManageBacklog}
+              isPending={isBulkAssigningSprint}
+              onAssignTasksToSprint={assignSelectedTasksToSprint}
+              selectedTasks={selectedTasks}
+              sprintById={sprintById}
+            />
+            <UiButton
+              variant="ghost"
+              size="iconXs"
+              aria-label="Mehrfachauswahl aufheben"
+              onClick={() => setSelectedTaskIds(new Set())}
+            >
+              <X size={15} aria-hidden="true" />
+            </UiButton>
+          </div>
+        </div>
+      ) : null}
       <DataTableFrame
         title="Backlog-Rangfolge"
         description="Rang steuert die nächste Planung; Priorität bleibt die fachliche Dringlichkeit."
         caption="Priorisierte Backlog-Aufgaben"
         results={[{ id: "backlog", visibleCount: items.length, totalCount: allItems.length }]}
-        filtering={{ mode: "embedded", toolbar }}
+        filtering={{ mode: "external", labelledBy: "backlog-data-filters" }}
         actions={canManageBacklog ? <UiButton variant="blue" size="sm" onClick={onProposeDeliverable}><Plus size={15} /> Deliverable vorschlagen</UiButton> : undefined}
         minWidth={backlogTableMinWidth}
         surfaceVariant="structural"
-        className="border-t-4 border-t-blue-700"
+        className={selectedTasks.length ? "border-t-0" : "border-t-4 border-t-blue-700"}
         mobileContent={
           <div className="divide-y divide-slate-200 border-t border-slate-200 bg-white">
             {items.map((item, index) => (
               <article key={item.task.id} className={classNames("grid gap-3 px-4 py-4", item.task.id === draggedTaskId && "bg-blue-50/70 opacity-60", item.rank === 1 && "border-l-4 border-l-blue-700 pl-3")}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <SelectionCheckbox
+                      checked={selectableTaskIds.has(item.task.id) && selectedTaskIds.has(item.task.id)}
+                      disabled={isBulkAssigningSprint || !canSelectForBulkSprintAssignment(item.task, canManageBacklog, sprintById)}
+                      label={`${item.task.title} für Sprint-Zuordnung auswählen`}
+                      onChange={() => toggleTaskSelection(item.task.id)}
+                    />
+                    <div className="min-w-0">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xs font-bold text-slate-500">#{item.rank}</span>
                       <UiBadge tone={priorityBadgeTone(item.task.priority)} shape="rectangular">{item.task.priority}</UiBadge>
@@ -189,6 +287,7 @@ export function BacklogRankTable({
                     <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="line-clamp-2 text-left font-semibold text-slate-950">
                       {item.task.title}
                     </TaskReferenceLink>
+                    </div>
                   </div>
                   <RowActions item={item} index={index} props={actionProps} />
                 </div>
@@ -211,7 +310,15 @@ export function BacklogRankTable({
       >
         <DataTableHead>
           <tr>
-            <DataHeaderCell aria-label="Backlog-Aktionen" />
+            <DataHeaderCell aria-label="Backlog-Auswahl und Aktionen">
+              <SelectionCheckbox
+                checked={allSelectableSelected}
+                disabled={isBulkAssigningSprint || !selectableItems.length}
+                indeterminate={someSelectableSelected && !allSelectableSelected}
+                label={allSelectableSelected ? "Auswahl aller Deliverables aufheben" : "Alle einplanbaren Deliverables auswählen"}
+                onChange={toggleAllSelectable}
+              />
+            </DataHeaderCell>
             <DataColumnHeader label="#" direction={directionFor("rank")} onSort={() => toggleSort("rank")} />
             <DataColumnHeader label="Titel" direction={directionFor("title")} onSort={() => toggleSort("title")} />
             <DataColumnHeader label="Freigabe" direction={directionFor("approval")} onSort={() => toggleSort("approval")} />
@@ -250,7 +357,17 @@ export function BacklogRankTable({
                 }}
                 className={classNames(item.rank === 1 && "bg-blue-50/45", item.task.id === draggedTaskId && "opacity-55")}
               >
-                <DataCell className={classNames(item.rank === 1 && "border-l-4 border-l-blue-700", dropClass)}><RowActions item={item} index={index} props={actionProps} /></DataCell>
+                <DataCell className={classNames(item.rank === 1 && "border-l-4 border-l-blue-700", dropClass)}>
+                  <div className="flex items-center gap-2">
+                    <SelectionCheckbox
+                      checked={selectableTaskIds.has(item.task.id) && selectedTaskIds.has(item.task.id)}
+                      disabled={isBulkAssigningSprint || !canSelectForBulkSprintAssignment(item.task, canManageBacklog, sprintById)}
+                      label={`${item.task.title} für Sprint-Zuordnung auswählen`}
+                      onChange={() => toggleTaskSelection(item.task.id)}
+                    />
+                    <RowActions item={item} index={index} props={actionProps} />
+                  </div>
+                </DataCell>
                 <DataCell className={classNames("font-semibold text-slate-600", dropClass)}>#{item.rank}</DataCell>
                 <DataCell className={classNames("max-w-sm", dropClass)}><TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="text-left font-semibold text-slate-950">{item.task.title}</TaskReferenceLink></DataCell>
                 <DataCell className={dropClass}><UiBadge tone={approvalTone(item.task)} shape="rectangular">{approvalLabel(item.task)}</UiBadge></DataCell>

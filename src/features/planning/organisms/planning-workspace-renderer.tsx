@@ -153,6 +153,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           canManageBacklog={canManageTaskMeta}
           data={data}
           onOpenTask={openTaskPanel}
+          onCreatePlanningItem={(taskType) => setTaskDialogDefaults({ taskType })}
           onProposeDeliverable={() => setTaskDialogDefaults({ taskType: "deliverable" })}
           onUpdateTask={updateTask}
           refreshPlanningData={refreshPlanningData}

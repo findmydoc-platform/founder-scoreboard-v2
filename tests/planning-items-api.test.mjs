@@ -18,7 +18,7 @@ const publicPaths = [
   "/api/team/planning-items/v1/tokens/{id}",
 ];
 
-test("Planning Items API exposes create, PATCH, GitHub sync, and empty Milestone DELETE contracts", async () => {
+test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and empty Epic DELETE contracts", async () => {
   const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, updatePreviewRoute, deletePreviewRoute, updateRoute, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
     read("src/features/projects/model/milestone-contract.ts"),
@@ -41,7 +41,8 @@ test("Planning Items API exposes create, PATCH, GitHub sync, and empty Milestone
   assert.match(contract, /"write:planning-items:update"/);
   assert.match(contract, /"write:planning-items:delete-empty"/);
   assert.match(contract, /"write:planning-items:github-sync"/);
-  assert.match(contract, /"milestone"/);
+  assert.match(contract, /"epic"/);
+  assert.match(contract, /"milestone"/); // deprecated compatibility alias
   assert.match(contextRoute, /"read:planning-context"/);
   assert.match(createPreviewRoute, /"write:planning-items:create"/);
   assert.match(createRoute, /create_team_planning_items_transaction/);
@@ -63,51 +64,53 @@ test("Planning Items API exposes create, PATCH, GitHub sync, and empty Milestone
   assert.doesNotMatch(githubSyncRoute, /idempotency-key/i);
   assert.match(tokensRoute, /create_team_planning_items_token_v3/);
   assert.match(tokensRoute, /allowUpdates/);
-  assert.match(tokensRoute, /allowEmptyMilestoneDeletes/);
+  assert.match(tokensRoute, /allowEmptyEpicDeletes/);
+  assert.match(tokensRoute, /allowEmptyMilestoneDeletes/); // deprecated compatibility alias
   assert.match(tokensRoute, /allowGitHubSync/);
   assert.match(tokensRoute, /Nur CEO oder Deputy/);
   assert.match(tokensRoute, /!payload \|\| typeof payload !== "object" \|\| Array\.isArray\(payload\)/);
   assert.match(tokensRoute, /Token-Payload muss ein JSON-Objekt sein/);
-  assert.match(tokenUi, /canIssueEmptyMilestoneDeletes/);
-  assert.match(tokenUi, /Leere Meilensteine löschen/);
+  assert.match(tokenUi, /canIssueEmptyEpicDeletes/);
+  assert.match(tokenUi, /Leere Epics löschen/);
   assert.match(tokenUi, /GitHub synchronisieren/);
   assert.match(tokenRoute, /revoke_team_planning_items_token/);
 
   const document = JSON.parse(openapi);
   assert.equal(document.info.title, "FounderOps Planning Items API");
-  assert.equal(document.info.version, "1.4.0");
+  assert.equal(document.info.version, "2.0.0");
   assert.deepEqual(Object.keys(document.paths), publicPaths);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.operationId, "updatePlanningItem");
-  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyMilestone");
+  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyEpic");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/preview"].post.operationId, "previewPlanningItemUpdate");
-  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/delete/preview"].post.operationId, "previewEmptyMilestoneDelete");
+  assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/delete/preview"].post.operationId, "previewEmptyEpicDelete");
   assert.equal(document.paths["/api/team/planning-items/v1/tokens"].post.operationId, "createPlanningItemsToken");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/github-sync"].post.operationId, "syncPlanningItemToGitHub");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}/github-sync"].post.parameters.length, 1);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
-  assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "milestone");
+  assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "epic");
+  assert.deepEqual(document.components.schemas.StrategicStatus.enum, ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.TaskStatus.enum, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.SubIssueStatus.enum, ["Offen", "In Arbeit", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.PatchPayload.properties.status.oneOf, [
-    { $ref: "#/components/schemas/MilestoneStatus" },
+    { $ref: "#/components/schemas/StrategicStatus" },
     { $ref: "#/components/schemas/TaskStatus" },
     { $ref: "#/components/schemas/SubIssueStatus" },
   ]);
-  assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.default, false);
+  assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyEpicDeletes.default, false);
+  assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.deprecated, true);
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowGitHubSync.default, false);
   assert.deepEqual(document.components.schemas.GitHubSyncMode.enum, ["async", "wait"]);
   assert.equal(document.components.schemas.GitHubSyncCommand.properties.createIfMissing.type, "boolean");
-  assert.match(documentation, /PATCH processes only properties that are present/);
+  assert.match(documentation, /PATCH processes only properties present/);
   assert.match(documentation, /write:planning-items:delete-empty/);
   assert.match(documentation, /write:planning-items:github-sync/);
-  assert.match(documentation, /Async execution is best effort/);
+  assert.match(documentation, /GitHub projection is intentionally unavailable for Epics and Initiatives/);
   assert.match(documentation, /valid: false/);
-  assert.match(documentation, /No legacy HTTP aliases or parallel planning-item creation routes are retained/);
-  assert.match(documentation, /Existing update-enabled tokens continue to work without rotation/);
-  assert.match(documentation, /status: "Review"/);
-  assert.match(documentation, /separate four-state contract/);
-  assert.match(documentation, /complete any Sub-Issue/);
+  assert.match(documentation, /deprecated compatibility aliases/);
+  assert.match(documentation, /parentTaskId.*only canonical hierarchy reference/);
+  assert.match(documentation, /Review, score, Evidence gates, Sprint, repository, or GitHub fields/);
+  assert.match(documentation, /Sub-Issues retain their separate four-state status contract/);
 });
 
 test("GitHub sync scope migration backfills only active tokens and keeps issuance explicit", async () => {
@@ -208,7 +211,7 @@ test("PATCH normalizers preserve explicit zeroes and clear only fields supplied 
   assert.equal(normalizers.normalizePatchTaskStatus("planned").ok, false);
 });
 
-test("Milestone create and delete payload helpers enforce role, version, and stable idempotency input", async () => {
+test("Epic delete and legacy compatibility helpers enforce role, version, and stable idempotency input", async () => {
   const contract = await loadTranspiledModule("src/features/planning-items/model/planning-items-contract.ts");
   const normalization = await loadTranspiledModule(
     "src/features/planning-items/model/planning-item-normalization.ts",
@@ -285,6 +288,7 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
   );
 
   assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "milestone" }]), true);
+  assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "epic" }]), true);
   assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "deliverable" }]), false);
   assert.equal(create.parsePlanningItemCreatePayload({ items: [{ itemType: "milestone", title: "Launch", targetDate: "2026-10-31", status: "planned" }] }).ok, true);
   assert.equal(create.parsePlanningItemCreatePayload({ items: [{ itemType: "milestone", title: "Launch", sortOrder: 2 }] }).ok, false);
@@ -293,20 +297,22 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     eq() { return this; },
     then(resolve, reject) { return Promise.resolve({ data, error: null }).then(resolve, reject); },
   });
-  const rowsByTable = { profiles: [], active_packages: [], milestones: [], active_tasks: [] };
+  const rowsByTable = { profiles: [{ id: "ceo", name: "CEO" }], planning_item_legacy_ids: [], active_tasks: [] };
   const supabase = { from: (table) => ({ select: () => query(rowsByTable[table] || []) }) };
-  const [milestonePreview] = await create.buildPlanningItemCreatePreview(
-    [{ itemType: "milestone", title: " Launch ", description: " Ready ", targetDate: "2026-10-31", status: "active" }],
+  const [epicPreview] = await create.buildPlanningItemCreatePreview(
+    [{ itemType: "epic", title: " Launch ", description: " Ready ", ownerId: "ceo", targetDate: "2026-10-31", status: "In Arbeit" }],
     { id: "ceo", name: "CEO", platformRole: "ceo", githubLogin: "" },
     supabase,
   );
-  assert.deepEqual(milestonePreview, {
+  assert.deepEqual(epicPreview, {
     clientId: "planning-items-create-1",
-    itemType: "milestone",
+    itemType: "epic",
     title: "Launch",
     description: "Ready",
+    parentTaskId: "",
+    ownerId: "ceo",
     targetDate: "2026-10-31",
-    status: "active",
+    status: "In Arbeit",
     approvalStatus: null,
     errors: [],
     warnings: [],
@@ -317,8 +323,6 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     id: "deliverable-parent",
     title: "Parent",
     task_type: "deliverable",
-    package_id: "initiative-one",
-    milestone_id: "milestone-one",
     approval_status: "approved",
     review_status: "not_requested",
     score_final: false,
@@ -346,10 +350,9 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
     evidenceRequired: "",
     definitionOfDone: "",
     parentTaskId: "deliverable-parent",
-    packageId: "initiative-one",
-    milestoneId: "milestone-one",
     ownerId: "founder",
     githubRepo: "findmydoc-platform/management",
+    status: "Offen",
     approvalStatus: null,
     scoreRelevant: false,
     errors: [],
@@ -441,6 +444,6 @@ test("Milestone create and delete payload helpers enforce role, version, and sta
       expectedUpdatedAt,
       supabase: deleteSupabase,
     }),
-    { ok: false, status: 403, error: "Nur CEO oder Deputy können Meilensteine löschen." },
+    { ok: false, status: 403, error: "Nur CEO oder Deputy können Epics löschen." },
   );
 });

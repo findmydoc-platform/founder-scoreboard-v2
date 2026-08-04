@@ -270,11 +270,14 @@ export function TaskOverviewPanel({
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
   const isSubIssue = task.taskType === "sub_issue";
+  const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
   const hasSubIssueBrief = isSubIssue && subIssueBriefFields.some(({ key }) => Boolean(draft[key].trim()));
   const hasDistinctSubIssueContext = hasSubIssueBrief
     && Boolean(draft.description.trim())
     && draft.description.trim() !== draft.problemStatement.trim();
-  const hasReadContent = isSubIssue
+  const hasReadContent = isStrategic
+    ? Boolean(draft.description.trim() || draft.strategyGoal.trim() || draft.strategySuccessCriteria.trim() || draft.strategyScopeConstraints.trim() || riskContent)
+    : isSubIssue
     ? Boolean(draft.description.trim() || hasSubIssueBrief || linkedPullRequests.length > 0 || riskContent)
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
@@ -326,7 +329,9 @@ export function TaskOverviewPanel({
           <div>
             <h2 id="task-overview-heading" className="text-base font-semibold text-slate-950">Übersicht</h2>
             <p className="mt-1 text-sm text-slate-500">
-              {isSubIssue
+              {isStrategic
+                ? "Strategischer Kontext, Zielbild und direkte Kinder."
+                : isSubIssue
                 ? hasSubIssueBrief
                   ? "Arbeitsbrief, Blocker und automatisch verknüpfte Pull Requests."
                   : "Kontext, Blocker und automatisch verknüpfte Pull Requests."
@@ -360,7 +365,42 @@ export function TaskOverviewPanel({
             </UiField>
           ) : null}
 
-          {isSubIssue ? (
+          {isStrategic ? (
+            permissions.canEditBrief ? (
+              <>
+                <UiField>
+                  Kontext <span className="font-normal text-slate-400">(optional)</span>
+                  <UiTextArea
+                    data-task-overview-field
+                    value={draft.description}
+                    disabled={saving}
+                    onChange={(event) => onChange({ description: event.target.value })}
+                    minHeight="lg"
+                    inputPadding="md"
+                    leading="relaxed"
+                    placeholder="Warum ist dieses strategische Item wichtig?"
+                  />
+                </UiField>
+                {task.taskType === "initiative" ? (
+                  <fieldset className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+                    <legend className="px-1 text-sm font-semibold text-slate-950">Strategie</legend>
+                    <UiField>
+                      Zielbild
+                      <UiTextArea data-task-overview-field value={draft.strategyGoal} disabled={saving} onChange={(event) => onChange({ strategyGoal: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Welcher strategische Zustand soll erreicht werden?" />
+                    </UiField>
+                    <UiField>
+                      Erfolgskriterien
+                      <UiTextArea data-task-overview-field value={draft.strategySuccessCriteria} disabled={saving} onChange={(event) => onChange({ strategySuccessCriteria: event.target.value })} minHeight="lg" inputPadding="md" leading="relaxed" placeholder="Woran erkennen wir Erfolg?" />
+                    </UiField>
+                    <UiField>
+                      Scope &amp; Grenzen
+                      <UiTextArea data-task-overview-field value={draft.strategyScopeConstraints} disabled={saving} onChange={(event) => onChange({ strategyScopeConstraints: event.target.value })} minHeight="md" inputPadding="md" leading="relaxed" placeholder="Was gehört dazu und was nicht?" />
+                    </UiField>
+                  </fieldset>
+                ) : null}
+              </>
+            ) : null
+          ) : isSubIssue ? (
             permissions.canEditBrief ? (
               <>
               <UiField>
@@ -416,7 +456,7 @@ export function TaskOverviewPanel({
               </UiField>
             ) : null)}
 
-          {!isSubIssue && permissions.canEditEvidence ? (
+          {!isSubIssue && !isStrategic && permissions.canEditEvidence ? (
             <fieldset className="grid gap-3" data-tour-id="task-evidence-links">
               <legend className="text-sm font-semibold text-slate-950">Nachweis-Links</legend>
               <p className="-mt-1 text-sm text-slate-500">
@@ -486,7 +526,19 @@ export function TaskOverviewPanel({
       ) : (
         <div className={flatReadOnly ? "" : "px-5 sm:px-6"}>
           {!hasReadContent ? <UiEmptyState className="my-5">Für dieses Item ist noch keine Beschreibung hinterlegt.</UiEmptyState> : null}
-          {isSubIssue ? (
+          {isStrategic ? (
+            <>
+              <ReadSection label="Kontext" value={draft.description} emptyValue="Kein strategischer Kontext hinterlegt." />
+              {task.taskType === "initiative" ? (
+                <>
+                  <ReadSection label="Zielbild" value={draft.strategyGoal} emptyValue="Kein Zielbild hinterlegt." />
+                  <ReadSection label="Erfolgskriterien" value={draft.strategySuccessCriteria} checklist emptyValue="Keine Erfolgskriterien hinterlegt." />
+                  <ReadSection label="Scope & Grenzen" value={draft.strategyScopeConstraints} emptyValue="Keine Scope-Grenzen hinterlegt." />
+                </>
+              ) : null}
+              {riskContent}
+            </>
+          ) : isSubIssue ? (
             <>
               {hasSubIssueBrief ? (
                 <>

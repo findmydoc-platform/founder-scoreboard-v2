@@ -16,6 +16,12 @@ type TaskCreationRequestDraft = TaskCreationHierarchy & {
   relationType: string;
   relatedTaskId: string;
   relationNote: string;
+  priority: string;
+  status: string;
+  targetDate: string;
+  intendedOutcome: string;
+  acceptanceCriteria: string;
+  scopeConstraints: string;
 };
 
 export const SUB_ISSUE_CREATE_REQUEST_FIELDS = [
@@ -78,6 +84,24 @@ export function resolveTaskCreationHierarchy<T extends TaskCreationHierarchy>(dr
 
 export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(draft: T) {
   if (draft.taskType === "deliverable") return draft;
+  if (draft.taskType === "epic" || draft.taskType === "initiative") {
+    return {
+      creationRequestId: draft.creationRequestId,
+      title: draft.title,
+      description: draft.description,
+      taskType: draft.taskType,
+      parentTaskId: draft.parentTaskId,
+      assignee: draft.assignee,
+      priority: draft.priority,
+      status: draft.status,
+      targetDate: draft.targetDate,
+      strategy: draft.taskType === "initiative" ? {
+        goal: draft.intendedOutcome,
+        successCriteria: draft.acceptanceCriteria,
+        scopeConstraints: draft.scopeConstraints,
+      } : undefined,
+    };
+  }
   return {
     creationRequestId: draft.creationRequestId,
     title: draft.title,

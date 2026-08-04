@@ -1,33 +1,26 @@
-export const taskDetailTabOrder = ["overview", "subIssues", "relationships", "activity"] as const;
+export const taskDetailTabOrder = ["overview", "relationships", "activity"] as const;
 
 export type TaskDetailTabId = (typeof taskDetailTabOrder)[number];
 
 export type TaskDetailTabAvailability = {
   activityCount: number;
   activityKnown: boolean;
-  allowsSubIssues: boolean;
   canAddRelationship: boolean;
   canComment: boolean;
-  canCreateSubIssue: boolean;
   relationshipCount: number;
   relationshipsKnown: boolean;
-  subIssueCount: number;
 };
 
 export function taskDetailAvailableTabs({
   activityCount,
   activityKnown,
-  allowsSubIssues,
   canAddRelationship,
   canComment,
-  canCreateSubIssue,
   relationshipCount,
   relationshipsKnown,
-  subIssueCount,
 }: TaskDetailTabAvailability): TaskDetailTabId[] {
   const tabs: TaskDetailTabId[] = ["overview"];
 
-  if (allowsSubIssues && (subIssueCount > 0 || canCreateSubIssue)) tabs.push("subIssues");
   if (!relationshipsKnown || relationshipCount > 0 || canAddRelationship) tabs.push("relationships");
   if (!activityKnown || activityCount > 0 || canComment) tabs.push("activity");
 
