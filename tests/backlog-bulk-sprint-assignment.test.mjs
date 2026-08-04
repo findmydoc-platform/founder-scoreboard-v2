@@ -94,8 +94,18 @@ test("bulk Sprint assignment API preserves auth failures and maps stale or ineli
 
   for (const [code, status, message] of [
     ["P0001", 409, "Mindestens ein Deliverable wurde zwischenzeitlich geändert. Bitte neu laden."],
+    ["P0002", 404, "Mindestens ein Deliverable wurde nicht gefunden."],
+    ["P0004", 404, "Sprint wurde nicht gefunden."],
+    ["P0005", 409, "Der Ziel-Sprint ist gesperrt."],
+    ["P0006", 409, "Ein bisheriger Sprint wurde nicht gefunden. Bitte neu laden."],
+    ["P0007", 409, "Deliverables aus einem gesperrten Sprint können nicht umgeplant werden."],
+    ["P0010", 400, "Nur Deliverables können einem Sprint zugeordnet werden."],
     ["P0011", 409, "Nur freigegebene Deliverables können einem Sprint zugeordnet werden."],
+    ["P0012", 409, "Erledigte Deliverables können nicht mehr einem Sprint zugeordnet werden."],
+    ["P0013", 409, "Für mindestens ein Deliverable fehlt die Zuständigkeit."],
     ["P0014", 409, "Für mindestens ein Deliverable fehlt eine freigegebene Initiative."],
+    ["22023", 400, "Sprint-Zuordnung ist ungültig."],
+    ["22007", 400, "Sprint-Zuordnung ist ungültig."],
     ["unexpected", 500, "Sprint-Zuordnungen konnten nicht gespeichert werden."],
   ]) {
     const route = await loadBulkRoute({ rpc: async () => ({ data: null, error: { code } }) });

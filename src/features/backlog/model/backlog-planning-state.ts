@@ -45,6 +45,11 @@ export type BacklogSprintAssignmentEligibilityOptions = {
   sourceSprintLocked?: boolean;
 };
 
+export type BacklogBulkSprintAssignmentState = {
+  disabled: boolean;
+  disabledReason?: string;
+};
+
 function hasText(value?: string | null) {
   return Boolean(value?.trim());
 }
@@ -142,4 +147,37 @@ export function backlogSprintAssignmentMessage(reason?: BacklogSprintAssignmentR
     already_unassigned: "Aufgabe ist keinem Sprint zugeordnet.",
   };
   return reason ? messages[reason] : "Sprint-Zuordnung konnte nicht geändert werden.";
+}
+
+export function getBacklogBulkSprintAssignmentState(
+  tasks: BacklogPlanningTask[],
+  targetSprint: BacklogSprintTarget,
+  options: {
+    canManage?: boolean;
+    isPending?: boolean;
+    sourceSprintLocked?: (task: BacklogPlanningTask) => boolean;
+  } = {},
+): BacklogBulkSprintAssignmentState {
+  if (options.isPending) {
+    return { disabled: true, disabledReason: "Sprint-Zuordnungen werden gerade gespeichert." };
+  }
+
+  const eligibilities = tasks.map((task) => getBacklogSprintAssignmentEligibility(task, targetSprint, {
+    canManage: options.canManage,
+    sourceSprintLocked: options.sourceSprintLocked?.(task),
+  }));
+  const blockingEligibility = eligibilities.find((eligibility) => (
+    !eligibility.ok
+    || (eligibility.action === "noop" && eligibility.reason !== "already_assigned")
+  ));
+  if (blockingEligibility) {
+    return {
+      disabled: true,
+      disabledReason: backlogSprintAssignmentMessage(blockingEligibility.reason),
+    };
+  }
+  const hasAssignment = eligibilities.some((eligibility) => eligibility.ok && eligibility.action !== "noop");
+  return hasAssignment
+    ? { disabled: false }
+    : { disabled: true, disabledReason: "Alle ausgewählten Deliverables sind diesem Sprint bereits zugeordnet." };
 }

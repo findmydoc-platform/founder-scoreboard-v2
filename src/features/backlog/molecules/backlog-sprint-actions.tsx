@@ -4,6 +4,7 @@ import { CalendarPlus, X } from "lucide-react";
 import type { DragEvent } from "react";
 import {
   backlogSprintAssignmentMessage,
+  getBacklogBulkSprintAssignmentState,
   getBacklogSprintAssignmentEligibility,
 } from "@/features/backlog/model/backlog-planning-state";
 import type { BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
@@ -27,7 +28,7 @@ type BacklogBulkSprintAssignmentOptions = {
   sprintById: ReadonlyMap<string, Sprint>;
 };
 
-function currentSprintLocked(task: Task, sprintById: ReadonlyMap<string, Sprint>) {
+function currentSprintLocked(task: { sprintId?: string | null }, sprintById: ReadonlyMap<string, Sprint>) {
   return Boolean(task.sprintId && sprintById.get(task.sprintId)?.scoreLocked);
 }
 
@@ -116,27 +117,18 @@ export function BacklogBulkSprintAssignmentMenu({
   sprintById,
 }: BacklogBulkSprintAssignmentOptions) {
   const items = buckets.map((bucket) => {
-    const eligibilities = selectedTasks.map((task) => getBacklogSprintAssignmentEligibility(task, bucket.sprint, {
+    const state = getBacklogBulkSprintAssignmentState(selectedTasks, bucket.sprint, {
       canManage: canManageBacklog,
-      sourceSprintLocked: currentSprintLocked(task, sprintById),
-    }));
-    const blockingEligibility = eligibilities.find((eligibility) => !eligibility.ok || eligibility.action === "noop" && eligibility.reason !== "already_assigned");
-    const hasAssignment = eligibilities.some((eligibility) => eligibility.ok && eligibility.action !== "noop");
-    const disabled = isPending || Boolean(blockingEligibility) || !hasAssignment;
-    const disabledReason = isPending
-      ? "Sprint-Zuordnungen werden gerade gespeichert."
-      : blockingEligibility
-        ? backlogSprintAssignmentMessage(blockingEligibility.reason)
-        : !hasAssignment
-          ? "Alle ausgewählten Deliverables sind diesem Sprint bereits zugeordnet."
-          : undefined;
+      isPending,
+      sourceSprintLocked: (task) => currentSprintLocked(task, sprintById),
+    });
 
     return {
       id: `bulk-sprint-${bucket.sprint.id}`,
       label: `In ${bucket.sprint.name}${bucket.isCurrent ? " (aktuell)" : ""} einplanen`,
       icon: <CalendarPlus size={15} />,
-      disabled,
-      disabledReason,
+      disabled: state.disabled,
+      disabledReason: state.disabledReason,
       onSelect: () => void onAssignTasksToSprint(selectedTasks, bucket.sprint),
     };
   });

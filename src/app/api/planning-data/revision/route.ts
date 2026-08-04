@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     revision: {
-      activeTaskCount: count || 0,
+      activeTaskCount: count ?? 0,
       latestUpdatedAt: String(data?.[0]?.updated_at || ""),
     },
   }, {
