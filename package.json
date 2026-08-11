@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "prototype:planning-read-models": "node src/features/planning/prototypes/planning-read-models.tui.prototype.mts",
     "review:route": "node scripts/route-maintainability-review.mjs",
     "verify:migrations": "node scripts/verify-supabase-migrations.mjs",
     "verify:milestone-crud": "node scripts/verify-milestone-crud.mjs",
