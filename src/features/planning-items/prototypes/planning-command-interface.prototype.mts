@@ -41,7 +41,7 @@ export type PlanningCommand =
       kind: "reviseItem";
       itemId: string;
       expectedRevision: number;
-      changes: Partial<Pick<PlanningItem, "title" | "ownerId" | "parentId" | "status">>;
+      changes: Partial<Pick<PlanningItem, "title" | "ownerId" | "status">>;
     }
   | {
       kind: "actOnItem";
@@ -51,6 +51,7 @@ export type PlanningCommand =
         | { type: "decideApproval"; decision: "approve" | "reject" }
         | { type: "withdraw" }
         | { type: "restore" }
+        | { type: "reparent"; parentId: string | null }
         | { type: "deleteEmptyEpic" }
         | { type: "requestIssueProjection"; createIfMissing: boolean };
     };
@@ -192,6 +193,13 @@ export function runPlanningCommand(
       } else if (action.type === "restore") {
         item.trashed = false;
         item.revision += 1;
+        affected.push(item);
+      } else if (action.type === "reparent") {
+        const revised = { ...item, parentId: action.parentId };
+        if (!parentIsValid(state.items, revised)) {
+          return { state: current, result: { ok: false, error: { code: "conflict", reason: "state", message: "Requested parent violates the hierarchy." } } };
+        }
+        Object.assign(item, revised, { revision: item.revision + 1 });
         affected.push(item);
       } else {
         const hasChildren = state.items.some((candidate) => candidate.parentId === item.id && !candidate.trashed);

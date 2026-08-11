@@ -40,7 +40,7 @@ function render(clear = true) {
   console.log(lastResult ? JSON.stringify(lastResult, null, 2) : `${dim}none${reset}`);
   console.log(`\n${bold}Keys${reset}`);
   console.log("[m] mode  [x] actor  [c] create  [u] revise  [a] approve");
-  console.log("[w] withdraw  [r] restore  [d] delete epic  [g] project  [q] quit");
+  console.log("[p] reparent  [w] withdraw  [r] restore  [d] delete epic  [g] project  [q] quit");
 }
 
 function handle(key: string) {
@@ -49,6 +49,7 @@ function handle(key: string) {
   if (key === "c") invoke({ kind: "createItems", items: [{ id: `deliverable-${sequence++}`, kind: "deliverable", title: "Prototype item", ownerId: "founder", parentId: "initiative-1", approval: "proposed", status: "open" }] });
   if (key === "u") invoke({ kind: "reviseItem", itemId: "deliverable-1", expectedRevision: state.items.find((item) => item.id === "deliverable-1")?.revision || 1, changes: { title: "Revised runbook" } });
   if (key === "a") invoke({ kind: "actOnItem", itemId: "initiative-1", expectedRevision: state.items.find((item) => item.id === "initiative-1")?.revision || 1, action: { type: "decideApproval", decision: "approve" } });
+  if (key === "p") invoke({ kind: "actOnItem", itemId: "deliverable-1", expectedRevision: state.items.find((item) => item.id === "deliverable-1")?.revision || 1, action: { type: "reparent", parentId: "epic-1" } });
   if (key === "w") invoke({ kind: "actOnItem", itemId: "deliverable-1", expectedRevision: state.items.find((item) => item.id === "deliverable-1")?.revision || 1, action: { type: "withdraw" } });
   if (key === "r") invoke({ kind: "actOnItem", itemId: "deliverable-1", expectedRevision: state.items.find((item) => item.id === "deliverable-1")?.revision || 1, action: { type: "restore" } });
   if (key === "d") invoke({ kind: "actOnItem", itemId: "epic-1", expectedRevision: state.items.find((item) => item.id === "epic-1")?.revision || 1, action: { type: "deleteEmptyEpic" } });
