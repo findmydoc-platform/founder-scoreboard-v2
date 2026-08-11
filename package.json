@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "prototype:planning-store": "node src/features/planning-items/prototypes/planning-items-store.tui.prototype.mts",
     "review:route": "node scripts/route-maintainability-review.mjs",
     "verify:migrations": "node scripts/verify-supabase-migrations.mjs",
     "verify:milestone-crud": "node scripts/verify-milestone-crud.mjs",
