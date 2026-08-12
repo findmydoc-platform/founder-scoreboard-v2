@@ -1,10 +1,12 @@
 import type { NextRequest } from "next/server";
 import { handlePlanningItemsRequest, planningItemsError, planningItemsJson } from "@/features/planning-items/model/planning-items-route";
 import {
-  buildPlanningItemCreatePreview,
+  createTeamCreatePlanningItems,
   parsePlanningItemCreatePayload,
+  planningItemCreateCommand,
   planningItemCreateRequiresOperationalLead,
 } from "@/features/planning-items/model/planning-items-create";
+import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/model/planning-actor-context-server";
 
 export async function POST(request: NextRequest) {
   return handlePlanningItemsRequest(request, "write:planning-items:create", "Planning-Items-Erstellung konnte nicht geprüft werden.", async (permission) => {
@@ -18,7 +20,21 @@ export async function POST(request: NextRequest) {
       && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
       return planningItemsError("Nur CEO oder Deputy können Epics anlegen.", 403);
     }
-    const items = await buildPlanningItemCreatePreview(parsed.items, permission.profile, permission.supabase);
+    const actor = actorContextFromPlanningTokenAuth(permission);
+    if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+    let items: readonly { errors: readonly string[] }[] = [];
+    await createTeamCreatePlanningItems({
+      supabase: permission.supabase,
+      actor: actor.actor,
+      tokenId: permission.tokenId,
+      rawItems: parsed.items,
+      githubSyncMode: parsed.githubSyncMode,
+      onPreview: (preview) => { items = preview; },
+    }).run({
+      actor: actor.actor,
+      mode: "preview",
+      command: planningItemCreateCommand(parsed.items, actor.actor.profileId),
+    });
     return planningItemsJson({ ok: true, valid: items.every((item) => !item.errors.length), items });
   });
 }

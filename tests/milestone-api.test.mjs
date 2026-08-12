@@ -33,6 +33,11 @@ const server = await loadTranspiledModule(
     "@/features/projects/model/planning-legacy-adapters": {
       resolveCanonicalStrategicItemId: async (_supabase, id) => id,
     },
+    "@/features/planning-items/model/planning-items-create": {
+      browserCreateTransactionFromResult: () => null,
+      createBrowserCreatePlanningItems: () => ({ run: async () => ({ ok: false }) }),
+      planningItemCreateCommand: () => ({ kind: "createItems", items: [] }),
+    },
     "@/lib/slug": {
       slugify: (value) => String(value).trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, ""),
     },
@@ -157,7 +162,7 @@ test("Legacy Milestone update helper delegates writes to the canonical Epic RPC"
 
 test("Session routes use the narrow role guards and never return raw database errors", async () => {
   const [collectionRoute, itemRoute, serverSource] = await Promise.all([
-    readFile("src/app/api/milestones/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-milestone-route.ts", "utf8"),
     readFile("src/app/api/milestones/[id]/route.ts", "utf8"),
     readFile("src/features/projects/model/milestone-server.ts", "utf8"),
   ]);

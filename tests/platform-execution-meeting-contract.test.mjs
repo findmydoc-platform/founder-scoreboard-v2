@@ -242,7 +242,9 @@ test("execution workspace is retired while legacy storage remains compatible", a
 
 test("task creation uses approval-aware deliverables and inherited sub issues", async () => {
   const migration = await readSupabaseSchemaContract();
-  const route = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const routeAdapter = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
+  const planningCreate = await readFile("src/features/planning-items/model/planning-items-create.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const transactionalCreationMigration = await readSupabaseSchemaContract();
   const createCommand = await readFile("src/features/tasks/hooks/use-task-create-command.ts", "utf8");
@@ -251,10 +253,14 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(migration, /approval_status/);
+  assert.match(routeAdapter, /handleBrowserTaskCreate/);
+  assert.doesNotMatch(routeAdapter, /\.rpc\(|from\(/);
   assert.match(migration, /decide_deliverable_approval_transaction/);
   assert.match(migration, /tasks_approval_status_by_type_check[^]*task_type = 'sub_issue'[^]*approval_status is null/);
   assert.match(route, /task\.proposed/);
-  assert.match(route, /create_planning_task_transaction/);
+  assert.match(route, /createBrowserCreatePlanningItems/);
+  assert.doesNotMatch(route, /\.rpc\(/);
+  assert.match(planningCreate, /create_planning_task_transaction/);
   assert.doesNotMatch(route, /from\("tasks"\)\.insert/);
   assert.match(transactionalCreationMigration, /create or replace function public\.create_task_transaction/);
   assert.match(transactionalCreationMigration, /insert into public\.task_relationship_edges/);
@@ -269,7 +275,7 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.doesNotMatch(route, /Founder können nur eigene Deliverables verfeinern/);
   assert.match(route, /new Set<TaskType>\(\["epic", "initiative", "deliverable", "sub_issue"\]\)/);
   assert.match(route, /const isStrategic = requestedType === "epic" \|\| requestedType === "initiative"/);
-  assert.match(route, /create_planning_item_transaction/);
+  assert.match(planningCreate, /create_browser_planning_item_transaction/);
   assert.match(route, /if \(taskType === "deliverable" && parentTaskId\)/);
   assert.doesNotMatch(route, /Deliverables brauchen eine Initiative/);
   assert.match(route, /In einer abgelehnten Initiative/);

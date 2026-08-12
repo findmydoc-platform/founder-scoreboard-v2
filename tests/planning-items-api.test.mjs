@@ -19,12 +19,13 @@ const publicPaths = [
 ];
 
 test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and empty Epic DELETE contracts", async () => {
-  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, updatePreviewRoute, deletePreviewRoute, updateRoute, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
+  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
     read("src/features/projects/model/milestone-contract.ts"),
     read("src/app/api/team/planning-items/v1/context/route.ts"),
     read("src/app/api/team/planning-items/v1/items/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/route.ts"),
+    read("src/features/planning-items/model/planning-items-create.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
@@ -45,7 +46,9 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(contract, /"milestone"/); // deprecated compatibility alias
   assert.match(contextRoute, /"read:planning-context"/);
   assert.match(createPreviewRoute, /"write:planning-items:create"/);
-  assert.match(createRoute, /create_team_planning_items_transaction/);
+  assert.match(createRoute, /createTeamCreatePlanningItems/);
+  assert.match(createModule, /create_team_planning_items_transaction/);
+  assert.doesNotMatch(createRoute, /\.rpc\(/);
   assert.match(updatePreviewRoute, /"write:planning-items:update"/);
   assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
   assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);

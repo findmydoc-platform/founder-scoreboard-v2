@@ -179,14 +179,17 @@ test("planning items publish an approval-aware repository contract", async () =>
   const openapi = JSON.parse(await readFile("public/founderops-team-planning-items-openapi.json", "utf8"));
   const previewRoute = await readFile("src/app/api/team/planning-items/v1/items/preview/route.ts", "utf8");
   const commitRoute = await readFile("src/app/api/team/planning-items/v1/items/route.ts", "utf8");
+  const createModule = await readFile("src/features/planning-items/model/planning-items-create.ts", "utf8");
   const intakeDocs = await readFile("docs/team-planning-items-api.md", "utf8");
 
   assert.ok(openapi.paths["/api/team/planning-items/v1/items/preview"]);
   assert.ok(openapi.paths["/api/team/planning-items/v1/items"]);
   assert.equal(openapi.paths["/api/team/task-intake/v2/preview"], undefined);
   assert.equal(openapi.paths["/api/team/task-intake/v2/commit"], undefined);
-  assert.match(previewRoute, /buildPlanningItemCreatePreview/);
-  assert.match(commitRoute, /create_team_planning_items_transaction/);
+  assert.match(previewRoute, /createTeamCreatePlanningItems/);
+  assert.match(previewRoute, /mode: "preview"/);
+  assert.match(commitRoute, /createTeamCreatePlanningItems/);
+  assert.match(createModule, /create_team_planning_items_transaction/);
   assert.match(intakeDocs, /Canonical `itemType` values are `epic`, `initiative`, `deliverable`, and `sub_issue`/);
   assert.match(intakeDocs, /input type `milestone` are deprecated compatibility aliases/);
   assert.match(intakeDocs, /Sub-Issue.*approved Deliverable/);

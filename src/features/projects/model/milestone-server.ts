@@ -7,6 +7,12 @@ import type { DbMilestone, DbTask } from "@/lib/planning-data-row-types";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { resolveCanonicalStrategicItemId } from "@/features/projects/model/planning-legacy-adapters";
+import type { ActorContext } from "@/features/planning-items/model/actor-context";
+import {
+  browserCreateTransactionFromResult,
+  createBrowserCreatePlanningItems,
+  planningItemCreateCommand,
+} from "@/features/planning-items/model/planning-items-create";
 import {
   MILESTONE_STATUSES,
   type MilestoneCreateRequest,
@@ -246,28 +252,42 @@ export async function loadProjectMilestone(supabase: SupabaseClient, id: string)
 export async function insertProjectMilestone(
   supabase: SupabaseClient,
   input: NormalizedMilestoneCreate,
-  actorProfileId: string,
+  actor: ActorContext,
+  requestMetadata?: { requestIp?: string; userAgent?: string },
 ) {
   const insert = buildMilestoneInsert(input);
-  const { data, error } = await supabase.rpc("create_planning_item_transaction", {
-    p_item: {
+  const item = {
       id: insert.id,
       project_id: insert.project_id,
       task_type: "epic",
       title: insert.title,
       description: insert.description || "",
       status: input.status === "active" ? "In Arbeit" : input.status === "done" ? "Erledigt" : "Offen",
-      owner: actorProfileId,
-      assignee: actorProfileId,
+      owner: actor.profileId,
+      assignee: actor.profileId,
       target_date: insert.target_date || null,
       sort_order: 0,
-    },
-    p_strategy: null,
-    p_raci_assignments: [],
-    p_actor_profile_id: actorProfileId,
+    };
+  const planningItems = createBrowserCreatePlanningItems({
+    supabase,
+    actor,
+    writer: { kind: "strategic", params: { item, strategy: null, raciAssignments: [], legacyAuditAction: "milestone.create" } },
   });
-  const row = (data as { task?: DbTask } | null)?.task || null;
-  return { data: row, error, insert };
+  const result = await planningItems.run({
+    actor,
+    mode: "commit",
+    command: planningItemCreateCommand([{
+      itemType: "epic",
+      title: input.title,
+      description: input.description,
+      ownerId: actor.profileId,
+      targetDate: input.targetDate,
+      status: item.status,
+    }], actor.profileId),
+    requestMetadata,
+  });
+  const transaction = result.ok ? browserCreateTransactionFromResult(result) as { task?: DbTask } | null : null;
+  return { data: transaction?.task || null, error: result.ok ? null : result.error, insert };
 }
 
 export async function updateProjectMilestone(
