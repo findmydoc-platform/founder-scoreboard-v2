@@ -411,6 +411,36 @@ async function verifyEmptyEpicDeleteRoutes(sessionToken) {
   }
 }
 
+async function verifyPlanningRelationshipRoutes(sessionToken, sourceTaskId, relatedTaskId) {
+  const created = await apiRequest(`/api/tasks/${sourceTaskId}/relationships`, sessionToken, "", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ relationType: "blocked_by", relatedTaskId, note: "Local integration fixture" }),
+  });
+  assertStatus(created, 200, "Browser planning relationship creation");
+  const createdBody = await created.json();
+  if (
+    !createdBody.ok
+    || !Number.isInteger(createdBody.relation?.id)
+    || createdBody.relation.taskId !== sourceTaskId
+    || createdBody.relation.relatedTaskId !== relatedTaskId
+    || createdBody.relation.relationType !== "blocked_by"
+  ) {
+    throw new Error("Browser planning relationship creation changed its response shape.");
+  }
+
+  const removed = await apiRequest(`/api/tasks/${sourceTaskId}/relationships`, sessionToken, "", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ relationId: createdBody.relation.id }),
+  });
+  assertStatus(removed, 200, "Browser planning relationship removal");
+  const removedBody = await removed.json();
+  if (!removedBody.ok || removedBody.relationId !== createdBody.relation.id) {
+    throw new Error("Browser planning relationship removal changed its response shape.");
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -419,6 +449,7 @@ async function main() {
   await verifySeedConvergence(status, source);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
+  execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-items-transaction.mjs")], { cwd: root, stdio: "inherit" });
   await verifyGitHubProjectRoleBoundary(status, source);
   await verifyUnmappedAuthReadBoundary(status);
@@ -454,6 +485,7 @@ async function main() {
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
+    await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
 
     const expectedProfiles = [
       ["", "ceo"],

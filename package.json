@@ -21,6 +21,7 @@
     "verify:planning-items": "node scripts/verify-planning-items-transaction.mjs",
     "verify:backlog-bulk-sprint": "node scripts/verify-backlog-bulk-sprint-assignment.mjs",
     "verify:backlog-move": "node scripts/verify-backlog-move-transaction.mjs",
+    "verify:planning-relationships": "node scripts/verify-planning-relationship-transaction.mjs",
     "verify:planning-batches": "node scripts/verify-planning-batch-transactions.mjs",
     "verify:planning-trash-lifecycle": "node scripts/verify-planning-trash-lifecycle-transaction.mjs",
     "verify:sprint-finalization": "node scripts/verify-sprint-finalization-transaction.mjs",

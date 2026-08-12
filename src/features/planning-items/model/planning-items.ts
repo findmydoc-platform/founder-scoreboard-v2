@@ -190,16 +190,20 @@ export type PlanningAction =
     before?: VersionedItemReference;
     after?: VersionedItemReference;
   }>)
-  | (VersionedItemReference & Readonly<{
+  | Readonly<{
     kind: "addRelationship";
+    itemId: PlanningItemId;
+    expectedRevision?: PlanningRevision;
     relatedItemId: PlanningItemId;
     relation: "blocked_by" | "blocks" | "relates_to";
     note?: string;
-  }>)
-  | (VersionedItemReference & Readonly<{
+  }>
+  | Readonly<{
     kind: "removeRelationship";
+    itemId: PlanningItemId;
+    expectedRevision?: PlanningRevision;
     relationshipId: number;
-  }>)
+  }>
   | (VersionedItemReference & Readonly<{
     kind: "requestGitHubProjection";
     mode: "async" | "wait";

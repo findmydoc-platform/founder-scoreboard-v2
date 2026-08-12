@@ -574,6 +574,8 @@ test("reviews live in task detail while legacy review links remain compatible", 
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const blockerRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const relationshipRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const relationshipModule = await readFile("src/features/planning-items/model/planning-items-relationships.ts", "utf8");
+  const relationshipCommandMigration = await readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8");
   const planningTrashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
   const reviewLock = await readFile("src/lib/task-review-lock.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
@@ -646,8 +648,12 @@ test("reviews live in task detail while legacy review links remain compatible", 
   assert.match(taskRoute, /isTaskReviewLocked\(currentReviewState\).*hasReviewLockedTaskChanges\(payload/s);
   assert.match(taskRoute, /isTaskReviewLocked\(parentReviewTask\)/);
   assert.match(blockerRoute, /taskIdsHaveReviewLock\(supabase, \[id\]\)/);
-  assert.match(relationshipRoute, /taskIdsHaveReviewLock\(supabase, \[id, relatedTaskId\]\)/);
-  assert.match(relationshipRoute, /taskIdsHaveReviewLock\(supabase, \[id, otherTaskId\]\)/);
+  assert.match(relationshipRoute, /createPlanningRelationshipPlanningItems/);
+  assert.doesNotMatch(relationshipRoute, /taskIdsHaveReviewLock/);
+  assert.match(relationshipModule, /state\.reviewLocked/);
+  assert.match(relationshipModule, /state\.finalReviewLocked/);
+  assert.match(relationshipCommandMigration, /review_status = 'requested'/);
+  assert.match(relationshipCommandMigration, /review_status = 'accepted'/);
   assert.match(reviewLock, /parent_task_id/);
   assert.match(reviewLock, /isReviewStateLocked/);
   assert.match(planningTrashApi, /isReviewStateLocked\(root\.review_status, root\.score_final\)/);
