@@ -35,7 +35,7 @@ async function waitForServer(child) {
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error("Next.js local integration server stopped before becoming ready.");
     try {
-      const response = await fetch(`${appOrigin}/api/planning-data?workspace=planning`);
+      const response = await fetch(`${appOrigin}/api/planning-board-data`);
       if (response.status === 401) return;
     } catch {
       // The server is still starting.
@@ -707,7 +707,7 @@ async function main() {
   try {
     await waitForServer(app);
 
-    const unauthenticated = await apiRequest("/api/planning-data?workspace=planning", "", "");
+    const unauthenticated = await apiRequest("/api/planning-board-data", "", "");
     assertStatus(unauthenticated, 401, "Unauthenticated planning data");
     const unauthenticatedRevision = await apiRequest("/api/planning-data/revision", "", "");
     assertStatus(unauthenticatedRevision, 401, "Unauthenticated planning revision");
@@ -737,12 +737,12 @@ async function main() {
       ["local-viewer", "viewer"],
     ];
     for (const [profileId, role] of expectedProfiles) {
-      const response = await apiRequest("/api/planning-data?workspace=planning", token, profileId);
+      const response = await apiRequest("/api/planning-board-data", token, profileId);
       assertStatus(response, 200, `${role} planning data`);
       const body = await response.json();
       if (body.currentProfile?.platformRole !== role) throw new Error(`${role} profile override was not applied.`);
       const expectedPlanningItems = source.epics.length + source.packages.length + source.tasks.length;
-      if (body.data?.tasks?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
+      if (body.model?.items?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {
