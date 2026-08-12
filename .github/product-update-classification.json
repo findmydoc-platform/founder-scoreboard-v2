@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Replaces the existing Planning and Strategic Planning data-loading paths without adding or materially expanding visible user functionality."
+  "reason": "Replaces supporting workspace data-loading paths without adding or materially expanding visible user functionality."
 }

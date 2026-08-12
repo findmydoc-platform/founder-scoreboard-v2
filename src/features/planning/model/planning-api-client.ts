@@ -9,6 +9,7 @@ import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } fr
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlanningTaskRevision } from "@/features/planning/model/planning-data-revision";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
+import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
@@ -25,6 +26,15 @@ export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, worksp
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
   }>(route);
+}
+
+export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, workspace: SupportingWorkspace) {
+  return apiClient.requestJson<{
+    model?: SupportingWorkspaceModel;
+    headerData?: PlanningHeaderData;
+    currentProfile?: AuthenticatedProfile | null;
+    error?: string;
+  }>(`/api/${workspace}-data`);
 }
 
 export function requestPlanningDataRevision(apiClient: BrowserApiClient) {

@@ -6,6 +6,12 @@ import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlo
 import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
+import { supportingWorkspaceModelToPlanningData, type SupportingWorkspace } from "@/features/planning/model/supporting-workspace-data-adapters";
+import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
+import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
+import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
+import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
+import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { getPlanningDataScopeForWorkspace, type LegacyPlanningDataWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
@@ -71,6 +77,30 @@ async function loadPlanningWorkspacePageData(
     : { status: planningWorkspace.status };
 }
 
+async function loadSupportingWorkspacePageData(
+  workspace: SupportingWorkspace,
+  profile?: AuthenticatedProfile | null,
+) {
+  const supabase = getServerSupabase();
+  if (!supabase) return { status: "unavailable" as const };
+  const readModel = workspace === "events" ? createSupabaseEventsReadModel(supabase)
+    : workspace === "tools" ? createSupabaseToolsReadModel(supabase)
+      : workspace === "team" ? createSupabaseTeamReadModel(supabase)
+        : workspace === "profile" ? createSupabaseProfileReadModel(supabase)
+          : createSupabaseNotificationsReadModel(supabase);
+  const [workspaceData, headerData] = await Promise.all([
+    readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
+    loadPlanningHeaderData(supabase, {
+      currentProfileId: profile?.id || null,
+      platformRole: profile?.platformRole || null,
+      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
+    }),
+  ]);
+  return workspaceData.status === "ready"
+    ? { status: "ready" as const, model: workspaceData.model, headerData }
+    : { status: workspaceData.status };
+}
+
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
@@ -127,6 +157,25 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
+    if (initialWorkspace === "events" || initialWorkspace === "tools" || initialWorkspace === "team" || initialWorkspace === "profile" || initialWorkspace === "notifications") {
+      const supportingWorkspace = await loadSupportingWorkspacePageData(initialWorkspace, auth.profile);
+      if (supportingWorkspace.status !== "ready") {
+        return <PlanningDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
+      }
+      return (
+        <PlanningApp
+          initialData={supportingWorkspaceModelToPlanningData(initialWorkspace, supportingWorkspace.model)}
+          initialHeaderData={supportingWorkspace.headerData}
+          initialWorkspace={initialWorkspace}
+          source="supabase"
+          authRequired
+          initialAuthUser={auth.user}
+          initialCurrentProfile={auth.profile}
+          initialProtectedDataLoaded
+        />
+      );
+    }
+
     const [{ availability, data, headerData, source }, initialDecisionLogResult] = await Promise.all([
       loadWorkspacePlanningData(initialWorkspace, auth.profile, { headerData: "deferred" }),
       initialWorkspace === "decision-log" ? loadNotionDecisionLog() : Promise.resolve(undefined),
@@ -172,6 +221,20 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       <PlanningApp
         initialData={planningWorkspaceModelToPlanningData(planningWorkspace.model)}
         initialHeaderData={planningWorkspace.headerData}
+        initialWorkspace={initialWorkspace}
+        source="supabase"
+        authRequired={false}
+      />
+    );
+  }
+
+  if (initialWorkspace === "events" || initialWorkspace === "tools" || initialWorkspace === "team" || initialWorkspace === "profile" || initialWorkspace === "notifications") {
+    const supportingWorkspace = await loadSupportingWorkspacePageData(initialWorkspace);
+    if (supportingWorkspace.status !== "ready") return <PlanningDataUnavailablePage workspace={initialWorkspace} />;
+    return (
+      <PlanningApp
+        initialData={supportingWorkspaceModelToPlanningData(initialWorkspace, supportingWorkspace.model)}
+        initialHeaderData={supportingWorkspace.headerData}
         initialWorkspace={initialWorkspace}
         source="supabase"
         authRequired={false}

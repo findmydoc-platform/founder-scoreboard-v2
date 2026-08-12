@@ -50,12 +50,7 @@ function recordingSupabase() {
 
 const expectedTablesByWorkspace = {
   "decision-log": ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  events: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "founder_events"],
   sprint: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
-  tools: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "fmd_tools"],
-  team: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  notifications: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "notification_events", "notification_deliveries", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  profile: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "notification_preferences", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
 };
 
 for (const [workspace, expectedTables] of Object.entries(expectedTablesByWorkspace)) {

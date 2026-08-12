@@ -745,6 +745,24 @@ async function main() {
       if (body.model?.items?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
     }
 
+    const supportingWorkspaceEndpoints = [
+      "/api/events-data",
+      "/api/tools-data",
+      "/api/team-data",
+      "/api/profile-data",
+      "/api/notifications-data",
+    ];
+    for (const endpoint of supportingWorkspaceEndpoints) {
+      for (const [profileId, role] of expectedProfiles) {
+        const response = await apiRequest(endpoint, token, profileId);
+        assertStatus(response, 200, `${role} ${endpoint}`);
+        const body = await response.json();
+        if (!body.model || body.currentProfile?.platformRole !== role) {
+          throw new Error(`${role} did not receive the focused ${endpoint} model.`);
+        }
+      }
+    }
+
     for (const profileId of ["sebastian", "local-viewer"]) {
       const response = await apiRequest("/api/milestones", token, profileId, {
         method: "POST",
