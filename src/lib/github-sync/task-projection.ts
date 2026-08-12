@@ -168,7 +168,7 @@ function validateTaskForProjection(loaded: LoadedSyncTask, createIfMissing: bool
 }
 
 async function validateActiveTask(supabase: SupabaseClient, taskId: string) {
-  const active = await requireActivePlanningItem(supabase, "tasks", taskId);
+  const active = await requireActivePlanningItem(supabase, taskId);
   if (active.ok) return null;
   if (active.status === 404) return taskGitHubSyncFailure("github_sync_not_found", active.error);
   if (active.status === 409) return taskGitHubSyncFailure("github_sync_inactive", active.error);

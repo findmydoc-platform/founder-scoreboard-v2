@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { permission, supabase } = apiContext;
 
   const { id } = await context.params;
-  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  const activeItem = await requireActivePlanningItem(supabase, id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   const { data: task, error: taskError } = await supabase
     .from("tasks")

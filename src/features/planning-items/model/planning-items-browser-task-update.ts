@@ -174,7 +174,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       },
     });
   }
-  const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
+  const activeItem = await requireActivePlanningItem(supabase, id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
     return apiError("Aktueller Aufgabenstand ist erforderlich.", 400);

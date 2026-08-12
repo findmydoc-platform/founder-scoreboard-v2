@@ -21,16 +21,16 @@ function guardSupabase(result) {
 
 test("central planning mutation guard distinguishes active, missing, and trashed items", async () => {
   assert.deepEqual(
-    await requireActivePlanningItem(guardSupabase({ data: { id: "task-1", trashed_at: null }, error: null }), "tasks", "task-1"),
+    await requireActivePlanningItem(guardSupabase({ data: { id: "task-1", trashed_at: null }, error: null }), "task-1"),
     { ok: true },
   );
   assert.deepEqual(
-    await requireActivePlanningItem(guardSupabase({ data: null, error: null }), "packages", "initiative-1"),
-    { ok: false, status: 404, error: "Initiative wurde nicht gefunden." },
+    await requireActivePlanningItem(guardSupabase({ data: null, error: null }), "initiative-1"),
+    { ok: false, status: 404, error: "Planning-Item wurde nicht gefunden." },
   );
   assert.deepEqual(
-    await requireActivePlanningItem(guardSupabase({ data: { id: "task-1", trashed_at: "2026-07-13T08:00:00Z" }, error: null }), "tasks", "task-1"),
-    { ok: false, status: 409, error: "Aufgabe befindet sich im Papierkorb und kann nicht geändert werden." },
+    await requireActivePlanningItem(guardSupabase({ data: { id: "task-1", trashed_at: "2026-07-13T08:00:00Z" }, error: null }), "task-1"),
+    { ok: false, status: 409, error: "Planning-Item befindet sich im Papierkorb und kann nicht geändert werden." },
   );
 });
 
@@ -106,10 +106,9 @@ test("reparenting and relationship targets use active read models", async () => 
 });
 
 test("task detail is active-first and falls back to a read-only trash surface", async () => {
-  const [page, taskTemplate, initiativeTemplate, banner] = await Promise.all([
+  const [page, taskTemplate, banner] = await Promise.all([
     read("src/app/tasks/[id]/page.tsx"),
     read("src/features/planning-trash/templates/planning-trash-task-detail-page.tsx"),
-    read("src/features/planning-trash/templates/planning-initiative-detail-page.tsx"),
     read("src/features/planning-trash/molecules/planning-trash-banner.tsx"),
   ]);
 
@@ -117,7 +116,7 @@ test("task detail is active-first and falls back to a read-only trash surface", 
   assert.match(page, /loadPlanningTrashTaskDetail\(supabase, id, \[\.\.\.taskDetailResult\.people\]\)/);
   assert.match(page, /createSupabaseTaskDetailReadModel\(supabase\)\.load/);
   assert.match(page, /getServerPlanningAuth\(\["ceo", "founder", "deputy", "viewer"\]\)/);
-  for (const template of [taskTemplate, initiativeTemplate]) {
+  for (const template of [taskTemplate]) {
     assert.doesNotMatch(template, /"use client"|<form|UiButton|onUpdate|onDecide|onRestore|onSyncGitHub/);
     assert.match(template, /Schreibgeschützt/);
   }
@@ -136,7 +135,6 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
   const trashDetail = await loadTranspiledModule(
     "src/lib/planning-trash-detail.ts",
     {
-      "@/lib/planning-profile-mappers": { mapMilestone: (row) => row, mapPackage: (row) => row },
       "@/lib/planning-task-mappers": {
         mapTaskRow: (row, _profiles, options) => ({
           id: row.id,
@@ -181,8 +179,6 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
     description: "Fallback",
     task_type: "initiative",
     parent_task_id: "epic-1",
-    package_id: null,
-    milestone_id: null,
     status: "In Arbeit",
     priority: "P1",
     approval_status: "approved",
@@ -239,14 +235,14 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
   assert.equal(result.detail.task.strategy.goal, "Reach launch readiness");
   assert.deepEqual(result.detail.task.raciAssignments, [{ profileId: "ceo", role: "accountable", sortOrder: 0 }]);
   assert.equal(result.detail.parent.taskType, "epic");
+  assert.equal(result.detail.epic.taskType, "epic");
   assert.equal(result.detail.children[0].taskType, "deliverable");
 });
 
-test("legacy initiative details redirect into the common task detail surface", async () => {
+test("initiative links use canonical planning item ids without legacy lookup", async () => {
   const page = await read("src/app/initiatives/[id]/page.tsx");
-  assert.match(page, /planning_item_legacy_ids/);
-  assert.match(page, /source_kind", "package"/);
-  assert.match(page, /redirect\(`\/tasks\//);
+  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.doesNotMatch(page, /planning_item_legacy_ids|source_kind|legacy_id/);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
@@ -257,14 +253,14 @@ test("notifications keep rejected initiative details read-only and return revisi
   const commands = await read("src/features/planning/hooks/use-notification-commands.ts");
 
   assert.equal(notificationTarget({ entityType: "task", entityId: "task/1" }).href, "/tasks/task%2F1");
-  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
+  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/tasks/initiative%2F1");
   assert.deepEqual(
     notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),
     { workspace: "backlog", href: "/backlog?backlog.level=initiative" },
   );
   assert.equal(
     notificationTarget({ type: "planning_item.rejected", entityType: "initiative", entityId: "initiative/1" }).href,
-    "/initiatives/initiative%2F1",
+    "/tasks/initiative%2F1",
   );
   assert.doesNotMatch(commands, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(commands, /if \(!task \|\| !taskOverlayWorkspaces\.has\(workspace\)\)/);

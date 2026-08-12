@@ -126,7 +126,7 @@ export function PlanningTrashTaskDetailPage({
                       <Link href={`/tasks/${encodeURIComponent(detail.parent.id)}`} className="font-semibold text-blue-700 hover:underline">
                         {detail.parent.title}
                       </Link>
-                    ) : value(detail.milestone?.title)}
+                    ) : value(detail.epic?.title)}
                   </ReadOnlyDetailField>
                 )}
                 {detail.parent && task.taskType === "sub_issue" && (
