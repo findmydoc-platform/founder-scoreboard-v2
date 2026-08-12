@@ -751,6 +751,7 @@ async function main() {
       "/api/team-data",
       "/api/profile-data",
       "/api/notifications-data",
+      "/api/sprint-data",
     ];
     for (const endpoint of supportingWorkspaceEndpoints) {
       for (const [profileId, role] of expectedProfiles) {

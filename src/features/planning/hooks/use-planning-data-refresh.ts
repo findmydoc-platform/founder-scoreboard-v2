@@ -11,6 +11,7 @@ import { mergePlanningHeaderData, normalizePlanningHeaderData } from "@/lib/plan
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningData } from "@/features/planning/model/supporting-workspace-data-adapters";
+import { sprintWorkspaceModelToPlanningData } from "@/features/sprint/model/sprint-planning-data-adapter";
 
 type UsePlanningDataRefreshOptions = {
   apiClient: BrowserApiClient;
@@ -72,6 +73,22 @@ export function usePlanningDataRefresh({
       const { response, body } = await planningApi.requestSupportingWorkspaceData(apiClient, workspace);
       if (!response.ok || !body?.model) return;
       const nextData = normalizePlanningData(supportingWorkspaceModelToPlanningData(workspace, body.model));
+      const nextHeaderData = mergePlanningHeaderData(headerData, normalizePlanningHeaderData(body.headerData));
+      setProtectedPlanningDataCache({
+        authUserId: authUser.id,
+        data: nextData,
+        headerData: nextHeaderData,
+        currentProfile: body.currentProfile || serverCurrentProfile,
+      });
+      setData(nextData);
+      setHeaderData(nextHeaderData);
+      setProtectedDataLoaded(true);
+      return;
+    }
+    if (workspace === "sprint") {
+      const { response, body } = await planningApi.requestSprintWorkspaceData(apiClient);
+      if (!response.ok || !body?.model) return;
+      const nextData = normalizePlanningData(sprintWorkspaceModelToPlanningData(body.model));
       const nextHeaderData = mergePlanningHeaderData(headerData, normalizePlanningHeaderData(body.headerData));
       setProtectedPlanningDataCache({
         authUserId: authUser.id,

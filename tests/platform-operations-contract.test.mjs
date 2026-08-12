@@ -404,7 +404,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.doesNotMatch(dataScopes, /\n\s*tools: \{/);
   assert.doesNotMatch(dataScopes, /\n\s*events: \{/);
   assert.doesNotMatch(dataScopes, /\n\s*notifications: \{/);
-  assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
+  assert.doesNotMatch(dataScopes, /\n\s*sprint: \{/);
   assert.doesNotMatch(dataScopes, /\n\s*profile: \{/);
   assert.match(dataLoader, /export type PlanningDataQueryScope/);
   assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);

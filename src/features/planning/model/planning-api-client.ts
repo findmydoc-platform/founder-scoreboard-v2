@@ -10,6 +10,7 @@ import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlanningTaskRevision } from "@/features/planning/model/planning-data-revision";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
+import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
@@ -35,6 +36,15 @@ export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, work
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
   }>(`/api/${workspace}-data`);
+}
+
+export function requestSprintWorkspaceData(apiClient: BrowserApiClient) {
+  return apiClient.requestJson<{
+    model?: SprintWorkspaceModel;
+    headerData?: PlanningHeaderData;
+    currentProfile?: AuthenticatedProfile | null;
+    error?: string;
+  }>("/api/sprint-data");
 }
 
 export function requestPlanningDataRevision(apiClient: BrowserApiClient) {

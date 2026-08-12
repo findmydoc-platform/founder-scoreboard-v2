@@ -7,6 +7,7 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
+import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 type Props = {
   initialData: PlanningData;
@@ -20,6 +21,7 @@ type Props = {
   initialAuthError?: string;
   initialDecisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
+  initialSprintModel?: SprintWorkspaceModel;
 };
 
 export function PlanningApp({
@@ -34,6 +36,7 @@ export function PlanningApp({
   initialAuthError = "",
   initialDecisionLogResult,
   initialBacklogModel,
+  initialSprintModel,
 }: Props) {
   const controller = usePlanningAppController({
     initialData,
@@ -47,5 +50,5 @@ export function PlanningApp({
     initialAuthError,
   });
 
-  return <PlanningAppShell authRequired={authRequired} controller={controller} source={source} decisionLogResult={initialDecisionLogResult} initialBacklogModel={initialBacklogModel} />;
+  return <PlanningAppShell authRequired={authRequired} controller={controller} source={source} decisionLogResult={initialDecisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} />;
 }

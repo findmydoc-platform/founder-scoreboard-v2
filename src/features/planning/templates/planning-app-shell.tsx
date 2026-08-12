@@ -13,6 +13,7 @@ import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
+import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
@@ -20,9 +21,10 @@ type PlanningAppShellProps = {
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
+  initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningAppShell({ authRequired, controller, source, decisionLogResult, initialBacklogModel }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -173,7 +175,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
           />
         )}
 
-        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} initialBacklogModel={initialBacklogModel} />
+        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} />
       </main>
 
       <PlanningOverlayLayer controller={controller} />

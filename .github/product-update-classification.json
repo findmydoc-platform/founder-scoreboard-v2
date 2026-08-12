@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Replaces supporting workspace data-loading paths without adding or materially expanding visible user functionality."
+  "reason": "Replaces the existing Sprint data-loading and state path without adding or materially expanding visible user functionality."
 }

@@ -11,6 +11,7 @@ import { canManageMilestones } from "@/features/projects/model/milestone-policy"
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
+import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -31,9 +32,10 @@ type PlanningWorkspaceRendererProps = {
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
   initialBacklogModel?: BacklogModel;
+  initialSprintModel?: SprintWorkspaceModel;
 };
 
-export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult, initialBacklogModel }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult, initialBacklogModel, initialSprintModel }: PlanningWorkspaceRendererProps) {
   const {
     authBusy,
     canManageTaskMeta,
@@ -203,7 +205,8 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
         />
       )}
       {workspace === "sprint" && (
-        <SprintScoreTableOverview
+        initialSprintModel ? <SprintScoreTableOverview
+          initialModel={initialSprintModel}
           data={data}
           pending={isPending}
           onOpenTask={openTaskPanel}
@@ -228,7 +231,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           currentProfile={currentProfile}
           canManageSprint={canManageSprint}
           sprintLockMessage={sprintLockMessage}
-        />
+        /> : null
       )}
       {workspace === "notifications" && (
         <NotificationsOverview
