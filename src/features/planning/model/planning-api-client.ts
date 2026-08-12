@@ -1,23 +1,17 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { MilestoneDeleteRequest, MilestoneNotEmptyError, MilestoneResponse } from "@/features/projects/model/milestone-contract";
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
-import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
-import type { PlanningTaskRevision } from "@/features/planning/model/planning-data-revision";
+import type { PlanningTaskRevision } from "@/features/planning/model/planning-revision";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
-import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
+import type { SupportingWorkspace, SupportingWorkspaceModel } from "@/features/planning/model/supporting-planning-shell-projection";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
-
-export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
-  const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
-  return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
-}
 
 export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects") {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
@@ -47,8 +41,8 @@ export function requestSprintWorkspaceData(apiClient: BrowserApiClient) {
   }>("/api/sprint-data");
 }
 
-export function requestPlanningDataRevision(apiClient: BrowserApiClient) {
-  return apiClient.requestJson<{ error?: string; revision?: PlanningTaskRevision }>("/api/planning-data/revision");
+export function requestPlanningShellStateRevision(apiClient: BrowserApiClient) {
+  return apiClient.requestJson<{ error?: string; revision?: PlanningTaskRevision }>("/api/planning-revision");
 }
 
 export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: readonly PlanningHeaderSlotKey[], options: { signal?: AbortSignal } = {}) {

@@ -1,17 +1,17 @@
 import { Columns3, GanttChart, ListTree, Table2 } from "lucide-react";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
-import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-data-mappers";
+import { mapScoreObjection as mapScoreObjectionResponse } from "@/lib/planning-row-mappers";
 import { addDaysIso, sprintNumber } from "@/lib/planning-schedule";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, MAX_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
 import { DEFAULT_GITHUB_PROJECT_NUMBER, DEFAULT_GITHUB_PROJECT_OWNER, validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
-import type { Package, PlanningData, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
+import type { Package, PlanningShellState, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
 
-export function normalizePlanningData(data: PlanningData): PlanningData {
+export function normalizePlanningShellState(data: PlanningShellState): PlanningShellState {
   const storedReviewWindowHours = Number(data.project?.reviewObjectionWindowHours);
   const reviewObjectionWindowHours = Number.isInteger(storedReviewWindowHours)
     && storedReviewWindowHours >= 1

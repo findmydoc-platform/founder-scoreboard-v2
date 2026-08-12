@@ -8,7 +8,7 @@ import type {
   HeaderNotificationsData,
   HeaderQuickLink,
   NotificationEvent,
-  PlanningData,
+  PlanningShellState,
   PlanningHeaderData,
   PlatformRole,
 } from "@/lib/types";
@@ -81,7 +81,7 @@ export type PlanningHeaderSharedSlotLoaders = {
 };
 
 type PlanningHeaderLoadOptions = PlanningHeaderProjectionOptions & {
-  data?: PlanningData;
+  data?: PlanningShellState;
   notificationEventsReconciled?: boolean;
   slots?: readonly PlanningHeaderSlotKey[];
   sharedSlotLoaders?: PlanningHeaderSharedSlotLoaders;
@@ -270,7 +270,7 @@ export function projectHeaderNotifications(
 }
 
 export function projectPlanningHeaderData(
-  data: PlanningData,
+  data: PlanningShellState,
   fallback: PlanningHeaderData = emptyPlanningHeaderData,
   options: PlanningHeaderProjectionOptions = {},
 ): PlanningHeaderData {

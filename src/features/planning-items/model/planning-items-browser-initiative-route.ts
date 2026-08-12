@@ -14,7 +14,7 @@ import {
   resolveCanonicalStrategicItemId,
 } from "@/features/projects/model/planning-legacy-adapters";
 import { mapPackage } from "@/lib/planning-profile-mappers";
-import type { DbPackage } from "@/lib/planning-data-row-types";
+import type { DbPackage } from "@/lib/planning-row-types";
 import { ACTIVE_PACKAGES_TABLE } from "@/lib/planning-read-model";
 import { slugify } from "@/lib/slug";
 import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";

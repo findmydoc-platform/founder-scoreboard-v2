@@ -15,7 +15,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   const policy = await readFile("src/lib/notification-policy.ts", "utf8");
   const catalog = await readFile("src/lib/notification-catalog.ts", "utf8");
   const resolutionPolicy = await readFile("src/lib/notification-resolution.ts", "utf8");
-  const planningData = await readFile("src/lib/planning-data.ts", "utf8");
+  const planningData = await readFile("src/lib/planning-header-data.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const ui = await readPlanningSurface();
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
@@ -201,7 +201,7 @@ test("founder events are modeled as team-visible operational reminders", async (
   const app = await readPlanningSurface();
   const ui = await readFeatureSurface("src/features/events");
   const types = await readFile("src/lib/types.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/events/server/events-read-model-supabase.ts", "utf8");
   const mappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
@@ -307,8 +307,7 @@ test("active founder feedback is removed while historical migration stays intact
   const ui = await readPlanningSurface();
   const notificationsOverviewUi = await readFile("src/features/notifications/organisms/notifications-overview.tsx", "utf8");
   const notificationOutboxUi = await readFile("src/features/notifications/organisms/notification-outbox-panel.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
+  const data = await readFile("src/features/notifications/server/notifications-read-model-supabase.ts", "utf8");
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const notificationPolicy = await readFile("src/lib/notification-policy.ts", "utf8");
 
@@ -326,7 +325,7 @@ test("active founder feedback is removed while historical migration stays intact
   assert.doesNotMatch(ui, /FeedbackDialog/);
   assert.doesNotMatch(ui, /\/api\/feedback/);
   assert.doesNotMatch(data, /feedbackItems|feedback_items/);
-  assert.doesNotMatch(dataScopes, /feedbackItems/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
   assert.doesNotMatch(apiClient, /createFeedbackRequest|\/api\/feedback/);
   assert.doesNotMatch(notificationPolicy, /feedback\.bug_reported|feedback\.feature_requested/);
 });
@@ -344,11 +343,8 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
   const legacyReviewsPage = await readFile("src/app/(workspaces)/reviews/page.tsx", "utf8");
   const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
-  const planningData = await readFile("src/lib/planning-data.ts", "utf8");
-  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
   const headerData = await readFile("src/lib/planning-header-data.ts", "utf8");
-  const planningDataApi = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
   const workspacePages = await Promise.all([
     "planning",
     "decision-log",
@@ -395,33 +391,19 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(planningAuth, /\.eq\("profile_id", auth\.profile\.id\)/);
   assert.match(planningAuth, /rootWorkspaceFromPreference\(data\?\.default_workspace\)/);
   assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
-  assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\),/);
-  assert.match(dataScopes, /export const workspaceDataScopes/);
-  assert.doesNotMatch(dataScopes, /taskDetailPageDataScope/);
-  assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
-  assert.match(dataScopes, /planningDataWorkspaceFromValue/);
-  assert.match(dataScopes, /notificationEvents: false/);
-  assert.doesNotMatch(dataScopes, /\n\s*tools: \{/);
-  assert.doesNotMatch(dataScopes, /\n\s*events: \{/);
-  assert.doesNotMatch(dataScopes, /\n\s*notifications: \{/);
-  assert.doesNotMatch(dataScopes, /\n\s*sprint: \{/);
-  assert.doesNotMatch(dataScopes, /\n\s*profile: \{/);
-  assert.match(dataLoader, /export type PlanningDataQueryScope/);
-  assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
-  assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
+  assert.doesNotMatch(workspacePage, /getPlanningShellState|PlanningShellStateQueryScope/);
+  assert.match(workspacePage, /createSupabaseBacklogReadModel/);
+  assert.match(workspacePage, /createSupabasePlanningBoardReadModel/);
+  assert.match(workspacePage, /createSupabaseSprintReadModel/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
+  await assert.rejects(() => readFile("src/lib/planning-data-loader.ts", "utf8"), /ENOENT/);
   assert.match(headerData, /HeaderQuickLink/);
   assert.match(headerData, /HeaderCalendarEvent/);
   assert.match(headerData, /headerQuickLinkSelect/);
   assert.match(headerData, /headerCalendarEventSelect/);
   assert.match(headerData, /loadPlanningHeaderData/);
-  assert.match(planningData, /headerData/);
-  assert.match(planningData, /filterPlanningDataForWorkspaceAccess/);
-  assert.match(planningData, /isOperationalLeadRole\(access\.platformRole!/);
-  assert.match(planningData, /event\.recipientProfileId === currentProfileId/);
-  assert.match(planningData, /notificationDeliveries: \[\]/);
-  assert.match(planningDataApi, /planningDataWorkspaceFromValue\(rawWorkspace\)/);
-  assert.match(planningDataApi, /apiError\("Unknown planning workspace\.", 400\)/);
-  assert.match(planningDataApi, /platformRole: auth\.profile\?\.platformRole/);
+  assert.doesNotMatch(planningApiClient, /\/api\/planning-data/);
+  await assert.rejects(() => readFile("src/app/api/planning-data/route.ts", "utf8"), /ENOENT/);
   assert.match(workspaceHook, /workspacePath\(nextWorkspace\)/);
   assert.match(workspaceHook, /router\.push/);
   assert.doesNotMatch(workspaceHook, /workspaceStateKey|localStorage|searchParams|legacyMineWorkspace|router\.replace/);
@@ -465,7 +447,7 @@ test("Planning Items API is the sole automated planning-item creation contract",
 
 test("planning mutations do not persist a browser seed database", async () => {
   const ui = await readPlanningSurface();
-  assert.doesNotMatch(ui, /useLocalPlanningState|persistLocalPlanningData|persistLocalPlanningTasks/);
+  assert.doesNotMatch(ui, /useLocalPlanningState|persistLocalPlanningShellState|persistLocalPlanningTasks/);
 });
 
 test("header actions are workspace aware", async () => {

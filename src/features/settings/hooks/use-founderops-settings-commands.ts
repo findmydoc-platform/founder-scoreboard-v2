@@ -8,7 +8,7 @@ import { canConfigureFounderOpsGitHubProject } from "@/lib/platform";
 
 export function useFounderOpsSettingsCommands({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   currentProfile,
   data,
   setSaveError,
@@ -21,7 +21,7 @@ export function useFounderOpsSettingsCommands({
 
     const { response, body } = await updateFounderOpsReviewWindowRequest(apiClient, expectedHours, reviewObjectionWindowHours);
     if (!response.ok || !body?.project) throw new Error(body?.error || "Prozesseinstellung konnte nicht gespeichert werden.");
-    applyPlanningDataUpdate((current) => applyReviewWindowHours(
+    applyPlanningShellStateUpdate((current) => applyReviewWindowHours(
       current,
       body.project!.reviewObjectionWindowHours,
       body.sprints || [],
@@ -48,7 +48,7 @@ export function useFounderOpsSettingsCommands({
       githubProjectNumber,
     );
     if (!response.ok || !body?.project) throw new Error(body?.error || "GitHub Project konnte nicht geprüft und gespeichert werden.");
-    applyPlanningDataUpdate((current) => applyGitHubProjectSettings(
+    applyPlanningShellStateUpdate((current) => applyGitHubProjectSettings(
       current,
       body.project!.githubProjectOwner,
       body.project!.githubProjectNumber,

@@ -31,7 +31,7 @@ const sharedStubs = {
   "@/features/planning-items/server/planning-workspace-read-source": {
     planningProfileSelect: "id",
   },
-  "@/lib/planning-data-mappers": {
+  "@/lib/planning-row-mappers": {
     mapFounderEvent: (row) => ({ id: row.id, updatedAt: row.updated_at }),
     mapFmdTool: (row) => ({ id: row.id, sortOrder: row.sort_order }),
   },
@@ -66,19 +66,18 @@ test("Events and Tools expose focused fail-closed load interfaces", async () => 
 });
 
 test("supporting workspaces own one loader and no longer appear in global scopes", async () => {
-  const [page, scopes, apiClient, adapter] = await Promise.all([
+  const [page, apiClient, adapter] = await Promise.all([
     readFile("src/app/(workspaces)/workspace-page.tsx", "utf8"),
-    readFile("src/lib/planning-data-scopes.ts", "utf8"),
     readFile("src/features/planning/model/planning-api-client.ts", "utf8"),
-    readFile("src/features/planning/model/supporting-workspace-data-adapters.ts", "utf8"),
+    readFile("src/features/planning/model/supporting-planning-shell-projection.ts", "utf8"),
   ]);
   for (const workspace of ["events", "tools", "team", "profile", "notifications"]) {
-    assert.doesNotMatch(scopes, new RegExp(`\\n\\s*${workspace}:\\s*\\{`));
     assert.match(page, new RegExp(`createSupabase${workspace === "events" ? "Events" : workspace === "tools" ? "Tools" : workspace === "team" ? "Team" : workspace === "profile" ? "Profile" : "Notifications"}ReadModel`));
   }
   assert.match(apiClient, /requestSupportingWorkspaceData/);
   assert.match(adapter, /SupportingWorkspaceModel/);
   assert.doesNotMatch(adapter, /server\//);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
 });
 
 test("consumer-owned read-model interfaces do not import peer server modules", async () => {
@@ -93,6 +92,6 @@ test("consumer-owned read-model interfaces do not import peer server modules", a
     const source = await readFile(file, "utf8");
     assert.match(source, /interface \w+ReadModel[\s\S]*load\(/);
     assert.doesNotMatch(source, /server\//);
-    assert.doesNotMatch(source, /PlanningData/);
+    assert.doesNotMatch(source, /PlanningShellState/);
   }
 });

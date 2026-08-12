@@ -3,8 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadPlanningItemsForReadModel, mapPlanningProject, planningProjectId } from "@/features/planning-items/server/planning-workspace-read-source";
 import type { SprintReadModel } from "@/features/sprint/model/sprint-read-model";
-import { mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent } from "@/lib/planning-data-mappers";
-import type { DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "@/lib/planning-data-row-types";
+import { mapFounderSprintScore, mapFounderStrikeState, mapMeeting, mapMeetingAttendance, mapScoreObjection, mapSprint, mapSprintCommitment, mapStrikeEvent } from "@/lib/planning-row-mappers";
+import type { DbFounderSprintScore, DbFounderStrikeState, DbMeeting, DbMeetingAttendance, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "@/lib/planning-row-types";
 
 export function createSupabaseSprintReadModel(supabase: SupabaseClient): SprintReadModel {
   return {

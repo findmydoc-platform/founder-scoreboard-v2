@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validateApprovalDecisionNote } from "@/lib/approval-decision-policy";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
-import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask } from "@/lib/planning-data-row-types";
+import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask } from "@/lib/planning-row-types";
 import type { Task } from "@/lib/types";
 import { attemptPlanningGitHubLifecycleDrain, loadOutstandingPlanningGitHubLifecycleTaskIds } from "@/lib/planning-github-lifecycle-trigger";
 import { createPlanningItems, type PlanningDecisionCore } from "./planning-items-runner";

@@ -1,5 +1,5 @@
 import type { FounderSprintScore, FounderStrikeState, ScoreObjection, Sprint, SprintCommitment, StrikeEvent } from "./types";
-import type { DbFounderSprintScore, DbFounderStrikeState, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "./planning-data-row-types";
+import type { DbFounderSprintScore, DbFounderStrikeState, DbScoreObjection, DbSprint, DbSprintCommitment, DbStrikeEvent } from "./planning-row-types";
 
 export function mapSprint(row: DbSprint): Sprint {
   return {

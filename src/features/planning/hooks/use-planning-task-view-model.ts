@@ -3,11 +3,11 @@
 import { useMemo } from "react";
 import type { PlanningFilters } from "@/features/planning/hooks/use-planning-view-state";
 import { buildPlanningTaskTableViewModel } from "@/features/planning/model/planning-task-table-view-model";
-import type { PlanningData, Profile } from "@/lib/types";
+import type { PlanningShellState, Profile } from "@/lib/types";
 
 type UsePlanningTaskViewModelOptions = {
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   filters: PlanningFilters;
 };
 

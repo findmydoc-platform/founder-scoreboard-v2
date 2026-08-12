@@ -3,9 +3,9 @@ import type { NotificationsWorkspaceModel } from "@/features/notifications/model
 import type { ProfileWorkspaceModel } from "@/features/profile/model/profile-read-model";
 import type { TeamWorkspaceModel } from "@/features/team/model/team-read-model";
 import type { ToolsWorkspaceModel } from "@/features/tools/model/tools-read-model";
-import { emptyPlanningData } from "@/lib/planning-data";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
 export type SupportingWorkspace = "events" | "tools" | "team" | "profile" | "notifications";
 export type SupportingWorkspaceModel = EventsWorkspaceModel | ToolsWorkspaceModel | TeamWorkspaceModel | ProfileWorkspaceModel | NotificationsWorkspaceModel;
@@ -14,23 +14,23 @@ export function isSupportingWorkspace(workspace: string): workspace is Supportin
   return workspace === "events" || workspace === "tools" || workspace === "team" || workspace === "profile" || workspace === "notifications";
 }
 
-export function supportingWorkspaceModelToPlanningData(workspace: SupportingWorkspace, model: SupportingWorkspaceModel): PlanningData {
+export function supportingWorkspaceModelToPlanningShellState(workspace: SupportingWorkspace, model: SupportingWorkspaceModel): PlanningShellState {
   if (workspace === "events") {
     const eventsModel = model as EventsWorkspaceModel;
-    return { ...emptyPlanningData, profiles: [...eventsModel.people], events: [...eventsModel.events] };
+    return { ...emptyPlanningShellState, profiles: [...eventsModel.people], events: [...eventsModel.events] };
   }
   if (workspace === "tools") {
     const toolsModel = model as ToolsWorkspaceModel;
-    return { ...emptyPlanningData, profiles: [...toolsModel.people], fmdTools: [...toolsModel.tools] };
+    return { ...emptyPlanningShellState, profiles: [...toolsModel.people], fmdTools: [...toolsModel.tools] };
   }
   if (workspace === "team") {
     const teamModel = model as TeamWorkspaceModel;
-    return { ...emptyPlanningData, profiles: [...teamModel.people], tasks: [...teamModel.items] };
+    return { ...emptyPlanningShellState, profiles: [...teamModel.people], tasks: [...teamModel.items] };
   }
   if (workspace === "profile") {
     const profileModel = model as ProfileWorkspaceModel;
     return {
-      ...emptyPlanningData,
+      ...emptyPlanningShellState,
       project: profileModel.project,
       profiles: [...profileModel.people],
       packages: profileModel.initiatives.map(mapLegacyPackageFromInitiative),
@@ -40,7 +40,7 @@ export function supportingWorkspaceModelToPlanningData(workspace: SupportingWork
   }
   const notificationsModel = model as NotificationsWorkspaceModel;
   return {
-    ...emptyPlanningData,
+    ...emptyPlanningShellState,
     profiles: [...notificationsModel.people],
     tasks: [...notificationsModel.items],
     notificationEvents: [...notificationsModel.events],

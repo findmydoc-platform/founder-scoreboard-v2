@@ -3,8 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventsReadModel } from "@/features/events/model/events-read-model";
 import { planningProfileSelect } from "@/features/planning-items/server/planning-workspace-read-source";
-import { mapFounderEvent } from "@/lib/planning-data-mappers";
-import type { DbFounderEvent, DbProfile } from "@/lib/planning-data-row-types";
+import { mapFounderEvent } from "@/lib/planning-row-mappers";
+import type { DbFounderEvent, DbProfile } from "@/lib/planning-row-types";
 import { mapProfile } from "@/lib/planning-profile-mappers";
 
 export function createSupabaseEventsReadModel(supabase: SupabaseClient): EventsReadModel {

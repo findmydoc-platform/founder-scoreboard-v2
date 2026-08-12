@@ -21,7 +21,7 @@ import type { Task, TaskStatus } from "@/lib/types";
 type UseTaskUpdateCommandOptions = Pick<
   PlanningCommandContext,
   | "apiClient"
-  | "applyPlanningDataUpdate"
+  | "applyPlanningShellStateUpdate"
   | "canChangeTaskStatus"
   | "canManageFinalTaskStatus"
   | "canManageTaskMeta"
@@ -32,7 +32,7 @@ type UseTaskUpdateCommandOptions = Pick<
   | "setSaveError"
   | "startTransition"
 > & {
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   serverUpdatedAtByTask: TaskServerRevisionStore;
@@ -41,14 +41,14 @@ type UseTaskUpdateCommandOptions = Pick<
 
 export function useTaskUpdateCommand({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   canChangeTaskStatus,
   canManageFinalTaskStatus,
   canManageTaskMeta,
   currentProfile,
   data,
   githubInstallationAvailable,
-  refreshPlanningData,
+  refreshCurrentWorkspaceModel,
   setData,
   setSaveError,
   setStatusGuardNotice,
@@ -120,7 +120,7 @@ export function useTaskUpdateCommand({
       return Promise.resolve({ ok: false, error: founderTaskAssignmentGuardMessage(), status: 403 });
     }
 
-    applyPlanningDataUpdate((current) => {
+    applyPlanningShellStateUpdate((current) => {
       const nextData = {
         ...current,
         tasks: current.tasks.map((item) => (item.id === task.id ? {
@@ -158,7 +158,7 @@ export function useTaskUpdateCommand({
           serverUpdatedAtByTask.current.delete(task.id);
           const error = body?.error || "Aufgabe wurde zwischenzeitlich geändert. Der aktuelle Stand wurde neu geladen.";
           try {
-            await refreshPlanningData();
+            await refreshCurrentWorkspaceModel();
           } catch {
             // The authoritative refresh is best-effort after a rejected mutation.
           }
@@ -172,7 +172,7 @@ export function useTaskUpdateCommand({
           serverUpdatedAtByTask.current.set(task.id, body.task.updatedAt);
         }
         if (body?.activities?.length) {
-          applyPlanningDataUpdate((current) => ({
+          applyPlanningShellStateUpdate((current) => ({
             ...current,
             taskActivity: [...body.activities!, ...current.taskActivity],
           }));
@@ -197,7 +197,7 @@ export function useTaskUpdateCommand({
         mutationEpochByTask.current.set(task.id, mutationEpoch + 1);
         serverUpdatedAtByTask.current.delete(task.id);
         try {
-          await refreshPlanningData();
+          await refreshCurrentWorkspaceModel();
         } catch {
           // The authoritative refresh is best-effort after a failed mutation.
         }

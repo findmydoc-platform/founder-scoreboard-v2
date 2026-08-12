@@ -234,7 +234,7 @@ async function upsertRows(client, table, columns, rows, conflictColumn = "id") {
   );
 }
 
-async function seedPlanningData(status) {
+async function seedPlanningDatabase(status) {
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   if (source.project.id !== localProjectId) {
     throw new Error(`Local seed project must remain ${localProjectId}.`);
@@ -476,7 +476,7 @@ async function seedLocalAuth(status, env) {
 async function seed() {
   const status = readStatus();
   const env = syncLocalEnv(status);
-  await seedPlanningData(status);
+  await seedPlanningDatabase(status);
   await seedLocalAuth(status, env);
 }
 

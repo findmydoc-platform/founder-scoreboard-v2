@@ -1,5 +1,5 @@
 import type { FmdTool, FounderEvent, NotificationDelivery, NotificationEvent, NotificationPreference } from "./types";
-import type { DbFmdTool, DbFounderEvent, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference } from "./planning-data-row-types";
+import type { DbFmdTool, DbFounderEvent, DbNotificationDelivery, DbNotificationEvent, DbNotificationPreference } from "./planning-row-types";
 
 export function mapNotificationEvent(row: DbNotificationEvent): NotificationEvent {
   return {

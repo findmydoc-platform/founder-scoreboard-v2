@@ -10,8 +10,8 @@ import type {
   DbSprintCommitment,
   DbTask,
   DbTaskLink,
-} from "@/lib/planning-data-row-types";
-import { taskRowSelect } from "@/lib/planning-data-row-types";
+} from "@/lib/planning-row-types";
+import { taskRowSelect } from "@/lib/planning-row-types";
 import { mapProfile } from "@/lib/planning-profile-mappers";
 import { mapSprint, mapSprintCommitment } from "@/lib/planning-sprint-mappers";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";

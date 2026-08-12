@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-const { applyTaskDetailModel, taskDetailDegradationMessage, taskDetailModelToPlanningData } = await loadTranspiledModule(
-  "src/features/tasks/model/task-detail-planning-data-adapter.ts",
+const { applyTaskDetailModel, taskDetailDegradationMessage, taskDetailModelToPlanningShellState } = await loadTranspiledModule(
+  "src/features/tasks/model/task-detail-planning-shell-projection.ts",
   {
     "@/lib/planning-profile-mappers": {
       mapLegacyMilestoneFromEpic: (item) => ({ ...item, legacy: "milestone" }),
@@ -31,7 +31,7 @@ function model() {
 }
 
 test("task detail compatibility projection contains only the feature model", () => {
-  const data = taskDetailModelToPlanningData(model());
+  const data = taskDetailModelToPlanningShellState(model());
   assert.deepEqual(data.tasks.map(({ id }) => id), ["target", "epic", "initiative", "child", "related"]);
   assert.deepEqual(data.milestones.map(({ id }) => id), ["epic"]);
   assert.deepEqual(data.packages.map(({ id }) => id), ["initiative"]);
@@ -41,7 +41,7 @@ test("task detail compatibility projection contains only the feature model", () 
 
 test("task detail refresh replaces only selected detail rows and referenced items", () => {
   const current = {
-    ...taskDetailModelToPlanningData(model()),
+    ...taskDetailModelToPlanningShellState(model()),
     tasks: [{ id: "other", taskType: "deliverable" }, { id: "target", taskType: "deliverable", stale: true }],
     taskComments: [{ id: "old-target", taskId: "target" }, { id: "other-comment", taskId: "other" }],
     taskRelations: [

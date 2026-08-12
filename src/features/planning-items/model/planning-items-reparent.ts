@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
-import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask } from "@/lib/planning-data-row-types";
+import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask } from "@/lib/planning-row-types";
 import type { Task } from "@/lib/types";
 import { createPlanningItems, type PlanningDecisionCore } from "./planning-items-runner";
 import { createSupabasePlanningItemsStore } from "./planning-items-store-supabase";

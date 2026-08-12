@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapLegacyMilestoneFromEpic, mapMilestone } from "@/lib/planning-profile-mappers";
-import type { DbMilestone, DbTask } from "@/lib/planning-data-row-types";
+import type { DbMilestone, DbTask } from "@/lib/planning-row-types";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { resolveCanonicalStrategicItemId } from "@/features/projects/model/planning-legacy-adapters";

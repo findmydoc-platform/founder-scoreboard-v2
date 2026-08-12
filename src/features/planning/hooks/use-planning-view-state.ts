@@ -7,7 +7,7 @@ import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dia
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
-import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 import { addDaysIso } from "@/lib/planning-schedule";
 import { dateUrlField, enumUrlField, multiEnumUrlField, stringUrlField, useTableUrlState, type TableUrlHistoryMode, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
 
@@ -58,7 +58,7 @@ const planningBoardUrlSchema: TableUrlSchema<PlanningBoardUrlState> = {
 };
 
 type UsePlanningViewStateOptions = {
-  initialData: PlanningData;
+  initialData: PlanningShellState;
 };
 
 export function usePlanningViewState({

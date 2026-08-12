@@ -121,7 +121,7 @@ const { createSupabaseTaskDetailReadModel } = await loadTranspiledModule(
   {
     "server-only": {},
     "@/features/tasks/model/task-detail-read-model": { taskDetailReadLimits },
-    "@/lib/planning-data-mappers": {
+    "@/lib/planning-row-mappers": {
       mapTaskAuditActivity: (row) => row,
       mapTaskBlocker: (row) => row,
       mapTaskComment: (row) => row,
@@ -129,7 +129,7 @@ const { createSupabaseTaskDetailReadModel } = await loadTranspiledModule(
       mapTaskRelation: (row) => ({ id: row.id, taskId: row.task_id, relatedTaskId: row.related_task_id }),
       mapTaskReview: (row) => row,
     },
-    "@/lib/planning-data-row-types": { taskRowSelect: "id" },
+    "@/lib/planning-row-types": { taskRowSelect: "id" },
     "@/lib/planning-profile-mappers": { mapProfile: (row) => row },
     "@/lib/planning-sprint-mappers": { mapSprint: (row) => row },
     "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },

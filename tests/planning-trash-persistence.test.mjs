@@ -38,9 +38,10 @@ test("production baseline keeps planning trash constrained, indexed, and hidden 
 });
 
 test("normal planning reads use the centralized active read models", async () => {
-  const [readModel, loader, planningContext, planningItemsCreate, taskDetail] = await Promise.all([
+  const [readModel, workspaceReadSource, backlog, planningContext, planningItemsCreate, taskDetail] = await Promise.all([
     read("src/lib/planning-read-model.ts"),
-    read("src/lib/planning-data-loader.ts"),
+    read("src/features/planning-items/server/planning-workspace-read-source.ts"),
+    read("src/features/backlog/server/backlog-read-model-supabase.ts"),
     read("src/features/planning-items/model/planning-items-context.ts"),
     read("src/features/planning-items/model/planning-items-create.ts"),
     read("src/features/tasks/server/task-detail-read-model-supabase.ts"),
@@ -48,12 +49,13 @@ test("normal planning reads use the centralized active read models", async () =>
 
   assert.match(readModel, /ACTIVE_PACKAGES_TABLE = "active_packages"/);
   assert.match(readModel, /ACTIVE_TASKS_TABLE = "active_tasks"/);
-  for (const source of [loader, planningContext, planningItemsCreate, taskDetail]) {
+  for (const source of [workspaceReadSource, backlog, planningContext, planningItemsCreate, taskDetail]) {
     assert.match(source, /ACTIVE_TASKS_TABLE/);
   }
-  for (const source of [loader, planningContext, planningItemsCreate]) {
+  for (const source of [workspaceReadSource, backlog, planningContext, planningItemsCreate]) {
     assert.doesNotMatch(source, /ACTIVE_PACKAGES_TABLE/);
   }
+  await assert.rejects(() => read("src/lib/planning-data-loader.ts"), /ENOENT/);
 });
 
 test("schema verification covers trash metadata and both active views", async () => {

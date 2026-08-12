@@ -1,5 +1,5 @@
 import type { Milestone, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, Task, ViewMode } from "./types";
-import type { DbMilestone, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-data-row-types";
+import type { DbMilestone, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
   volkan: "#22c55e",

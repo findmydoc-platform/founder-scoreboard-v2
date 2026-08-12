@@ -7,13 +7,13 @@ import { planningWorkspaces } from "@/features/planning/model/planning-app-model
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { PlanningData, Profile, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, ViewMode } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningDerivedStateOptions = {
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   filters: PlanningFilters;
   planningLevel: PlanningLevel;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];

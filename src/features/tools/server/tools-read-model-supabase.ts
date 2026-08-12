@@ -3,8 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { planningProfileSelect } from "@/features/planning-items/server/planning-workspace-read-source";
 import type { ToolsReadModel } from "@/features/tools/model/tools-read-model";
-import { mapFmdTool } from "@/lib/planning-data-mappers";
-import type { DbFmdTool, DbProfile } from "@/lib/planning-data-row-types";
+import { mapFmdTool } from "@/lib/planning-row-mappers";
+import type { DbFmdTool, DbProfile } from "@/lib/planning-row-types";
 import { mapProfile } from "@/lib/planning-profile-mappers";
 
 export function createSupabaseToolsReadModel(supabase: SupabaseClient): ToolsReadModel {

@@ -21,7 +21,7 @@ function responseError(body: unknown, fallback: string) {
 
 export function useMilestoneCommands({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   data,
   setMilestoneDeleteTarget,
   setMilestoneDialogDefaults,
@@ -33,7 +33,7 @@ export function useMilestoneCommands({
     if (!response.ok || !body || !("milestone" in body)) {
       throw new Error(responseError(body, "Der Meilenstein konnte nicht gespeichert werden."));
     }
-    applyPlanningDataUpdate((current) => ({
+    applyPlanningShellStateUpdate((current) => ({
       ...current,
       milestones: existing
         ? current.milestones.map((item) => item.id === body.milestone.id ? body.milestone : item)
@@ -47,7 +47,7 @@ export function useMilestoneCommands({
       expectedUpdatedAt: milestone.updatedAt,
     });
     if (!response.ok) throw new Error(responseError(body, "Der Meilenstein konnte nicht gelöscht werden."));
-    applyPlanningDataUpdate((current) => ({
+    applyPlanningShellStateUpdate((current) => ({
       ...current,
       milestones: current.milestones.filter((item) => item.id !== milestone.id),
     }));

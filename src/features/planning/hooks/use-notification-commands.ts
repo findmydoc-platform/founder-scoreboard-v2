@@ -23,7 +23,7 @@ type GoogleChatStatus = {
 
 type UseNotificationCommandsOptions = PlanningCommandContext & {
   openTaskPanel: (taskId: string) => void;
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setShowNotifications: (show: boolean) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
@@ -36,7 +36,7 @@ export function useNotificationCommands({
   apiClient,
   data,
   openTaskPanel,
-  refreshPlanningData,
+  refreshCurrentWorkspaceModel,
   setData,
   setHeaderData,
   setSaveError,
@@ -95,12 +95,12 @@ export function useNotificationCommands({
 
         setNotificationDispatchMessage(`${body?.sent || 0} gesendet, ${body?.failed || 0} fehlgeschlagen, ${body?.skipped || 0} übersprungen.`);
         await refreshGoogleChatStatus();
-        await refreshPlanningData();
+        await refreshCurrentWorkspaceModel();
       } catch (error) {
         setNotificationDispatchMessage(error instanceof Error ? error.message : "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
       }
     });
-  }, [apiClient, refreshGoogleChatStatus, refreshPlanningData, setSaveError, source, startTransition]);
+  }, [apiClient, refreshGoogleChatStatus, refreshCurrentWorkspaceModel, setSaveError, source, startTransition]);
 
   const dispatchNotifications = () => {
     runNotificationDelivery({ limit: 20 }, "Google-Chat-Dispatch konnte nicht ausgeführt werden.");
@@ -151,7 +151,7 @@ export function useNotificationCommands({
             ...current,
             notificationEvents: current.notificationEvents,
           }));
-          await refreshPlanningData();
+          await refreshCurrentWorkspaceModel();
           setSaveError(error instanceof Error ? error.message : "Notification konnte nicht aktualisiert werden.");
         } finally {
           resolve();

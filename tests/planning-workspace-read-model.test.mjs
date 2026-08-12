@@ -48,8 +48,8 @@ function createSupabaseFixture(failedTable = "") {
 
 const moduleStubs = {
   "server-only": {},
-  "@/lib/planning-data-mappers": { mapTaskRelation: (row) => ({ id: row.id, taskId: row.task_id, relatedTaskId: row.related_task_id, relationType: row.relation_type }) },
-  "@/lib/planning-data-row-types": { taskRowSelect: "id" },
+  "@/lib/planning-row-mappers": { mapTaskRelation: (row) => ({ id: row.id, taskId: row.task_id, relatedTaskId: row.related_task_id, relationType: row.relation_type }) },
+  "@/lib/planning-row-types": { taskRowSelect: "id" },
   "@/lib/planning-profile-mappers": {
     mapProfile: (row) => ({ id: row.id, name: row.name }),
     mapProfileUiPreference: (row) => ({ profileId: row.profile_id }),
@@ -105,21 +105,19 @@ test("planning workspace reader loads only the focused canonical model", async (
 });
 
 test("Planning and Strategic Planning use consumer-owned loaders and no legacy workspace scope", async () => {
-  const [workspacePage, scopes, model, planningReader, projectsReader, planningClient, projectsClient] = await Promise.all([
+  const [workspacePage, model, planningReader, projectsReader, planningClient, projectsClient] = await Promise.all([
     readFile("src/app/(workspaces)/workspace-page.tsx", "utf8"),
-    readFile("src/lib/planning-data-scopes.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-workspace-model.ts", "utf8"),
     readFile("src/features/planning/model/planning-board-read-model.ts", "utf8"),
     readFile("src/features/projects/model/strategic-planning-read-model.ts", "utf8"),
-    readFile("src/features/planning/hooks/use-planning-data-refresh.ts", "utf8"),
+    readFile("src/features/planning/hooks/use-workspace-model-refresh.ts", "utf8"),
     readFile("src/features/projects/organisms/projects-overview.tsx", "utf8"),
   ]);
   assert.match(workspacePage, /createSupabasePlanningBoardReadModel/);
   assert.match(workspacePage, /createSupabaseStrategicPlanningReadModel/);
   assert.match(workspacePage, /initialWorkspace === "planning" \|\| initialWorkspace === "projects"/);
-  assert.doesNotMatch(scopes, /\n\s*planning:\s*\{/);
-  assert.doesNotMatch(scopes, /\n\s*projects:\s*\{/);
-  assert.doesNotMatch(model, /packages|milestones|PlanningData/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
+  assert.doesNotMatch(model, /packages|milestones|PlanningShellState/);
   assert.match(planningReader, /interface PlanningBoardReadModel[\s\S]*load\(/);
   assert.match(projectsReader, /interface StrategicPlanningReadModel[\s\S]*load\(/);
   assert.doesNotMatch(planningReader, /server\//);

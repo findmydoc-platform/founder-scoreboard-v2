@@ -1,37 +1,37 @@
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
-import type { AuthenticatedProfile, PlanningData, PlanningDataResponse, PlanningHeaderData } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
 import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
-import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
-import { isSupportingWorkspace, supportingWorkspaceModelToPlanningData, type SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
+import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
+import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState, type SupportingWorkspaceModel } from "@/features/planning/model/supporting-planning-shell-projection";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
-import { sprintWorkspaceModelToPlanningData } from "@/features/sprint/model/sprint-planning-data-adapter";
+import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 
-type ProtectedPlanningDataCache = {
+type ProtectedPlanningShellStateCache = {
   authUserId: string;
-  data: PlanningData;
+  data: PlanningShellState;
   headerData: PlanningHeaderData;
   currentProfile: AuthenticatedProfile | null;
 };
 
-let protectedPlanningDataCache: ProtectedPlanningDataCache | null = null;
+let protectedPlanningShellStateCache: ProtectedPlanningShellStateCache | null = null;
 
-export function getProtectedPlanningDataCache() {
-  return protectedPlanningDataCache;
+export function getProtectedPlanningShellStateCache() {
+  return protectedPlanningShellStateCache;
 }
 
-export function setProtectedPlanningDataCache(cache: ProtectedPlanningDataCache | null) {
-  protectedPlanningDataCache = cache;
+export function setProtectedPlanningShellStateCache(cache: ProtectedPlanningShellStateCache | null) {
+  protectedPlanningShellStateCache = cache;
 }
 
 type UsePlanningAuthOptions = {
   authRequired: boolean;
   source: "supabase";
-  safeInitialData: PlanningData;
+  safeInitialData: PlanningShellState;
   safeInitialHeaderData: PlanningHeaderData;
   taskCount: number;
   workspace: AppWorkspace;
@@ -39,9 +39,9 @@ type UsePlanningAuthOptions = {
   initialCurrentProfile?: AuthenticatedProfile | null;
   initialProtectedDataLoaded?: boolean;
   initialAuthError?: string;
-  setData: (data: PlanningData) => void;
+  setData: (data: PlanningShellState) => void;
   setHeaderData: (data: PlanningHeaderData) => void;
-  normalizePlanningData: (data: PlanningData) => PlanningData;
+  normalizePlanningShellState: (data: PlanningShellState) => PlanningShellState;
   normalizePlanningHeaderData: (data?: Partial<PlanningHeaderData> | null) => PlanningHeaderData;
   onSignedOut: () => void;
 };
@@ -69,7 +69,7 @@ export function usePlanningAuth({
   initialAuthError = "",
   setData,
   setHeaderData,
-  normalizePlanningData,
+  normalizePlanningShellState,
   normalizePlanningHeaderData,
   onSignedOut,
 }: UsePlanningAuthOptions) {
@@ -180,7 +180,7 @@ export function usePlanningAuth({
         setWaitingGitHubCommentCount(0);
         setGithubConnectionState("unknown");
         protectedDataUserIdRef.current = "";
-        protectedPlanningDataCache = null;
+        protectedPlanningShellStateCache = null;
         setServerCurrentProfile(null);
         setData(safeInitialData);
         setHeaderData(safeInitialHeaderData);
@@ -213,8 +213,8 @@ export function usePlanningAuth({
     let active = true;
     const authUserId = authUser.id;
 
-    if (protectedPlanningDataCache?.authUserId === authUserId) {
-      const cached = protectedPlanningDataCache;
+    if (protectedPlanningShellStateCache?.authUserId === authUserId) {
+      const cached = protectedPlanningShellStateCache;
       queueMicrotask(() => {
         if (!active) return;
         protectedDataUserIdRef.current = authUserId;
@@ -229,7 +229,7 @@ export function usePlanningAuth({
       };
     }
 
-    async function loadProtectedPlanningData() {
+    async function loadProtectedPlanningShellState() {
       if (!taskCount) setProtectedDataLoaded(false);
       const session = await getBrowserSupabase()?.auth.getSession();
       const token = session?.data.session?.access_token;
@@ -252,18 +252,28 @@ export function usePlanningAuth({
               : workspace === "sprint"
                 ? "/api/sprint-data"
                 : "";
-        const response = await fetch(focusedPlanningRoute || `/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
+        if (!focusedPlanningRoute) {
+          protectedDataUserIdRef.current = authUserId;
+          setProtectedDataLoaded(true);
+          return;
+        }
+        const response = await fetch(focusedPlanningRoute, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel | SupportingWorkspaceModel | SprintWorkspaceModel; error?: string }) | null;
+        const payload = await response.json().catch(() => null) as {
+          model?: PlanningWorkspaceModel | SupportingWorkspaceModel | SprintWorkspaceModel;
+          headerData?: PlanningHeaderData;
+          currentProfile?: AuthenticatedProfile | null;
+          error?: string;
+        } | null;
         const payloadData = payload?.model
           ? workspace === "sprint"
-            ? sprintWorkspaceModelToPlanningData(payload.model as SprintWorkspaceModel)
+            ? sprintWorkspaceModelToPlanningShellState(payload.model as SprintWorkspaceModel)
             : isSupportingWorkspace(workspace)
-            ? supportingWorkspaceModelToPlanningData(workspace, payload.model as SupportingWorkspaceModel)
-            : planningWorkspaceModelToPlanningData(payload.model as PlanningWorkspaceModel)
-          : payload?.data;
+              ? supportingWorkspaceModelToPlanningShellState(workspace, payload.model as SupportingWorkspaceModel)
+              : planningWorkspaceModelToPlanningShellState(payload.model as PlanningWorkspaceModel)
+          : null;
 
         if (!active) return;
         if (!response.ok || !payloadData || !payload?.currentProfile) {
@@ -277,9 +287,9 @@ export function usePlanningAuth({
         }
 
         protectedDataUserIdRef.current = authUserId;
-        const nextData = normalizePlanningData(payloadData);
+        const nextData = normalizePlanningShellState(payloadData);
         const nextHeaderData = normalizePlanningHeaderData(payload.headerData);
-        protectedPlanningDataCache = { authUserId, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
+        protectedPlanningShellStateCache = { authUserId, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
         setServerCurrentProfile(payload.currentProfile);
         setData(nextData);
         setHeaderData(nextHeaderData);
@@ -296,12 +306,12 @@ export function usePlanningAuth({
       }
     }
 
-    loadProtectedPlanningData();
+    loadProtectedPlanningShellState();
 
     return () => {
       active = false;
     };
-  }, [authRequired, authUser, normalizePlanningData, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
+  }, [authRequired, authUser, normalizePlanningShellState, normalizePlanningHeaderData, protectedDataLoaded, safeInitialData, safeInitialHeaderData, setData, setHeaderData, source, taskCount, workspace]);
 
   const signIn = useCallback(async (options: SignInOptions = {}) => {
     const supabase = getBrowserSupabase();
@@ -369,7 +379,7 @@ export function usePlanningAuth({
     }
 
     protectedDataUserIdRef.current = "";
-    protectedPlanningDataCache = null;
+    protectedPlanningShellStateCache = null;
     setServerCurrentProfile(null);
     setAuthUser(null);
     setGithubInstallationAvailable(false);

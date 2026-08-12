@@ -1,5 +1,5 @@
 import type { LinkedPullRequest, Profile, Task, TaskReview } from "./types";
-import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask, DbTaskLink, DbTaskReview } from "./planning-data-row-types";
+import type { DbPlanningItemRaciAssignment, DbPlanningItemStrategy, DbTask, DbTaskLink, DbTaskReview } from "./planning-row-types";
 import { profileNameById } from "./planning-profile-mappers";
 import { normalizeSubIssueStatus } from "./status";
 

@@ -12,23 +12,23 @@ import type { Task } from "@/lib/types";
 type UseTaskWithdrawCommandOptions = Pick<
   PlanningCommandContext,
   | "apiClient"
-  | "applyPlanningDataUpdate"
+  | "applyPlanningShellStateUpdate"
   | "currentProfile"
   | "data"
   | "setSaveError"
   | "startTransition"
 > & {
   closeTaskPanel: () => void;
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
 };
 
 export function useTaskWithdrawCommand({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   closeTaskPanel,
   currentProfile,
   data,
-  refreshPlanningData,
+  refreshCurrentWorkspaceModel,
   setSaveError,
   startTransition,
 }: UseTaskWithdrawCommandOptions) {
@@ -45,7 +45,7 @@ export function useTaskWithdrawCommand({
 
     const withdrawal = removePlanningRootFromData(data, "deliverable", task.id);
     setSaveError("");
-    applyPlanningDataUpdate((current) => removePlanningRootFromData(current, "deliverable", task.id).data);
+    applyPlanningShellStateUpdate((current) => removePlanningRootFromData(current, "deliverable", task.id).data);
     closeTaskPanel();
 
     startTransition(async () => {
@@ -53,8 +53,8 @@ export function useTaskWithdrawCommand({
         const { response, body } = await taskApi.withdrawTaskRequest(apiClient, task.id, task.approvalRevision, reason);
         if (!response.ok) throw new Error(body?.error || "Deliverable konnte nicht zurückgezogen werden.");
       } catch (error) {
-        applyPlanningDataUpdate((current) => restorePlanningRootToData(current, withdrawal.snapshot));
-        await refreshPlanningData();
+        applyPlanningShellStateUpdate((current) => restorePlanningRootToData(current, withdrawal.snapshot));
+        await refreshCurrentWorkspaceModel();
         setSaveError(error instanceof Error ? error.message : "Deliverable konnte nicht zurückgezogen werden.");
       }
     });

@@ -11,10 +11,10 @@ import {
   startTaskPanelHistory,
   type TaskPanelOpenMode,
 } from "@/features/tasks/model/task-panel-selection";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
 type UsePlanningTaskSelectionOptions = {
-  data: PlanningData;
+  data: PlanningShellState;
   selectedTaskId: string | null;
   setSelectedTaskId: (taskId: string | null) => void;
 };

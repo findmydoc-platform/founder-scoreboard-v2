@@ -20,7 +20,7 @@ export type TaskUpdateHandler = (task: Task, patch: Partial<Task>) => void | Pro
 
 export type TaskMutationCommandContext = PlanningCommandContext & {
   closeTaskPanel: () => void;
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
   setTaskDialogDefaults: Dispatch<SetStateAction<Partial<NewTaskDraft> | null>>;

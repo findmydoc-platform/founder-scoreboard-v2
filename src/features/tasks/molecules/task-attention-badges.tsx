@@ -1,5 +1,5 @@
 import { taskPlanningAttentionSignals, taskReviewAttentionSignals, type TaskAttentionSignal } from "@/features/tasks/model/task-attention-signals";
-import type { PlanningData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 import { UiBadge, type UiTone } from "@/shared/atoms/ui-primitives";
 
 function signalTone(signal: TaskAttentionSignal): UiTone {
@@ -48,7 +48,7 @@ export function PlanningTaskAttentionBadges({
   excludeIds = [],
 }: {
   task: Task;
-  data: Pick<PlanningData, "taskBlockers" | "taskRelations" | "tasks">;
+  data: Pick<PlanningShellState, "taskBlockers" | "taskRelations" | "tasks">;
   compact?: boolean;
   excludeIds?: string[];
 }) {

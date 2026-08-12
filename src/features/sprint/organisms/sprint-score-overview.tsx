@@ -9,10 +9,10 @@ import { SprintScoreObjections } from "@/features/sprint/organisms/sprint-score-
 import { SprintTaskTables } from "@/features/sprint/organisms/sprint-task-tables";
 import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
-import { sprintWorkspaceModelToPlanningData } from "@/features/sprint/model/sprint-planning-data-adapter";
+import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import { sprintWorkspaceReducer, type SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 import { findCurrentSprint } from "@/lib/planning-schedule";
-import type { Meeting, MeetingAttendance, PlanningData, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
+import type { Meeting, MeetingAttendance, PlanningShellState, Profile, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskStatus } from "@/lib/types";
 
 export function SprintScoreTableOverview({
   initialModel,
@@ -37,7 +37,7 @@ export function SprintScoreTableOverview({
   sprintLockMessage,
 }: {
   initialModel: SprintWorkspaceModel;
-  data: PlanningData;
+  data: PlanningShellState;
   pending: boolean;
   onOpenTask: (taskId: string) => void;
   onRequestReview: (task: Task) => void;
@@ -77,7 +77,7 @@ export function SprintScoreTableOverview({
       },
     });
   }, [data, initialModel]);
-  const sprintData = sprintWorkspaceModelToPlanningData(model);
+  const sprintData = sprintWorkspaceModelToPlanningShellState(model);
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
   const [scoreObjectionDraft, setScoreObjectionDraft] = useState("");

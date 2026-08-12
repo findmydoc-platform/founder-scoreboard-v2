@@ -1,13 +1,13 @@
 import { workspacePath, type AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
-import { planningDataUnavailableMessage } from "@/lib/planning-data-availability";
+import { planningDataUnavailableMessage } from "@/lib/workspace-data-availability";
 
-type PlanningDataUnavailablePageProps = {
+type WorkspaceDataUnavailablePageProps = {
   workspace: AppWorkspace;
   authUserEmail?: string;
 };
 
-export function PlanningDataUnavailablePage({ workspace, authUserEmail = "" }: PlanningDataUnavailablePageProps) {
+export function WorkspaceDataUnavailablePage({ workspace, authUserEmail = "" }: WorkspaceDataUnavailablePageProps) {
   return (
     <PlanningBootShell
       workspace={workspace}

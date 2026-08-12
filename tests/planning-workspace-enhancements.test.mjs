@@ -16,7 +16,7 @@ async function loadRevisionRoute({ apiContext, queryResult } = {}) {
     },
   };
   let receivedGuard = null;
-  const route = await loadTranspiledModule("src/app/api/planning-data/revision/route.ts", {
+  const route = await loadTranspiledModule("src/app/api/planning-revision/route.ts", {
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, headers: init.headers || {}, status: init.status || 200 }),
@@ -41,7 +41,7 @@ async function loadRevisionRoute({ apiContext, queryResult } = {}) {
 }
 
 test("planning task revisions compare active count and newest server timestamp", async () => {
-  const revisions = await loadTranspiledModule("src/features/planning/model/planning-data-revision.ts");
+  const revisions = await loadTranspiledModule("src/features/planning/model/planning-revision.ts");
   const revision = revisions.planningTaskRevision([
     { id: "one", updatedAt: "2026-08-03T10:00:00.000Z" },
     { id: "two", updatedAt: "2026-08-03T12:00:00.000Z" },
@@ -93,7 +93,7 @@ test("planning revision route preserves authorization, exact count, latest times
 
 test("remote planning changes use one guarded global header notice only when revisions differ", async () => {
   const [route, hook, apiClient, header] = await Promise.all([
-    readFile("src/app/api/planning-data/revision/route.ts", "utf8"),
+    readFile("src/app/api/planning-revision/route.ts", "utf8"),
     readFile("src/features/planning/hooks/use-planning-remote-changes.ts", "utf8"),
     readFile("src/features/planning/model/planning-api-client.ts", "utf8"),
     readFile("src/features/planning/organisms/planning-header.tsx", "utf8"),
@@ -104,7 +104,7 @@ test("remote planning changes use one guarded global header notice only when rev
   assert.match(route, /count: "exact"/);
   assert.match(route, /order\("updated_at", \{ ascending: false \}\)/);
   assert.match(route, /private, no-store/);
-  assert.match(apiClient, /requestPlanningDataRevision/);
+  assert.match(apiClient, /requestPlanningShellStateRevision/);
   assert.match(hook, /planningTaskRevisionsEqual/);
   assert.match(hook, /60_000/);
   assert.match(hook, /visibilitychange/);

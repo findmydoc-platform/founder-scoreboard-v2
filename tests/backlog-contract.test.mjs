@@ -12,7 +12,7 @@ const scheduleMock = {
   findCurrentSprint: (sprints) => sprints.find((sprint) => sprint.status === "active") || sprints[0],
 };
 
-function basePlanningData() {
+function basePlanningShellState() {
   return {
     project: { id: "findmydoc-founder-execution", name: "findmydoc Planning", range: "" },
     people: [
@@ -134,7 +134,6 @@ function basePlanningData() {
 test("backlog workspace is routed separately from planning and uses sprint commitments", async () => {
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const page = await readFile("src/app/(workspaces)/backlog/page.tsx", "utf8");
-  const dataScopes = await readFile("src/lib/planning-data-scopes.ts", "utf8");
   const loading = await readFile("src/app/(workspaces)/backlog/loading.tsx", "utf8");
   const model = await readFile("src/features/planning/model/planning-app-model.ts", "utf8");
   const renderer = await readFile("src/features/planning/organisms/planning-workspace-renderer.tsx", "utf8");
@@ -145,7 +144,7 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   assert.match(routes, /ListOrdered/);
   assert.match(page, /renderWorkspacePage\("backlog"\)/);
   assert.match(loading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
-  assert.doesNotMatch(dataScopes, /backlog: \{/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
   assert.match(renderer, /initialBacklogModel/);
   assert.match(model, /backlog: "Backlog"/);
   assert.match(renderer, /BacklogOverview/);
@@ -172,11 +171,11 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
   });
   const { backlogTableColumns, backlogTableColumnCount, backlogTableMinWidth } = await loadTranspiledModule("src/features/backlog/model/backlog-table-layout.ts");
 
-  const all = buildBacklogViewModel(basePlanningData(), "all");
-  const ready = buildBacklogViewModel(basePlanningData(), "ready");
-  const proposals = buildBacklogViewModel(basePlanningData(), "proposals");
+  const all = buildBacklogViewModel(basePlanningShellState(), "all");
+  const ready = buildBacklogViewModel(basePlanningShellState(), "ready");
+  const proposals = buildBacklogViewModel(basePlanningShellState(), "proposals");
   const queried = filterBacklogItemsByQuery(all.visibleItems, "später");
-  const combined = buildBacklogTableViewModel(basePlanningData(), {
+  const combined = buildBacklogTableViewModel(basePlanningShellState(), {
     ...DEFAULT_BACKLOG_FILTERS,
     priority: "P0",
     assignee: "CEO",

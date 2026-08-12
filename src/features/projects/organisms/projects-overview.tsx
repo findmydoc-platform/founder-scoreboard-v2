@@ -14,7 +14,7 @@ import type { MilestoneChildCounts } from "@/features/projects/model/milestone-c
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { ApprovalDecisionAction, Milestone, Package, PlanningData, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, Milestone, Package, PlanningShellState, Profile, Task } from "@/lib/types";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
@@ -58,7 +58,7 @@ export function ProjectsOverview({
   onDecideInitiative,
   onWithdrawInitiative,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   tasks: Task[];
   currentProfile?: Profile | null;
   canManageInitiatives: boolean;
@@ -346,7 +346,7 @@ function InitiativeTreeItem({
   statusOptions,
   priorityOptions,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   initiative: Package;
   tasks: Task[];
   profileName: (profileId?: string) => string;

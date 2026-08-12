@@ -13,7 +13,7 @@ import type { NewTaskCreateCallbacks, NewTaskDraft } from "@/features/tasks/orga
 type UseTaskCreateCommandOptions = Pick<
   PlanningCommandContext,
   | "apiClient"
-  | "applyPlanningDataUpdate"
+  | "applyPlanningShellStateUpdate"
   | "currentProfile"
   | "data"
   | "setSaveError"
@@ -24,7 +24,7 @@ type UseTaskCreateCommandOptions = Pick<
 
 export function useTaskCreateCommand({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   currentProfile,
   data,
   setSaveError,
@@ -48,7 +48,7 @@ export function useTaskCreateCommand({
         const { response, body } = await taskApi.createTaskRequest(apiClient, requestPayload);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Aufgabe konnte nicht erstellt werden.");
 
-        applyPlanningDataUpdate((current) => {
+        applyPlanningShellStateUpdate((current) => {
           const tasksWithCreated = current.tasks.some((task) => task.id === body.task!.id)
             ? current.tasks.map((task) => (task.id === body.task!.id ? { ...task, ...body.task } : task))
             : [...current.tasks, body.task!];
@@ -70,7 +70,7 @@ export function useTaskCreateCommand({
           const classification = classifyTaskGitHubSyncResponse(syncResponse.status, syncBody);
           if (classification.kind !== "success") {
             if (classification.result.task) {
-              applyPlanningDataUpdate((current) => ({
+              applyPlanningShellStateUpdate((current) => ({
                 ...current,
                 tasks: current.tasks.map((task) => (
                   task.id === body.task!.id
@@ -83,7 +83,7 @@ export function useTaskCreateCommand({
               `${classification.result.error || "GitHub Issue konnte nicht angelegt werden."} Die Aufgabe wurde gespeichert und kann erneut synchronisiert werden.`,
             );
           }
-          applyPlanningDataUpdate((current) => ({
+          applyPlanningShellStateUpdate((current) => ({
             ...current,
             tasks: current.tasks.map((task) => (
               task.id === body.task!.id

@@ -3,23 +3,23 @@
 import type { User } from "@supabase/supabase-js";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePlanningAuth } from "@/features/planning/hooks/use-planning-auth";
-import { usePlanningDataRefresh } from "@/features/planning/hooks/use-planning-data-refresh";
+import { useCurrentWorkspaceModelRefresh } from "@/features/planning/hooks/use-workspace-model-refresh";
 import { usePlanningFocusMode } from "@/features/planning/hooks/use-planning-focus-mode";
 import { usePlanningRemoteChanges } from "@/features/planning/hooks/use-planning-remote-changes";
 import { usePlanningHeaderData } from "@/features/planning/hooks/use-planning-header-data";
 import { usePlanningRequestContext } from "@/features/planning/hooks/use-planning-request-context";
 import { usePlanningViewState } from "@/features/planning/hooks/use-planning-view-state";
 import { usePlanningWorkspace } from "@/features/planning/hooks/use-planning-workspace";
-import { normalizePlanningData } from "@/features/planning/model/planning-app-model";
+import { normalizePlanningShellState } from "@/features/planning/model/planning-app-model";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
 import { hasSupabaseEnv } from "@/lib/supabase";
-import type { AuthenticatedProfile, PlanningData, PlanningHeaderData, Task } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 export type PlanningBootstrapStateOptions = {
-  initialData: PlanningData;
+  initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
   source: "supabase";
@@ -41,7 +41,7 @@ export function usePlanningBootstrapState({
   initialProtectedDataLoaded = false,
   initialAuthError = "",
 }: PlanningBootstrapStateOptions) {
-  const safeInitialData = useMemo(() => normalizePlanningData(initialData), [initialData]);
+  const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
   const [data, setData] = useState(initialClientData);
@@ -71,7 +71,7 @@ export function usePlanningBootstrapState({
     initialAuthError,
     setData,
     setHeaderData: setBaseHeaderData,
-    normalizePlanningData,
+    normalizePlanningShellState,
     normalizePlanningHeaderData,
     onSignedOut: clearSelectedTask,
   });
@@ -105,7 +105,7 @@ export function usePlanningBootstrapState({
     (normalizeStatus(task.status) !== "Erledigt" || canManageFinalTaskStatus)
     && (canManageTaskMeta || taskBelongsToProfile(task, requestContext.currentProfile))
   ), [canManageFinalTaskStatus, canManageTaskMeta, requestContext.currentProfile]);
-  const dataRefresh = usePlanningDataRefresh({
+  const dataRefresh = useCurrentWorkspaceModelRefresh({
     apiClient: requestContext.apiClient,
     authUser: auth.authUser,
     headerData,
@@ -120,7 +120,7 @@ export function usePlanningBootstrapState({
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,
     enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
-    refreshPlanningData: dataRefresh.refreshPlanningData,
+    refreshCurrentWorkspaceModel: dataRefresh.refreshCurrentWorkspaceModel,
     tasks: data.tasks,
   });
 

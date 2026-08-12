@@ -99,7 +99,7 @@ export function PlanningFilters({
     <FilterToolbar
       compactMobile
       className="mx-4 mb-4 lg:mx-6"
-      panelId="planning-data-filters"
+      panelId="planning-filters"
       searchLabel="Aufgaben durchsuchen"
       searchPlaceholder={isStrategicBoard ? "Titel, Ziel, Priorität oder Zuständigkeit suchen" : "Aufgabe, Bereich, Priorität oder GitHub-Referenz suchen"}
       query={filters.query}

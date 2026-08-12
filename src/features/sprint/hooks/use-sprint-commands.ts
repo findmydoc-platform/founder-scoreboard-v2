@@ -9,7 +9,7 @@ import { mapFounderSprintScore } from "@/lib/planning-sprint-mappers";
 import type { ScoreObjection, ScoreObjectionResolutionInput, Sprint, SprintCommitment } from "@/lib/types";
 
 type UseSprintCommandsOptions = PlanningCommandContext & {
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
   sprintPlanningOptions: SprintPlanningOptions;
 };
 
@@ -17,7 +17,7 @@ export function useSprintCommands({
   apiClient,
   currentProfile,
   data,
-  refreshPlanningData,
+  refreshCurrentWorkspaceModel,
   setData,
   setSaveError,
   source,
@@ -310,7 +310,7 @@ export function useSprintCommands({
         if (body?.carryover) {
           setSprintLockMessage(`${body.carryover.evaluated || 0} offene Deliverables bewertet, ${body.carryover.created || 0} Carry-over-Aufgaben erstellt. ${body.scoring?.scores || 0} FounderOps-Scores finalisiert, ${body.scoring?.strikeEvents || 0} Strike-Ereignisse geschrieben${body.scoring?.governanceReviews ? `, ${body.scoring.governanceReviews} Governance Review nötig` : ""}.`);
         }
-        await refreshPlanningData();
+        await refreshCurrentWorkspaceModel();
         await createSprintPlanAsync(sprintPlanningOptions, true);
       } catch (error) {
         setData(previousData);

@@ -1,8 +1,8 @@
 import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "../planning-profile-mappers";
-import type { Package, PlanningData, Task } from "../types";
+import type { Package, PlanningShellState, Task } from "../types";
 import seedSource from "./source.json";
 
-type EmptySeedCollections = Omit<PlanningData, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
+type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
 type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "approvalStatus" | "approvalRevision" | "parentApprovalStatus" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee" | "evidenceLinks" | "linkedPullRequests"> & Partial<SeedTaskDefaults> & {
   assigneeId: string;
@@ -10,8 +10,8 @@ export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assig
 };
 
 type SeedSource = {
-  project: PlanningData["project"];
-  profiles: PlanningData["profiles"];
+  project: PlanningShellState["project"];
+  profiles: PlanningShellState["profiles"];
   epics?: Array<{
     id: string;
     title: string;
@@ -22,9 +22,9 @@ type SeedSource = {
     sortOrder?: number;
   }>;
   packages: Package[];
-  sprints: PlanningData["sprints"];
-  fmdTools: PlanningData["fmdTools"];
-  meetings: PlanningData["meetings"];
+  sprints: PlanningShellState["sprints"];
+  fmdTools: PlanningShellState["fmdTools"];
+  meetings: PlanningShellState["meetings"];
   emptyCollections: EmptySeedCollections;
   taskDefaults: SeedTaskDefaults;
   tasks: SeedTaskInput[];
@@ -179,7 +179,7 @@ export const seedMilestones = seedTasks
   .filter((task) => task.taskType === "epic")
   .map(mapLegacyMilestoneFromEpic);
 
-export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningData {
+export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningShellState {
   return {
     project: seedProject,
     profiles: seedProfiles,

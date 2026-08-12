@@ -93,7 +93,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|withdrawTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
-        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
+        /runNotificationDeliveryRequest|setProtectedPlanningShellStateCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
       ],
@@ -103,7 +103,7 @@ test("planning app controller delegates command domains and stays a thin compose
       source: bootstrapState,
       matches: [
         /usePlanningAuth/,
-        /usePlanningDataRefresh/,
+        /useCurrentWorkspaceModelRefresh/,
         /usePlanningRequestContext/,
         /usePlanningViewState/,
         /usePlanningWorkspace/,
@@ -129,7 +129,7 @@ test("planning app controller delegates command domains and stays a thin compose
         /planningApi\.|taskApi\./,
         /updateTaskRequest|createTaskRequest|withdrawTaskRequest|syncTaskToGitHubRequest/,
         /updateMeetingAttendanceRequest|lockSprintRequest/,
-        /runNotificationDeliveryRequest|setProtectedPlanningDataCache/,
+        /runNotificationDeliveryRequest|setProtectedPlanningShellStateCache/,
         /persistLocalPlanningTasks|window\.confirm|event\.dataTransfer\.setData/,
         /window\.history\.length|addEventListener\("keydown"/,
       ],
@@ -153,7 +153,7 @@ test("planning app controller delegates command domains and stays a thin compose
     {
       label: "task create command",
       path: "src/features/tasks/hooks/use-task-create-command.ts",
-      matches: [/createTaskRequest/, /applyPlanningDataUpdate/, /setTaskDialogDefaults/, /syncTaskToGitHubRequest/],
+      matches: [/createTaskRequest/, /applyPlanningShellStateUpdate/, /setTaskDialogDefaults/, /syncTaskToGitHubRequest/],
     },
     {
       label: "task withdraw command",
@@ -186,8 +186,8 @@ test("planning app controller delegates command domains and stays a thin compose
     },
     {
       label: "planning data refresh hook",
-      path: "src/features/planning/hooks/use-planning-data-refresh.ts",
-      matches: [/setProtectedPlanningDataCache/, /requestPlanningData\(apiClient, workspace\)/],
+      path: "src/features/planning/hooks/use-workspace-model-refresh.ts",
+      matches: [/setProtectedPlanningShellStateCache/, /requestPlanningWorkspaceData\(apiClient, workspace\)/],
     },
     {
       label: "planning task table view model",
@@ -225,7 +225,7 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(taskUpdateCommand, /buildClientTaskUpdatePatch/);
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
   assert.match(taskUpdateCommand, /latestMutationByTask/);
-  assert.match(taskUpdateCommand, /refreshPlanningData/);
+  assert.match(taskUpdateCommand, /refreshCurrentWorkspaceModel/);
   assert.match(route, /createBrowserRevisePlanningItems/);
   assert.match(planningUpdate, /update_browser_planning_task_transaction/);
   assert.match(planningUpdate, /p_expected_updated_at: writer\.params\.expectedUpdatedAt/);
@@ -248,30 +248,22 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.doesNotMatch(updateRoute, /function profileId/);
 });
 
-test("planning data loader separates query loading from public orchestration", async () => {
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
+test("consumer-owned read models replace the global planning data loader", async () => {
+  const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const headerData = await readFile("src/lib/planning-header-data.ts", "utf8");
-  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const reader = await readFile("src/features/planning-items/server/planning-workspace-read-source.ts", "utf8");
   const headerRoute = await readFile("src/app/api/planning-header-data/route.ts", "utf8");
-  const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
+  const rowTypes = await readFile("src/lib/planning-row-types.ts", "utf8");
 
-  assert.match(data, /loadPlanningDataRows/);
-  assert.match(data, /loadPlanningHeaderData/);
-  assert.match(data, /hasCorePlanningDataError/);
-  assert.match(data, /mapPlanningDataRows/);
-  assert.doesNotMatch(data, /Promise\.all/);
-  assert.doesNotMatch(data, /task_dependencies\(note\), task_notes\(note\)/);
-
-  assert.match(loader, /Promise\.all/);
-  assert.match(loader, /founderProjectId/);
-  assert.match(loader, /taskRowSelect/);
-  assert.doesNotMatch(loader, /select\("\*, task_dependencies\(note\), task_notes\(note\)"\)/);
+  assert.match(workspacePage, /createSupabasePlanningBoardReadModel/);
+  assert.match(workspacePage, /createSupabaseBacklogReadModel/);
+  assert.match(reader, /Promise\.all/);
+  assert.match(reader, /planningProjectId/);
+  assert.match(reader, /taskRowSelect/);
   assert.match(rowTypes, /export const taskRowColumns/);
   assert.match(rowTypes, /task_dependencies\(note\), task_notes\(note\)/);
-  assert.match(loader, /export function hasCorePlanningDataError/);
-  assert.match(loader, /export function mapPlanningDataRows/);
-  assert.match(loader, /scoreObjections/);
-  assert.match(loader, /notificationPreferenceResult/);
+  await assert.rejects(() => readFile("src/lib/planning-data-loader.ts", "utf8"), /ENOENT/);
+  await assert.rejects(() => readFile("src/lib/planning-data.ts", "utf8"), /ENOENT/);
   assert.match(headerData, /HeaderDataSlot/);
   assert.match(headerData, /HeaderNotification/);
   assert.match(headerData, /headerQuickLinkSelect = "id,name,category,url,preview_image_url"/);
@@ -284,17 +276,14 @@ test("planning data loader separates query loading from public orchestration", a
   assert.doesNotMatch(headerData, /description|owner|audience_mode|participant_profile_ids|reminder_days_before/);
 });
 
-test("authenticated workspace SSR defers header data to the protected client loader", async () => {
+test("authenticated workspace SSR composes focused workspace and header reads", async () => {
   const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data.ts", "utf8");
-  const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
   const headerDataHook = await readFile("src/features/planning/hooks/use-planning-header-data.ts", "utf8");
 
-  assert.match(data, /headerData\?: "eager" \| "deferred"/);
-  assert.match(data, /options\.headerData === "deferred"[\s\S]*emptyPlanningHeaderData[\s\S]*await loadPlanningHeaderData/);
-  assert.match(page, /loadWorkspacePlanningData\(initialWorkspace, auth\.profile, \{[\s\S]*headerData: "deferred"/);
-  assert.match(page, /initialHeaderData=\{headerData\}[\s\S]*initialProtectedDataLoaded/);
-  assert.doesNotMatch(api, /headerData: "deferred"/);
+  assert.match(page, /Promise\.all\(\[[\s\S]*readModel\.load/m);
+  assert.match(page, /loadPlanningHeaderData/);
+  assert.match(page, /initialProtectedDataLoaded/);
+  assert.doesNotMatch(page, /headerData: "deferred"|loadWorkspacePlanningShellState/);
 
   assert.match(headerDataHook, /if \(authRequired && !protectedDataLoaded\) return;[\s\S]*if \(!idleSlotKey\) return;/);
   assert.match(headerDataHook, /const requestedSlots = idleSlotKey\.split\(","\) as PlanningHeaderSlotKey\[\]/);
@@ -302,8 +291,8 @@ test("authenticated workspace SSR defers header data to the protected client loa
 });
 
 test("task row descriptor covers planning UI mapping fields", async () => {
-  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
-  const rowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
+  const loader = await readFile("src/features/planning-items/server/planning-workspace-read-source.ts", "utf8");
+  const rowTypes = await readFile("src/lib/planning-row-types.ts", "utf8");
   const profileMappers = await readFile("src/lib/planning-profile-mappers.ts", "utf8");
   const taskMappers = await readFile("src/lib/planning-task-mappers.ts", "utf8");
   const mappers = `${profileMappers}\n${taskMappers}`;
@@ -353,7 +342,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
   const types = await readFile("src/lib/types.ts", "utf8");
-  const dataRowTypes = await readFile("src/lib/planning-data-row-types.ts", "utf8");
+  const dataRowTypes = await readFile("src/lib/planning-row-types.ts", "utf8");
   const newTaskUi = await readFile("src/features/tasks/organisms/new-task-dialog.tsx", "utf8");
   const detail = await readFile("src/features/tasks/templates/task-detail-page.tsx", "utf8");
   const detailSurface = await readFile("src/features/tasks/organisms/task-detail-surface.tsx", "utf8");
@@ -383,7 +372,7 @@ test("task template v2 separates outcome criteria evidence and DoD", async () =>
 
 test("strict auth gates planning data until a valid session is present", async () => {
   const page = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
-  const api = await readFile("src/app/api/planning-data/route.ts", "utf8");
+  const api = await readFile("src/app/api/planning-board-data/route.ts", "utf8");
   const authz = await readFile("src/lib/authz.ts", "utf8");
   const serverAuth = await readFile("src/lib/planning-auth-server.ts", "utf8");
   const ui = await readPlanningSurface();
@@ -392,15 +381,14 @@ test("strict auth gates planning data until a valid session is present", async (
 
   assert.match(page, /requiresSupabaseAuth\(\)/);
   assert.match(page, /getServerPlanningAuth/);
-  assert.match(page, /emptyPlanningData/);
+  assert.match(page, /emptyPlanningShellState/);
   assert.match(page, /emptyPlanningHeaderData/);
   assert.match(page, /initialHeaderData/);
   assert.match(page, /initialProtectedDataLoaded/);
-  assert.match(api, /requirePlatformRole\(request, \["ceo", "founder", "deputy", "viewer"\]\)/);
-  assert.match(api, /currentProfile: auth\.profile/);
-  assert.match(api, /result\.availability === "unavailable"/);
-  assert.match(api, /planningDataUnavailableMessage, 503/);
-  assert.match(page, /PlanningDataUnavailablePage/);
+  assert.match(api, /requirePlatformRole\(currentRequest, \["ceo", "founder", "deputy", "viewer"\]\)/);
+  assert.match(api, /const currentProfile = apiContext\.permission\.profile/);
+  assert.match(api, /result\.status === "unavailable"/);
+  assert.match(page, /WorkspaceDataUnavailablePage/);
   assert.match(authz, /auth_user_id/);
   assert.match(authz, /\.eq\("auth_user_id", user\.id\)/);
   assert.match(serverAuth, /requirePlatformRoleForUser/);
@@ -424,7 +412,8 @@ test("strict auth gates planning data until a valid session is present", async (
   assert.doesNotMatch(authControl, /GitHub-Rechte fehlen/);
   assert.doesNotMatch(authControl, /Login öffnen/);
   assert.match(authHook, /supabase\.auth\.signOut\(\{ scope: "global" \}\)/);
-  assert.match(authHook, /\/api\/planning-data\?workspace=\$\{encodeURIComponent\(workspace\)\}/);
+  assert.doesNotMatch(authHook, /\/api\/planning-data/);
+  await assert.rejects(() => readFile("src/app/api/planning-data/route.ts", "utf8"), /ENOENT/);
 });
 
 test("workspace loading shells are route-specific and data-free", async () => {
@@ -455,7 +444,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
   assert.match(shell, /function GenericWorkspaceSkeleton/);
   assert.match(shell, /function DetailContentSkeleton/);
   assert.match(shell, /variant === "task-detail"/);
-  assert.doesNotMatch(shell, /PlanningData|getPlanningData|emptyPlanningData|data\.tasks|authUser|provider_token/);
+  assert.doesNotMatch(shell, /PlanningShellState|getPlanningShellState|emptyPlanningShellState|data\.tasks|authUser|provider_token/);
 
   assert.match(groupLoading, /WorkspaceLoadingShell workspace="planning" variant="planning"/);
   assert.match(backlogLoading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
@@ -676,7 +665,7 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   const objectionRoute = await readFile("src/app/api/sprints/[id]/score-objections/route.ts", "utf8");
   const ui = await readFeatureSurface("src/features/sprint");
   const meetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/sprint/server/sprint-read-model-supabase.ts", "utf8");
   const verify = await readFile("scripts/verify-supabase.mjs", "utf8");
 
   assert.match(scoring, /deliveryPoints/);
@@ -719,9 +708,9 @@ test("founderops v2.1 computes 20 point sprint scores strikes and objections", a
   assert.match(meetingUi, /Weekly Updates/);
   assert.match(meetingUi, /max\. 2 je Weekly, 4 je Sprint/);
   assert.doesNotMatch(meetingUi, /Biweekly/);
-  assert.match(data, /founderSprintScores/);
-  assert.match(data, /founderStrikeStates/);
-  assert.match(data, /scoreObjections/);
+  assert.match(data, /scores:/);
+  assert.match(data, /strikeStates:/);
+  assert.match(data, /objections:/);
   assert.match(verify, /founder_sprint_scores/);
   assert.match(verify, /strike_events/);
 });
@@ -832,7 +821,7 @@ test("tasks can be assigned to an unlocked sprint", async () => {
 test("Supabase decision log mutations and data slices stay removed while legacy storage remains in the production baseline", async () => {
   const schema = await readSupabaseSchemaContract();
   const apiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
-  const dataLoader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const dataLoader = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
 
   assert.match(schema, /create table if not exists decision_task_links/);
@@ -848,7 +837,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
   const route = await readFile("src/app/api/profiles/[id]/route.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const transactionMigration = await readSupabaseSchemaContract();
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/planning-items/server/planning-workspace-read-source.ts", "utf8");
   const ui = await readPlanningSurface();
   const teamUi = await readFile("src/features/team/organisms/team-overview.tsx", "utf8");
   const teamCard = await readFile("src/features/team/molecules/team-member-card.tsx", "utf8");
@@ -917,7 +906,7 @@ test("profile role management is CEO-only and keeps one CEO", async () => {
 test("notification preferences are editable per profile and event type", async () => {
   const route = await readFile("src/app/api/notification-preferences/route.ts", "utf8");
   const selfRoute = await readFile("src/app/api/profile-settings/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8");
   const dataMappers = await readFile("src/lib/planning-notification-mappers.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const profileUi = await readFile("src/features/profile/organisms/profile-settings-overview.tsx", "utf8");

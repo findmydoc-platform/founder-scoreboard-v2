@@ -89,7 +89,10 @@ test("CEO transfer and managed notification preferences use one transaction", as
 
 test("profile preferences and feature tour acknowledgements are additive data slices", async () => {
   const migration = await readSupabaseSchemaContract();
-  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const loader = (await Promise.all([
+    readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8"),
+    readFile("src/app/api/profile-feature-tours/seen/route.ts", "utf8"),
+  ])).join("\n");
   const types = await readFile("src/lib/types.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
 
@@ -99,10 +102,10 @@ test("profile preferences and feature tour acknowledgements are additive data sl
   assert.match(migration, /profile_feature_tour_acknowledgements_write_self/);
   assert.match(migration, /current_platform_role\(\)[^]*'ceo'[^]*'deputy'/);
 
-  assert.match(loader, /profileUiPreferenceResult/);
-  assert.match(loader, /profileFeatureTourAcknowledgementResult/);
+  assert.match(loader, /preferenceResult/);
+  assert.match(loader, /profile_feature_tour_acknowledgements/);
   assert.match(loader, /mapProfileUiPreference/);
-  assert.match(loader, /mapProfileFeatureTourAcknowledgement/);
+  assert.match(loader, /tour_id/);
   assert.match(types, /profileUiPreferences: ProfileUiPreference\[\]/);
   assert.match(types, /profileFeatureTourAcknowledgements: ProfileFeatureTourAcknowledgement\[\]/);
   assert.match(schemaChecks, /profile_ui_preferences/);
@@ -210,7 +213,7 @@ test("CEO configures the global review and objection window from the settings pa
   const settingsCommands = await readFile("src/features/settings/hooks/use-founderops-settings-commands.ts", "utf8");
   const sprintCreateRoute = await readFile("src/app/api/sprints/route.ts", "utf8");
   const sprintUpdateRoute = await readFile("src/app/api/sprints/[id]/route.ts", "utf8");
-  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const loader = await readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
 
   assert.match(profileUi, /section\.id === "process".*currentProfile\.platformRole === "ceo"/s);
@@ -227,7 +230,7 @@ test("CEO configures the global review and objection window from the settings pa
   assert.match(sprintCreateRoute, /sprintReviewDueAt\(endDate, reviewObjectionWindowHours\)/);
   assert.match(sprintCreateRoute, /create_sprint_plan_with_review_window_transaction/);
   assert.match(sprintUpdateRoute, /update_sprint_schedule_transaction/);
-  assert.match(settingsCommands, /applyPlanningDataUpdate/);
+  assert.match(settingsCommands, /applyPlanningShellStateUpdate/);
   assert.doesNotMatch(settingsCommands, /setData\(|previousData|setSaveError\(error/);
   assert.match(migration, /add column if not exists review_objection_window_hours integer not null default 48/);
   assert.match(migration, /review_objection_window_hours between 1 and 336/);
@@ -250,7 +253,7 @@ test("only the CEO configures the live-validated global GitHub Project outside l
   const githubProjectUi = await readFile("src/features/profile/molecules/profile-github-project-settings-section.tsx", "utf8");
   const settingsRoute = await readFile("src/app/api/founderops-settings/github-project/route.ts", "utf8");
   const syncRoute = await readFile("src/lib/github-sync/project-projection.ts", "utf8");
-  const loader = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const loader = await readFile("src/features/profile/server/profile-read-model-supabase.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const ceoOnlyMigration = await readFile(
     "supabase/migrations/20260723102323_restrict_founderops_github_project_settings_to_ceo.sql",

@@ -1,7 +1,7 @@
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import { addDaysIso, currentIsoDate } from "@/lib/planning-schedule";
 import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 export type TaskAttentionSignal = {
   id: string;
@@ -9,9 +9,9 @@ export type TaskAttentionSignal = {
   kind: "critical" | "quality" | "review";
 };
 
-type SignalData = Pick<PlanningData, "taskBlockers" | "taskRelations" | "tasks">;
+type SignalData = Pick<PlanningShellState, "taskBlockers" | "taskRelations" | "tasks">;
 
-function taskHasOpenBlocker(taskId: string, data: Pick<PlanningData, "taskBlockers">) {
+function taskHasOpenBlocker(taskId: string, data: Pick<PlanningShellState, "taskBlockers">) {
   return data.taskBlockers.some((blocker) => blocker.taskId === taskId && blocker.status === "open");
 }
 

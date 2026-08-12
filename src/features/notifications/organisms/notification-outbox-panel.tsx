@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatDate } from "@/lib/display";
 import { notificationChannelLabel, shouldSendToGoogleChatDigest, shouldSendToGoogleChatDm } from "@/lib/notification-policy";
-import type { NotificationDelivery, PlanningData } from "@/lib/types";
+import type { NotificationDelivery, PlanningShellState } from "@/lib/types";
 import { classNames, UiBadge, UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
 
@@ -46,7 +46,7 @@ export function NotificationOutboxPanel({
   onSendGoogleChatTest,
   className,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   pending: boolean;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;

@@ -14,7 +14,7 @@ import { TaskDiscardChangesDialog } from "@/features/tasks/molecules/task-discar
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
-import { taskDetailModelToPlanningData } from "@/features/tasks/model/task-detail-planning-data-adapter";
+import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { AuthenticatedProfile, PlanningHeaderData } from "@/lib/types";
@@ -44,7 +44,7 @@ export function TaskDetailPage({
   const [overviewDirty, setOverviewDirty] = useState(false);
   const discardGuard = useTaskDiscardGuard(overviewDirty);
   const controller = usePlanningAppController({
-    initialData: taskDetailModelToPlanningData(initialModel),
+    initialData: taskDetailModelToPlanningShellState(initialModel),
     initialHeaderData: headerData,
     initialWorkspace: "planning",
     source,

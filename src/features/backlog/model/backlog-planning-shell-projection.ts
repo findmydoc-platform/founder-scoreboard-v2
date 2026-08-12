@@ -1,11 +1,11 @@
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
-import { emptyPlanningData } from "@/lib/planning-data";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
-export function backlogModelToPlanningData(model: BacklogModel): PlanningData {
+export function backlogModelToPlanningShellState(model: BacklogModel): PlanningShellState {
   return {
-    ...emptyPlanningData,
+    ...emptyPlanningShellState,
     profiles: [...model.people],
     packages: model.items.filter((item) => item.taskType === "initiative").map(mapLegacyPackageFromInitiative),
     milestones: model.items.filter((item) => item.taskType === "epic").map(mapLegacyMilestoneFromEpic),

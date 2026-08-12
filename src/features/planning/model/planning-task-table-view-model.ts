@@ -2,7 +2,7 @@ import { isThisWeek, sortTasks, taskText } from "@/features/planning/model/plann
 import { taskHasCriticalAttention, taskHasMissingEvidenceAttention } from "@/features/tasks/model/task-attention-signals";
 import { hasGitHubIssue, hasOpenWaitingRelation, taskBelongsToProfile } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, PlanningFilterPreferences, Profile } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, Profile } from "@/lib/types";
 
 export function buildPlanningTaskTableViewModel({
   currentProfile,
@@ -10,7 +10,7 @@ export function buildPlanningTaskTableViewModel({
   filters,
 }: {
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   filters: PlanningFilterPreferences;
 }) {
   const normalizedQuery = filters.query.trim().toLocaleLowerCase("de");

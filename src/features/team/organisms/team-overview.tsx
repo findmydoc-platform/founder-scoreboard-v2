@@ -6,7 +6,7 @@ import { TeamMemberCard } from "@/features/team/molecules/team-member-card";
 import { TeamRoleSummary } from "@/features/team/molecules/team-role-summary";
 import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile-view-model";
 import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
-import type { PlanningData, Profile, Task } from "@/lib/types";
+import type { PlanningShellState, Profile, Task } from "@/lib/types";
 
 export function TeamOverview({
   data,
@@ -15,7 +15,7 @@ export function TeamOverview({
   canManageTeam,
   onSaveProfileSettings,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   tasks: Task[];
   pending: boolean;
   canManageTeam: boolean;

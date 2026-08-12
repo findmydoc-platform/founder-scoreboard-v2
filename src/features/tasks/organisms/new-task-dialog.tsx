@@ -15,7 +15,7 @@ import {
 } from "@/features/tasks/model/task-form-options";
 import { allowedGitHubRepositories, defaultGitHubRepository } from "@/lib/github-repositories";
 import { taskAssigneeOptions } from "@/lib/display";
-import type { PlanningData, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
+import type { PlanningShellState, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
@@ -57,7 +57,7 @@ export type NewTaskCreateCallbacks = {
 };
 
 type DraftSetter = Dispatch<SetStateAction<NewTaskDraft>>;
-type TaskDialogData = Pick<PlanningData, "packages" | "profiles" | "sprints" | "tasks">;
+type TaskDialogData = Pick<PlanningShellState, "packages" | "profiles" | "sprints" | "tasks">;
 
 function SectionHeading({ children, accent = false }: { children: string; accent?: boolean }) {
   return (

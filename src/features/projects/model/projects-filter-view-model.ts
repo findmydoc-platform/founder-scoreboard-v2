@@ -1,7 +1,7 @@
 import { normalizeStatus } from "@/lib/status";
 import { taskHasCriticalAttention } from "@/features/tasks/model/task-attention-signals";
 import { hasGitHubIssue } from "@/lib/platform";
-import type { Milestone, Package, PlanningData, Task } from "@/lib/types";
+import type { Milestone, Package, PlanningShellState, Task } from "@/lib/types";
 
 export type ProjectHierarchyInitiative = {
   initiative: Package;
@@ -69,7 +69,7 @@ export function buildProjectsFilterViewModel({
   tasks,
   filters,
 }: {
-  data: Pick<PlanningData, "milestones" | "packages"> & Partial<Pick<PlanningData, "taskBlockers" | "taskRelations">>;
+  data: Pick<PlanningShellState, "milestones" | "packages"> & Partial<Pick<PlanningShellState, "taskBlockers" | "taskRelations">>;
   tasks: Task[];
   filters: ProjectsTableFilters;
 }): ProjectsFilterViewModel {

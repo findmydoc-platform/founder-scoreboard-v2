@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanText } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
-import { mapFmdTool } from "@/lib/planning-data-mappers";
-import type { DbFmdTool } from "@/lib/planning-data-row-types";
+import { mapFmdTool } from "@/lib/planning-row-mappers";
+import type { DbFmdTool } from "@/lib/planning-row-types";
 import type { FmdTool } from "@/lib/types";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 

@@ -43,7 +43,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
   const decideTaskApproval = (task: Task, action: ApprovalDecisionAction, note = "") => {
     options.setSaveError("");
     if (options.source !== "supabase") {
-      options.applyPlanningDataUpdate((current) => action === "reject"
+      options.applyPlanningShellStateUpdate((current) => action === "reject"
         ? removePlanningRootFromData(current, "deliverable", task.id).data
         : applyDeliverableApprovalPatch(
             current,
@@ -56,7 +56,7 @@ export function useTaskMutationCommands(options: TaskMutationCommandContext) {
       try {
         const { response, body } = await taskApi.decideTaskApprovalRequest(options.apiClient, task.id, action, task.approvalRevision, note);
         if (!response.ok || !body?.task) throw new Error(body?.error || "Freigabeentscheidung konnte nicht gespeichert werden.");
-        options.applyPlanningDataUpdate((current) => action === "reject"
+        options.applyPlanningShellStateUpdate((current) => action === "reject"
           ? removePlanningRootFromData(current, "deliverable", task.id).data
           : applyDeliverableApprovalPatch(current, body.task!));
         if (action === "reject") closeTaskPanel();

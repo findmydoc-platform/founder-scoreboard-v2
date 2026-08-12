@@ -7,7 +7,7 @@ import {
   type DbPlanningItemRaciAssignment,
   type DbPlanningItemStrategy,
   type DbTask,
-} from "@/lib/planning-data-row-types";
+} from "@/lib/planning-row-types";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import type { Milestone, Package, Task } from "@/lib/types";
 

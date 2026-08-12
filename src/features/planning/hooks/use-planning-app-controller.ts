@@ -35,7 +35,7 @@ export function usePlanningAppController({
   const {
     actualProfile,
     apiClient,
-    applyPlanningDataUpdate,
+    applyPlanningShellStateUpdate,
     authAvailable,
     authBusy,
     authChecked,
@@ -71,7 +71,7 @@ export function usePlanningAppController({
     planningRemoteChangesAvailable,
     planningRemoteChangesRefreshing,
     protectedDataLoaded,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     refreshPlanningRemoteChanges,
     saveError,
     selectedTaskId,
@@ -112,7 +112,7 @@ export function usePlanningAppController({
 
   const commandContext = {
     apiClient,
-    applyPlanningDataUpdate,
+    applyPlanningShellStateUpdate,
     canChangeTaskStatus,
     canManageFinalTaskStatus,
     canManageTaskMeta,
@@ -139,7 +139,7 @@ export function usePlanningAppController({
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
     apiClient,
-    applyPlanningDataUpdate,
+    applyPlanningShellStateUpdate,
     selectedTask,
     source,
     startTransition,
@@ -165,7 +165,7 @@ export function usePlanningAppController({
     hasPlanningBoardUrlState,
     hasPlanningFilterUrlState,
     openTaskPanel,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     selectedTask,
     setFilters,
     setHeaderData,
@@ -230,7 +230,7 @@ export function usePlanningAppController({
     planningRemoteChangesRefreshing,
     openTaskPanel,
     protectedDataLoaded,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     refreshPlanningRemoteChanges,
     releaseSidebarFocus,
     apiClient,

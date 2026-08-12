@@ -215,7 +215,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   const relationshipCommandMigration = await readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8");
   const github = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const githubHttp = await readFile("src/lib/github-http.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/tasks/server/task-detail-read-model-supabase.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const platform = await readFile("src/lib/platform.ts", "utf8");
   const display = await readFile("src/lib/display.ts", "utf8");
@@ -631,7 +631,10 @@ test("github app connect persists reload-stable user tokens without browser toke
 test("comments blockers and notification outbox are modeled before Google Chat delivery", async () => {
   const migration = await readSupabaseSchemaContract();
   const externalMigration = await readSupabaseSchemaContract();
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = (await Promise.all([
+    readFile("src/features/tasks/server/task-detail-read-model-supabase.ts", "utf8"),
+    readFile("src/features/notifications/server/notifications-read-model-supabase.ts", "utf8"),
+  ])).join("\n");
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const githubCommentsRoute = await readFile("src/app/api/tasks/[id]/github-comments/route.ts", "utf8");
   const githubAssetsRoute = await readFile("src/app/api/github-assets/route.ts", "utf8");
@@ -664,14 +667,14 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   assert.match(migration, /create table if not exists task_blockers/);
   assert.match(migration, /create table if not exists notification_events/);
   assert.match(migration, /review_due_at/);
-  assert.match(data, /taskComments/);
-  assert.match(data, /taskExternalComments/);
+  assert.match(data, /comments:/);
+  assert.match(data, /externalComments:/);
   assert.match(data, /task_external_comments/);
-  assert.match(data, /taskBlockers/);
-  assert.match(data, /taskActivity/);
+  assert.match(data, /blockers:/);
+  assert.match(data, /activity:/);
   assert.match(data, /task_audit_timeline/);
   assert.doesNotMatch(data, /from\("task_activity"\)/);
-  assert.match(data, /notificationEvents/);
+  assert.match(data, /events,/);
   assert.match(commentsRoute, /task.comment/);
   assert.match(commentsRoute, /mentionedProfileIds/);
   assert.match(commentsRoute, /task.mention/);
