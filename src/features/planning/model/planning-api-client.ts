@@ -1,19 +1,30 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningDataResponse, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
 import type { MilestoneDeleteRequest, MilestoneNotEmptyError, MilestoneResponse } from "@/features/projects/model/milestone-contract";
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlanningTaskRevision } from "@/features/planning/model/planning-data-revision";
+import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status">;
 
 export function requestPlanningData(apiClient: BrowserApiClient, workspace?: AppWorkspace) {
   const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
   return apiClient.requestJson<Partial<PlanningDataResponse> & { error?: string }>(`/api/planning-data${query}`);
+}
+
+export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects") {
+  const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
+  return apiClient.requestJson<{
+    model?: PlanningWorkspaceModel;
+    headerData?: PlanningHeaderData;
+    currentProfile?: AuthenticatedProfile | null;
+    error?: string;
+  }>(route);
 }
 
 export function requestPlanningDataRevision(apiClient: BrowserApiClient) {

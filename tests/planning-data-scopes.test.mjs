@@ -49,11 +49,9 @@ function recordingSupabase() {
 }
 
 const expectedTablesByWorkspace = {
-  planning: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   "decision-log": ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   events: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "founder_events"],
   sprint: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
-  projects: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "task_relationship_edges", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   tools: ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "fmd_tools"],
   team: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
   notifications: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "notification_events", "notification_deliveries", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],

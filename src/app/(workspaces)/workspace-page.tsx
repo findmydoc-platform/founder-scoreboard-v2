@@ -3,6 +3,9 @@ import { PlanningDataUnavailablePage } from "@/features/planning/templates/plann
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { backlogModelToPlanningData } from "@/features/backlog/model/backlog-planning-data-adapter";
 import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
+import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
+import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
 import { getPlanningDataScopeForWorkspace, type LegacyPlanningDataWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
@@ -46,6 +49,28 @@ async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
     : { status: backlog.status };
 }
 
+async function loadPlanningWorkspacePageData(
+  workspace: "planning" | "projects",
+  profile?: AuthenticatedProfile | null,
+) {
+  const supabase = getServerSupabase();
+  if (!supabase) return { status: "unavailable" as const };
+  const readModel = workspace === "planning"
+    ? createSupabasePlanningBoardReadModel(supabase)
+    : createSupabaseStrategicPlanningReadModel(supabase);
+  const [planningWorkspace, headerData] = await Promise.all([
+    readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
+    loadPlanningHeaderData(supabase, {
+      currentProfileId: profile?.id || null,
+      platformRole: profile?.platformRole || null,
+      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
+    }),
+  ]);
+  return planningWorkspace.status === "ready"
+    ? { status: "ready" as const, model: planningWorkspace.model, headerData }
+    : { status: planningWorkspace.status };
+}
+
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
@@ -74,6 +99,25 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           initialHeaderData={backlog.headerData}
           initialWorkspace="backlog"
           initialBacklogModel={backlog.model}
+          source="supabase"
+          authRequired
+          initialAuthUser={auth.user}
+          initialCurrentProfile={auth.profile}
+          initialProtectedDataLoaded
+        />
+      );
+    }
+
+    if (initialWorkspace === "planning" || initialWorkspace === "projects") {
+      const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace, auth.profile);
+      if (planningWorkspace.status !== "ready") {
+        return <PlanningDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
+      }
+      return (
+        <PlanningApp
+          initialData={planningWorkspaceModelToPlanningData(planningWorkspace.model)}
+          initialHeaderData={planningWorkspace.headerData}
+          initialWorkspace={initialWorkspace}
           source="supabase"
           authRequired
           initialAuthUser={auth.user}
@@ -114,6 +158,21 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         initialHeaderData={backlog.headerData}
         initialWorkspace="backlog"
         initialBacklogModel={backlog.model}
+        source="supabase"
+        authRequired={false}
+      />
+    );
+  }
+
+
+  if (initialWorkspace === "planning" || initialWorkspace === "projects") {
+    const planningWorkspace = await loadPlanningWorkspacePageData(initialWorkspace);
+    if (planningWorkspace.status !== "ready") return <PlanningDataUnavailablePage workspace={initialWorkspace} />;
+    return (
+      <PlanningApp
+        initialData={planningWorkspaceModelToPlanningData(planningWorkspace.model)}
+        initialHeaderData={planningWorkspace.headerData}
+        initialWorkspace={initialWorkspace}
         source="supabase"
         authRequired={false}
       />

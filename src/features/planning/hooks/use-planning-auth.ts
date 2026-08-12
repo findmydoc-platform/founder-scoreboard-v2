@@ -5,6 +5,8 @@ import type { AuthenticatedProfile, PlanningData, PlanningDataResponse, Planning
 import { githubUserConnectionStateFromStatus, type GitHubUserConnectionState } from "@/features/planning/model/github-app-connection";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
+import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
+import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -238,14 +240,20 @@ export function usePlanningAuth({
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
       try {
-        const response = await fetch(`/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
+        const focusedPlanningRoute = workspace === "planning"
+          ? "/api/planning-board-data"
+          : workspace === "projects"
+            ? "/api/strategic-planning-data"
+            : "";
+        const response = await fetch(focusedPlanningRoute || `/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { error?: string }) | null;
+        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel; error?: string }) | null;
+        const payloadData = payload?.model ? planningWorkspaceModelToPlanningData(payload.model) : payload?.data;
 
         if (!active) return;
-        if (!response.ok || !payload?.data || !payload.currentProfile) {
+        if (!response.ok || !payloadData || !payload?.currentProfile) {
           protectedDataUserIdRef.current = "";
           setServerCurrentProfile(null);
           setData(safeInitialData);
@@ -256,7 +264,7 @@ export function usePlanningAuth({
         }
 
         protectedDataUserIdRef.current = authUserId;
-        const nextData = normalizePlanningData(payload.data);
+        const nextData = normalizePlanningData(payloadData);
         const nextHeaderData = normalizePlanningHeaderData(payload.headerData);
         protectedPlanningDataCache = { authUserId, data: nextData, headerData: nextHeaderData, currentProfile: payload.currentProfile };
         setServerCurrentProfile(payload.currentProfile);
