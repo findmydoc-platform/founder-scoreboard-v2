@@ -346,7 +346,7 @@ test("task row descriptor covers planning UI mapping fields", async () => {
 
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
   const migration = await readSupabaseSchemaContract();
-  const createRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const createRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
   const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
@@ -480,7 +480,7 @@ test("task review uses accountable reviewer route and keeps rework non-final", a
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const reviewModule = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const reviewCommandMigration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
-  const createTaskRoute = await readFile("src/app/api/tasks/route.ts", "utf8");
+  const createTaskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
   const taskInsertRow = await readFile("src/lib/task-insert-row.ts", "utf8");
   const createTaskContract = `${createTaskRoute}\n${taskInsertRow}`;
   const authz = await readFile("src/lib/authz.ts", "utf8");

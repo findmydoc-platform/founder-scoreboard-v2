@@ -435,6 +435,7 @@ test("Planning Items API is the sole automated planning-item creation contract",
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const ui = await readPlanningSurface();
   const planningItemsRoute = await readFile("src/app/api/team/planning-items/v1/items/route.ts", "utf8");
+  const planningItemsCreate = await readFile("src/features/planning-items/model/planning-items-create.ts", "utf8");
   const planningItemsDocumentation = await readFile("docs/team-planning-items-api.md", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
@@ -453,7 +454,9 @@ test("Planning Items API is the sole automated planning-item creation contract",
   }
   assert.doesNotMatch(routes, /ceo-intake/);
   assert.doesNotMatch(ui, /CEO Intake|CeoTaskIntake|canUseCeoIntake|\/api\/ceo\/task-intake/);
-  assert.match(planningItemsRoute, /create_team_planning_items_transaction/);
+  assert.match(planningItemsRoute, /createTeamCreatePlanningItems/);
+  assert.doesNotMatch(planningItemsRoute, /\.rpc\(/);
+  assert.match(planningItemsCreate, /create_team_planning_items_transaction/);
   assert.match(planningItemsDocumentation, /sole supported API contract for automated planning-item creation/);
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);

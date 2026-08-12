@@ -187,9 +187,9 @@ test("context keeps canonical strategy and the flat v1 initiative projection", a
 });
 
 test("replay versioning and package preference translation are additive", async () => {
-  const [migration, createRoute, updateRoute, documentation] = await Promise.all([
+  const [migration, createModule, updateRoute, documentation] = await Promise.all([
     read("supabase/migrations/20260804093935_planning_items_replay_and_preferences_compatibility.sql"),
-    read("src/app/api/team/planning-items/v1/items/route.ts"),
+    read("src/features/planning-items/model/planning-items-create.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
     read("docs/team-planning-items-api.md"),
   ]);
@@ -203,8 +203,8 @@ test("replay versioning and package preference translation are additive", async 
   assert.match(migration, /alter column contract_version set default 2/i);
   assert.match(migration, /planning_filters->>'packageId'/);
   assert.match(migration, /coalesce\(legacy\.task_id, expanded\.package_id\)/);
-  assert.match(createRoute, /planningItemLegacyCreateHash/);
-  assert.match(createRoute, /contract_version/);
+  assert.match(createModule, /planningItemLegacyCreateHash/);
+  assert.match(createModule, /contract_version/);
   assert.match(updateRoute, /mapLegacyPlanningItemDatabaseRow/);
   assert.match(updateRoute, /contract_version/);
   assert.match(documentation, /flat `goal`, `successCriteria`, and `scopeConstraints` fields/);
@@ -230,6 +230,12 @@ test("v1 create replays return the immutable snapshot before canonical preview v
       "next/server": { after: () => undefined },
       "@/lib/api-input": { auditRequestMetadata: () => ({}) },
       "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-actor-context-server": {
+        actorContextFromPlanningTokenAuth: () => ({
+          ok: true,
+          actor: { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-v1", scopes: [] } },
+        }),
+      },
       "@/features/planning-items/model/planning-items-route": {
         handlePlanningItemsRequest: async (_request, _scope, _message, handler) => handler({
           tokenId: "token-v1",
@@ -255,6 +261,19 @@ test("v1 create replays return the immutable snapshot before canonical preview v
         planningItemCreateGitHubSyncCommands: () => [],
         planningItemCreateHash: () => "canonical-hash",
         planningItemCreateCommitItem: (item) => item,
+        planningItemCreateCommand: () => ({ kind: "createItems", items: [] }),
+        createTeamCreatePlanningItems: () => ({
+          run: async () => ({
+            ok: true,
+            status: "committed",
+            items: [],
+            changes: [{ field: "createItemsTransaction", before: null, after: { batchId: stored.id, items: stored.response_tasks, replayed: true } }],
+            effects: [],
+            replayed: true,
+          }),
+        }),
+        planningCreateTransactionFromResult: (result) => result.changes[0].after,
+        planningCreateError: () => ({ message: "error", status: 500 }),
       },
       "@/features/planning-items/model/planning-items-github-sync": {},
     },

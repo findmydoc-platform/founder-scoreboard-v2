@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const activeTaskReaders = [
-  "src/app/api/tasks/route.ts",
+  "src/features/planning-items/model/planning-items-browser-task-create.ts",
   "src/app/api/notifications/generate-digest/route.ts",
   "src/app/api/focus/route.ts",
   "src/app/api/sprints/route.ts",
@@ -19,7 +19,7 @@ test("operational planning readers use centralized active views", async () => {
     assert.match(source, /ACTIVE_TASKS_TABLE/, `${activeTaskReaders[index]} must use the active task boundary`);
   }
 
-  const initiativeRoute = await readFile("src/app/api/initiatives/route.ts", "utf8");
+  const initiativeRoute = await readFile("src/features/planning-items/model/planning-items-browser-initiative-route.ts", "utf8");
   // The legacy Initiative endpoint is a read-only compatibility adapter over
   // the canonical Initiative-task projection, not the old packages table.
   assert.match(initiativeRoute, /ACTIVE_PACKAGES_TABLE/);

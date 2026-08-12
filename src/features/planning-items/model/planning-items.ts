@@ -45,6 +45,7 @@ export type NewInitiative = NewPlanningItemBase<"initiative"> & Readonly<{
   parentId: PlanningItemId | null;
   strategy: PlanningStrategy;
   raciAssignments: readonly PlanningRaciAssignment[];
+  priority: string;
   targetDate: string | null;
 }>;
 
@@ -53,6 +54,12 @@ export type NewDeliverable = NewPlanningItemBase<"deliverable"> & Readonly<{
   status: DeliverableStatus;
   parentId: PlanningItemId | null;
   priority: string;
+  workstream: string;
+  startDate: string | null;
+  endDate: string | null;
+  deadline: string | null;
+  hours: number;
+  githubRepository: string;
 }>;
 
 export type NewSubIssue = NewPlanningItemBase<"sub_issue"> & Readonly<{
