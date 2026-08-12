@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Removes legacy planning reads and redirects active item navigation to canonical task IDs without adding or materially expanding visible functionality."
+  "reason": "Adds an operational planning cutover preflight and restore runbook without adding or materially expanding visible functionality."
 }

@@ -35,6 +35,7 @@
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
     "verify:planning-approval": "node scripts/verify-planning-approval-transaction.mjs",
     "verify:planning-reparent": "node scripts/verify-planning-reparent-transaction.mjs",
+    "verify:planning-legacy-cutover": "node scripts/verify-planning-legacy-cutover.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:database-security": "node scripts/verify-database-security.mjs",
     "verify:task-utf8": "node scripts/verify-task-utf8.mjs",
