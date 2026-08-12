@@ -413,7 +413,7 @@ export type PlanningFilterPreferences = {
   status: string;
   priority: string;
   review: string;
-  packageId: string;
+  initiativeId: string;
   quick: string[];
   sprintId: string;
   workstream: string;
@@ -429,7 +429,7 @@ export type ProfileUiPreference = {
   defaultWorkspace: string;
   defaultTaskView: ViewMode;
   planningFilters: PlanningFilterPreferences;
-  expandedPackageIds: string[];
+  expandedInitiativeIds: string[];
   createdAt: string;
   updatedAt: string;
 };

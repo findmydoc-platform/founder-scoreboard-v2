@@ -17,7 +17,7 @@ export function buildPlanningTaskTableViewModel({
   const visibleTasks = sortTasks(data.tasks.filter((task) => {
     if (task.taskType === "sub_issue") return false;
     const normalized = normalizeStatus(task.status);
-    const initiative = data.packages.find((pack) => pack.id === task.packageId);
+    const initiative = data.packages.find((candidate) => candidate.id === task.parentTaskId);
     const sprint = data.sprints.find((item) => item.id === task.sprintId);
     const reviewOwner = data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
     const matchesQuery = !normalizedQuery || [
@@ -32,7 +32,7 @@ export function buildPlanningTaskTableViewModel({
     const matchesStatus = filters.status === "Alle" || normalized === filters.status;
     const matchesPriority = filters.priority === "Alle" || task.priority === filters.priority;
     const matchesReview = !filters.review || filters.review === "Alle" || task.reviewStatus === filters.review;
-    const matchesPackage = filters.packageId === "Alle" || task.packageId === filters.packageId;
+    const matchesInitiative = filters.initiativeId === "Alle" || task.parentTaskId === filters.initiativeId;
     const matchesSprint = filters.sprintId === "Alle" || task.sprintId === filters.sprintId;
     const matchesWorkstream = filters.workstream === "Alle" || task.workstream === filters.workstream;
     const deadline = task.targetDate || task.deadline || task.endDate || "";
@@ -54,7 +54,7 @@ export function buildPlanningTaskTableViewModel({
       || quickFilter === "evidence" && taskHasMissingEvidenceAttention(task)
     ));
 
-    return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesReview && matchesPackage
+    return matchesQuery && matchesAssignee && matchesStatus && matchesPriority && matchesReview && matchesInitiative
       && matchesSprint && matchesWorkstream && matchesTargetFrom && matchesTargetTo && matchesRisk && matchesQuick;
   }));
 

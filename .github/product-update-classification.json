@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Retires duplicate Browser planning endpoints in favor of the canonical task route family without adding or materially expanding visible functionality."
+  "reason": "Renames internal Planning preference and expansion state to Initiative terminology while preserving the existing database adapter, without adding or materially expanding visible functionality."
 }

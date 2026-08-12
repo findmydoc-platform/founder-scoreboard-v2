@@ -20,7 +20,7 @@ All items below must be absent from active application code before the destructi
 1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. Browser fields `packageId`, `milestoneId`, and `assignee` where `parentTaskId` and `ownerId` are authoritative.
 3. Team v1 Package/Milestone aliases, scopes, OpenAPI fields, and legacy replay response mapping.
-4. `Package`, `Milestone`, `packages`, `milestones`, `expandedPackageIds`, and `planningFilters.packageId` in active UI state.
+4. `Package`, `Milestone`, `packages`, and `milestones` in active UI state. The active preference and board-expansion contract already uses `initiativeId` and `expandedInitiativeIds`; the old database column and JSON key remain read-only compatibility inputs until #317 migrates stored data.
 5. Reads from `active_packages`, `packages`, `milestones`, and `planning_item_legacy_ids`.
 6. Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts.
 

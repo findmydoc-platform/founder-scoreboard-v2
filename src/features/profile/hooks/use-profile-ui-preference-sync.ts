@@ -8,7 +8,7 @@ type ProfileUiPreferenceSyncOptions = {
   data: PlanningShellState;
   hasPlanningBoardUrlState: boolean;
   hasPlanningFilterUrlState: boolean;
-  setExpandedPackageIds: (packageIds: string[]) => void;
+  setExpandedInitiativeIds: (initiativeIds: string[]) => void;
   setFilters: (filters: PlanningFilterPreferences) => void;
   setView: (view: ViewMode) => void;
 };
@@ -18,7 +18,7 @@ export function useProfileUiPreferenceSync({
   data,
   hasPlanningBoardUrlState,
   hasPlanningFilterUrlState,
-  setExpandedPackageIds,
+  setExpandedInitiativeIds,
   setFilters,
   setView,
 }: ProfileUiPreferenceSyncOptions) {
@@ -43,6 +43,6 @@ export function useProfileUiPreferenceSync({
           : preference.planningFilters.quick,
       });
     }
-    setExpandedPackageIds(preference.expandedPackageIds);
-  }, [currentProfileId, hasPlanningBoardUrlState, hasPlanningFilterUrlState, preference, setExpandedPackageIds, setFilters, setView]);
+    setExpandedInitiativeIds(preference.expandedInitiativeIds);
+  }, [currentProfileId, hasPlanningBoardUrlState, hasPlanningFilterUrlState, preference, setExpandedInitiativeIds, setFilters, setView]);
 }

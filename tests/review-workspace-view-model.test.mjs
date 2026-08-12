@@ -81,7 +81,7 @@ test("planning review filters and My Reviews use the issue review state", async 
   ];
   const data = { tasks, packages: [], sprints: [], profiles: [], taskRelations: [] };
   const baseFilters = {
-    query: "", assignee: "Alle", status: "Alle", priority: "Alle", review: "Alle", packageId: "Alle",
+    query: "", assignee: "Alle", status: "Alle", priority: "Alle", review: "Alle", initiativeId: "Alle",
     quick: [], sprintId: "Alle", workstream: "Alle", risk: "Alle", targetFrom: "", targetTo: "", sort: "priority", direction: "asc",
   };
 

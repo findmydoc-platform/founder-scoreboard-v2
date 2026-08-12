@@ -54,7 +54,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
     workspace,
   } = controller;
   const resolvedParentFilterId = planningLevel === "deliverable"
-    ? filters.packageId === "Alle" ? "all" : filters.packageId
+    ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
   const planningLevelTasks = data.tasks.filter((task) => task.taskType === planningLevel);
   const planningVisibleTasks = controller.visibleTasks.filter((task) => (
@@ -65,7 +65,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
     setPlanningLevel(level);
     setFilters({
       ...filters,
-      packageId: "Alle",
+      initiativeId: "Alle",
       ...(level === "deliverable" ? {} : {
         quick: [],
         review: "Alle",
@@ -78,7 +78,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
   };
   const handlePlanningParentFilterChange = (parentId: string) => {
     if (planningLevel === "deliverable") {
-      setFilters({ ...filters, packageId: parentId === "all" ? "Alle" : parentId });
+      setFilters({ ...filters, initiativeId: parentId === "all" ? "Alle" : parentId });
       return;
     }
     setPlanningParentFilterId(parentId);

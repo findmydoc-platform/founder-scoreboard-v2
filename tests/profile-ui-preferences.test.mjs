@@ -8,6 +8,10 @@ const workspacePreferences = await loadTranspiledModule(
   "src/features/planning/model/workspace-preferences.ts",
 );
 
+const planningProfileMappers = await loadTranspiledModule(
+  "src/lib/planning-profile-mappers.ts",
+);
+
 const icon = () => null;
 const workspaceRoutes = await loadTranspiledModule(
   "src/features/planning/model/workspace-routes.ts",
@@ -81,14 +85,14 @@ test("new profiles start with neutral planning defaults instead of current contr
 
   assert.equal(draft.defaultWorkspace, "planning");
   assert.equal(draft.defaultTaskView, "board");
-  assert.deepEqual(draft.expandedPackageIds, []);
+  assert.deepEqual(draft.expandedInitiativeIds, []);
   assert.deepEqual(draft.planningFilters, {
     query: "",
     assignee: "Alle",
     status: "Alle",
     priority: "Alle",
     review: "Alle",
-    packageId: "Alle",
+    initiativeId: "Alle",
     quick: [],
     sprintId: "Alle",
     workstream: "Alle",
@@ -113,14 +117,42 @@ test("saved profile preferences remain intact while legacy workspaces are normal
       defaultWorkspace: "reviews",
       defaultTaskView: "table",
       planningFilters,
-      expandedPackageIds: ["initiative-1"],
+      expandedInitiativeIds: ["initiative-1"],
     },
   });
 
   assert.equal(draft.defaultWorkspace, "planning");
   assert.equal(draft.defaultTaskView, "table");
   assert.deepEqual(draft.planningFilters, planningFilters);
-  assert.deepEqual(draft.expandedPackageIds, ["initiative-1"]);
+  assert.deepEqual(draft.expandedInitiativeIds, ["initiative-1"]);
+});
+
+test("profile preference reads normalize the legacy package filter into the canonical initiative field", () => {
+  const preference = planningProfileMappers.mapProfileUiPreference({
+    profile_id: "profile-1",
+    default_workspace: "planning",
+    default_task_view: "board",
+    planning_filters: { packageId: "initiative-legacy", initiativeId: "initiative-current" },
+    expanded_package_ids: ["initiative-1"],
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:00:00.000Z",
+  });
+
+  assert.equal(preference.planningFilters.initiativeId, "initiative-current");
+  assert.equal("packageId" in preference.planningFilters, false);
+  assert.deepEqual(preference.expandedInitiativeIds, ["initiative-1"]);
+
+  const legacyPreference = planningProfileMappers.mapProfileUiPreference({
+    profile_id: "profile-1",
+    default_workspace: "planning",
+    default_task_view: "board",
+    planning_filters: { packageId: "initiative-legacy" },
+    expanded_package_ids: [],
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:00:00.000Z",
+  });
+
+  assert.equal(legacyPreference.planningFilters.initiativeId, "initiative-legacy");
 });
 
 test("profile settings API delegates workspace validation to the shared workspace contract", async () => {
@@ -129,6 +161,14 @@ test("profile settings API delegates workspace validation to the shared workspac
   assert.match(route, /rootWorkspaceFromPreference\(typeof value === "string" \? value : null\)/);
   assert.doesNotMatch(route, /cleanDefaultWorkspace\(uiPayload\.defaultWorkspace, permission\.profile\?\.platformRole\)/);
   assert.doesNotMatch(route, /allowedWorkspaces/);
+});
+
+test("profile settings API accepts only canonical initiative preference fields", async () => {
+  const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
+
+  assert.match(route, /expandedInitiativeIds: string\[\]/);
+  assert.match(route, /candidate\.initiativeId/);
+  assert.doesNotMatch(route, /expandedPackageIds|candidate\.packageId/);
 });
 
 test("profile settings only offer workspaces supported by the persisted default contract", async () => {

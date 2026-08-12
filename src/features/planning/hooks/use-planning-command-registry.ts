@@ -106,7 +106,7 @@ export function usePlanningCommandRegistry({
     data,
     hasPlanningBoardUrlState,
     hasPlanningFilterUrlState,
-    setExpandedPackageIds: boardState.setExpandedPackageIds,
+    setExpandedInitiativeIds: boardState.setExpandedInitiativeIds,
     setFilters,
     setView,
   });

@@ -51,7 +51,7 @@ export function PlanningFilters({
   onPlanningParentFilterChange,
 }: PlanningFiltersProps) {
   const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee;
-  const initiativeName = packages.find((pack) => pack.id === filters.packageId)?.title || filters.packageId;
+  const initiativeName = packages.find((initiative) => initiative.id === filters.initiativeId)?.title || filters.initiativeId;
   const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
@@ -66,7 +66,7 @@ export function PlanningFilters({
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => onChange({ ...filters, status: "Alle" }) }] : []),
     ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, onRemove: () => onChange({ ...filters, priority: "Alle" }) }] : []),
     ...(!isStrategicBoard && filters.review !== "Alle" ? [{ id: "review", label: `Review-Status: ${reviewLabel(filters.review as Parameters<typeof reviewLabel>[0])}`, onRemove: () => onChange({ ...filters, review: "Alle" }) }] : []),
-    ...(!isStrategicBoard && filters.packageId !== "Alle" ? [{ id: "initiative", label: `Initiative: ${initiativeName}`, onRemove: () => onChange({ ...filters, packageId: "Alle" }) }] : []),
+    ...(!isStrategicBoard && filters.initiativeId !== "Alle" ? [{ id: "initiative", label: `Initiative: ${initiativeName}`, onRemove: () => onChange({ ...filters, initiativeId: "Alle" }) }] : []),
     ...(showPlanningLevel && planningLevel === "initiative" && planningParentFilterId !== "all" ? [{ id: "parent-epic", label: `Epic: ${parentName}`, onRemove: () => onPlanningParentFilterChange("all") }] : []),
     ...(!isStrategicBoard && filters.sprintId !== "Alle" ? [{ id: "sprint", label: `Sprint: ${sprintName}`, onRemove: () => onChange({ ...filters, sprintId: "Alle" }) }] : []),
     ...(!isStrategicBoard && filters.workstream !== "Alle" ? [{ id: "workstream", label: `Bereich: ${filters.workstream}`, onRemove: () => onChange({ ...filters, workstream: "Alle" }) }] : []),
@@ -172,8 +172,8 @@ export function PlanningFilters({
         {!showPlanningLevel ? <FilterField label="Initiative">
           <CustomSelect
             aria-label="Nach Initiative filtern"
-            value={filters.packageId}
-            onChange={(packageId) => onChange({ ...filters, packageId })}
+            value={filters.initiativeId}
+            onChange={(initiativeId) => onChange({ ...filters, initiativeId })}
             className="h-10 text-sm"
             options={[{ value: "Alle", label: "Alle Initiativen" }, ...packages.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))]}
           />

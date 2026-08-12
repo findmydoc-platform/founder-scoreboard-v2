@@ -12,7 +12,7 @@ export function BoardSettingsSection({
   data,
   draft,
   assigneeOptions,
-  packageOptions,
+  initiativeOptions,
   priorityOptions,
   quickFilterOptions,
   statusOptions,
@@ -21,14 +21,14 @@ export function BoardSettingsSection({
   onAdvancedBoardOpenChange,
   onDefaultTaskViewChange,
   onDefaultWorkspaceChange,
-  onPackageToggle,
+  onInitiativeToggle,
   onPlanningFiltersChange,
 }: {
   advancedBoardOpen: boolean;
   data: PlanningShellState;
   draft: ProfileSettingsDraft;
   assigneeOptions: Array<{ value: string; label: string }>;
-  packageOptions: Array<{ value: string; label: string }>;
+  initiativeOptions: Array<{ value: string; label: string }>;
   priorityOptions: Array<{ value: string; label: string }>;
   quickFilterOptions: Array<{ value: string; label: string }>;
   statusOptions: Array<{ value: string; label: string }>;
@@ -37,7 +37,7 @@ export function BoardSettingsSection({
   onAdvancedBoardOpenChange: (open: boolean) => void;
   onDefaultTaskViewChange: (view: ViewMode) => void;
   onDefaultWorkspaceChange: (workspace: AppWorkspace) => void;
-  onPackageToggle: (packageId: string) => void;
+  onInitiativeToggle: (initiativeId: string) => void;
   onPlanningFiltersChange: (patch: Partial<PlanningFilterPreferences>) => void;
 }) {
   return (
@@ -73,7 +73,7 @@ export function BoardSettingsSection({
                 </UiField>
                 <UiField as="div">
                   Initiative
-                  <CustomSelect value={draft.planningFilters.packageId} onChange={(packageId) => onPlanningFiltersChange({ packageId })} options={packageOptions} className="h-9 text-sm" />
+                  <CustomSelect value={draft.planningFilters.initiativeId} onChange={(initiativeId) => onPlanningFiltersChange({ initiativeId })} options={initiativeOptions} className="h-9 text-sm" />
                 </UiField>
                 <UiField as="div" className="md:col-span-2">
                   Schnellfilter kombinieren
@@ -92,20 +92,20 @@ export function BoardSettingsSection({
             </SettingsRow>
             <SettingsRow label="Aufgeklappte Initiativen" description="Nur die Initiativen, die beim Öffnen direkt sichtbar sein sollen." align="start">
               <div className="flex flex-wrap justify-start gap-2 md:max-w-2xl">
-                {data.packages.map((pack) => {
-                  const selected = draft.expandedPackageIds.includes(pack.id);
+                {data.packages.map((initiative) => {
+                  const selected = draft.expandedInitiativeIds.includes(initiative.id);
                   return (
                     <button
-                      key={pack.id}
+                      key={initiative.id}
                       type="button"
-                      onClick={() => onPackageToggle(pack.id)}
+                      onClick={() => onInitiativeToggle(initiative.id)}
                       className={classNames(
                         "inline-flex h-8 max-w-full items-center gap-2 rounded-md border px-2 text-xs font-semibold",
                         selected ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                       )}
                     >
                       {selected && <Check size={13} />}
-                      <span className="truncate">{pack.title}</span>
+                      <span className="truncate">{initiative.title}</span>
                     </button>
                   );
                 })}
