@@ -1,6 +1,6 @@
 import { initiativeOptionLabel, taskAssigneeLabel, taskAssigneeOptions } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
-import type { Milestone, Profile, Sprint, Task, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
+import type { Profile, Sprint, Task, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import type { CustomSelectOption } from "@/shared/atoms/custom-select";
 
 export const priorityOptions: CustomSelectOption[] = ["P0", "P1", "P2", "P3", "P4"].map((priority) => ({
@@ -26,10 +26,6 @@ export const taskRelationTypeOptions: Array<CustomSelectOption & { value: TaskRe
   { value: "relates_to", label: "Verknüpft mit" },
 ];
 
-export function milestoneOptions(milestones: Milestone[], emptyLabel: string): CustomSelectOption[] {
-  return [{ value: "", label: emptyLabel }, ...milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))];
-}
-
 export function sprintOptions(sprints: Sprint[]): CustomSelectOption[] {
   return sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }));
 }
@@ -46,7 +42,7 @@ export function parentDeliverableOptions(tasks: Task[], legacyInitiatives: Array
   return tasks
     .filter((task) => task.taskType === "deliverable")
     .map((task) => {
-      const initiative = initiativeById.get(task.parentTaskId || task.packageId);
+      const initiative = initiativeById.get(task.parentTaskId);
       const approvalHint = task.approvalStatus === "approved" ? "" : " · wartet auf Freigabe";
       return {
         value: task.id,

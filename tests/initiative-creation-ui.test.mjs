@@ -23,9 +23,6 @@ const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
   "@/features/planning/model/planning-trash-state": {
     removePlanningRootFromData: (data) => ({ data }),
   },
-  "@/lib/planning-profile-mappers": {
-    mapLegacyPackageFromInitiative: (task) => task,
-  },
 });
 
 const draft = {

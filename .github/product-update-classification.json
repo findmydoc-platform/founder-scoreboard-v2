@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Retires legacy Package and Milestone aliases from the Team Planning API and context while preserving immutable stored replay responses until the separately approved receipt migration."
+  "reason": "Removes legacy Package and Milestone hierarchy reads and DTO fields from active Browser, Backlog, mapper, and local seed paths without changing user-visible workflows."
 }

@@ -226,9 +226,9 @@ test("parent Deliverable options include Initiative and inactive approval contex
   });
 
   assert.deepEqual(parentDeliverableOptions([
-    { id: "approved", title: "Approved work", taskType: "deliverable", packageId: "initiative", approvalStatus: "approved" },
-    { id: "proposed", title: "Proposed work", taskType: "deliverable", packageId: "initiative", approvalStatus: "proposed" },
-    { id: "child", title: "Child", taskType: "sub_issue", packageId: "initiative", approvalStatus: null },
+    { id: "approved", title: "Approved work", taskType: "deliverable", parentTaskId: "initiative", approvalStatus: "approved" },
+    { id: "proposed", title: "Proposed work", taskType: "deliverable", parentTaskId: "initiative", approvalStatus: "proposed" },
+    { id: "child", title: "Child", taskType: "sub_issue", parentTaskId: "initiative", approvalStatus: null },
   ], [{ id: "initiative", title: "Growth" }]), [
     { value: "approved", label: "Approved work · Growth" },
     { value: "proposed", label: "Proposed work · Growth · wartet auf Freigabe" },

@@ -23,7 +23,7 @@ function planningTask(overrides = {}) {
     status: "Offen",
     assigneeId: "ceo",
     ownerId: "ceo",
-    packageId: "initiative-1",
+    parentTaskId: "initiative-1",
     hasInitiative: true,
     sprintId: "",
     ...overrides,
@@ -57,7 +57,7 @@ function planningData() {
         assignee: "CEO",
         ownerId: "ceo",
         owner: "CEO",
-        packageId: "initiative-1",
+        parentTaskId: "initiative-1",
         taskType: "deliverable",
         approvalStatus: "approved",
         sprintId: "",
@@ -74,7 +74,7 @@ function planningData() {
         assignee: "CEO",
         ownerId: "ceo",
         owner: "CEO",
-        packageId: "initiative-1",
+        parentTaskId: "initiative-1",
         taskType: "deliverable",
         approvalStatus: "approved",
         sprintId: "sprint-14",
@@ -91,7 +91,7 @@ function planningData() {
         assignee: "CEO",
         ownerId: "ceo",
         owner: "CEO",
-        packageId: "initiative-1",
+        parentTaskId: "initiative-1",
         taskType: "deliverable",
         approvalStatus: "proposed",
         sprintId: "",
@@ -210,7 +210,8 @@ test("task update and API route use the shared sprint assignment contract withou
   assert.match(route, /backlogSprintAssignmentMessage/);
   assert.match(route, /sourceSprintLocked/);
   assert.match(route, /sprintAssignmentNoop/);
-  assert.match(route, /ACTIVE_PACKAGES_TABLE/);
+  assert.match(route, /ACTIVE_TASKS_TABLE/);
+  assert.doesNotMatch(route, /ACTIVE_PACKAGES_TABLE|active_packages/);
   assert.match(command, /TaskUpdateResult/);
   assert.match(command, /return queuedMutation/);
   assert.match(sprintAssignment, /getBacklogSprintAssignmentEligibility/);

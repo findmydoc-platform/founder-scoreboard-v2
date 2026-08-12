@@ -11,28 +11,32 @@ test("source.json is the single maintained local seed data source", async () => 
   const packageJson = await readFile("package.json", "utf8");
   const shared = await readFile("src/lib/seed/shared.ts", "utf8");
   const runner = await readFile("scripts/local-development.mjs", "utf8");
+  const verifier = await readFile("scripts/verify-local-integration.mjs", "utf8");
 
   assert.ok(existsSync("src/lib/seed/source.json"));
   assert.equal(existsSync("supabase/seed.sql"), false);
   assert.match(shared, /from "\.\/source\.json"/);
   assert.match(runner, /src\/lib\/seed\/source\.json/);
+  assert.doesNotMatch(shared, /\bPackage\b|packageId|milestoneId|source\.packages/);
+  assert.doesNotMatch(runner, /packageId|milestoneId|source\.packages/);
+  assert.doesNotMatch(verifier, /packageId|milestoneId|source\.packages/);
   assert.match(packageJson, /"local:seed": "node scripts\/local-development\.mjs seed"/);
 });
 
 test("local seed covers planning roles and stable core data", async () => {
   const source = await readSeedSource();
   const profileById = new Map(source.profiles.map((profile) => [profile.id, profile]));
-  const packageIds = new Set(source.packages.map((item) => item.id));
+  const initiativeIds = new Set(source.initiatives.map((item) => item.id));
   const taskIds = source.tasks.map((task) => task.id);
   const simulatedRollupParent = source.tasks.find((task) => task.id === "sebastian-contact-404-beheben-oder-links-umstellen");
   const simulatedRollupChildren = source.tasks.filter((task) => task.parentTaskId === simulatedRollupParent?.id);
 
   assert.equal(source.project.id, "findmydoc-founder-execution");
-  assert.deepEqual(source.packages.map((item) => item.id), ["GC1", "GC2", "GC3", "GC4", "GC5"]);
+  assert.deepEqual(source.initiatives.map((item) => item.id), ["GC1", "GC2", "GC3", "GC4", "GC5"]);
   assert.ok(source.tasks.length > 0);
   assert.equal(new Set(taskIds).size, taskIds.length);
   assert.ok(taskIds.includes("sebastian-contact-404-beheben-oder-links-umstellen"));
-  assert.ok(source.tasks.every((task) => packageIds.has(task.packageId)));
+  assert.ok(source.tasks.every((task) => task.taskType === "sub_issue" || initiativeIds.has(task.parentTaskId)));
   assert.ok(source.tasks.every((task) => profileById.has(task.assigneeId)));
   assert.equal(simulatedRollupParent?.githubIssueNumber, 9999);
   assert.equal(simulatedRollupParent?.githubIssueUrl, "https://github.com/findmydoc-platform/management/issues/9999");

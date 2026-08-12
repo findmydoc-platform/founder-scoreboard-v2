@@ -51,8 +51,6 @@ export type CurrentTaskForActivity = {
   owner?: string | null;
   priority?: string | null;
   sprint_id?: string | null;
-  milestone_id?: string | null;
-  package_id?: string | null;
   parent_task_id?: string | null;
   start_date?: string | null;
   end_date?: string | null;

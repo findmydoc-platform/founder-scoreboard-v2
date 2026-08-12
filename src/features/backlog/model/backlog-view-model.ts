@@ -101,7 +101,7 @@ function sprintCapacityHours(model: BacklogModel, sprint: Sprint) {
 }
 
 function buildBacklogItem(task: Task, initiativeById: Map<string, Task>, rank: number): BacklogItem {
-  const initiative = initiativeById.get(task.packageId);
+  const initiative = initiativeById.get(task.parentTaskId);
   const planningState = getBacklogPlanningState({ ...task, hasInitiative: Boolean(initiative) });
 
   return {
@@ -162,7 +162,7 @@ export function filterBacklogItems(items: BacklogItem[], filters: BacklogTableFi
       || filters.readiness === "ready" && item.planningState.kind === "ready"
       || filters.readiness === "incomplete" && item.planningState.kind === "blocked";
     const priorityMatches = filters.priority === "Alle" || item.task.priority === filters.priority;
-    const initiativeMatches = filters.initiative === "Alle" || item.task.packageId === filters.initiative;
+    const initiativeMatches = filters.initiative === "Alle" || item.task.parentTaskId === filters.initiative;
     const assigneeMatches = filters.assignee === "Alle" || item.task.assigneeId === filters.assignee || item.task.assignee === filters.assignee;
     return statusMatches && readinessMatches && priorityMatches && initiativeMatches && assigneeMatches;
   });

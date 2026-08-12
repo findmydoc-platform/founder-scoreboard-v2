@@ -36,8 +36,6 @@ type CreateTaskPayload = {
   evidenceRequired?: string;
   taskType?: TaskType;
   parentTaskId?: string;
-  packageId?: string;
-  milestoneId?: string;
   sprintId?: string;
   assignee?: string;
   owner?: string;
@@ -107,6 +105,9 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
+  if (Object.hasOwn(payload, "packageId") || Object.hasOwn(payload, "milestoneId")) {
+    return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
+  }
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
   const isStrategic = requestedType === "epic" || requestedType === "initiative";
@@ -258,9 +259,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (!githubRepository.ok) return apiError(githubRepository.error, 400);
 
   if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
-  const packageId = payload.packageId || null;
   let parentApprovalStatus: Task["parentApprovalStatus"] = null;
-  let initiative: { id: string; milestone_id: string | null; owner?: string | null; approval_status?: string | null } | null = null;
+  let initiative: { id: string; owner?: string | null; approval_status?: string | null } | null = null;
   const startDate = payload.startDate || null;
   const endDate = payload.endDate || null;
 
@@ -277,33 +277,12 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     ? "P2"
     : payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
   const assignee = profileId(payload.assignee || payload.owner) || permission.profile?.id || null;
-  let parentTaskId = taskType === "sub_issue" || taskType === "deliverable" ? payload.parentTaskId || "" : "";
-
-  if (taskType === "deliverable" && !parentTaskId && packageId) {
-    const { data: canonicalParent, error: canonicalParentError } = await supabase
-      .from(ACTIVE_TASKS_TABLE)
-      .select("id,task_type")
-      .eq("id", packageId)
-      .maybeSingle();
-    if (canonicalParentError) return apiError(canonicalParentError.message, 500);
-    if (canonicalParent?.task_type === "initiative") {
-      parentTaskId = canonicalParent.id;
-    } else {
-      const { data: legacyParent, error: legacyParentError } = await supabase
-      .from("planning_item_legacy_ids")
-      .select("task_id")
-      .eq("source_kind", "package")
-      .eq("legacy_id", packageId)
-      .maybeSingle();
-      if (legacyParentError) return apiError(legacyParentError.message, 500);
-      parentTaskId = legacyParent?.task_id || "";
-    }
-  }
+  const parentTaskId = taskType === "sub_issue" || taskType === "deliverable" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && parentTaskId) {
     const { data: initiativeRow, error: initiativeError } = await supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,milestone_id,owner,approval_status,task_type")
+      .select("id,owner,approval_status,task_type")
       .eq("id", parentTaskId)
       .maybeSingle();
     if (initiativeError || !initiativeRow || initiativeRow.task_type !== "initiative") {
@@ -338,7 +317,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (taskType === "sub_issue") {
     const { data: parent, error: parentError } = await supabase
       .from(ACTIVE_TASKS_TABLE)
-      .select("id,title,task_type,package_id,milestone_id,approval_status,review_status,score_final")
+      .select("id,title,task_type,approval_status,review_status,score_final")
       .eq("id", parentTaskId)
       .single();
     if (parentError || !parent || parent.task_type !== "deliverable") return apiError("Deliverable wurde nicht gefunden.", 404);
@@ -369,8 +348,6 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   const insert = buildTaskInsertRow({
     id,
     creationRequestId,
-    // parent_task_id is canonical. package_id and milestone_id remain
-    // trigger-derived legacy comparison fields after the cutover.
     title,
     description: cleanText(payload.description, 4000),
     problemStatement: cleanText(payload.problemStatement, 4000),

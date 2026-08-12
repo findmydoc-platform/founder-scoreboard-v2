@@ -129,13 +129,6 @@ function materializeTasks(source) {
   });
 }
 
-function strategicStatusFromLegacy(status) {
-  if (status === "active") return "In Arbeit";
-  if (status === "paused") return "Pausiert";
-  if (status === "done") return "Erledigt";
-  return "Offen";
-}
-
 function canonicalSeedEpics(source) {
   return (source.epics || []).map((epic) => ({
     id: epic.id,
@@ -159,19 +152,19 @@ function canonicalSeedEpics(source) {
 }
 
 function canonicalSeedInitiatives(source) {
-  return source.packages.map((item) => ({
+  return source.initiatives.map((item) => ({
     id: item.id,
     project_id: source.project.id,
     title: item.title,
     description: nullable(item.goal),
-    status: strategicStatusFromLegacy(item.status),
+    status: item.status,
     priority: item.priority || "P2",
     owner: nullable(item.ownerId),
     assignee: nullable(item.ownerId),
     sort_order: item.sortOrder || 0,
     target_date: nullable(item.targetDate),
     task_type: "initiative",
-    parent_task_id: nullable(item.milestoneId),
+    parent_task_id: nullable(item.parentTaskId),
     approval_status: item.approvalStatus || "approved",
     approval_revision: item.approvalRevision || 1,
     proposed_by: nullable(item.proposedById) || nullable(item.ownerId),
@@ -351,7 +344,7 @@ async function seedPlanningDatabase(status) {
       github_issue_last_synced_at: nullable(task.githubIssueLastSyncedAt),
       github_issue_sync_error: nullable(task.githubIssueSyncError),
       task_type: task.taskType,
-      parent_task_id: nullable(task.taskType === "deliverable" ? task.packageId : task.parentTaskId),
+      parent_task_id: nullable(task.parentTaskId),
       score_relevant: Boolean(task.scoreRelevant),
       review_owner_profile_id: nullable(task.reviewOwnerProfileId),
       review_requested_at: nullable(task.reviewRequestedAt),
@@ -380,13 +373,13 @@ async function seedPlanningDatabase(status) {
     for (const row of parentFirst) {
       await upsertRows(client, "tasks", Object.keys(row), [row]);
     }
-    await upsertRows(client, "planning_item_strategy", ["task_id", "goal", "success_criteria", "scope_constraints"], source.packages.map((item) => ({
+    await upsertRows(client, "planning_item_strategy", ["task_id", "goal", "success_criteria", "scope_constraints"], source.initiatives.map((item) => ({
       task_id: item.id,
       goal: item.goal || "",
       success_criteria: item.successCriteria || "",
       scope_constraints: item.scopeConstraints || "",
     })), "task_id");
-    await replacePlanningItemRaciRows(client, source.packages);
+    await replacePlanningItemRaciRows(client, source.initiatives);
     await upsertRows(client, "task_notes", ["task_id", "note"], tasks.map((task) => ({ task_id: task.id, note: task.note || "" })), "task_id");
     const taskIds = tasks.map((task) => task.id);
     await client.query("delete from task_dependencies where task_id = any($1::text[])", [taskIds]);
@@ -419,7 +412,7 @@ async function seedPlanningDatabase(status) {
       }
     }
     await client.query("commit");
-    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${(source.epics || []).length} epics, ${source.packages.length} initiatives, ${tasks.length} delivery items.`);
+    console.log(`Seeded local planning data: ${source.profiles.length} profiles, ${(source.epics || []).length} epics, ${source.initiatives.length} initiatives, ${tasks.length} delivery items.`);
   } catch (error) {
     await client.query("rollback");
     throw error;

@@ -121,9 +121,9 @@ async function verifySeedConvergence(status, source) {
     const expected = {
       profiles: source.profiles.length,
       tools: source.fmdTools.length,
-      tasks: source.epics.length + source.packages.length + source.tasks.length,
+      tasks: source.epics.length + source.initiatives.length + source.tasks.length,
       epics: source.epics.length,
-      initiatives: source.packages.length,
+      initiatives: source.initiatives.length,
       deliverables: source.tasks.filter((task) => (task.taskType || "deliverable") === "deliverable").length,
       sub_issues: source.tasks.filter((task) => task.taskType === "sub_issue").length,
       sprints: source.sprints.length,
@@ -733,7 +733,7 @@ async function main() {
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
-    await verifyPlanningReviewRoutes(status, token, source.packages[0].id);
+    await verifyPlanningReviewRoutes(status, token, source.initiatives[0].id);
     await verifyPlanningApprovalRoutes(status, token);
     await verifyPlanningReparentRoutes(status, token);
 
@@ -748,7 +748,7 @@ async function main() {
       assertStatus(response, 200, `${role} planning data`);
       const body = await response.json();
       if (body.currentProfile?.platformRole !== role) throw new Error(`${role} profile override was not applied.`);
-      const expectedPlanningItems = source.epics.length + source.packages.length + source.tasks.length;
+      const expectedPlanningItems = source.epics.length + source.initiatives.length + source.tasks.length;
       if (body.model?.items?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
     }
 

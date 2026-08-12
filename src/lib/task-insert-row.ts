@@ -58,10 +58,6 @@ export function buildTaskInsertRow(input: BuildTaskInsertRowInput) {
     id: input.id,
     creation_request_id: input.creationRequestId || null,
     project_id: input.projectId || "findmydoc-founder-execution",
-    // These retained columns are comparison/recovery data only. The task
-    // hierarchy is always written through parent_task_id.
-    package_id: null,
-    milestone_id: null,
     title: input.title,
     description: input.description ?? null,
     problem_statement: input.problemStatement ?? null,

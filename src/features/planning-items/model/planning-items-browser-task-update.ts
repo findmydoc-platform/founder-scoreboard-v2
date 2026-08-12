@@ -52,7 +52,7 @@ import {
 } from "@/features/backlog/model/backlog-planning-state";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
 import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
@@ -81,8 +81,6 @@ type TaskUpdateTransactionResult = {
     decision_note?: string | null;
     sprint_id?: string | null;
     score_relevant?: boolean | null;
-    package_id?: string | null;
-    milestone_id?: string | null;
     parent_task_id?: string | null;
     github_issue_sync_status?: Task["githubIssueSyncStatus"] | null;
     github_issue_sync_error?: string | null;
@@ -112,6 +110,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const rawPayload = await request.json() as unknown;
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
     return apiError("Aufgabenänderung ist ungültig.", 400);
+  }
+  if (Object.hasOwn(rawPayload, "packageId") || Object.hasOwn(rawPayload, "milestoneId")) {
+    return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
   }
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
@@ -191,7 +192,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
+    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -446,12 +447,12 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     let hasInitiative = false;
     if (nextPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
-        .from(ACTIVE_PACKAGES_TABLE)
-        .select("id")
+        .from(ACTIVE_TASKS_TABLE)
+        .select("id,task_type")
         .eq("id", nextPackageId)
         .maybeSingle();
       if (initiativeError) return apiError(initiativeError.message, 500);
-      hasInitiative = Boolean(initiative);
+      hasInitiative = initiative?.task_type === "initiative";
     }
 
     let targetSprint: { id: string; scoreLocked: boolean } | null = null;
@@ -483,7 +484,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       status: nextStatus,
       assignee: nextAssignee,
       owner: nextOwner,
-      packageId: nextPackageId,
+      parentTaskId: nextPackageId,
       hasInitiative,
       sprintId: currentTask.sprint_id,
     }, targetSprint, { sourceSprintLocked });

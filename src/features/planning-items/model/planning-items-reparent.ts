@@ -72,15 +72,6 @@ export function parsePlanningTaskReparentPayload(payload: unknown):
   return { ok: true, value: { expectedUpdatedAt: row.expectedUpdatedAt, parentId: parent.trim() } };
 }
 
-export function parsePlanningInitiativeReparentPayload(payload: unknown):
-  | Readonly<{ ok: true; value: { parentId: string } }>
-  | Readonly<{ ok: false; error: string; status: number }> {
-  const row = record(payload);
-  if (!row || typeof row.milestoneId !== "string") return { ok: false, error: "Initiative-Änderung ist ungültig.", status: 400 };
-  if (Object.keys(row).some((key) => key !== "milestoneId")) return { ok: false, error: "Ändere das Epic separat von weiteren Initiative-Feldern.", status: 409 };
-  return { ok: true, value: { parentId: row.milestoneId.trim() } };
-}
-
 export function changePlanningParentCommand(itemId: string, parentId: string | null, expectedRevision?: string): ActOnItem {
   return { kind: "actOnItem", action: { kind: "changeParent", itemId, parentId, ...(expectedRevision ? { expectedRevision } : {}) } };
 }
@@ -157,8 +148,7 @@ function decide(actionInput: ReparentAction, state: PlanningReparentState) {
   const projected: Task = {
     ...item.task,
     parentTaskId: parentId,
-    ...(item.kind === "initiative" ? { milestoneId: parentId } : {}),
-    ...(item.kind === "deliverable" ? { packageId: parentId, parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
+    ...(item.kind === "deliverable" ? { parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
     ...(item.kind === "sub_issue" ? { parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
   };
   return {
