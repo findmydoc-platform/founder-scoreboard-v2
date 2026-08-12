@@ -1,11 +1,11 @@
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
-import { emptyPlanningData } from "@/lib/planning-data";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
-export function planningWorkspaceModelToPlanningData(model: PlanningWorkspaceModel): PlanningData {
+export function planningWorkspaceModelToPlanningShellState(model: PlanningWorkspaceModel): PlanningShellState {
   return {
-    ...emptyPlanningData,
+    ...emptyPlanningShellState,
     project: model.project,
     profiles: [...model.people],
     packages: model.items.filter((item) => item.taskType === "initiative").map(mapLegacyPackageFromInitiative),

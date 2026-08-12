@@ -1,11 +1,11 @@
 import { sprintReviewDueAt } from "@/lib/sprint-review-window";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
 export function applyReviewWindowHours(
-  data: PlanningData,
+  data: PlanningShellState,
   reviewObjectionWindowHours: number,
   savedDueDates: Array<{ id: string; reviewDueAt: string }> = [],
-): PlanningData {
+): PlanningShellState {
   const savedDueDateBySprintId = new Map(savedDueDates.map((sprint) => [sprint.id, sprint.reviewDueAt]));
   return {
     ...data,
@@ -20,10 +20,10 @@ export function applyReviewWindowHours(
 }
 
 export function applyGitHubProjectSettings(
-  data: PlanningData,
+  data: PlanningShellState,
   githubProjectOwner: string,
   githubProjectNumber: number,
-): PlanningData {
+): PlanningShellState {
   return {
     ...data,
     project: { ...data.project, githubProjectOwner, githubProjectNumber },

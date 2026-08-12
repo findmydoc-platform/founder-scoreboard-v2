@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "@/features/planning-items/model/planning-workspace-model";
-import { mapTaskRelation } from "@/lib/planning-data-mappers";
+import { mapTaskRelation } from "@/lib/planning-row-mappers";
 import type {
   DbPlanningItemRaciAssignment,
   DbPlanningItemStrategy,
@@ -12,8 +12,8 @@ import type {
   DbTask,
   DbTaskLink,
   DbTaskRelation,
-} from "@/lib/planning-data-row-types";
-import { taskRowSelect } from "@/lib/planning-data-row-types";
+} from "@/lib/planning-row-types";
+import { taskRowSelect } from "@/lib/planning-row-types";
 import { mapProfile, mapProfileUiPreference } from "@/lib/planning-profile-mappers";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { mapSprint } from "@/lib/planning-sprint-mappers";

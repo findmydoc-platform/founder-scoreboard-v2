@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 
 type ProfileUiPreferenceSyncOptions = {
   currentProfileId: string;
-  data: PlanningData;
+  data: PlanningShellState;
   hasPlanningBoardUrlState: boolean;
   hasPlanningFilterUrlState: boolean;
   setExpandedPackageIds: (packageIds: string[]) => void;

@@ -111,7 +111,7 @@ export function TaskTableView({
   const riskOptions = [{ value: "Alle", label: "Alle Risiken" }, { value: "critical", label: "Kritisch" }, { value: "blocked", label: "Blockiert" }, { value: "evidence", label: "Evidence fehlt" }, { value: "github", label: "GitHub fehlt" }];
 
   return (
-    <DataTableFrame title="Aufgaben" description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`} caption="Gefilterte Planungsaufgaben" results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]} filtering={{ mode: "external", labelledBy: "planning-data-filters" }} minWidth={1040}>
+    <DataTableFrame title="Aufgaben" description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "deadline" ? "Zieltermin" : "Status"}`} caption="Gefilterte Planungsaufgaben" results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]} filtering={{ mode: "external", labelledBy: "planning-filters" }} minWidth={1040}>
         <DataTableHead>
           <tr>
             <DataColumnHeader label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />

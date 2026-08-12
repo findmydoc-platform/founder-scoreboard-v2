@@ -8,7 +8,7 @@ import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { formatDate } from "@/lib/display";
 import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
 import { isOperationalLeadRole } from "@/lib/platform";
-import type { NotificationDelivery, NotificationEvent, PlanningData, Profile } from "@/lib/types";
+import type { NotificationDelivery, NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
 import { classNames, UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
 
@@ -75,7 +75,7 @@ export function NotificationsOverview({
 }: {
   canManageOutbox: boolean;
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   pending: boolean;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;

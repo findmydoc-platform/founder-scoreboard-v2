@@ -1,5 +1,5 @@
 import type { Meeting, MeetingAttendance } from "./types";
-import type { DbMeeting, DbMeetingAttendance } from "./planning-data-row-types";
+import type { DbMeeting, DbMeetingAttendance } from "./planning-row-types";
 
 export function mapMeeting(row: DbMeeting): Meeting {
   return {

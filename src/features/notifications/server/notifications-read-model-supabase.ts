@@ -3,8 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotificationsReadModel } from "@/features/notifications/model/notifications-read-model";
 import { loadPlanningItemsForReadModel } from "@/features/planning-items/server/planning-workspace-read-source";
-import { mapNotificationDelivery, mapNotificationEvent } from "@/lib/planning-data-mappers";
-import type { DbNotificationDelivery, DbNotificationEvent } from "@/lib/planning-data-row-types";
+import { mapNotificationDelivery, mapNotificationEvent } from "@/lib/planning-row-mappers";
+import type { DbNotificationDelivery, DbNotificationEvent } from "@/lib/planning-row-types";
 import { isOperationalLeadRole } from "@/lib/platform";
 
 export function createSupabaseNotificationsReadModel(supabase: SupabaseClient): NotificationsReadModel {

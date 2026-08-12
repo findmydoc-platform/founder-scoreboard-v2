@@ -1,6 +1,6 @@
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
-import type { PlanningData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 function modelTasks(model: TaskDetailModel) {
   return [...new Map([
@@ -20,7 +20,7 @@ function replaceTasks(current: readonly Task[], replacements: readonly Task[]) {
   ];
 }
 
-export function taskDetailModelToPlanningData(model: TaskDetailModel): PlanningData {
+export function taskDetailModelToPlanningShellState(model: TaskDetailModel): PlanningShellState {
   const tasks = modelTasks(model);
   return {
     project: model.project,
@@ -54,7 +54,7 @@ export function taskDetailModelToPlanningData(model: TaskDetailModel): PlanningD
   };
 }
 
-export function applyTaskDetailModel(current: PlanningData, model: TaskDetailModel): PlanningData {
+export function applyTaskDetailModel(current: PlanningShellState, model: TaskDetailModel): PlanningShellState {
   const replacements = modelTasks(model);
   const replacementIds = new Set(replacements.map((task) => task.id));
   const selectedId = model.item.id;

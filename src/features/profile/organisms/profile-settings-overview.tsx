@@ -24,12 +24,12 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import { taskStatuses } from "@/lib/status";
 import { canConfigureFounderOpsGitHubProject } from "@/lib/platform";
-import type { PlanningData, PlanningFilterPreferences, Profile } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, Profile } from "@/lib/types";
 import { UiButton, UiEmptyState, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 
 type ProfileSettingsOverviewProps = {
   apiClient: BrowserApiClient;
-  data: PlanningData;
+  data: PlanningShellState;
   currentProfile: Profile | null;
   pending: boolean;
   source: "supabase";
@@ -70,7 +70,7 @@ function ProfileSettingsForm({
   onSaveFounderOpsGitHubProject,
   onSaveFounderOpsReviewWindow,
   profileUiPreference,
-}: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null }) {
+}: Omit<ProfileSettingsOverviewProps, "currentProfile"> & { currentProfile: Profile; profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null }) {
   const initialDraft = buildInitialDraft({ currentProfile, data, profileUiPreference });
   const [draft, setDraft] = useState<ProfileSettingsDraft>(() => initialDraft);
   const [savedSnapshot, setSavedSnapshot] = useState(() => serializeDraft(initialDraft));

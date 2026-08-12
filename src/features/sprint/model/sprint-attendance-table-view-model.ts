@@ -1,4 +1,4 @@
-import type { Meeting, MeetingAttendance, MeetingAttendanceStatus, PlanningData, Profile } from "@/lib/types";
+import type { Meeting, MeetingAttendance, MeetingAttendanceStatus, PlanningShellState, Profile } from "@/lib/types";
 
 export type SprintAttendanceSignalFilter = "all" | "missing_update" | "open_reason";
 export type SprintAttendanceSort = "founder" | "meeting" | "status" | "points";
@@ -52,7 +52,7 @@ export function buildSprintAttendanceTableViewModel({
   meetings,
   filters,
 }: {
-  data: Pick<PlanningData, "profiles" | "meetingAttendance">;
+  data: Pick<PlanningShellState, "profiles" | "meetingAttendance">;
   meetings: Meeting[];
   filters: SprintAttendanceTableFilters;
 }) {

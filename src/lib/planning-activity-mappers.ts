@@ -1,5 +1,5 @@
 import type { AuditEntry, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation } from "./types";
-import type { DbAuditEntry, DbTaskAuditActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-data-row-types";
+import type { DbAuditEntry, DbTaskAuditActivity, DbTaskBlocker, DbTaskComment, DbTaskExternalComment, DbTaskFocusItem, DbTaskRelation } from "./planning-row-types";
 
 export function mapAuditEntry(row: DbAuditEntry): AuditEntry {
   return {

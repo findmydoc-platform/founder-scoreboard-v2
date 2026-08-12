@@ -30,23 +30,22 @@ test("Sprint reducer keeps updates inside the focused slice", () => {
   assert.equal(locked.items[0].scoreFinal, true);
 });
 
-test("Sprint uses one focused reader and no global PlanningData scope", async () => {
-  const [page, scopes, reader, overview, adapter, client] = await Promise.all([
+test("Sprint uses one focused reader and no global PlanningShellState scope", async () => {
+  const [page, reader, overview, adapter, client] = await Promise.all([
     readFile("src/app/(workspaces)/workspace-page.tsx", "utf8"),
-    readFile("src/lib/planning-data-scopes.ts", "utf8"),
     readFile("src/features/sprint/model/sprint-read-model.ts", "utf8"),
     readFile("src/features/sprint/organisms/sprint-score-overview.tsx", "utf8"),
-    readFile("src/features/sprint/model/sprint-planning-data-adapter.ts", "utf8"),
+    readFile("src/features/sprint/model/sprint-planning-shell-projection.ts", "utf8"),
     readFile("src/features/planning/model/planning-api-client.ts", "utf8"),
   ]);
   assert.match(page, /createSupabaseSprintReadModel/);
   assert.match(page, /initialSprintModel/);
-  assert.doesNotMatch(scopes, /\n\s*sprint: \{/);
   assert.match(reader, /interface SprintReadModel[\s\S]*load\(/);
-  assert.doesNotMatch(reader, /PlanningData|server\//);
+  assert.doesNotMatch(reader, /PlanningShellState|server\//);
   assert.match(overview, /useReducer\(sprintWorkspaceReducer, initialModel\)/);
-  assert.match(adapter, /sprintWorkspaceModelToPlanningData/);
+  assert.match(adapter, /sprintWorkspaceModelToPlanningShellState/);
   assert.match(client, /requestSprintWorkspaceData/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
 });
 
 test("Sprint reader has a deterministic bounded query contract", async () => {

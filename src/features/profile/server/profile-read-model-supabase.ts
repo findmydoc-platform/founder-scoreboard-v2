@@ -3,8 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadPlanningItemsForReadModel, mapPlanningProject, planningProjectId } from "@/features/planning-items/server/planning-workspace-read-source";
 import type { ProfileReadModel } from "@/features/profile/model/profile-read-model";
-import { mapNotificationPreference, mapProfileUiPreference } from "@/lib/planning-data-mappers";
-import type { DbNotificationPreference, DbProfileUiPreference } from "@/lib/planning-data-row-types";
+import { mapNotificationPreference, mapProfileUiPreference } from "@/lib/planning-row-mappers";
+import type { DbNotificationPreference, DbProfileUiPreference } from "@/lib/planning-row-types";
 
 export function createSupabaseProfileReadModel(supabase: SupabaseClient): ProfileReadModel {
   return {

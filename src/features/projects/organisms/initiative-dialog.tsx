@@ -6,7 +6,7 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import { currentApprovalDecisionReason } from "@/features/planning/model/approval-domain";
-import type { Package, PlanningData } from "@/lib/types";
+import type { Package, PlanningShellState } from "@/lib/types";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
@@ -66,7 +66,7 @@ export function InitiativeDialog({
   canApproveNow = false,
 }: {
   defaults: Partial<InitiativeDraft>;
-  data: PlanningData;
+  data: PlanningShellState;
   pending: boolean;
   onClose: () => void;
   onSave: (draft: InitiativeDraft) => void | Promise<void>;

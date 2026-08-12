@@ -206,7 +206,7 @@ function useCreateFixture() {
   createTransitions.length = 0;
   const command = useTaskCreateCommand({
     apiClient: {},
-    applyPlanningDataUpdate: (update) => {
+    applyPlanningShellStateUpdate: (update) => {
       data = typeof update === "function" ? update(data) : update;
     },
     currentProfile: null,

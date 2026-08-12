@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { buildSprintAttendanceTableViewModel, DEFAULT_SPRINT_ATTENDANCE_FILTERS, type SprintAttendanceSignalFilter, type SprintAttendanceSort, type SprintAttendanceTableFilters } from "@/features/sprint/model/sprint-attendance-table-view-model";
 import { roleLabel } from "@/lib/platform";
-import type { Meeting, MeetingAttendance, MeetingAttendanceStatus, PlanningData, Profile } from "@/lib/types";
+import type { Meeting, MeetingAttendance, MeetingAttendanceStatus, PlanningShellState, Profile } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
 import { DataCell, DataColumnHeader, DataEmptyRow, DataHeaderCell, DataRow, DataTableFrame, DataTableHead, type SortDirection } from "@/shared/molecules/data-surface";
@@ -46,7 +46,7 @@ export function SprintMeetingAttendanceSection({
   canManageSprint,
   onUpdateMeetingAttendance,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   meetings: Meeting[];
   pending: boolean;
   currentProfile: Profile | null;

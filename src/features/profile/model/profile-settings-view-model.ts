@@ -1,6 +1,6 @@
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { appWorkspaceFromValue, type AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { PlanningData, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, Profile, ViewMode } from "@/lib/types";
 
 export type ProfileSettingsSectionId = "profile" | "notifications" | "board" | "process" | "api";
 
@@ -26,7 +26,7 @@ export const profileColorOptions = [
   { value: "#64748b", label: "Schiefer" },
 ];
 
-function eventEnabled(data: PlanningData, profileId: string, eventType: string) {
+function eventEnabled(data: PlanningShellState, profileId: string, eventType: string) {
   const preference = data.notificationPreferences.find((item) => item.profileId === profileId && item.channel === "google_chat" && item.eventType === eventType);
   return preference?.enabled !== false;
 }
@@ -60,8 +60,8 @@ export function buildInitialDraft({
   profileUiPreference,
 }: {
   currentProfile: Profile;
-  data: PlanningData;
-  profileUiPreference: NonNullable<PlanningData["profileUiPreferences"][number]> | null;
+  data: PlanningShellState;
+  profileUiPreference: NonNullable<PlanningShellState["profileUiPreferences"][number]> | null;
 }): ProfileSettingsDraft {
   return {
     focus: currentProfile.focus || "",

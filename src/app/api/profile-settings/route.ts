@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auditRequestMetadata, cleanOptionalText } from "@/lib/api-input";
 import { requireTeamMember } from "@/lib/authz";
-import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@/lib/planning-data-mappers";
-import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-data-row-types";
+import { mapNotificationPreference, mapProfile, mapProfileUiPreference } from "@/lib/planning-row-mappers";
+import type { DbNotificationPreference, DbProfile, DbProfileUiPreference } from "@/lib/planning-row-types";
 import { googleChatDigestEventTypes } from "@/lib/notification-policy";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { rootWorkspaceFromPreference } from "@/features/planning/model/workspace-preferences";

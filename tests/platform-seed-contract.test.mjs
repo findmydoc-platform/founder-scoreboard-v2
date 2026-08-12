@@ -47,14 +47,14 @@ test("local seed covers planning roles and stable core data", async () => {
   assert.equal(profileById.get("local-viewer")?.platformRole, "viewer");
 });
 
-test("planning data fails closed without Supabase and has no browser fallback", async () => {
-  const planningData = await readFile("src/lib/planning-data.ts", "utf8");
+test("workspace read models fail closed without Supabase and have no browser fallback", async () => {
+  const workspacePage = await readFile("src/app/(workspaces)/workspace-page.tsx", "utf8");
   const bootstrap = await readFile("src/features/planning/hooks/use-planning-bootstrap-state.ts", "utf8");
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
 
-  assert.match(planningData, /if \(!supabase\) return planningDataFailureResult\(\)/);
-  assert.match(planningData, /source: "supabase"[\s\S]*availability: "unavailable"/);
-  assert.doesNotMatch(planningData, /source: "seed"|allowsLocalPlanningFallback/);
+  assert.match(workspacePage, /if \(!supabase\) return \{ status: "unavailable" as const \}/);
+  assert.doesNotMatch(workspacePage, /source: "seed"|allowsLocalPlanningFallback/);
+  await assert.rejects(() => readFile("src/lib/planning-data.ts", "utf8"), /ENOENT/);
   assert.doesNotMatch(bootstrap, /useLocalPlanningState|localStateLoaded/);
   assert.doesNotMatch(header, /Beispieldaten laden|demoSeedImport/);
   assert.equal(existsSync("src/features/planning/hooks/use-local-planning-state.ts"), false);

@@ -532,7 +532,7 @@ export type AuditEntry = {
   afterData?: Record<string, unknown> | null;
 };
 
-export type PlanningData = {
+export type PlanningShellState = {
   project: Project;
   profiles: Profile[];
   packages: Package[];
@@ -561,14 +561,6 @@ export type PlanningData = {
   meetings: Meeting[];
   meetingAttendance: MeetingAttendance[];
   audit: AuditEntry[];
-};
-
-export type PlanningDataResponse = {
-  data: PlanningData;
-  headerData: PlanningHeaderData;
-  source: "supabase";
-  availability: "ready" | "unavailable";
-  currentProfile: AuthenticatedProfile | null;
 };
 
 export type ViewMode = "board" | "structure" | "table" | "gantt";

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, Profile, ProfileFeatureTourAcknowledgement, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, ProfileFeatureTourAcknowledgement, ViewMode } from "@/lib/types";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import * as planningApi from "@/features/planning/model/planning-api-client";
 import {
@@ -18,10 +18,10 @@ import { selectNextFeatureTour } from "@/features/product-tours/model/feature-to
 type FeatureTourProviderProps = {
   apiClient: BrowserApiClient;
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   openTaskPanel: (taskId: string) => void;
   selectedTaskId: string | null;
-  setData: Dispatch<SetStateAction<PlanningData>>;
+  setData: Dispatch<SetStateAction<PlanningShellState>>;
   setView: (view: ViewMode) => void;
   setWorkspace: (workspace: AppWorkspace) => void;
   source: "supabase";
@@ -92,7 +92,7 @@ function waitForElement(selector: string, timeoutMs = 8000) {
 }
 
 function upsertAcknowledgement(
-  data: PlanningData,
+  data: PlanningShellState,
   acknowledgement: ProfileFeatureTourAcknowledgement,
 ) {
   return {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ScoreObjectionReviewControls } from "@/features/sprint/molecules/score-objection-review-controls";
-import type { FounderSprintScore, PlanningData, Profile, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
+import type { FounderSprintScore, PlanningShellState, Profile, ScoreObjectionResolutionInput, Sprint } from "@/lib/types";
 import { sprintObjectionWindowState } from "@/lib/sprint-review-window";
 import { UiBadge, UiButton, UiEmptyState, UiPanel, UiTextInput } from "@/shared/atoms/ui-primitives";
 
@@ -18,7 +18,7 @@ export function SprintScoreObjections({
   onCreateScoreObjection,
   onReviewScoreObjection,
 }: {
-  data: Pick<PlanningData, "profiles" | "scoreObjections">;
+  data: Pick<PlanningShellState, "profiles" | "scoreObjections">;
   sprint: Sprint;
   currentProfile: Profile | null;
   pending: boolean;

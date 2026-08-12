@@ -1,7 +1,7 @@
-import type { PlanningData, TrashRootType } from "@/lib/types";
+import type { PlanningShellState, TrashRootType } from "@/lib/types";
 
 export type PlanningTrashStateSnapshot = Pick<
-  PlanningData,
+  PlanningShellState,
   | "packages"
   | "tasks"
   | "taskActivity"
@@ -12,7 +12,7 @@ export type PlanningTrashStateSnapshot = Pick<
   | "taskRelations"
 >;
 
-function collectTaskTreeIds(tasks: PlanningData["tasks"], rootTaskId: string) {
+function collectTaskTreeIds(tasks: PlanningShellState["tasks"], rootTaskId: string) {
   const taskIds = new Set([rootTaskId]);
   let foundChild = true;
 
@@ -28,7 +28,7 @@ function collectTaskTreeIds(tasks: PlanningData["tasks"], rootTaskId: string) {
   return taskIds;
 }
 
-function taskIdsForRoot(data: PlanningData, rootType: TrashRootType, rootId: string) {
+function taskIdsForRoot(data: PlanningShellState, rootType: TrashRootType, rootId: string) {
   if (rootType === "initiative") {
     return new Set(data.tasks.filter((task) => task.packageId === rootId).map((task) => task.id));
   }
@@ -40,7 +40,7 @@ function restoreMissingById<T extends { id: string | number }>(current: T[], rem
   return [...removed.filter((item) => !currentIds.has(item.id)), ...current];
 }
 
-export function removePlanningRootFromData(data: PlanningData, rootType: TrashRootType, rootId: string) {
+export function removePlanningRootFromData(data: PlanningShellState, rootType: TrashRootType, rootId: string) {
   const taskIds = taskIdsForRoot(data, rootType, rootId);
   const snapshot: PlanningTrashStateSnapshot = {
     packages: rootType === "initiative" ? data.packages.filter((pack) => pack.id === rootId) : [],
@@ -74,7 +74,7 @@ export function removePlanningRootFromData(data: PlanningData, rootType: TrashRo
   };
 }
 
-export function restorePlanningRootToData(data: PlanningData, snapshot: PlanningTrashStateSnapshot): PlanningData {
+export function restorePlanningRootToData(data: PlanningShellState, snapshot: PlanningTrashStateSnapshot): PlanningShellState {
   return {
     ...data,
     packages: restoreMissingById(data.packages, snapshot.packages),

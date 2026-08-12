@@ -3,7 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import { setProtectedPlanningDataCache } from "@/features/planning/hooks/use-planning-auth";
+import { setProtectedPlanningShellStateCache } from "@/features/planning/hooks/use-planning-auth";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import {
   idlePlanningHeaderSlots,
@@ -15,7 +15,7 @@ import {
   type PlanningHeaderSlotKey,
 } from "@/lib/planning-header-data";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
 
 type UsePlanningHeaderDataOptions = {
   apiClient: BrowserApiClient;
@@ -23,7 +23,7 @@ type UsePlanningHeaderDataOptions = {
   authUser: User | null;
   baseHeaderData: PlanningHeaderData;
   currentProfileId: string;
-  data: PlanningData;
+  data: PlanningShellState;
   protectedDataLoaded: boolean;
   serverCurrentProfile: AuthenticatedProfile | null;
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
@@ -93,7 +93,7 @@ export function usePlanningHeaderData({
         const nextHeaderData = normalizePlanningHeaderData(body.headerData);
         setHeaderData((current) => {
           const mergedHeaderData = mergePlanningHeaderData(current, nextHeaderData);
-          setProtectedPlanningDataCache({
+          setProtectedPlanningShellStateCache({
             authUserId,
             currentProfile: serverCurrentProfile,
             data,

@@ -6,7 +6,7 @@ import type { InitiativeDraft } from "@/features/projects/organisms/initiative-d
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
-import type { PlanningData, Profile, Sprint, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, Sprint, ViewMode } from "@/lib/types";
 
 export type HeaderAction = {
   id: string;
@@ -20,7 +20,7 @@ export type HeaderAction = {
 type UsePlanningHeaderActionsOptions = {
   activeSprint?: Sprint;
   currentProfile: Profile | null;
-  data: PlanningData;
+  data: PlanningShellState;
   planningLevel?: PlanningLevel;
   setInitiativeDialogDefaults: (defaults: Partial<InitiativeDraft> | null) => void;
   setMilestoneDialogDefaults: (defaults: Partial<MilestoneDraft> | null) => void;

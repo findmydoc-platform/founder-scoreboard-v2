@@ -15,7 +15,7 @@ import {
   mapTaskExternalComment,
   mapTaskRelation,
   mapTaskReview,
-} from "@/lib/planning-data-mappers";
+} from "@/lib/planning-row-mappers";
 import {
   taskRowSelect,
   type DbPlanningItemRaciAssignment,
@@ -30,7 +30,7 @@ import {
   type DbTaskLink,
   type DbTaskRelation,
   type DbTaskReview,
-} from "@/lib/planning-data-row-types";
+} from "@/lib/planning-row-types";
 import { mapProfile } from "@/lib/planning-profile-mappers";
 import { mapSprint } from "@/lib/planning-sprint-mappers";
 import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";

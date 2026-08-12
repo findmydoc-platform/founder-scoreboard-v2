@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type DragEvent } from "react";
-import type { PlanningData, Task, TaskStatus } from "@/lib/types";
+import type { PlanningShellState, Task, TaskStatus } from "@/lib/types";
 import {
   createTaskDragPreview,
   founderCompletedTaskGuardMessage,
@@ -12,7 +12,7 @@ import { normalizeStatus } from "@/lib/status";
 
 type UsePlanningBoardStateOptions = {
   canChangeTaskStatus: (task: Task) => boolean;
-  data: PlanningData;
+  data: PlanningShellState;
   setStatusGuardNotice: (message: string) => void;
   setStatusGuardTaskId: (taskId: string | null) => void;
   updateTask: (task: Task, patch: Partial<Task>) => void;

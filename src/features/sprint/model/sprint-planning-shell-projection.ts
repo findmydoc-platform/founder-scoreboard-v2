@@ -1,11 +1,11 @@
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
-import { emptyPlanningData } from "@/lib/planning-data";
+import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
-import type { PlanningData } from "@/lib/types";
+import type { PlanningShellState } from "@/lib/types";
 
-export function sprintWorkspaceModelToPlanningData(model: SprintWorkspaceModel): PlanningData {
+export function sprintWorkspaceModelToPlanningShellState(model: SprintWorkspaceModel): PlanningShellState {
   return {
-    ...emptyPlanningData,
+    ...emptyPlanningShellState,
     project: model.project,
     profiles: [...model.people],
     tasks: [...model.items],

@@ -2,7 +2,7 @@ import { founderScore, taskBelongsToProfile } from "@/lib/platform";
 import { computeFounderSprintScore } from "@/lib/founderops-scoring";
 import { findCurrentSprint } from "@/lib/planning-schedule";
 import { normalizeStatus } from "@/lib/status";
-import type { CommitmentLevel, PlanningData, Profile } from "@/lib/types";
+import type { CommitmentLevel, PlanningShellState, Profile } from "@/lib/types";
 
 export function reviewChecklistScore(checklist: { acceptanceCriteriaMet?: boolean; dodMet?: boolean; evidenceProvided?: boolean; communicationClear?: boolean; blockerHandled?: boolean }) {
   const checked = [
@@ -25,7 +25,7 @@ export function buildSprintScoreViewModel({
   data,
   selectedSprintId,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   selectedSprintId: string;
 }) {
   const currentSprint = findCurrentSprint(data.sprints);

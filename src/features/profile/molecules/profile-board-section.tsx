@@ -2,7 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
 import type { ProfileSettingsDraft } from "@/features/profile/model/profile-settings-view-model";
 import { SettingsPane, SettingsRow } from "@/features/profile/molecules/profile-settings-layout";
-import type { PlanningData, PlanningFilterPreferences, ViewMode } from "@/lib/types";
+import type { PlanningShellState, PlanningFilterPreferences, ViewMode } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiButton, UiEmptyState, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { FilterToggleGroup } from "@/shared/molecules/filter-toolbar";
@@ -25,7 +25,7 @@ export function BoardSettingsSection({
   onPlanningFiltersChange,
 }: {
   advancedBoardOpen: boolean;
-  data: PlanningData;
+  data: PlanningShellState;
   draft: ProfileSettingsDraft;
   assigneeOptions: Array<{ value: string; label: string }>;
   packageOptions: Array<{ value: string; label: string }>;

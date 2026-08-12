@@ -172,7 +172,7 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
           trashRevision: row.trash_revision,
         }),
       },
-      "@/lib/planning-data-row-types": { taskRowSelect: "task-columns" },
+      "@/lib/planning-row-types": { taskRowSelect: "task-columns" },
     },
   );
   const initiativeRow = {

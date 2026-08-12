@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireTeamMember } from "@/lib/authz";
-import { mapProfileFeatureTourAcknowledgement } from "@/lib/planning-data-mappers";
-import type { DbProfileFeatureTourAcknowledgement } from "@/lib/planning-data-row-types";
+import { mapProfileFeatureTourAcknowledgement } from "@/lib/planning-row-mappers";
+import type { DbProfileFeatureTourAcknowledgement } from "@/lib/planning-row-types";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 
 type Payload = {

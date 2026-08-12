@@ -19,7 +19,7 @@ import { useTaskMutationCommands } from "@/features/tasks/hooks/use-task-mutatio
 import { useFmdToolCommands } from "@/features/tools/hooks/use-fmd-tool-commands";
 import { useFounderOpsSettingsCommands } from "@/features/settings/hooks/use-founderops-settings-commands";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import type { PlanningData, PlanningHeaderData, Task } from "@/lib/types";
+import type { PlanningShellState, PlanningHeaderData, Task } from "@/lib/types";
 
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
@@ -27,11 +27,11 @@ type UsePlanningCommandRegistryOptions = {
   closeTaskPanel: () => void;
   commandContext: PlanningCommandContext;
   currentProfileId: string;
-  data: PlanningData;
+  data: PlanningShellState;
   hasPlanningBoardUrlState: boolean;
   hasPlanningFilterUrlState: boolean;
   openTaskPanel: (taskId: string) => void;
-  refreshPlanningData: () => Promise<void>;
+  refreshCurrentWorkspaceModel: () => Promise<void>;
   selectedTask: Task | null;
   setFilters: PlanningViewState["setFilters"];
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
@@ -56,7 +56,7 @@ export function usePlanningCommandRegistry({
   hasPlanningBoardUrlState,
   hasPlanningFilterUrlState,
   openTaskPanel,
-  refreshPlanningData,
+  refreshCurrentWorkspaceModel,
   selectedTask,
   setFilters,
   setHeaderData,
@@ -75,7 +75,7 @@ export function usePlanningCommandRegistry({
   const taskMutationCommands = useTaskMutationCommands({
     ...commandContext,
     closeTaskPanel,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
@@ -118,7 +118,7 @@ export function usePlanningCommandRegistry({
   });
   const sprintCommands = useSprintCommands({
     ...commandContext,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     sprintPlanningOptions,
   });
   const profileSettingsCommands = useProfileSettingsCommands(commandContext);
@@ -128,7 +128,7 @@ export function usePlanningCommandRegistry({
   const notificationCommands = useNotificationCommands({
     ...commandContext,
     openTaskPanel,
-    refreshPlanningData,
+    refreshCurrentWorkspaceModel,
     setHeaderData,
     setShowNotifications,
     setWorkspace,

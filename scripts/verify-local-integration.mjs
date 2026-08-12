@@ -709,7 +709,7 @@ async function main() {
 
     const unauthenticated = await apiRequest("/api/planning-board-data", "", "");
     assertStatus(unauthenticated, 401, "Unauthenticated planning data");
-    const unauthenticatedRevision = await apiRequest("/api/planning-data/revision", "", "");
+    const unauthenticatedRevision = await apiRequest("/api/planning-revision", "", "");
     assertStatus(unauthenticatedRevision, 401, "Unauthenticated planning revision");
 
     const localLogin = await fetch(`${appOrigin}/api/auth/local-login`, { method: "POST" });

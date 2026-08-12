@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getPlanningData } from "@/lib/planning-data";
 import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
 const coreTables = ["profiles", "packages", "tasks"] as const;
@@ -17,11 +16,12 @@ async function coreTablesReachable() {
 
 export async function GET() {
   const startedAt = Date.now();
-  const [{ source }, coreTablesReady] = await Promise.all([getPlanningData(), coreTablesReachable()]);
+  const coreTablesReady = await coreTablesReachable();
+  const source = "supabase" as const;
 
   const checks = {
     supabaseConfigured: hasSupabaseEnv(),
-    usesSupabaseData: source === "supabase",
+    usesSupabaseData: hasSupabaseEnv(),
     coreTablesReachable: coreTablesReady,
   };
 

@@ -5,12 +5,12 @@ import { usePlanningAppController } from "@/features/planning/hooks/use-planning
 import { PlanningAppShell } from "@/features/planning/templates/planning-app-shell";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
-import type { AuthenticatedProfile, PlanningData, PlanningHeaderData } from "@/lib/types";
+import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData } from "@/lib/types";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 
 type Props = {
-  initialData: PlanningData;
+  initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
   initialWorkspace: AppWorkspace;
   source: "supabase";

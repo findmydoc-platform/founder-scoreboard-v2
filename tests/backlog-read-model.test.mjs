@@ -44,7 +44,7 @@ const { createSupabaseBacklogReadModel } = await loadTranspiledModule(
   "src/features/backlog/server/backlog-read-model-supabase.ts",
   {
     "server-only": {},
-    "@/lib/planning-data-row-types": { taskRowSelect: "id" },
+    "@/lib/planning-row-types": { taskRowSelect: "id" },
     "@/lib/planning-profile-mappers": { mapProfile: (row) => ({ id: row.id, name: row.name, weeklyCapacity: row.weekly_capacity }) },
     "@/lib/planning-sprint-mappers": {
       mapSprint: (row) => row,
@@ -119,18 +119,17 @@ test("backlog reducer patches only its own item slice", () => {
   assert.equal(updated.commitments, model.commitments);
 });
 
-test("backlog page and client state no longer depend on global PlanningData reads", async () => {
-  const [workspacePage, overview, commands, viewModel, scopes] = await Promise.all([
+test("backlog page and client state no longer depend on global PlanningShellState reads", async () => {
+  const [workspacePage, overview, commands, viewModel] = await Promise.all([
     readFile("src/app/(workspaces)/workspace-page.tsx", "utf8"),
     readFile("src/features/backlog/organisms/backlog-overview.tsx", "utf8"),
     readFile("src/features/backlog/hooks/use-backlog-commands.ts", "utf8"),
     readFile("src/features/backlog/model/backlog-view-model.ts", "utf8"),
-    readFile("src/lib/planning-data-scopes.ts", "utf8"),
   ]);
   assert.match(workspacePage, /createSupabaseBacklogReadModel\(supabase\)\.load/);
   assert.match(workspacePage, /initialWorkspace === "backlog"[\s\S]*loadBacklogPageData/);
   assert.match(overview, /useReducer\(backlogModelReducer, initialModel\)/);
   assert.match(overview, /requestBacklogModel/);
-  for (const source of [overview, commands, viewModel]) assert.doesNotMatch(source, /PlanningData|refreshPlanningData|setData/);
-  assert.doesNotMatch(scopes, /backlog: \{/);
+  for (const source of [overview, commands, viewModel]) assert.doesNotMatch(source, /PlanningShellState|refreshCurrentWorkspaceModel|setData/);
+  await assert.rejects(() => readFile("src/lib/planning-data-scopes.ts", "utf8"), /ENOENT/);
 });

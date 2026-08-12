@@ -2,13 +2,13 @@
 
 import { useEffect, useState, type TransitionStartFunction } from "react";
 import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
-import { applyTaskDetailModel, taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-data-adapter";
+import { applyTaskDetailModel, taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 type UseTaskDetailDataLoaderOptions = {
   apiClient: BrowserApiClient;
-  applyPlanningDataUpdate: (updater: (current: PlanningData) => PlanningData) => void;
+  applyPlanningShellStateUpdate: (updater: (current: PlanningShellState) => PlanningShellState) => void;
   selectedTask: Task | null;
   source: "supabase";
   startTransition: TransitionStartFunction;
@@ -16,7 +16,7 @@ type UseTaskDetailDataLoaderOptions = {
 
 export function useTaskDetailDataLoader({
   apiClient,
-  applyPlanningDataUpdate,
+  applyPlanningShellStateUpdate,
   selectedTask,
   source,
   startTransition,
@@ -42,7 +42,7 @@ export function useTaskDetailDataLoader({
         if (!active) return;
         if (!response.ok || !body?.taskDetail) throw new Error(body?.error || "Task-Details konnten nicht geladen werden.");
 
-        applyPlanningDataUpdate((current) => applyTaskDetailModel(current, body.taskDetail!));
+        applyPlanningShellStateUpdate((current) => applyTaskDetailModel(current, body.taskDetail!));
         setLoadedTaskIds((current) => {
           if (current.has(selectedTaskId)) return current;
           const next = new Set(current);
@@ -67,7 +67,7 @@ export function useTaskDetailDataLoader({
     return () => {
       active = false;
     };
-  }, [apiClient, applyPlanningDataUpdate, loadedTaskIds, selectedTaskId, source, startTransition]);
+  }, [apiClient, applyPlanningShellStateUpdate, loadedTaskIds, selectedTaskId, source, startTransition]);
 
   const selectedStateMatches = loadState.taskId === selectedTaskId;
   const selectedTaskNeedsLoad = Boolean(

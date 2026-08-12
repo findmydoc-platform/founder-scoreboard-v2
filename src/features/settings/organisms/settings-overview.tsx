@@ -1,7 +1,7 @@
 "use client";
 
 import { SettingsNotificationsSection } from "@/features/settings/organisms/settings-notifications";
-import type { NotificationDelivery, PlanningData } from "@/lib/types";
+import type { NotificationDelivery, PlanningShellState } from "@/lib/types";
 
 type GoogleChatStatusSummary = {
   webhookConfigured: boolean;
@@ -20,7 +20,7 @@ export function SettingsOverview({
   onRetryNotificationDelivery,
   onSendGoogleChatTest,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   pending: boolean;
   notificationDispatchMessage: string;
   googleChatStatus: GoogleChatStatusSummary | null;

@@ -3,7 +3,7 @@ import { notificationDefinition } from "./notification-catalog";
 import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import { isOperationalLeadRole } from "./platform";
 import { normalizeStatus } from "./status";
-import type { FounderEvent, NotificationEvent, PlanningData, PlatformRole, Sprint, Task, TaskBlocker } from "./types";
+import type { FounderEvent, NotificationEvent, PlanningShellState, PlatformRole, Sprint, Task, TaskBlocker } from "./types";
 
 type ResolutionTask = Pick<Task, "id" | "status" | "assignee" | "owner" | "reviewOwnerProfileId" | "reviewStatus" | "scoreFinal" | "taskType" | "approvalStatus" | "endDate" | "deadline">;
 type ResolutionSprint = Pick<Sprint, "id" | "status" | "scoreLocked" | "reviewDueAt">;
@@ -166,7 +166,7 @@ export function notificationResolution(
   return definition.lifecycle === "informational" ? null : undefined;
 }
 
-export function resolveNotificationEvents(data: PlanningData, now = new Date()) {
+export function resolveNotificationEvents(data: PlanningShellState, now = new Date()) {
   const context: NotificationResolutionContext = {
     tasks: new Map(data.tasks.map((task) => [task.id, task])),
     blockers: new Map(data.tasks.map((task) => [task.id, data.taskBlockers.filter((blocker) => blocker.taskId === task.id)])),
@@ -326,7 +326,7 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
   }
 }
 
-export async function persistResolvedNotificationEvents(supabase: SupabaseClient, data: PlanningData) {
+export async function persistResolvedNotificationEvents(supabase: SupabaseClient, data: PlanningShellState) {
   const result = await reconcileNotificationEvents(supabase);
   return result.ok ? resolveNotificationEvents(data).data : data;
 }

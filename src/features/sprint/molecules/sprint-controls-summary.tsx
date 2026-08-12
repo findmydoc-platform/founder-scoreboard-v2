@@ -5,7 +5,7 @@ import { useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiBadge, UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { formatDate } from "@/lib/display";
-import type { PlanningData, Sprint, Task } from "@/lib/types";
+import type { PlanningShellState, Sprint, Task } from "@/lib/types";
 
 export function SprintControlsSummary({
   data,
@@ -26,7 +26,7 @@ export function SprintControlsSummary({
   onUpdateSprint,
   onLockSprint,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   sprint: Sprint;
   currentSprint?: Sprint;
   sprintTasks: Task[];

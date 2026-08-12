@@ -3,7 +3,7 @@ import { auditRequestMetadata } from "@/lib/api-input";
 import { requireOperationalLead } from "@/lib/authz";
 import { assertFounderEventParticipantsExist, buildFounderEventUpdatePatch, founderEventSelect, validateFounderEventRow, type EventPayload } from "@/features/events/model/event-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
-import { mapFounderEvent } from "@/lib/planning-data-mappers";
+import { mapFounderEvent } from "@/lib/planning-row-mappers";
 import { invalidateSharedPlanningHeaderCache } from "@/lib/planning-header-cache";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {

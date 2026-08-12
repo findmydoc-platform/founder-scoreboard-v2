@@ -7,7 +7,7 @@ import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
 import { taskAssigneeLabel } from "@/lib/display";
 import { reviewLabel } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { PlanningData, Sprint, Task, TaskStatus } from "@/lib/types";
+import type { PlanningShellState, Sprint, Task, TaskStatus } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { buildSprintTaskTableRows, DEFAULT_SPRINT_TASK_FILTERS, type SprintTaskReviewFilter, type SprintTaskRiskFilter, type SprintTaskScoreFilter, type SprintTaskSort, type SprintTaskTableFilters } from "@/features/sprint/model/sprint-task-table-view-model";
 import { ColumnFilterPopover } from "@/shared/molecules/column-filter-popover";
@@ -41,7 +41,7 @@ export function SprintTaskTables({
   onAssignSprint,
   onOpenReviewTask,
 }: {
-  data: PlanningData;
+  data: PlanningShellState;
   sprint: Sprint;
   sprintTasks: Task[];
   otherTasks: Task[];

@@ -26,7 +26,7 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   const header = await readFile("src/features/planning/organisms/planning-header.tsx", "utf8");
   const headerActions = await readFile("src/features/planning/molecules/planning-header-data-actions.tsx", "utf8");
   const headerData = await readFile("src/lib/planning-header-data.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/tools/server/tools-read-model-supabase.ts", "utf8");
   const schemaChecks = await readFile("src/lib/planning-schema-checks.json", "utf8");
   const seed = await readFile("src/lib/seed/source.json", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -138,7 +138,7 @@ test("fmd tools workspace keeps internal tools repos notion and drive visible", 
   assert.match(planningApiClient, /createFmdToolRequest/);
   assert.doesNotMatch(header, /setWorkspace\("tools"\)/);
   assert.doesNotMatch(header, /Werkzeugraum/);
-  assert.match(data, /fmdTools/);
+  assert.match(data, /const tools =/);
   assert.match(data, /preview_image_url,preview_image_source/);
   assert.match(schemaChecks, /preview_image_url,preview_image_source/);
   assert.match(seed, /https:\/\/mailsig\.findmydoc\.eu\//);
@@ -162,7 +162,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   const routes = await readFile("src/features/planning/model/workspace-routes.ts", "utf8");
   const workspacePreferences = await readFile("src/features/planning/model/workspace-preferences.ts", "utf8");
   const executionPage = await readFile("src/app/(workspaces)/execution/page.tsx", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/planning/server/planning-board-read-model-supabase.ts", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
   const focusRoute = await readFile("src/app/api/focus/route.ts", "utf8");
   const planningApiClient = await readFile("src/features/planning/model/planning-api-client.ts", "utf8");
@@ -221,7 +221,7 @@ test("execution workspace is retired while legacy storage remains compatible", a
   assert.doesNotMatch(detail, /decisionTaskLinks/);
   assert.doesNotMatch(taskPage, /focusItems=\{data\.taskFocusItems\}/);
   assert.doesNotMatch(taskPage, /decisionTaskLinks=\{data\.decisionTaskLinks\}/);
-  assert.match(data, /taskFocusItems/);
+  assert.doesNotMatch(data, /taskFocusItems|task_focus_items/);
   assert.doesNotMatch(data, /decisionTaskLinks/);
   assert.match(types, /export type TaskFocusItem/);
   assert.doesNotMatch(types, /export type DecisionTaskLink/);
@@ -309,7 +309,7 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
 test("weekly meeting attendance has scoring, absence reasons and updates", async () => {
   const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/meetings/[id]/attendance/route.ts", "utf8");
-  const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
+  const data = await readFile("src/features/sprint/server/sprint-read-model-supabase.ts", "utf8");
   const sprintUi = await readFeatureSurface("src/features/sprint");
   const sprintMeetingUi = await readFile("src/features/sprint/molecules/sprint-meeting-attendance-section.tsx", "utf8");
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -324,7 +324,7 @@ test("weekly meeting attendance has scoring, absence reasons and updates", async
   assert.match(route, /founderSelfReportStatuses/);
   assert.match(route, /founder_self_report/);
   assert.match(route, /lead_review/);
-  assert.match(data, /meetingAttendance/);
+  assert.match(data, /attendance:/);
   assert.match(sprintUi, /SprintMeetingAttendanceSection/);
   assert.match(sprintMeetingUi, /Weekly Updates/);
   assert.match(sprintMeetingUi, /max\. 2 je Weekly, 4 je Sprint/);

@@ -1,6 +1,6 @@
 import { hasGitHubIssue } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, Task } from "@/lib/types";
+import type { PlanningShellState, Task } from "@/lib/types";
 
 export type SprintTaskRiskFilter = "all" | "github" | "carryover" | "outcome";
 export type SprintTaskReviewFilter = "all" | "not_requested" | "requested" | "changes_requested" | "accepted" | "partial";
@@ -29,7 +29,7 @@ export const DEFAULT_SPRINT_TASK_FILTERS: SprintTaskTableFilters = {
   direction: "asc",
 };
 
-export function buildSprintTaskTableRows(tasks: Task[], data: Pick<PlanningData, "sprints">, filters: SprintTaskTableFilters) {
+export function buildSprintTaskTableRows(tasks: Task[], data: Pick<PlanningShellState, "sprints">, filters: SprintTaskTableFilters) {
   const query = filters.query.trim().toLocaleLowerCase("de");
   const priorityRank: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
   const direction = filters.direction === "desc" ? -1 : 1;

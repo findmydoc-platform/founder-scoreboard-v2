@@ -2,7 +2,7 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
-import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation, TaskReview } from "@/lib/types";
+import type { ApprovalDecisionAction, PlanningShellState, Task, TaskActivity, TaskExternalComment, TaskRelation, TaskReview } from "@/lib/types";
 import type {
   TaskGitHubProjectionResult,
   TaskGitHubSyncCommand,
@@ -113,7 +113,7 @@ export function createTaskCommentRequest(apiClient: BrowserApiClient, taskId: st
   return apiClient.requestJson<{
     error?: string;
     notice?: { code: string; level: "info"; message: string } | null;
-    comment?: PlanningData["taskComments"][number];
+    comment?: PlanningShellState["taskComments"][number];
   }>(`/api/tasks/${taskId}/comments`, {
     method: "POST",
     json: { comment },
@@ -148,7 +148,7 @@ export function removeTaskRelationshipRequest(apiClient: BrowserApiClient, taskI
 }
 
 export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
-  return apiClient.requestJson<{ error?: string; blocker?: PlanningData["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
+  return apiClient.requestJson<{ error?: string; blocker?: PlanningShellState["taskBlockers"][number] }>(`/api/tasks/${taskId}/blockers`, {
     method: "POST",
     json: payload,
   });

@@ -1,4 +1,4 @@
-import type { ApprovalDecisionAction, ApprovalStatus, Package, PlanningData, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, ApprovalStatus, Package, PlanningShellState, Profile, Task } from "@/lib/types";
 
 type ApprovalSubject = {
   approvalStatus: ApprovalStatus | null;
@@ -28,9 +28,9 @@ export function applyOptimisticDeliverableApprovalDecision(task: Task, action: A
 }
 
 export function applyDeliverableApprovalPatch(
-  data: PlanningData,
+  data: PlanningShellState,
   deliverablePatch: Partial<Task> & Pick<Task, "id" | "approvalStatus">,
-): PlanningData {
+): PlanningShellState {
   return {
     ...data,
     tasks: data.tasks.map((task) => {
