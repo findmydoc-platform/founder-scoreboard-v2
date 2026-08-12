@@ -1,7 +1,7 @@
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningDataQueryScope } from "@/lib/planning-data-loader";
 
-export type LegacyPlanningDataWorkspace = Exclude<AppWorkspace, "backlog">;
+export type LegacyPlanningDataWorkspace = Exclude<AppWorkspace, "backlog" | "planning" | "projects">;
 
 const baseWorkspaceDataScope = {
   packages: false,
@@ -36,14 +36,6 @@ export const initiativeDetailPageDataScope = {
 } satisfies PlanningDataQueryScope;
 
 export const workspaceDataScopes = {
-  planning: {
-    ...baseWorkspaceDataScope,
-    packages: true,
-    milestones: true,
-    tasks: true,
-    sprints: true,
-    taskRelations: true,
-  },
   "decision-log": { ...baseWorkspaceDataScope },
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
@@ -59,14 +51,6 @@ export const workspaceDataScopes = {
     scoreObjections: true,
     meetings: true,
     meetingAttendance: true,
-  },
-  projects: {
-    ...baseWorkspaceDataScope,
-    packages: true,
-    milestones: true,
-    tasks: true,
-    sprints: true,
-    taskRelations: true,
   },
   tools: { ...baseWorkspaceDataScope, fmdTools: true },
   team: { ...baseWorkspaceDataScope, tasks: true },
