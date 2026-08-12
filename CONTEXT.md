@@ -4,6 +4,26 @@ FounderOps owns planning state and projects selected task information to externa
 
 ## Language
 
+**Planning Item**:
+One element in the FounderOps planning hierarchy. Every Planning Item is exactly one Epic, Initiative, Deliverable, or Sub-Issue.
+_Avoid_: Task as the generic hierarchy term, Package, Milestone
+
+**Epic**:
+A strategic planning container at the root of the hierarchy. It has no parent and no approval, Review, Sprint, RACI, or GitHub projection state.
+_Avoid_: Milestone
+
+**Initiative**:
+A strategic Planning Item that may belong to an Epic. It owns strategy, RACI, and approval state.
+_Avoid_: Package
+
+**Deliverable**:
+An approval-aware Planning Item that may belong to an Initiative. It owns Review, Sprint, and GitHub projection state.
+_Avoid_: generic Task when the hierarchy type matters
+
+**Sub-Issue**:
+A Planning Item below one approved Deliverable. It can have a GitHub projection but does not own approval, Review, Sprint, or RACI state.
+_Avoid_: child Task when the hierarchy type matters
+
 **GitHub projection**:
 The one-way representation of FounderOps task state in GitHub. FounderOps and Supabase remain authoritative.
 _Avoid_: GitHub sync as source of truth, replication
