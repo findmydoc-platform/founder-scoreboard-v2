@@ -35,8 +35,9 @@ test("only proposer or operational lead may withdraw draft and proposed roots", 
   assert.equal(trashPolicy.canRestorePlanningRoot({ id: "founder-1", platformRole: "founder" }), false);
 });
 
-test("paper-bin routes share centralized RPC and fail-closed permission contracts", async () => {
+test("paper-bin routes share the PlanningItems command and fail-closed permission contracts", async () => {
   const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
+  const trashModule = await readFile("src/features/planning-items/model/planning-items-trash.ts", "utf8");
   const serviceRoleClient = await readFile("src/lib/supabase-service-role.ts", "utf8");
   const routePaths = [
     "src/app/api/tasks/[id]/withdraw/route.ts",
@@ -48,26 +49,21 @@ test("paper-bin routes share centralized RPC and fail-closed permission contract
 
   assert.match(trashApi, /requirePlanningContributor/);
   assert.match(trashApi, /requireOperationalLead/);
-  assert.match(trashApi, /root\.proposed_by !== profile\.id/);
-  assert.match(trashApi, /root\.task_type !== rootType/);
-  assert.match(trashApi, /Sub-Issues können nicht unabhängig zurückgezogen werden/);
-  assert.match(trashApi, /isWithdrawableApprovalStatus/);
-  assert.match(trashApi, /withdraw_planning_item_transaction/);
-  assert.match(trashApi, /restore_planning_item_transaction/);
+  assert.match(trashApi, /createPlanningTrashPlanningItems/);
+  assert.match(trashApi, /actorContextFromSessionAuth/);
+  assert.match(trashModule, /task\.proposed_by !== actorProfileId/);
+  assert.match(trashModule, /task\.task_type !== rootType/);
+  assert.match(trashModule, /subIssueRootUnsupported/);
+  assert.match(trashModule, /mutate_planning_trash_command_transaction/);
   assert.match(trashApi, /getServerServiceRoleSupabase/);
-  assert.match(trashApi, /serviceSupabase\.rpc\("withdraw_planning_item_transaction"/);
-  assert.match(trashApi, /serviceSupabase\.rpc\("restore_planning_item_transaction"/);
-  assert.doesNotMatch(trashApi, /context\.supabase\.rpc\("(?:withdraw|restore)_planning_item_transaction"/);
+  assert.doesNotMatch(trashApi, /\.from\(|\.rpc\(/);
   assert.match(serviceRoleClient, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(serviceRoleClient, /SUPABASE_SECRET_KEY/);
   assert.doesNotMatch(serviceRoleClient, /ANON|PUBLISHABLE/);
-  assert.match(trashApi, /p_root_type: rootType/);
-  assert.match(trashApi, /p_expected_revision/);
-  assert.match(trashApi, /p_expected_trash_revision/);
-  assert.match(trashApi, /p_request_ip/);
-  assert.match(trashApi, /attemptPlanningGitHubLifecycleDrain/);
+  assert.match(trashApi, /requestMetadata: requestMetadata\(request\)/);
+  assert.match(trashModule, /runPlanningTrashLifecycle/);
   for (const field of ["rootType", "rootId", "affectedTaskIds", "trashRevision", "item", "eventIds"]) {
-    assert.match(trashApi, new RegExp(`${field}:`));
+    assert.match(trashModule, new RegExp(`${field}:`));
   }
   assert.equal(routes.every((route) => /export async function POST/.test(route)), true);
   assert.equal(routes.filter((route) => /"deliverable"/.test(route)).length, 2);

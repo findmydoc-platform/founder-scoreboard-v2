@@ -1,9 +1,16 @@
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
-  isWithdrawableApprovalStatus,
+  createPlanningTrashPlanningItems,
+  planningTrashError,
+  planningTrashTransactionFromResult,
+  restorePlanningItemCommand,
+  runPlanningTrashLifecycle,
+  withdrawPlanningItemCommand,
+} from "@/features/planning-items/model/planning-items-trash";
+import {
   validatePlanningTrashReason,
   validatePlanningTrashRevision,
   type PlanningTrashRestorePayload,
@@ -12,106 +19,19 @@ import {
 import { auditRequestMetadata } from "@/lib/api-input";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requireOperationalLead, requirePlanningContributor } from "@/lib/authz";
-import { attemptPlanningGitHubLifecycleDrain } from "@/lib/planning-github-lifecycle-trigger";
-import { isOperationalLeadRole } from "@/lib/platform";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
-import type { ApprovalStatus, TrashRootType } from "@/lib/types";
-import { isReviewStateLocked, reviewStateLockMessage } from "@/features/reviews/model/task-review-state";
+import type { TrashRootType } from "@/lib/types";
 
-type PlanningTrashRootRow = {
-  id: string;
-  task_type?: "initiative" | "deliverable" | "sub_issue" | null;
-  approval_status: ApprovalStatus | null;
-  approval_revision: number | null;
-  proposed_by: string | null;
-  review_status?: string | null;
-  score_final?: boolean | null;
-  trashed_at: string | null;
-  trash_revision: number | null;
-};
-
-type PlanningTrashTransactionResult = Record<string, unknown> & {
-  affectedTaskIds?: unknown;
-  affected_task_ids?: unknown;
-  eventIds?: unknown;
-  event_ids?: unknown;
-  item?: unknown;
-  rootId?: unknown;
-  root_id?: unknown;
-  rootType?: unknown;
-  root_type?: unknown;
-  trashRevision?: unknown;
-  trash_revision?: unknown;
-};
-
-function planningTrashRootLabel(rootType: TrashRootType) {
+function label(rootType: TrashRootType) {
   return rootType === "initiative" ? "Initiative" : "Deliverable";
 }
 
-function planningTrashRootTable(rootType: TrashRootType) {
-  void rootType;
-  return "tasks";
-}
-
-function planningTrashRootSelect(rootType: TrashRootType) {
-  void rootType;
-  return "id,task_type,approval_status,approval_revision,proposed_by,review_status,score_final,trashed_at,trash_revision";
-}
-
-function planningTrashTransactionError(
-  error: { code?: string; message?: string },
-  rootType: TrashRootType,
-  action: "withdraw" | "restore",
-) {
-  const label = planningTrashRootLabel(rootType);
-  if (error.code === "P0001") return apiError(`${label} wurde zwischenzeitlich geändert. Bitte neu laden.`, 409);
-  if (error.code === "P0002") return apiError(`${label} wurde nicht gefunden.`, 404);
-  if (error.code === "P0003") return apiError(error.message || `${label} kann in diesem Zustand nicht ${action === "withdraw" ? "zurückgezogen" : "wiederhergestellt"} werden.`, 409);
-  if (error.code === "P0006") return apiError(error.message || "Keine Berechtigung für diese Aktion.", 403);
-  if (error.code === "22023") return apiError(error.message || "Papierkorb-Aktion ist ungültig.", 400);
-  return apiError(error.message || `${label} konnte nicht ${action === "withdraw" ? "zurückgezogen" : "wiederhergestellt"} werden.`, 500);
-}
-
-function values(value: unknown): Array<string | number> {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string | number => typeof item === "string" || typeof item === "number");
-}
-
-function stringValues(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())))];
-}
-
-function normalizePlanningTrashTransactionResult(data: unknown, rootType: TrashRootType, rootId: string) {
-  const result = data && typeof data === "object" ? data as PlanningTrashTransactionResult : {};
+function requestMetadata(request: NextRequest) {
+  const metadata = auditRequestMetadata(request);
   return {
-    rootType: result.rootType === "initiative" || result.rootType === "deliverable"
-      ? result.rootType
-      : result.root_type === "initiative" || result.root_type === "deliverable"
-        ? result.root_type
-        : rootType,
-    rootId: typeof result.rootId === "string"
-      ? result.rootId
-      : typeof result.root_id === "string"
-        ? result.root_id
-        : rootId,
-    affectedTaskIds: stringValues(result.affectedTaskIds ?? result.affected_task_ids),
-    trashRevision: Number(result.trashRevision ?? result.trash_revision ?? 0),
-    item: result.item && typeof result.item === "object" ? result.item : null,
-    eventIds: values(result.eventIds ?? result.event_ids),
+    ...(metadata.request_ip ? { requestIp: metadata.request_ip } : {}),
+    ...(metadata.user_agent ? { userAgent: metadata.user_agent } : {}),
   };
-}
-
-async function loadPlanningTrashRoot(
-  supabase: SupabaseClient,
-  rootType: TrashRootType,
-  rootId: string,
-) {
-  return supabase
-    .from(planningTrashRootTable(rootType))
-    .select(planningTrashRootSelect(rootType))
-    .eq("id", rootId)
-    .maybeSingle<PlanningTrashRootRow>();
 }
 
 export async function handlePlanningTrashWithdraw(
@@ -121,59 +41,35 @@ export async function handlePlanningTrashWithdraw(
 ) {
   const context = await requireJsonApiContext<PlanningTrashWithdrawPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
-
   const reason = validatePlanningTrashReason(context.payload.reason);
   if (!reason.ok) {
-    return apiError(
-      reason.reason === "too_long"
-        ? "Die Begründung darf höchstens 2.000 Zeichen lang sein."
-        : "Für das Zurückziehen ist eine Begründung erforderlich.",
-      400,
-    );
+    return apiError(reason.reason === "too_long"
+      ? "Die Begründung darf höchstens 2.000 Zeichen lang sein."
+      : "Für das Zurückziehen ist eine Begründung erforderlich.", 400);
   }
-  if (!validatePlanningTrashRevision(context.payload.expectedRevision)) {
-    return apiError("Aktueller Freigabestand ist erforderlich.", 400);
-  }
-
+  if (!validatePlanningTrashRevision(context.payload.expectedRevision)) return apiError("Aktueller Freigabestand ist erforderlich.", 400);
+  const actor = actorContextFromSessionAuth({ ok: true, profile: context.permission.profile });
+  if (!actor.ok) return apiError("Nur Antragsteller, CEO oder Deputy können dieses Item zurückziehen.", 403);
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
-  const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
-  if (rootError) return apiError(rootError.message, 500);
-  if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
-  if (root.task_type !== rootType) {
-    return apiError(rootType === "initiative" ? "Initiative wurde nicht gefunden." : "Sub-Issues können nicht unabhängig zurückgezogen werden.", 400);
-  }
-  if (root.trashed_at) return apiError(`${planningTrashRootLabel(rootType)} liegt bereits im Papierkorb.`, 409);
-  if (rootType === "deliverable" && isReviewStateLocked(root.review_status, root.score_final)) {
-    return apiError(reviewStateLockMessage(root.review_status, root.score_final), 409);
-  }
-  if (!isWithdrawableApprovalStatus(root.approval_status)) {
-    return apiError("Nur Entwürfe oder eingereichte Vorschläge können zurückgezogen werden.", 409);
-  }
-  if (Number(root.approval_revision || 0) !== Number(context.payload.expectedRevision)) {
-    return apiError(`${planningTrashRootLabel(rootType)} wurde zwischenzeitlich geändert. Bitte neu laden.`, 409);
-  }
 
-  const profile = context.permission.profile;
-  if (profile && !isOperationalLeadRole(profile.platformRole) && root.proposed_by !== profile.id) {
-    return apiError("Nur Antragsteller, CEO oder Deputy können dieses Item zurückziehen.", 403);
-  }
-
-  const requestMetadata = auditRequestMetadata(request);
-  const { data, error } = await serviceSupabase.rpc("withdraw_planning_item_transaction", {
-    p_root_type: rootType,
-    p_root_id: rootId,
-    p_expected_revision: Number(context.payload.expectedRevision),
-    p_actor_profile_id: profile?.id || null,
-    p_reason: reason.reason,
-    p_request_ip: requestMetadata.request_ip,
-    p_user_agent: requestMetadata.user_agent || null,
+  const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
+    actor: actor.actor,
+    mode: "commit",
+    command: withdrawPlanningItemCommand(rootId, {
+      expectedApprovalRevision: Number(context.payload.expectedRevision),
+      reason: reason.reason,
+    }),
+    requestMetadata: requestMetadata(request),
   });
-  if (error) return planningTrashTransactionError(error, rootType, "withdraw");
-
-  const result = normalizePlanningTrashTransactionResult(data, rootType, rootId);
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, taskIds: result.affectedTaskIds, supabase: serviceSupabase });
-  return NextResponse.json({ ok: true, ...result, lifecycle });
+  if (!result.ok) {
+    const mapped = planningTrashError(result.error, rootType, "withdraw");
+    return apiError(mapped.message, mapped.status);
+  }
+  const transaction = planningTrashTransactionFromResult(result);
+  if (result.status !== "committed" || !transaction) return apiError(`${label(rootType)} konnte nicht zurückgezogen werden.`, 500);
+  const lifecycle = await runPlanningTrashLifecycle(serviceSupabase, transaction);
+  return NextResponse.json({ ok: true, ...transaction, lifecycle });
 }
 
 export async function handlePlanningTrashRestore(
@@ -183,35 +79,24 @@ export async function handlePlanningTrashRestore(
 ) {
   const context = await requireJsonApiContext<PlanningTrashRestorePayload>(request, requireOperationalLead, {});
   if (!context.ok) return context.response;
-  if (!validatePlanningTrashRevision(context.payload.expectedTrashRevision)) {
-    return apiError("Aktueller Papierkorbstand ist erforderlich.", 400);
-  }
-
+  if (!validatePlanningTrashRevision(context.payload.expectedTrashRevision)) return apiError("Aktueller Papierkorbstand ist erforderlich.", 400);
+  const actor = actorContextFromSessionAuth({ ok: true, profile: context.permission.profile });
+  if (!actor.ok) return apiError("Keine Berechtigung für diese Aktion.", 403);
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
-  const { data: root, error: rootError } = await loadPlanningTrashRoot(serviceSupabase, rootType, rootId);
-  if (rootError) return apiError(rootError.message, 500);
-  if (!root) return apiError(`${planningTrashRootLabel(rootType)} wurde nicht gefunden.`, 404);
-  if (root.task_type !== rootType) {
-    return apiError(rootType === "initiative" ? "Initiative wurde nicht gefunden." : "Sub-Issues können nicht unabhängig wiederhergestellt werden.", 400);
-  }
-  if (!root.trashed_at) return apiError(`${planningTrashRootLabel(rootType)} liegt nicht im Papierkorb.`, 409);
-  if (Number(root.trash_revision || 0) !== Number(context.payload.expectedTrashRevision)) {
-    return apiError(`${planningTrashRootLabel(rootType)} wurde zwischenzeitlich geändert. Bitte neu laden.`, 409);
-  }
 
-  const requestMetadata = auditRequestMetadata(request);
-  const { data, error } = await serviceSupabase.rpc("restore_planning_item_transaction", {
-    p_root_type: rootType,
-    p_root_id: rootId,
-    p_expected_trash_revision: Number(context.payload.expectedTrashRevision),
-    p_actor_profile_id: context.permission.profile?.id || null,
-    p_request_ip: requestMetadata.request_ip,
-    p_user_agent: requestMetadata.user_agent || null,
+  const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
+    actor: actor.actor,
+    mode: "commit",
+    command: restorePlanningItemCommand(rootId, Number(context.payload.expectedTrashRevision)),
+    requestMetadata: requestMetadata(request),
   });
-  if (error) return planningTrashTransactionError(error, rootType, "restore");
-
-  const result = normalizePlanningTrashTransactionResult(data, rootType, rootId);
-  const lifecycle = await attemptPlanningGitHubLifecycleDrain({ rootType, rootId, taskIds: result.affectedTaskIds, supabase: serviceSupabase });
-  return NextResponse.json({ ok: true, ...result, lifecycle });
+  if (!result.ok) {
+    const mapped = planningTrashError(result.error, rootType, "restore");
+    return apiError(mapped.message, mapped.status);
+  }
+  const transaction = planningTrashTransactionFromResult(result);
+  if (result.status !== "committed" || !transaction) return apiError(`${label(rootType)} konnte nicht wiederhergestellt werden.`, 500);
+  const lifecycle = await runPlanningTrashLifecycle(serviceSupabase, transaction);
+  return NextResponse.json({ ok: true, ...transaction, lifecycle });
 }

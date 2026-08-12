@@ -120,6 +120,8 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const taskWithdrawCommand = await readFile("src/features/tasks/hooks/use-task-withdraw-command.ts", "utf8");
   const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
+  const trashModule = await readFile("src/features/planning-items/model/planning-items-trash.ts", "utf8");
+  const trashCommandMigration = await readFile("supabase/migrations/20260812150600_planning_trash_command_transaction.sql", "utf8");
   const deletionMigration = await readSupabaseSchemaContract();
   const github = await readFile("src/lib/github.ts", "utf8");
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
@@ -134,8 +136,11 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   assert.doesNotMatch(taskApiClient, /deleteTaskRequest/);
   assert.match(taskWithdrawCommand, /removePlanningRootFromData/);
   assert.match(taskWithdrawCommand, /restorePlanningRootToData/);
-  assert.match(trashApi, /withdraw_planning_item_transaction/);
-  assert.match(trashApi, /restore_planning_item_transaction/);
+  assert.match(trashApi, /createPlanningTrashPlanningItems/);
+  assert.doesNotMatch(trashApi, /\.rpc\(|\.from\(/);
+  assert.match(trashModule, /mutate_planning_trash_command_transaction/);
+  assert.match(trashCommandMigration, /public\.withdraw_planning_item_transaction/);
+  assert.match(trashCommandMigration, /public\.restore_planning_item_transaction/);
   assert.match(deletionMigration, /create table if not exists public\.task_deletion_operations/);
   assert.match(deletionMigration, /delete from public\.tasks where id = v_operation\.task_id/);
   assert.match(deletionMigration, /insert into public\.audit_log/);

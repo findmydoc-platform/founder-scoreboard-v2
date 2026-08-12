@@ -163,10 +163,12 @@ export type PlanningAction =
     decision: Extract<PlanningApprovalStatus, "approved" | "rejected" | "draft">;
     note: string;
   }>
-  | (VersionedItemReference & Readonly<{
+  | Readonly<{
     kind: "withdraw";
+    itemId: PlanningItemId;
+    expectedApprovalRevision: number;
     reason: string;
-  }>)
+  }>
   | Readonly<{
     kind: "restore";
     itemId: PlanningItemId;
