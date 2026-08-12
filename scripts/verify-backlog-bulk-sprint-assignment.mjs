@@ -34,6 +34,7 @@ try {
   const suffix = randomUUID().replaceAll("-", "");
   const projectId = `bulk-sprint-project-${suffix}`;
   const profileId = `bulk-sprint-profile-${suffix}`;
+  const founderId = `bulk-sprint-founder-${suffix}`;
   const sprintId = `bulk-sprint-target-${suffix}`;
   const epicId = `bulk-sprint-epic-${suffix}`;
   const initiativeId = `bulk-sprint-initiative-${suffix}`;
@@ -41,8 +42,8 @@ try {
 
   await client.query(
     `insert into public.profiles (id, name, role, platform_role)
-     values ($1, 'Bulk Sprint verifier', 'admin', 'ceo')`,
-    [profileId],
+     values ($1, 'Bulk Sprint verifier', 'admin', 'ceo'), ($2, 'Bulk Sprint denied Founder', 'member', 'founder')`,
+    [profileId, founderId],
   );
   await client.query(
     "insert into public.projects (id, name) values ($1, 'Bulk Sprint verification')",
@@ -78,6 +79,15 @@ try {
     taskId: row.id,
     expectedUpdatedAt: row.updated_at,
   }));
+  await expectCode("P0015", () => client.query(
+    "select public.assign_backlog_tasks_to_sprint_transaction($1::jsonb, $2, $3, null, 'local verifier denied')",
+    [JSON.stringify(assignments), sprintId, founderId],
+  ));
+  const denied = await client.query(
+    "select count(*)::integer as assigned from public.tasks where id = any($1::text[]) and sprint_id is not null",
+    [taskIds],
+  );
+  assert.equal(denied.rows[0]?.assigned, 0, "Denied Sprint assignment must leave all Deliverables unchanged.");
   const assigned = await client.query(
     "select public.assign_backlog_tasks_to_sprint_transaction($1::jsonb, $2, $3, null, 'local verifier') as result",
     [JSON.stringify(assignments), sprintId, profileId],

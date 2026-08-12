@@ -3,34 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-async function loadBulkRoute({ apiContext, rpc } = {}) {
-  const operationalLeadGuard = () => ({ ok: true });
-  let receivedGuard = null;
-  const route = await loadTranspiledModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", {
-    "next/server": {
-      NextResponse: {
-        json: (body, init = {}) => ({ body, headers: init.headers, status: init.status || 200 }),
-      },
-    },
-    "@/lib/api-input": {
-      auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }),
-    },
-    "@/lib/api-response": {
-      apiError: (error, status) => ({ body: { error }, status }),
-      requireApiContext: async (_request, guard) => {
-        receivedGuard = guard;
-        return apiContext || {
-          ok: true,
-          permission: { profile: { id: "ceo", platformRole: "ceo" } },
-          supabase: { rpc: rpc || (async () => ({ data: [], error: null })) },
-        };
-      },
-    },
-    "@/lib/authz": { requireOperationalLead: operationalLeadGuard },
-  });
-  return { ...route, operationalLeadGuard, receivedGuard: () => receivedGuard };
-}
-
+const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
 const validPayload = {
   assignments: [
     { taskId: "deliverable-one", expectedUpdatedAt: "2026-08-03T12:00:00.000Z" },
@@ -39,113 +12,136 @@ const validPayload = {
   sprintId: "sprint-10",
 };
 
-test("bulk Sprint assignment parser accepts one target and unique current Deliverables", async () => {
-  const { parseBulkSprintAssignment } = await loadBulkRoute();
+async function loadModel() {
+  const storeContract = await loadTranspiledModule("src/features/planning-items/model/planning-items-store.ts");
+  const runner = await loadTranspiledModule("src/features/planning-items/model/planning-items-runner.ts");
+  const supabaseStore = await loadTranspiledModule("src/features/planning-items/model/planning-items-store-supabase.ts", {
+    "server-only": {}, "./planning-items-store": storeContract,
+  });
+  return loadTranspiledModule("src/features/planning-items/model/planning-items-sprint-assignment.ts", {
+    "./planning-items-runner": runner,
+    "./planning-items-store-supabase": supabaseStore,
+  });
+}
 
-  assert.deepEqual(parseBulkSprintAssignment(validPayload), validPayload);
-  assert.equal(parseBulkSprintAssignment(null), "Sprint-Zuordnung ist ungültig.");
-  assert.equal(parseBulkSprintAssignment({ assignments: [], sprintId: "sprint-10" }), "Wähle zwischen 1 und 100 Deliverables sowie einen Sprint aus.");
-  assert.equal(parseBulkSprintAssignment({
-    assignments: [validPayload.assignments[0], validPayload.assignments[0]],
-    sprintId: "sprint-10",
-  }), "Sprint-Zuordnung ist ungültig.");
-  assert.equal(parseBulkSprintAssignment({
-    assignments: [{ taskId: "deliverable-one", expectedUpdatedAt: "not-a-date" }],
-    sprintId: "sprint-10",
-  }), "Sprint-Zuordnung ist ungültig.");
-});
-
-test("bulk Sprint assignment API is operational-lead guarded and forwards one atomic command", async () => {
-  const rpcCalls = [];
-  const route = await loadBulkRoute({
-    rpc: async (...args) => {
-      rpcCalls.push(args);
-      return {
-        data: validPayload.assignments.map((assignment) => ({
-          id: assignment.taskId,
-          sprintId: validPayload.sprintId,
-          scoreRelevant: true,
-          updatedAt: "2026-08-03T12:02:00.000Z",
-        })),
-        error: null,
-      };
+async function loadRoute(run, apiContext) {
+  return loadTranspiledModule("src/app/api/tasks/bulk-sprint-assignment/route.ts", {
+    "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status || 200 }) } },
+    "@/lib/api-input": { auditRequestMetadata: () => ({ request_ip: "test-ip", user_agent: "test-agent" }) },
+    "@/lib/api-response": {
+      apiError: (error, status) => ({ body: { error }, status }),
+      requireApiContext: async () => apiContext || { ok: true, permission: { profile: { id: "ceo", platformRole: "ceo" } }, supabase: {} },
+    },
+    "@/lib/authz": { requireOperationalLead: () => ({}) },
+    "@/features/planning-items/model/planning-actor-context-server": { actorContextFromSessionAuth: () => ({ ok: true, actor }) },
+    "@/features/planning-items/model/planning-items-sprint-assignment": {
+      parseSprintAssignmentRequest: (value) => value?.assignments ? value : "Sprint-Zuordnung ist ungültig.",
+      sprintAssignmentCommand: (value) => ({ kind: "canonicalSprintAssignment", value }),
+      createSprintAssignmentPlanningItems: () => ({ run }),
+      sprintAssignmentUpdatesFromChanges: (changes) => changes[0]?.after || [],
+      sprintAssignmentError: (error) => error.code === "conflict"
+        ? { message: "Der Ziel-Sprint ist gesperrt.", status: 409 }
+        : { message: "Sprint-Zuordnungen konnten nicht gespeichert werden.", status: 500 },
     },
   });
+}
 
-  const response = await route.PATCH({ json: async () => validPayload });
+function item(id, revision, overrides = {}) {
+  return { id, task_type: "deliverable", updated_at: revision, trashed_at: null, approval_status: "approved", status: "Offen", assignee: "owner", owner: "owner", parent_task_id: "initiative", sprint_id: null, ...overrides };
+}
 
-  assert.equal(route.receivedGuard(), route.operationalLeadGuard);
-  assert.equal(response.status, 200);
-  assert.equal(response.body.updates.length, 2);
-  assert.equal(rpcCalls.length, 1);
-  assert.deepEqual(rpcCalls[0], ["assign_backlog_tasks_to_sprint_transaction", {
-    p_assignments: validPayload.assignments,
-    p_sprint_id: "sprint-10",
-    p_actor_profile_id: "ceo",
-    p_request_ip: "test-ip",
-    p_user_agent: "test-agent",
-  }]);
+function fixture({ items, parents, sprints, rpcResult = { data: [], error: null } }) {
+  const calls = [];
+  return {
+    calls,
+    client: {
+      from(table) { return { select() { return { async in(_column, ids) {
+        if (table === "tasks") return { data: ids.includes("initiative") ? parents : items, error: null };
+        return { data: sprints, error: null };
+      } }; } }; },
+      async rpc(...args) { calls.push(args); return rpcResult; },
+    },
+  };
+}
+
+test("Sprint assignment parser covers single and bulk inputs", async () => {
+  const model = await loadModel();
+  assert.deepEqual(model.parseSprintAssignmentRequest(validPayload), validPayload);
+  assert.deepEqual(model.parseSprintAssignmentRequest({ assignments: [validPayload.assignments[0]], sprintId: "sprint-10" }), { assignments: [validPayload.assignments[0]], sprintId: "sprint-10" });
+  assert.equal(model.parseSprintAssignmentRequest(null), "Sprint-Zuordnung ist ungültig.");
+  assert.equal(model.parseSprintAssignmentRequest({ assignments: [], sprintId: "sprint-10" }), "Wähle zwischen 1 und 100 Deliverables sowie einen Sprint aus.");
+  assert.equal(model.parseSprintAssignmentRequest({ assignments: [validPayload.assignments[0], validPayload.assignments[0]], sprintId: "sprint-10" }), "Sprint-Zuordnung ist ungültig.");
 });
 
-test("bulk Sprint assignment API preserves auth failures and maps stale or ineligible data safely", async () => {
-  const denied = { ok: false, response: { body: { error: "Nicht erlaubt" }, status: 403 } };
-  const deniedRoute = await loadBulkRoute({ apiContext: denied });
-  assert.deepEqual(await deniedRoute.PATCH({ json: async () => validPayload }), denied.response);
+test("route is transport-only and preserves Browser invocation and response", async () => {
+  const calls = [];
+  const route = await loadRoute(async (invocation) => {
+    calls.push(invocation);
+    return { ok: true, status: "committed", changes: [{ field: "sprintAssignment", after: [{ id: "deliverable-one", sprintId: "sprint-10", scoreRelevant: true, updatedAt: "2026-08-03T12:02:00.000Z" }] }] };
+  });
+  const response = await route.PATCH({ json: async () => validPayload });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.updates.length, 1);
+  assert.deepEqual(calls, [{ actor, mode: "commit", command: { kind: "canonicalSprintAssignment", value: validPayload }, requestMetadata: { requestIp: "test-ip", userAgent: "test-agent" } }]);
 
-  for (const [code, status, message] of [
-    ["P0001", 409, "Mindestens ein Deliverable wurde zwischenzeitlich geändert. Bitte neu laden."],
-    ["P0002", 404, "Mindestens ein Deliverable wurde nicht gefunden."],
-    ["P0004", 404, "Sprint wurde nicht gefunden."],
-    ["P0005", 409, "Der Ziel-Sprint ist gesperrt."],
-    ["P0006", 409, "Ein bisheriger Sprint wurde nicht gefunden. Bitte neu laden."],
-    ["P0007", 409, "Deliverables aus einem gesperrten Sprint können nicht umgeplant werden."],
-    ["P0010", 400, "Nur Deliverables können einem Sprint zugeordnet werden."],
-    ["P0011", 409, "Nur freigegebene Deliverables können einem Sprint zugeordnet werden."],
-    ["P0012", 409, "Erledigte Deliverables können nicht mehr einem Sprint zugeordnet werden."],
-    ["P0013", 409, "Für mindestens ein Deliverable fehlt die Zuständigkeit."],
-    ["P0014", 409, "Für mindestens ein Deliverable fehlt eine freigegebene Initiative."],
-    ["22023", 400, "Sprint-Zuordnung ist ungültig."],
-    ["22007", 400, "Sprint-Zuordnung ist ungültig."],
-    ["unexpected", 500, "Sprint-Zuordnungen konnten nicht gespeichert werden."],
+  const source = await readFile("src/app/api/tasks/bulk-sprint-assignment/route.ts", "utf8");
+  assert.match(source, /createSprintAssignmentPlanningItems/);
+  assert.match(source, /\.run\(/);
+  assert.match(source, /requireOperationalLead/);
+  assert.doesNotMatch(source, /\.rpc\(|assign_backlog_tasks_to_sprint_transaction/);
+});
+
+test("module shares Preview and Commit policy and issues one atomic writer call", async () => {
+  const model = await loadModel();
+  const rows = validPayload.assignments.map((entry) => item(entry.taskId, entry.expectedUpdatedAt));
+  const parent = item("initiative", "2026-08-03T11:00:00.000Z", { task_type: "initiative" });
+  const updates = rows.map((row) => ({ id: row.id, sprintId: "sprint-10", scoreRelevant: true, updatedAt: "2026-08-03T12:02:00.000Z" }));
+  const db = fixture({ items: rows, parents: [parent], sprints: [{ id: "sprint-10", score_locked: false }], rpcResult: { data: updates, error: null } });
+  const planning = model.createSprintAssignmentPlanningItems(db.client);
+  const command = model.sprintAssignmentCommand(validPayload);
+  const preview = await planning.run({ actor, mode: "preview", command });
+  const commit = await planning.run({ actor, mode: "commit", command });
+  assert.equal(preview.status, "previewed");
+  assert.equal(commit.status, "committed");
+  assert.equal(db.calls.length, 1);
+  assert.deepEqual(db.calls[0][1].p_assignments, [...validPayload.assignments].sort((a, b) => a.taskId.localeCompare(b.taskId)));
+});
+
+test("role, stale revision, and locked Sprint stop before writes", async () => {
+  const model = await loadModel();
+  const rows = validPayload.assignments.map((entry) => item(entry.taskId, entry.expectedUpdatedAt));
+  const parent = item("initiative", "2026-08-03T11:00:00.000Z", { task_type: "initiative" });
+  const command = model.sprintAssignmentCommand(validPayload);
+  for (const [actorValue, itemRows, sprintRows, expected] of [
+    [{ ...actor, platformRole: "founder" }, rows, [{ id: "sprint-10", score_locked: false }], "forbidden"],
+    [actor, [{ ...rows[0], updated_at: "stale" }, rows[1]], [{ id: "sprint-10", score_locked: false }], "conflict"],
+    [actor, rows, [{ id: "sprint-10", score_locked: true }], "conflict"],
   ]) {
-    const route = await loadBulkRoute({ rpc: async () => ({ data: null, error: { code } }) });
-    const response = await route.PATCH({ json: async () => validPayload });
-    assert.equal(response.status, status);
-    assert.equal(response.body.error, message);
+    const db = fixture({ items: itemRows, parents: [parent], sprints: sprintRows });
+    const result = await model.createSprintAssignmentPlanningItems(db.client).run({ actor: actorValue, mode: "commit", command });
+    assert.equal(result.error.code, expected);
+    assert.equal(db.calls.length, 0);
   }
 });
 
-test("bulk Sprint assignment transaction validates every item before updating and is service-only", async () => {
-  const [migration, route, apiClient, command, menu, table] = await Promise.all([
-    readFile("supabase/migrations/20260803141929_bulk_sprint_assignment_transaction.sql", "utf8"),
-    readFile("src/app/api/tasks/bulk-sprint-assignment/route.ts", "utf8"),
-    readFile("src/features/tasks/model/task-api-client.ts", "utf8"),
-    readFile("src/features/backlog/hooks/use-backlog-bulk-sprint-assignment.ts", "utf8"),
-    readFile("src/features/backlog/molecules/backlog-sprint-actions.tsx", "utf8"),
-    readFile("src/features/backlog/molecules/backlog-rank-table.tsx", "utf8"),
-  ]);
-
-  assert.match(migration, /create or replace function public\.assign_backlog_tasks_to_sprint_transaction/i);
-  assert.match(migration, /v_assignment_count < 1 or v_assignment_count > 100/i);
-  assert.match(migration, /cardinality\(v_task_ids\) <> v_assignment_count/i);
+test("transaction remains service-only, actor-guarded, ordered, and atomic", async () => {
+  const migration = await readFile("supabase/migrations/20260812123345_authorize_sprint_assignment_transaction.sql", "utf8");
+  const moduleSource = await readFile("src/features/planning-items/model/planning-items-sprint-assignment.ts", "utf8");
+  assert.match(migration, /v_actor_role not in \('ceo', 'deputy'\)/i);
+  assert.match(migration, /raise exception using errcode = 'P0015'/i);
   assert.match(migration, /order by task\.id\s+for update/i);
-  assert.match(migration, /v_task\.updated_at <> \(v_assignment ->> 'expectedUpdatedAt'\)::timestamptz/i);
-  assert.match(migration, /v_task\.task_type <> 'deliverable'/i);
-  assert.match(migration, /parent\.task_type = 'initiative'[\s\S]*parent\.approval_status = 'approved'/i);
-  assert.match(migration, /v_target_sprint\.score_locked/i);
-  assert.match(migration, /v_source_locked/i);
-  assert.ok(migration.indexOf("for v_assignment in") < migration.indexOf("update public.tasks as task"), "All-item validation must begin before writes.");
-  assert.match(migration, /task\.sprint\.bulk_assigned/i);
-  assert.match(migration, /revoke all on function public\.assign_backlog_tasks_to_sprint_transaction[\s\S]*from authenticated/i);
-  assert.match(migration, /grant execute on function public\.assign_backlog_tasks_to_sprint_transaction[\s\S]*to service_role/i);
-  assert.doesNotMatch(migration, /github|outbox/i);
+  assert.ok(migration.indexOf("for v_assignment in") < migration.indexOf("update public.tasks as task"));
+  assert.match(migration, /revoke all on function public\.assign_backlog_tasks_to_sprint_transaction[^;]*from public, anon, authenticated/i);
+  assert.match(migration, /grant execute on function public\.assign_backlog_tasks_to_sprint_transaction[^;]*to service_role/i);
+  assert.match(moduleSource, /assign_backlog_tasks_to_sprint_transaction/);
+  assert.doesNotMatch(moduleSource, /github|outbox/i);
+});
 
-  assert.match(route, /requireOperationalLead/);
-  assert.match(route, /assign_backlog_tasks_to_sprint_transaction/);
-  assert.match(apiClient, /assignBacklogTasksToSprintRequest/);
-  assert.match(command, /refreshPlanningData\(\)\.catch/);
-  assert.match(command, /setData\(\(current\)/);
-  assert.match(menu, /BacklogBulkSprintAssignmentMenu/);
-  assert.match(table, /Mehrfachauswahl für Sprint-Zuordnung/);
-  assert.match(table, /Die Sprint-Zuordnung wird gemeinsam oder gar nicht gespeichert/);
+test("route preserves upstream auth failure and mapped errors", async () => {
+  const denied = { ok: false, response: { body: { error: "Nicht erlaubt" }, status: 403 } };
+  assert.deepEqual(await (await loadRoute(async () => ({}), denied)).PATCH({ json: async () => validPayload }), denied.response);
+  const route = await loadRoute(async () => ({ ok: false, error: { code: "conflict", reason: "state" } }));
+  const response = await route.PATCH({ json: async () => validPayload });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error, "Der Ziel-Sprint ist gesperrt.");
 });
