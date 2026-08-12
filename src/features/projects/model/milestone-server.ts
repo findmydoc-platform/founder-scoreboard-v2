@@ -8,17 +8,13 @@ import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { slugify } from "@/lib/slug";
 import { resolveCanonicalStrategicItemId } from "@/features/projects/model/planning-legacy-adapters";
 import {
-  MILESTONE_NOT_EMPTY_CODE,
   MILESTONE_STATUSES,
-  type MilestoneChildCounts,
   type MilestoneCreateRequest,
   type MilestoneDeleteRequest,
   type MilestoneDto,
-  type MilestoneNotEmptyError,
   type MilestonePatchRequest,
   type MilestoneStatus,
 } from "./milestone-contract";
-import { milestoneNotEmptyMessage, normalizeMilestoneChildCounts } from "./milestone-policy";
 
 export const MILESTONE_PROJECT_ID = "findmydoc-founder-execution";
 // The endpoint name remains a compatibility surface.  Its rows are Epics
@@ -48,11 +44,6 @@ export type NormalizedMilestonePatch = {
 
 export type NormalizedMilestoneDelete = {
   expectedUpdatedAt: string;
-};
-
-type DatabaseErrorLike = {
-  code?: string | null;
-  message?: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -301,76 +292,6 @@ export async function updateProjectMilestone(
   });
   const row = (data as { task?: DbTask } | null)?.task || null;
   return { data: row, error, update };
-}
-
-export async function deleteProjectMilestone(
-  supabase: SupabaseClient,
-  id: string,
-  expectedUpdatedAt: string,
-  actorProfileId: string,
-) {
-  const { data, error } = await supabase.rpc("delete_empty_epic_transaction", {
-    p_task_id: id,
-    p_expected_updated_at: expectedUpdatedAt,
-    p_actor_profile_id: actorProfileId,
-  });
-  return {
-    data: ((data as { task?: DbTask } | null)?.task || null) as DbTask | null,
-    error,
-  };
-}
-
-export async function loadMilestoneChildCounts(
-  supabase: SupabaseClient,
-  milestoneId: string,
-): Promise<
-  | { ok: true; counts: MilestoneChildCounts }
-  | { ok: false; error: DatabaseErrorLike }
-> {
-  const { data: rows, error } = await supabase
-    .from("tasks")
-    .select("id,parent_task_id,task_type")
-    .eq("project_id", MILESTONE_PROJECT_ID);
-  if (error) return { ok: false, error };
-  const children = rows || [];
-  const descendants = new Set<string>([milestoneId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const row of children) {
-      if (row.parent_task_id && descendants.has(row.parent_task_id) && !descendants.has(row.id)) {
-        descendants.add(row.id);
-        changed = true;
-      }
-    }
-  }
-  const descendantRows = children.filter((row) => row.id !== milestoneId && descendants.has(row.id));
-  return {
-    ok: true,
-    counts: normalizeMilestoneChildCounts({
-      initiatives: descendantRows.filter((row) => row.task_type === "initiative").length,
-      tasks: descendantRows.filter((row) => row.task_type === "deliverable" || row.task_type === "sub_issue").length,
-    }),
-  };
-}
-
-export function milestoneDatabaseErrorCode(error: unknown) {
-  if (!isRecord(error) || typeof error.code !== "string") return "";
-  return error.code;
-}
-
-export function isMilestoneNotEmptyDatabaseError(error: unknown) {
-  const code = milestoneDatabaseErrorCode(error);
-  return code === "23503" || code === "P0008";
-}
-
-export function milestoneNotEmptyError(counts: MilestoneChildCounts): MilestoneNotEmptyError {
-  const children = normalizeMilestoneChildCounts(counts);
-  return {
-    code: MILESTONE_NOT_EMPTY_CODE,
-    error: milestoneNotEmptyMessage(children),
-    children,
-  };
 }
 
 export type {

@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -329,6 +330,87 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
   }
 }
 
+async function verifyEmptyEpicDeleteRoutes(sessionToken) {
+  const createEpic = async (title) => {
+    const response = await apiRequest("/api/milestones", sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, description: "Local integration fixture", status: "planned" }),
+    });
+    assertStatus(response, 200, `${title} creation`);
+    const body = await response.json();
+    if (!body.milestone?.id || !body.milestone?.updatedAt) throw new Error(`${title} creation returned an incomplete response.`);
+    return body.milestone;
+  };
+
+  const browserEpic = await createEpic("Browser empty Epic delete verification");
+  const founderDenied = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "sebastian", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
+  });
+  assertStatus(founderDenied, 403, "Founder empty Epic deletion");
+  const browserDelete = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
+  });
+  assertStatus(browserDelete, 200, "Browser empty Epic deletion");
+  const browserBody = await browserDelete.json();
+  if (browserBody.milestone?.id !== browserEpic.id) throw new Error("Browser empty Epic deletion changed its response shape.");
+
+  const teamEpic = await createEpic("Team empty Epic delete verification");
+  let tokenId = "";
+  try {
+    const issued = await apiRequest("/api/team/planning-items/v1/tokens", sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Local empty Epic delete verification", allowEmptyEpicDeletes: true }),
+    });
+    assertStatus(issued, 200, "Empty Epic delete token issuance");
+    const tokenBody = await issued.json();
+    tokenId = String(tokenBody.tokenRecord?.id || "");
+    if (!tokenBody.token || !tokenId || !tokenBody.tokenRecord?.scopes?.includes("write:planning-items:delete-empty")) {
+      throw new Error("Empty Epic delete token issuance returned an incomplete response.");
+    }
+    const payload = JSON.stringify({ expectedUpdatedAt: teamEpic.updatedAt });
+    const preview = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}/delete/preview`, tokenBody.token, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: payload,
+    });
+    assertStatus(preview, 200, "Team empty Epic deletion preview");
+    const previewBody = await preview.json();
+    if (!previewBody.valid || !previewBody.canDelete || previewBody.itemType !== "epic") {
+      throw new Error("Team empty Epic deletion preview changed its response shape.");
+    }
+
+    const idempotencyKey = randomUUID();
+    const commitRequest = {
+      method: "DELETE",
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+      body: payload,
+    };
+    const committed = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
+    assertStatus(committed, 200, "Team empty Epic deletion");
+    const committedBody = await committed.json();
+    if (committedBody.replayed || committedBody.itemType !== "epic" || committedBody.item?.id !== teamEpic.id) {
+      throw new Error("Team empty Epic deletion changed its response shape.");
+    }
+    const replayed = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
+    assertStatus(replayed, 200, "Team empty Epic deletion replay");
+    const replayedBody = await replayed.json();
+    if (!replayedBody.replayed || replayedBody.item?.id !== teamEpic.id) {
+      throw new Error("Team empty Epic deletion replay was not stable.");
+    }
+  } finally {
+    if (tokenId) {
+      const revoked = await apiRequest(`/api/team/planning-items/v1/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
+      assertStatus(revoked, 200, "Empty Epic delete token cleanup");
+    }
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -371,6 +453,7 @@ async function main() {
     const token = signInData.session.access_token;
     await verifyDirectProfileMutationDenied(supabase, signInData.user.id);
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
+    await verifyEmptyEpicDeleteRoutes(token);
 
     const expectedProfiles = [
       ["", "ceo"],

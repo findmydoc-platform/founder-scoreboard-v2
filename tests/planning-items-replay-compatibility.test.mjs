@@ -281,21 +281,32 @@ test("v1 update and delete replays use legacy response mapping", async () => {
       systemEffects: [],
     },
   };
+  const storedDelete = {
+    request_hash: "legacy-delete-hash",
+    contract_version: 1,
+    response: {
+      itemType: "milestone",
+      item: { id: "milestone-v1", title: "Legacy" },
+      children: { initiatives: 0, tasks: 0 },
+    },
+  };
   let deleteRpcCalls = 0;
-  const query = {
+  const query = (data) => ({
     select() { return this; },
     eq() { return this; },
-    async maybeSingle() { return { data: storedUpdate, error: null }; },
-  };
+    async maybeSingle() { return { data, error: null }; },
+  });
   const route = await loadTranspiledModule(
     "src/app/api/team/planning-items/v1/items/[id]/route.ts",
     {
       "next/server": { after: () => undefined },
       "@/lib/api-input": { auditRequestMetadata: () => ({}) },
       "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
-      "@/features/planning-items/model/planning-item-delete": {
-        parsePlanningItemDeletePayload: () => ({ ok: true, expectedUpdatedAt: "2026-07-01T08:00:00.000Z" }),
-        planningItemMilestoneDeleteHash: () => "legacy-delete-hash",
+      "@/features/planning-items/model/planning-actor-context-server": {},
+      "@/features/planning-items/model/planning-items-empty-epic-delete": {
+        parseEmptyEpicDeletePayload: () => ({ ok: true, expectedUpdatedAt: "2026-07-01T08:00:00.000Z" }),
+        emptyEpicDeleteHash: () => "legacy-delete-hash",
+        createEmptyEpicDeletePlanningItems: () => { throw new Error("legacy replay must bypass PlanningItems.run"); },
       },
       "@/features/planning-items/model/planning-item-update": {
         parsePlanningItemPatchPayload: () => ({
@@ -316,7 +327,9 @@ test("v1 update and delete replays use legacy response mapping", async () => {
           scopes: [],
           profile: { id: "ceo", platformRole: "ceo" },
           supabase: {
-            from: () => query,
+            from: (table) => table === "team_planning_milestone_delete_requests"
+              ? query(storedDelete)
+              : query(storedUpdate),
             rpc: async () => {
               deleteRpcCalls += 1;
               return {
@@ -335,12 +348,6 @@ test("v1 update and delete replays use legacy response mapping", async () => {
         planningItemsJson: (body, status = 200) => ({ body, status }),
       },
       "@/features/planning-items/model/planning-items-github-sync": {},
-      "@/features/projects/model/milestone-server": {
-        isMilestoneNotEmptyDatabaseError: () => false,
-        loadMilestoneChildCounts: async () => ({ ok: true, counts: { initiatives: 0, tasks: 0 } }),
-        loadProjectMilestone: async () => ({ data: null, error: null }),
-        milestoneNotEmptyError: () => ({}),
-      },
     },
   );
   const request = {
@@ -357,5 +364,5 @@ test("v1 update and delete replays use legacy response mapping", async () => {
   assert.equal(deleteResponse.status, 200);
   assert.equal(deleteResponse.body.itemType, "milestone");
   assert.equal(deleteResponse.body.item.mapped, "legacy");
-  assert.equal(deleteRpcCalls, 1);
+  assert.equal(deleteRpcCalls, 0);
 });
