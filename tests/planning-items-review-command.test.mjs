@@ -101,7 +101,7 @@ test("review routes delegate to PlanningItems and the command RPC remains servic
     "src/app/api/tasks/[id]/review/reopen/route.ts",
   ];
   const routes = await Promise.all(paths.map((path) => readFile(path, "utf8")));
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const model = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const migration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
   const schema = await readSupabaseSchemaContract();

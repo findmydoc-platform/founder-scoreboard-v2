@@ -56,6 +56,56 @@ const updates = await loadTranspiledModule(
 
 const updatedAt = "2026-07-22T09:30:00.000Z";
 
+test("ReviseItem maps every item type and keeps omitted fields absent", () => {
+  const epic = updates.planningItemReviseCommand("epic-1", "epic", updatedAt, {
+    title: "Updated Epic",
+    status: "active",
+    owner: "ceo",
+    targetDate: "2026-12-31",
+    parentTaskId: "must-not-leak",
+  });
+  assert.deepEqual(epic.changes, {
+    itemKind: "epic",
+    title: "Updated Epic",
+    ownerId: "ceo",
+    status: "In Arbeit",
+    targetDate: "2026-12-31",
+  });
+
+  const initiative = updates.planningItemReviseCommand("initiative-1", "initiative", updatedAt, {
+    goal: "Outcome",
+    successCriteria: "Evidence",
+    scopeConstraints: "Boundary",
+    accountableProfileId: "ceo",
+    responsibleProfileIds: ["owner"],
+    priority: "P1",
+  });
+  assert.deepEqual(initiative.changes.strategy, { goal: "Outcome", successCriteria: "Evidence", scopeConstraints: "Boundary" });
+  assert.deepEqual(initiative.changes.raciAssignments, [
+    { profileId: "ceo", role: "accountable", sortOrder: 0 },
+    { profileId: "owner", role: "responsible", sortOrder: 0 },
+  ]);
+  assert.equal(initiative.changes.priority, "P1");
+
+  const deliverable = updates.planningItemReviseCommand("deliverable-1", "deliverable", updatedAt, {
+    problemStatement: "Problem",
+    intendedOutcome: "Outcome",
+    ownerId: "owner",
+    hours: 8,
+  });
+  assert.deepEqual(deliverable.changes.brief, { problemStatement: "Problem", intendedOutcome: "Outcome" });
+  assert.equal(deliverable.changes.ownerId, "owner");
+  assert.equal(deliverable.changes.hours, 8);
+
+  const subIssue = updates.planningItemReviseCommand("sub-1", "sub_issue", updatedAt, {
+    description: "Context",
+    githubRepo: "findmydoc-platform/website",
+  });
+  assert.deepEqual(subIssue.changes.brief, { description: "Context" });
+  assert.equal(subIssue.changes.githubRepository, "findmydoc-platform/website");
+  assert.equal(Object.hasOwn(subIssue.changes, "ownerId"), false);
+});
+
 function taskRow(overrides = {}) {
   return {
     id: "task-1",

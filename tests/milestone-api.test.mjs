@@ -38,6 +38,26 @@ const server = await loadTranspiledModule(
       createBrowserCreatePlanningItems: () => ({ run: async () => ({ ok: false }) }),
       planningItemCreateCommand: () => ({ kind: "createItems", items: [] }),
     },
+    "@/features/planning-items/model/planning-item-update": {
+      browserReviseTransactionFromResult: (result) => result.transaction,
+      createBrowserRevisePlanningItems: ({ supabase, writer }) => ({
+        run: async () => {
+          const response = await supabase.rpc("update_browser_planning_item_transaction", {
+            p_task_id: writer.params.taskId,
+            p_expected_updated_at: writer.params.expectedUpdatedAt,
+            p_patch: writer.params.patch,
+            p_strategy: writer.params.strategy,
+            p_raci_assignments: writer.params.raciAssignments,
+            p_actor_profile_id: "ceo",
+            p_request_ip: null,
+            p_user_agent: null,
+            p_legacy_audit_action: writer.params.legacyAuditAction,
+          });
+          return response.error ? { ok: false, error: response.error } : { ok: true, transaction: response.data };
+        },
+      }),
+      planningItemReviseCommand: () => ({ kind: "reviseItem" }),
+    },
     "@/lib/slug": {
       slugify: (value) => String(value).trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, ""),
     },
@@ -132,7 +152,7 @@ test("Milestone inserts own project and ID while leaving sort allocation to the 
   assert.match(server.createMilestoneId("Market readiness"), /^epic-market-readiness-[0-9a-f-]{36}$/);
 });
 
-test("Legacy Milestone update helper delegates writes to the canonical Epic RPC", async () => {
+test("Legacy Milestone update helper delegates writes to the canonical Revise RPC", async () => {
   const calls = [];
   const supabase = {
     rpc(name, input) {
@@ -146,16 +166,19 @@ test("Legacy Milestone update helper delegates writes to the canonical Epic RPC"
     "milestone-one",
     "2026-07-14T12:00:00.000Z",
     { title: "Updated title" },
-    "ceo",
+    { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } },
   );
   assert.deepEqual(calls, [
-    ["rpc", "update_planning_item_transaction", {
+    ["rpc", "update_browser_planning_item_transaction", {
       p_task_id: "milestone-one",
       p_expected_updated_at: "2026-07-14T12:00:00.000Z",
       p_patch: { title: "Updated title" },
       p_strategy: null,
       p_raci_assignments: null,
       p_actor_profile_id: "ceo",
+      p_request_ip: null,
+      p_user_agent: null,
+      p_legacy_audit_action: "milestone.update",
     }],
   ]);
 });
@@ -163,7 +186,7 @@ test("Legacy Milestone update helper delegates writes to the canonical Epic RPC"
 test("Session routes use the narrow role guards and never return raw database errors", async () => {
   const [collectionRoute, itemRoute, serverSource] = await Promise.all([
     readFile("src/features/planning-items/model/planning-items-browser-milestone-route.ts", "utf8"),
-    readFile("src/app/api/milestones/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-milestone-update.ts", "utf8"),
     readFile("src/features/projects/model/milestone-server.ts", "utf8"),
   ]);
 
@@ -177,6 +200,6 @@ test("Session routes use the narrow role guards and never return raw database er
   assert.doesNotMatch(itemRoute, /freshTarget|freshChildren|loadMilestoneChildCounts|buildMilestoneDeletePolicy/);
   assert.match(serverSource, /import "server-only"/);
   assert.match(serverSource, /\.eq\("project_id", MILESTONE_PROJECT_ID\)/);
-  assert.match(serverSource, /update_planning_item_transaction/);
+  assert.match(serverSource, /createBrowserRevisePlanningItems/);
   assert.doesNotMatch(serverSource, /delete_empty_epic_transaction|loadMilestoneChildCounts/);
 });

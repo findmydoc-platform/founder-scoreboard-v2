@@ -207,10 +207,11 @@ test("planning app controller delegates command domains and stays a thin compose
 test("task mutation contract centralizes update normalization and route patches", async () => {
   const contract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const taskUpdateCommand = await readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8");
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
   const verifySupabase = await readFile("scripts/verify-supabase.mjs", "utf8");
-  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
+  const planningUpdate = await readFile("src/features/planning-items/model/planning-item-update.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
 
@@ -225,8 +226,9 @@ test("task mutation contract centralizes update normalization and route patches"
   assert.match(taskUpdateCommand, /taskUpdateRequestPayload/);
   assert.match(taskUpdateCommand, /latestMutationByTask/);
   assert.match(taskUpdateCommand, /refreshPlanningData/);
-  assert.match(route, /update_planning_task_transaction/);
-  assert.match(route, /p_expected_updated_at: payload\.expectedUpdatedAt/);
+  assert.match(route, /createBrowserRevisePlanningItems/);
+  assert.match(planningUpdate, /update_browser_planning_task_transaction/);
+  assert.match(planningUpdate, /p_expected_updated_at: writer\.params\.expectedUpdatedAt/);
   assert.doesNotMatch(route, /\.from\("task_notes"\)[\s\S]*\.upsert/);
   assert.doesNotMatch(route, /\.from\("task_dependencies"\)\.delete/);
   assert.match(migration, /task\.updated_at = \$3/);
@@ -347,7 +349,7 @@ test("task row descriptor covers planning UI mapping fields", async () => {
 test("task template v2 separates outcome criteria evidence and DoD", async () => {
   const migration = await readSupabaseSchemaContract();
   const createRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
-  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const updateRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const updateRoutePolicy = `${updateRoute}\n${updateRouteHelpers}`;
   const types = await readFile("src/lib/types.ts", "utf8");
@@ -477,7 +479,7 @@ test("workspace loading shells are route-specific and data-free", async () => {
 
 test("task review uses accountable reviewer route and keeps rework non-final", async () => {
   const route = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const reviewModule = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const reviewCommandMigration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
   const createTaskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
@@ -569,7 +571,7 @@ test("reviews live in task detail while legacy review links remain compatible", 
   const legacyReviewsRoute = await readFile("src/app/(workspaces)/reviews/page.tsx", "utf8");
   const reviewRoute = await readFile("src/app/reviews/[id]/page.tsx", "utf8");
   const reopenRoute = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const reviewModule = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const reviewCommandMigration = await readFile("supabase/migrations/20260812133802_planning_review_command_transaction.sql", "utf8");
   const blockerRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
@@ -819,7 +821,7 @@ test("sprint configuration is operational-lead only and audited", async () => {
 });
 
 test("tasks can be assigned to an unlocked sprint", async () => {
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
 
   assert.match(route, /sprintId/);
   assert.match(route, /sprint_id/);
@@ -1007,7 +1009,7 @@ test("review workflow supports rework, suggestions, and sprint commitments", asy
 test("founder self checklist is separate from CEO scoring", async () => {
   const migration = await readSupabaseSchemaContract();
   const reviewModule = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const sprintUi = await readFeatureSurface("src/features/sprint");

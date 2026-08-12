@@ -116,7 +116,7 @@ test("github sync route is team-scoped and locked per github resource", async ()
 });
 
 test("planning items use the paper-bin workflow while legacy deletion artifacts remain available", async () => {
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const taskWithdrawCommand = await readFile("src/features/tasks/hooks/use-task-withdraw-command.ts", "utf8");
   const trashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
@@ -126,7 +126,7 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   const github = await readFile("src/lib/github.ts", "utf8");
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
 
-  assert.match(taskRoute, /export async function DELETE/);
+  assert.match(taskRoute, /export async function handleBrowserTaskDelete/);
   assert.match(taskRoute, /Direktes Löschen ist nicht mehr verfügbar/);
   assert.match(taskRoute, /410/);
   assert.doesNotMatch(taskRoute, /archiveGitHubIssue|prepare_task_deletion_transaction|finalize_task_deletion_transaction/);
@@ -307,7 +307,7 @@ test("task relationships use github-like blocked by and blocking semantics", asy
 });
 
 test("github issue sync and comment delivery keep independent state", async () => {
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
@@ -637,7 +637,7 @@ test("comments blockers and notification outbox are modeled before Google Chat d
   const githubAssetsRoute = await readFile("src/app/api/github-assets/route.ts", "utf8");
   const attachmentRoute = await readFile("src/app/api/tasks/[id]/attachments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const taskMutationContract = await readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8");
   const syncRoute = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
   const ui = await readPlanningSurface();

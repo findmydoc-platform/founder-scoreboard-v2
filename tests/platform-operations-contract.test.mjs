@@ -437,7 +437,7 @@ test("Planning Items API is the sole automated planning-item creation contract",
   const planningItemsRoute = await readFile("src/app/api/team/planning-items/v1/items/route.ts", "utf8");
   const planningItemsCreate = await readFile("src/features/planning-items/model/planning-items-create.ts", "utf8");
   const planningItemsDocumentation = await readFile("docs/team-planning-items-api.md", "utf8");
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const taskRouteHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const taskRoutePolicy = `${taskRoute}\n${taskRouteHelpers}`;
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");

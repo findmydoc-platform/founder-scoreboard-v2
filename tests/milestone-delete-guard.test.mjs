@@ -44,7 +44,7 @@ test("Epic deletion is empty-only, task-rooted, and service-role callable", asyn
 test("legacy Milestone endpoint stays an adapter over the canonical PlanningItems command", async () => {
   const [server, route, command] = await Promise.all([
     readFile("src/features/projects/model/milestone-server.ts", "utf8"),
-    readFile("src/app/api/milestones/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-milestone-update.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-empty-epic-delete.ts", "utf8"),
   ]);
 

@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("working status stays ownership-bound while Sub-Issue final transitions are role-based", async () => {
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
   const routePolicy = `${route}\n${routeHelpers}`;
   const app = await readPlanningSurface();

@@ -36,7 +36,7 @@ test("operational planning readers use centralized active views", async () => {
 test("trash detail and mutation writes retain explicit base-table access", async () => {
   const [detail, taskRoute] = await Promise.all([
     readFile("src/lib/planning-trash-detail.ts", "utf8"),
-    readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
   ]);
   assert.match(detail, /\.from\("tasks"\)/);
   assert.match(detail, /\.from\("packages"\)/);

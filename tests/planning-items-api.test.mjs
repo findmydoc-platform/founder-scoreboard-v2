@@ -19,16 +19,17 @@ const publicPaths = [
 ];
 
 test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and empty Epic DELETE contracts", async () => {
-  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
+  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, updateModule, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
     read("src/features/projects/model/milestone-contract.ts"),
     read("src/app/api/team/planning-items/v1/context/route.ts"),
     read("src/app/api/team/planning-items/v1/items/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/route.ts"),
     read("src/features/planning-items/model/planning-items-create.ts"),
-    read("src/app/api/team/planning-items/v1/items/[id]/preview/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-update-preview.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts"),
-    read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-update-route.ts"),
+    read("src/features/planning-items/model/planning-item-update.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/github-sync/route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/[id]/route.ts"),
@@ -53,7 +54,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
   assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);
   assert.match(deletePreviewRoute, /mode: "preview"/);
-  assert.match(updateRoute, /update_team_planning_item_transaction/);
+  assert.match(updateRoute, /createTeamRevisePlanningItems/);
+  assert.match(updateModule, /update_team_planning_item_transaction/);
   assert.match(updateRoute, /createEmptyEpicDeletePlanningItems/);
   assert.doesNotMatch(updateRoute, /isMilestoneNotEmptyDatabaseError|loadMilestoneChildCounts/);
   assert.match(milestoneContract, /MILESTONE_NOT_EMPTY_CODE = "MILESTONE_NOT_EMPTY"/);
