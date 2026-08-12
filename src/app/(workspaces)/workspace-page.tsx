@@ -12,6 +12,8 @@ import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read
 import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
 import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
+import { sprintWorkspaceModelToPlanningData } from "@/features/sprint/model/sprint-planning-data-adapter";
+import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { getPlanningDataScopeForWorkspace, type LegacyPlanningDataWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
 import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
@@ -101,6 +103,22 @@ async function loadSupportingWorkspacePageData(
     : { status: workspaceData.status };
 }
 
+async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
+  const supabase = getServerSupabase();
+  if (!supabase) return { status: "unavailable" as const };
+  const [sprint, headerData] = await Promise.all([
+    createSupabaseSprintReadModel(supabase).load({ authorized: true, actorProfileId: profile?.id || null }),
+    loadPlanningHeaderData(supabase, {
+      currentProfileId: profile?.id || null,
+      platformRole: profile?.platformRole || null,
+      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
+    }),
+  ]);
+  return sprint.status === "ready"
+    ? { status: "ready" as const, model: sprint.model, headerData }
+    : { status: sprint.status };
+}
+
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
   if (requiresSupabaseAuth()) {
     const auth = await getServerPlanningAuth(["ceo", "founder", "deputy", "viewer"]);
@@ -176,6 +194,24 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
       );
     }
 
+    if (initialWorkspace === "sprint") {
+      const sprint = await loadSprintPageData(auth.profile);
+      if (sprint.status !== "ready") return <PlanningDataUnavailablePage workspace="sprint" authUserEmail={auth.user?.email || ""} />;
+      return (
+        <PlanningApp
+          initialData={sprintWorkspaceModelToPlanningData(sprint.model)}
+          initialHeaderData={sprint.headerData}
+          initialWorkspace="sprint"
+          initialSprintModel={sprint.model}
+          source="supabase"
+          authRequired
+          initialAuthUser={auth.user}
+          initialCurrentProfile={auth.profile}
+          initialProtectedDataLoaded
+        />
+      );
+    }
+
     const [{ availability, data, headerData, source }, initialDecisionLogResult] = await Promise.all([
       loadWorkspacePlanningData(initialWorkspace, auth.profile, { headerData: "deferred" }),
       initialWorkspace === "decision-log" ? loadNotionDecisionLog() : Promise.resolve(undefined),
@@ -236,6 +272,21 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         initialData={supportingWorkspaceModelToPlanningData(initialWorkspace, supportingWorkspace.model)}
         initialHeaderData={supportingWorkspace.headerData}
         initialWorkspace={initialWorkspace}
+        source="supabase"
+        authRequired={false}
+      />
+    );
+  }
+
+  if (initialWorkspace === "sprint") {
+    const sprint = await loadSprintPageData();
+    if (sprint.status !== "ready") return <PlanningDataUnavailablePage workspace="sprint" />;
+    return (
+      <PlanningApp
+        initialData={sprintWorkspaceModelToPlanningData(sprint.model)}
+        initialHeaderData={sprint.headerData}
+        initialWorkspace="sprint"
+        initialSprintModel={sprint.model}
         source="supabase"
         authRequired={false}
       />

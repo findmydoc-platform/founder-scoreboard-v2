@@ -50,7 +50,6 @@ function recordingSupabase() {
 
 const expectedTablesByWorkspace = {
   "decision-log": ["projects", "profiles", "profile_ui_preferences", "profile_feature_tour_acknowledgements"],
-  sprint: ["projects", "profiles", "active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links", "sprints", "sprint_commitments", "founder_sprint_scores", "founder_strike_state", "strike_events", "score_objections", "profile_ui_preferences", "profile_feature_tour_acknowledgements", "meetings", "meeting_attendance"],
 };
 
 for (const [workspace, expectedTables] of Object.entries(expectedTablesByWorkspace)) {

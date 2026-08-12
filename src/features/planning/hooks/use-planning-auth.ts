@@ -8,6 +8,8 @@ import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningData, type SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
+import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
+import { sprintWorkspaceModelToPlanningData } from "@/features/sprint/model/sprint-planning-data-adapter";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -247,14 +249,18 @@ export function usePlanningAuth({
             ? "/api/strategic-planning-data"
             : isSupportingWorkspace(workspace)
               ? `/api/${workspace}-data`
-              : "";
+              : workspace === "sprint"
+                ? "/api/sprint-data"
+                : "";
         const response = await fetch(focusedPlanningRoute || `/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel | SupportingWorkspaceModel; error?: string }) | null;
+        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel | SupportingWorkspaceModel | SprintWorkspaceModel; error?: string }) | null;
         const payloadData = payload?.model
-          ? isSupportingWorkspace(workspace)
+          ? workspace === "sprint"
+            ? sprintWorkspaceModelToPlanningData(payload.model as SprintWorkspaceModel)
+            : isSupportingWorkspace(workspace)
             ? supportingWorkspaceModelToPlanningData(workspace, payload.model as SupportingWorkspaceModel)
             : planningWorkspaceModelToPlanningData(payload.model as PlanningWorkspaceModel)
           : payload?.data;
