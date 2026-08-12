@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const atomicFeatureDirs = ["atoms", "molecules", "organisms", "templates", "hooks", "model"];
+const atomicFeatureDirs = ["atoms", "molecules", "organisms", "templates", "hooks", "model", "server"];
 const approvedNativeControlFiles = new Set([
   "src/shared/atoms/custom-select.tsx",
   "src/shared/atoms/custom-date-picker.tsx",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type TransitionStartFunction } from "react";
 import { requestTaskDetailData } from "@/features/tasks/model/task-api-client";
-import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
+import { applyTaskDetailModel, taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-data-adapter";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { PlanningData, Task } from "@/lib/types";
 
@@ -40,16 +40,20 @@ export function useTaskDetailDataLoader({
       try {
         const { response, body } = await requestTaskDetailData(apiClient, selectedTaskId);
         if (!active) return;
-        if (!response.ok || !body?.detailData) throw new Error(body?.error || "Task-Details konnten nicht geladen werden.");
+        if (!response.ok || !body?.taskDetail) throw new Error(body?.error || "Task-Details konnten nicht geladen werden.");
 
-        applyPlanningDataUpdate((current) => mergeTaskDetailData(current, selectedTaskId, body.detailData!));
+        applyPlanningDataUpdate((current) => applyTaskDetailModel(current, body.taskDetail!));
         setLoadedTaskIds((current) => {
           if (current.has(selectedTaskId)) return current;
           const next = new Set(current);
           next.add(selectedTaskId);
           return next;
         });
-        setLoadState({ taskId: selectedTaskId, loading: false, error: "" });
+        setLoadState({
+          taskId: selectedTaskId,
+          loading: false,
+          error: taskDetailDegradationMessage(body.unavailable || []),
+        });
       } catch (caught) {
         if (!active) return;
         setLoadState({

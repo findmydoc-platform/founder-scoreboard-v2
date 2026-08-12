@@ -29,14 +29,6 @@ const baseWorkspaceDataScope = {
   audit: false,
 } satisfies PlanningDataQueryScope;
 
-export const taskDetailPageDataScope = {
-  ...baseWorkspaceDataScope,
-  packages: true,
-  milestones: true,
-  tasks: true,
-  sprints: true,
-} satisfies PlanningDataQueryScope;
-
 export const initiativeDetailPageDataScope = {
   ...baseWorkspaceDataScope,
 } satisfies PlanningDataQueryScope;

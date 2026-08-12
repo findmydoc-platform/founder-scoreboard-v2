@@ -1,7 +1,7 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { TaskDetailData } from "@/lib/task-detail-data";
+import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import type { ApprovalDecisionAction, PlanningData, Task, TaskActivity, TaskExternalComment, TaskRelation, TaskReview } from "@/lib/types";
 import type {
   TaskGitHubProjectionResult,
@@ -79,7 +79,11 @@ export function restoreTaskRequest(apiClient: BrowserApiClient, taskId: string, 
 }
 
 export function requestTaskDetailData(apiClient: BrowserApiClient, taskId: string) {
-  return apiClient.requestJson<{ error?: string; detailData?: TaskDetailData }>(`/api/tasks/${taskId}/detail-data`);
+  return apiClient.requestJson<{
+    error?: string;
+    taskDetail?: TaskDetailModel;
+    unavailable?: TaskDetailUnavailableArea[];
+  }>(`/api/tasks/${taskId}/detail-data`);
 }
 
 export function createTaskRequest(apiClient: BrowserApiClient, draft: unknown) {

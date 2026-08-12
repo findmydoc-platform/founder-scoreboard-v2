@@ -43,7 +43,7 @@ test("normal planning reads use the centralized active read models", async () =>
     read("src/lib/planning-data-loader.ts"),
     read("src/features/planning-items/model/planning-items-context.ts"),
     read("src/features/planning-items/model/planning-items-create.ts"),
-    read("src/lib/task-detail-data.ts"),
+    read("src/features/tasks/server/task-detail-read-model-supabase.ts"),
   ]);
 
   assert.match(readModel, /ACTIVE_PACKAGES_TABLE = "active_packages"/);

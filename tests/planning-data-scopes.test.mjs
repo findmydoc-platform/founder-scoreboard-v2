@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-const { getPlanningDataScopeForWorkspace, taskDetailPageDataScope } = await loadTranspiledModule(
+const { getPlanningDataScopeForWorkspace } = await loadTranspiledModule(
   "src/lib/planning-data-scopes.ts",
 );
 
@@ -68,22 +68,6 @@ for (const [workspace, expectedTables] of Object.entries(expectedTablesByWorkspa
     assert.deepEqual(supabase.queriedTables, expectedTables);
   });
 }
-
-test("task detail keeps every core collection while loading detail rows separately", async () => {
-  const supabase = recordingSupabase();
-  await loadPlanningDataRows(supabase, taskDetailPageDataScope);
-  assert.deepEqual(supabase.queriedTables, [
-    "projects",
-    "profiles",
-    "active_tasks",
-    "planning_item_strategy",
-    "planning_item_raci_assignments",
-    "task_links",
-    "sprints",
-    "profile_ui_preferences",
-    "profile_feature_tour_acknowledgements",
-  ]);
-});
 
 test("skipped collections keep the PlanningData response shape as empty arrays", async () => {
   const supabase = recordingSupabase();

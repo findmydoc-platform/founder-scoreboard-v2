@@ -113,8 +113,9 @@ test("task detail is active-first and falls back to a read-only trash surface", 
     read("src/features/planning-trash/molecules/planning-trash-banner.tsx"),
   ]);
 
-  assert.match(page, /const task = data\.tasks\.find/);
-  assert.match(page, /loadPlanningTrashTaskDetail\(supabase, id, data\.profiles\)/);
+  assert.match(page, /taskDetailResult\.status === "notFound"/);
+  assert.match(page, /loadPlanningTrashTaskDetail\(supabase, id, \[\.\.\.taskDetailResult\.people\]\)/);
+  assert.match(page, /createSupabaseTaskDetailReadModel\(supabase\)\.load/);
   assert.match(page, /getServerPlanningAuth\(\["ceo", "founder", "deputy", "viewer"\]\)/);
   for (const template of [taskTemplate, initiativeTemplate]) {
     assert.doesNotMatch(template, /"use client"|<form|UiButton|onUpdate|onDecide|onRestore|onSyncGitHub/);
