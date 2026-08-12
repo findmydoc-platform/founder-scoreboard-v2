@@ -206,6 +206,8 @@ test("github issue export keeps current Sub-Issue context compact and reconstruc
 test("task relationships use github-like blocked by and blocking semantics", async () => {
   const migration = await readSupabaseSchemaContract();
   const route = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const relationshipModule = await readFile("src/features/planning-items/model/planning-items-relationships.ts", "utf8");
+  const relationshipCommandMigration = await readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8");
   const github = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
   const githubHttp = await readFile("src/lib/github-http.ts", "utf8");
   const data = await readFile("src/lib/planning-data-loader.ts", "utf8");
@@ -228,9 +230,14 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(migration, /blocks/);
   assert.match(migration, /relates_to/);
   assert.match(route, /requirePlanningContributor/);
-  assert.match(route, /taskRelationshipAccess/);
-  assert.match(route, /allowedRelationTypes\.includes\(relationType\)/);
-  assert.match(route, /canRemoveRelation\(mappedRelation\)/);
+  assert.match(route, /createPlanningRelationshipPlanningItems/);
+  assert.match(route, /createPlanningRelationshipPlanningItems\(apiContext\.supabase\)\.run/);
+  assert.doesNotMatch(route, /taskRelationshipAccess|task_relationship_edges|taskIdsHaveReviewLock/);
+  assert.match(relationshipModule, /relationType !== "blocked_by" && relationType !== "blocks" && relationType !== "relates_to"/);
+  assert.match(relationshipModule, /canManageBlockedBy/);
+  assert.match(relationshipModule, /actor\.platformRole === "ceo" \|\| actor\.platformRole === "deputy"/);
+  assert.match(relationshipCommandMigration, /task\.relationship_created/);
+  assert.match(relationshipCommandMigration, /task\.relationship_deleted/);
   assert.match(relationshipPermissions, /profile\.platformRole === "founder"/);
   assert.match(relationshipPermissions, /founderManageableTaskTypes/);
   assert.match(relationshipPermissions, /relation\.taskId === task\.id/);
@@ -238,9 +245,9 @@ test("task relationships use github-like blocked by and blocking semantics", asy
   assert.match(relationshipPermissionMigration, /created_by = public\.current_profile_id\(\)/);
   assert.match(relationshipPermissionMigration, /coalesce\(initiative\.accountable_profile_id, initiative\.owner_id\)/);
   assert.match(relationshipPermissionMigration, /task_relationship_edges_update_operational/);
-  assert.match(route, /task.relationship_created/);
-  assert.match(route, /task.relationship_deleted/);
-  assert.match(route, /github_issue_sync_status: "not_synced"/);
+  assert.match(relationshipCommandMigration, /task\.relationship_created/);
+  assert.match(relationshipCommandMigration, /task\.relationship_deleted/);
+  assert.match(relationshipCommandMigration, /github_issue_sync_status = 'not_synced'/);
   assert.match(types, /TaskRelationType/);
   assert.match(data, /task_relationship_edges/);
   assert.match(platform, /taskRelationsFor/);
@@ -301,6 +308,7 @@ test("github issue sync and comment delivery keep independent state", async () =
   const commentsRoute = await readFile("src/app/api/tasks/[id]/comments/route.ts", "utf8");
   const blockersRoute = await readFile("src/app/api/tasks/[id]/blockers/route.ts", "utf8");
   const relationshipsRoute = await readFile("src/app/api/tasks/[id]/relationships/route.ts", "utf8");
+  const relationshipCommandMigration = await readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8");
   const syncRoute = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
   const github = await readFile("src/lib/github-sync/issue-projection.ts", "utf8");
   const dependencies = await readFile("src/lib/github-sync/dependency-projection.ts", "utf8");
@@ -313,7 +321,8 @@ test("github issue sync and comment delivery keep independent state", async () =
   assert.match(commentsRoute, /deliverPendingGitHubComments/);
   assert.match(deliveryMigration, /waiting_for_author_connection/);
   assert.match(blockersRoute, /github_issue_sync_status: "not_synced"/);
-  assert.match(relationshipsRoute, /github_issue_sync_status: "not_synced"/);
+  assert.doesNotMatch(relationshipsRoute, /github_issue_sync_status|github_issue_sync_error/);
+  assert.match(relationshipCommandMigration, /github_issue_sync_status = 'not_synced'/);
   assert.match(syncRoute, /projectTaskGitHubDependencies/);
   assert.match(dependencies, /task_relationship_edges/);
   assert.match(dependencies, /\.in\("relation_type", \["blocked_by", "blocks"\]\)/);

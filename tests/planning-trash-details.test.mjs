@@ -41,7 +41,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
     "src/app/api/tasks/[id]/comments/route.ts",
     "src/app/api/tasks/[id]/github-comments/route.ts",
     "src/app/api/tasks/[id]/blockers/route.ts",
-    "src/app/api/tasks/[id]/relationships/route.ts",
     "src/app/api/tasks/[id]/attachments/route.ts",
     "src/app/api/tasks/[id]/review/route.ts",
     "src/app/api/tasks/[id]/review/reopen/route.ts",
@@ -60,17 +59,29 @@ test("all high-risk task and initiative mutations use the centralized active gua
   }
   const syncProjection = await read("src/lib/github-sync/task-projection.ts");
   assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
+
+  const [relationshipRoute, relationshipModule, relationshipMigration] = await Promise.all([
+    read("src/app/api/tasks/[id]/relationships/route.ts"),
+    read("src/features/planning-items/model/planning-items-relationships.ts"),
+    read("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql"),
+  ]);
+  assert.match(relationshipRoute, /createPlanningRelationshipPlanningItems/);
+  assert.match(relationshipModule, /state\.source\.trashed/);
+  assert.match(relationshipModule, /state\.related\.trashed/);
+  assert.match(relationshipMigration, /v_source\.trashed_at is not null/);
+  assert.match(relationshipMigration, /v_related\.trashed_at is not null/);
 });
 
 test("reparenting and relationship targets use active read models", async () => {
-  const [taskRoute, relationshipRoute] = await Promise.all([
+  const [taskRoute, relationshipModule, relationshipMigration] = await Promise.all([
     read("src/app/api/tasks/[id]/route.ts"),
-    read("src/app/api/tasks/[id]/relationships/route.ts"),
+    read("src/features/planning-items/model/planning-items-relationships.ts"),
+    read("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql"),
   ]);
 
   assert.match(taskRoute, /\.from\(ACTIVE_TASKS_TABLE\)[^]*\.select\("id,task_type,approval_status"\)/);
-  assert.match(relationshipRoute, /ACTIVE_TASKS_TABLE/);
-  assert.match(relationshipRoute, /requireActivePlanningItem\(supabase, "tasks", relatedTaskId\)/);
+  assert.match(relationshipModule, /state\.related\.trashed/);
+  assert.match(relationshipMigration, /v_related\.trashed_at is not null/);
 });
 
 test("task detail is active-first and falls back to a read-only trash surface", async () => {
