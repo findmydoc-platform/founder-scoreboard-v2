@@ -336,6 +336,7 @@ async function main() {
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
+  execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-items-transaction.mjs")], { cwd: root, stdio: "inherit" });
   await verifyGitHubProjectRoleBoundary(status, source);
   await verifyUnmappedAuthReadBoundary(status);

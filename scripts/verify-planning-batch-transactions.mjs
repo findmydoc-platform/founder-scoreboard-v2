@@ -31,6 +31,16 @@ await client.connect();
 await client.query("begin");
 
 try {
+  const actors = await client.query(
+    `select id, platform_role
+     from public.profiles
+     where platform_role in ('ceo', 'founder')
+     order by case platform_role when 'ceo' then 0 else 1 end, id`,
+  );
+  const ceoId = actors.rows.find((profile) => profile.platform_role === "ceo")?.id;
+  const founderId = actors.rows.find((profile) => profile.platform_role === "founder")?.id;
+  if (!ceoId || !founderId) throw new Error("Backlog transaction verification requires CEO and Founder profiles.");
+
   const insertedTasks = await client.query(
     `insert into public.tasks (id, project_id, title, status, priority, sort_order)
      values
@@ -72,11 +82,11 @@ try {
       'after'::text,
       $3::timestamptz,
       $4::timestamptz,
-      null,
+      $5::text,
       null,
       'transaction verifier move'
     ) as result`,
-    [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1])],
+    [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1]), ceoId],
   );
   if (!moved.rows[0]?.result?.some((task) => task.id === taskIds[0])) {
     throw new Error("Backlog move did not return the moved task.");
@@ -100,6 +110,27 @@ try {
   );
   if (moveAudit.rows[0]?.count !== 1) throw new Error("Backlog move audit was not committed with the move.");
 
+  await client.query("savepoint forbidden_backlog_move");
+  try {
+    await client.query(
+      `select public.move_backlog_task_transaction(
+        $1::text,
+        $2::text,
+        'before'::text,
+        $3::timestamptz,
+        $4::timestamptz,
+        $5::text,
+        null,
+        'transaction verifier forbidden move'
+      )`,
+      [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1]), founderId],
+    );
+    throw new Error("Founder backlog move unexpectedly succeeded through the database transaction.");
+  } catch (error) {
+    if (error?.code !== "P0004") throw error;
+    await client.query("rollback to savepoint forbidden_backlog_move");
+  }
+
   await client.query("savepoint stale_backlog_move");
   try {
     await client.query(
@@ -109,11 +140,11 @@ try {
         'before'::text,
         $3::timestamptz,
         $4::timestamptz,
-        null,
+        $5::text,
         null,
         'transaction verifier move'
       )`,
-      [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1])],
+      [taskIds[0], taskIds[1], persistedOrderById.get(taskIds[0]), persistedOrderById.get(taskIds[1]), ceoId],
     );
     throw new Error("Stale backlog move unexpectedly succeeded.");
   } catch (error) {
