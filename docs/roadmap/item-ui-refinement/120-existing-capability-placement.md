@@ -252,7 +252,7 @@ It is not a `blocked_by` relationship. A Task may have a reported blocker, a `Wa
 
 ### Data source and current code path
 
-- Data: `TaskBlocker` in `src/lib/types.ts`; loaded as `taskBlockers` by `loadTaskDetailData`.
+- Data: `TaskBlocker` in `src/lib/types.ts`; loaded by the feature-owned Task Detail Read Model.
 - Current UI: `TaskDetailPanelBlockerSection`.
 - Permission: `permissions.canReportBlocker` from `taskDetailPermissions`.
 - Mutation: existing `POST /api/tasks/[id]/blockers` through the Planning collaboration controller.

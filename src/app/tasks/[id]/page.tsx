@@ -4,13 +4,12 @@ import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { PlanningTrashTaskDetailPage } from "@/features/planning-trash/templates/planning-trash-task-detail-page";
-import { mergeTaskDetailData } from "@/features/tasks/model/task-detail-data-merge";
-import { taskDetailPageDataScope } from "@/lib/planning-data-scopes";
-import { emptyPlanningData, getPlanningData } from "@/lib/planning-data";
-import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { taskDetailDegradationMessage } from "@/features/tasks/model/task-detail-planning-data-adapter";
+import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
+import { emptyPlanningData } from "@/lib/planning-data";
+import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
-import { emptyTaskDetailData, loadTaskDetailData } from "@/lib/task-detail-data";
 import { loadPlanningTrashTaskDetail } from "@/lib/planning-trash-detail";
 import type { AuthenticatedProfile } from "@/lib/types";
 
@@ -33,26 +32,25 @@ export default async function TaskPage({ params }: Props) {
   }
 
   const supabase = getServerSupabase();
-  const planningDataPromise = getPlanningData(taskDetailPageDataScope, {
-    workspace: "planning",
-    currentProfileId: authProfile?.id || null,
-    platformRole: authProfile?.platformRole || null,
-  });
-  const taskDetailPromise = supabase
-    ? loadTaskDetailData(supabase, id)
-    : Promise.resolve({ ok: true as const, data: emptyTaskDetailData });
-  const [
-    { availability, data, headerData, source },
-    taskDetailResult,
-  ] = await Promise.all([planningDataPromise, taskDetailPromise]);
-  if (availability === "unavailable") {
+  if (!supabase) {
     return <PlanningDataUnavailablePage workspace="planning" />;
   }
-  const task = data.tasks.find((item) => item.id === id);
+  const [taskDetailResult, headerData] = await Promise.all([
+    createSupabaseTaskDetailReadModel(supabase).load(
+      { itemId: id },
+      { authorized: true, actorProfileId: authProfile?.id || null },
+    ),
+    loadPlanningHeaderData(supabase, {
+      currentProfileId: authProfile?.id || null,
+      platformRole: authProfile?.platformRole || null,
+    }),
+  ]);
+  if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden") {
+    return <PlanningDataUnavailablePage workspace="planning" />;
+  }
 
-  if (!task) {
-    if (!supabase) notFound();
-    const trashDetailResult = await loadPlanningTrashTaskDetail(supabase, id, data.profiles);
+  if (taskDetailResult.status === "notFound") {
+    const trashDetailResult = await loadPlanningTrashTaskDetail(supabase, id, [...taskDetailResult.people]);
     if (!trashDetailResult.ok) {
       if (trashDetailResult.status === 404) notFound();
       return <PlanningDataUnavailablePage workspace="planning" />;
@@ -60,26 +58,24 @@ export default async function TaskPage({ params }: Props) {
     return (
       <PlanningTrashTaskDetailPage
         detail={trashDetailResult.detail}
-        profiles={data.profiles}
+        profiles={[...taskDetailResult.people]}
         currentPlatformRole={authProfile?.platformRole}
       />
     );
   }
 
-  if (!taskDetailResult.ok && taskDetailResult.status === 404) notFound();
-  const taskDetailData = taskDetailResult.ok ? taskDetailResult.data : emptyTaskDetailData;
-  const initialData = mergeTaskDetailData(data, id, taskDetailData);
-
   return (
     <TaskDetailPage
-      taskId={task.id}
-      initialData={initialData}
+      taskId={taskDetailResult.model.item.id}
+      initialModel={taskDetailResult.model}
       headerData={headerData}
-      source={source}
+      source="supabase"
       authRequired={authRequired}
       initialAuthUser={authUser}
       initialCurrentProfile={authProfile}
-      initialDetailDataError={taskDetailResult.ok ? "" : taskDetailResult.error}
+      initialDetailDataError={taskDetailResult.status === "degraded"
+        ? taskDetailDegradationMessage(taskDetailResult.unavailable)
+        : ""}
     />
   );
 }

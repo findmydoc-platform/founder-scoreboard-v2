@@ -397,7 +397,7 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(workspacePreferences, /value === "settings"\) return "notifications"/);
   assert.match(workspacePage, /getPlanningData\(getPlanningDataScopeForWorkspace\(initialWorkspace\),/);
   assert.match(dataScopes, /export const workspaceDataScopes/);
-  assert.match(dataScopes, /export const taskDetailPageDataScope/);
+  assert.doesNotMatch(dataScopes, /taskDetailPageDataScope/);
   assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
   assert.match(dataScopes, /planningDataWorkspaceFromValue/);
   assert.match(dataScopes, /notificationEvents: false/);

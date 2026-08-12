@@ -21,7 +21,8 @@ test("fullscreen and planning panel use one task detail surface", async () => {
   const tabs = await readFile("src/features/tasks/molecules/task-detail-tabs.tsx", "utf8");
   const ui = await readPlanningSurface();
 
-  assert.match(route, /loadTaskDetailData\(supabase, id\)/);
+  assert.match(route, /createSupabaseTaskDetailReadModel\(supabase\)\.load/);
+  assert.doesNotMatch(route, /getPlanningData|loadTaskDetailData|mergeTaskDetailData/);
   assert.doesNotMatch(route, /SeedTaskDetailPage|source === "seed"/);
   assert.match(detailDataRoute, /\["ceo", "founder", "deputy", "viewer"\]/);
   assert.match(page, /TaskDetailSurface/);
@@ -85,9 +86,10 @@ test("task detail loading avoids server waterfalls and defers inactive client fe
   const overlays = await readFile("src/features/planning/organisms/planning-overlay-layer.tsx", "utf8");
   const tours = await readFile("src/features/product-tours/organisms/feature-tour-provider.tsx", "utf8");
 
-  assert.match(route, /const planningDataPromise = getPlanningData/);
-  assert.match(route, /const taskDetailPromise = supabase/);
-  assert.match(route, /Promise\.all\(\[planningDataPromise, taskDetailPromise\]\)/);
+  assert.match(route, /Promise\.all\(\[/);
+  assert.match(route, /createSupabaseTaskDetailReadModel\(supabase\)\.load/);
+  assert.match(route, /loadPlanningHeaderData\(supabase/);
+  assert.doesNotMatch(route, /getPlanningData|taskDetailPageDataScope/);
 
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/planning\/organisms\/status-guard-dialog"\)/);
   assert.match(overlays, /dynamic\(\s*\(\) =>\s*import\("@\/features\/projects\/organisms\/initiative-dialog"\)/);
