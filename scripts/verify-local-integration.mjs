@@ -660,12 +660,12 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
     const teamRequest = {
       method: "PATCH",
       headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-      body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, packageId: ids.initiativeTwo }),
+      body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, parentTaskId: ids.initiativeTwo }),
     };
     const team = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
     if (team.status !== 200) throw new Error(`Team Deliverable reparent: expected 200, received ${team.status}: ${await team.text()}`);
     const teamBody = await team.json();
-    if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("packageId")) {
+    if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("parentTaskId")) {
       throw new Error("Team Deliverable reparent changed its response shape.");
     }
     const replay = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);

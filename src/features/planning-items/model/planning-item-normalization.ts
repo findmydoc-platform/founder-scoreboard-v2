@@ -2,7 +2,6 @@ import { cleanText } from "@/lib/api-input";
 import { normalizeLookup, slugify } from "@/lib/slug";
 import {
   PLANNING_ITEM_FIELD_RULES,
-  TEAM_PLANNING_MILESTONE_STATUSES,
   TEAM_PLANNING_TASK_STATUSES,
   type PlanningItemFieldKey,
 } from "@/features/planning-items/model/planning-items-contract";
@@ -14,7 +13,6 @@ export type IntakeLookupProfile = {
 };
 
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
-const milestoneStatuses = new Set<string>(TEAM_PLANNING_MILESTONE_STATUSES);
 const taskStatuses = new Set<string>(TEAM_PLANNING_TASK_STATUSES);
 
 export function intakeText(value: unknown, maxLength: number) {
@@ -133,13 +131,6 @@ export function normalizePatchPriority(value: unknown): StrictPatchNormalization
   const priority = cleanText(value, 10);
   if (!priorities.has(priority)) return { ok: false, error: "muss P0, P1, P2, P3 oder P4 sein" };
   return { ok: true, value: priority };
-}
-
-export function normalizePatchMilestoneStatus(value: unknown): StrictPatchNormalization<string> {
-  if (typeof value !== "string") return { ok: false, error: "muss ein Meilenstein-Status sein" };
-  const status = cleanText(value, 40);
-  if (!milestoneStatuses.has(status)) return { ok: false, error: "muss planned, active oder done sein" };
-  return { ok: true, value: status };
 }
 
 export function normalizePatchTaskStatus(value: unknown): StrictPatchNormalization<string> {

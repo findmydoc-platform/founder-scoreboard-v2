@@ -17,6 +17,7 @@ import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
+  TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
   TEAM_PLANNING_STRATEGIC_STATUSES,
   isStrategicPlanningItemType,
   parsePlanningItemGitHubSyncCommand,
@@ -90,12 +91,12 @@ const strategicStatuses = new Set<string>(TEAM_PLANNING_STRATEGIC_STATUSES);
 const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>> = {
   epic: new Set(["title", "description", "ownerId", "targetDate", "status"]),
   initiative: new Set([
-    "title", "description", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "parentTaskId", "milestoneId",
+    "title", "description", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "parentTaskId",
     "ownerId", "accountableProfileId", "responsibleProfileIds", "consultedProfileIds", "informedProfileIds", "priority", "targetDate", "status",
   ]),
   deliverable: new Set([
     "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
-    "evidenceRequired", "definitionOfDone", "parentTaskId", "packageId", "ownerId", "priority", "workstream", "startDate",
+    "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId", "priority", "workstream", "startDate",
     "endDate", "deadline", "hours", "status",
   ]),
   sub_issue: new Set([
@@ -358,7 +359,12 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
   }
   const raw = payload as UnknownRecord;
   const unknownKey = Object.keys(raw).find((key) => (
-    key !== "expectedUpdatedAt" && key !== "itemType" && key !== "githubSync" && key !== "githubSyncMode" && !patchFields.has(key)
+    key !== "expectedUpdatedAt"
+    && key !== "itemType"
+    && key !== "githubSync"
+    && key !== "githubSyncMode"
+    && !patchFields.has(key)
+    && !TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.includes(key as (typeof TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS)[number])
   ));
   if (unknownKey) return { ok: false as const, error: `PATCH-Payload enthält das unbekannte Feld ${unknownKey}.` };
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
@@ -377,37 +383,20 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
   if (hasGitHubSync && !githubSyncMode) return { ok: false as const, error: "githubSyncMode muss bei GitHub-Sync async oder wait sein." };
   if (!hasGitHubSync && hasMode) return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
   const presentFields = Object.keys(raw).filter((key): key is TeamPlanningItemPatchField => patchFields.has(key));
-  if (!presentFields.length && !githubSync) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
-  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
+  const hasLegacyAliases = TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.some((field) => hasOwn(raw, field));
+  if (!presentFields.length && !githubSync && !hasLegacyAliases) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
+  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null, hasLegacyAliases };
 }
 
 async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<TargetLoadResult> {
-  let canonicalId = itemId;
-  let taskResult = await supabase
+  const canonicalId = itemId;
+  const taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
     .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
     .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
     .eq("id", canonicalId)
     .maybeSingle();
   if (taskResult.error) throw new Error(taskResult.error.message);
-  if (!taskResult.data) {
-    const legacyResult = await supabase
-      .from("planning_item_legacy_ids")
-      .select("task_id")
-      .eq("legacy_id", itemId)
-      .maybeSingle<{ task_id: string }>();
-    if (legacyResult.error) throw new Error(legacyResult.error.message);
-    canonicalId = legacyResult.data?.task_id || "";
-    if (canonicalId) {
-      taskResult = await supabase
-        .from(ACTIVE_TASKS_TABLE)
-        .select("id,title,description,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,definition_of_done,task_type,parent_task_id,owner,assignee,priority,status,workstream,start_date,end_date,deadline,estimate_hours,github_repo,github_issue_number,github_issue_url,github_issue_sync_status,approval_status,approval_revision,sprint_id,review_status,review_owner_profile_id,review_requested_at,score_points,score_final,score_relevant,target_date,sort_order,updated_at")
-        .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID)
-        .eq("id", canonicalId)
-        .maybeSingle();
-      if (taskResult.error) throw new Error(taskResult.error.message);
-    }
-  }
   if (!taskResult.data) return { ok: false, status: 404, error: "Planungselement wurde nicht gefunden oder ist im Papierkorb." };
   const itemType = taskTypeFromRow(taskResult.data as DatabaseRow);
   if (itemType !== "initiative") return { ok: true, itemType, row: taskResult.data as DatabaseRow, raciAssignments: [] };
@@ -488,9 +477,7 @@ function normalizePatch(raw: UnknownRecord, presentFields: TeamPlanningItemPatch
       case "responsibleProfileIds": result = normalizePatchStringList(value); break;
       case "consultedProfileIds":
       case "informedProfileIds": result = normalizePatchStringList(value); break;
-      case "milestoneId":
       case "accountableProfileId":
-      case "packageId":
       case "parentTaskId":
       case "ownerId": result = normalizePatchId(value); break;
       case "githubRepo": result = normalizePatchText(value, 120, true); break;
@@ -526,8 +513,6 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
     ["githubRepo", "github_repo"],
   ];
   for (const [field, column] of maps) if (changed.has(field)) dbPatch[column] = resultingItem[field];
-  if (changed.has("packageId") && !changed.has("parentTaskId")) dbPatch.parent_task_id = resultingItem.parentTaskId;
-  if (changed.has("milestoneId") && !changed.has("parentTaskId")) dbPatch.parent_task_id = resultingItem.parentTaskId;
   if (changed.has("ownerId")) {
     dbPatch.owner = resultingItem.ownerId;
     dbPatch.assignee = resultingItem.ownerId;
@@ -566,32 +551,27 @@ export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, su
     errors.push("GitHub-Sync ist für Epic und Initiative nicht verfügbar.");
   }
 
-  const [profilesResult, parentsResult, legacyIdsResult, sprintsResult, raciResult] = await Promise.all([
+  const [profilesResult, parentsResult, sprintsResult, raciResult] = await Promise.all([
     supabase.from("profiles").select("id,platform_role"),
     supabase.from(ACTIVE_TASKS_TABLE)
       .select("id,task_type,parent_task_id,owner,assignee,approval_status,review_status,score_final,sprint_id")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    supabase.from("planning_item_legacy_ids").select("legacy_id,task_id"),
     supabase.from("sprints").select("id,score_locked"),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order"),
   ]);
-  if (profilesResult.error || parentsResult.error || legacyIdsResult.error || sprintsResult.error || raciResult.error) {
+  if (profilesResult.error || parentsResult.error || sprintsResult.error || raciResult.error) {
     throw new Error("Planning-Items-Referenzen konnten nicht geladen werden.");
   }
 
   const profiles = new Map(((profilesResult.data || []) as DatabaseRow[]).map((profile) => [String(profile.id), profile]));
   const profileIds = new Set(profiles.keys());
   const parents = new Map(((parentsResult.data || []) as DatabaseRow[]).map((parent) => [String(parent.id), parent]));
-  const legacyIds = new Map(((legacyIdsResult.data || []) as DatabaseRow[]).map((row) => [String(row.legacy_id), String(row.task_id)]));
   const sprints = new Map(((sprintsResult.data || []) as DatabaseRow[]).map((sprint) => [String(sprint.id), sprint]));
   const raciAssignments = (raciResult.data || []) as RaciRow[];
 
-  const parentPatched = ["parentTaskId", "milestoneId", "packageId"].some((field) => hasOwn(normalizedPatch, field));
-  const parentInput = hasOwn(normalizedPatch, "parentTaskId") ? String(normalizedPatch.parentTaskId || "")
-    : hasOwn(normalizedPatch, "milestoneId") ? String(normalizedPatch.milestoneId || "")
-      : hasOwn(normalizedPatch, "packageId") ? String(normalizedPatch.packageId || "")
-        : String(currentItem.parentTaskId || "");
-  const parentTaskId = parentInput && (parents.has(parentInput) ? parentInput : legacyIds.get(parentInput) || parentInput);
+  const parentPatched = hasOwn(normalizedPatch, "parentTaskId");
+  const parentInput = parentPatched ? String(normalizedPatch.parentTaskId || "") : String(currentItem.parentTaskId || "");
+  const parentTaskId = parentInput;
   if (parentPatched) normalizedPatch.parentTaskId = parentTaskId;
   const parent = parentTaskId ? parents.get(parentTaskId) : undefined;
 
@@ -631,10 +611,6 @@ export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, su
   }
 
   const resultingItem: UnknownRecord = { ...currentItem, ...normalizedPatch, parentTaskId };
-  if (parentPatched) {
-    delete resultingItem.packageId;
-    delete resultingItem.milestoneId;
-  }
   if (String(resultingItem.startDate || "") && String(resultingItem.endDate || "") && String(resultingItem.startDate) > String(resultingItem.endDate)) {
     errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
   }
@@ -643,7 +619,7 @@ export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, su
     && parsed.presentFields.includes("status")
     && !isSubIssueStatus(String(target.row.status || ""));
   const fieldChanged = (field: TeamPlanningItemPatchField) => {
-    if (["parentTaskId", "milestoneId", "packageId"].includes(field)) {
+    if (field === "parentTaskId") {
       return !sameValue(currentItem.parentTaskId, parentTaskId);
     }
     return !sameValue(currentItem[field], resultingItem[field]);
@@ -777,7 +753,7 @@ export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, su
     }
   }
 
-  const parentChanged = changedFields.some((field) => ["parentTaskId", "milestoneId", "packageId"].includes(field));
+  const parentChanged = changedFields.includes("parentTaskId");
   if (parentChanged && (target.itemType === "deliverable" || target.itemType === "sub_issue") && changedFields.length > 1) {
     errors.push("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.");
   }
@@ -1130,6 +1106,10 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
           effects: [],
           replayed: true,
         };
+      }
+
+      if (dependencies.parsed.hasLegacyAliases) {
+        return { ok: false, error: { code: "invalidCommand", issues: [{ path: "command.changes", reason: "legacyAliasRetired" }] } };
       }
 
       const prepared = dependencies.preparedPreview ? { ok: true as const, preview: dependencies.preparedPreview } : await buildPlanningItemUpdatePreview({

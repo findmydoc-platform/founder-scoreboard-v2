@@ -330,7 +330,7 @@ async function commitDelete(
     initiatives: Number(transaction?.children?.initiatives || 0),
     tasks: Number(transaction?.children?.tasks || 0),
   };
-  const projection = projectionFromRow(row, children, transaction?.itemType === "milestone" ? "milestone" : "epic", 2);
+  const projection = projectionFromRow(row, children, "epic", 2);
   if (!item || !projection) return { data: null, error: new Error("Invalid empty Epic delete result") };
   return {
     data: {
@@ -377,11 +377,12 @@ export function emptyEpicDeleteTeamItem(result: Extract<PlanningResult, { ok: tr
   const item = result.items[0];
   const projection = projectionFromResult(result);
   if (!item || item.kind !== "epic" || !projection) return null;
+  const itemType = projection.contractVersion === 1 ? projection.itemType : "epic";
   return {
-    itemType: projection.itemType,
+    itemType,
     item: {
       id: item.id,
-      itemType: projection.itemType,
+      itemType,
       title: item.title,
       description: item.description,
       targetDate: item.targetDate || "",
@@ -392,21 +393,6 @@ export function emptyEpicDeleteTeamItem(result: Extract<PlanningResult, { ok: tr
       updatedAt: item.updatedAt,
     },
     children: projection.children,
-  };
-}
-
-export function emptyEpicDeleteMilestone(result: Extract<PlanningResult, { ok: true }>) {
-  const item = result.items[0];
-  const projection = projectionFromResult(result);
-  if (!item || item.kind !== "epic" || !projection) return null;
-  return {
-    id: item.id,
-    title: item.title,
-    description: item.description,
-    targetDate: item.targetDate || "",
-    status: item.status === "In Arbeit" ? "active" as const : item.status === "Erledigt" ? "done" as const : "planned" as const,
-    sortOrder: projection.sortOrder,
-    updatedAt: item.updatedAt,
   };
 }
 
@@ -425,7 +411,7 @@ export function emptyEpicDeletePreview(result: Extract<PlanningResult, { ok: tru
     children: projected.children,
     valid: canDelete,
     canDelete,
-    code: canDelete ? null : "MILESTONE_NOT_EMPTY" as const,
+    code: canDelete ? null : "EPIC_NOT_EMPTY" as const,
     error: canDelete ? "" : emptyEpicNotEmptyMessage(projected.children),
     warnings: [EMPTY_EPIC_DELETE_WARNING],
   };
@@ -434,13 +420,13 @@ export function emptyEpicDeletePreview(result: Extract<PlanningResult, { ok: tru
 export function emptyEpicNotEmptyMessage(children: EmptyEpicChildren) {
   const initiativeWord = children.initiatives === 1 ? "Initiative" : "Initiativen";
   const taskWord = children.tasks === 1 ? "Aufgabe" : "Aufgaben";
-  return `Der Meilenstein kann nicht gelöscht werden, weil noch ${children.initiatives} ${initiativeWord} und ${children.tasks} ${taskWord} zugeordnet sind.`;
+  return `Das Epic kann nicht gelöscht werden, weil noch ${children.initiatives} ${initiativeWord} und ${children.tasks} ${taskWord} zugeordnet sind.`;
 }
 
 export function emptyEpicDeleteError(error: PlanningError): Readonly<{
   message: string;
   status: number;
-  code?: "MILESTONE_NOT_EMPTY";
+  code?: "EPIC_NOT_EMPTY";
   children?: EmptyEpicChildren;
 }> {
   if (error.code === "invalidCommand") return { message: "Planning-Items-Anfrage ist ungültig.", status: 400 };
@@ -468,7 +454,7 @@ export function emptyEpicDeleteError(error: PlanningError): Readonly<{
           tasks: Number((value as Record<string, unknown>).tasks || 0),
         }
       : { initiatives: 0, tasks: 0 };
-    return { message: emptyEpicNotEmptyMessage(children), status: 409, code: "MILESTONE_NOT_EMPTY", children };
+    return { message: emptyEpicNotEmptyMessage(children), status: 409, code: "EPIC_NOT_EMPTY", children };
   }
   return { message: "Planning-Items-Löschung konnte nicht gespeichert werden.", status: 500 };
 }

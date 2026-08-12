@@ -7,6 +7,7 @@ import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
   TEAM_PLANNING_ITEM_CREATE_FIELDS,
+  TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
   TEAM_PLANNING_ITEM_TYPES,
   TEAM_PLANNING_STRATEGIC_STATUSES,
   TEAM_PLANNING_SUB_ISSUE_STATUSES,
@@ -118,7 +119,11 @@ export type PlanningItemCreatePreviewItem = {
 };
 
 const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
-const inputKeys = new Set<string>([...TEAM_PLANNING_ITEM_CREATE_FIELDS, "githubSync"]);
+const inputKeys = new Set<string>([
+  ...TEAM_PLANNING_ITEM_CREATE_FIELDS,
+  ...TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
+  "githubSync",
+]);
 const strategicStatuses = new Set<string>(TEAM_PLANNING_STRATEGIC_STATUSES);
 const deliveryStatuses = new Set<string>(TEAM_PLANNING_TASK_STATUSES);
 const subIssueStatuses = new Set<string>(TEAM_PLANNING_SUB_ISSUE_STATUSES);
@@ -180,6 +185,11 @@ function itemTypeForInput(value: unknown) {
   };
 }
 
+export function planningItemCreateUsesLegacyAliases(item: PlanningItemCreateInput) {
+  return intakeText(item.itemType, 40) === "milestone"
+    || TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.some((field) => Object.hasOwn(item, field));
+}
+
 export function planningItemCreateRequiresOperationalLead(items: PlanningItemCreateInput[]) {
   return items.some((item) => normalizeTeamPlanningItemType(intakeText(item.itemType, 40)) === "epic");
 }
@@ -224,21 +234,30 @@ export function parsePlanningItemCreatePayload(payload: unknown) {
   if (!hasGitHubSync && hasMode) {
     return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
   }
-  return { ok: true as const, items: normalizedItems, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
+  return {
+    ok: true as const,
+    items: normalizedItems,
+    githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null,
+    hasLegacyAliases: normalizedItems.some(planningItemCreateUsesLegacyAliases),
+  };
 }
 
 export async function buildPlanningItemCreatePreview(
   items: PlanningItemCreateInput[],
   actor: AuthenticatedProfile,
   supabase: SupabaseServer,
+  allowLegacyReferences = false,
 ) {
+  const legacyIdsQuery = allowLegacyReferences
+    ? supabase.from("planning_item_legacy_ids").select("source_kind,legacy_id,task_id")
+    : Promise.resolve({ data: [], error: null });
   const [profilesResult, parentsResult, legacyIdsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
     supabase
       .from(ACTIVE_TASKS_TABLE)
       .select("id,task_type,approval_status,trashed_at")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    supabase.from("planning_item_legacy_ids").select("source_kind,legacy_id,task_id"),
+    legacyIdsQuery,
   ]);
   if (profilesResult.error || parentsResult.error || legacyIdsResult.error) {
     throw new Error("Planning-Items-Kontext konnte nicht geladen werden.");
@@ -769,10 +788,13 @@ async function prepareTeamCreate(
       ? { kind: "error", error: { code: "conflict", reason: "idempotency" } }
       : { kind: "replay", receipt: replayReceipt({ batchId: stored.id, items: stored.response_tasks, replayed: true }) }, error: null };
   }
+  if (!stored && dependencies.rawItems.some(planningItemCreateUsesLegacyAliases)) {
+    return { data: { kind: "error", error: invalidCreate("legacyAliasRetired") }, error: null };
+  }
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {
     id: request.actor.profileId,
     platformRole: request.actor.platformRole,
-  } as AuthenticatedProfile, dependencies.supabase);
+  } as AuthenticatedProfile, dependencies.supabase, Boolean(stored));
   dependencies.onPreview?.(preview);
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);

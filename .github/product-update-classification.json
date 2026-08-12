@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Removes duplicated legacy Package and Milestone UI state in favor of canonical Planning Items while preserving the existing user-visible workflows and database compatibility adapters."
+  "reason": "Retires legacy Package and Milestone aliases from the Team Planning API and context while preserving immutable stored replay responses until the separately approved receipt migration."
 }

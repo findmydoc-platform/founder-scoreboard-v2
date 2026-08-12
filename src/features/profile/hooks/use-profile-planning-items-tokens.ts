@@ -59,9 +59,7 @@ export function useProfilePlanningItemsTokens({
       if (!response.ok || !body?.tokens) throw new Error(body?.error || "Planning-API-Tokens konnten nicht geladen werden.");
       if (!mounted.current) return;
       setTokens(body.tokens);
-      setCanIssueEmptyEpicDeletes(Boolean(
-        body.capabilities?.canIssueEmptyEpicDeletes ?? body.capabilities?.canIssueEmptyMilestoneDeletes,
-      ));
+      setCanIssueEmptyEpicDeletes(Boolean(body.capabilities?.canIssueEmptyEpicDeletes));
       setLoaded(true);
     } catch (error) {
       if (!mounted.current) return;

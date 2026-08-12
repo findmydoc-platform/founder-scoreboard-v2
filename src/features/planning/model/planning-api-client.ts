@@ -2,7 +2,7 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskFocusItem } from "@/lib/types";
-import type { MilestoneDeleteRequest, MilestoneNotEmptyError } from "@/features/projects/model/milestone-contract";
+import type { EpicNotEmptyError, MilestoneDeleteRequest } from "@/features/projects/model/milestone-contract";
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
@@ -105,7 +105,7 @@ export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: 
 
 export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: MilestoneDraft) {
   const { id, expectedUpdatedAt } = draft;
-  return apiClient.requestJson<{ task?: Task } | MilestoneNotEmptyError | { error?: string; code?: string }>(
+  return apiClient.requestJson<{ task?: Task } | EpicNotEmptyError | { error?: string; code?: string }>(
     id ? `/api/tasks/${encodeURIComponent(id)}` : "/api/tasks",
     {
       method: id ? "PATCH" : "POST",
@@ -121,7 +121,7 @@ export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: Milesto
 }
 
 export function deleteMilestoneRequest(apiClient: BrowserApiClient, epicId: string, payload: MilestoneDeleteRequest) {
-  return apiClient.requestJson<{ task?: Partial<Task> & { id: string } } | MilestoneNotEmptyError | { error?: string; code?: string }>(
+  return apiClient.requestJson<{ task?: Partial<Task> & { id: string } } | EpicNotEmptyError | { error?: string; code?: string }>(
     `/api/tasks/${encodeURIComponent(epicId)}`,
     { method: "DELETE", json: payload },
   );

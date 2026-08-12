@@ -165,14 +165,21 @@ test("Preview and commit share policy while commit uses one atomic Browser RPC",
     p_request_ip: "test-ip",
     p_user_agent: "test-agent",
   }]);
-  assert.deepEqual(model.emptyEpicDeleteMilestone(committed), {
-    id: source.id,
-    title: source.title,
-    description: source.description,
-    targetDate: source.target_date,
-    status: "planned",
-    sortOrder: 20,
-    updatedAt: source.updated_at,
+  assert.deepEqual(model.emptyEpicDeleteTeamItem(committed), {
+    itemType: "epic",
+    item: {
+      id: source.id,
+      itemType: "epic",
+      title: source.title,
+      description: source.description,
+      targetDate: source.target_date,
+      status: source.status,
+      ownerId: source.owner,
+      sortOrder: 20,
+      approvalStatus: null,
+      updatedAt: source.updated_at,
+    },
+    children: { initiatives: 0, tasks: 0 },
   });
 });
 
@@ -201,6 +208,7 @@ test("non-empty and legacy-protected Epics preview as invalid and never reach a 
     const committed = await planning.run({ actor, mode: "commit", command });
     assert.equal(preview.status, "previewed");
     assert.equal(model.emptyEpicDeletePreview(preview).canDelete, false);
+    assert.equal(model.emptyEpicDeletePreview(preview).code, "EPIC_NOT_EMPTY");
     assert.equal(committed.ok, false);
     assert.equal(committed.error.code, "conflict");
     assert.equal(current.rpcCalls.length, 0);

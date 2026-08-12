@@ -110,7 +110,7 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    const reparentFields = parsed.presentFields.filter((field) => ["parentTaskId", "packageId", "milestoneId"].includes(field));
+    const reparentFields = ["parentTaskId", "packageId", "milestoneId"].filter((field) => Object.hasOwn(parsed.raw, field));
     const reparentField = reparentFields[0];
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
@@ -165,6 +165,10 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
         if (refreshed.data) return storedResponse(refreshed.data as StoredUpdateRequest);
       }
       return storedResponse(existingRequest.data as StoredUpdateRequest);
+    }
+
+    if (parsed.hasLegacyAliases) {
+      return planningItemsError("Legacy-Aliase sind nicht mehr zulässig. Verwende parentTaskId.", 400);
     }
 
     if (reparentField) {

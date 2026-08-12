@@ -1,5 +1,5 @@
 export const MILESTONE_STATUSES = ["planned", "active", "done"] as const;
-export const MILESTONE_NOT_EMPTY_CODE = "MILESTONE_NOT_EMPTY" as const;
+export const EPIC_NOT_EMPTY_CODE = "EPIC_NOT_EMPTY" as const;
 
 export type MilestoneStatus = typeof MILESTONE_STATUSES[number];
 
@@ -37,8 +37,8 @@ export type MilestoneChildCounts = {
   tasks: number;
 };
 
-export type MilestoneNotEmptyError = {
-  code: typeof MILESTONE_NOT_EMPTY_CODE;
+export type EpicNotEmptyError = {
+  code: typeof EPIC_NOT_EMPTY_CODE;
   error: string;
   children: MilestoneChildCounts;
 };

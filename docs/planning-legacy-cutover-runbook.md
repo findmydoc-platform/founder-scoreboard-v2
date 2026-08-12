@@ -19,7 +19,7 @@ All items below must be absent from active application code before the destructi
 
 1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. Browser fields `packageId`, `milestoneId`, and `assignee` where `parentTaskId` and `ownerId` are authoritative.
-3. Team v1 Package/Milestone aliases, scopes, OpenAPI fields, and legacy replay response mapping.
+3. [x] New Team v1 context, create, update, token, delete-error, and OpenAPI contracts expose only canonical Epic and `parentTaskId` forms. Legacy-shaped commit payloads are parsed only after an idempotency key is present and can return only an exact immutable stored receipt; they cannot create or update state. Removing the replay-only parser, response mapper, compatibility hashes, and special Epic-delete receipt table remains blocked on the #317 receipt migration and replay proof.
 4. [x] `Package`, `Milestone`, `packages`, and `milestones` in active UI state. Planning, Projects, Gantt, trash, and task-detail surfaces now derive Epic and Initiative state exclusively from canonical Planning Items and `parentTaskId`. The old database column and JSON preference key remain read-only compatibility inputs until #317 migrates stored data.
 5. Reads from `active_packages`, `packages`, `milestones`, and `planning_item_legacy_ids`.
 6. Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts.

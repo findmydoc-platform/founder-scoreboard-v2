@@ -153,37 +153,81 @@ test("v1 update snapshots keep their former public response shape", async () => 
   );
 });
 
-test("context keeps canonical strategy and the flat v1 initiative projection", async () => {
-  const context = await loadTranspiledModule(
-    "src/features/planning-items/model/planning-items-context.ts",
-    {
-      "@/lib/status": { normalizeStatus: (value) => value, normalizeSubIssueStatus: (value) => value },
-      "@/features/planning-items/model/planning-items-contract": {
-        FOUNDEROPS_PLANNING_PROJECT_ID: "project",
-        TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES: [],
-        TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE: 30,
-        TEAM_PLANNING_ITEM_TYPES: ["epic", "initiative", "deliverable", "sub_issue"],
-      },
-      "@/features/planning-items/model/supabase-pagination": {},
-      "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
-    },
-  );
-  const canonical = {
-    id: "initiative-1",
-    description: "Fallback goal",
-    scopeConstraints: "",
-    strategy: {
-      goal: "Primary goal",
-      successCriteria: "Measured outcome",
-      scopeConstraints: "No migration",
-    },
+test("context publishes only canonical collections and nested initiative strategy", async () => {
+  const source = await read("src/features/planning-items/model/planning-items-context.ts");
+  assert.match(source, /const initiatives = items[\s\S]*itemType === "initiative"/);
+  assert.match(source, /strategy,/);
+  assert.doesNotMatch(source, /planningItemsInitiativeCompatibilityProjection/);
+  assert.doesNotMatch(source, /milestones,/);
+  assert.doesNotMatch(source, /goal: item\.strategy/);
+  assert.doesNotMatch(source, /successCriteria: item\.strategy/);
+});
+
+test("new Team commits reject legacy aliases before preview or persistence", async () => {
+  const { create, update } = await loadPlanningModels();
+  let rpcCalls = 0;
+  let previewCalls = 0;
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: null, error: null }; },
   };
-  const projected = context.planningItemsInitiativeCompatibilityProjection(canonical);
-  assert.equal(projected.goal, "Primary goal");
-  assert.equal(projected.successCriteria, "Measured outcome");
-  assert.equal(projected.scopeConstraints, "No migration");
-  assert.deepEqual(projected.strategy, canonical.strategy);
-  assert.equal(Object.hasOwn(canonical, "goal"), false);
+  const supabase = {
+    from: () => query,
+    async rpc() { rpcCalls += 1; return { data: null, error: null }; },
+  };
+  const actor = {
+    profileId: "ceo",
+    platformRole: "ceo",
+    credential: { kind: "planningToken", tokenId: "token", scopes: [] },
+  };
+  const legacyCreate = create.parsePlanningItemCreatePayload({
+    items: [{ itemType: "deliverable", title: "Legacy", packageId: "package-legacy" }],
+  });
+  assert.equal(legacyCreate.ok, true);
+  const createResult = await create.createTeamCreatePlanningItems({
+    supabase,
+    actor,
+    tokenId: "token",
+    rawItems: legacyCreate.items,
+    githubSyncMode: null,
+    onPreview: () => { previewCalls += 1; },
+  }).run({
+    actor,
+    mode: "commit",
+    command: create.planningItemCreateCommand(legacyCreate.items, actor.profileId),
+    idempotencyKey: "11111111-1111-4111-8111-111111111111",
+  });
+  assert.equal(createResult.ok, false);
+  assert.equal(createResult.error.issues[0].reason, "legacyAliasRetired");
+
+  const legacyPatch = update.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: "2026-07-30T09:00:00.000Z",
+    milestoneId: "milestone-legacy",
+  });
+  assert.equal(legacyPatch.ok, true);
+  const updateResult = await update.createTeamRevisePlanningItems({
+    supabase,
+    actor,
+    tokenId: "token",
+    itemId: "initiative",
+    parsed: legacyPatch,
+    onPreview: () => { previewCalls += 1; },
+  }).run({
+    actor,
+    mode: "commit",
+    command: update.planningItemReviseCommand(
+      "initiative",
+      "initiative",
+      legacyPatch.expectedUpdatedAt,
+      legacyPatch.raw,
+    ),
+    idempotencyKey: "22222222-2222-4222-8222-222222222222",
+  });
+  assert.equal(updateResult.ok, false);
+  assert.equal(updateResult.error.issues[0].reason, "legacyAliasRetired");
+  assert.equal(previewCalls, 0);
+  assert.equal(rpcCalls, 0);
 });
 
 test("replay versioning and package preference translation are additive", async () => {
@@ -207,7 +251,7 @@ test("replay versioning and package preference translation are additive", async 
   assert.match(createModule, /contract_version/);
   assert.match(updateRoute, /mapLegacyPlanningItemDatabaseRow/);
   assert.match(updateRoute, /contract_version/);
-  assert.match(documentation, /flat `goal`, `successCriteria`, and `scopeConstraints` fields/);
+  assert.match(documentation, /immutable stored idempotency receipt/);
 });
 
 test("v1 create replays return the immutable snapshot before canonical preview validation", async () => {
