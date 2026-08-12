@@ -16,7 +16,6 @@ import {
   markTaskGitHubSyncDirty,
   rejectClientGitHubSyncStatusUpdate,
   restrictedTaskUpdateFields,
-  startsTaskReviewRequest,
   validateSubIssueStatusParentApproval,
   validateTaskTypeUpdateFields,
   validateTaskStatusUpdate,
@@ -24,12 +23,22 @@ import {
   type TaskRouteDbUpdate,
 } from "@/features/tasks/model/task-route-update-helpers";
 import { taskDetailPermissions } from "@/features/tasks/model/task-detail-permissions";
+import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
+import {
+  createPlanningReviewPlanningItems,
+  isPlanningReviewRequestPayload,
+  parsePlanningReviewRequestPayload,
+  planningReviewActivitiesFromResult,
+  planningReviewError,
+  planningReviewTaskFromResult,
+  requestPlanningReviewCommand,
+} from "@/features/planning-items/model/planning-items-review";
 import {
   backlogSprintAssignmentMessage,
   getBacklogSprintAssignmentEligibility,
 } from "@/features/backlog/model/backlog-planning-state";
 import { isOperationalLeadRole } from "@/lib/platform";
-import { createNotificationPayload } from "@/lib/notification-catalog";
+import { auditRequestMetadata } from "@/lib/api-input";
 import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
@@ -86,6 +95,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
   let payload = { ...rawPayload } as TaskUpdatePayload;
+  if (isPlanningReviewRequestPayload(rawPayload)) {
+    const parsed = parsePlanningReviewRequestPayload(rawPayload);
+    if (!parsed.ok) return apiError(parsed.error, parsed.status);
+    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+    if (!actor.ok) return apiError("Founder können nur den Status ihrer eigenen Aufgaben ändern.", 403);
+    const metadata = auditRequestMetadata(request);
+    const result = await createPlanningReviewPlanningItems(supabase).run({
+      actor: actor.actor,
+      mode: "commit",
+      command: requestPlanningReviewCommand(id, parsed.value),
+      requestMetadata: {
+        requestIp: metadata.request_ip || undefined,
+        userAgent: metadata.user_agent || undefined,
+      },
+    });
+    if (!result.ok) {
+      const mapped = planningReviewError(result.error, "request");
+      return apiError(mapped.message, mapped.status);
+    }
+    const task = planningReviewTaskFromResult(result);
+    if (result.status !== "committed" || !task) return apiError("Aufgabe konnte nicht gespeichert werden.", 500);
+    const activities = planningReviewActivitiesFromResult(result).map((activity) => ({
+      id: activity.id,
+      taskId: activity.taskId,
+      action: taskAuditActionFromMessage(activity.message),
+      actorProfileId: permission.profile?.id || "",
+      message: activity.message,
+      beforeData: null,
+      afterData: { message: activity.message },
+      createdAt: activity.createdAt,
+    })).filter((activity) => activity.action);
+    return NextResponse.json({ ok: true, activities, task });
+  }
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
@@ -242,7 +284,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const statusNoop = normalizedStatusUpdate.statusNoop;
   const isOperationalLead = isOperationalLeadRole(permission.profile?.platformRole);
   const isCeo = permission.profile?.platformRole === "ceo";
-  const startsReviewRequest = startsTaskReviewRequest(payload);
   const canSetReviewOwner = isCeo;
   const restrictedFields = restrictedTaskUpdateFields(payload);
   const ownerFields = founderOwnedTaskUpdateFields(payload);
@@ -268,7 +309,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return apiError(`Founder können diese Felder nur bei eigenen Aufgaben ändern: ${ownerFields.join(", ")}.`, 403);
   }
 
-  if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner && !startsReviewRequest) {
+  if (payload.reviewOwnerProfileId !== undefined && !canSetReviewOwner) {
     return apiError("Nur der CEO kann den Review Owner ändern.", 403);
   }
   if (currentTask.review_status === "requested" && payload.reviewOwnerProfileId !== undefined && !profileId(payload.reviewOwnerProfileId)) {
@@ -512,56 +553,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.review_owner_profile_id = nextReviewOwner || null;
   }
 
-  if (startsReviewRequest) {
-    if (currentTask.task_type !== "deliverable" || currentTask.approval_status !== "approved") {
-      return apiError("Nur freigegebene Deliverables können in Review gegeben werden.", 409);
-    }
-    if (currentTask.score_final) {
-      return apiError("Final bewertete Aufgaben müssen über „Review erneut öffnen“ zurück in Review gegeben werden.", 409);
-    }
-    if (currentTask.sprint_id) {
-      const { data: reviewSprint, error: reviewSprintError } = await supabase
-        .from("sprints")
-        .select("id,score_locked")
-        .eq("id", currentTask.sprint_id)
-        .maybeSingle();
-      if (reviewSprintError) return apiError(reviewSprintError.message, 500);
-      if (reviewSprint?.score_locked) return apiError("Sprint-Score ist bereits gelockt.", 409);
-    }
-
-    const reviewPackageId = currentTask.parent_task_id || "";
-    let reviewOwnerProfileId = currentTask.review_owner_profile_id || "";
-    if (!reviewOwnerProfileId && reviewPackageId) {
-      const { data: initiative, error: initiativeError } = await supabase
-        .from(ACTIVE_PACKAGES_TABLE)
-        .select("owner_id,accountable_profile_id")
-        .eq("id", reviewPackageId)
-        .maybeSingle();
-      if (initiativeError) return apiError(initiativeError.message, 500);
-      reviewOwnerProfileId = initiative?.accountable_profile_id || initiative?.owner_id || "";
-    }
-
-    update.status = "Review";
-    update.review_status = "requested";
-    update.score_points = 0;
-    update.score_final = false;
-    const requestedReviewOwnerProfileId = canSetReviewOwner && typeof payload.reviewOwnerProfileId === "string" ? profileId(payload.reviewOwnerProfileId) || null : undefined;
-    const nextReviewOwnerProfileId = requestedReviewOwnerProfileId !== undefined ? requestedReviewOwnerProfileId : reviewOwnerProfileId || null;
-    if (!nextReviewOwnerProfileId) {
-      return apiError("Lege vor der Review-Anfrage eine Review-Verantwortung fest.", 409);
-    }
-    const { data: reviewOwner, error: reviewOwnerError } = await supabase
-      .from("profiles")
-      .select("id,platform_role")
-      .eq("id", nextReviewOwnerProfileId)
-      .maybeSingle();
-    if (reviewOwnerError) return apiError(reviewOwnerError.message, 500);
-    if (!reviewOwner || !reviewOwner.platform_role || reviewOwner.platform_role === "viewer") {
-      return apiError("Die Review-Verantwortung braucht eine beitragende Rolle.", 409);
-    }
-    update.review_owner_profile_id = nextReviewOwnerProfileId;
-    update.review_requested_at = new Date().toISOString();
-  }
   applyFinalStatusReopen(update, currentTask, payload, isCeo, detailPermissions.canReopenSubIssue);
 
   applyTaskSelfChecklistUpdateFields(update, payload);
@@ -584,30 +575,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     });
   }
 
-  const notifications: Array<Record<string, string | null>> = [];
-  if (currentTask && update.review_status === "requested" && currentTask.review_status !== "requested") {
-    const reviewOwnerProfileId = typeof update.review_owner_profile_id === "string" ? update.review_owner_profile_id : "";
-    let recipients = [{ id: reviewOwnerProfileId }].filter((recipient) => recipient.id);
-    if (!recipients.length) {
-      const { data: fallbackRecipients, error: recipientError } = await supabase
-        .from("profiles")
-        .select("id")
-        .in("platform_role", ["ceo", "deputy"]);
-      if (recipientError) return apiError(recipientError.message, 500);
-      recipients = fallbackRecipients || [];
-    }
-    notifications.push(...recipients.map((recipient) => createNotificationPayload("task.review_requested", {
-        actorProfileId: permission.profile?.id,
-        recipientProfileId: recipient.id,
-        entityType: "task",
-        entityId: id,
-        title: `Review angefragt: ${currentTask.title}`,
-        body: reviewOwnerProfileId
-          ? "Diese Aufgabe wartet auf deine Accountable-Review."
-          : "Diese Aufgabe wartet auf Review, hat aber keinen Review Owner.",
-      })));
-  }
-
   const { data: transactionData, error: transactionError } = await supabase.rpc("update_planning_task_transaction", {
     p_task_id: id,
     p_expected_updated_at: payload.expectedUpdatedAt,
@@ -617,7 +584,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     p_dependency_present: payload.dependsOn !== undefined,
     p_dependency_note: payload.dependsOn?.trim().slice(0, 2000) ?? null,
     p_activity_messages: [...new Set(messages)],
-    p_notifications: notifications,
+    p_notifications: [],
     p_actor_profile_id: permission.profile?.id || null,
   });
 
@@ -647,7 +614,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     createdAt: activity.created_at,
   })).filter((activity) => activity.action);
   const taskPatch = {
-    ...buildTaskUpdateResponsePatch(id, update, startsReviewRequest, currentTask.task_type as Task["taskType"]),
+    ...buildTaskUpdateResponsePatch(id, update, false, currentTask.task_type as Task["taskType"]),
     id,
     updatedAt: result.task.updated_at,
     approvalStatus: result.task.approval_status ?? null,
