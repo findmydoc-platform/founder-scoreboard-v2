@@ -14,6 +14,12 @@ import {
   parseEmptyEpicDeletePayload,
 } from "@/features/planning-items/model/planning-items-empty-epic-delete";
 import {
+  changePlanningParentCommand,
+  createPlanningReparentPlanningItems,
+  planningReparentError,
+  planningReparentHash,
+} from "@/features/planning-items/model/planning-items-reparent";
+import {
   buildPlanningItemUpdatePreview,
   mapLegacyPlanningItemDatabaseRow,
   mapPlanningItemDatabaseRow,
@@ -34,6 +40,7 @@ import {
 
 type UpdateTransactionResult = {
   replayed?: boolean;
+  commandKind?: "changeParent";
   itemType?: PlanningItemReplayType;
   item?: Record<string, unknown>;
   changedFields?: string[];
@@ -116,6 +123,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
+    const reparentFields = parsed.presentFields.filter((field) => ["parentTaskId", "packageId", "milestoneId"].includes(field));
+    const reparentField = reparentFields[0];
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
       return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
@@ -133,12 +142,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if ((itemType === "epic" || itemType === "milestone") && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
         return planningItemsError("Nur CEO oder Deputy können Epics bearbeiten.", 403);
       }
-      const requestHash = planningItemUpdateHash({
-        itemId,
-        itemType,
-        expectedUpdatedAt: parsed.expectedUpdatedAt,
-        patch: parsed.raw,
-      });
+      const requestHash = stored.response?.commandKind === "changeParent" && reparentField
+        ? planningReparentHash(itemId, parsed.expectedUpdatedAt, String(parsed.raw[reparentField] || "") || null, reparentField)
+        : planningItemUpdateHash({
+            itemId,
+            itemType,
+            expectedUpdatedAt: parsed.expectedUpdatedAt,
+            patch: parsed.raw,
+          });
       if (requestHash !== stored.request_hash) {
         return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       }
@@ -158,6 +169,72 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     if (existingRequest.data) {
       return storedResponse(existingRequest.data as StoredUpdateRequest);
+    }
+
+    if (reparentField) {
+      if (reparentFields.length !== 1 || parsed.presentFields.length !== 1) {
+        return planningItemsError("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", 409);
+      }
+      const actor = actorContextFromPlanningTokenAuth({
+        ok: true,
+        profile: { id: permission.profile.id, platformRole: permission.profile.platformRole },
+        tokenId: permission.tokenId,
+        scopes: permission.scopes,
+      });
+      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+      const metadata = auditRequestMetadata(request);
+      const result = await createPlanningReparentPlanningItems(permission.supabase, "any", reparentField).run({
+        actor: actor.actor,
+        mode: "commit",
+        command: changePlanningParentCommand(itemId, String(parsed.raw[reparentField] || "") || null, parsed.expectedUpdatedAt),
+        idempotencyKey,
+        requestMetadata: {
+          requestIp: metadata.request_ip || undefined,
+          userAgent: metadata.user_agent || undefined,
+        },
+      });
+      if (!result.ok) {
+        if (result.error.code === "conflict" && result.error.reason === "idempotency") {
+          return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+        }
+        const mapped = planningReparentError(result.error, "task");
+        return planningItemsError(mapped.message, mapped.status);
+      }
+      if (result.status !== "committed") throw new Error("Planning-Items-Parent-Wechsel wurde nicht bestätigt.");
+      const committedRequest = await loadStoredRequest();
+      if (committedRequest.error) throw Object.assign(new Error(committedRequest.error.message), { code: committedRequest.error.code });
+      const transaction = (committedRequest.data as StoredUpdateRequest | null)?.response;
+      if (!transaction?.item || !transaction.itemType) throw new Error("Planning-Items-Parent-Wechsel lieferte kein Ergebnis zurück.");
+      if (!parsed.githubSync || !parsed.githubSyncMode) {
+        return updateResponse(request, itemId, { ...transaction, replayed: result.replayed }, transaction.itemType, transaction.changedFields, transaction.systemEffects);
+      }
+      const target: PlanningItemGitHubSyncTarget = {
+        itemId,
+        itemType: transaction.itemType === "milestone" ? "epic" : transaction.itemType,
+        command: parsed.githubSync,
+      };
+      if (parsed.githubSyncMode === "wait") {
+        const results = await executePlanningItemGitHubSyncs({ supabase: permission.supabase, actorProfileId: permission.profile.id, targets: [target] });
+        const enriched = { ...transaction, replayed: result.replayed, githubSync: results.get(itemId) };
+        await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, enriched);
+        return updateResponse(request, itemId, enriched, transaction.itemType, transaction.changedFields, transaction.systemEffects);
+      }
+      const preflight = await preflightPlanningItemGitHubSync(permission.supabase, permission.profile.id, target);
+      const accepted = { ...transaction, replayed: result.replayed, githubSync: preflight };
+      await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, accepted);
+      if (preflight.status === "accepted") {
+        after(async () => {
+          const results = await executePlanningItemGitHubSyncs({ supabase: permission.supabase, actorProfileId: permission.profile.id, targets: [target] });
+          const finalResult = results.get(itemId);
+          if (!finalResult) return;
+          try {
+            await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, { ...transaction, githubSync: finalResult });
+          } catch {
+            // The Planning Item projection remains authoritative when response snapshot refresh fails.
+          }
+        });
+      }
+      return updateResponse(request, itemId, accepted, transaction.itemType, transaction.changedFields, transaction.systemEffects);
     }
 
     const result = await buildPlanningItemUpdatePreview({

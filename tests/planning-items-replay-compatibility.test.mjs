@@ -308,10 +308,15 @@ test("v1 update and delete replays use legacy response mapping", async () => {
         emptyEpicDeleteHash: () => "legacy-delete-hash",
         createEmptyEpicDeletePlanningItems: () => { throw new Error("legacy replay must bypass PlanningItems.run"); },
       },
+      "@/features/planning-items/model/planning-items-reparent": {
+        planningReparentHash: () => "reparent-hash",
+        createPlanningReparentPlanningItems: () => { throw new Error("legacy replay must bypass reparent PlanningItems.run"); },
+      },
       "@/features/planning-items/model/planning-item-update": {
         parsePlanningItemPatchPayload: () => ({
           ok: true,
           expectedUpdatedAt: "2026-07-01T08:00:00.000Z",
+          presentFields: ["intendedOutcome"],
           raw: { intendedOutcome: "Legacy goal" },
           githubSync: null,
           githubSyncMode: null,

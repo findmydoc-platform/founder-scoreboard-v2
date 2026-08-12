@@ -34,6 +34,14 @@ import {
   requestPlanningReviewCommand,
 } from "@/features/planning-items/model/planning-items-review";
 import {
+  changePlanningParentCommand,
+  createPlanningReparentPlanningItems,
+  isPlanningTaskReparentPayload,
+  parsePlanningTaskReparentPayload,
+  planningReparentError,
+  planningReparentTaskFromResult,
+} from "@/features/planning-items/model/planning-items-reparent";
+import {
   backlogSprintAssignmentMessage,
   getBacklogSprintAssignmentEligibility,
 } from "@/features/backlog/model/backlog-planning-state";
@@ -128,6 +136,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     })).filter((activity) => activity.action);
     return NextResponse.json({ ok: true, activities, task });
   }
+  if (isPlanningTaskReparentPayload(rawPayload)) {
+    const parsed = parsePlanningTaskReparentPayload(rawPayload);
+    if (!parsed.ok) return apiError(parsed.error, parsed.status);
+    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+    if (!actor.ok) return apiError("Zuordnung konnte nicht gespeichert werden.", 403);
+    const result = await createPlanningReparentPlanningItems(supabase, "any").run({
+      actor: actor.actor,
+      mode: "commit",
+      command: changePlanningParentCommand(id, parsed.value.parentId || null, parsed.value.expectedUpdatedAt),
+    });
+    if (!result.ok) {
+      const mapped = planningReparentError(result.error, "task");
+      return apiError(mapped.message, mapped.status);
+    }
+    const task = planningReparentTaskFromResult(result);
+    if (result.status !== "committed" || !task) return apiError("Zuordnung konnte nicht gespeichert werden.", 500);
+    return NextResponse.json({
+      ok: true,
+      activities: [],
+      task: {
+        id,
+        parentTaskId: task.parentTaskId || "",
+        packageId: task.packageId || "",
+        milestoneId: task.milestoneId || "",
+        parentApprovalStatus: task.parentApprovalStatus ?? null,
+        approvalStatus: task.approvalStatus ?? null,
+        approvalRevision: Number(task.approvalRevision || 1),
+        githubIssueSyncStatus: task.githubIssueSyncStatus || "not_synced",
+        githubIssueSyncError: task.githubIssueSyncError || "",
+        updatedAt: task.updatedAt,
+      },
+    });
+  }
   const activeItem = await requireActivePlanningItem(supabase, "tasks", id);
   if (!activeItem.ok) return apiError(activeItem.error, activeItem.status);
   if (!payload.expectedUpdatedAt || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
@@ -136,7 +177,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const update: TaskRouteDbUpdate = {};
   let nextParentApprovalStatus: Task["parentApprovalStatus"] | undefined;
   let sprintAssignmentNoop = false;
-  let usesLegacyInitiativeAlias = false;
   const { data: currentTask } = await supabase
     .from("tasks")
     .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
@@ -158,11 +198,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     const allowedFields = new Set([
       "expectedUpdatedAt", "title", "description", "status", "assignee", "owner", "priority",
-      "parentTaskId", "targetDate", "strategy", "raciAssignments",
+      "targetDate", "strategy", "raciAssignments",
     ]);
     const unsupportedField = Object.keys(rawPayload).find((field) => !allowedFields.has(field));
     if (unsupportedField) return apiError(`Das Feld ${unsupportedField} ist für strategische Planungselemente nicht zulässig.`, 400);
-    if (!isOperationalLead && (payload.parentTaskId !== undefined || payload.assignee !== undefined || payload.owner !== undefined || payload.raciAssignments !== undefined)) {
+    if (!isOperationalLead && (payload.assignee !== undefined || payload.owner !== undefined || payload.raciAssignments !== undefined)) {
       return apiError("Parent, Owner und RACI können nur von CEO oder Deputy geändert werden.", 403);
     }
     if (payload.status !== undefined && !allowedPlanningItemStatuses(currentTask.task_type).includes(payload.status as never)) {
@@ -196,7 +236,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       patch.assignee = assignee;
       patch.owner = assignee;
     }
-    if (payload.parentTaskId !== undefined) patch.parent_task_id = payload.parentTaskId || null;
     if (payload.targetDate !== undefined) patch.target_date = targetDate;
     const strategy = payload.strategy === undefined ? null : {
       goal: strategicText(payload.strategy.goal, 4_000),
@@ -244,13 +283,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     });
   }
 
-  // packageId is retained as a deprecated request alias only.  It always
-  // becomes the canonical parentTaskId and never writes package_id again.
-  if (currentTask.task_type === "deliverable" && payload.packageId !== undefined && payload.parentTaskId === undefined) {
-    const { packageId: legacyPackageId, ...withoutLegacyPackageId } = payload;
-    payload = { ...withoutLegacyPackageId, parentTaskId: legacyPackageId || "" };
-    usesLegacyInitiativeAlias = true;
-  }
   const taskTypeFieldGuard = validateTaskTypeUpdateFields(currentTask, payload);
   if (!taskTypeFieldGuard.ok) return apiError(taskTypeFieldGuard.error, taskTypeFieldGuard.status);
   const hasEvidenceLinks = Object.prototype.hasOwnProperty.call(rawPayload, "evidenceLinks");
@@ -314,88 +346,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
   if (currentTask.review_status === "requested" && payload.reviewOwnerProfileId !== undefined && !profileId(payload.reviewOwnerProfileId)) {
     return apiError("Ein aktives Review braucht eine Review-Verantwortung.", 400);
-  }
-
-  if (payload.parentTaskId !== undefined) {
-    if (currentTask.task_type !== "sub_issue" && currentTask.task_type !== "deliverable") {
-      return apiError("Dieses Planungselement kann keinem anderen Parent zugeordnet werden.", 400);
-    }
-    if (currentTask.task_type === "sub_issue" && !detailPermissions.canReparentSubIssue) {
-      return apiError("Nur CEO, Deputy oder die aktuelle Zuständigkeit können dieses Sub-Issue verschieben.", 403);
-    }
-    if (currentTask.task_type === "deliverable" && !isOperationalLead) {
-      return apiError("Deliverables können nur von CEO oder Deputy einer Initiative zugeordnet werden.", 403);
-    }
-
-    const nextParentTaskId = payload.parentTaskId.trim();
-    if (currentTask.task_type === "sub_issue" && !nextParentTaskId) {
-      return apiError("Ein Parent-Deliverable ist erforderlich.", 400);
-    }
-    if (nextParentTaskId) {
-      const { data: nextParent, error: nextParentError } = await supabase
-        .from(ACTIVE_TASKS_TABLE)
-        .select("id,task_type,approval_status")
-        .eq("id", nextParentTaskId)
-        .maybeSingle();
-      if (nextParentError) return apiError(nextParentError.message, 500);
-      if (!nextParent) return apiError("Übergeordnetes Planungselement wurde nicht gefunden.", 404);
-      const requiredParentType = currentTask.task_type === "sub_issue" ? "deliverable" : "initiative";
-      if (nextParent.task_type !== requiredParentType) {
-        return apiError(currentTask.task_type === "sub_issue"
-          ? "Sub-Issues können nur unter Deliverables verschoben werden."
-          : "Deliverables können nur unter Initiativen eingeordnet werden.", 400);
-      }
-      nextParentApprovalStatus = nextParent.approval_status as Task["parentApprovalStatus"];
-    }
-    if (nextParentTaskId !== currentTask.parent_task_id) update.parent_task_id = nextParentTaskId || null;
-  }
-
-  if (payload.parentTaskId !== undefined && update.parent_task_id !== undefined) {
-    const additionalFields = Object.keys(rawPayload).filter((field) => ![
-      "expectedUpdatedAt",
-      "parentTaskId",
-      ...(usesLegacyInitiativeAlias ? ["packageId"] : []),
-    ].includes(field));
-    if (additionalFields.length) {
-      return apiError("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", 409);
-    }
-    const { data, error } = await supabase.rpc("reparent_planning_item_transaction", {
-      p_task_id: id,
-      p_expected_updated_at: payload.expectedUpdatedAt,
-      p_parent_task_id: typeof update.parent_task_id === "string" ? update.parent_task_id : null,
-      p_actor_profile_id: permission.profile?.id || null,
-    });
-    const transaction = data as { task?: {
-      updated_at?: string;
-      approval_status?: Task["approvalStatus"];
-      approval_revision?: number;
-      parent_task_id?: string | null;
-      package_id?: string | null;
-      milestone_id?: string | null;
-      github_issue_sync_status?: Task["githubIssueSyncStatus"];
-      github_issue_sync_error?: string | null;
-    } } | null;
-    if (error || !transaction?.task?.updated_at) {
-      if (error?.code === "P0001") return apiError("Planungselement wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
-      if (error?.code === "23514" || error?.code === "22023") return apiError(error.message || "Übergeordnete Planungsebene ist ungültig.", 400);
-      return apiError(error?.message || "Zuordnung konnte nicht gespeichert werden.", 500);
-    }
-    return NextResponse.json({
-      ok: true,
-      activities: [],
-      task: {
-        id,
-        parentTaskId: transaction.task.parent_task_id || "",
-        packageId: transaction.task.package_id || "",
-        milestoneId: transaction.task.milestone_id || "",
-        parentApprovalStatus: nextParentApprovalStatus ?? null,
-        approvalStatus: transaction.task.approval_status ?? null,
-        approvalRevision: Number(transaction.task.approval_revision || 1),
-        githubIssueSyncStatus: transaction.task.github_issue_sync_status || "not_synced",
-        githubIssueSyncError: transaction.task.github_issue_sync_error || "",
-        updatedAt: transaction.task.updated_at,
-      },
-    });
   }
 
   const statusGuard = validateTaskStatusUpdate({
@@ -626,14 +576,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     decisionNote: result.task.decision_note || "",
     sprintId: result.task.sprint_id || "",
     scoreRelevant: Boolean(result.task.score_relevant),
-    ...(payload.parentTaskId !== undefined ? {
-      parentTaskId: result.task.parent_task_id || "",
-      packageId: result.task.package_id || "",
-      milestoneId: result.task.milestone_id || "",
-      parentApprovalStatus: result.parentApprovalStatus ?? nextParentApprovalStatus ?? null,
-      githubIssueSyncStatus: result.task.github_issue_sync_status || "not_synced",
-      githubIssueSyncError: result.task.github_issue_sync_error || "",
-    } : {}),
   };
 
   return NextResponse.json({
