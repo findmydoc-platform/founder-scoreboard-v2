@@ -95,10 +95,11 @@ test("paper-bin UI replaces hard-delete controls with an accessible reason dialo
 });
 
 test("approval decisions drain lifecycle jobs and rejected roots leave active UI state", async () => {
-  const [trigger, taskRoute, initiativeRoute, taskCommands, initiativeCommands] = await Promise.all([
+  const [trigger, taskRoute, initiativeRoute, approvalModule, taskCommands, initiativeCommands] = await Promise.all([
     readFile("src/lib/planning-github-lifecycle-trigger.ts", "utf8"),
     readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8"),
     readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8"),
     readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8"),
     readFile("src/features/projects/hooks/use-initiative-commands.ts", "utf8"),
   ]);
@@ -110,11 +111,12 @@ test("approval decisions drain lifecycle jobs and rejected roots leave active UI
   assert.doesNotMatch(trigger, /registeredDrain|registerPlanningGitHubLifecycleDrain/);
   for (const route of [taskRoute]) {
     assert.match(route, /getServerServiceRoleSupabase/);
-    assert.match(route, /attemptPlanningGitHubLifecycleDrain/);
+    assert.match(route, /runPlanningApprovalLifecycle/);
     assert.match(route, /lifecycle/);
-    assert.match(route, /loadOutstandingPlanningGitHubLifecycleTaskIds/);
   }
-  assert.match(initiativeRoute, /decide_planning_item_approval_transaction/);
+  assert.match(approvalModule, /attemptPlanningGitHubLifecycleDrain/);
+  assert.match(approvalModule, /loadOutstandingPlanningGitHubLifecycleTaskIds/);
+  assert.match(initiativeRoute, /createPlanningApprovalPlanningItems/);
   assert.match(initiativeRoute, /lifecycle: null/);
   assert.doesNotMatch(initiativeRoute, /attemptPlanningGitHubLifecycleDrain|loadOutstandingPlanningGitHubLifecycleTaskIds/);
   assert.match(taskCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "deliverable", task\.id\)/);

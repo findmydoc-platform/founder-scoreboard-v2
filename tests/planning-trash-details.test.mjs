@@ -37,7 +37,6 @@ test("central planning mutation guard distinguishes active, missing, and trashed
 test("all high-risk task and initiative mutations use the centralized active guard", async () => {
   const guardedRoutes = [
     "src/app/api/tasks/[id]/route.ts",
-    "src/app/api/tasks/[id]/approval/route.ts",
     "src/app/api/tasks/[id]/comments/route.ts",
     "src/app/api/tasks/[id]/github-comments/route.ts",
     "src/app/api/tasks/[id]/blockers/route.ts",
@@ -50,7 +49,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
   }
   for (const route of [
     "src/app/api/initiatives/[id]/route.ts",
-    "src/app/api/initiatives/[id]/approval/route.ts",
   ]) {
     const source = await read(route);
     assert.match(source, /loadCanonicalStrategicItem/, `${route} must use the active canonical item adapter`);
@@ -81,6 +79,18 @@ test("all high-risk task and initiative mutations use the centralized active gua
   }
   assert.match(reviewModule, /task\.trashed/);
   assert.match(reviewMigration, /v_task\.trashed_at is not null/);
+
+  const [approvalTaskRoute, approvalInitiativeRoute, approvalModule, approvalMigration] = await Promise.all([
+    read("src/app/api/tasks/[id]/approval/route.ts"),
+    read("src/app/api/initiatives/[id]/approval/route.ts"),
+    read("src/features/planning-items/model/planning-items-approval.ts"),
+    read("supabase/migrations/20260812140715_planning_approval_command_transaction.sql"),
+  ]);
+  for (const route of [approvalTaskRoute, approvalInitiativeRoute]) {
+    assert.match(route, /createPlanningApprovalPlanningItems/);
+  }
+  assert.match(approvalModule, /item\.trashed/);
+  assert.match(approvalMigration, /v_task\.trashed_at/);
 });
 
 test("reparenting and relationship targets use active read models", async () => {

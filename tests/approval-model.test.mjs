@@ -58,6 +58,7 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
   const migration = await readSupabaseSchemaContract();
   const initiativeRoute = await readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8");
+  const approvalModule = await readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8");
 
   assert.match(migration, /approval_revision <> p_expected_revision/);
   assert.match(migration, /p_action in \('approve', 'reject'\) and v_actor_role not in \('ceo', 'deputy'\)/);
@@ -66,8 +67,9 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
   assert.match(migration, /deliverable approval requires an approved initiative/);
   assert.match(migration, /task\.approval_reset/);
   assert.match(migration, /task\.approval_resubmitted/);
-  assert.match(initiativeRoute, /decide_planning_item_approval_transaction/);
-  assert.match(taskRoute, /decide_planning_item_approval_transaction/);
+  assert.match(initiativeRoute, /createPlanningApprovalPlanningItems/);
+  assert.match(taskRoute, /createPlanningApprovalPlanningItems/);
+  assert.match(approvalModule, /mutate_planning_approval_command_transaction/);
 });
 
 test("non-approved deliverables are gated from sprint review score and github", async () => {
