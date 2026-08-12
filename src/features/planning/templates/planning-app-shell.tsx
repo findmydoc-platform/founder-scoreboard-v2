@@ -12,15 +12,17 @@ import { ProductUpdatesProvider } from "@/features/product-updates/organisms/pro
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
+import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 
 type PlanningAppShellProps = {
   authRequired: boolean;
   controller: PlanningAppController;
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
+  initialBacklogModel?: BacklogModel;
 };
 
-export function PlanningAppShell({ authRequired, controller, source, decisionLogResult }: PlanningAppShellProps) {
+export function PlanningAppShell({ authRequired, controller, source, decisionLogResult, initialBacklogModel }: PlanningAppShellProps) {
   const {
     authAvailable,
     authBusy,
@@ -171,7 +173,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
           />
         )}
 
-        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} />
+        <PlanningWorkspaceRenderer controller={controller} source={source} decisionLogResult={decisionLogResult} initialBacklogModel={initialBacklogModel} />
       </main>
 
       <PlanningOverlayLayer controller={controller} />

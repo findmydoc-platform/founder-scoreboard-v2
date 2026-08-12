@@ -10,6 +10,7 @@ import { UiPanel } from "@/shared/atoms/ui-primitives";
 import { canManageMilestones } from "@/features/projects/model/milestone-policy";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
+import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -29,9 +30,10 @@ type PlanningWorkspaceRendererProps = {
   controller: PlanningAppController;
   source: "supabase";
   decisionLogResult?: NotionDecisionLogResult;
+  initialBacklogModel?: BacklogModel;
 };
 
-export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult }: PlanningWorkspaceRendererProps) {
+export function PlanningWorkspaceRenderer({ controller, source, decisionLogResult, initialBacklogModel }: PlanningWorkspaceRendererProps) {
   const {
     authBusy,
     canManageTaskMeta,
@@ -58,7 +60,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     notificationDispatchMessage,
     openNotification,
     openTaskPanel,
-    refreshPlanningData,
     apiClient,
     retryNotificationDelivery,
     reviewScoreObjection,
@@ -67,7 +68,6 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     saveFounderOpsGitHubProject,
     saveFounderOpsReviewWindow,
     sendGoogleChatTest,
-    setData,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
     setMilestoneDeleteTarget,
@@ -148,18 +148,14 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
         />
       )}
       {workspace === "backlog" && (
-        <BacklogOverview
+        initialBacklogModel ? <BacklogOverview
           apiClient={apiClient}
           canManageBacklog={canManageTaskMeta}
-          data={data}
+          initialModel={initialBacklogModel}
           onOpenTask={openTaskPanel}
           onCreatePlanningItem={(taskType) => setTaskDialogDefaults({ taskType })}
           onProposeDeliverable={() => setTaskDialogDefaults({ taskType: "deliverable" })}
-          onUpdateTask={updateTask}
-          refreshPlanningData={refreshPlanningData}
-          setData={setData}
-          source={source}
-        />
+        /> : null
       )}
       {workspace === "events" && (
         <EventsOverview

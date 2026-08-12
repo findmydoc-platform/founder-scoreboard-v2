@@ -1,17 +1,19 @@
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { PlanningDataUnavailablePage } from "@/features/planning/templates/planning-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
-import { getPlanningDataScopeForWorkspace } from "@/lib/planning-data-scopes";
+import { backlogModelToPlanningData } from "@/features/backlog/model/backlog-planning-data-adapter";
+import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
+import { getPlanningDataScopeForWorkspace, type LegacyPlanningDataWorkspace } from "@/lib/planning-data-scopes";
 import { emptyPlanningData, getPlanningData, type PlanningDataLoadOptions } from "@/lib/planning-data";
-import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
+import { emptyPlanningHeaderData, loadPlanningHeaderData } from "@/lib/planning-header-data";
 import { sharedPlanningHeaderSlotLoaders } from "@/lib/planning-header-cache";
 import { getServerPlanningAuth } from "@/lib/planning-auth-server";
 import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
-import { requiresSupabaseAuth } from "@/lib/supabase";
+import { getServerSupabase, requiresSupabaseAuth } from "@/lib/supabase";
 import type { AuthenticatedProfile } from "@/lib/types";
 
 function loadWorkspacePlanningData(
-  initialWorkspace: AppWorkspace,
+  initialWorkspace: LegacyPlanningDataWorkspace,
   profile?: AuthenticatedProfile | null,
   options?: PlanningDataLoadOptions,
 ) {
@@ -23,6 +25,25 @@ function loadWorkspacePlanningData(
     ...options,
     sharedHeaderSlotLoaders: sharedPlanningHeaderSlotLoaders,
   });
+}
+
+async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
+  const supabase = getServerSupabase();
+  if (!supabase) return { status: "unavailable" as const };
+  const [backlog, headerData] = await Promise.all([
+    createSupabaseBacklogReadModel(supabase).load({
+      authorized: true,
+      actorProfileId: profile?.id || null,
+    }),
+    loadPlanningHeaderData(supabase, {
+      currentProfileId: profile?.id || null,
+      platformRole: profile?.platformRole || null,
+      sharedSlotLoaders: sharedPlanningHeaderSlotLoaders,
+    }),
+  ]);
+  return backlog.status === "ready"
+    ? { status: "ready" as const, model: backlog.model, headerData }
+    : { status: backlog.status };
 }
 
 export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
@@ -38,6 +59,26 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
           authRequired
           initialAuthUser={auth.user}
           initialAuthError={auth.error}
+        />
+      );
+    }
+
+    if (initialWorkspace === "backlog") {
+      const backlog = await loadBacklogPageData(auth.profile);
+      if (backlog.status !== "ready") {
+        return <PlanningDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
+      }
+      return (
+        <PlanningApp
+          initialData={backlogModelToPlanningData(backlog.model)}
+          initialHeaderData={backlog.headerData}
+          initialWorkspace="backlog"
+          initialBacklogModel={backlog.model}
+          source="supabase"
+          authRequired
+          initialAuthUser={auth.user}
+          initialCurrentProfile={auth.profile}
+          initialProtectedDataLoaded
         />
       );
     }
@@ -60,6 +101,21 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace) {
         initialCurrentProfile={auth.profile}
         initialProtectedDataLoaded
         initialDecisionLogResult={initialDecisionLogResult}
+      />
+    );
+  }
+
+  if (initialWorkspace === "backlog") {
+    const backlog = await loadBacklogPageData();
+    if (backlog.status !== "ready") return <PlanningDataUnavailablePage workspace="backlog" />;
+    return (
+      <PlanningApp
+        initialData={backlogModelToPlanningData(backlog.model)}
+        initialHeaderData={backlog.headerData}
+        initialWorkspace="backlog"
+        initialBacklogModel={backlog.model}
+        source="supabase"
+        authRequired={false}
       />
     );
   }

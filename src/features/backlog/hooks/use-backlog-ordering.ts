@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useTransition } from "react";
+import type { Dispatch } from "react";
+import type { BacklogAction } from "@/features/backlog/model/backlog-read-model";
 import * as taskApi from "@/features/tasks/model/task-api-client";
 import type { BacklogMovePlacement } from "@/features/tasks/model/task-api-client";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { PlanningData, Task } from "@/lib/types";
+import type { Task } from "@/lib/types";
 
 export type BacklogPlacement = BacklogMovePlacement;
 export type BacklogMoveAction = "up" | "down" | "top" | "bottom";
@@ -18,11 +20,10 @@ export type BacklogMoveTarget = {
 type UseBacklogOrderingOptions = {
   apiClient: BrowserApiClient;
   canManageBacklog: boolean;
+  dispatch: Dispatch<BacklogAction>;
   orderedTasks: Task[];
-  refreshPlanningData: () => Promise<void>;
-  setData: (updater: (current: PlanningData) => PlanningData) => void;
+  refreshBacklogModel: () => Promise<void>;
   setMessage: (message: string) => void;
-  source: "supabase";
 };
 
 function reorderedBacklogTasks(tasks: Task[], taskId: string, targetTaskId: string, placement: BacklogPlacement) {
@@ -68,9 +69,9 @@ function targetForAction(tasks: Task[], taskId: string, action: BacklogMoveActio
 export function useBacklogOrdering({
   apiClient,
   canManageBacklog,
+  dispatch,
   orderedTasks,
-  refreshPlanningData,
-  setData,
+  refreshBacklogModel,
   setMessage,
 }: UseBacklogOrderingOptions) {
   const [isReordering, startReorderTransition] = useTransition();
@@ -100,19 +101,19 @@ export function useBacklogOrdering({
     const previousTasks = orderedTasks;
     const nextOrderById = new Map(nextTasks.map((item, index) => [item.id, (index + 1) * 10]));
     setMessage("");
-    setData((current) => {
-      const tasks = current.tasks.map((item) => nextOrderById.has(item.id) ? { ...item, order: nextOrderById.get(item.id)! } : item);
-      return { ...current, tasks };
+    dispatch({
+      type: "itemsPatched",
+      patches: nextTasks.map((item) => ({ id: item.id, order: nextOrderById.get(item.id)! })),
     });
 
     reorderInFlightRef.current = true;
     startReorderTransition(async () => {
       const rollback = () => {
         const previousOrderById = new Map(previousTasks.map((item) => [item.id, item.order]));
-        setData((current) => ({
-          ...current,
-          tasks: current.tasks.map((item) => previousOrderById.has(item.id) ? { ...item, order: previousOrderById.get(item.id)! } : item),
-        }));
+        dispatch({
+          type: "itemsPatched",
+          patches: previousTasks.map((item) => ({ id: item.id, order: previousOrderById.get(item.id)! })),
+        });
       };
 
       try {
@@ -125,23 +126,20 @@ export function useBacklogOrdering({
         });
         if (response.ok) {
           const persistedById = new Map((body?.updates || []).map((update) => [update.id, update]));
-          setData((current) => ({
-            ...current,
-            tasks: current.tasks.map((item) => {
-              const persisted = persistedById.get(item.id);
-              return persisted ? { ...item, order: persisted.sortOrder, updatedAt: persisted.updatedAt } : item;
-            }),
-          }));
+          dispatch({
+            type: "itemsPatched",
+            patches: [...persistedById].map(([id, persisted]) => ({ id, order: persisted.sortOrder, updatedAt: persisted.updatedAt })),
+          });
           setMessage("Rangfolge aktualisiert.");
           return;
         }
 
         rollback();
-        await refreshPlanningData().catch(() => {});
+        await refreshBacklogModel().catch(() => {});
         setMessage(body?.error || "Backlog-Reihenfolge konnte nicht gespeichert werden.");
       } catch {
         rollback();
-        await refreshPlanningData().catch(() => {});
+        await refreshBacklogModel().catch(() => {});
         setMessage("Backlog-Reihenfolge konnte nicht gespeichert werden.");
       } finally {
         reorderInFlightRef.current = false;

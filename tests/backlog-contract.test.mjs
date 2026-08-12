@@ -15,7 +15,7 @@ const scheduleMock = {
 function basePlanningData() {
   return {
     project: { id: "findmydoc-founder-execution", name: "findmydoc Planning", range: "" },
-    profiles: [
+    people: [
       { id: "ceo", name: "CEO", weeklyCapacity: 20 },
       { id: "deputy", name: "Deputy", weeklyCapacity: 22 },
     ],
@@ -23,7 +23,22 @@ function basePlanningData() {
       { id: "initiative-1", title: "Ärzte gewinnen", goal: "", priority: "P1", sortOrder: 10 },
     ],
     milestones: [],
-    tasks: [
+    items: [
+      {
+        id: "initiative-1",
+        order: 1,
+        title: "Ärzte gewinnen",
+        description: "",
+        status: "Geplant",
+        priority: "P1",
+        assignee: "CEO",
+        owner: "CEO",
+        packageId: "initiative-1",
+        taskType: "initiative",
+        approvalStatus: "approved",
+        sprintId: "",
+        hours: 0,
+      },
       {
         id: "late-p0",
         order: 30,
@@ -89,7 +104,7 @@ function basePlanningData() {
       { id: "sprint-4", name: "Sprint 4", status: "active", startDate: "2026-07-06", endDate: "2026-07-19", reviewDueAt: "2026-07-17T12:00", scoreLocked: false },
       { id: "sprint-5", name: "Sprint 5", status: "planning", startDate: "2026-07-20", endDate: "2026-08-02", reviewDueAt: "2026-07-31T12:00", scoreLocked: false },
     ],
-    sprintCommitments: [
+    commitments: [
       { id: 1, sprintId: "sprint-4", profileId: "ceo", commitmentLevel: "Standard", weeklyHours: 20, note: "" },
       { id: 2, sprintId: "sprint-4", profileId: "deputy", commitmentLevel: "Standard", weeklyHours: 22, note: "" },
     ],
@@ -130,7 +145,8 @@ test("backlog workspace is routed separately from planning and uses sprint commi
   assert.match(routes, /ListOrdered/);
   assert.match(page, /renderWorkspacePage\("backlog"\)/);
   assert.match(loading, /WorkspaceLoadingShell workspace="backlog" variant="backlog"/);
-  assert.match(dataScopes, /backlog: \{[\s\S]*sprintCommitments: true,[\s\S]*\}/);
+  assert.doesNotMatch(dataScopes, /backlog: \{/);
+  assert.match(renderer, /initialBacklogModel/);
   assert.match(model, /backlog: "Backlog"/);
   assert.match(renderer, /BacklogOverview/);
   assert.match(renderer, /BacklogWorkspacePanelLoading/);
@@ -267,7 +283,7 @@ test("backlog UI uses custom FounderOps surfaces without native choice controls"
   assert.match(overview, /canAssignSprints=\{backlogLevel === "deliverable" && canManageBacklog\}/);
   assert.match(rankTable, /canReorder/);
   assert.match(rankTable, /placement === "before"/);
-  assert.match(overview, /sprints: data\.sprints/);
+  assert.match(overview, /sprints: \[\.\.\.model\.sprints\]/);
   assert.match(ordering, /moveBacklogTaskRequest/);
   assert.match(sprintAssignment, /getBacklogSprintAssignmentEligibility/);
   assert.match(sprintPane, /const sprintHorizon = 5/);

@@ -1,8 +1,9 @@
 import { findCurrentSprint } from "@/lib/planning-schedule";
 import { isApprovedDeliverable, isProposedDeliverable } from "@/features/planning/model/approval-domain";
 import { getBacklogPlanningState, type BacklogPlanningState } from "@/features/backlog/model/backlog-planning-state";
+import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import { normalizeStatus } from "@/lib/status";
-import type { Package, PlanningData, Sprint, Task } from "@/lib/types";
+import type { Sprint, Task } from "@/lib/types";
 
 export type BacklogScope = "all" | "proposals" | "ready" | "unscheduled";
 export type BacklogSort = "rank" | "priority" | "title" | "approval" | "initiative" | "assignee" | "readiness" | "status";
@@ -37,7 +38,7 @@ export const DEFAULT_BACKLOG_FILTERS: BacklogTableFilters = {
 };
 
 export type BacklogItem = {
-  initiative?: Package;
+  initiative?: Task;
   isReadyForSprint: boolean;
   planningState: BacklogPlanningState;
   rank: number;
@@ -87,11 +88,11 @@ function sprintDurationDays(sprint: Pick<Sprint, "startDate" | "endDate">) {
   return Math.floor((end - start) / 86_400_000) + 1;
 }
 
-function sprintCapacityHours(data: PlanningData, sprint: Sprint) {
-  const commitments = data.sprintCommitments.filter((commitment) => commitment.sprintId === sprint.id);
+function sprintCapacityHours(model: BacklogModel, sprint: Sprint) {
+  const commitments = model.commitments.filter((commitment) => commitment.sprintId === sprint.id);
   const weeklyHours = commitments.length
     ? commitments.map((commitment) => commitment.weeklyHours)
-    : data.profiles.map((profile) => profile.weeklyCapacity);
+    : model.people.map((profile) => profile.weeklyCapacity);
   const durationDays = sprintDurationDays(sprint);
   if (!weeklyHours.length || durationDays === null || weeklyHours.some((hours) => !Number.isFinite(hours) || hours < 0)) {
     return null;
@@ -99,7 +100,7 @@ function sprintCapacityHours(data: PlanningData, sprint: Sprint) {
   return Math.round(weeklyHours.reduce((sum, hours) => sum + hours, 0) * durationDays / 7);
 }
 
-function buildBacklogItem(task: Task, initiativeById: Map<string, Package>, rank: number): BacklogItem {
+function buildBacklogItem(task: Task, initiativeById: Map<string, Task>, rank: number): BacklogItem {
   const initiative = initiativeById.get(task.packageId);
   const planningState = getBacklogPlanningState({ ...task, hasInitiative: Boolean(initiative) });
 
@@ -167,14 +168,14 @@ export function filterBacklogItems(items: BacklogItem[], filters: BacklogTableFi
   });
 }
 
-export function buildBacklogTableViewModel(data: PlanningData, filters: BacklogTableFilters) {
-  const workspace = buildBacklogViewModel(data, filters.scope);
+export function buildBacklogTableViewModel(model: BacklogModel, filters: BacklogTableFilters) {
+  const workspace = buildBacklogViewModel(model, filters.scope);
   const visibleItems = sortBacklogItems(filterBacklogItems(workspace.visibleItems, filters), filters.sort, filters.direction);
   return { ...workspace, visibleItems };
 }
 
-function planningSprints(data: PlanningData) {
-  const ordered = [...data.sprints]
+function planningSprints(model: BacklogModel) {
+  const ordered = [...model.sprints]
     .filter((sprint) => sprint.status !== "closed")
     .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""));
   const current = findCurrentSprint(ordered) || ordered[0];
@@ -186,19 +187,19 @@ function planningSprints(data: PlanningData) {
   };
 }
 
-export function buildBacklogViewModel(data: PlanningData, scope: BacklogScope) {
-  const initiativeById = new Map(data.packages.map((initiative) => [initiative.id, initiative]));
-  const orderedTasks = data.tasks
+export function buildBacklogViewModel(model: BacklogModel, scope: BacklogScope) {
+  const initiativeById = new Map(model.items.filter((item) => item.taskType === "initiative").map((initiative) => [initiative.id, initiative]));
+  const orderedTasks = model.items
     .filter((task) => task.taskType === "deliverable" && !taskIsDone(task))
     .sort(byBacklogOrder);
   const allItems = orderedTasks.map((task, index) => buildBacklogItem(task, initiativeById, index + 1));
   const visibleItems = allItems.filter((item) => filterItem(item, scope));
-  const { current, sprints } = planningSprints(data);
+  const { current, sprints } = planningSprints(model);
   const sprintBuckets = sprints.map((sprint) => {
-    const plannedHours = data.tasks
+    const plannedHours = model.items
       .filter((task) => isApprovedDeliverable(task) && task.sprintId === sprint.id && !taskIsDone(task))
       .reduce((sum, task) => sum + task.hours, 0);
-    const capacityHours = sprintCapacityHours(data, sprint);
+    const capacityHours = sprintCapacityHours(model, sprint);
     const capacityUnavailable = capacityHours === null;
     const overCapacityHours = capacityHours === null ? 0 : Math.max(plannedHours - capacityHours, 0);
     return {
