@@ -36,10 +36,8 @@ import {
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
 import {
-  executePlanningItemGitHubSyncs,
-  preflightPlanningItemGitHubSync,
-  type PlanningItemGitHubSyncTarget,
-} from "@/features/planning-items/model/planning-items-github-sync";
+  dispatchAndLoadPlanningGitHubProjections,
+} from "@/features/planning-items/model/planning-items-github-projection";
 
 type UpdateTransactionResult = {
   replayed?: boolean;
@@ -101,20 +99,6 @@ function updateResponse(
   });
 }
 
-async function persistUpdateResponse(
-  supabase: Parameters<typeof executePlanningItemGitHubSyncs>[0]["supabase"],
-  tokenId: string,
-  idempotencyKey: string,
-  transaction: UpdateTransactionResult,
-) {
-  const { error } = await supabase
-    .from("team_planning_item_update_requests")
-    .update({ response: transaction })
-    .eq("token_id", tokenId)
-    .eq("idempotency_key", idempotencyKey);
-  if (error) throw new Error(`GitHub-Sync-Ergebnis konnte nicht gespeichert werden: ${error.message}`);
-}
-
 export async function handleTeamPlanningItemUpdate(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht gespeichert werden.", async (permission) => {
     const { id } = await context.params;
@@ -171,6 +155,15 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
       throw Object.assign(new Error(existingRequest.error.message), { code: existingRequest.error.code });
     }
     if (existingRequest.data) {
+      if (parsed.githubSyncMode === "wait") {
+        await dispatchAndLoadPlanningGitHubProjections(
+          permission.supabase,
+          `team-update:${permission.tokenId}:${idempotencyKey}`,
+        );
+        const refreshed = await loadStoredRequest();
+        if (refreshed.error) throw Object.assign(new Error(refreshed.error.message), { code: refreshed.error.code });
+        if (refreshed.data) return storedResponse(refreshed.data as StoredUpdateRequest);
+      }
       return storedResponse(existingRequest.data as StoredUpdateRequest);
     }
 
@@ -186,7 +179,12 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
       });
       if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
       const metadata = auditRequestMetadata(request);
-      const result = await createPlanningReparentPlanningItems(permission.supabase, "any", reparentField).run({
+      const result = await createPlanningReparentPlanningItems(
+        permission.supabase,
+        "any",
+        reparentField,
+        parsed.githubSync,
+      ).run({
         actor: actor.actor,
         mode: "commit",
         command: changePlanningParentCommand(itemId, String(parsed.raw[reparentField] || "") || null, parsed.expectedUpdatedAt),
@@ -211,30 +209,16 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
       if (!parsed.githubSync || !parsed.githubSyncMode) {
         return updateResponse(request, itemId, { ...transaction, replayed: result.replayed }, transaction.itemType, transaction.changedFields, transaction.systemEffects);
       }
-      const target: PlanningItemGitHubSyncTarget = {
-        itemId,
-        itemType: transaction.itemType === "milestone" ? "epic" : transaction.itemType,
-        command: parsed.githubSync,
-      };
+      const operationId = `team-update:${permission.tokenId}:${idempotencyKey}`;
       if (parsed.githubSyncMode === "wait") {
-        const results = await executePlanningItemGitHubSyncs({ supabase: permission.supabase, actorProfileId: permission.profile.id, targets: [target] });
+        const results = await dispatchAndLoadPlanningGitHubProjections(permission.supabase, operationId);
         const enriched = { ...transaction, replayed: result.replayed, githubSync: results.get(itemId) };
-        await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, enriched);
         return updateResponse(request, itemId, enriched, transaction.itemType, transaction.changedFields, transaction.systemEffects);
       }
-      const preflight = await preflightPlanningItemGitHubSync(permission.supabase, permission.profile.id, target);
-      const accepted = { ...transaction, replayed: result.replayed, githubSync: preflight };
-      await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, accepted);
-      if (preflight.status === "accepted") {
+      const accepted = { ...transaction, replayed: result.replayed };
+      if (transaction.githubSync?.status === "accepted") {
         after(async () => {
-          const results = await executePlanningItemGitHubSyncs({ supabase: permission.supabase, actorProfileId: permission.profile.id, targets: [target] });
-          const finalResult = results.get(itemId);
-          if (!finalResult) return;
-          try {
-            await persistUpdateResponse(permission.supabase, permission.tokenId, idempotencyKey, { ...transaction, githubSync: finalResult });
-          } catch {
-            // The Planning Item projection remains authoritative when response snapshot refresh fails.
-          }
+          await dispatchAndLoadPlanningGitHubProjections(permission.supabase, operationId);
         });
       }
       return updateResponse(request, itemId, accepted, transaction.itemType, transaction.changedFields, transaction.systemEffects);
@@ -281,8 +265,7 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
       itemId,
       parsed,
       preparedPreview: preview,
-      executeGitHubSyncs: executePlanningItemGitHubSyncs,
-      preflightGitHubSync: preflightPlanningItemGitHubSync,
+      dispatchGitHubProjections: dispatchAndLoadPlanningGitHubProjections,
       scheduleAfter: after,
     }).run({
       actor: actor.actor,
@@ -294,6 +277,7 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
     if (!reviseResult.ok) {
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "idempotency") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
       if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "revision") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden.", 409);
+      if (reviseResult.error.code === "conflict" && reviseResult.error.reason === "state") return planningItemsError("GitHub-Sync ist für dieses Planungselement im aktuellen Zustand nicht möglich.", 409);
       if (reviseResult.error.code === "forbidden") return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
       if (reviseResult.error.code === "invalidCommand") return planningItemsJson({ ok: false, error: "Planning-Items-Update enthält ungültige Felder.", errors: reviseResult.error.issues.map((issue) => issue.reason), warnings: preview.warnings }, 400);
       throw new Error("Planning-Items-Update konnte nicht gespeichert werden.");

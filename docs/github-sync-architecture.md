@@ -7,8 +7,10 @@ FounderOps and Supabase are authoritative. GitHub is a one-way projection used f
 ```mermaid
 flowchart LR
 Client["Task clients"] --> Route["POST /api/tasks/[id]/sync-github"]
-Planning["Planning API clients"] --> PlanningRoute["POST /api/team/planning-items/v1/items/[id]/github-sync"]
-PlanningRoute --> Task
+Planning["Planning API clients"] --> PlanningRoute["Planning Items.run"]
+PlanningRoute --> Queue["Durable projection outbox"]
+Queue --> Dispatcher["Projection dispatcher"]
+Dispatcher --> Task
 Route --> Task["Task projection"]
   Task --> Issue["Issue projection"]
   Task --> Dependency["Dependency projection"]
@@ -24,6 +26,7 @@ Route --> Task["Task projection"]
 | Module | Interface | Responsibility |
 | --- | --- | --- |
 | `src/lib/github-sync/task-projection.ts` | `projectTaskToGitHub` | Eligibility, lock, reload, compare-and-set transitions, ordering, error persistence, and final result |
+| `src/features/planning-items/model/planning-items-github-projection.ts` | `dispatchPlanningGitHubProjections` | Durable claim, lease recovery, terminal result persistence, and receipt refresh |
 | `src/lib/github-sync/issue-projection.ts` | `projectTaskGitHubIssue` | Issue document, labels, state, ownership marker, assignee, recovery, and creation |
 | `src/lib/github-sync/dependency-projection.ts` | `projectTaskGitHubDependencies` | Local relationship resolution and complete native dependency reconciliation |
 | `src/lib/github-sync/project-projection.ts` | `projectTaskToFounderOpsGitHubProject` | Project settings, membership, Sprint context, and native field reconciliation |
@@ -46,12 +49,20 @@ projectTaskToGitHub({
 })
 ```
 
-Planning API async calls use the same interface in preflight-only mode before
-returning HTTP `202`, then execute the full projection through Next.js
-`after()`. This is best-effort continuation in the same Vercel invocation, not
-a queue or scheduled retry. Embedded Create and PATCH commands persist their
-per-item response classification without making GitHub part of the FounderOps
-database transaction.
+Planning API commits store the Planning mutation, idempotency receipt, and one
+projection request per eligible item in the same database transaction. `async`
+returns HTTP `202` only after that request is durable. Next.js `after()` wakes
+the dispatcher to reduce latency, but correctness comes from the durable queue
+and maintenance drain. `wait` claims and processes the same request before
+returning; it never calls GitHub around the queue. Projection and notification
+delivery remain outside the Planning transaction, so GitHub failure never
+rolls back authoritative FounderOps state.
+
+Projection and close/reopen lifecycle requests use one item-wide delivery
+sequence. A later action cannot overtake an unfinished earlier action for the
+same item. Claim leases recover abandoned work after a crash. Replaying a
+Planning idempotency key reads the original request and receipt and creates no
+additional projection request.
 
 The HTTP body uses the browser-safe `TaskGitHubSyncCommand` contract and must contain an explicit Boolean `createIfMissing`. The Route Handler rejects absent or non-Boolean creation intent before acquiring a GitHub token or entering the projection module.
 

@@ -8,6 +8,7 @@ import { createPlanningItems, type PlanningDecisionCore } from "./planning-items
 import { createSupabasePlanningItemsStore } from "./planning-items-store-supabase";
 import type { ActOnItem, PlanningAction, PlanningError, PlanningItems, PlanningResult } from "./planning-items";
 import type { PlanningCommitOutcome, PlanningCommitRequest, PlanningPreparation, PlanningPreparationRequest } from "./planning-items-store";
+import type { PlanningItemGitHubSyncCommand } from "./planning-items-contract";
 
 type ReparentKind = "initiative" | "deliverable" | "sub_issue";
 type ReparentRoute = "initiative" | "task";
@@ -210,10 +211,17 @@ function providerError(code: string, message: string, plan: PlanningReparentComm
   return null;
 }
 
-async function commitReparent(supabase: PlanningSupabase, request: PlanningCommitRequest<PlanningReparentCommitPlan>, teamChangedField: string): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
+async function commitReparent(
+  supabase: PlanningSupabase,
+  request: PlanningCommitRequest<PlanningReparentCommitPlan>,
+  teamChangedField: string,
+  projectionCommand?: PlanningItemGitHubSyncCommand | null,
+): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const token = request.actor.credential.kind === "planningToken" ? request.actor.credential : null;
   const result = token
-    ? await supabase.rpc("mutate_team_planning_reparent_command_transaction", {
+    ? await supabase.rpc(projectionCommand
+        ? "mutate_team_planning_reparent_with_projection_transaction"
+        : "mutate_team_planning_reparent_command_transaction", {
         p_token_id: token.tokenId,
         p_profile_id: request.actor.profileId,
         p_item_id: request.plan.itemId,
@@ -224,6 +232,7 @@ async function commitReparent(supabase: PlanningSupabase, request: PlanningCommi
         p_idempotency_key: request.idempotencyKey || null,
         p_request_hash: planningReparentHash(request.plan.itemId, request.plan.expectedRevision, request.plan.parentId || null, teamChangedField),
         p_changed_field: teamChangedField,
+        ...(projectionCommand ? { p_projection_command: projectionCommand } : {}),
         p_request_ip: request.requestMetadata?.requestIp || null,
         p_user_agent: request.requestMetadata?.userAgent || null,
       })
@@ -251,9 +260,14 @@ async function commitReparent(supabase: PlanningSupabase, request: PlanningCommi
   return { data: { ok: true, receipt: { items: [], changes: [{ field: "reparentedItem", before: request.plan.before, after: committed }], effects: effects(request.plan.itemKind, request.plan.noop).map((effect) => ({ ...effect, status: "applied" as const })), replayed: Boolean(transaction?.replayed) } }, error: null };
 }
 
-export function createPlanningReparentPlanningItems(supabaseClient: unknown, expectedKind: ReparentKind | "any", teamChangedField = "parentTaskId"): PlanningItems {
+export function createPlanningReparentPlanningItems(
+  supabaseClient: unknown,
+  expectedKind: ReparentKind | "any",
+  teamChangedField = "parentTaskId",
+  projectionCommand?: PlanningItemGitHubSyncCommand | null,
+): PlanningItems {
   const supabase = supabaseClient as PlanningSupabase;
-  return createPlanningItems({ store: createSupabasePlanningItemsStore<PlanningReparentState, PlanningReparentCommitPlan>({ prepareCommand: (request) => prepareReparent(supabase, expectedKind, request), commitCommand: (request) => commitReparent(supabase, request, teamChangedField) }), decisionCore: planningReparentDecisionCore });
+  return createPlanningItems({ store: createSupabasePlanningItemsStore<PlanningReparentState, PlanningReparentCommitPlan>({ prepareCommand: (request) => prepareReparent(supabase, expectedKind, request), commitCommand: (request) => commitReparent(supabase, request, teamChangedField, projectionCommand) }), decisionCore: planningReparentDecisionCore });
 }
 
 export function planningReparentTaskFromResult(result: Extract<PlanningResult, { ok: true }>) {

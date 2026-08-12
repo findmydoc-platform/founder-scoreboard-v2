@@ -5,6 +5,7 @@ import {
   validateMaintenanceSecret,
 } from "@/lib/maintenance-auth";
 import { drainPlanningGitHubLifecycleJobs } from "@/lib/planning-github-lifecycle";
+import { dispatchPlanningGitHubProjections } from "@/features/planning-items/model/planning-items-github-projection";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,9 @@ export async function POST(request: NextRequest) {
   if (!supabase) return supabaseUnavailable();
 
   try {
-    const summary = await drainPlanningGitHubLifecycleJobs({ supabase, limit: 25 });
-    const [terminalResult, outstandingResult] = await Promise.all([
+    const lifecycle = await drainPlanningGitHubLifecycleJobs({ supabase, limit: 25 });
+    const projection = await dispatchPlanningGitHubProjections({ supabase, limit: 25 });
+    const [terminalResult, outstandingResult, outstandingProjectionResult] = await Promise.all([
       supabase
         .from("planning_github_lifecycle_outbox")
         .select("id", { count: "exact", head: true })
@@ -28,12 +30,17 @@ export async function POST(request: NextRequest) {
         .from("planning_github_lifecycle_outbox")
         .select("id", { count: "exact", head: true })
         .neq("status", "completed"),
+      supabase
+        .from("planning_github_projection_outbox")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "completed"),
     ]);
-    if (terminalResult.error || outstandingResult.error) {
+    if (terminalResult.error || outstandingResult.error || outstandingProjectionResult.error) {
       throw new Error("Planning trash lifecycle state could not be loaded.");
     }
     const terminalFailed = terminalResult.count;
     const outstandingLifecycleJobs = outstandingResult.count;
+    const outstandingProjectionRequests = outstandingProjectionResult.count;
     if (
       typeof terminalFailed !== "number"
       || !Number.isSafeInteger(terminalFailed)
@@ -41,14 +48,24 @@ export async function POST(request: NextRequest) {
       || typeof outstandingLifecycleJobs !== "number"
       || !Number.isSafeInteger(outstandingLifecycleJobs)
       || outstandingLifecycleJobs < 0
+      || typeof outstandingProjectionRequests !== "number"
+      || !Number.isSafeInteger(outstandingProjectionRequests)
+      || outstandingProjectionRequests < 0
     ) {
       throw new Error("Planning trash lifecycle state was invalid.");
     }
     return NextResponse.json({
       ok: true,
-      ...summary,
+      ...lifecycle,
+      projection: {
+        claimed: projection.claimed,
+        completed: projection.completed,
+        retryScheduled: projection.retryScheduled,
+        failed: projection.failed,
+      },
       terminalFailed,
       outstandingLifecycleJobs,
+      outstandingProjectionRequests,
     });
   } catch {
     return apiError("GitHub-Lifecycle des Planungspapierkorbs konnte nicht verarbeitet werden.", 500);
