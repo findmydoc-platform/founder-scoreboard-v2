@@ -130,6 +130,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           onWithdrawInitiative={withdrawInitiative}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({
             id: initiative.id,
+            expectedUpdatedAt: initiative.updatedAt,
             title: initiative.title,
             milestoneId: initiative.milestoneId || "",
             ownerId: initiative.ownerId || "",

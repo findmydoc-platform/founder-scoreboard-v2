@@ -107,21 +107,24 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
+  const requestedType = payload.taskType || "deliverable";
+  if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
+  const isStrategic = requestedType === "epic" || requestedType === "initiative";
+  const isCeo = permission.profile?.platformRole === "ceo";
+  if (isStrategic && !isOperationalLeadRole(permission.profile?.platformRole)) {
+    return apiError(requestedType === "epic" ? "Epics können nur von CEO oder Deputy erstellt werden." : "Initiativen können nur von CEO oder Deputy erstellt werden.", 403);
+  }
   const title = cleanText(payload.title, 240);
   if (title.length < 3) return apiError("Titel ist erforderlich.", 400);
   const creationRequestId = cleanText(payload.creationRequestId, 64);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(creationRequestId)) {
     return apiError("Erstellungsanfrage ist ungültig. Bitte Dialog neu öffnen.", 400);
   }
-
-  const requestedType = payload.taskType || "deliverable";
-  if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
-  const isStrategic = requestedType === "epic" || requestedType === "initiative";
   if (isStrategic) {
-    if (!isOperationalLeadRole(permission.profile?.platformRole)) {
-      return apiError(requestedType === "epic" ? "Epics können nur von CEO oder Deputy erstellt werden." : "Initiativen können nur von CEO oder Deputy erstellt werden.", 403);
+    if (payload.approveNow && requestedType !== "initiative") {
+      return apiError("Epics haben keinen Freigabestatus.", 400);
     }
-    if (payload.approveNow) return apiError("Strategische Planungselemente werden nicht direkt beim Erstellen freigegeben.", 400);
+    if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
     const status = payload.status && allowedPlanningItemStatuses(requestedType).includes(payload.status as never)
       ? payload.status
       : "Offen";
@@ -211,9 +214,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
       ? await supabase.from("profiles").select("id,name").in("id", [...new Set(profileIds)])
       : { data: [] };
     const profileNameById = new Map((profileRows || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
-    return NextResponse.json({
-      ok: true,
-      task: mapTaskRow(created, profileNameById, {
+    let responseTask = mapTaskRow(created, profileNameById, {
         strategy: requestedType === "initiative" ? {
           task_id: id,
           goal: cleanText(payload.strategy?.goal || payload.intendedOutcome, 4000),
@@ -226,7 +227,23 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
           role: assignment.role || "responsible",
           sort_order: assignment.sortOrder ?? 0,
         })) : [],
-      }),
+      });
+    if (requestedType === "initiative" && payload.approveNow) {
+      const approval = await createPlanningApprovalPlanningItems(supabase, "initiative").run({
+        actor: actor.actor,
+        mode: "commit",
+        command: decidePlanningApprovalCommand(id, {
+          expectedApprovalRevision: 1,
+          action: "approve",
+          note: "Bei Erstellung durch CEO freigegeben.",
+        }),
+      });
+      if (!approval.ok) return apiError("Initiative konnte nicht freigegeben werden.", 400);
+      responseTask = planningApprovalTaskFromResult(approval) || responseTask;
+    }
+    return NextResponse.json({
+      ok: true,
+      task: responseTask,
       relation: null,
       relatedTask: null,
     });
@@ -240,7 +257,6 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   const githubRepository = resolveTaskGitHubRepository(requestedType, payload.githubRepo);
   if (!githubRepository.ok) return apiError(githubRepository.error, 400);
 
-  const isCeo = permission.profile?.platformRole === "ceo";
   if (payload.approveNow && !isCeo) return apiError("Nur der CEO kann beim Erstellen direkt freigeben.", 403);
   const packageId = payload.packageId || null;
   let parentApprovalStatus: Task["parentApprovalStatus"] = null;

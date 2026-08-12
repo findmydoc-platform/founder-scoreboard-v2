@@ -12,6 +12,8 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type InitiativeDraft = {
   id?: string;
+  expectedUpdatedAt?: string;
+  creationRequestId: string;
   title: string;
   milestoneId: string;
   ownerId: string;
@@ -76,6 +78,8 @@ export function InitiativeDialog({
   const defaultOwnerId = defaults.ownerId || data.profiles.find((profile) => profile.platformRole === "founder")?.id || data.profiles[0]?.id || "";
   const [draft, setDraft] = useState<InitiativeDraft>({
     id: defaults.id,
+    expectedUpdatedAt: defaults.expectedUpdatedAt,
+    creationRequestId: defaults.creationRequestId || crypto.randomUUID(),
     title: defaults.title || "",
     milestoneId: defaults.milestoneId || activeMilestoneId,
     ownerId: defaultOwnerId,

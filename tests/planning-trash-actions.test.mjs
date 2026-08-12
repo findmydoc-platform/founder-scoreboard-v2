@@ -42,8 +42,6 @@ test("paper-bin routes share the PlanningItems command and fail-closed permissio
   const routePaths = [
     "src/app/api/tasks/[id]/withdraw/route.ts",
     "src/app/api/tasks/[id]/restore/route.ts",
-    "src/app/api/initiatives/[id]/withdraw/route.ts",
-    "src/app/api/initiatives/[id]/restore/route.ts",
   ];
   const routes = await Promise.all(routePaths.map((path) => readFile(path, "utf8")));
 
@@ -56,7 +54,8 @@ test("paper-bin routes share the PlanningItems command and fail-closed permissio
   assert.match(trashModule, /subIssueRootUnsupported/);
   assert.match(trashModule, /mutate_planning_trash_command_transaction/);
   assert.match(trashApi, /getServerServiceRoleSupabase/);
-  assert.doesNotMatch(trashApi, /\.from\(|\.rpc\(/);
+  assert.doesNotMatch(trashApi, /\.rpc\(/);
+  assert.match(trashApi, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
   assert.match(serviceRoleClient, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(serviceRoleClient, /SUPABASE_SECRET_KEY/);
   assert.doesNotMatch(serviceRoleClient, /ANON|PUBLISHABLE/);
@@ -66,8 +65,7 @@ test("paper-bin routes share the PlanningItems command and fail-closed permissio
     assert.match(trashModule, new RegExp(`${field}:`));
   }
   assert.equal(routes.every((route) => /export async function POST/.test(route)), true);
-  assert.equal(routes.filter((route) => /"deliverable"/.test(route)).length, 2);
-  assert.equal(routes.filter((route) => /"initiative"/.test(route)).length, 2);
+  assert.equal(routes.every((route) => !/"deliverable"|"initiative"/.test(route)), true);
 });
 
 test("paper-bin UI replaces hard-delete controls with an accessible reason dialog", async () => {
@@ -91,10 +89,9 @@ test("paper-bin UI replaces hard-delete controls with an accessible reason dialo
 });
 
 test("approval decisions drain lifecycle jobs and rejected roots leave active UI state", async () => {
-  const [trigger, taskRoute, initiativeRoute, approvalModule, taskCommands, initiativeCommands] = await Promise.all([
+  const [trigger, taskRoute, approvalModule, taskCommands, initiativeCommands] = await Promise.all([
     readFile("src/lib/planning-github-lifecycle-trigger.ts", "utf8"),
     readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8"),
-    readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8"),
     readFile("src/features/tasks/hooks/use-task-mutation-commands.ts", "utf8"),
     readFile("src/features/projects/hooks/use-initiative-commands.ts", "utf8"),
@@ -112,9 +109,7 @@ test("approval decisions drain lifecycle jobs and rejected roots leave active UI
   }
   assert.match(approvalModule, /attemptPlanningGitHubLifecycleDrain/);
   assert.match(approvalModule, /loadOutstandingPlanningGitHubLifecycleTaskIds/);
-  assert.match(initiativeRoute, /createPlanningApprovalPlanningItems/);
-  assert.match(initiativeRoute, /lifecycle: null/);
-  assert.doesNotMatch(initiativeRoute, /attemptPlanningGitHubLifecycleDrain|loadOutstandingPlanningGitHubLifecycleTaskIds/);
+  assert.match(taskRoute, /item\.task_type === "deliverable"/);
   assert.match(taskCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "deliverable", task\.id\)/);
   assert.match(initiativeCommands, /action === "reject"[^]*removePlanningRootFromData\(current, "initiative", initiative\.id\)/);
 });

@@ -6,7 +6,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const dialogPath = "src/features/projects/organisms/initiative-dialog.tsx";
 const commandPath = "src/features/projects/hooks/use-initiative-commands.ts";
 
-let saveInitiativeRequest = async () => ({ response: { ok: true }, body: { initiative: null } });
+let saveInitiativeRequest = async () => ({ response: { ok: true }, body: { task: null } });
 
 const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
   "@/features/planning/model/planning-api-client": {
@@ -23,9 +23,13 @@ const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
   "@/features/planning/model/planning-trash-state": {
     removePlanningRootFromData: (data) => ({ data }),
   },
+  "@/lib/planning-profile-mappers": {
+    mapLegacyPackageFromInitiative: (task) => task,
+  },
 });
 
 const draft = {
+  creationRequestId: "11111111-1111-4111-8111-111111111111",
   title: "Partnerpraxen standardisieren",
   milestoneId: "milestone-1",
   ownerId: "profile-1",
@@ -144,7 +148,7 @@ test("successful Supabase initiative creation closes only after the server resul
   };
   saveInitiativeRequest = async () => ({
     response: { ok: true },
-    body: { initiative: savedInitiative },
+    body: { task: savedInitiative },
   });
   const fixture = commandFixture();
   const { saveInitiative } = useInitiativeCommands(fixture.options);

@@ -69,9 +69,8 @@ test("only the current rejection or return reason is exposed by the approval vie
 });
 
 test("approval routes and UI share the reason contract", async () => {
-  const [api, initiativeRoute, taskRoute, approvalModule, dialog, projects, taskWorkflow] = await Promise.all([
+  const [api, taskRoute, approvalModule, dialog, projects, taskWorkflow] = await Promise.all([
     readFile("src/lib/approval-api.ts", "utf8"),
-    readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8"),
     readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8"),
     readFile("src/features/planning/molecules/approval-decision-dialog.tsx", "utf8"),
@@ -80,10 +79,9 @@ test("approval routes and UI share the reason contract", async () => {
   ]);
 
   assert.match(api, /validateApprovalDecisionNote/);
-  assert.match(initiativeRoute, /requirePlanningContributor/);
-  assert.match(initiativeRoute, /createPlanningApprovalPlanningItems/);
   assert.match(taskRoute, /requirePlanningContributor/);
   assert.match(taskRoute, /createPlanningApprovalPlanningItems/);
+  assert.match(taskRoute, /item\.task_type/);
   assert.match(approvalModule, /mutate_planning_approval_command_transaction/);
   assert.match(dialog, /maxLength=\{APPROVAL_DECISION_NOTE_MAX_LENGTH\}/);
   assert.match(dialog, /required/);

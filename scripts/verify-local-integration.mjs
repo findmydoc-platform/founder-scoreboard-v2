@@ -332,32 +332,38 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
 
 async function verifyEmptyEpicDeleteRoutes(sessionToken) {
   const createEpic = async (title) => {
-    const response = await apiRequest("/api/milestones", sessionToken, "", {
+    const response = await apiRequest("/api/tasks", sessionToken, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, description: "Local integration fixture", status: "planned" }),
+      body: JSON.stringify({
+        taskType: "epic",
+        creationRequestId: randomUUID(),
+        title,
+        description: "Local integration fixture",
+        status: "Offen",
+      }),
     });
     assertStatus(response, 200, `${title} creation`);
     const body = await response.json();
-    if (!body.milestone?.id || !body.milestone?.updatedAt) throw new Error(`${title} creation returned an incomplete response.`);
-    return body.milestone;
+    if (!body.task?.id || !body.task?.updatedAt) throw new Error(`${title} creation returned an incomplete response.`);
+    return body.task;
   };
 
   const browserEpic = await createEpic("Browser empty Epic delete verification");
-  const founderDenied = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "sebastian", {
+  const founderDenied = await apiRequest(`/api/tasks/${browserEpic.id}`, sessionToken, "sebastian", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
   });
   assertStatus(founderDenied, 403, "Founder empty Epic deletion");
-  const browserDelete = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "", {
+  const browserDelete = await apiRequest(`/api/tasks/${browserEpic.id}`, sessionToken, "", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
   });
   assertStatus(browserDelete, 200, "Browser empty Epic deletion");
   const browserBody = await browserDelete.json();
-  if (browserBody.milestone?.id !== browserEpic.id) throw new Error("Browser empty Epic deletion changed its response shape.");
+  if (browserBody.task?.id !== browserEpic.id) throw new Error("Browser empty Epic deletion changed its response shape.");
 
   const teamEpic = await createEpic("Team empty Epic delete verification");
   let tokenId = "";
@@ -546,14 +552,14 @@ async function verifyPlanningApprovalRoutes(status, sessionToken) {
       "insert into public.planning_item_raci_assignments (task_id,profile_id,role,sort_order) values ($1,'volkan','accountable',0),($1,'anil','responsible',1)",
       [initiativeId],
     );
-    const initiative = await apiRequest(`/api/initiatives/${initiativeId}/approval`, sessionToken, "", {
+    const initiative = await apiRequest(`/api/tasks/${initiativeId}/approval`, sessionToken, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "approve", expectedRevision: 1, note: "" }),
     });
     assertStatus(initiative, 200, "Browser Initiative approval");
     const initiativeBody = await initiative.json();
-    if (!initiativeBody.ok || initiativeBody.initiative?.approvalStatus !== "approved" || initiativeBody.lifecycle !== null) {
+    if (!initiativeBody.ok || initiativeBody.task?.approvalStatus !== "approved" || initiativeBody.lifecycle !== null) {
       throw new Error("Browser Initiative approval changed its response shape.");
     }
     const deliverable = await apiRequest(`/api/tasks/${deliverableId}/approval`, sessionToken, "", {
@@ -604,12 +610,13 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
       [ids.initiativeOne, ids.initiativeTwo],
     );
 
-    const initiative = await apiRequest(`/api/initiatives/${ids.initiativeOne}`, sessionToken, "", {
-      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ milestoneId: ids.epicTwo }),
+    const initiativeRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.initiativeOne])).rows[0]?.revision;
+    const initiative = await apiRequest(`/api/tasks/${ids.initiativeOne}`, sessionToken, "", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedUpdatedAt: initiativeRevision, parentTaskId: ids.epicTwo }),
     });
     assertStatus(initiative, 200, "Browser Initiative reparent");
     const initiativeBody = await initiative.json();
-    if (!initiativeBody.ok || initiativeBody.initiative?.milestoneId !== ids.epicTwo || initiativeBody.initiative?.approvalStatus !== "proposed") {
+    if (!initiativeBody.ok || initiativeBody.task?.parentTaskId !== ids.epicTwo || initiativeBody.task?.approvalStatus !== "proposed") {
       throw new Error("Browser Initiative reparent changed its response shape.");
     }
     const deliverableRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.deliverableOne])).rows[0]?.revision;
@@ -765,20 +772,20 @@ async function main() {
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {
-      const response = await apiRequest("/api/milestones", token, profileId, {
+      const response = await apiRequest("/api/tasks", token, profileId, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ taskType: "epic", creationRequestId: randomUUID() }),
       });
-      assertStatus(response, 403, `${profileId} milestone authorization`);
+      assertStatus(response, 403, `${profileId} Epic authorization`);
     }
     for (const profileId of ["", "local-deputy"]) {
-      const response = await apiRequest("/api/milestones", token, profileId, {
+      const response = await apiRequest("/api/tasks", token, profileId, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ taskType: "epic", creationRequestId: randomUUID() }),
       });
-      assertStatus(response, 400, `${profileId || "ceo"} milestone validation`);
+      assertStatus(response, 400, `${profileId || "ceo"} Epic validation`);
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {

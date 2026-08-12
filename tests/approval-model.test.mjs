@@ -56,7 +56,6 @@ test("production baseline excludes legacy proposal storage and the v1 intake RPC
 
 test("approval transactions enforce revision, initiative prerequisite, and Deputy or accountable decisions", async () => {
   const migration = await readSupabaseSchemaContract();
-  const initiativeRoute = await readFile("src/app/api/initiatives/[id]/approval/route.ts", "utf8");
   const taskRoute = await readFile("src/app/api/tasks/[id]/approval/route.ts", "utf8");
   const approvalModule = await readFile("src/features/planning-items/model/planning-items-approval.ts", "utf8");
 
@@ -67,8 +66,8 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
   assert.match(migration, /deliverable approval requires an approved initiative/);
   assert.match(migration, /task\.approval_reset/);
   assert.match(migration, /task\.approval_resubmitted/);
-  assert.match(initiativeRoute, /createPlanningApprovalPlanningItems/);
   assert.match(taskRoute, /createPlanningApprovalPlanningItems/);
+  assert.match(taskRoute, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
   assert.match(approvalModule, /mutate_planning_approval_command_transaction/);
 });
 

@@ -127,8 +127,8 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   const headerActions = await readFile("src/features/tasks/molecules/task-detail-header-actions.tsx", "utf8");
 
   assert.match(taskRoute, /export async function handleBrowserTaskDelete/);
-  assert.match(taskRoute, /Direktes Löschen ist nicht mehr verfügbar/);
-  assert.match(taskRoute, /410/);
+  assert.match(taskRoute, /createEmptyEpicDeletePlanningItems/);
+  assert.match(taskRoute, /emptyEpicDeleteCommand/);
   assert.doesNotMatch(taskRoute, /archiveGitHubIssue|prepare_task_deletion_transaction|finalize_task_deletion_transaction/);
   assert.doesNotMatch(taskRoute, /from\("tasks"\)\.delete\(\)/);
   assert.match(taskApiClient, /\/withdraw/);
@@ -137,7 +137,7 @@ test("planning items use the paper-bin workflow while legacy deletion artifacts 
   assert.match(taskWithdrawCommand, /removePlanningRootFromData/);
   assert.match(taskWithdrawCommand, /restorePlanningRootToData/);
   assert.match(trashApi, /createPlanningTrashPlanningItems/);
-  assert.doesNotMatch(trashApi, /\.rpc\(|\.from\(/);
+  assert.doesNotMatch(trashApi, /\.rpc\(/);
   assert.match(trashModule, /mutate_planning_trash_command_transaction/);
   assert.match(trashCommandMigration, /public\.withdraw_planning_item_transaction/);
   assert.match(trashCommandMigration, /public\.restore_planning_item_transaction/);

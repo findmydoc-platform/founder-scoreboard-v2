@@ -8,6 +8,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   return handleBrowserTaskUpdate(request, context);
 }
 
-export async function DELETE() {
-  return handleBrowserTaskDelete();
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  return handleBrowserTaskDelete(request, context);
 }

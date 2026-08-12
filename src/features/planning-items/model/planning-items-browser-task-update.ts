@@ -59,6 +59,14 @@ import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, rev
 import { normalizeEvidenceLinkList } from "@/features/tasks/model/task-evidence-links";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
+import { requireJsonApiContext } from "@/lib/api-response";
+import { requireOperationalLead } from "@/lib/authz";
+import {
+  createEmptyEpicDeletePlanningItems,
+  emptyEpicDeleteCommand,
+  emptyEpicDeleteError,
+  parseEmptyEpicDeletePayload,
+} from "@/features/planning-items/model/planning-items-empty-epic-delete";
 
 type TaskUpdateTransactionResult = {
   parentApprovalStatus?: Task["parentApprovalStatus"];
@@ -163,8 +171,6 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       task: {
         id,
         parentTaskId: task.parentTaskId || "",
-        packageId: task.packageId || "",
-        milestoneId: task.milestoneId || "",
         parentApprovalStatus: task.parentApprovalStatus ?? null,
         approvalStatus: task.approvalStatus ?? null,
         approvalRevision: Number(task.approvalRevision || 1),
@@ -614,6 +620,39 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   });
 }
 
-export async function handleBrowserTaskDelete() {
-  return apiError("Direktes Löschen ist nicht mehr verfügbar. Nutze den Papierkorb-Workflow.", 410);
+export async function handleBrowserTaskDelete(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const apiContext = await requireJsonApiContext<unknown>(request, requireOperationalLead, null);
+  if (!apiContext.ok) return apiContext.response;
+  const parsed = parseEmptyEpicDeletePayload(apiContext.payload);
+  if (!parsed.ok) return apiError(parsed.error, 400);
+  const actor = actorContextFromSessionAuth({ ok: true, profile: apiContext.permission.profile });
+  if (!actor.ok) return apiError("Nur CEO oder Deputy können Epics löschen.", 403);
+  const { id } = await context.params;
+  const metadata = auditRequestMetadata(request);
+  const result = await createEmptyEpicDeletePlanningItems(apiContext.supabase).run({
+    actor: actor.actor,
+    mode: "commit",
+    command: emptyEpicDeleteCommand(id.trim(), parsed.expectedUpdatedAt),
+    requestMetadata: {
+      requestIp: metadata.request_ip || undefined,
+      userAgent: metadata.user_agent || undefined,
+    },
+  });
+  if (!result.ok) {
+    const mapped = emptyEpicDeleteError(result.error);
+    if (mapped.code && mapped.children) {
+      return NextResponse.json({ code: mapped.code, error: mapped.message, children: mapped.children }, { status: mapped.status });
+    }
+    if (result.error.code === "notFound") return apiError("Epic wurde nicht gefunden.", 404);
+    if (result.error.code === "conflict" && result.error.reason === "revision") {
+      return apiError("Epic wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+    }
+    return apiError(mapped.message, mapped.status);
+  }
+  const item = result.items[0];
+  if (!item || item.kind !== "epic") return apiError("Epic konnte nicht gelöscht werden.", 500);
+  return NextResponse.json({ ok: true, task: { id: item.id, taskType: "epic", updatedAt: item.updatedAt } });
 }

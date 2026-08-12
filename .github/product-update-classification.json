@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds an operational planning cutover preflight and restore runbook without adding or materially expanding visible functionality."
+  "reason": "Retires duplicate Browser planning endpoints in favor of the canonical task route family without adding or materially expanding visible functionality."
 }

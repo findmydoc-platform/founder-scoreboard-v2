@@ -89,7 +89,8 @@ test("withdraw and restore routes are transport adapters over one PlanningItems 
     readFile("supabase/migrations/20260812150600_planning_trash_command_transaction.sql", "utf8"),
   ]);
   assert.match(api, /createPlanningTrashPlanningItems/);
-  assert.doesNotMatch(api, /\.from\(|withdraw_planning_item_transaction|restore_planning_item_transaction/);
+  assert.doesNotMatch(api, /withdraw_planning_item_transaction|restore_planning_item_transaction/);
+  assert.match(api, /item\.task_type !== "initiative" && item\.task_type !== "deliverable"/);
   assert.match(module, /prepare_planning_trash_command/);
   assert.match(module, /mutate_planning_trash_command_transaction/);
   assert.match(migration, /public\.withdraw_planning_item_transaction/);

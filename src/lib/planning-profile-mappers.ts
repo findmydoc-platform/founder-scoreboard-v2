@@ -164,6 +164,7 @@ export function mapLegacyPackageFromInitiative(item: Task): Package {
 
   return {
     id: item.id,
+    updatedAt: item.updatedAt,
     milestoneId: item.parentTaskId,
     ownerId: item.ownerId,
     accountableProfileId: firstAssignment("accountable"),

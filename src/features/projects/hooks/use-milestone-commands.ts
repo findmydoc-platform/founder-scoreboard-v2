@@ -6,6 +6,7 @@ import * as planningApi from "@/features/planning/model/planning-api-client";
 import type { MilestoneDeleteTarget } from "@/features/projects/organisms/milestone-delete-dialog";
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { Milestone } from "@/lib/types";
+import { mapLegacyMilestoneFromEpic } from "@/lib/planning-profile-mappers";
 
 type UseMilestoneCommandsOptions = PlanningCommandContext & {
   setMilestoneDeleteTarget: Dispatch<SetStateAction<MilestoneDeleteTarget | null>>;
@@ -30,14 +31,15 @@ export function useMilestoneCommands({
     const existing = draft.id ? data.milestones.find((milestone) => milestone.id === draft.id) : undefined;
 
     const { response, body } = await planningApi.saveMilestoneRequest(apiClient, draft);
-    if (!response.ok || !body || !("milestone" in body)) {
+    if (!response.ok || !body || !("task" in body) || !body.task) {
       throw new Error(responseError(body, "Der Meilenstein konnte nicht gespeichert werden."));
     }
+    const milestone = mapLegacyMilestoneFromEpic(body.task);
     applyPlanningShellStateUpdate((current) => ({
       ...current,
       milestones: existing
-        ? current.milestones.map((item) => item.id === body.milestone.id ? body.milestone : item)
-        : [...current.milestones, body.milestone],
+        ? current.milestones.map((item) => item.id === milestone.id ? milestone : item)
+        : [...current.milestones, milestone],
     }));
     setMilestoneDialogDefaults(null);
   };

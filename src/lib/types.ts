@@ -62,6 +62,7 @@ export type Project = {
 
 export type Package = {
   id: string;
+  updatedAt?: string;
   milestoneId?: string;
   ownerId?: string;
   accountableProfileId?: string;

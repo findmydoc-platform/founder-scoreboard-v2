@@ -17,7 +17,7 @@ The verifier checks row and field parity for Milestones/Epics and Packages/Initi
 
 All items below must be absent from active application code before the destructive migration is approved:
 
-1. `/api/milestones` and legacy Initiative HTTP response/request shapes.
+1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. Browser fields `packageId`, `milestoneId`, and `assignee` where `parentTaskId` and `ownerId` are authoritative.
 3. Team v1 Package/Milestone aliases, scopes, OpenAPI fields, and legacy replay response mapping.
 4. `Package`, `Milestone`, `packages`, `milestones`, `expandedPackageIds`, and `planningFilters.packageId` in active UI state.

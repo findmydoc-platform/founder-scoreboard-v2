@@ -57,7 +57,7 @@ export function planningReparentHash(itemId: string, expectedRevision: string, p
 
 export function isPlanningTaskReparentPayload(payload: unknown) {
   const row = record(payload);
-  return Boolean(row && (Object.hasOwn(row, "parentTaskId") || Object.hasOwn(row, "packageId")));
+  return Boolean(row && Object.hasOwn(row, "parentTaskId"));
 }
 
 export function parsePlanningTaskReparentPayload(payload: unknown):
@@ -65,12 +65,9 @@ export function parsePlanningTaskReparentPayload(payload: unknown):
   | Readonly<{ ok: false; error: string; status: number }> {
   const row = record(payload);
   if (!row || !validTimestamp(row.expectedUpdatedAt)) return { ok: false, error: "Aktueller Aufgabenstand ist erforderlich.", status: 400 };
-  const hasParent = Object.hasOwn(row, "parentTaskId");
-  const hasPackage = Object.hasOwn(row, "packageId");
-  if (hasParent && hasPackage) return { ok: false, error: "Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", status: 409 };
-  const supported = new Set(["expectedUpdatedAt", hasPackage ? "packageId" : "parentTaskId"]);
+  const supported = new Set(["expectedUpdatedAt", "parentTaskId"]);
   if (Object.keys(row).some((key) => !supported.has(key))) return { ok: false, error: "Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", status: 409 };
-  const parent = hasPackage ? row.packageId : row.parentTaskId;
+  const parent = row.parentTaskId;
   if (typeof parent !== "string") return { ok: false, error: "Übergeordnete Planungsebene ist ungültig.", status: 400 };
   return { ok: true, value: { expectedUpdatedAt: row.expectedUpdatedAt, parentId: parent.trim() } };
 }

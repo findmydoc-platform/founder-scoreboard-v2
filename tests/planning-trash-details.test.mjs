@@ -47,12 +47,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
     const source = await read(route);
     assert.match(source, /requireActivePlanningItem/, `${route} must fail closed for trash mutations`);
   }
-  for (const route of [
-    "src/features/planning-items/model/planning-items-browser-initiative-update.ts",
-  ]) {
-    const source = await read(route);
-    assert.match(source, /loadCanonicalStrategicItem/, `${route} must use the active canonical item adapter`);
-  }
   const syncProjection = await read("src/lib/github-sync/task-projection.ts");
   assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
 
@@ -80,15 +74,12 @@ test("all high-risk task and initiative mutations use the centralized active gua
   assert.match(reviewModule, /task\.trashed/);
   assert.match(reviewMigration, /v_task\.trashed_at is not null/);
 
-  const [approvalTaskRoute, approvalInitiativeRoute, approvalModule, approvalMigration] = await Promise.all([
+  const [approvalTaskRoute, approvalModule, approvalMigration] = await Promise.all([
     read("src/app/api/tasks/[id]/approval/route.ts"),
-    read("src/app/api/initiatives/[id]/approval/route.ts"),
     read("src/features/planning-items/model/planning-items-approval.ts"),
     read("supabase/migrations/20260812140715_planning_approval_command_transaction.sql"),
   ]);
-  for (const route of [approvalTaskRoute, approvalInitiativeRoute]) {
-    assert.match(route, /createPlanningApprovalPlanningItems/);
-  }
+  assert.match(approvalTaskRoute, /createPlanningApprovalPlanningItems/);
   assert.match(approvalModule, /item\.trashed/);
   assert.match(approvalMigration, /v_task\.trashed_at/);
 });

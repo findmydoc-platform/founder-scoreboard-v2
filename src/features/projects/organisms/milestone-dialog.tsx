@@ -10,6 +10,7 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type MilestoneDraft = {
   id?: string;
+  creationRequestId: string;
   title: string;
   description: string;
   targetDate: string;
@@ -40,6 +41,7 @@ export function MilestoneDialog({
   const errorRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<MilestoneDraft>({
     id: defaults.id,
+    creationRequestId: defaults.creationRequestId || crypto.randomUUID(),
     title: defaults.title || "",
     description: defaults.description || "",
     targetDate: defaults.targetDate || "",
