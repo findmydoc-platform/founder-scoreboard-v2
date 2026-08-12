@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Replaces legacy Browser task responsibility aliases with the canonical ownerId request field without changing user-visible workflows."
+  "reason": "Adds the canonical Planning preference storage and moves active readers and writers off legacy filter keys and columns without changing user-visible workflows."
 }

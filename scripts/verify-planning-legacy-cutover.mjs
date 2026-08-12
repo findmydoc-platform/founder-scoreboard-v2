@@ -230,23 +230,16 @@ const parityChecks = [
     sql: `
       select preference.profile_id as id
       from public.profile_ui_preferences preference
-      where coalesce(
-          preference.planning_filters->>'initiativeId',
-          preference.planning_filters->>'packageId',
-          'Alle'
-        ) not in ('', 'Alle')
+      where coalesce(preference.planning_filters->>'initiativeId', 'Alle') not in ('', 'Alle')
         and not exists (
           select 1 from public.tasks initiative
-          where initiative.id = coalesce(
-              preference.planning_filters->>'initiativeId',
-              preference.planning_filters->>'packageId'
-            )
+          where initiative.id = preference.planning_filters->>'initiativeId'
             and initiative.task_type = 'initiative'
         )
       union
       select preference.profile_id as id
       from public.profile_ui_preferences preference
-      cross join lateral unnest(preference.expanded_package_ids) expanded(item_id)
+      cross join lateral unnest(preference.expanded_item_ids) expanded(item_id)
       where expanded.item_id <> 'Alle'
         and not exists (
           select 1 from public.tasks initiative
@@ -259,7 +252,7 @@ const parityChecks = [
 const readyToDropChecks = [
   {
     name: "legacy preference filter keys",
-    sql: "select profile_id as id from public.profile_ui_preferences where planning_filters ? 'packageId'",
+    sql: "select profile_id as id from public.profile_ui_preferences where planning_filters ?| array['packageId', 'owner']",
   },
   {
     name: "legacy create replay snapshots",

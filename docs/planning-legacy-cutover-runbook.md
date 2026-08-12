@@ -20,7 +20,7 @@ All items below must be absent from active application code before the destructi
 1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. [x] Browser hierarchy fields `packageId` and `milestoneId` are removed from active create, update, task projections, Backlog state, and local seed data; `parentTaskId` is authoritative. Browser create and update requests use only `ownerId` for responsibility and reject the old `assignee` and `owner` aliases.
 3. [x] New Team v1 context, create, update, token, delete-error, and OpenAPI contracts expose only canonical Epic and `parentTaskId` forms. Legacy-shaped commit payloads are parsed only after an idempotency key is present and can return only an exact immutable stored receipt; they cannot create or update state. Removing the replay-only parser, response mapper, compatibility hashes, and special Epic-delete receipt table remains blocked on the #317 receipt migration and replay proof.
-4. [x] `Package`, `Milestone`, `packages`, and `milestones` in active UI state. Planning, Projects, Gantt, trash, and task-detail surfaces now derive Epic and Initiative state exclusively from canonical Planning Items and `parentTaskId`. The old database column and JSON preference key remain read-only compatibility inputs until #317 migrates stored data.
+4. [x] `Package`, `Milestone`, `packages`, and `milestones` in active UI state. Planning, Projects, Gantt, trash, and task-detail surfaces now derive Epic and Initiative state exclusively from canonical Planning Items and `parentTaskId`. Saved Planning filters use `initiativeId` and `expanded_item_ids`; the additive preparation migration preserves existing values before active readers switch. The old column remains unused until #317 drops it.
 5. [x] Active application reads from `active_packages`, `packages`, and `milestones` are removed. `planning_item_legacy_ids` is read only by the isolated stored-replay adapter and the cutover verifier; removing it remains blocked on #317 replay migration.
 6. Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts.
 
@@ -84,7 +84,6 @@ These retained objects currently reference legacy IDs, columns, tables, or respo
 - `prepare_planning_reparent_command(text,text,text,text)` and its commit RPC — accept canonical IDs only.
 - Planning create/update RPCs — remove Package/Milestone aliases and legacy column writes.
 - trash guard, purge, and restore functions — operate only on task-rooted Planning Items.
-- `update_profile_settings_transaction(...)` — persist `initiativeId` and `expandedItemIds` only.
 - replay readers/writers — use one general Planning command receipt table and canonical response payload.
 
 Every replacement is verified before any drop. A missing replacement is a hard abort.
@@ -150,7 +149,7 @@ alter table public.profile_ui_preferences
   drop column expanded_package_ids restrict;
 ```
 
-The preference migration must first add and populate the canonical replacement. It must also rename the `planning_filters.packageId` JSON key to `initiativeId` without changing unknown filter keys.
+The preparatory migration `20260812231305_canonical_planning_preferences.sql` adds and populates `expanded_item_ids`, moves the `planning_filters.packageId` value to `initiativeId`, moves `owner` to `assignee`, and preserves unknown filter keys. #317 only removes the now-unused legacy column.
 
 ### F. Remove legacy root tables last
 

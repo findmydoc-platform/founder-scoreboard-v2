@@ -41,14 +41,14 @@ function filterStringArray(value: unknown) {
 
 function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & { owner?: unknown; packageId?: unknown };
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
   return {
     query: filterString(candidate.query, defaultPlanningFilters.query),
-    assignee: filterString(candidate.assignee, filterString(candidate.owner, defaultPlanningFilters.assignee)),
+    assignee: filterString(candidate.assignee, defaultPlanningFilters.assignee),
     status: filterString(candidate.status, defaultPlanningFilters.status),
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
     review: filterString(candidate.review, defaultPlanningFilters.review),
-    initiativeId: filterString(candidate.initiativeId, filterString(candidate.packageId, defaultPlanningFilters.initiativeId)),
+    initiativeId: filterString(candidate.initiativeId, defaultPlanningFilters.initiativeId),
     quick: filterStringArray(candidate.quick),
     sprintId: filterString(candidate.sprintId, defaultPlanningFilters.sprintId),
     workstream: filterString(candidate.workstream, defaultPlanningFilters.workstream),
@@ -90,7 +90,7 @@ export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPre
     defaultWorkspace: row.default_workspace === "reviews" ? "planning" : row.default_workspace || "planning",
     defaultTaskView: mapViewMode(row.default_task_view),
     planningFilters: mapPlanningFilters(row.planning_filters),
-    expandedInitiativeIds: row.expanded_package_ids || [],
+    expandedInitiativeIds: row.expanded_item_ids || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

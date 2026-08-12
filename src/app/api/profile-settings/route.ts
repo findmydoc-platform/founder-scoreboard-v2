@@ -83,10 +83,10 @@ function cleanBoolean(value: unknown) {
 
 function cleanFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & { owner?: unknown };
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
   return {
     query: typeof candidate.query === "string" ? candidate.query.slice(0, 120) : defaultPlanningFilters.query,
-    assignee: typeof candidate.assignee === "string" ? candidate.assignee.slice(0, 120) : typeof candidate.owner === "string" ? candidate.owner.slice(0, 120) : defaultPlanningFilters.assignee,
+    assignee: typeof candidate.assignee === "string" ? candidate.assignee.slice(0, 120) : defaultPlanningFilters.assignee,
     status: typeof candidate.status === "string" ? candidate.status.slice(0, 80) : defaultPlanningFilters.status,
     priority: typeof candidate.priority === "string" ? candidate.priority.slice(0, 20) : defaultPlanningFilters.priority,
     review: typeof candidate.review === "string" ? candidate.review.slice(0, 40) : defaultPlanningFilters.review,
@@ -148,6 +148,13 @@ export async function PATCH(request: NextRequest) {
       return apiError("UI-Einstellungen sind ungültig.", 400);
     }
     const uiPayload = payload.uiPreferences;
+    if (
+      uiPayload.planningFilters
+      && typeof uiPayload.planningFilters === "object"
+      && (Object.hasOwn(uiPayload.planningFilters, "owner") || Object.hasOwn(uiPayload.planningFilters, "packageId"))
+    ) {
+      return apiError("Verwende assignee und initiativeId für Planning-Filter.", 400);
+    }
     const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
@@ -156,8 +163,7 @@ export async function PATCH(request: NextRequest) {
       default_workspace: defaultWorkspace,
       default_task_view: defaultTaskView,
       planning_filters: cleanFilters(uiPayload.planningFilters),
-      // The database column is renamed only in the separately approved data migration.
-      expanded_package_ids: cleanInitiativeIds(uiPayload.expandedInitiativeIds),
+      expanded_item_ids: cleanInitiativeIds(uiPayload.expandedInitiativeIds),
     };
   }
 

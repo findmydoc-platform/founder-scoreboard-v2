@@ -19,7 +19,7 @@ test("source.json is the single maintained local seed data source", async () => 
   assert.match(runner, /src\/lib\/seed\/source\.json/);
   assert.doesNotMatch(shared, /\bPackage\b|packageId|milestoneId|source\.packages/);
   assert.doesNotMatch(runner, /packageId|milestoneId|source\.packages/);
-  assert.doesNotMatch(verifier, /packageId|milestoneId|source\.packages/);
+  assert.doesNotMatch(verifier, /milestoneId|source\.packages/);
   assert.match(packageJson, /"local:seed": "node scripts\/local-development\.mjs seed"/);
 });
 

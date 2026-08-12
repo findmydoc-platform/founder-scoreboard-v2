@@ -127,32 +127,20 @@ test("saved profile preferences remain intact while legacy workspaces are normal
   assert.deepEqual(draft.expandedInitiativeIds, ["initiative-1"]);
 });
 
-test("profile preference reads normalize the legacy package filter into the canonical initiative field", () => {
+test("profile preference reads use only canonical planning fields", () => {
   const preference = planningProfileMappers.mapProfileUiPreference({
     profile_id: "profile-1",
     default_workspace: "planning",
     default_task_view: "board",
-    planning_filters: { packageId: "initiative-legacy", initiativeId: "initiative-current" },
-    expanded_package_ids: ["initiative-1"],
+    planning_filters: { assignee: "profile-2", initiativeId: "initiative-current" },
+    expanded_item_ids: ["initiative-1"],
     created_at: "2026-08-12T00:00:00.000Z",
     updated_at: "2026-08-12T00:00:00.000Z",
   });
 
   assert.equal(preference.planningFilters.initiativeId, "initiative-current");
-  assert.equal("packageId" in preference.planningFilters, false);
+  assert.equal(preference.planningFilters.assignee, "profile-2");
   assert.deepEqual(preference.expandedInitiativeIds, ["initiative-1"]);
-
-  const legacyPreference = planningProfileMappers.mapProfileUiPreference({
-    profile_id: "profile-1",
-    default_workspace: "planning",
-    default_task_view: "board",
-    planning_filters: { packageId: "initiative-legacy" },
-    expanded_package_ids: [],
-    created_at: "2026-08-12T00:00:00.000Z",
-    updated_at: "2026-08-12T00:00:00.000Z",
-  });
-
-  assert.equal(legacyPreference.planningFilters.initiativeId, "initiative-legacy");
 });
 
 test("profile settings API delegates workspace validation to the shared workspace contract", async () => {
@@ -168,7 +156,26 @@ test("profile settings API accepts only canonical initiative preference fields",
 
   assert.match(route, /expandedInitiativeIds: string\[\]/);
   assert.match(route, /candidate\.initiativeId/);
-  assert.doesNotMatch(route, /expandedPackageIds|candidate\.packageId/);
+  assert.match(route, /expanded_item_ids: cleanInitiativeIds/);
+  assert.match(route, /Object\.hasOwn\(uiPayload\.planningFilters, "packageId"\)/);
+  assert.match(route, /Object\.hasOwn\(uiPayload\.planningFilters, "owner"\)/);
+  assert.doesNotMatch(route, /expandedPackageIds|expanded_package_ids|candidate\.packageId|candidate\.owner/);
+});
+
+test("canonical planning preference migration preserves values before readers switch", async () => {
+  const migration = await readFile(
+    "supabase/migrations/20260812231305_canonical_planning_preferences.sql",
+    "utf8",
+  );
+
+  assert.match(migration, /add column if not exists expanded_item_ids text\[\]/);
+  assert.match(migration, /set expanded_item_ids = expanded_package_ids/);
+  assert.match(migration, /planning_filters - 'packageId'/);
+  assert.match(migration, /planning_filters - 'owner'/);
+  assert.match(migration, /alter column planning_filters set default/);
+  assert.match(migration, /legacy Planning preference fields are not supported/);
+  assert.match(migration, /p_ui_preferences -> 'expanded_item_ids'/);
+  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from/i);
 });
 
 test("profile settings only offer workspaces supported by the persisted default contract", async () => {

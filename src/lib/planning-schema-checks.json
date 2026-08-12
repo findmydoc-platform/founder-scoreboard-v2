@@ -44,7 +44,7 @@
   {
     "name": "profile_ui_preferences",
     "table": "profile_ui_preferences",
-    "select": "profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,updated_at",
+    "select": "profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,updated_at",
     "health": true
   },
   {

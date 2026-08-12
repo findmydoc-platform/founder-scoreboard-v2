@@ -143,6 +143,61 @@ async function verifySeedConvergence(status, source) {
   }
 }
 
+async function verifyCanonicalPlanningPreferences(status) {
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  await client.connect();
+  try {
+    await client.query("begin");
+    const canonical = {
+      default_workspace: "planning",
+      default_task_view: "board",
+      planning_filters: { assignee: "volkan", initiativeId: "GC1" },
+      expanded_item_ids: ["GC1"],
+    };
+    const result = await client.query(
+      "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6) as result",
+      ["volkan", {}, canonical, {}, null, null],
+    );
+    const stored = await client.query(
+      "select planning_filters,expanded_item_ids,expanded_package_ids from public.profile_ui_preferences where profile_id=$1",
+      ["volkan"],
+    );
+    const preference = stored.rows[0];
+    if (JSON.stringify(result.rows[0]?.result?.ui_preference?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
+      throw new Error("Profile settings RPC did not return canonical expanded Planning item IDs.");
+    }
+    if (JSON.stringify(preference?.planning_filters) !== JSON.stringify(canonical.planning_filters)
+      || JSON.stringify(preference?.expanded_item_ids) !== JSON.stringify(["GC1"])
+      || preference?.expanded_package_ids?.length !== 0) {
+      throw new Error("Profile settings RPC did not isolate canonical Planning preferences from the legacy column.");
+    }
+
+    await client.query("savepoint legacy_preferences");
+    try {
+      await client.query(
+        "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6)",
+        ["volkan", {}, {
+          default_workspace: "planning",
+          default_task_view: "board",
+          planning_filters: { owner: "volkan", packageId: "GC1" },
+          expanded_package_ids: ["GC1"],
+        }, {}, null, null],
+      );
+      throw new Error("Profile settings RPC accepted legacy Planning preference fields.");
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Profile settings RPC accepted")) throw error;
+      if (error?.code !== "22023") throw error;
+    }
+    await client.query("rollback to savepoint legacy_preferences");
+    await client.query("rollback");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
 async function verifyGitHubProjectRoleBoundary(status, source) {
   const client = new pg.Client({ connectionString: status.DB_URL });
   await client.connect();
@@ -694,6 +749,7 @@ async function main() {
   const status = localStatus();
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
+  await verifyCanonicalPlanningPreferences(status);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });

@@ -407,7 +407,7 @@ export type DbProfileUiPreference = {
   default_workspace: string | null;
   default_task_view: ProfileUiPreference["defaultTaskView"] | null;
   planning_filters: Partial<PlanningFilterPreferences> | null;
-  expanded_package_ids: string[] | null;
+  expanded_item_ids: string[] | null;
   created_at: string;
   updated_at: string;
 };
