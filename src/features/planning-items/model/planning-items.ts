@@ -125,6 +125,13 @@ type VersionedItemReference = Readonly<{
   expectedRevision: PlanningRevision;
 }>;
 
+export type PlanningReviewChecklist = Readonly<{
+  acceptanceCriteriaMet: boolean;
+  evidenceProvided: boolean;
+  communicationClear: boolean;
+  blockerHandled: boolean;
+}>;
+
 export const PLANNING_ACTION_KINDS = [
   "changeParent",
   "decideApproval",
@@ -165,17 +172,23 @@ export type PlanningAction =
   | (VersionedItemReference & Readonly<{
     kind: "deleteEmptyEpic";
   }>)
-  | (VersionedItemReference & Readonly<{
+  | Readonly<{
     kind: "requestReview";
-    reviewerProfileId: ProfileId;
-  }>)
-  | (VersionedItemReference & Readonly<{
+    itemId: PlanningItemId;
+    expectedRevision: PlanningRevision;
+    reviewerProfileId?: ProfileId;
+  }>
+  | Readonly<{
     kind: "decideReview";
+    itemId: PlanningItemId;
+    expectedRevision?: PlanningRevision;
     decision: Extract<PlanningReviewStatus, "accepted" | "partial" | "changes_requested">;
     note: string;
-  }>)
+    checklist: PlanningReviewChecklist;
+  }>
   | (VersionedItemReference & Readonly<{
     kind: "withdrawReview";
+    reason: string;
   }>)
   | (VersionedItemReference & Readonly<{
     kind: "reopenReview";

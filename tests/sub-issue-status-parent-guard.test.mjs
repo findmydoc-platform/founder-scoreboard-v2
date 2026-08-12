@@ -24,9 +24,11 @@ test("task updates expose an atomic parent-approval conflict as a stable 409", a
 test("same-status requests become unchanged responses before status side effects", async () => {
   const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const normalizeIndex = route.indexOf("withoutUnchangedTaskStatus(currentTask, payload)");
+  const reviewRequestIndex = route.indexOf("isPlanningReviewRequestPayload(rawPayload)");
 
   assert.ok(normalizeIndex > 0);
-  assert.ok(normalizeIndex < route.indexOf("startsTaskReviewRequest(payload)"));
+  assert.ok(reviewRequestIndex > 0);
+  assert.ok(reviewRequestIndex < normalizeIndex);
   assert.ok(normalizeIndex < route.indexOf("validateSubIssueStatusParentApproval({"));
   assert.ok(normalizeIndex < route.indexOf("applyFinalStatusReopen(update"));
   assert.ok(normalizeIndex < route.indexOf("markTaskGitHubSyncDirty(update)"));

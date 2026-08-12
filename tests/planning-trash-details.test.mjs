@@ -42,8 +42,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
     "src/app/api/tasks/[id]/github-comments/route.ts",
     "src/app/api/tasks/[id]/blockers/route.ts",
     "src/app/api/tasks/[id]/attachments/route.ts",
-    "src/app/api/tasks/[id]/review/route.ts",
-    "src/app/api/tasks/[id]/review/reopen/route.ts",
   ];
 
   for (const route of guardedRoutes) {
@@ -70,6 +68,19 @@ test("all high-risk task and initiative mutations use the centralized active gua
   assert.match(relationshipModule, /state\.related\.trashed/);
   assert.match(relationshipMigration, /v_source\.trashed_at is not null/);
   assert.match(relationshipMigration, /v_related\.trashed_at is not null/);
+
+  const [reviewRoute, reviewReopenRoute, reviewWithdrawRoute, reviewModule, reviewMigration] = await Promise.all([
+    read("src/app/api/tasks/[id]/review/route.ts"),
+    read("src/app/api/tasks/[id]/review/reopen/route.ts"),
+    read("src/app/api/tasks/[id]/review/withdraw/route.ts"),
+    read("src/features/planning-items/model/planning-items-review.ts"),
+    read("supabase/migrations/20260812133802_planning_review_command_transaction.sql"),
+  ]);
+  for (const route of [reviewRoute, reviewReopenRoute, reviewWithdrawRoute]) {
+    assert.match(route, /createPlanningReviewPlanningItems/);
+  }
+  assert.match(reviewModule, /task\.trashed/);
+  assert.match(reviewMigration, /v_task\.trashed_at is not null/);
 });
 
 test("reparenting and relationship targets use active read models", async () => {

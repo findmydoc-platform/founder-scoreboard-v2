@@ -441,6 +441,91 @@ async function verifyPlanningRelationshipRoutes(sessionToken, sourceTaskId, rela
   }
 }
 
+async function verifyPlanningReviewRoutes(status, sessionToken, parentTaskId) {
+  const taskId = `local-review-route-${randomUUID()}`;
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  await client.connect();
+  try {
+    const inserted = await client.query(
+      `with inserted as (
+       insert into public.tasks (
+         id, project_id, parent_task_id, title, task_type, status, priority,
+         owner, assignee, approval_status, review_status, review_owner_profile_id,
+         score_points, score_final, github_issue_sync_status
+       ) values ($1, 'findmydoc-founder-execution', $2, 'Local review route verification', 'deliverable', 'In Arbeit', 'P2',
+         'volkan', 'volkan', 'approved', 'not_requested', 'volkan', 0, false, 'synced')
+       returning updated_at
+       ) select to_jsonb(updated_at) #>> '{}' as updated_at from inserted`,
+      [taskId, parentTaskId],
+    );
+    const expectedUpdatedAt = inserted.rows[0]?.updated_at;
+    if (!expectedUpdatedAt) throw new Error("Planning review route fixture did not return a revision.");
+
+    const requested = await apiRequest(`/api/tasks/${taskId}`, sessionToken, "", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt, status: "Review", reviewStatus: "requested" }),
+    });
+    if (requested.status !== 200) {
+      throw new Error(`Browser planning review request: expected 200, received ${requested.status}: ${await requested.text()}`);
+    }
+    const requestedBody = await requested.json();
+    if (requestedBody.task?.reviewStatus !== "requested" || requestedBody.task?.reviewOwnerProfileId !== "volkan") {
+      throw new Error("Browser planning review request changed its response shape.");
+    }
+
+    const decided = await apiRequest(`/api/tasks/${taskId}/review`, sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        decision: "accepted",
+        comment: "Local integration accepted",
+        checklist: {
+          acceptanceCriteriaMet: true,
+          evidenceProvided: true,
+          communicationClear: true,
+          blockerHandled: true,
+        },
+      }),
+    });
+    assertStatus(decided, 200, "Browser planning review decision");
+    const decidedBody = await decided.json();
+    if (decidedBody.review?.decision !== "accepted" || decidedBody.task?.scoreFinal !== true || !decidedBody.task?.updatedAt) {
+      throw new Error("Browser planning review decision changed its response shape.");
+    }
+
+    const reopened = await apiRequest(`/api/tasks/${taskId}/review/reopen`, sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: decidedBody.task.updatedAt }),
+    });
+    assertStatus(reopened, 200, "Browser planning review reopen");
+    const reopenedBody = await reopened.json();
+    if (reopenedBody.task?.reviewStatus !== "requested" || reopenedBody.task?.scoreFinal !== false || !reopenedBody.task?.updatedAt) {
+      throw new Error("Browser planning review reopen changed its response shape.");
+    }
+
+    const withdrawn = await apiRequest(`/api/tasks/${taskId}/review/withdraw`, sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: reopenedBody.task.updatedAt, reason: "Local integration cleanup" }),
+    });
+    assertStatus(withdrawn, 200, "Browser planning review withdrawal");
+    const withdrawnBody = await withdrawn.json();
+    if (withdrawnBody.task?.reviewStatus !== "not_requested" || withdrawnBody.task?.status !== "In Arbeit") {
+      throw new Error("Browser planning review withdrawal changed its response shape.");
+    }
+  } finally {
+    await client.query("select set_config('founderops.trash_lifecycle_write', 'on', false)");
+    await client.query("delete from public.notification_events where entity_id = $1", [taskId]);
+    await client.query("delete from public.audit_log where entity_id = $1", [taskId]);
+    await client.query("delete from public.task_reviews where task_id = $1", [taskId]);
+    await client.query("delete from public.task_activity where task_id = $1", [taskId]);
+    await client.query("delete from public.tasks where id = $1", [taskId]);
+    await client.end();
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -486,6 +571,7 @@ async function main() {
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
+    await verifyPlanningReviewRoutes(status, token, source.packages[0].id);
 
     const expectedProfiles = [
       ["", "ceo"],

@@ -262,6 +262,7 @@ test("migration and routes enforce lifecycle persistence reconciliation and owne
   const route = await readFile("src/app/api/notifications/[id]/route.ts", "utf8");
   const reconciliation = await readFile("src/lib/notification-resolution.ts", "utf8");
   const reviewReopen = await readFile("src/app/api/tasks/[id]/review/reopen/route.ts", "utf8");
+  const reviewCommands = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
 
   assert.match(migration, /create table if not exists notification_events[^]*seen_at timestamptz/);
   assert.match(migration, /notification_events_unseen_recipient_created_idx/);
@@ -275,5 +276,6 @@ test("migration and routes enforce lifecycle persistence reconciliation and owne
   assert.match(reconciliation, /\.gt\("id", cursor\)/);
   assert.match(reconciliation, /\.limit\(pageSize\)/);
   assert.match(reconciliation, /while \(true\)/);
-  assert.match(reviewReopen, /createNotificationPayload\("task\.review_reopened"/);
+  assert.match(reviewReopen, /createPlanningReviewPlanningItems/);
+  assert.match(reviewCommands, /createNotificationPayload\("task\.review_reopened"/);
 });

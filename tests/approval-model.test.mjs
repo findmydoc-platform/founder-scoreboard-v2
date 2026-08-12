@@ -73,12 +73,14 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
 test("non-approved deliverables are gated from sprint review score and github", async () => {
   const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
+  const reviewCommands = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const githubProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
   const sprintLock = await readFile("src/app/api/sprints/[id]/lock/route.ts", "utf8");
   const board = await readFile("src/features/planning/organisms/planning-task-view-renderer.tsx", "utf8");
 
-  assert.match(taskRoute, /approval_status !== "approved"/);
-  assert.match(reviewRoute, /approval_status !== "approved"/);
+  assert.match(taskRoute, /createPlanningReviewPlanningItems/);
+  assert.match(reviewRoute, /createPlanningReviewPlanningItems/);
+  assert.match(reviewCommands, /task\.approvalStatus !== "approved"/);
   assert.match(githubProjection, /loaded\.task\.approvalStatus !== "approved"/);
   assert.match(sprintLock, /task\.approval_status === "approved"/);
   assert.match(board, /isTaskPlanningActive/);
