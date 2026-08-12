@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds the canonical Planning preference storage and moves active readers and writers off legacy filter keys and columns without changing user-visible workflows."
+  "reason": "Renames active Planning and Projects UI contracts from legacy Milestone identifiers to Epic identifiers without changing user-visible workflows."
 }

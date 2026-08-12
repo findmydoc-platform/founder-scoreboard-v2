@@ -7,7 +7,7 @@ import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
-import { canManageMilestones } from "@/features/projects/model/milestone-policy";
+import { canManageEpics } from "@/features/projects/model/epic-policy";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
@@ -72,8 +72,8 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     sendGoogleChatTest,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
     setTaskDialogDefaults,
     setSprintPlanningOptions,
     signIn,
@@ -95,7 +95,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const canManageProjectEpics = canManageMilestones(currentProfile?.platformRole);
+  const canManageProjectEpics = canManageEpics(currentProfile?.platformRole);
   const canManageNotificationsOutbox = !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
@@ -115,8 +115,8 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           canManageInitiatives={canManageTaskMeta}
           canManageEpics={canManageProjectEpics}
           pending={isPending}
-          onCreateEpic={() => setMilestoneDialogDefaults({})}
-          onEditEpic={(epic) => setMilestoneDialogDefaults({
+          onCreateEpic={() => setEpicDialogDefaults({})}
+          onEditEpic={(epic) => setEpicDialogDefaults({
             id: epic.id,
             title: epic.title,
             description: epic.description,
@@ -124,7 +124,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
             status: epic.status === "In Arbeit" ? "active" : epic.status === "Erledigt" ? "done" : "planned",
             expectedUpdatedAt: epic.updatedAt,
           })}
-          onDeleteEpic={(epic, children) => setMilestoneDeleteTarget({ milestone: epic, children })}
+          onDeleteEpic={(epic, children) => setEpicDeleteTarget({ epic: epic, children })}
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onWithdrawInitiative={withdrawInitiative}

@@ -47,12 +47,12 @@ const InitiativeDialog = dynamic(
   () => import("@/features/projects/organisms/initiative-dialog").then((module) => module.InitiativeDialog),
   { loading: () => <OverlayLoadingFallback label="Initiativenformular wird geladen …" surface="dialog" /> },
 );
-const MilestoneDialog = dynamic(
-  () => import("@/features/projects/organisms/milestone-dialog").then((module) => module.MilestoneDialog),
+const EpicDialog = dynamic(
+  () => import("@/features/projects/organisms/epic-dialog").then((module) => module.EpicDialog),
   { loading: () => <OverlayLoadingFallback label="Meilensteinformular wird geladen …" surface="dialog" /> },
 );
-const MilestoneDeleteDialog = dynamic(
-  () => import("@/features/projects/organisms/milestone-delete-dialog").then((module) => module.MilestoneDeleteDialog),
+const EpicDeleteDialog = dynamic(
+  () => import("@/features/projects/organisms/epic-delete-dialog").then((module) => module.EpicDeleteDialog),
   { loading: () => <OverlayLoadingFallback label="Löschdialog wird geladen …" surface="dialog" /> },
 );
 const NewTaskDialog = dynamic(
@@ -77,8 +77,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     data,
     importGitHubComments,
     initiativeDialogDefaults,
-    milestoneDeleteTarget,
-    milestoneDialogDefaults,
+    epicDeleteTarget,
+    epicDialogDefaults,
     isPending,
     openTaskPanel,
     reopenReviewTask,
@@ -86,8 +86,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     removeTaskRelation,
     reportTaskBlocker,
     saveInitiative,
-    saveMilestone,
-    deleteMilestone,
+    saveEpic,
+    deleteEpic,
     selectedInitiative,
     selectedTask,
     selectedTaskActivity,
@@ -98,8 +98,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskExternalComments,
     selectedTaskSubIssues,
     setInitiativeDialogDefaults,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
@@ -200,18 +200,18 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onSave={saveInitiative}
         />
       )}
-      {milestoneDialogDefaults && (
-        <MilestoneDialog
-          defaults={milestoneDialogDefaults}
-          onClose={() => setMilestoneDialogDefaults(null)}
-          onSave={saveMilestone}
+      {epicDialogDefaults && (
+        <EpicDialog
+          defaults={epicDialogDefaults}
+          onClose={() => setEpicDialogDefaults(null)}
+          onSave={saveEpic}
         />
       )}
-      {milestoneDeleteTarget && (
-        <MilestoneDeleteDialog
-          target={milestoneDeleteTarget}
-          onClose={() => setMilestoneDeleteTarget(null)}
-          onConfirm={deleteMilestone}
+      {epicDeleteTarget && (
+        <EpicDeleteDialog
+          target={epicDeleteTarget}
+          onClose={() => setEpicDeleteTarget(null)}
+          onConfirm={deleteEpic}
         />
       )}
     </>

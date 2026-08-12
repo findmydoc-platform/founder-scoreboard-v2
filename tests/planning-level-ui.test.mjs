@@ -11,8 +11,8 @@ test("planning creation labels and header actions follow the active level", asyn
       "@/features/planning/model/planning-app-model": {
         epicPlanningItems: (tasks) => tasks.filter((item) => item.taskType === "epic"),
       },
-      "@/features/projects/model/milestone-policy": {
-        canManageMilestones: () => false,
+      "@/features/projects/model/epic-policy": {
+        canManageEpics: () => false,
       },
     },
   );
@@ -21,7 +21,7 @@ test("planning creation labels and header actions follow the active level", asyn
     currentProfile: null,
     data: { tasks: [] },
     setInitiativeDialogDefaults: () => {},
-    setMilestoneDialogDefaults: () => {},
+    setEpicDialogDefaults: () => {},
     setTaskDialogDefaults: (defaults) => opened.push(defaults),
     workspace: "planning",
   };

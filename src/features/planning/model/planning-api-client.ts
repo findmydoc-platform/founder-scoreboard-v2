@@ -2,8 +2,8 @@
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskFocusItem } from "@/lib/types";
-import type { EpicNotEmptyError, MilestoneDeleteRequest } from "@/features/projects/model/milestone-contract";
-import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
+import type { EpicNotEmptyError, EpicDeleteRequest } from "@/features/projects/model/epic-contract";
+import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
@@ -103,7 +103,7 @@ export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: 
   });
 }
 
-export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: MilestoneDraft) {
+export function saveEpicRequest(apiClient: BrowserApiClient, draft: EpicDraft) {
   const { id, expectedUpdatedAt } = draft;
   return apiClient.requestJson<{ task?: Task } | EpicNotEmptyError | { error?: string; code?: string }>(
     id ? `/api/tasks/${encodeURIComponent(id)}` : "/api/tasks",
@@ -120,7 +120,7 @@ export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: Milesto
   );
 }
 
-export function deleteMilestoneRequest(apiClient: BrowserApiClient, epicId: string, payload: MilestoneDeleteRequest) {
+export function deleteEpicRequest(apiClient: BrowserApiClient, epicId: string, payload: EpicDeleteRequest) {
   return apiClient.requestJson<{ task?: Partial<Task> & { id: string } } | EpicNotEmptyError | { error?: string; code?: string }>(
     `/api/tasks/${encodeURIComponent(epicId)}`,
     { method: "DELETE", json: payload },

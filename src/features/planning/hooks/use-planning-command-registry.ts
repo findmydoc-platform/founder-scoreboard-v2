@@ -9,7 +9,7 @@ import type { usePlanningViewState } from "@/features/planning/hooks/use-plannin
 import { useProfileUiPreferenceSync } from "@/features/profile/hooks/use-profile-ui-preference-sync";
 import { useOwnProfileSettingsCommands } from "@/features/profile/hooks/use-own-profile-settings-commands";
 import { useInitiativeCommands } from "@/features/projects/hooks/use-initiative-commands";
-import { useMilestoneCommands } from "@/features/projects/hooks/use-milestone-commands";
+import { useEpicCommands } from "@/features/projects/hooks/use-epic-commands";
 import { useReviewCommands } from "@/features/reviews/hooks/use-review-commands";
 import { useSprintCommands } from "@/features/sprint/hooks/use-sprint-commands";
 import { useWeeklyAttendanceCommands } from "@/features/sprint/hooks/use-weekly-attendance-commands";
@@ -36,8 +36,8 @@ type UsePlanningCommandRegistryOptions = {
   setFilters: PlanningViewState["setFilters"];
   setHeaderData: Dispatch<SetStateAction<PlanningHeaderData>>;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setMilestoneDeleteTarget: PlanningViewState["setMilestoneDeleteTarget"];
-  setMilestoneDialogDefaults: PlanningViewState["setMilestoneDialogDefaults"];
+  setEpicDeleteTarget: PlanningViewState["setEpicDeleteTarget"];
+  setEpicDialogDefaults: PlanningViewState["setEpicDialogDefaults"];
   setShowNotifications: PlanningViewState["setShowNotifications"];
   setStatusGuardNotice: Dispatch<SetStateAction<string>>;
   setStatusGuardTaskId: Dispatch<SetStateAction<string | null>>;
@@ -61,8 +61,8 @@ export function usePlanningCommandRegistry({
   setFilters,
   setHeaderData,
   setInitiativeDialogDefaults,
-  setMilestoneDeleteTarget,
-  setMilestoneDialogDefaults,
+  setEpicDeleteTarget,
+  setEpicDialogDefaults,
   setShowNotifications,
   setStatusGuardNotice,
   setStatusGuardTaskId,
@@ -89,10 +89,10 @@ export function usePlanningCommandRegistry({
     ...commandContext,
     setInitiativeDialogDefaults,
   });
-  const milestoneCommands = useMilestoneCommands({
+  const epicCommands = useEpicCommands({
     ...commandContext,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
   });
   const boardState = usePlanningBoardState({
     canChangeTaskStatus: commandContext.canChangeTaskStatus,
@@ -140,7 +140,7 @@ export function usePlanningCommandRegistry({
     fmdToolCommands,
     founderOpsSettingsCommands,
     initiativeCommands,
-    milestoneCommands,
+    epicCommands,
     notificationCommands,
     ownProfileSettingsCommands,
     profileSettingsCommands,

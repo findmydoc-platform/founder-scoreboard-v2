@@ -53,7 +53,7 @@ test("active task projections and local fixtures expose only parentTaskId", asyn
     readFile("src/lib/seed/source.json", "utf8"),
   ]);
   for (const source of [mapper, taskTypes, seed]) {
-    assert.doesNotMatch(source, /\bpackageId\b|\bmilestoneId\b|\bpackages\b/);
+    assert.doesNotMatch(source, /\bpackageId\b|\bmilestoneId\b|\bpackages\b|\bmilestones\b/);
   }
   assert.match(mapper, /parentTaskId: row\.parent_task_id/);
   assert.match(seed, /"initiatives"/);

@@ -19,9 +19,9 @@ const publicPaths = [
 ];
 
 test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and empty Epic DELETE contracts", async () => {
-  const [contract, milestoneContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, updateModule, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
+  const [contract, epicContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, updateModule, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
-    read("src/features/projects/model/milestone-contract.ts"),
+    read("src/features/projects/model/epic-contract.ts"),
     read("src/app/api/team/planning-items/v1/context/route.ts"),
     read("src/app/api/team/planning-items/v1/items/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/route.ts"),
@@ -61,8 +61,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(updateRoute, /createTeamRevisePlanningItems/);
   assert.match(updateModule, /update_team_planning_item_with_projection_transaction/);
   assert.match(updateRoute, /createEmptyEpicDeletePlanningItems/);
-  assert.doesNotMatch(updateRoute, /isMilestoneNotEmptyDatabaseError|loadMilestoneChildCounts/);
-  assert.match(milestoneContract, /EPIC_NOT_EMPTY_CODE = "EPIC_NOT_EMPTY"/);
+  assert.doesNotMatch(updateRoute, /isEpicNotEmptyDatabaseError|loadEpicChildCounts/);
+  assert.match(epicContract, /EPIC_NOT_EMPTY_CODE = "EPIC_NOT_EMPTY"/);
   assert.match(updateRoute, /team_planning_item_update_requests/);
   assert.match(updateRoute, /existingRequest/);
   assert.match(updateRoute, /replayCheck/);

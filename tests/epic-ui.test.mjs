@@ -6,7 +6,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("project header exposes ordered milestone actions only to allowed roles", async () => {
+test("project header exposes ordered epic actions only to allowed roles", async () => {
   const { usePlanningHeaderActions } = await loadTranspiledModule(
     "src/features/planning/hooks/use-planning-header-actions.ts",
     {
@@ -16,8 +16,8 @@ test("project header exposes ordered milestone actions only to allowed roles", a
       "@/features/planning/model/planning-app-model": {
         epicPlanningItems: (tasks) => tasks.filter((item) => item.taskType === "epic"),
       },
-      "@/features/projects/model/milestone-policy": {
-        canManageMilestones: (role, source) => source === "seed" || role === "ceo" || role === "deputy",
+      "@/features/projects/model/epic-policy": {
+        canManageEpics: (role, source) => source === "seed" || role === "ceo" || role === "deputy",
       },
     },
   );
@@ -26,19 +26,19 @@ test("project header exposes ordered milestone actions only to allowed roles", a
     currentProfile: { platformRole: "ceo" },
     data: { tasks: [] },
     setInitiativeDialogDefaults: (value) => opened.push(["initiative", value]),
-    setMilestoneDialogDefaults: (value) => opened.push(["milestone", value]),
+    setEpicDialogDefaults: (value) => opened.push(["epic", value]),
     setTaskDialogDefaults: () => {},
     source: "supabase",
     workspace: "projects",
   };
 
   const emptyActions = usePlanningHeaderActions(options);
-  assert.deepEqual(emptyActions.map((action) => action.id), ["new-milestone", "new-initiative"]);
+  assert.deepEqual(emptyActions.map((action) => action.id), ["new-epic", "new-initiative"]);
   assert.equal(emptyActions[0].variant, "primary");
   assert.equal(emptyActions[1].disabled, true);
   assert.equal(emptyActions[1].disabledReason, "Lege zuerst einen Meilenstein an.");
   emptyActions[0].onClick();
-  assert.deepEqual(opened, [["milestone", {}]]);
+  assert.deepEqual(opened, [["epic", {}]]);
 
   const populatedActions = usePlanningHeaderActions({
     ...options,
@@ -52,10 +52,10 @@ test("project header exposes ordered milestone actions only to allowed roles", a
   }), []);
 });
 
-test("milestone UI exposes the bounded creation contract and saved schedule metadata", async () => {
+test("epic UI exposes the bounded creation contract and saved schedule metadata", async () => {
   const [header, dialog, overview] = await Promise.all([
     read("src/features/planning/organisms/planning-header.tsx"),
-    read("src/features/projects/organisms/milestone-dialog.tsx"),
+    read("src/features/projects/organisms/epic-dialog.tsx"),
     read("src/features/projects/organisms/projects-overview.tsx"),
   ]);
 

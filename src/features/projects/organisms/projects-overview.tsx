@@ -10,7 +10,7 @@ import { PlanningTrashActionDialog } from "@/features/planning/molecules/plannin
 import { canDecideInitiativeApproval, canReturnInitiativeForRevision, isProposedDeliverable } from "@/features/planning/model/approval-domain";
 import { canWithdrawPlanningRoot, isWithdrawableApprovalStatus } from "@/features/planning/model/planning-trash-contract";
 import { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS, type ProjectsRiskFilter, type ProjectsSort, type ProjectsTableFilters } from "@/features/projects/model/projects-filter-view-model";
-import type { MilestoneChildCounts } from "@/features/projects/model/milestone-contract";
+import type { EpicChildCounts } from "@/features/projects/model/epic-contract";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
@@ -66,7 +66,7 @@ export function ProjectsOverview({
   canManageEpics: boolean;
   pending: boolean;
   onCreateEpic: () => void;
-  onDeleteEpic: (epic: Task, children: MilestoneChildCounts) => void;
+  onDeleteEpic: (epic: Task, children: EpicChildCounts) => void;
   onEditInitiative: (initiative: Task) => void;
   onEditEpic: (epic: Task) => void;
   onOpenTask: (taskId: string) => void;

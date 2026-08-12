@@ -1,38 +1,38 @@
-export const MILESTONE_STATUSES = ["planned", "active", "done"] as const;
+export const EPIC_STATUSES = ["planned", "active", "done"] as const;
 export const EPIC_NOT_EMPTY_CODE = "EPIC_NOT_EMPTY" as const;
 
-export type MilestoneStatus = typeof MILESTONE_STATUSES[number];
+export type EpicStatus = typeof EPIC_STATUSES[number];
 
-export type MilestoneDto = {
+export type EpicDto = {
   id: string;
   title: string;
   description: string;
   targetDate: string;
-  status: MilestoneStatus;
+  status: EpicStatus;
   sortOrder: number;
   updatedAt: string;
 };
 
-export type MilestoneCreateRequest = {
+export type EpicCreateRequest = {
   title: string;
   description?: string | null;
   targetDate?: string | null;
-  status?: MilestoneStatus;
+  status?: EpicStatus;
 };
 
-export type MilestonePatchRequest = {
+export type EpicPatchRequest = {
   expectedUpdatedAt: string;
   title?: string;
   description?: string | null;
   targetDate?: string | null;
-  status?: MilestoneStatus;
+  status?: EpicStatus;
 };
 
-export type MilestoneDeleteRequest = {
+export type EpicDeleteRequest = {
   expectedUpdatedAt: string;
 };
 
-export type MilestoneChildCounts = {
+export type EpicChildCounts = {
   initiatives: number;
   tasks: number;
 };
@@ -40,15 +40,15 @@ export type MilestoneChildCounts = {
 export type EpicNotEmptyError = {
   code: typeof EPIC_NOT_EMPTY_CODE;
   error: string;
-  children: MilestoneChildCounts;
+  children: EpicChildCounts;
 };
 
-export type MilestoneResponse = {
+export type EpicResponse = {
   ok: true;
-  milestone: MilestoneDto;
+  epic: EpicDto;
 };
 
-export type MilestoneListResponse = {
+export type EpicListResponse = {
   ok: true;
-  milestones: MilestoneDto[];
+  epics: EpicDto[];
 };

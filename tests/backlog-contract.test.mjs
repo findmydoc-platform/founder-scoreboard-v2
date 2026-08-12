@@ -22,7 +22,6 @@ function basePlanningShellState() {
     packages: [
       { id: "initiative-1", title: "Ärzte gewinnen", goal: "", priority: "P1", sortOrder: 10 },
     ],
-    milestones: [],
     items: [
       {
         id: "initiative-1",

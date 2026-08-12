@@ -2,8 +2,8 @@
 
 import { useCallback, useState, type SetStateAction } from "react";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
-import type { MilestoneDeleteTarget } from "@/features/projects/organisms/milestone-delete-dialog";
-import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
+import type { EpicDeleteTarget } from "@/features/projects/organisms/epic-delete-dialog";
+import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
@@ -68,8 +68,8 @@ export function usePlanningViewState({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
-  const [milestoneDialogDefaults, setMilestoneDialogDefaults] = useState<Partial<MilestoneDraft> | null>(null);
-  const [milestoneDeleteTarget, setMilestoneDeleteTarget] = useState<MilestoneDeleteTarget | null>(null);
+  const [epicDialogDefaults, setEpicDialogDefaults] = useState<Partial<EpicDraft> | null>(null);
+  const [epicDeleteTarget, setEpicDeleteTarget] = useState<EpicDeleteTarget | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -101,8 +101,8 @@ export function usePlanningViewState({
     hasPlanningBoardUrlState,
     hasPlanningFilterUrlState,
     initiativeDialogDefaults,
-    milestoneDeleteTarget,
-    milestoneDialogDefaults,
+    epicDeleteTarget,
+    epicDialogDefaults,
     mobileNavOpen,
     planningLevel: planningBoardUrlState.level,
     planningParentFilterId: planningBoardUrlState.parentId,
@@ -110,8 +110,8 @@ export function usePlanningViewState({
     selectedTaskId,
     setFilters,
     setInitiativeDialogDefaults,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
     setMobileNavOpen,
     setPlanningLevel,
     setPlanningParentFilterId,

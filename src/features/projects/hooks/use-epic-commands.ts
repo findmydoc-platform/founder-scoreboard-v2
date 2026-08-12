@@ -3,13 +3,13 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { PlanningCommandContext } from "@/features/planning/hooks/planning-command-context";
 import * as planningApi from "@/features/planning/model/planning-api-client";
-import type { MilestoneDeleteTarget } from "@/features/projects/organisms/milestone-delete-dialog";
-import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
+import type { EpicDeleteTarget } from "@/features/projects/organisms/epic-delete-dialog";
+import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { Task } from "@/lib/types";
 
-type UseMilestoneCommandsOptions = PlanningCommandContext & {
-  setMilestoneDeleteTarget: Dispatch<SetStateAction<MilestoneDeleteTarget | null>>;
-  setMilestoneDialogDefaults: Dispatch<SetStateAction<Partial<MilestoneDraft> | null>>;
+type UseEpicCommandsOptions = PlanningCommandContext & {
+  setEpicDeleteTarget: Dispatch<SetStateAction<EpicDeleteTarget | null>>;
+  setEpicDialogDefaults: Dispatch<SetStateAction<Partial<EpicDraft> | null>>;
 };
 
 function responseError(body: unknown, fallback: string) {
@@ -19,14 +19,14 @@ function responseError(body: unknown, fallback: string) {
   return fallback;
 }
 
-export function useMilestoneCommands({
+export function useEpicCommands({
   apiClient,
   applyPlanningShellStateUpdate,
-  setMilestoneDeleteTarget,
-  setMilestoneDialogDefaults,
-}: UseMilestoneCommandsOptions) {
-  const saveMilestone = async (draft: MilestoneDraft) => {
-    const { response, body } = await planningApi.saveMilestoneRequest(apiClient, draft);
+  setEpicDeleteTarget,
+  setEpicDialogDefaults,
+}: UseEpicCommandsOptions) {
+  const saveEpic = async (draft: EpicDraft) => {
+    const { response, body } = await planningApi.saveEpicRequest(apiClient, draft);
     if (!response.ok || !body || !("task" in body) || !body.task) {
       throw new Error(responseError(body, "Der Meilenstein konnte nicht gespeichert werden."));
     }
@@ -37,20 +37,20 @@ export function useMilestoneCommands({
         ? current.tasks.map((item) => item.id === epic.id ? epic : item)
         : [...current.tasks, epic],
     }));
-    setMilestoneDialogDefaults(null);
+    setEpicDialogDefaults(null);
   };
 
-  const deleteMilestone = async (milestone: Task) => {
-    const { response, body } = await planningApi.deleteMilestoneRequest(apiClient, milestone.id, {
-      expectedUpdatedAt: milestone.updatedAt || "",
+  const deleteEpic = async (epic: Task) => {
+    const { response, body } = await planningApi.deleteEpicRequest(apiClient, epic.id, {
+      expectedUpdatedAt: epic.updatedAt || "",
     });
     if (!response.ok) throw new Error(responseError(body, "Der Meilenstein konnte nicht gelöscht werden."));
     applyPlanningShellStateUpdate((current) => ({
       ...current,
-      tasks: current.tasks.filter((item) => item.id !== milestone.id),
+      tasks: current.tasks.filter((item) => item.id !== epic.id),
     }));
-    setMilestoneDeleteTarget(null);
+    setEpicDeleteTarget(null);
   };
 
-  return { deleteMilestone, saveMilestone };
+  return { deleteEpic, saveEpic };
 }

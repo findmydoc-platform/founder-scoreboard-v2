@@ -106,7 +106,7 @@ export function InitiativeDialog({
   const closeBlocked = pending || submitting;
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: closeBlocked });
   const bodyRef = useRef<HTMLDivElement>(null);
-  const milestoneRef = useRef<HTMLDivElement>(null);
+  const epicRef = useRef<HTMLDivElement>(null);
   const ownerRef = useRef<HTMLDivElement>(null);
   const accountableRef = useRef<HTMLDivElement>(null);
   const responsibleRef = useRef<HTMLDivElement>(null);
@@ -118,8 +118,8 @@ export function InitiativeDialog({
   const errorSummaryId = useId();
   const titleErrorId = useId();
   const goalErrorId = useId();
-  const milestoneLabelId = useId();
-  const milestoneErrorId = useId();
+  const epicLabelId = useId();
+  const epicErrorId = useId();
   const ownerLabelId = useId();
   const ownerErrorId = useId();
   const accountableLabelId = useId();
@@ -150,7 +150,7 @@ export function InitiativeDialog({
       : errors.goal
         ? document.getElementById(goalInputId)
         : errors.parentTaskId
-          ? milestoneRef.current?.querySelector<HTMLElement>("button")
+          ? epicRef.current?.querySelector<HTMLElement>("button")
           : errors.ownerId
             ? ownerRef.current?.querySelector<HTMLElement>("button")
             : errors.accountableProfileId
@@ -324,22 +324,22 @@ export function InitiativeDialog({
               <h3 id={`${titleId}-context-group`} className="text-sm font-semibold text-slate-900">Einordnung &amp; Verantwortung</h3>
 
               <div
-                ref={milestoneRef}
+                ref={epicRef}
                 onBlur={() => touchValidationField("parentTaskId")}
                 className="grid gap-1 text-xs font-semibold text-slate-500"
               >
-                <span id={milestoneLabelId}>Epic *</span>
+                <span id={epicLabelId}>Epic *</span>
                 <CustomSelect
                   value={draft.parentTaskId}
                   onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))}
-                  aria-labelledby={milestoneLabelId}
+                  aria-labelledby={epicLabelId}
                   aria-required
                   aria-invalid={showValidationError("parentTaskId") && Boolean(errors.parentTaskId)}
-                  aria-describedby={showValidationError("parentTaskId") && errors.parentTaskId ? milestoneErrorId : undefined}
+                  aria-describedby={showValidationError("parentTaskId") && errors.parentTaskId ? epicErrorId : undefined}
                   className="h-11 text-sm"
                   options={epics.map((epic) => ({ value: epic.id, label: epic.title }))}
                 />
-                {showValidationError("parentTaskId") && errors.parentTaskId && <span id={milestoneErrorId} className="font-medium text-red-600">{errors.parentTaskId}</span>}
+                {showValidationError("parentTaskId") && errors.parentTaskId && <span id={epicErrorId} className="font-medium text-red-600">{errors.parentTaskId}</span>}
               </div>
 
               <div
