@@ -32,7 +32,6 @@ import type { ActorContext } from "./actor-context";
 import type { CreateItems, NewPlanningItem, PlanningError, PlanningItems, PlanningResult } from "./planning-items";
 import type { PlanningCommitOutcome, PlanningCommitRequest, PlanningPreparation, PlanningPreparationRequest } from "./planning-items-store";
 import type { PlanningDecisionCore } from "./planning-items-runner";
-import type { PlanningItemGitHubSyncTarget } from "./planning-items-github-sync";
 
 type SupabaseServer = NonNullable<ReturnType<typeof getServerSupabase>>;
 
@@ -567,6 +566,7 @@ export type PlanningCreateTransaction = {
   batchId: string;
   replayed?: boolean;
   items: CreateResponseItem[];
+  projectionOperationId?: string;
 };
 
 type StoredCreateRequest = {
@@ -593,16 +593,10 @@ type TeamCreateDependencies = Readonly<{
   rawItems: readonly PlanningItemCreateInput[];
   githubSyncMode: TeamPlanningItemGitHubSyncMode | null;
   scheduleAfter?: (callback: () => Promise<void>) => void;
-  executeGitHubSyncs?: (input: {
-    supabase: PlanningCreateSupabase;
-    actorProfileId: string;
-    targets: PlanningItemGitHubSyncTarget[];
-  }) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
-  preflightGitHubSync?: (
+  dispatchGitHubProjections?: (
     supabase: PlanningCreateSupabase,
-    actorProfileId: string,
-    target: PlanningItemGitHubSyncTarget,
-  ) => Promise<PlanningItemGitHubSyncResult>;
+    operationId: string,
+  ) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
   onPreview?: (items: readonly PlanningItemCreatePreviewItem[]) => void;
 }>; 
 
@@ -703,16 +697,6 @@ function transactionFromResult(result: Extract<PlanningResult, { ok: true }>): P
   return value && typeof value === "object" && !Array.isArray(value) ? value as PlanningCreateTransaction : null;
 }
 
-function createSyncTargets(items: CreateResponseItem[], commands: readonly (PlanningItemGitHubSyncCommand | null)[]) {
-  return items.flatMap((entry, index): PlanningItemGitHubSyncTarget[] => {
-    const command = commands[index];
-    const itemId = String(entry.item?.id || "");
-    return command && itemId && (entry.itemType === "deliverable" || entry.itemType === "sub_issue")
-      ? [{ itemId, itemType: entry.itemType, command }]
-      : [];
-  });
-}
-
 function mergeSyncResults(
   items: CreateResponseItem[],
   commands: readonly (PlanningItemGitHubSyncCommand | null)[],
@@ -723,15 +707,6 @@ function mergeSyncResults(
     const result = results.get(String(entry.item?.id || ""));
     return result ? { ...entry, githubSync: result } : entry;
   });
-}
-
-async function persistCreateResponse(dependencies: TeamCreateDependencies, batchId: string, items: CreateResponseItem[]) {
-  const { error } = await dependencies.supabase
-    .from("team_task_intake_batches")
-    .update({ response_tasks: items })
-    .eq("id", batchId)
-    .eq("token_id", dependencies.tokenId);
-  if (error) throw new Error(`GitHub-Sync-Ergebnis konnte nicht gespeichert werden: ${error.message}`);
 }
 
 function createEffects(preview: readonly PlanningItemCreatePreviewItem[]) {
@@ -802,9 +777,25 @@ async function prepareTeamCreate(
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);
   if (stored) {
-    return { data: requestHash !== stored.request_hash
-      ? { kind: "error", error: { code: "conflict", reason: "idempotency" } }
-      : { kind: "replay", receipt: replayReceipt({ batchId: stored.id, items: stored.response_tasks, replayed: true }) }, error: null };
+    if (requestHash !== stored.request_hash) {
+      return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
+    }
+    let replayItems = stored.response_tasks;
+    if (dependencies.githubSyncMode === "wait" && dependencies.dispatchGitHubProjections && request.idempotencyKey) {
+      await dependencies.dispatchGitHubProjections(
+        dependencies.supabase,
+        `team-create:${dependencies.tokenId}:${request.idempotencyKey}`,
+      );
+      const refreshed = await dependencies.supabase
+        .from("team_task_intake_batches")
+        .select("response_tasks")
+        .eq("token_id", dependencies.tokenId)
+        .eq("idempotency_key", request.idempotencyKey)
+        .single();
+      if (refreshed.error) return { data: null, error: refreshed.error };
+      replayItems = (refreshed.data as { response_tasks: CreateResponseItem[] }).response_tasks;
+    }
+    return { data: { kind: "replay", receipt: replayReceipt({ batchId: stored.id, items: replayItems, replayed: true }) }, error: null };
   }
   return { data: { kind: "state", state: { preview, requestHash, githubSyncCommands } }, error: null };
 }
@@ -812,6 +803,7 @@ async function prepareTeamCreate(
 function createProviderError(error: unknown): PlanningError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
   if (code === "P0003") return { code: "conflict", reason: "idempotency" };
+  if (["P0014", "P0015"].includes(code)) return { code: "conflict", reason: "state" };
   if (code === "P0004") return { code: "forbidden", reason: "planningTokenInactive" };
   if (["P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
   if (code === "22023") return invalidCreate("persistenceValidation");
@@ -824,12 +816,13 @@ async function commitTeamCreate(
   request: PlanningCommitRequest<PlanningCreateCommitPlan>,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
   const metadata = request.requestMetadata;
-  const { data, error } = await dependencies.supabase.rpc("create_team_planning_items_transaction", {
+  const { data, error } = await dependencies.supabase.rpc("create_team_planning_items_with_projection_transaction", {
     p_token_id: dependencies.tokenId,
     p_profile_id: request.actor.profileId,
     p_idempotency_key: request.idempotencyKey,
     p_request_hash: request.plan.requestHash,
     p_items: request.plan.preview.map(planningItemCreateCommitItem),
+    p_projection_commands: request.plan.githubSyncCommands,
     p_request_ip: metadata?.requestIp || null,
     p_user_agent: metadata?.userAgent || null,
   });
@@ -838,7 +831,7 @@ async function commitTeamCreate(
   if (!transaction?.batchId || !Array.isArray(transaction.items)) {
     return { data: { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } }, error: null };
   }
-  if (transaction.replayed || !dependencies.githubSyncMode) {
+  if (!dependencies.githubSyncMode || !transaction.projectionOperationId) {
     return { data: {
       ok: true,
       receipt: {
@@ -848,29 +841,14 @@ async function commitTeamCreate(
       },
     }, error: null };
   }
-  const targets = createSyncTargets(transaction.items, request.plan.githubSyncCommands);
   if (dependencies.githubSyncMode === "wait") {
-    if (!dependencies.executeGitHubSyncs) return { data: { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } }, error: null };
-    const results = await dependencies.executeGitHubSyncs({ supabase: dependencies.supabase, actorProfileId: request.actor.profileId, targets });
+    if (!dependencies.dispatchGitHubProjections) return { data: { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } }, error: null };
+    const results = await dependencies.dispatchGitHubProjections(dependencies.supabase, transaction.projectionOperationId);
     transaction.items = mergeSyncResults(transaction.items, request.plan.githubSyncCommands, results);
-    await persistCreateResponse(dependencies, transaction.batchId, transaction.items);
   } else {
-    if (!dependencies.preflightGitHubSync) return { data: { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } }, error: null };
-    const preflightEntries = await Promise.all(targets.map(async (target) => [
-      target.itemId,
-      await dependencies.preflightGitHubSync!(dependencies.supabase, request.actor.profileId, target),
-    ] as const));
-    const preflightResults = new Map(preflightEntries);
-    transaction.items = mergeSyncResults(transaction.items, request.plan.githubSyncCommands, preflightResults);
-    await persistCreateResponse(dependencies, transaction.batchId, transaction.items);
-    const acceptedTargets = targets.filter((target) => preflightResults.get(target.itemId)?.status === "accepted");
-    if (acceptedTargets.length && dependencies.scheduleAfter) {
-      const responseItems = transaction.items;
+    if (dependencies.scheduleAfter && dependencies.dispatchGitHubProjections) {
       dependencies.scheduleAfter(async () => {
-        if (!dependencies.executeGitHubSyncs) return;
-        const results = await dependencies.executeGitHubSyncs({ supabase: dependencies.supabase, actorProfileId: request.actor.profileId, targets: acceptedTargets });
-        const finalItems = mergeSyncResults(responseItems, request.plan.githubSyncCommands, results);
-        try { await persistCreateResponse(dependencies, transaction.batchId, finalItems); } catch { /* Snapshot refresh is best effort. */ }
+        await dependencies.dispatchGitHubProjections!(dependencies.supabase, transaction.projectionOperationId!);
       });
     }
   }
@@ -942,6 +920,7 @@ export function planningCreateTransactionFromResult(result: Extract<PlanningResu
 
 export function planningCreateError(error: PlanningError) {
   if (error.code === "conflict" && error.reason === "idempotency") return { message: "Idempotency-Key wurde mit anderen Daten wiederverwendet.", status: 409 };
+  if (error.code === "conflict" && error.reason === "state") return { message: "GitHub-Sync ist für mindestens ein Planungselement im aktuellen Zustand nicht möglich.", status: 409 };
   if (error.code === "forbidden") return error.reason === "planningTokenInactive"
     ? { message: "Planning-API-Token ist nicht mehr aktiv.", status: 401 }
     : { message: "Planning-API-Berechtigung ist nicht mehr gültig.", status: 403 };

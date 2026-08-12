@@ -133,7 +133,7 @@ Strategic items accept only strategic fields. They do not accept Review, score, 
 
 GitHub projection is intentionally unavailable for Epics and Initiatives. The API rejects strategic GitHub commands before writing; no strategic item can create a GitHub queue, outbox entry, sync warning, comment import, or GitHub attachment.
 
-Deliverables and Sub-Issues retain the existing GitHub behavior. `wait` completes eligible projections before returning; `async` schedules best-effort work through the current request lifecycle. GitHub failure never rolls back a successful FounderOps create or update.
+Deliverables and Sub-Issues retain the existing response contract. The Planning commit stores its GitHub projection request durably and atomically with the item and idempotency receipt. `wait` processes that stored request before returning; `async` returns `accepted` after the durable commit and only uses request-lifecycle work as a wake-up optimization. GitHub failure never rolls back a successful FounderOps create or update, and replaying the same idempotency key never creates another request.
 
 ## Empty Epic deletion
 

@@ -1013,18 +1013,13 @@ export type TeamReviseTransaction = Readonly<{
   changedFields?: string[];
   systemEffects?: unknown[];
   githubSync?: PlanningItemGitHubSyncResult;
+  projectionOperationId?: string;
 }>;
 
 type StoredTeamReviseRequest = Readonly<{
   request_hash: string;
   response: TeamReviseTransaction | null;
   contract_version: number | null;
-}>;
-
-type TeamReviseTarget = Readonly<{
-  itemId: string;
-  itemType: TeamPlanningItemType;
-  command: PlanningItemGitHubSyncCommand;
 }>;
 
 type TeamReviseDependencies = Readonly<{
@@ -1035,16 +1030,10 @@ type TeamReviseDependencies = Readonly<{
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   preparedPreview?: PlanningItemUpdatePreview;
   onPreview?: (preview: PlanningItemUpdatePreview) => void;
-  executeGitHubSyncs?: (input: Readonly<{
-    supabase: SupabaseServer;
-    actorProfileId: string;
-    targets: TeamReviseTarget[];
-  }>) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
-  preflightGitHubSync?: (
+  dispatchGitHubProjections?: (
     supabase: SupabaseServer,
-    actorProfileId: string,
-    target: TeamReviseTarget,
-  ) => Promise<PlanningItemGitHubSyncResult>;
+    operationId: string,
+  ) => Promise<Map<string, PlanningItemGitHubSyncResult>>;
   scheduleAfter?: (callback: () => Promise<void>) => void;
 }>;
 
@@ -1065,25 +1054,13 @@ export function teamReviseTransactionFromResult(result: Extract<PlanningResult, 
   return teamReviseReceiptFromResult(result);
 }
 
-async function persistTeamReviseResponse(
-  dependencies: TeamReviseDependencies,
-  idempotencyKey: string,
-  transaction: TeamReviseTransaction,
-) {
-  const { error } = await dependencies.supabase
-    .from("team_planning_item_update_requests")
-    .update({ response: transaction })
-    .eq("token_id", dependencies.tokenId)
-    .eq("idempotency_key", idempotencyKey);
-  if (error) throw new Error(`GitHub-Sync-Ergebnis konnte nicht gespeichert werden: ${error.message}`);
-}
-
 function teamReviseProviderError(error: unknown): PlanningError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
   if (code === "P0001") return { code: "conflict", reason: "revision" };
   if (code === "P0003") return { code: "conflict", reason: "idempotency" };
   if (["P0004", "P0005", "P0006", "P0007"].includes(code)) return { code: "forbidden", reason: "planningTokenRejected" };
   if (["P0008", "P0010"].includes(code)) return { code: "conflict", reason: "state" };
+  if (["P0014", "P0015"].includes(code)) return { code: "conflict", reason: "state" };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (["22023", "23514"].includes(code)) return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
   return { code: "dependencyUnavailable", dependency: "database", retryable: true };
@@ -1130,11 +1107,26 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
           patch: dependencies.parsed.raw,
         });
         if (requestHash !== stored.request_hash) return { ok: false, error: { code: "conflict", reason: "idempotency" } };
+        let replayResponse = stored.response;
+        if (dependencies.parsed.githubSyncMode === "wait" && dependencies.dispatchGitHubProjections) {
+          await dependencies.dispatchGitHubProjections(
+            dependencies.supabase,
+            `team-update:${dependencies.tokenId}:${idempotencyKey}`,
+          );
+          const refreshed = await dependencies.supabase
+            .from("team_planning_item_update_requests")
+            .select("response")
+            .eq("token_id", dependencies.tokenId)
+            .eq("idempotency_key", idempotencyKey)
+            .single();
+          if (refreshed.error) return { ok: false, error: teamReviseProviderError(refreshed.error) };
+          replayResponse = (refreshed.data as { response: TeamReviseTransaction }).response;
+        }
         return {
           ok: true,
           status: "committed",
           items: [],
-          changes: [teamReviseChange({ transaction: { ...stored.response, replayed: true }, contractVersion: Number(stored.contract_version || 1) })],
+          changes: [teamReviseChange({ transaction: { ...replayResponse, replayed: true }, contractVersion: Number(stored.contract_version || 1) })],
           effects: [],
           replayed: true,
         };
@@ -1167,7 +1159,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       };
 
       const metadata = invocation.requestMetadata;
-      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_transaction", {
+      const { data, error } = await dependencies.supabase.rpc("update_team_planning_item_with_projection_transaction", {
         p_token_id: dependencies.tokenId,
         p_profile_id: invocation.actor.profileId,
         p_item_type: preview.itemType,
@@ -1178,6 +1170,7 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
         p_patch: preview.dbPatch,
         p_changed_fields: preview.changedFields,
         p_system_effects: preview.systemEffects,
+        p_projection_command: dependencies.parsed.githubSync || null,
         p_request_ip: metadata?.requestIp || null,
         p_user_agent: metadata?.userAgent || null,
       });
@@ -1185,27 +1178,17 @@ export function createTeamRevisePlanningItems(dependencies: TeamReviseDependenci
       let transaction = data as TeamReviseTransaction | null;
       if (!transaction) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: false } };
 
-      const syncCommand = dependencies.parsed.githubSync;
       const syncMode = dependencies.parsed.githubSyncMode;
-      if (syncCommand && syncMode && !transaction.replayed) {
-        const target: TeamReviseTarget = { itemId: preview.itemId, itemType: preview.itemType, command: syncCommand };
+      if (syncMode && transaction.projectionOperationId) {
+        const projectionOperationId = transaction.projectionOperationId;
         if (syncMode === "wait") {
-          if (!dependencies.executeGitHubSyncs) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
-          const results = await dependencies.executeGitHubSyncs({ supabase: dependencies.supabase, actorProfileId: invocation.actor.profileId, targets: [target] });
+          if (!dependencies.dispatchGitHubProjections) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
+          const results = await dependencies.dispatchGitHubProjections(dependencies.supabase, projectionOperationId);
           transaction = { ...transaction, githubSync: results.get(preview.itemId) };
-          await persistTeamReviseResponse(dependencies, idempotencyKey, transaction);
         } else {
-          if (!dependencies.preflightGitHubSync) return { ok: false, error: { code: "dependencyUnavailable", dependency: "github", retryable: true } };
-          const preflight = await dependencies.preflightGitHubSync(dependencies.supabase, invocation.actor.profileId, target);
-          transaction = { ...transaction, githubSync: preflight };
-          await persistTeamReviseResponse(dependencies, idempotencyKey, transaction);
-          if (preflight.status === "accepted" && dependencies.scheduleAfter && dependencies.executeGitHubSyncs) {
-            const committed = transaction;
+          if (dependencies.scheduleAfter && dependencies.dispatchGitHubProjections) {
             dependencies.scheduleAfter(async () => {
-              const results = await dependencies.executeGitHubSyncs!({ supabase: dependencies.supabase, actorProfileId: invocation.actor.profileId, targets: [target] });
-              const finalResult = results.get(preview.itemId);
-              if (!finalResult) return;
-              try { await persistTeamReviseResponse(dependencies, idempotencyKey, { ...committed, githubSync: finalResult }); } catch { /* Snapshot refresh is best effort. */ }
+              await dependencies.dispatchGitHubProjections!(dependencies.supabase, projectionOperationId);
             });
           }
         }

@@ -16,9 +16,8 @@ import {
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
 import {
-  executePlanningItemGitHubSyncs,
-  preflightPlanningItemGitHubSync,
-} from "@/features/planning-items/model/planning-items-github-sync";
+  dispatchAndLoadPlanningGitHubProjections,
+} from "@/features/planning-items/model/planning-items-github-projection";
 
 export async function POST(request: NextRequest) {
   return handlePlanningItemsRequest(
@@ -46,8 +45,7 @@ export async function POST(request: NextRequest) {
         rawItems: parsed.items,
         githubSyncMode: parsed.githubSyncMode,
         scheduleAfter: (callback) => after(callback),
-        executeGitHubSyncs: executePlanningItemGitHubSyncs,
-        preflightGitHubSync: preflightPlanningItemGitHubSync,
+        dispatchGitHubProjections: dispatchAndLoadPlanningGitHubProjections,
         onPreview: (items) => { previewItems = items; },
       });
       const metadata = auditRequestMetadata(request);

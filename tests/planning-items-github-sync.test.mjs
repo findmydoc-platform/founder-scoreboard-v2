@@ -160,6 +160,39 @@ const standaloneRoute = await loadTranspiledModule(
         },
       }),
     },
+    "@/features/planning-items/model/planning-items-github-projection": {
+      enqueueTeamPlanningGitHubProjection: async ({ itemId }) => ({
+        ok: true,
+        value: {
+          operationId: "team-sync:token-1:key-1",
+          itemId,
+          itemType: "sub_issue",
+          githubSync: { status: "accepted" },
+          replayed: false,
+        },
+      }),
+      dispatchAndLoadPlanningGitHubProjections: async () => new Map([
+        ["task-1", standaloneMode === "failed"
+          ? {
+              status: "failed",
+              code: "github_sync_unavailable",
+              error: "GitHub unavailable",
+              retryable: true,
+            }
+          : {
+              status: "synced",
+              code: "github_sync_succeeded",
+              issue: {
+                repository: "findmydoc-platform/management",
+                number: 42,
+                url: "https://github.com/findmydoc-platform/management/issues/42",
+                recovered: false,
+                recreated: false,
+              },
+              warnings: [],
+            }],
+      ]),
+    },
     "@/lib/github-sync/contract": githubContract,
   },
 );

@@ -45,7 +45,7 @@ test("Browser and Team transports delegate Revise writes to one deep module", as
   assert.match(teamPreviewAdapter, /createTeamRevisePlanningItems/);
   assert.match(update, /update_browser_planning_item_transaction/);
   assert.match(update, /update_browser_planning_task_transaction/);
-  assert.match(update, /update_team_planning_item_transaction/);
+  assert.match(update, /update_team_planning_item_with_projection_transaction/);
   for (const route of [appTask, appInitiative, appMilestone, appTeam, appTeamPreview]) {
     assert.doesNotMatch(route, /\.rpc\(|\.from\(/);
   }

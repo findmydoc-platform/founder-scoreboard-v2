@@ -276,6 +276,7 @@ test("v1 create replays return the immutable snapshot before canonical preview v
         planningCreateError: () => ({ message: "error", status: 500 }),
       },
       "@/features/planning-items/model/planning-items-github-sync": {},
+      "@/features/planning-items/model/planning-items-github-projection": {},
     },
   );
   const response = await route.POST({
@@ -372,6 +373,7 @@ test("v1 update and delete replays use legacy response mapping", async () => {
         planningItemsJson: (body, status = 200) => ({ body, status }),
       },
       "@/features/planning-items/model/planning-items-github-sync": {},
+      "@/features/planning-items/model/planning-items-github-projection": {},
     },
   );
   const request = {

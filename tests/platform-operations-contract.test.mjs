@@ -456,7 +456,7 @@ test("Planning Items API is the sole automated planning-item creation contract",
   assert.doesNotMatch(ui, /CEO Intake|CeoTaskIntake|canUseCeoIntake|\/api\/ceo\/task-intake/);
   assert.match(planningItemsRoute, /createTeamCreatePlanningItems/);
   assert.doesNotMatch(planningItemsRoute, /\.rpc\(/);
-  assert.match(planningItemsCreate, /create_team_planning_items_transaction/);
+  assert.match(planningItemsCreate, /create_team_planning_items_with_projection_transaction/);
   assert.match(planningItemsDocumentation, /sole supported API contract for automated planning-item creation/);
   assert.match(taskRoutePolicy, /Founder können Aufgaben nur in Review geben/);
   assert.match(taskRoutePolicy, /Diese Felder sind geschützt/);

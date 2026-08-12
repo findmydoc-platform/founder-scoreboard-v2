@@ -48,14 +48,14 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(contextRoute, /"read:planning-context"/);
   assert.match(createPreviewRoute, /"write:planning-items:create"/);
   assert.match(createRoute, /createTeamCreatePlanningItems/);
-  assert.match(createModule, /create_team_planning_items_transaction/);
+  assert.match(createModule, /create_team_planning_items_with_projection_transaction/);
   assert.doesNotMatch(createRoute, /\.rpc\(/);
   assert.match(updatePreviewRoute, /"write:planning-items:update"/);
   assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
   assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);
   assert.match(deletePreviewRoute, /mode: "preview"/);
   assert.match(updateRoute, /createTeamRevisePlanningItems/);
-  assert.match(updateModule, /update_team_planning_item_transaction/);
+  assert.match(updateModule, /update_team_planning_item_with_projection_transaction/);
   assert.match(updateRoute, /createEmptyEpicDeletePlanningItems/);
   assert.doesNotMatch(updateRoute, /isMilestoneNotEmptyDatabaseError|loadMilestoneChildCounts/);
   assert.match(milestoneContract, /MILESTONE_NOT_EMPTY_CODE = "MILESTONE_NOT_EMPTY"/);
@@ -66,7 +66,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(createRoute, /after\(/);
   assert.match(githubSyncRoute, /"write:planning-items:github-sync"/);
   assert.match(githubSyncRoute, /githubSyncMode/);
-  assert.doesNotMatch(githubSyncRoute, /idempotency-key/i);
+  assert.match(githubSyncRoute, /idempotency-key/i);
+  assert.match(githubSyncRoute, /randomUUID/);
   assert.match(tokensRoute, /create_team_planning_items_token_v3/);
   assert.match(tokensRoute, /allowUpdates/);
   assert.match(tokensRoute, /allowEmptyEpicDeletes/);
