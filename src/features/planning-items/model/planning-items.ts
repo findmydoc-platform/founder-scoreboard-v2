@@ -150,10 +150,12 @@ export const PLANNING_ACTION_KINDS = [
 ] as const;
 
 export type PlanningAction =
-  | (VersionedItemReference & Readonly<{
+  | Readonly<{
     kind: "changeParent";
+    itemId: PlanningItemId;
+    expectedRevision?: PlanningRevision;
     parentId: PlanningItemId | null;
-  }>)
+  }>
   | Readonly<{
     kind: "decideApproval";
     itemId: PlanningItemId;

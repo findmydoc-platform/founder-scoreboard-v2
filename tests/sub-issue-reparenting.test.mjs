@@ -4,22 +4,23 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("Sub-Issue reparenting stays guarded by task type, ownership, and CAS", async () => {
-  const [route, permissions, migration] = await Promise.all([
+  const [route, permissions, module, migration] = await Promise.all([
     readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
     readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-reparent.ts", "utf8"),
     readSupabaseSchemaContract(),
   ]);
 
-  assert.match(route, /payload\.parentTaskId !== undefined/);
-  assert.match(route, /currentTask\.task_type !== "sub_issue"/);
-  assert.match(route, /detailPermissions\.canReparentSubIssue/);
-  assert.match(route, /const requiredParentType = currentTask\.task_type === "sub_issue" \? "deliverable" : "initiative"/);
-  assert.match(route, /nextParent\.task_type !== requiredParentType/);
-  assert.match(route, /p_expected_updated_at: payload\.expectedUpdatedAt/);
+  assert.match(route, /isPlanningTaskReparentPayload/);
+  assert.match(route, /createPlanningReparentPlanningItems/);
+  assert.doesNotMatch(route, /reparent_planning_item_transaction/);
+  assert.match(module, /item\.kind === "sub_issue" && !operational && !owns/);
+  assert.match(module, /item\.kind === "sub_issue" && !parentId/);
+  assert.match(module, /state\.parent\?\.approvalStatus !== "approved"/);
   assert.match(permissions, /task\.taskType === "sub_issue" && canWorkOnTask/);
-  assert.match(migration, /v_before_task\.updated_at <> p_expected_updated_at/);
-  assert.match(migration, /v_before_task\.task_type <> 'sub_issue'/);
-  assert.match(migration, /task_type = 'deliverable'/);
+  assert.match(migration, /v_task\.updated_at is distinct from p_expected_updated_at/);
+  assert.match(migration, /v_task\.task_type <> p_expected_kind/);
+  assert.match(migration, /v_parent\.updated_at is distinct from p_expected_parent_updated_at/);
 });
 
 test("database transaction inherits hierarchy and audits the old and new parent", async () => {

@@ -13,8 +13,16 @@ import {
 import {
   legacyInitiativeFromCanonical,
   loadCanonicalStrategicItem,
-  resolveCanonicalStrategicItemId,
 } from "@/features/projects/model/planning-legacy-adapters";
+import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
+import {
+  changePlanningParentCommand,
+  createPlanningReparentPlanningItems,
+  parsePlanningInitiativeReparentPayload,
+  planningReparentError,
+  planningReparentTaskFromResult,
+} from "@/features/planning-items/model/planning-items-reparent";
+import { mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
 
 function strategicStatus(value?: string) {
   if (value === "active") return "In Arbeit";
@@ -33,6 +41,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { permission, supabase } = apiContext;
   const { id } = await context.params;
+  const raw = await request.json() as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return apiError("Initiative-Änderung ist ungültig.", 400);
+  const payload = raw as InitiativePayload;
+  if (payload.milestoneId !== undefined) {
+    const parsed = parsePlanningInitiativeReparentPayload(raw);
+    if (!parsed.ok) return apiError(parsed.error, parsed.status);
+    const actor = actorContextFromSessionAuth({ ok: true, profile: permission.profile });
+    if (!actor.ok) return apiError("Diese Initiative-Felder sind geschützt: Epic.", 403);
+    const result = await createPlanningReparentPlanningItems(supabase, "initiative").run({
+      actor: actor.actor,
+      mode: "commit",
+      command: changePlanningParentCommand(id, parsed.value.parentId || null),
+    });
+    if (!result.ok) {
+      const mapped = planningReparentError(result.error, "initiative");
+      return apiError(mapped.message, mapped.status);
+    }
+    const task = planningReparentTaskFromResult(result);
+    if (result.status !== "committed" || !task) return apiError("Initiative konnte nicht geladen werden.", 500);
+    return NextResponse.json({ ok: true, initiative: mapLegacyPackageFromInitiative(task) });
+  }
   const current = await loadCanonicalStrategicItem(supabase, id, "initiative");
   if (!current) return apiError("Initiative wurde nicht gefunden.", 404);
 
@@ -41,23 +70,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!isOperationalLead && !isInitiativeOwner) {
     return apiError("Nur CEO, Deputy oder der Initiative-Owner können diese Initiative bearbeiten.", 403);
   }
-
-  const raw = await request.json() as unknown;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return apiError("Initiative-Änderung ist ungültig.", 400);
-  const payload = raw as InitiativePayload;
   if (payload.priority && !initiativePriorities.has(payload.priority)) return apiError("Ungültige Priorität.", 400);
 
   const raciFields = ["accountableProfileId", "responsibleProfileIds", "consultedProfileIds", "informedProfileIds"];
-  const parentTaskId = payload.milestoneId === undefined
-    ? undefined
-    : payload.milestoneId
-      ? await resolveCanonicalStrategicItemId(supabase, payload.milestoneId, "epic")
-      : null;
-  if (payload.milestoneId && !parentTaskId) return apiError("Epic wurde nicht gefunden.", 404);
-
   const restrictedForOwner = [
     payload.ownerId !== undefined && payload.ownerId !== current.task.ownerId ? "Owner" : "",
-    payload.milestoneId !== undefined && parentTaskId !== current.task.parentTaskId ? "Epic" : "",
     raciFields.some((field) => hasOwn(payload, field)) ? "RACI" : "",
   ].filter(Boolean);
   if (!isOperationalLead && restrictedForOwner.length) {
@@ -113,7 +130,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (payload.priority !== undefined) patch.priority = payload.priority || "P2";
   if (payload.status !== undefined) patch.status = strategicStatus(payload.status);
   if (payload.targetDate !== undefined) patch.target_date = payload.targetDate || null;
-  if (parentTaskId !== undefined) patch.parent_task_id = parentTaskId;
   const strategyFieldsChanged = payload.goal !== undefined || payload.successCriteria !== undefined || payload.scopeConstraints !== undefined;
   const strategy = strategyFieldsChanged ? {
     goal: cleanText(payload.goal === undefined ? current.task.strategy?.goal : payload.goal, 4_000),

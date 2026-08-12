@@ -576,6 +576,111 @@ async function verifyPlanningApprovalRoutes(status, sessionToken) {
   }
 }
 
+async function verifyPlanningReparentRoutes(status, sessionToken) {
+  const suffix = randomUUID();
+  const ids = Object.fromEntries(["epicOne", "epicTwo", "initiativeOne", "initiativeTwo", "deliverableOne", "deliverableTwo", "subIssue", "teamDeliverable"]
+    .map((key) => [key, `local-reparent-${key}-${suffix}`]));
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  let tokenId = "";
+  await client.connect();
+  try {
+    await client.query(
+      `insert into public.tasks (id,project_id,parent_task_id,title,task_type,status,priority,owner,assignee,approval_status,approval_revision,review_status,score_final,github_issue_sync_status)
+       values
+         ($1,'findmydoc-founder-execution',null,'Reparent Epic One','epic','Offen','P2','volkan','volkan',null,1,'not_requested',false,'not_applicable'),
+         ($2,'findmydoc-founder-execution',null,'Reparent Epic Two','epic','Offen','P2','volkan','volkan',null,1,'not_requested',false,'not_applicable'),
+         ($3,'findmydoc-founder-execution',$1,'Reparent Initiative One','initiative','Offen','P2','volkan','volkan','approved',2,'not_requested',false,'not_applicable'),
+         ($4,'findmydoc-founder-execution',$2,'Reparent Initiative Two','initiative','Offen','P2','volkan','volkan','approved',2,'not_requested',false,'not_applicable'),
+         ($5,'findmydoc-founder-execution',$3,'Reparent Deliverable One','deliverable','In Arbeit','P2','volkan','volkan','approved',2,'not_requested',false,'synced'),
+         ($6,'findmydoc-founder-execution',$4,'Reparent Deliverable Two','deliverable','In Arbeit','P2','volkan','volkan','approved',2,'not_requested',false,'synced'),
+         ($7,'findmydoc-founder-execution',$5,'Reparent Sub-Issue','sub_issue','Offen','P2','volkan','volkan',null,1,'not_requested',false,'synced'),
+         ($8,'findmydoc-founder-execution',$3,'Team Reparent Deliverable','deliverable','In Arbeit','P2','volkan','volkan','approved',2,'not_requested',false,'synced')
+       returning id,updated_at::text as updated_at`,
+      [ids.epicOne, ids.epicTwo, ids.initiativeOne, ids.initiativeTwo, ids.deliverableOne, ids.deliverableTwo, ids.subIssue, ids.teamDeliverable],
+    );
+    await client.query(
+      `insert into public.planning_item_raci_assignments (task_id,profile_id,role,sort_order)
+       values ($1,'volkan','accountable',0),($1,'anil','responsible',0),($2,'volkan','accountable',0),($2,'anil','responsible',0)`,
+      [ids.initiativeOne, ids.initiativeTwo],
+    );
+
+    const initiative = await apiRequest(`/api/initiatives/${ids.initiativeOne}`, sessionToken, "", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ milestoneId: ids.epicTwo }),
+    });
+    assertStatus(initiative, 200, "Browser Initiative reparent");
+    const initiativeBody = await initiative.json();
+    if (!initiativeBody.ok || initiativeBody.initiative?.milestoneId !== ids.epicTwo || initiativeBody.initiative?.approvalStatus !== "proposed") {
+      throw new Error("Browser Initiative reparent changed its response shape.");
+    }
+    const deliverableRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.deliverableOne])).rows[0]?.revision;
+
+    const founderDenied = await apiRequest(`/api/tasks/${ids.deliverableOne}`, sessionToken, "sebastian", {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: deliverableRevision, parentTaskId: ids.initiativeTwo }),
+    });
+    assertStatus(founderDenied, 403, "Founder Deliverable reparent");
+    const deliverable = await apiRequest(`/api/tasks/${ids.deliverableOne}`, sessionToken, "", {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: deliverableRevision, parentTaskId: ids.initiativeTwo }),
+    });
+    assertStatus(deliverable, 200, "Browser Deliverable reparent");
+    const deliverableBody = await deliverable.json();
+    if (deliverableBody.task?.parentTaskId !== ids.initiativeTwo || deliverableBody.task?.approvalStatus !== "proposed" || deliverableBody.task?.githubIssueSyncStatus !== "not_synced") {
+      throw new Error("Browser Deliverable reparent changed its response shape.");
+    }
+    const subIssueRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.subIssue])).rows[0]?.revision;
+    const subIssue = await apiRequest(`/api/tasks/${ids.subIssue}`, sessionToken, "", {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: subIssueRevision, parentTaskId: ids.deliverableTwo }),
+    });
+    assertStatus(subIssue, 200, "Browser Sub-Issue reparent");
+    const subIssueBody = await subIssue.json();
+    if (subIssueBody.task?.parentTaskId !== ids.deliverableTwo || subIssueBody.task?.githubIssueSyncStatus !== "not_synced") {
+      throw new Error("Browser Sub-Issue reparent changed its response shape.");
+    }
+
+    const issued = await apiRequest("/api/team/planning-items/v1/tokens", sessionToken, "", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label: "Local reparent verification", allowUpdates: true }),
+    });
+    assertStatus(issued, 200, "Reparent token issuance");
+    const tokenBody = await issued.json();
+    tokenId = String(tokenBody.tokenRecord?.id || "");
+    if (!tokenBody.token || !tokenId || !tokenBody.tokenRecord?.scopes?.includes("write:planning-items:update")) {
+      throw new Error("Reparent token issuance returned an incomplete response.");
+    }
+    const teamDeliverableRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.teamDeliverable])).rows[0]?.revision;
+    const idempotencyKey = randomUUID();
+    const teamRequest = {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+      body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, packageId: ids.initiativeTwo }),
+    };
+    const team = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
+    if (team.status !== 200) throw new Error(`Team Deliverable reparent: expected 200, received ${team.status}: ${await team.text()}`);
+    const teamBody = await team.json();
+    if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("packageId")) {
+      throw new Error("Team Deliverable reparent changed its response shape.");
+    }
+    const replay = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
+    assertStatus(replay, 200, "Team Deliverable reparent replay");
+    const replayBody = await replay.json();
+    if (!replayBody.replayed || replayBody.item?.parentTaskId !== ids.initiativeTwo) {
+      throw new Error("Team Deliverable reparent replay was not stable.");
+    }
+  } finally {
+    if (tokenId) {
+      const revoked = await apiRequest(`/api/team/planning-items/v1/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
+      assertStatus(revoked, 200, "Reparent token cleanup");
+    }
+    await client.query("select set_config('founderops.trash_lifecycle_write', 'on', false)");
+    await client.query("delete from public.team_planning_item_update_requests where item_id = any($1::text[])", [Object.values(ids)]);
+    await client.query("delete from public.audit_log where entity_id = any($1::text[])", [Object.values(ids)]);
+    await client.query("delete from public.planning_item_raci_assignments where task_id = any($1::text[])", [Object.values(ids)]);
+    await client.query("delete from public.tasks where id = any($1::text[])", [Object.values(ids).reverse()]);
+    await client.end();
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -623,6 +728,7 @@ async function main() {
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
     await verifyPlanningReviewRoutes(status, token, source.packages[0].id);
     await verifyPlanningApprovalRoutes(status, token);
+    await verifyPlanningReparentRoutes(status, token);
 
     const expectedProfiles = [
       ["", "ceo"],
