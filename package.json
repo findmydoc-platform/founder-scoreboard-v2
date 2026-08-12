@@ -29,6 +29,7 @@
     "verify:founderops-settings": "node scripts/verify-founderops-settings-transaction.mjs",
     "verify:notification-lifecycle": "node scripts/verify-notification-lifecycle.mjs",
     "verify:task-review": "node scripts/verify-task-review-transaction.mjs",
+    "verify:planning-approval": "node scripts/verify-planning-approval-transaction.mjs",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:database-security": "node scripts/verify-database-security.mjs",
     "verify:task-utf8": "node scripts/verify-task-utf8.mjs",

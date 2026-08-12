@@ -526,6 +526,56 @@ async function verifyPlanningReviewRoutes(status, sessionToken, parentTaskId) {
   }
 }
 
+async function verifyPlanningApprovalRoutes(status, sessionToken) {
+  const suffix = randomUUID();
+  const epicId = `local-approval-epic-${suffix}`;
+  const initiativeId = `local-approval-initiative-${suffix}`;
+  const deliverableId = `local-approval-deliverable-${suffix}`;
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `insert into public.tasks (id,project_id,parent_task_id,title,task_type,status,priority,owner,assignee,approval_status,approval_revision,review_status,score_final)
+       values
+         ($1,'findmydoc-founder-execution',null,'Local Approval Epic','epic','Offen','P2','volkan','volkan',null,1,'not_requested',false),
+         ($2,'findmydoc-founder-execution',$1,'Local Approval Initiative','initiative','Offen','P2','volkan','volkan','proposed',1,'not_requested',false),
+         ($3,'findmydoc-founder-execution',$2,'Local Approval Deliverable','deliverable','Offen','P2','volkan','volkan','proposed',1,'not_requested',false)`,
+      [epicId, initiativeId, deliverableId],
+    );
+    await client.query(
+      "insert into public.planning_item_raci_assignments (task_id,profile_id,role,sort_order) values ($1,'volkan','accountable',0),($1,'anil','responsible',1)",
+      [initiativeId],
+    );
+    const initiative = await apiRequest(`/api/initiatives/${initiativeId}/approval`, sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "approve", expectedRevision: 1, note: "" }),
+    });
+    assertStatus(initiative, 200, "Browser Initiative approval");
+    const initiativeBody = await initiative.json();
+    if (!initiativeBody.ok || initiativeBody.initiative?.approvalStatus !== "approved" || initiativeBody.lifecycle !== null) {
+      throw new Error("Browser Initiative approval changed its response shape.");
+    }
+    const deliverable = await apiRequest(`/api/tasks/${deliverableId}/approval`, sessionToken, "", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "approve", expectedRevision: 1, note: "" }),
+    });
+    assertStatus(deliverable, 200, "Browser Deliverable approval");
+    const deliverableBody = await deliverable.json();
+    if (!deliverableBody.ok || deliverableBody.task?.approvalStatus !== "approved" || !Object.hasOwn(deliverableBody, "lifecycle")) {
+      throw new Error("Browser Deliverable approval changed its response shape.");
+    }
+  } finally {
+    await client.query("select set_config('founderops.trash_lifecycle_write', 'on', false)");
+    await client.query("delete from public.audit_log where entity_id = any($1::text[])", [[epicId, initiativeId, deliverableId]]);
+    await client.query("delete from public.task_activity where task_id = any($1::text[])", [[epicId, initiativeId, deliverableId]]);
+    await client.query("delete from public.planning_item_raci_assignments where task_id = $1", [initiativeId]);
+    await client.query("delete from public.tasks where id = any($1::text[])", [[deliverableId, initiativeId, epicId]]);
+    await client.end();
+  }
+}
+
 async function main() {
   localStatus();
   execFileSync(process.execPath, [localDevelopmentScript, "seed"], { cwd: root, stdio: "inherit" });
@@ -572,6 +622,7 @@ async function main() {
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
     await verifyPlanningReviewRoutes(status, token, source.packages[0].id);
+    await verifyPlanningApprovalRoutes(status, token);
 
     const expectedProfiles = [
       ["", "ceo"],

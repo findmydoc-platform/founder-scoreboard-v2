@@ -154,12 +154,13 @@ export type PlanningAction =
     kind: "changeParent";
     parentId: PlanningItemId | null;
   }>)
-  | (VersionedItemReference & Readonly<{
+  | Readonly<{
     kind: "decideApproval";
+    itemId: PlanningItemId;
     expectedApprovalRevision: number;
     decision: Extract<PlanningApprovalStatus, "approved" | "rejected" | "draft">;
     note: string;
-  }>)
+  }>
   | (VersionedItemReference & Readonly<{
     kind: "withdraw";
     reason: string;

@@ -1,37 +1,41 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { approvalTransactionError, validateApprovalDecision, type ApprovalDecisionPayload } from "@/lib/approval-api";
+import { validateApprovalDecision, type ApprovalDecisionPayload } from "@/lib/approval-api";
 import { apiError, requireJsonApiContext } from "@/lib/api-response";
 import { requirePlanningContributor } from "@/lib/authz";
-import {
-  legacyInitiativeFromCanonical,
-  loadCanonicalStrategicItem,
-} from "@/features/projects/model/planning-legacy-adapters";
 import { getServerServiceRoleSupabase } from "@/lib/supabase-service-role";
+import { mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
+import { actorContextFromSessionAuth } from "@/features/planning-items/model/planning-actor-context-server";
+import {
+  createPlanningApprovalPlanningItems,
+  decidePlanningApprovalCommand,
+  planningApprovalError,
+  planningApprovalTaskFromResult,
+} from "@/features/planning-items/model/planning-items-approval";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const apiContext = await requireJsonApiContext<ApprovalDecisionPayload>(request, requirePlanningContributor, {});
   if (!apiContext.ok) return apiContext.response;
   const decision = validateApprovalDecision(apiContext.payload);
   if (!decision.ok) return decision.response;
-
-  const { id } = await context.params;
+  const actor = actorContextFromSessionAuth({ ok: true, profile: apiContext.permission.profile });
+  if (!actor.ok) return apiError("only ceo or deputy may decide planning approval", 403);
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für Freigaben ist nicht konfiguriert.", 503);
-  const current = await loadCanonicalStrategicItem(serviceSupabase, id, "initiative");
-  if (!current) return apiError("Initiative wurde nicht gefunden.", 404);
-
-  const { error } = await serviceSupabase.rpc("decide_planning_item_approval_transaction", {
-    p_task_id: current.id,
-    p_expected_revision: decision.expectedRevision,
-    p_action: decision.action,
-    p_actor_profile_id: apiContext.permission.profile?.id || "",
-    p_note: decision.note,
+  const { id } = await context.params;
+  const result = await createPlanningApprovalPlanningItems(serviceSupabase, "initiative").run({
+    actor: actor.actor,
+    mode: "commit",
+    command: decidePlanningApprovalCommand(id, {
+      expectedApprovalRevision: decision.expectedRevision,
+      action: decision.action,
+      note: decision.note || "",
+    }),
   });
-  if (error) return approvalTransactionError(error, "Initiative");
-
-  const updated = await loadCanonicalStrategicItem(serviceSupabase, current.id, "initiative");
-  if (!updated) return apiError("Initiative konnte nicht geladen werden.", 500);
-  // Strategic items deliberately have no GitHub lifecycle drain or delivery
-  // notification side effect.
-  return NextResponse.json({ ok: true, initiative: legacyInitiativeFromCanonical(updated), lifecycle: null });
+  if (!result.ok) {
+    const mapped = planningApprovalError(result.error, "Initiative");
+    return apiError(mapped.message, mapped.status);
+  }
+  const task = planningApprovalTaskFromResult(result);
+  if (result.status !== "committed" || !task) return apiError("Initiative konnte nicht geladen werden.", 500);
+  return NextResponse.json({ ok: true, initiative: mapLegacyPackageFromInitiative(task), lifecycle: null });
 }
