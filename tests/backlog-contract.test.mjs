@@ -181,21 +181,25 @@ test("backlog view model sorts by rank not priority and keeps sprint as assignme
 
 test("backlog ordering API is operational-lead guarded and does not dirty github sync", async () => {
   const route = await readFile("src/app/api/tasks/backlog-order/route.ts", "utf8");
+  const planningItems = await readFile("src/features/planning-items/model/planning-items-backlog-move.ts", "utf8");
   const apiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const ordering = await readFile("src/features/backlog/hooks/use-backlog-ordering.ts", "utf8");
   const migration = await readSupabaseSchemaContract();
 
   assert.match(route, /requirePlanningContributor/);
-  assert.match(route, /isOperationalLeadRole/);
-  assert.match(route, /Nur CEO oder Deputy können die Backlog-Reihenfolge ändern/);
-  assert.match(route, /move_backlog_task_transaction/);
+  assert.match(route, /createBacklogMovePlanningItems/);
+  assert.match(route, /\.run\(/);
+  assert.doesNotMatch(route, /move_backlog_task_transaction|isOperationalLeadRole/);
+  assert.match(planningItems, /backlogOrderRequiresOperationalLead/);
+  assert.match(planningItems, /Nur CEO oder Deputy können die Backlog-Reihenfolge ändern/);
+  assert.match(planningItems, /move_backlog_task_transaction/);
   assert.match(ordering, /expectedTaskUpdatedAt/);
   assert.match(ordering, /expectedTargetUpdatedAt/);
   assert.match(ordering, /updatedAt: persisted\.updatedAt/);
   assert.match(migration, /move_backlog_task_transaction/);
   assert.match(migration, /task\.backlog_reorder/);
   assert.match(migration, /v_task\.updated_at is distinct from p_expected_task_updated_at/);
-  assert.doesNotMatch(route, /github_issue_sync_status|github_issue_sync_error|task_activity/);
+  assert.doesNotMatch(`${route}\n${planningItems}`, /github_issue_sync_status|github_issue_sync_error|task_activity/);
   assert.match(apiClient, /moveBacklogTaskRequest/);
   assert.match(apiClient, /\/api\/tasks\/backlog-order/);
 });
