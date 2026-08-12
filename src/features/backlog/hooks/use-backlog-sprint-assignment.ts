@@ -1,23 +1,31 @@
 "use client";
 
+import type { Dispatch } from "react";
 import {
   backlogSprintAssignmentMessage,
   getBacklogSprintAssignmentEligibility,
   type BacklogSprintAssignmentEligibility,
 } from "@/features/backlog/model/backlog-planning-state";
-import type { TaskUpdateHandler } from "@/features/tasks/hooks/task-mutation-command-types";
+import type { BacklogAction } from "@/features/backlog/model/backlog-read-model";
+import * as taskApi from "@/features/tasks/model/task-api-client";
+import { taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
+import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Sprint, Task } from "@/lib/types";
 
 type UseBacklogSprintAssignmentOptions = {
+  apiClient: BrowserApiClient;
   canManageBacklog: boolean;
-  onUpdateTask: TaskUpdateHandler;
+  dispatch: Dispatch<BacklogAction>;
+  refreshBacklogModel: () => Promise<void>;
   setMessage: (message: string) => void;
   sprintById?: ReadonlyMap<string, Sprint>;
 };
 
 export function useBacklogSprintAssignment({
+  apiClient,
   canManageBacklog,
-  onUpdateTask,
+  dispatch,
+  refreshBacklogModel,
   setMessage,
   sprintById,
 }: UseBacklogSprintAssignmentOptions) {
@@ -32,8 +40,25 @@ export function useBacklogSprintAssignment({
     }
 
     setMessage("");
-    const update = await onUpdateTask(task, { sprintId: sprint?.id || "" });
-    if (update && !update.ok) setMessage(update.error);
+    try {
+      const { response, body } = await taskApi.updateTaskRequest(
+        apiClient,
+        task.id,
+        taskUpdateRequestPayload({ sprintId: sprint?.id || "" }, task.updatedAt || ""),
+      );
+      if (!response.ok) {
+        await refreshBacklogModel().catch(() => {});
+        setMessage(body?.error || "Sprint-Zuordnung konnte nicht gespeichert werden.");
+        return eligibility;
+      }
+      dispatch({
+        type: "itemsPatched",
+        patches: [{ id: task.id, ...(body?.task || { sprintId: sprint?.id || "" }) }],
+      });
+    } catch {
+      await refreshBacklogModel().catch(() => {});
+      setMessage("Sprint-Zuordnung konnte nicht gespeichert werden.");
+    }
     return eligibility;
   };
 

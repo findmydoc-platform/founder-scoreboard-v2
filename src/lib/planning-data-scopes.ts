@@ -1,6 +1,8 @@
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import type { PlanningDataQueryScope } from "@/lib/planning-data-loader";
 
+export type LegacyPlanningDataWorkspace = Exclude<AppWorkspace, "backlog">;
+
 const baseWorkspaceDataScope = {
   packages: false,
   milestones: false,
@@ -42,14 +44,6 @@ export const workspaceDataScopes = {
     sprints: true,
     taskRelations: true,
   },
-  backlog: {
-    ...baseWorkspaceDataScope,
-    packages: true,
-    milestones: true,
-    tasks: true,
-    sprints: true,
-    sprintCommitments: true,
-  },
   "decision-log": { ...baseWorkspaceDataScope },
   events: { ...baseWorkspaceDataScope, events: true },
   sprint: {
@@ -87,14 +81,14 @@ export const workspaceDataScopes = {
     packages: true,
     notificationPreferences: true,
   },
-} satisfies Record<AppWorkspace, PlanningDataQueryScope>;
+} satisfies Record<LegacyPlanningDataWorkspace, PlanningDataQueryScope>;
 
-export function getPlanningDataScopeForWorkspace(workspace: AppWorkspace): PlanningDataQueryScope {
+export function getPlanningDataScopeForWorkspace(workspace: LegacyPlanningDataWorkspace): PlanningDataQueryScope {
   return workspaceDataScopes[workspace];
 }
 
-export function planningDataWorkspaceFromValue(value: string | null | undefined): AppWorkspace | null {
+export function planningDataWorkspaceFromValue(value: string | null | undefined): LegacyPlanningDataWorkspace | null {
   if (!value) return null;
   if (value === "settings") return "notifications";
-  return Object.prototype.hasOwnProperty.call(workspaceDataScopes, value) ? value as AppWorkspace : null;
+  return Object.prototype.hasOwnProperty.call(workspaceDataScopes, value) ? value as LegacyPlanningDataWorkspace : null;
 }

@@ -38,9 +38,14 @@ async function loadPlanningState() {
 
 function planningData() {
   return {
-    profiles: [{ id: "ceo", name: "CEO", weeklyCapacity: 42 }],
-    packages: [{ id: "initiative-1", title: "Wachstum" }],
-    tasks: [
+    people: [{ id: "ceo", name: "CEO", weeklyCapacity: 42 }],
+    items: [
+      {
+        id: "initiative-1",
+        order: 1,
+        title: "Wachstum",
+        taskType: "initiative",
+      },
       {
         id: "ready",
         order: 10,
@@ -97,7 +102,7 @@ function planningData() {
       { id: "sprint-14", name: "Sprint 14", status: "active", startDate: "2026-07-06", endDate: "2026-07-19", reviewDueAt: "", scoreLocked: false },
       { id: "invalid", name: "Ungültig", status: "planning", startDate: "2026-07-32", endDate: "2026-08-02", reviewDueAt: "", scoreLocked: false },
     ],
-    sprintCommitments: [{ id: 1, sprintId: "sprint-14", profileId: "ceo", commitmentLevel: "Standard", weeklyHours: 42, note: "" }],
+    commitments: [{ id: 1, sprintId: "sprint-14", profileId: "ceo", commitmentLevel: "Standard", weeklyHours: 42, note: "" }],
   };
 }
 

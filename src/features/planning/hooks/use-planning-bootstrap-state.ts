@@ -119,7 +119,7 @@ export function usePlanningBootstrapState({
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     apiClient: requestContext.apiClient,
-    enabled: source === "supabase" && auth.protectedDataLoaded && (workspace === "planning" || workspace === "backlog"),
+    enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
     refreshPlanningData: dataRefresh.refreshPlanningData,
     tasks: data.tasks,
   });

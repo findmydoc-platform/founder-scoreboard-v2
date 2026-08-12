@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { useBacklogCommands } from "@/features/backlog/hooks/use-backlog-commands";
 import { BacklogRankTable } from "@/features/backlog/molecules/backlog-rank-table";
@@ -8,10 +8,12 @@ import { BacklogScopeTabs } from "@/features/backlog/molecules/backlog-scope-tab
 import { BacklogSprintPane } from "@/features/backlog/molecules/backlog-sprint-pane";
 import { PlanningBacklogTree, type BacklogPlanningLevel } from "@/features/backlog/molecules/planning-backlog-tree";
 import { DEFAULT_BACKLOG_FILTERS, buildBacklogTableViewModel, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
+import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
+import { backlogModelReducer, type BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import { PlanningLevelSelect } from "@/features/planning/molecules/planning-level-select";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { normalizeStatus } from "@/lib/status";
-import type { PlanningData, Sprint, Task } from "@/lib/types";
+import type { Sprint, Task } from "@/lib/types";
 import { classNames, UiNotice } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
@@ -33,37 +35,38 @@ const backlogFilterSchema: TableUrlSchema<BacklogTableFilters> = {
 type BacklogOverviewProps = {
   apiClient: BrowserApiClient;
   canManageBacklog: boolean;
-  data: PlanningData;
+  initialModel: BacklogModel;
   onOpenTask: (taskId: string) => void;
   onCreatePlanningItem: (taskType: BacklogPlanningLevel) => void;
   onProposeDeliverable: () => void;
-  onUpdateTask: (task: Task, patch: Partial<Task>) => void;
-  refreshPlanningData: () => Promise<void>;
-  setData: (updater: (current: PlanningData) => PlanningData) => void;
-  source: "supabase";
 };
 
 export function BacklogOverview({
   apiClient,
   canManageBacklog,
-  data,
+  initialModel,
   onOpenTask,
   onCreatePlanningItem,
   onProposeDeliverable,
-  onUpdateTask,
-  refreshPlanningData,
-  setData,
-  source,
 }: BacklogOverviewProps) {
+  const [model, dispatch] = useReducer(backlogModelReducer, initialModel);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState("");
+  useEffect(() => {
+    dispatch({ type: "modelLoaded", model: initialModel });
+  }, [initialModel]);
+  const refreshBacklogModel = useCallback(async () => {
+    const { response, body } = await requestBacklogModel(apiClient);
+    if (!response.ok || !body?.model) throw new Error(body?.error || "Backlog konnte nicht neu geladen werden.");
+    dispatch({ type: "modelLoaded", model: body.model });
+  }, [apiClient]);
   const { state: filters, updateState: updateFilters } = useTableUrlState({ namespace: "backlog", schema: backlogFilterSchema });
   const backlogLevel = filters.level;
-  const viewModel = useMemo(() => buildBacklogTableViewModel(data, filters), [data, filters]);
+  const viewModel = useMemo(() => buildBacklogTableViewModel(model, filters), [model, filters]);
   const visibleItems = viewModel.visibleItems;
   const levelTasks = useMemo(
-    () => data.tasks.filter((task) => task.taskType === backlogLevel),
-    [backlogLevel, data.tasks],
+    () => model.items.filter((task) => task.taskType === backlogLevel),
+    [backlogLevel, model.items],
   );
   const visibleLevelTasks = useMemo(() => {
     if (backlogLevel === "deliverable") return visibleItems.map((item) => item.task);
@@ -106,16 +109,14 @@ export function BacklogOverview({
   } = useBacklogCommands({
     apiClient,
     canManageBacklog,
-    onUpdateTask,
+    dispatch,
     orderedTasks: viewModel.orderedTasks,
-    refreshPlanningData,
-    setData,
-    source,
-    sprints: data.sprints,
+    refreshBacklogModel,
+    sprints: [...model.sprints],
   });
 
   const taskById = useMemo(() => new Map(viewModel.orderedTasks.map((task) => [task.id, task])), [viewModel.orderedTasks]);
-  const sprintById = useMemo(() => new Map(data.sprints.map((sprint) => [sprint.id, sprint])), [data.sprints]);
+  const sprintById = useMemo(() => new Map(model.sprints.map((sprint) => [sprint.id, sprint])), [model.sprints]);
   const draggedTask = taskById.get(draggedTaskId) || null;
   const handleAssignTaskToSprint = (task: Task, sprint: Sprint | null) => {
     setDraggedTaskId("");
@@ -126,16 +127,16 @@ export function BacklogOverview({
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => updateFilters({ status: "Alle" }) }] : []),
     ...(backlogLevel === "deliverable" && filters.readiness !== "all" ? [{ id: "readiness", label: `Planungsstatus: ${filters.readiness === "ready" ? "Bereit" : "Nicht bereit"}`, onRemove: () => updateFilters({ readiness: "all" }) }] : []),
     ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, onRemove: () => updateFilters({ priority: "Alle" }) }] : []),
-    ...(backlogLevel === "initiative" && filters.epic !== "Alle" ? [{ id: "epic", label: `Epic: ${data.tasks.find((task) => task.id === filters.epic)?.title || filters.epic}`, onRemove: () => updateFilters({ epic: "Alle" }) }] : []),
-    ...(backlogLevel === "deliverable" && filters.initiative !== "Alle" ? [{ id: "initiative", label: `Initiative: ${data.tasks.find((task) => task.id === filters.initiative)?.title || filters.initiative}`, onRemove: () => updateFilters({ initiative: "Alle" }) }] : []),
-    ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${data.profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee}`, onRemove: () => updateFilters({ assignee: "Alle" }) }] : []),
+    ...(backlogLevel === "initiative" && filters.epic !== "Alle" ? [{ id: "epic", label: `Epic: ${model.items.find((task) => task.id === filters.epic)?.title || filters.epic}`, onRemove: () => updateFilters({ epic: "Alle" }) }] : []),
+    ...(backlogLevel === "deliverable" && filters.initiative !== "Alle" ? [{ id: "initiative", label: `Initiative: ${model.items.find((task) => task.id === filters.initiative)?.title || filters.initiative}`, onRemove: () => updateFilters({ initiative: "Alle" }) }] : []),
+    ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${model.people.find((profile) => profile.id === filters.assignee)?.name || filters.assignee}`, onRemove: () => updateFilters({ assignee: "Alle" }) }] : []),
   ];
   const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(levelTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))];
   const readinessOptions = [{ value: "all", label: "Alle" }, { value: "ready", label: "Bereit" }, { value: "incomplete", label: "Nicht bereit" }];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority }));
-  const epicOptions = [{ value: "Alle", label: "Alle Epics" }, ...data.tasks.filter((task) => task.taskType === "epic").map((task) => ({ value: task.id, label: task.title }))];
-  const initiativeOptions = [{ value: "Alle", label: "Alle Initiativen" }, ...data.tasks.filter((task) => task.taskType === "initiative").map((task) => ({ value: task.id, label: task.title }))];
-  const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
+  const epicOptions = [{ value: "Alle", label: "Alle Epics" }, ...model.items.filter((task) => task.taskType === "epic").map((task) => ({ value: task.id, label: task.title }))];
+  const initiativeOptions = [{ value: "Alle", label: "Alle Initiativen" }, ...model.items.filter((task) => task.taskType === "initiative").map((task) => ({ value: task.id, label: task.title }))];
+  const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...model.people.map((profile) => ({ value: profile.id, label: profile.name }))];
   const filterStateIsDirty = filters.query !== ""
     || filters.scope !== "all"
     || filters.status !== "Alle"
@@ -188,7 +189,7 @@ export function BacklogOverview({
           <PlanningLevelSelect
             ariaLabel="Planungsebene im Backlog"
             value={backlogLevel}
-            tasks={data.tasks}
+            tasks={[...model.items]}
             onChange={(level) => updateFilters({
               level,
               epic: "Alle",
@@ -227,7 +228,7 @@ export function BacklogOverview({
           <PlanningBacklogTree
             canAssignSprints={backlogLevel === "deliverable" && canManageBacklog}
             canCreate={canManageBacklog}
-            data={data.tasks}
+            data={[...model.items]}
             draggedTaskId={draggedTaskId}
             level={backlogLevel}
             onAssignTaskToSprint={handleAssignTaskToSprint}
