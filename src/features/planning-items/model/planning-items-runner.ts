@@ -1,16 +1,19 @@
 import type { ActorContext } from "./actor-context";
 import type { PlanningItem } from "./planning-item-domain";
 import type {
-  AppliedEffect,
   FieldChange,
   PlannedEffect,
   PlanningCommand,
   PlanningError,
-  PlanningInvocation,
   PlanningItems,
   PlanningResult,
   PlanningWarning,
 } from "./planning-items";
+import type {
+  PlanningCommitReceipt,
+  PlanningItemsStore,
+  PlanningPreparation,
+} from "./planning-items-store";
 
 export type PlanningDecisionInput<State> = Readonly<{
   actor: ActorContext;
@@ -35,40 +38,9 @@ export interface PlanningDecisionCore<State, CommitPlan> {
   decide(input: PlanningDecisionInput<State>): PlanningDecision<CommitPlan>;
 }
 
-export type PlanningPreparationRequest = Readonly<{
-  actor: ActorContext;
-  command: PlanningCommand;
-  idempotencyKey?: string;
-}>;
-
-export type PlanningCommitReceipt = Readonly<{
-  items: readonly PlanningItem[];
-  changes: readonly FieldChange[];
-  effects: readonly AppliedEffect[];
-  replayed: boolean;
-}>;
-
-export type PlanningPreparation<State> =
-  | Readonly<{ kind: "state"; state: State }>
-  | Readonly<{ kind: "replay"; receipt: PlanningCommitReceipt }>
-  | Readonly<{ kind: "error"; error: PlanningError }>;
-
-export type PlanningCommitRequest<CommitPlan> = Readonly<{
-  actor: ActorContext;
-  command: PlanningCommand;
-  plan: CommitPlan;
-  idempotencyKey?: string;
-  requestMetadata?: PlanningInvocation["requestMetadata"];
-}>;
-
-export type PlanningCommitOutcome =
-  | Readonly<{ ok: true; receipt: PlanningCommitReceipt }>
-  | Readonly<{ ok: false; error: PlanningError }>;
-
 export type PlanningItemsRunnerDependencies<State, CommitPlan> = Readonly<{
-  prepare(request: PlanningPreparationRequest): Promise<PlanningPreparation<State>>;
+  store: PlanningItemsStore<State, CommitPlan>;
   decisionCore: PlanningDecisionCore<State, CommitPlan>;
-  commit(request: PlanningCommitRequest<CommitPlan>): Promise<PlanningCommitOutcome>;
 }>;
 
 const unavailable: PlanningResult = {
@@ -116,7 +88,7 @@ export function createPlanningItems<State, CommitPlan>(
 
       let preparation: PlanningPreparation<State>;
       try {
-        preparation = await dependencies.prepare({
+        preparation = await dependencies.store.prepare({
           actor: invocation.actor,
           command: invocation.command,
           ...(invocation.mode === "commit" && invocation.idempotencyKey
@@ -152,9 +124,9 @@ export function createPlanningItems<State, CommitPlan>(
         };
       }
 
-      let outcome: PlanningCommitOutcome;
+      let outcome;
       try {
-        outcome = await dependencies.commit({
+        outcome = await dependencies.store.commit({
           actor: invocation.actor,
           command: invocation.command,
           plan: decision.commitPlan,
