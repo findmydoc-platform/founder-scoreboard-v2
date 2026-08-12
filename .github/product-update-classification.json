@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Removes legacy Package and Milestone hierarchy reads and DTO fields from active Browser, Backlog, mapper, and local seed paths without changing user-visible workflows."
+  "reason": "Replaces legacy Browser task responsibility aliases with the canonical ownerId request field without changing user-visible workflows."
 }

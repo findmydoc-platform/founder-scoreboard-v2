@@ -91,7 +91,7 @@ test("compact Sub-Issue creation keeps optional work brief fields for the edit f
     description: "Optional context",
     taskType: "sub_issue",
     parentTaskId: "deliverable-one",
-    assignee: "founder-one",
+    ownerId: "founder-one",
     githubRepo: "findmydoc-platform/management",
     relationType: "blocked_by",
     relatedTaskId: "dependency-one",
@@ -106,7 +106,7 @@ test("standard task API accepts optional Sub-Issue work brief fields but rejects
     description: "Optional context",
     taskType: "sub_issue",
     parentTaskId: "deliverable-one",
-    assignee: "founder-one",
+    ownerId: "founder-one",
     githubRepo: "findmydoc-platform/management",
     relationType: "blocked_by",
     relatedTaskId: "dependency-one",
@@ -122,7 +122,7 @@ test("standard task API accepts optional Sub-Issue work brief fields but rejects
     definitionOfDone: "Quality standard",
   };
   assert.equal(unsupportedSubIssueCreateField(withBrief), "");
-  for (const field of ["status", "priority", "evidenceLinks", "reviewStatus", "scorePoints"]) {
+  for (const field of ["status", "priority", "evidenceLinks", "reviewStatus", "scorePoints", "assignee", "owner"]) {
     assert.equal(unsupportedSubIssueCreateField({ ...withBrief, [field]: "forbidden" }), field);
   }
 });

@@ -64,7 +64,7 @@ function initiativeMutation(draft: InitiativeDraft, expectedUpdatedAt?: string) 
     ...(!draft.id ? { taskType: "initiative" as const, creationRequestId: draft.creationRequestId } : {}),
     title: draft.title,
     description: draft.goal,
-    owner: draft.ownerId,
+    ownerId: draft.ownerId,
     priority: draft.priority,
     status: strategicStatus(draft.status),
     targetDate: draft.targetDate,

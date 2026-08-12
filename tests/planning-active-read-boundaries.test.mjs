@@ -24,6 +24,8 @@ test("operational planning readers use centralized active views", async () => {
   assert.doesNotMatch(createTaskRoute, /\.from\("tasks"\)\s*\.select/);
   assert.doesNotMatch(createTaskRoute, /\.from\("planning_item_legacy_ids"\)|package_id|milestone_id/);
   assert.match(createTaskRoute, /Object\.hasOwn\(payload, "packageId"\)/);
+  assert.match(createTaskRoute, /Object\.hasOwn\(payload, "assignee"\)/);
+  assert.match(createTaskRoute, /payload\.ownerId/);
 
   const digest = sources[1];
   assert.match(digest, /if \(!task\) continue/);
@@ -40,6 +42,8 @@ test("trash detail and mutation guards use only the canonical planning item tabl
   assert.match(taskRoute, /\.from\("tasks"\)/);
   assert.doesNotMatch(taskRoute, /ACTIVE_PACKAGES_TABLE|active_packages|package_id|milestone_id/);
   assert.match(taskRoute, /Object\.hasOwn\(rawPayload, "packageId"\)/);
+  assert.match(taskRoute, /Object\.hasOwn\(rawPayload, "assignee"\)/);
+  assert.match(taskRoute, /payload\.ownerId/);
 });
 
 test("active task projections and local fixtures expose only parentTaskId", async () => {

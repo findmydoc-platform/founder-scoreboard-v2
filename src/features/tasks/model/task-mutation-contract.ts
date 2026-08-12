@@ -7,8 +7,7 @@ export type TaskUpdatePayload = {
   title?: string;
   description?: string;
   status?: string;
-  assignee?: string;
-  owner?: string;
+  ownerId?: string;
   reviewOwnerProfileId?: string;
   priority?: string;
   problemStatement?: string;
@@ -115,7 +114,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     title: patch.title,
     description: patch.description,
     status: patch.status,
-    assignee: patch.assigneeId || patch.assignee || patch.ownerId || patch.owner,
+    ownerId: patch.ownerId || patch.assigneeId || patch.owner || patch.assignee,
     priority: patch.priority,
     problemStatement: patch.problemStatement,
     intendedOutcome: patch.intendedOutcome,
@@ -169,7 +168,7 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.reviewOwnerProfileId !== undefined && payload.reviewOwnerProfileId !== currentTask?.review_owner_profile_id) {
     messages.push(`Review Owner geändert: ${formatChange(currentTask?.review_owner_profile_id, payload.reviewOwnerProfileId)}`);
   }
-  if (payload.assignee !== undefined && payload.assignee !== (currentTask?.assignee || currentTask?.owner)) messages.push(`Zuständigkeit geändert: ${formatChange(currentTask?.assignee || currentTask?.owner, payload.assignee)}`);
+  if (payload.ownerId !== undefined && payload.ownerId !== (currentTask?.owner || currentTask?.assignee)) messages.push(`Zuständigkeit geändert: ${formatChange(currentTask?.owner || currentTask?.assignee, payload.ownerId)}`);
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
   if (payload.parentTaskId !== undefined && payload.parentTaskId !== currentTask?.parent_task_id) {

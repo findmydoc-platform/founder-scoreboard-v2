@@ -25,8 +25,7 @@ const subIssueAllowedUpdateFields = new Set([
   "evidenceRequired",
   "definitionOfDone",
   "status",
-  "assignee",
-  "owner",
+  "ownerId",
   "parentTaskId",
 ]);
 
@@ -82,7 +81,7 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   const isImplicitReviewScoreReset = startsTaskReviewRequest(payload) && payload.scoreFinal === false && payload.scorePoints === undefined;
 
   return [
-    payload.assignee !== undefined || payload.owner !== undefined ? "Zuständig" : "",
+    payload.ownerId !== undefined ? "Zuständig" : "",
     payload.priority !== undefined ? "Priorität" : "",
     payload.parentTaskId !== undefined ? "Übergeordnetes Planning Item" : "",
     payload.sprintId !== undefined ? "Sprint" : "",

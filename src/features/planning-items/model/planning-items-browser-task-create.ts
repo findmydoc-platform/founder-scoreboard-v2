@@ -37,8 +37,7 @@ type CreateTaskPayload = {
   taskType?: TaskType;
   parentTaskId?: string;
   sprintId?: string;
-  assignee?: string;
-  owner?: string;
+  ownerId?: string;
   priority?: string;
   status?: string;
   workstream?: string;
@@ -108,6 +107,9 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (Object.hasOwn(payload, "packageId") || Object.hasOwn(payload, "milestoneId")) {
     return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
   }
+  if (Object.hasOwn(payload, "assignee") || Object.hasOwn(payload, "owner")) {
+    return apiError("Verwende ownerId für die Zuständigkeit.", 400);
+  }
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
   const isStrategic = requestedType === "epic" || requestedType === "initiative";
@@ -133,7 +135,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
     if (payload.targetDate && !targetDate) return apiError("Zieldatum ist ungültig.", 400);
     const idBase = `${permission.profile?.id || "planning"}-${slugify(title, { maxLength: 70 }) || "neues-planungselement"}`;
     const id = `${idBase}-${creationRequestId.replaceAll("-", "").slice(0, 12)}`;
-    const owner = profileId(payload.owner || payload.assignee) || permission.profile?.id || "";
+    const owner = profileId(payload.ownerId) || permission.profile?.id || "";
     const suppliedRaciAssignments = (payload.raciAssignments || []).map((assignment, index) => ({
       profileId: profileId(assignment.profileId),
       role: assignment.role,
@@ -276,7 +278,7 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   const priority = taskType === "sub_issue"
     ? "P2"
     : payload.priority && priorities.has(payload.priority) ? payload.priority : "P2";
-  const assignee = profileId(payload.assignee || payload.owner) || permission.profile?.id || null;
+  const assignee = profileId(payload.ownerId) || permission.profile?.id || null;
   const parentTaskId = taskType === "sub_issue" || taskType === "deliverable" ? payload.parentTaskId || "" : "";
 
   if (taskType === "deliverable" && parentTaskId) {

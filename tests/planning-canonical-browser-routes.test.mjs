@@ -45,9 +45,12 @@ test("canonical Browser payloads use parent and owner identifiers", async () => 
     readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8"),
   ]);
   assert.match(client, /parentTaskId: draft\.parentTaskId/);
-  assert.match(client, /owner: draft\.ownerId/);
+  assert.match(client, /ownerId: draft\.ownerId/);
+  assert.doesNotMatch(client, /^\s+owner: draft\.ownerId/m);
   assert.doesNotMatch(client, /json: draft/);
   assert.doesNotMatch(reparent, /Object\.hasOwn\(row, "packageId"\)/);
   assert.doesNotMatch(taskMutation, /^\s+packageId: patch\./m);
   assert.doesNotMatch(taskMutation, /^\s+milestoneId: patch\./m);
+  assert.match(taskMutation, /^\s+ownerId: patch\./m);
+  assert.doesNotMatch(taskMutation, /^\s+assignee: patch\./m);
 });

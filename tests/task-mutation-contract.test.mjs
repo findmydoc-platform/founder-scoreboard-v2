@@ -25,7 +25,7 @@ test("review request payload omits protected score and review owner fields", asy
   });
 
   const normalized = buildClientTaskUpdatePatch(
-    { id: "task-1", status: "In Arbeit", scoreFinal: false, packageId: "initiative-1" },
+    { id: "task-1", status: "In Arbeit", scoreFinal: false, parentTaskId: "initiative-1" },
     { status: "Review" },
     [],
     [{ id: "initiative-1", ownerId: "owner", accountableProfileId: "accountable" }],
@@ -58,7 +58,7 @@ test("review requests require an assigned review owner", async () => {
 
   assert.deepEqual(
     buildClientTaskUpdatePatch(
-      { id: "task-1", status: "In Arbeit", scoreFinal: false, packageId: "initiative-1" },
+      { id: "task-1", status: "In Arbeit", scoreFinal: false, parentTaskId: "initiative-1" },
       { status: "Review" },
       [],
       [],
@@ -82,6 +82,19 @@ test("score and review owner payload fields remain available outside review requ
   assert.equal(payload.reviewOwnerProfileId, "ceo");
   assert.equal(payload.scoreFinal, true);
   assert.equal(payload.scorePoints, 8);
+});
+
+test("task ownership uses only ownerId on the Browser wire contract", async () => {
+  const { taskUpdateRequestPayload } = await loadTranspiledModule("src/features/tasks/model/task-mutation-contract.ts", {
+    "@/features/planning/model/planning-app-model": planningAppModelMock,
+    "@/lib/slug": slugMock,
+  });
+
+  const payload = taskUpdateRequestPayload({ assigneeId: "founder-one" }, "2026-07-06T11:00:00.000Z");
+
+  assert.equal(payload.ownerId, "founder-one");
+  assert.equal(Object.hasOwn(payload, "assignee"), false);
+  assert.equal(Object.hasOwn(payload, "owner"), false);
 });
 
 test("normal task updates omit the server-owned GitHub sync status", async () => {

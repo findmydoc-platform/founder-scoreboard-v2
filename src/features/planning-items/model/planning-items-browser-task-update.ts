@@ -114,6 +114,9 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   if (Object.hasOwn(rawPayload, "packageId") || Object.hasOwn(rawPayload, "milestoneId")) {
     return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
   }
+  if (Object.hasOwn(rawPayload, "assignee") || Object.hasOwn(rawPayload, "owner")) {
+    return apiError("Verwende ownerId für die Zuständigkeit.", 400);
+  }
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
   let payload = { ...rawPayload } as TaskUpdatePayload;
@@ -212,12 +215,12 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       return apiError("Nur CEO, Deputy oder der Initiative-Owner können diese Initiative ändern.", 403);
     }
     const allowedFields = new Set([
-      "expectedUpdatedAt", "title", "description", "status", "assignee", "owner", "priority",
+      "expectedUpdatedAt", "title", "description", "status", "ownerId", "priority",
       "targetDate", "strategy", "raciAssignments",
     ]);
     const unsupportedField = Object.keys(rawPayload).find((field) => !allowedFields.has(field));
     if (unsupportedField) return apiError(`Das Feld ${unsupportedField} ist für strategische Planungselemente nicht zulässig.`, 400);
-    if (!isOperationalLead && (payload.assignee !== undefined || payload.owner !== undefined || payload.raciAssignments !== undefined)) {
+    if (!isOperationalLead && (payload.ownerId !== undefined || payload.raciAssignments !== undefined)) {
       return apiError("Parent, Owner und RACI können nur von CEO oder Deputy geändert werden.", 403);
     }
     if (payload.status !== undefined && !allowedPlanningItemStatuses(currentTask.task_type).includes(payload.status as never)) {
@@ -245,8 +248,8 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (payload.description !== undefined) patch.description = strategicText(payload.description, 4_000) || null;
     if (payload.status !== undefined) patch.status = payload.status;
     if (payload.priority !== undefined) patch.priority = payload.priority;
-    if (payload.assignee !== undefined || payload.owner !== undefined) {
-      const assignee = profileId(payload.assignee || payload.owner);
+    if (payload.ownerId !== undefined) {
+      const assignee = profileId(payload.ownerId);
       if (!assignee) return apiError("Planungselemente brauchen eine Zuständigkeit.", 400);
       patch.assignee = assignee;
       patch.owner = assignee;
@@ -413,8 +416,8 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const titleGuard = applyTaskTitleUpdate(update, payload);
   if (!titleGuard.ok) return apiError(titleGuard.error, titleGuard.status);
 
-  if (payload.assignee !== undefined || payload.owner !== undefined) {
-    const nextAssignee = profileId(payload.assignee || payload.owner);
+  if (payload.ownerId !== undefined) {
+    const nextAssignee = profileId(payload.ownerId);
     if (!nextAssignee) return apiError("Aufgaben brauchen eine Zuständigkeit.", 400);
     update.assignee = nextAssignee || null;
     update.owner = nextAssignee || null;
