@@ -21,8 +21,8 @@ import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS } from "@/lib/sprint-review-window";
 import type { Profile, Project } from "@/lib/types";
 
-const projectId = "findmydoc-founder-execution";
-const profileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
+export const planningProjectId = "findmydoc-founder-execution";
+export const planningProfileSelect = "id,name,role,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color,google_chat_user_id,google_chat_dm_space,notifications_enabled";
 
 type ProjectRow = {
   id: string;
@@ -33,7 +33,7 @@ type ProjectRow = {
   github_project_number: number | null;
 };
 
-function mapProject(row: ProjectRow): Project {
+export function mapPlanningProject(row: ProjectRow): Project {
   return {
     id: row.id,
     name: row.name,
@@ -44,7 +44,7 @@ function mapProject(row: ProjectRow): Project {
   };
 }
 
-function mapItems(rows: DbTask[], people: Profile[], links: DbTaskLink[], strategies: DbPlanningItemStrategy[], assignments: DbPlanningItemRaciAssignment[]) {
+export function mapPlanningItemRows(rows: DbTask[], people: Profile[], links: DbTaskLink[], strategies: DbPlanningItemStrategy[], assignments: DbPlanningItemRaciAssignment[]) {
   const linksById = new Map<string, DbTaskLink[]>();
   for (const link of links) linksById.set(link.task_id, [...(linksById.get(link.task_id) || []), link]);
   const strategyById = new Map(strategies.map((strategy) => [strategy.task_id, strategy]));
@@ -59,15 +59,37 @@ function mapItems(rows: DbTask[], people: Profile[], links: DbTaskLink[], strate
   return items.map((item) => item.parentTaskId ? { ...item, parentApprovalStatus: approvalById.get(item.parentTaskId) || null } : item);
 }
 
+export async function loadPlanningItemsForReadModel(supabase: SupabaseClient) {
+  const [profileResult, itemResult, strategyResult, raciResult, linkResult] = await Promise.all([
+    supabase.from("profiles").select(planningProfileSelect).order("name"),
+    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
+    supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
+    supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
+    supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
+  ]);
+  if (profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error) return null;
+  const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
+  return {
+    people,
+    items: mapPlanningItemRows(
+      (itemResult.data || []) as unknown as DbTask[],
+      people,
+      (linkResult.data || []) as DbTaskLink[],
+      (strategyResult.data || []) as DbPlanningItemStrategy[],
+      (raciResult.data || []) as DbPlanningItemRaciAssignment[],
+    ),
+  };
+}
+
 export async function loadPlanningWorkspaceModel(
   supabase: SupabaseClient,
   context: PlanningWorkspaceLoadContext,
 ): Promise<PlanningWorkspaceLoadResult> {
   if (!context.authorized) return { status: "forbidden" };
   const [projectResult, profileResult, itemResult, strategyResult, raciResult, linkResult, sprintResult, relationResult, preferenceResult] = await Promise.all([
-    supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", projectId).single<ProjectRow>(),
-    supabase.from("profiles").select(profileSelect).order("name"),
-    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).order("sort_order").order("id"),
+    supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single<ProjectRow>(),
+    supabase.from("profiles").select(planningProfileSelect).order("name"),
+    supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", planningProjectId).order("sort_order").order("id"),
     supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints"),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").order("task_id").order("sort_order"),
     supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
@@ -79,7 +101,7 @@ export async function loadPlanningWorkspaceModel(
     return { status: "unavailable" };
   }
   const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
-  const items = mapItems(
+  const items = mapPlanningItemRows(
     (itemResult.data || []) as unknown as DbTask[],
     people,
     (linkResult.data || []) as DbTaskLink[],
@@ -91,7 +113,7 @@ export async function loadPlanningWorkspaceModel(
     status: "ready",
     model: {
       revision: items.reduce((latest, item) => item.updatedAt && item.updatedAt > latest ? item.updatedAt : latest, ""),
-      project: mapProject(projectResult.data),
+      project: mapPlanningProject(projectResult.data),
       items,
       relationships: ((relationResult.data || []) as DbTaskRelation[])
         .filter((relation) => activeIds.has(relation.task_id) && activeIds.has(relation.related_task_id))

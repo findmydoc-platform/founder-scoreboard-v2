@@ -7,6 +7,7 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 import { planningWorkspaceModelToPlanningData } from "@/features/planning-items/model/planning-workspace-data-adapter";
+import { isSupportingWorkspace, supportingWorkspaceModelToPlanningData, type SupportingWorkspaceModel } from "@/features/planning/model/supporting-workspace-data-adapters";
 
 type ProtectedPlanningDataCache = {
   authUserId: string;
@@ -244,13 +245,19 @@ export function usePlanningAuth({
           ? "/api/planning-board-data"
           : workspace === "projects"
             ? "/api/strategic-planning-data"
-            : "";
+            : isSupportingWorkspace(workspace)
+              ? `/api/${workspace}-data`
+              : "";
         const response = await fetch(focusedPlanningRoute || `/api/planning-data?workspace=${encodeURIComponent(workspace)}`, {
           headers: { authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel; error?: string }) | null;
-        const payloadData = payload?.model ? planningWorkspaceModelToPlanningData(payload.model) : payload?.data;
+        const payload = await response.json().catch(() => null) as (Partial<PlanningDataResponse> & { model?: PlanningWorkspaceModel | SupportingWorkspaceModel; error?: string }) | null;
+        const payloadData = payload?.model
+          ? isSupportingWorkspace(workspace)
+            ? supportingWorkspaceModelToPlanningData(workspace, payload.model as SupportingWorkspaceModel)
+            : planningWorkspaceModelToPlanningData(payload.model as PlanningWorkspaceModel)
+          : payload?.data;
 
         if (!active) return;
         if (!response.ok || !payloadData || !payload?.currentProfile) {

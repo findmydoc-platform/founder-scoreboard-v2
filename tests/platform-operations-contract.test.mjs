@@ -401,12 +401,11 @@ test("workspace selection uses path routes and root-only profile defaults", asyn
   assert.match(dataScopes, /getPlanningDataScopeForWorkspace/);
   assert.match(dataScopes, /planningDataWorkspaceFromValue/);
   assert.match(dataScopes, /notificationEvents: false/);
-  assert.match(dataScopes, /tools: \{ \.\.\.baseWorkspaceDataScope, fmdTools: true \}/);
-  assert.match(dataScopes, /events: \{ \.\.\.baseWorkspaceDataScope, events: true \}/);
-  assert.match(dataScopes, /notifications: \{[\s\S]*notificationEvents: true,[\s\S]*notificationDeliveries: true,[\s\S]*\}/);
-  assert.match(dataScopes, /value === "settings"\) return "notifications"/);
+  assert.doesNotMatch(dataScopes, /\n\s*tools: \{/);
+  assert.doesNotMatch(dataScopes, /\n\s*events: \{/);
+  assert.doesNotMatch(dataScopes, /\n\s*notifications: \{/);
   assert.match(dataScopes, /sprint: \{[\s\S]*founderSprintScores: true,[\s\S]*meetingAttendance: true,[\s\S]*\}/);
-  assert.match(dataScopes, /profile: \{[\s\S]*notificationPreferences: true,[\s\S]*\}/);
+  assert.doesNotMatch(dataScopes, /\n\s*profile: \{/);
   assert.match(dataLoader, /export type PlanningDataQueryScope/);
   assert.match(dataLoader, /shouldLoad\(scope, "fmdTools"\)/);
   assert.match(dataLoader, /skippedListResult<DbFmdTool>/);
