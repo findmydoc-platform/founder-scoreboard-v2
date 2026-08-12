@@ -39,9 +39,23 @@ const effect = { kind: "audit", description: "Record title change" };
 
 function dependencies(calls) {
   return {
-    async prepare(request) {
-      calls.prepare.push(request);
-      return { kind: "state", state: { currentTitle: "Current" } };
+    store: {
+      async prepare(request) {
+        calls.prepare.push(request);
+        return { kind: "state", state: { currentTitle: "Current" } };
+      },
+      async commit(request) {
+        calls.commit.push(request);
+        return {
+          ok: true,
+          receipt: {
+            items: [projectedItem],
+            changes: [change],
+            effects: [{ ...effect, status: "applied" }],
+            replayed: false,
+          },
+        };
+      },
     },
     decisionCore: {
       decide(input) {
@@ -55,18 +69,6 @@ function dependencies(calls) {
           commitPlan: { nextTitle: "Revised" },
         };
       },
-    },
-    async commit(request) {
-      calls.commit.push(request);
-      return {
-        ok: true,
-        receipt: {
-          items: [projectedItem],
-          changes: [change],
-          effects: [{ ...effect, status: "applied" }],
-          replayed: false,
-        },
-      };
     },
   };
 }
@@ -154,7 +156,7 @@ test("commit receives the accepted semantic plan exactly once", async () => {
 test("replay bypasses policy and commit without creating effects", async () => {
   const calls = callLog();
   const deps = dependencies(calls);
-  deps.prepare = async (request) => {
+  deps.store.prepare = async (request) => {
     calls.prepare.push(request);
     return {
       kind: "replay",
@@ -184,7 +186,7 @@ test("replay bypasses policy and commit without creating effects", async () => {
 test("preview cannot be converted into a committed replay by a broken adapter", async () => {
   const calls = callLog();
   const deps = dependencies(calls);
-  deps.prepare = async () => ({
+  deps.store.prepare = async () => ({
     kind: "replay",
     receipt: {
       items: [projectedItem],
@@ -223,12 +225,12 @@ test("typed policy errors stop before commit", async () => {
 test("unexpected persistence failures become stable dependency errors", async () => {
   const prepareCalls = callLog();
   const prepareDeps = dependencies(prepareCalls);
-  prepareDeps.prepare = async () => {
+  prepareDeps.store.prepare = async () => {
     throw new Error("relation tasks does not exist; secret-provider-detail");
   };
   const commitCalls = callLog();
   const commitDeps = dependencies(commitCalls);
-  commitDeps.commit = async () => {
+  commitDeps.store.commit = async () => {
     throw new Error("SQLSTATE 99999; secret-provider-detail");
   };
 
