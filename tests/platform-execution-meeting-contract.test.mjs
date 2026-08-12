@@ -245,7 +245,8 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   const routeAdapter = await readFile("src/app/api/tasks/route.ts", "utf8");
   const route = await readFile("src/features/planning-items/model/planning-items-browser-task-create.ts", "utf8");
   const planningCreate = await readFile("src/features/planning-items/model/planning-items-create.ts", "utf8");
-  const updateRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const updateRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
+  const planningUpdate = await readFile("src/features/planning-items/model/planning-item-update.ts", "utf8");
   const transactionalCreationMigration = await readSupabaseSchemaContract();
   const createCommand = await readFile("src/features/tasks/hooks/use-task-create-command.ts", "utf8");
   const ui = await readPlanningSurface();
@@ -282,7 +283,8 @@ test("task creation uses approval-aware deliverables and inherited sub issues", 
   assert.match(route, /Nur der CEO kann beim Erstellen direkt freigeben/);
   assert.match(updateRoute, /getBacklogSprintAssignmentEligibility/);
   assert.match(updateRoute, /backlogSprintAssignmentMessage/);
-  assert.match(updateRoute, /update_planning_task_transaction/);
+  assert.match(updateRoute, /createBrowserRevisePlanningItems/);
+  assert.match(planningUpdate, /update_browser_planning_task_transaction/);
   assert.match(route, /deadline: taskType === "sub_issue" \? null : payload\.deadline/);
   assert.match(route, /unsupportedSubIssueCreateField/);
   assert.match(route, /Das Startdatum darf nicht nach dem Enddatum liegen/);

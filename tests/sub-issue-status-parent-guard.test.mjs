@@ -15,14 +15,14 @@ test("Sub-Issue status updates lock and revalidate the active parent approval", 
 });
 
 test("task updates expose an atomic parent-approval conflict as a stable 409", async () => {
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
 
-  assert.match(route, /transactionError\.code === "P0008"/);
+  assert.match(route, /reviseResult\.error\.code === "conflict" && reviseResult\.error\.reason === "state"/);
   assert.match(route, /Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv/);
 });
 
 test("same-status requests become unchanged responses before status side effects", async () => {
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const normalizeIndex = route.indexOf("withoutUnchangedTaskStatus(currentTask, payload)");
   const reviewRequestIndex = route.indexOf("isPlanningReviewRequestPayload(rawPayload)");
 

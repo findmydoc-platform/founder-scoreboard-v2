@@ -95,9 +95,9 @@ function fixture({
 
 test("browser and Team parent routes delegate exclusively to the PlanningItems action", async () => {
   const [initiativeRoute, taskRoute, teamRoute, module, migration] = await Promise.all([
-    readFile("src/app/api/initiatives/[id]/route.ts", "utf8"),
-    readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
-    readFile("src/app/api/team/planning-items/v1/items/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-initiative-update.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-reparent.ts", "utf8"),
     readFile("supabase/migrations/20260812142454_planning_reparent_command_transaction.sql", "utf8"),
   ]);

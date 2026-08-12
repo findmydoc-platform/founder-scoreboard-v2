@@ -29,7 +29,7 @@ test("rejects normal PATCH attempts to set GitHub sync status for every team rol
 test("normal task update contract omits sync status and route rejects it before task mutation", async () => {
   const [contract, taskRoute] = await Promise.all([
     readFile("src/features/tasks/model/task-mutation-contract.ts", "utf8"),
-    readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
   ]);
   const payloadType = contract.slice(
     contract.indexOf("export type TaskUpdatePayload"),

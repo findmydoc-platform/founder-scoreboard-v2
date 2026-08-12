@@ -14,6 +14,11 @@ import {
   planningItemCreateCommand,
 } from "@/features/planning-items/model/planning-items-create";
 import {
+  browserReviseTransactionFromResult,
+  createBrowserRevisePlanningItems,
+  planningItemReviseCommand,
+} from "@/features/planning-items/model/planning-item-update";
+import {
   MILESTONE_STATUSES,
   type MilestoneCreateRequest,
   type MilestoneDeleteRequest,
@@ -295,23 +300,33 @@ export async function updateProjectMilestone(
   id: string,
   expectedUpdatedAt: string,
   input: NormalizedMilestonePatch["update"],
-  actorProfileId: string,
+  actor: ActorContext,
+  requestMetadata?: { requestIp?: string; userAgent?: string },
 ) {
   const legacyUpdate = buildMilestoneUpdate(input);
   const update: Record<string, string | null> = { ...legacyUpdate };
   if (legacyUpdate.status !== undefined) {
     update.status = legacyUpdate.status === "active" ? "In Arbeit" : legacyUpdate.status === "done" ? "Erledigt" : "Offen";
   }
-  const { data, error } = await supabase.rpc("update_planning_item_transaction", {
-    p_task_id: id,
-    p_expected_updated_at: expectedUpdatedAt,
-    p_patch: update,
-    p_strategy: null,
-    p_raci_assignments: null,
-    p_actor_profile_id: actorProfileId,
+  const result = await createBrowserRevisePlanningItems({
+    supabase,
+    actor,
+    writer: { kind: "strategic", params: {
+      taskId: id,
+      expectedUpdatedAt,
+      patch: update,
+      strategy: null,
+      raciAssignments: null,
+      legacyAuditAction: "milestone.update",
+    } },
+  }).run({
+    actor,
+    mode: "commit",
+    command: planningItemReviseCommand(id, "epic", expectedUpdatedAt, input as Record<string, unknown>),
+    requestMetadata,
   });
-  const row = (data as { task?: DbTask } | null)?.task || null;
-  return { data: row, error, update };
+  const transaction = result.ok ? browserReviseTransactionFromResult(result) as { task?: DbTask } | null : null;
+  return { data: transaction?.task || null, error: result.ok ? null : result.error, update };
 }
 
 export type {

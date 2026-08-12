@@ -190,7 +190,7 @@ test("replay versioning and package preference translation are additive", async 
   const [migration, createModule, updateRoute, documentation] = await Promise.all([
     read("supabase/migrations/20260804093935_planning_items_replay_and_preferences_compatibility.sql"),
     read("src/features/planning-items/model/planning-items-create.ts"),
-    read("src/app/api/team/planning-items/v1/items/[id]/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-update-route.ts"),
     read("docs/team-planning-items-api.md"),
   ]);
   for (const table of [
@@ -316,7 +316,7 @@ test("v1 update and delete replays use legacy response mapping", async () => {
     async maybeSingle() { return { data, error: null }; },
   });
   const route = await loadTranspiledModule(
-    "src/app/api/team/planning-items/v1/items/[id]/route.ts",
+    "src/features/planning-items/model/planning-items-team-update-route.ts",
     {
       "next/server": { after: () => undefined },
       "@/lib/api-input": { auditRequestMetadata: () => ({}) },
@@ -379,12 +379,12 @@ test("v1 update and delete replays use legacy response mapping", async () => {
     json: async () => ({}),
     nextUrl: { origin: "http://localhost:3000" },
   };
-  const updateResponse = await route.PATCH(request, { params: Promise.resolve({ id: "package-v1" }) });
+  const updateResponse = await route.handleTeamPlanningItemUpdate(request, { params: Promise.resolve({ id: "package-v1" }) });
   assert.equal(updateResponse.status, 200);
   assert.equal(updateResponse.body.itemType, "initiative");
   assert.equal(updateResponse.body.item.mapped, "legacy");
 
-  const deleteResponse = await route.DELETE(request, { params: Promise.resolve({ id: "milestone-v1" }) });
+  const deleteResponse = await route.handleTeamPlanningItemDelete(request, { params: Promise.resolve({ id: "milestone-v1" }) });
   assert.equal(deleteResponse.status, 200);
   assert.equal(deleteResponse.body.itemType, "milestone");
   assert.equal(deleteResponse.body.item.mapped, "legacy");

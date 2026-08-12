@@ -5,7 +5,7 @@ import test from "node:test";
 
 test("Sub-Issue reparenting stays guarded by task type, ownership, and CAS", async () => {
   const [route, permissions, module, migration] = await Promise.all([
-    readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
     readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-reparent.ts", "utf8"),
     readSupabaseSchemaContract(),

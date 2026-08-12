@@ -112,8 +112,8 @@ function fixture({ item = epic(), descendants = [], protectedByLegacy = false, s
 
 test("Browser and Team routes delegate empty Epic policy and writes to PlanningItems.run", async () => {
   const [browser, team, preview, model, migration, corpus] = await Promise.all([
-    readFile("src/app/api/milestones/[id]/route.ts", "utf8"),
-    readFile("src/app/api/team/planning-items/v1/items/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-milestone-update.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
     readFile("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-empty-epic-delete.ts", "utf8"),
     readFile("supabase/migrations/20260812125116_authorize_empty_epic_delete_command.sql", "utf8"),

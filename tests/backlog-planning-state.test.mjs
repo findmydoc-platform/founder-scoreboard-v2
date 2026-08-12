@@ -196,7 +196,7 @@ test("backlog view model reports explicit readiness and sprint capacity over the
 
 test("task update and API route use the shared sprint assignment contract without changing task status", async () => {
   const [route, command, sprintAssignment] = await Promise.all([
-    readFile("src/app/api/tasks/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
     readFile("src/features/tasks/hooks/use-task-update-command.ts", "utf8"),
     readFile("src/features/backlog/hooks/use-backlog-sprint-assignment.ts", "utf8"),
   ]);

@@ -93,6 +93,7 @@ export type InitiativeChanges = Readonly<{
   status?: StrategicPlanningStatus;
   strategy?: Partial<PlanningStrategy>;
   raciAssignments?: readonly PlanningRaciAssignment[];
+  priority?: string;
   targetDate?: string | null;
 }>;
 
@@ -103,6 +104,11 @@ export type DeliverableChanges = Readonly<{
   ownerId?: ProfileId | null;
   status?: DeliverableStatus;
   priority?: string;
+  workstream?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  deadline?: string | null;
+  hours?: number;
 }>;
 
 export type SubIssueChanges = Readonly<{

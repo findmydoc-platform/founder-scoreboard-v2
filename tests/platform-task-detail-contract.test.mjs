@@ -117,7 +117,7 @@ test("shared task detail surface keeps github-like field saves and role gates", 
   const workflowStrips = await readFile("src/features/tasks/molecules/task-detail-workflow-strips.tsx", "utf8");
   const overview = await readFile("src/features/tasks/organisms/task-overview-panel.tsx", "utf8");
   const permissions = await readFile("src/features/tasks/model/task-detail-permissions.ts", "utf8");
-  const route = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const route = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const routeHelpers = await readFile("src/features/tasks/model/task-route-update-helpers.ts", "utf8");
 
   assert.match(surface, /useTaskDetailController/);

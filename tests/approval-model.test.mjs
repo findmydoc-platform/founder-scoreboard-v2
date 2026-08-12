@@ -73,7 +73,7 @@ test("approval transactions enforce revision, initiative prerequisite, and Deput
 });
 
 test("non-approved deliverables are gated from sprint review score and github", async () => {
-  const taskRoute = await readFile("src/app/api/tasks/[id]/route.ts", "utf8");
+  const taskRoute = await readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8");
   const reviewRoute = await readFile("src/app/api/tasks/[id]/review/route.ts", "utf8");
   const reviewCommands = await readFile("src/features/planning-items/model/planning-items-review.ts", "utf8");
   const githubProjection = await readFile("src/lib/github-sync/task-projection.ts", "utf8");
