@@ -41,16 +41,20 @@ test("Epic deletion is empty-only, task-rooted, and service-role callable", asyn
   assert.match(migration, /grant execute on function public\.delete_empty_epic_transaction[\s\S]*to service_role/i);
 });
 
-test("legacy Milestone endpoint stays an adapter over the canonical Epic transaction", async () => {
-  const [server, route] = await Promise.all([
+test("legacy Milestone endpoint stays an adapter over the canonical PlanningItems command", async () => {
+  const [server, route, command] = await Promise.all([
     readFile("src/features/projects/model/milestone-server.ts", "utf8"),
     readFile("src/app/api/milestones/[id]/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-empty-epic-delete.ts", "utf8"),
   ]);
 
   assert.match(server, /task_type", "epic"/);
   assert.match(server, /resolveCanonicalStrategicItemId/);
-  assert.match(server, /delete_empty_epic_transaction/);
-  assert.match(route, /deleteProjectMilestone\([\s\S]*context\.permission\.profile\?\.id/);
+  assert.doesNotMatch(server, /delete_empty_epic_transaction/);
+  assert.match(route, /createEmptyEpicDeletePlanningItems/);
+  assert.match(route, /\.run\(/);
+  assert.doesNotMatch(route, /deleteProjectMilestone|\.rpc\(/);
+  assert.match(command, /delete_empty_epic_with_audit_transaction/);
   assert.doesNotMatch(server, /\.from\("milestones"\)\.insert/);
 });
 
@@ -60,6 +64,8 @@ test("Epic database verifier remains local-only and rolls back its fixtures", as
   assert.match(verifier, /await client\.query\("begin"\)/);
   assert.match(verifier, /await client\.query\("rollback"\)/);
   assert.match(verifier, /delete_empty_epic_transaction/);
+  assert.match(verifier, /delete_empty_epic_with_audit_transaction/);
+  assert.match(verifier, /auditCountAfter/);
   assert.match(verifier, /founderId/);
   assert.match(verifier, /legacyCountAfter/);
 });

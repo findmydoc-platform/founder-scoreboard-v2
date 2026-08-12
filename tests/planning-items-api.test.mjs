@@ -48,11 +48,11 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(createRoute, /create_team_planning_items_transaction/);
   assert.match(updatePreviewRoute, /"write:planning-items:update"/);
   assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
-  assert.match(deletePreviewRoute, /loadPlanningItemMilestoneDeletePreview/);
+  assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);
+  assert.match(deletePreviewRoute, /mode: "preview"/);
   assert.match(updateRoute, /update_team_planning_item_transaction/);
-  assert.match(updateRoute, /delete_team_planning_milestone_transaction/);
-  assert.match(updateRoute, /isMilestoneNotEmptyDatabaseError/);
-  assert.match(updateRoute, /milestoneNotEmptyError/);
+  assert.match(updateRoute, /createEmptyEpicDeletePlanningItems/);
+  assert.doesNotMatch(updateRoute, /isMilestoneNotEmptyDatabaseError|loadMilestoneChildCounts/);
   assert.match(milestoneContract, /MILESTONE_NOT_EMPTY_CODE = "MILESTONE_NOT_EMPTY"/);
   assert.match(updateRoute, /team_planning_item_update_requests/);
   assert.match(updateRoute, /existingRequest/);
@@ -242,51 +242,6 @@ test("Epic delete and legacy compatibility helpers enforce role, version, and st
       },
     },
   );
-  const deletion = await loadTranspiledModule(
-    "src/features/planning-items/model/planning-item-delete.ts",
-    {
-      "@/features/planning-items/model/planning-items-contract": contract,
-      "@/features/planning-items/model/planning-item-update": { mapPlanningItemDatabaseRow: () => ({}) },
-      "@/features/projects/model/milestone-contract": {},
-      "@/features/projects/model/milestone-server": {
-        parseMilestoneDeleteRequest: (payload) => {
-          if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-            return { ok: false, error: "Ungültiger JSON-Body." };
-          }
-          const fields = Object.keys(payload);
-          if (fields.some((field) => field !== "expectedUpdatedAt")) {
-            return { ok: false, error: "Unbekanntes Feld." };
-          }
-          if (typeof payload.expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(payload.expectedUpdatedAt))) {
-            return { ok: false, error: "expectedUpdatedAt muss ein gültiger Zeitstempel sein." };
-          }
-          return { ok: true, value: { expectedUpdatedAt: payload.expectedUpdatedAt } };
-        },
-        loadProjectMilestone: (supabase, id) => supabase
-          .from("milestones")
-          .select("id,project_id,title,description,target_date,status,sort_order,updated_at")
-          .eq("project_id", "findmydoc-founder-execution")
-          .eq("id", id)
-          .maybeSingle(),
-        loadMilestoneChildCounts: async (supabase, id) => {
-          const [initiatives, tasks] = await Promise.all([
-            supabase.from("packages").select("id", { count: "exact", head: true }).eq("milestone_id", id),
-            supabase.from("tasks").select("id", { count: "exact", head: true }).eq("milestone_id", id),
-          ]);
-          return {
-            ok: true,
-            counts: { initiatives: initiatives.count || 0, tasks: tasks.count || 0 },
-          };
-        },
-        milestoneNotEmptyError: (children) => ({
-          code: "MILESTONE_NOT_EMPTY",
-          error: "Der Meilenstein kann nicht gelöscht werden, weil noch Kinder zugeordnet sind.",
-          children,
-        }),
-      },
-    },
-  );
-
   assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "milestone" }]), true);
   assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "epic" }]), true);
   assert.equal(create.planningItemCreateRequiresOperationalLead([{ itemType: "deliverable" }]), false);
@@ -394,56 +349,4 @@ test("Epic delete and legacy compatibility helpers enforce role, version, and st
   );
   assert.deepEqual(briefSubIssuePreview.errors, []);
 
-  const expectedUpdatedAt = "2026-07-14T12:00:00.000Z";
-  assert.deepEqual(deletion.parsePlanningItemDeletePayload({ expectedUpdatedAt }), { ok: true, expectedUpdatedAt });
-  assert.equal(deletion.parsePlanningItemDeletePayload({ expectedUpdatedAt, moveChildren: true }).ok, false);
-  assert.equal(deletion.parsePlanningItemDeletePayload({}).ok, false);
-  assert.equal(
-    deletion.planningItemMilestoneDeleteHash({ itemId: "milestone-a", expectedUpdatedAt }),
-    deletion.planningItemMilestoneDeleteHash({ itemId: "milestone-a", expectedUpdatedAt }),
-  );
-  assert.notEqual(
-    deletion.planningItemMilestoneDeleteHash({ itemId: "milestone-a", expectedUpdatedAt }),
-    deletion.planningItemMilestoneDeleteHash({ itemId: "milestone-b", expectedUpdatedAt }),
-  );
-
-  const countQuery = (count) => ({
-    eq() { return this; },
-    then(resolve, reject) { return Promise.resolve({ data: null, count, error: null }).then(resolve, reject); },
-  });
-  const deleteSupabase = {
-    from(table) {
-      if (table === "milestones") {
-        const builder = {
-          eq() { return this; },
-          maybeSingle: async () => ({
-            data: { id: "milestone-a", updated_at: expectedUpdatedAt },
-            error: null,
-          }),
-        };
-        return { select: () => builder };
-      }
-      return { select: () => countQuery(table === "packages" ? 2 : 5) };
-    },
-  };
-  const blockedPreview = await deletion.loadPlanningItemMilestoneDeletePreview({
-    actor: { id: "ceo", name: "CEO", platformRole: "ceo", githubLogin: "" },
-    itemId: "milestone-a",
-    expectedUpdatedAt,
-    supabase: deleteSupabase,
-  });
-  assert.equal(blockedPreview.ok, true);
-  assert.equal(blockedPreview.preview.valid, false);
-  assert.equal(blockedPreview.preview.canDelete, false);
-  assert.equal(blockedPreview.preview.code, "MILESTONE_NOT_EMPTY");
-  assert.deepEqual(blockedPreview.preview.children, { initiatives: 2, tasks: 5 });
-  assert.deepEqual(
-    await deletion.loadPlanningItemMilestoneDeletePreview({
-      actor: { id: "founder", name: "Founder", platformRole: "founder", githubLogin: "" },
-      itemId: "milestone-a",
-      expectedUpdatedAt,
-      supabase: deleteSupabase,
-    }),
-    { ok: false, status: 403, error: "Nur CEO oder Deputy können Epics löschen." },
-  );
 });

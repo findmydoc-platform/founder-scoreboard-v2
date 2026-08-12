@@ -149,14 +149,36 @@ async function verifyEpicCrud(config) {
     }]);
     const compatibilityEpic = compatibilityBatch?.items?.[0]?.item;
     await expectCode(client, "P0006", () => client.query(
-      "select public.delete_empty_epic_transaction($1, $2::timestamptz, $3)",
+      "select public.delete_empty_epic_with_audit_transaction($1, $2::timestamptz, $3)",
       [compatibilityEpic.id, compatibilityEpic.updated_at, founderId],
     ));
-    const compatibilityDelete = await client.query(
-      "select public.delete_empty_epic_transaction($1, $2::timestamptz, $3) as result",
-      [compatibilityEpic.id, compatibilityEpic.updated_at, ceoId],
+    const auditCountBefore = await client.query(
+      "select count(*)::integer as count from public.audit_log where action = 'milestone.delete' and entity_id = $1",
+      [compatibilityEpic.id],
     );
-    assert.equal(compatibilityDelete.rows[0]?.result?.task?.id, compatibilityEpic.id);
+    const compatibilityDelete = await client.query(
+      "select public.delete_empty_epic_with_audit_transaction($1, $2::timestamptz, $3, $4, $5) as result",
+      [compatibilityEpic.id, compatibilityEpic.updated_at, ceoId, "local-verifier", "FounderOps verifier"],
+    );
+    assert.equal(compatibilityDelete.rows[0]?.result?.item?.id, compatibilityEpic.id);
+    const auditCountAfter = await client.query(
+      "select count(*)::integer as count from public.audit_log where action = 'milestone.delete' and entity_id = $1",
+      [compatibilityEpic.id],
+    );
+    assert.equal(auditCountAfter.rows[0]?.count, auditCountBefore.rows[0]?.count + 1);
+
+    const rollbackBatch = await createItems(client, token.id, ceoId, [{
+      itemType: "epic",
+      title: "Rollback-compatible empty Epic",
+      ownerId: ceoId,
+      status: "Offen",
+    }]);
+    const rollbackEpic = rollbackBatch?.items?.[0]?.item;
+    const rollbackDelete = await client.query(
+      "select public.delete_empty_epic_transaction($1, $2::timestamptz, $3) as result",
+      [rollbackEpic.id, rollbackEpic.updated_at, ceoId],
+    );
+    assert.equal(rollbackDelete.rows[0]?.result?.task?.id, rollbackEpic.id);
 
     const founderTokenResult = await client.query(
       "select public.create_team_planning_items_token($1, $2, $3, $4, false) as result",

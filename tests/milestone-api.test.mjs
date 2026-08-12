@@ -127,7 +127,7 @@ test("Milestone inserts own project and ID while leaving sort allocation to the 
   assert.match(server.createMilestoneId("Market readiness"), /^epic-market-readiness-[0-9a-f-]{36}$/);
 });
 
-test("Legacy Milestone helpers delegate writes to canonical Epic RPCs", async () => {
+test("Legacy Milestone update helper delegates writes to the canonical Epic RPC", async () => {
   const calls = [];
   const supabase = {
     rpc(name, input) {
@@ -143,8 +143,6 @@ test("Legacy Milestone helpers delegate writes to canonical Epic RPCs", async ()
     { title: "Updated title" },
     "ceo",
   );
-  await server.deleteProjectMilestone(supabase, "milestone-one", "2026-07-14T12:00:00.000Z", "ceo");
-
   assert.deepEqual(calls, [
     ["rpc", "update_planning_item_transaction", {
       p_task_id: "milestone-one",
@@ -154,52 +152,7 @@ test("Legacy Milestone helpers delegate writes to canonical Epic RPCs", async ()
       p_raci_assignments: null,
       p_actor_profile_id: "ceo",
     }],
-    ["rpc", "delete_empty_epic_transaction", {
-      p_task_id: "milestone-one",
-      p_expected_updated_at: "2026-07-14T12:00:00.000Z",
-      p_actor_profile_id: "ceo",
-    }],
   ]);
-});
-
-test("Legacy Milestone child counts traverse the canonical task tree", async () => {
-  const tables = [];
-  const supabase = {
-    from(table) {
-      tables.push(table);
-      const result = {
-        data: [
-          { id: "initiative-one", parent_task_id: "milestone-one", task_type: "initiative" },
-          { id: "deliverable-one", parent_task_id: "initiative-one", task_type: "deliverable" },
-          { id: "sub-issue-one", parent_task_id: "deliverable-one", task_type: "sub_issue" },
-        ],
-        error: null,
-      };
-      const builder = {
-        select() { return builder; },
-        eq() { return builder; },
-        then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
-      };
-      return builder;
-    },
-  };
-
-  assert.deepEqual(await server.loadMilestoneChildCounts(supabase, "milestone-one"), {
-    ok: true,
-    counts: { initiatives: 1, tasks: 2 },
-  });
-  assert.deepEqual(tables, ["tasks"]);
-});
-
-test("Known database conflicts share one public non-empty contract without raw messages", () => {
-  assert.equal(server.isMilestoneNotEmptyDatabaseError({ code: "23503", message: "raw FK detail" }), true);
-  assert.equal(server.isMilestoneNotEmptyDatabaseError({ code: "P0008", message: "raw transaction detail" }), true);
-  assert.equal(server.isMilestoneNotEmptyDatabaseError({ code: "23505" }), false);
-  assert.deepEqual(server.milestoneNotEmptyError({ initiatives: 1, tasks: 2 }), {
-    code: "MILESTONE_NOT_EMPTY",
-    error: "Der Meilenstein kann nicht gelöscht werden, weil noch 1 Initiative und 2 Aufgaben zugeordnet sind.",
-    children: { initiatives: 1, tasks: 2 },
-  });
 });
 
 test("Session routes use the narrow role guards and never return raw database errors", async () => {
@@ -214,10 +167,11 @@ test("Session routes use the narrow role guards and never return raw database er
   assert.equal((itemRoute.match(/requireJsonApiContext<unknown>\(request, requireOperationalLead, null\)/g) || []).length, 2);
   assert.doesNotMatch(collectionRoute, /error\.message/);
   assert.doesNotMatch(itemRoute, /error\.message/);
-  assert.match(itemRoute, /freshTarget/);
-  assert.match(itemRoute, /freshChildren/);
+  assert.match(itemRoute, /createEmptyEpicDeletePlanningItems/);
+  assert.match(itemRoute, /emptyEpicDeleteCommand/);
+  assert.doesNotMatch(itemRoute, /freshTarget|freshChildren|loadMilestoneChildCounts|buildMilestoneDeletePolicy/);
   assert.match(serverSource, /import "server-only"/);
   assert.match(serverSource, /\.eq\("project_id", MILESTONE_PROJECT_ID\)/);
   assert.match(serverSource, /update_planning_item_transaction/);
-  assert.match(serverSource, /delete_empty_epic_transaction/);
+  assert.doesNotMatch(serverSource, /delete_empty_epic_transaction|loadMilestoneChildCounts/);
 });

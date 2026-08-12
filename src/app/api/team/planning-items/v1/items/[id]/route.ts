@@ -4,10 +4,15 @@ import {
   isUuid,
   type PlanningItemGitHubSyncResult,
 } from "@/features/planning-items/model/planning-items-contract";
+import { actorContextFromPlanningTokenAuth } from "@/features/planning-items/model/planning-actor-context-server";
 import {
-  parsePlanningItemDeletePayload,
-  planningItemMilestoneDeleteHash,
-} from "@/features/planning-items/model/planning-item-delete";
+  createEmptyEpicDeletePlanningItems,
+  emptyEpicDeleteCommand,
+  emptyEpicDeleteError,
+  emptyEpicDeleteHash,
+  emptyEpicDeleteTeamItem,
+  parseEmptyEpicDeletePayload,
+} from "@/features/planning-items/model/planning-items-empty-epic-delete";
 import {
   buildPlanningItemUpdatePreview,
   mapLegacyPlanningItemDatabaseRow,
@@ -26,12 +31,6 @@ import {
   preflightPlanningItemGitHubSync,
   type PlanningItemGitHubSyncTarget,
 } from "@/features/planning-items/model/planning-items-github-sync";
-import {
-  isMilestoneNotEmptyDatabaseError,
-  loadMilestoneChildCounts,
-  loadProjectMilestone,
-  milestoneNotEmptyError,
-} from "@/features/projects/model/milestone-server";
 
 type UpdateTransactionResult = {
   replayed?: boolean;
@@ -45,6 +44,12 @@ type UpdateTransactionResult = {
 type StoredUpdateRequest = {
   request_hash: string;
   response: UpdateTransactionResult | null;
+  contract_version: number | null;
+};
+
+type StoredDeleteRequest = {
+  request_hash: string;
+  response: DeleteTransactionResult | null;
   contract_version: number | null;
 };
 
@@ -289,54 +294,82 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
       if (!isUuid(idempotencyKey)) return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
 
-      const parsed = parsePlanningItemDeletePayload(await request.json().catch(() => null));
+      const parsed = parseEmptyEpicDeletePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
 
-      const metadata = auditRequestMetadata(request);
-      const { data, error } = await permission.supabase.rpc("delete_team_planning_milestone_transaction", {
-        p_token_id: permission.tokenId,
-        p_profile_id: permission.profile.id,
-        p_milestone_id: itemId,
-        p_expected_updated_at: parsed.expectedUpdatedAt,
-        p_idempotency_key: idempotencyKey,
-        p_request_hash: planningItemMilestoneDeleteHash({ itemId, expectedUpdatedAt: parsed.expectedUpdatedAt }),
-        p_request_ip: metadata.request_ip,
-        p_user_agent: metadata.user_agent || null,
-      });
-
-      if (error && isMilestoneNotEmptyDatabaseError(error)) {
-        const [freshTarget, freshChildren] = await Promise.all([
-          loadProjectMilestone(permission.supabase, itemId),
-          loadMilestoneChildCounts(permission.supabase, itemId),
-        ]);
-        if (!freshTarget.error && freshTarget.data && freshChildren.ok) {
-          const children = freshChildren.counts;
-          if (children.initiatives > 0 || children.tasks > 0) {
-            return planningItemsJson({
-              ok: false,
-              ...milestoneNotEmptyError(children),
-            }, 409);
-          }
+      const requestHash = emptyEpicDeleteHash({ itemId, expectedUpdatedAt: parsed.expectedUpdatedAt });
+      const legacyReplay = await permission.supabase
+        .from("team_planning_milestone_delete_requests")
+        .select("request_hash,response,contract_version")
+        .eq("token_id", permission.tokenId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (legacyReplay.error) throw Object.assign(new Error(legacyReplay.error.message), { code: legacyReplay.error.code });
+      const stored = legacyReplay.data as StoredDeleteRequest | null;
+      if (stored && Number(stored.contract_version || 1) === 1) {
+        if (stored.request_hash !== requestHash) {
+          return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
         }
+        const transaction = stored.response;
+        if (!transaction?.item || transaction.itemType !== "milestone") {
+          throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
+        }
+        const item = mapLegacyPlanningItemDatabaseRow("milestone", transaction.item);
+        return planningItemsJson({
+          ok: true,
+          replayed: true,
+          itemType: "milestone",
+          item,
+          children: {
+            initiatives: Number(transaction.children?.initiatives || 0),
+            tasks: Number(transaction.children?.tasks || 0),
+          },
+          itemLink: itemLink(request, "milestone", String(item.id || itemId)),
+        });
       }
-      if (error) throw Object.assign(new Error(error.message), { code: error.code });
 
-      const transaction = data as DeleteTransactionResult | null;
-      if (!transaction?.item) throw new Error("Planning-Items-Löschung lieferte kein Ergebnis zurück.");
-      const itemType = transaction.itemType === "milestone" ? "milestone" : "epic";
-      const item = itemType === "milestone"
-        ? mapLegacyPlanningItemDatabaseRow(itemType, transaction.item)
-        : mapPlanningItemDatabaseRow(itemType, transaction.item);
+      const actor = actorContextFromPlanningTokenAuth({
+        ok: true,
+        profile: {
+          id: permission.profile.id,
+          platformRole: permission.profile.platformRole,
+        },
+        tokenId: permission.tokenId,
+        scopes: permission.scopes,
+      });
+      if (!actor.ok) return planningItemsError("Planning-API-Berechtigung ist nicht mehr gültig.", 403);
+      const metadata = auditRequestMetadata(request);
+      const result = await createEmptyEpicDeletePlanningItems(permission.supabase).run({
+        actor: actor.actor,
+        mode: "commit",
+        command: emptyEpicDeleteCommand(itemId, parsed.expectedUpdatedAt),
+        idempotencyKey,
+        requestMetadata: {
+          requestIp: metadata.request_ip || undefined,
+          userAgent: metadata.user_agent || undefined,
+        },
+      });
+      if (!result.ok) {
+        const mapped = emptyEpicDeleteError(result.error);
+        if (mapped.code && mapped.children) {
+          return planningItemsJson({ ok: false, code: mapped.code, error: mapped.message, children: mapped.children }, mapped.status);
+        }
+        if (result.error.code === "notFound") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
+        if (result.error.code === "conflict" && result.error.reason === "revision") {
+          return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte erneut laden.", 409);
+        }
+        return planningItemsError(mapped.message, mapped.status);
+      }
+      if (result.status !== "committed") throw new Error("Planning-Items-Löschung wurde nicht bestätigt.");
+      const projected = emptyEpicDeleteTeamItem(result);
+      if (!projected) throw new Error("Planning-Items-Löschung lieferte kein Ergebnis zurück.");
       return planningItemsJson({
         ok: true,
-        replayed: Boolean(transaction.replayed),
-        itemType,
-        item,
-        children: {
-          initiatives: Number(transaction.children?.initiatives || 0),
-          tasks: Number(transaction.children?.tasks || 0),
-        },
-        itemLink: itemLink(request, itemType, String(item.id || itemId)),
+        replayed: result.replayed,
+        itemType: projected.itemType,
+        item: projected.item,
+        children: projected.children,
+        itemLink: itemLink(request, projected.itemType, String(projected.item.id || itemId)),
       });
     },
   );
