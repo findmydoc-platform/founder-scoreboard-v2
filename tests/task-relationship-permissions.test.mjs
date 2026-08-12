@@ -39,7 +39,7 @@ test("owner can manage only outgoing blocked_by relations on own deliverable", (
 test("initiative accountable can manage blocked_by without owning either task", () => {
   const access = taskRelationshipAccess({
     task: deliverable,
-    initiative: { accountableProfileId: "accountable-1" },
+    initiative: { raciAssignments: [{ profileId: "accountable-1", role: "accountable" }] },
     profile: { id: "accountable-1", name: "Accountable", platformRole: "founder" },
   });
 

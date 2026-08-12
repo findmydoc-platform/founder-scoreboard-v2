@@ -17,14 +17,14 @@ export function buildPlanningTaskTableViewModel({
   const visibleTasks = sortTasks(data.tasks.filter((task) => {
     if (task.taskType === "sub_issue") return false;
     const normalized = normalizeStatus(task.status);
-    const initiative = data.packages.find((candidate) => candidate.id === task.parentTaskId);
+    const initiative = data.tasks.find((candidate) => candidate.taskType === "initiative" && candidate.id === task.parentTaskId);
     const sprint = data.sprints.find((item) => item.id === task.sprintId);
     const reviewOwner = data.profiles.find((profile) => profile.id === task.reviewOwnerProfileId);
     const matchesQuery = !normalizedQuery || [
       taskText(task),
       normalized,
       initiative?.title || "",
-      initiative?.goal || "",
+      initiative?.strategy?.goal || "",
       sprint?.name || "",
       reviewOwner?.name || "",
     ].join(" ").toLocaleLowerCase("de").includes(normalizedQuery);

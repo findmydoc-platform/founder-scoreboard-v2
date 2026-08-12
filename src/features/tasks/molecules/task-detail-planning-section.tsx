@@ -6,16 +6,14 @@ import { isApprovedDeliverable } from "@/features/planning/model/approval-domain
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
 import { parentDeliverableOptions, sprintOptions } from "@/features/tasks/model/task-form-options";
 import { compactDateRange } from "@/lib/display";
-import type { Package, Profile, Sprint, Task } from "@/lib/types";
+import type { Profile, Sprint, Task } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { UiSelectField } from "@/shared/atoms/form-controls";
 import { classNames, UiButton } from "@/shared/atoms/ui-primitives";
 
 type Props = {
   task: Task;
-  pack?: Package;
   teamProfiles: Profile[];
-  packages: Package[];
   allTasks: Task[];
   sprints: Sprint[];
   canManageTaskMeta: boolean;
@@ -35,9 +33,7 @@ function ReadFact({ label, children }: { label: string; children: ReactNode }) {
 
 export function TaskDetailPlanningSection({
   task,
-  pack,
   teamProfiles,
-  packages,
   allTasks,
   sprints,
   canManageTaskMeta,
@@ -50,9 +46,8 @@ export function TaskDetailPlanningSection({
   const currentSprint = sprints.find((item) => item.id === task.sprintId);
   const initiatives = allTasks.filter((item) => item.taskType === "initiative");
   const epics = allTasks.filter((item) => item.taskType === "epic");
-  const parentDeliverables = allTasks.filter((item) => item.taskType === "deliverable");
   const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
-  const currentPackage = packages.find((item) => item.id === task.parentTaskId || item.id === task.packageId) || pack;
+  const currentInitiative = initiatives.find((item) => item.id === task.parentTaskId);
   const targetDate = task.targetDate || task.deadline || "";
   const canEditPlanning = task.taskType === "sub_issue" ? canReparentSubIssue : canManageTaskMeta;
   const dateSource = task.startDate || task.endDate || task.deadline
@@ -71,7 +66,7 @@ export function TaskDetailPlanningSection({
             <ListTree size={17} className="shrink-0 text-slate-400" aria-hidden="true" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{currentParent?.title || task.parentTaskId || "Parent-Deliverable fehlt"}</div>
-              <div className="mt-0.5 truncate text-xs text-slate-500">{currentPackage?.title || "Ohne Initiative"}</div>
+              <div className="mt-0.5 truncate text-xs text-slate-500">{currentInitiative?.title || "Ohne Initiative"}</div>
             </div>
           </div>
           {canReparentSubIssue ? (
@@ -84,7 +79,7 @@ export function TaskDetailPlanningSection({
         </div>
         {open && canReparentSubIssue ? (
           <div id="sub-issue-parent-control" className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
-            <UiSelectField label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(parentDeliverables, packages)} selectClassName="h-11 text-sm" />
+            <UiSelectField label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(allTasks)} selectClassName="h-11 text-sm" />
           </div>
         ) : null}
         {task.parentApprovalStatus !== "approved" ? <p className="pb-3 text-xs font-medium text-amber-800">Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.</p> : null}
@@ -164,10 +159,10 @@ export function TaskDetailPlanningSection({
               </>
             )}
           </div>
-          {currentPackage ? (
+          {currentInitiative ? (
             <details className="group mt-4 w-fit">
               <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-md px-2 text-xs font-semibold text-slate-600 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"><UsersRound size={15} aria-hidden="true" />Initiative-Team anzeigen<ChevronDown size={14} className="transition group-open:rotate-180" aria-hidden="true" /></summary>
-              <div className="mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3"><InitiativeRaciList initiative={currentPackage} profiles={teamProfiles} className="grid gap-2 text-xs text-slate-600" /></div>
+              <div className="mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3"><InitiativeRaciList initiative={currentInitiative} profiles={teamProfiles} className="grid gap-2 text-xs text-slate-600" /></div>
             </details>
           ) : null}
         </div>

@@ -1,6 +1,6 @@
 import { reviewOwnerForTask, taskAssigneePatch } from "@/features/planning/model/planning-app-model";
 import { slugify } from "@/lib/slug";
-import type { Package, PlanningItemRaciAssignment, PlanningStrategy, Profile, Task } from "@/lib/types";
+import type { PlanningItemRaciAssignment, PlanningStrategy, Profile, Task } from "@/lib/types";
 
 export type TaskUpdatePayload = {
   expectedUpdatedAt?: string;
@@ -17,8 +17,6 @@ export type TaskUpdatePayload = {
   acceptanceCriteria?: string;
   evidenceRequired?: string;
   definitionOfDone?: string;
-  packageId?: string;
-  milestoneId?: string;
   startDate?: string;
   endDate?: string;
   deadline?: string;
@@ -82,7 +80,7 @@ export function buildClientTaskUpdatePatch(
   task: Task,
   patch: Partial<Task>,
   profiles: Profile[],
-  packages: Package[],
+  items: Task[],
   reviewRequestedAt = new Date().toISOString(),
 ): NormalizedClientTaskPatch {
   let normalizedPatch = patch.assignee !== undefined || patch.assigneeId !== undefined || patch.owner !== undefined || patch.ownerId !== undefined
@@ -94,7 +92,7 @@ export function buildClientTaskUpdatePatch(
       return { ok: false, error: "Final bewertete Aufgaben können nicht erneut in Review gegeben werden." };
     }
     const nextTask = { ...task, ...normalizedPatch };
-    const reviewOwnerProfileId = reviewOwnerForTask(nextTask, packages);
+    const reviewOwnerProfileId = reviewOwnerForTask(nextTask, items);
     if (!reviewOwnerProfileId) {
       return { ok: false, error: "Lege vor der Review-Anfrage eine Review-Verantwortung fest." };
     }
@@ -136,7 +134,7 @@ export function taskUpdateRequestPayload(patch: Partial<Task>, expectedUpdatedAt
     scorePoints: patch.scorePoints,
     scoreFinal: isReviewRequest ? undefined : patch.scoreFinal,
     sprintId: patch.sprintId,
-    parentTaskId: patch.parentTaskId !== undefined ? patch.parentTaskId : patch.packageId,
+    parentTaskId: patch.parentTaskId,
     targetDate: patch.targetDate,
     strategy: patch.strategy,
     raciAssignments: patch.raciAssignments,
@@ -176,10 +174,8 @@ export function activityMessages(payload: TaskUpdatePayload, currentTask?: Curre
   if (payload.assignee !== undefined && payload.assignee !== (currentTask?.assignee || currentTask?.owner)) messages.push(`Zuständigkeit geändert: ${formatChange(currentTask?.assignee || currentTask?.owner, payload.assignee)}`);
   if (payload.priority !== undefined && payload.priority !== currentTask?.priority) messages.push(`Priorität geändert: ${formatChange(currentTask?.priority, payload.priority)}`);
   if (payload.sprintId !== undefined && payload.sprintId !== currentTask?.sprint_id) messages.push(`Sprint-Zuordnung geändert: ${formatChange(currentTask?.sprint_id, payload.sprintId)}`);
-  if (payload.milestoneId !== undefined && payload.milestoneId !== currentTask?.milestone_id) messages.push(`Epic / Meilenstein geändert: ${formatChange(currentTask?.milestone_id, payload.milestoneId)}`);
-  if (payload.packageId !== undefined && payload.packageId !== currentTask?.package_id) messages.push(`Initiative geändert: ${formatChange(currentTask?.package_id, payload.packageId)}`);
   if (payload.parentTaskId !== undefined && payload.parentTaskId !== currentTask?.parent_task_id) {
-    messages.push(`Parent-Deliverable geändert: ${formatChange(currentTask?.parent_task_id, payload.parentTaskId)}`);
+    messages.push(`${currentTask?.task_type === "sub_issue" ? "Parent-Deliverable" : "Übergeordnetes Planning Item"} geändert: ${formatChange(currentTask?.parent_task_id, payload.parentTaskId)}`);
   }
   if (
     (payload.startDate !== undefined && payload.startDate !== currentTask?.start_date)

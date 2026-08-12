@@ -7,7 +7,7 @@ import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { assigneeOptions, priorityOptions } from "@/features/tasks/model/task-form-options";
 import { formatDate, profileNameById, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, priorityBadgeTone } from "@/lib/status";
-import type { Package, Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskRelation, TaskStatus } from "@/lib/types";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiBadge } from "@/shared/atoms/ui-primitives";
@@ -19,7 +19,7 @@ export type TaskDetailRelationshipRow = {
 
 export type TaskDetailOperationalHeaderProps = {
   task: Task;
-  initiative?: Package;
+  initiative?: Task;
   parentTask?: Task;
   profiles: Profile[];
   subIssues: Task[];
@@ -306,10 +306,11 @@ export function TaskDetailOperationalHeader({
         ? parentTask?.title || "Parent fehlt"
         : "";
   const accountableAssignment = task.raciAssignments?.find((assignment) => assignment.role === "accountable");
+  const initiativeAccountableAssignment = initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable");
   const accountableLabel = task.taskType === "initiative"
     ? profileNameById(profiles, accountableAssignment?.profileId || "")
     : task.taskType === "deliverable" && initiative
-      ? profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId)
+      ? profileNameById(profiles, initiativeAccountableAssignment?.profileId || initiative.ownerId)
       : "";
   const directChildren = subIssues.filter((item) => item.parentTaskId === task.id);
   const completedChildren = directChildren.filter((item) => normalizeStatus(item.status) === "Erledigt").length;

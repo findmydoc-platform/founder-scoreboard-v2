@@ -1,10 +1,10 @@
 "use client";
 
 import { initiativeRaciRows } from "@/lib/display";
-import type { Package, Profile } from "@/lib/types";
+import type { Profile, Task } from "@/lib/types";
 
 type Props = {
-  initiative: Package;
+  initiative: Task;
   profiles: Profile[];
   className?: string;
 };

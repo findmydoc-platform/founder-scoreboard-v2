@@ -11,8 +11,6 @@ export const emptyPlanningShellState: PlanningShellState = {
     githubProjectNumber: 21,
   },
   profiles: [],
-  packages: [],
-  milestones: [],
   tasks: [],
   sprints: [],
   sprintCommitments: [],

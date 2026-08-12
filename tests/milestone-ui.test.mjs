@@ -13,6 +13,9 @@ test("project header exposes ordered milestone actions only to allowed roles", a
       "@/features/planning/model/planning-level": {
         planningLevelCreateLabel: (level) => level === "initiative" ? "Neue Initiative" : `Neues ${level === "epic" ? "Epic" : "Deliverable"}`,
       },
+      "@/features/planning/model/planning-app-model": {
+        epicPlanningItems: (tasks) => tasks.filter((item) => item.taskType === "epic"),
+      },
       "@/features/projects/model/milestone-policy": {
         canManageMilestones: (role, source) => source === "seed" || role === "ceo" || role === "deputy",
       },
@@ -21,7 +24,7 @@ test("project header exposes ordered milestone actions only to allowed roles", a
   const opened = [];
   const options = {
     currentProfile: { platformRole: "ceo" },
-    data: { milestones: [] },
+    data: { tasks: [] },
     setInitiativeDialogDefaults: (value) => opened.push(["initiative", value]),
     setMilestoneDialogDefaults: (value) => opened.push(["milestone", value]),
     setTaskDialogDefaults: () => {},
@@ -39,7 +42,7 @@ test("project header exposes ordered milestone actions only to allowed roles", a
 
   const populatedActions = usePlanningHeaderActions({
     ...options,
-    data: { milestones: [{ id: "m1" }] },
+    data: { tasks: [{ id: "m1", taskType: "epic" }] },
   });
   assert.equal(populatedActions[1].disabled, false);
 
@@ -68,6 +71,6 @@ test("milestone UI exposes the bounded creation contract and saved schedule meta
   assert.match(dialog, /overflow-y-auto/);
   assert.match(dialog, /Meilenstein erstellen/);
   assert.ok(dialog.indexOf("Zieltermin") < dialog.indexOf("Status</span>"));
-  assert.match(overview, /milestoneStatusMeta/);
+  assert.match(overview, /epicStatusMeta/);
   assert.match(overview, /Zieltermin:/);
 });

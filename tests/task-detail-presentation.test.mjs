@@ -271,8 +271,6 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
       evidenceRequired: "",
       taskType: "sub_issue",
       parentTaskId: 42,
-      milestoneId: "milestone-7",
-      packageId: "package-3",
       sprintId: "",
       assignee: "sebastian",
       priority: "P2",
@@ -307,7 +305,6 @@ test("buildQuickSubIssueCreationDraft trims the title and inherits parent contex
     title: "Fallbacks",
   });
 
-  assert.equal(fallbackDraft.milestoneId, "");
   assert.equal(fallbackDraft.workstream, "");
   assert.equal(fallbackDraft.startDate, "");
   assert.equal(fallbackDraft.endDate, "");

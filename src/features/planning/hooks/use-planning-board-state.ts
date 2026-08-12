@@ -6,6 +6,7 @@ import {
   createTaskDragPreview,
   founderCompletedTaskGuardMessage,
   founderTaskAssignmentGuardMessage,
+  initiativePlanningItems,
   transparentDragImage,
 } from "@/features/planning/model/planning-app-model";
 import { normalizeStatus } from "@/lib/status";
@@ -87,7 +88,7 @@ export function usePlanningBoardState({
   };
 
   const setAllInitiativeCollapse = (collapsed: boolean) => {
-    setExpandedInitiatives(Object.fromEntries(data.packages.map((initiative) => [initiative.id, !collapsed])));
+    setExpandedInitiatives(Object.fromEntries(initiativePlanningItems(data.tasks).map((initiative) => [initiative.id, !collapsed])));
   };
 
   const setExpandedInitiativeIds = (initiativeIds: string[]) => {

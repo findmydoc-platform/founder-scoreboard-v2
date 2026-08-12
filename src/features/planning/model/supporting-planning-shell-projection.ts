@@ -4,7 +4,6 @@ import type { ProfileWorkspaceModel } from "@/features/profile/model/profile-rea
 import type { TeamWorkspaceModel } from "@/features/team/model/team-read-model";
 import type { ToolsWorkspaceModel } from "@/features/tools/model/tools-read-model";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import { mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
 import type { PlanningShellState } from "@/lib/types";
 
 export type SupportingWorkspace = "events" | "tools" | "team" | "profile" | "notifications";
@@ -33,7 +32,7 @@ export function supportingWorkspaceModelToPlanningShellState(workspace: Supporti
       ...emptyPlanningShellState,
       project: profileModel.project,
       profiles: [...profileModel.people],
-      packages: profileModel.initiatives.map(mapLegacyPackageFromInitiative),
+      tasks: [...profileModel.initiatives],
       notificationPreferences: [...profileModel.notificationPreferences],
       profileUiPreferences: [...profileModel.preferences],
     };

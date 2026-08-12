@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
-import { profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { initiativePlanningItems, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
@@ -99,7 +99,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
       {view === "structure" && (
         <TaskStructureView
-          packages={data.packages}
+          initiatives={initiativePlanningItems(data.tasks)}
           visibleTasks={planningBoardTasks}
           relations={data.taskRelations}
           allTasks={data.tasks}
@@ -130,7 +130,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       )}
 
       {view === "gantt" && (
-        <GanttView tasks={planningBoardTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
+        <GanttView tasks={planningBoardTasks} items={data.tasks} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
       )}
     </>
   );

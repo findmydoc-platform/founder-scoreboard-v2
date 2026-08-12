@@ -1,8 +1,7 @@
 import { taskAssigneeLabel } from "@/lib/display";
-import { taskRelationshipAccess } from "@/features/tasks/model/task-relationship-permissions";
-import { effectiveTaskRelation, hasGitHubIssue, taskRelationsFor } from "@/lib/platform";
+import { effectiveTaskRelation, taskRelationsFor } from "@/lib/platform";
 import { normalizeStatus } from "@/lib/status";
-import type { Milestone, Package, Profile, Sprint, Task, TaskBlocker, TaskRelation } from "@/lib/types";
+import type { Task, TaskRelation } from "@/lib/types";
 
 export type TaskRelationshipRow = {
   relation: TaskRelation;
@@ -22,9 +21,8 @@ export type EditableTaskState = Pick<
   | "status"
   | "priority"
   | "assignee"
-  | "packageId"
+  | "parentTaskId"
   | "sprintId"
-  | "milestoneId"
   | "startDate"
   | "endDate"
   | "deadline"
@@ -51,7 +49,7 @@ export type TaskDetailGitHubState = Pick<
 
 export type TaskDetailDetailsDraft = Pick<
   EditableTaskState,
-  "priority" | "assignee" | "packageId" | "sprintId" | "milestoneId" | "startDate" | "endDate" | "deadline"
+  "priority" | "assignee" | "parentTaskId" | "sprintId" | "startDate" | "endDate" | "deadline"
   | "reviewOwnerProfileId"
 >;
 
@@ -66,9 +64,8 @@ export function buildEditableTaskState(task: Task): EditableTaskState {
     status: normalizeStatus(task.status),
     priority: task.priority,
     assignee: task.assignee,
-    packageId: task.packageId,
+    parentTaskId: task.parentTaskId,
     sprintId: task.sprintId,
-    milestoneId: task.milestoneId || "",
     startDate: task.startDate,
     endDate: task.endDate,
     deadline: task.deadline,
@@ -105,9 +102,8 @@ export function buildTaskDetailsDraft(meta: EditableTaskState): TaskDetailDetail
   return {
     priority: meta.priority,
     assignee: meta.assignee,
-    packageId: meta.packageId,
+    parentTaskId: meta.parentTaskId,
     sprintId: meta.sprintId,
-    milestoneId: meta.milestoneId,
     startDate: meta.startDate,
     endDate: meta.endDate,
     deadline: meta.deadline,
@@ -164,88 +160,4 @@ export function relationTargetOptionsForTask(task: Task, allTasks: Task[]) {
   return allTasks
     .filter((item) => item.id !== task.id && item.taskType !== "sub_issue")
     .map((item) => ({ value: item.id, label: `${item.title} · ${taskAssigneeLabel(item)}` }));
-}
-
-export function buildTaskDetailViewModel({
-  task,
-  meta,
-  githubState,
-  pack,
-  packages,
-  sprint,
-  sprints,
-  milestones,
-  profiles,
-  blockers,
-  relations,
-  allTasks,
-  currentProfile,
-  unrestrictedRelationshipAccess = false,
-}: {
-  task: Task;
-  meta: EditableTaskState;
-  githubState: TaskDetailGitHubState;
-  pack?: Package;
-  packages: Package[];
-  sprint?: Sprint;
-  sprints: Sprint[];
-  milestones: Milestone[];
-  profiles: Profile[];
-  blockers: TaskBlocker[];
-  relations: TaskRelation[];
-  allTasks: Task[];
-  currentProfile?: Pick<Profile, "id" | "name" | "platformRole"> | null;
-  unrestrictedRelationshipAccess?: boolean;
-}) {
-  const assigneeProfile = profiles.find((profile) => profile.name === meta.assignee || profile.id === meta.assignee);
-  const creatorProfile = profiles.find((profile) => profile.name === task.createdBy || profile.id === task.createdBy)
-    || profiles.find((profile) => profile.platformRole === "ceo")
-    || assigneeProfile;
-  const currentSprint = sprints.find((item) => item.id === meta.sprintId) || sprint;
-  const currentMilestone = milestones.find((item) => item.id === meta.milestoneId);
-  const currentPackage = packages.find((item) => item.id === meta.packageId) || pack;
-  const profileName = (profileId: string) => profiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
-  const openBlockers = blockers.filter((blocker) => blocker.status === "open");
-  const { waitsOn, blocks, related } = buildTaskRelationshipRows(task, allTasks, relations);
-  const relationTargetOptions = relationTargetOptionsForTask(task, allTasks);
-  const canManageTaskMeta = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const relationshipAccess = taskRelationshipAccess({
-    task,
-    initiative: currentPackage,
-    profile: currentProfile,
-    unrestricted: unrestrictedRelationshipAccess,
-  });
-  const canSyncExistingGitHubIssue = hasGitHubIssue({
-    githubIssueNumber: githubState.githubIssueNumber,
-    githubIssueUrl: githubState.githubIssueUrl,
-    issueNumber: task.issueNumber,
-    issueUrl: task.issueUrl,
-  });
-
-  return {
-    assigneeProfile,
-    creatorProfile,
-    currentSprint,
-    currentMilestone,
-    currentPackage,
-    profileName,
-    openBlockers,
-    waitsOn,
-    blocks,
-    related,
-    relationTargetOptions,
-    canManageTaskMeta,
-    relationshipAccess,
-    canSyncExistingGitHubIssue,
-  };
-}
-
-export function buildDetailsPackagePatch(packageId: string, packages: Package[], currentMilestoneId?: string): Partial<TaskDetailDetailsDraft> {
-  const nextPackage = packages.find((item) => item.id === packageId);
-  return { packageId, milestoneId: nextPackage?.milestoneId || currentMilestoneId || "" };
-}
-
-export function buildDetailsMilestonePatch(milestoneId: string, packages: Package[], currentPackageId?: string): Partial<TaskDetailDetailsDraft> {
-  const nextPackage = packages.find((item) => !milestoneId || !item.milestoneId || item.milestoneId === milestoneId);
-  return { milestoneId, packageId: nextPackage?.id || currentPackageId || "" };
 }

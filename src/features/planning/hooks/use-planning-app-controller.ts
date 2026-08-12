@@ -235,7 +235,7 @@ export function usePlanningAppController({
     releaseSidebarFocus,
     apiClient,
     saveError,
-    selectedPackage: taskSelection.selectedPackage,
+    selectedInitiative: taskSelection.selectedInitiative,
     selectedTask,
     selectedTaskId,
     selectedTaskActivity: taskSelection.selectedTaskActivity,

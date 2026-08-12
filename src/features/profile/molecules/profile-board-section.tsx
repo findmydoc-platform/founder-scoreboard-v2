@@ -6,6 +6,7 @@ import type { PlanningShellState, PlanningFilterPreferences, ViewMode } from "@/
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { classNames, UiButton, UiEmptyState, UiField, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { FilterToggleGroup } from "@/shared/molecules/filter-toolbar";
+import { initiativePlanningItems } from "@/features/planning/model/planning-app-model";
 
 export function BoardSettingsSection({
   advancedBoardOpen,
@@ -40,6 +41,7 @@ export function BoardSettingsSection({
   onInitiativeToggle: (initiativeId: string) => void;
   onPlanningFiltersChange: (patch: Partial<PlanningFilterPreferences>) => void;
 }) {
+  const initiatives = initiativePlanningItems(data.tasks);
   return (
     <SettingsPane eyebrow="Planung" title="Planungs-Defaults" description="Legt fest, wo die App startet und wie die Planung standardmäßig dargestellt wird.">
       <SettingsRow label="Startbereich" description="Bereich, der beim Öffnen der App startet.">
@@ -92,7 +94,7 @@ export function BoardSettingsSection({
             </SettingsRow>
             <SettingsRow label="Aufgeklappte Initiativen" description="Nur die Initiativen, die beim Öffnen direkt sichtbar sein sollen." align="start">
               <div className="flex flex-wrap justify-start gap-2 md:max-w-2xl">
-                {data.packages.map((initiative) => {
+                {initiatives.map((initiative) => {
                   const selected = draft.expandedInitiativeIds.includes(initiative.id);
                   return (
                     <button
@@ -109,7 +111,7 @@ export function BoardSettingsSection({
                     </button>
                   );
                 })}
-                {!data.packages.length && <UiEmptyState className="w-full">Keine Initiativen vorhanden.</UiEmptyState>}
+                {!initiatives.length && <UiEmptyState className="w-full">Keine Initiativen vorhanden.</UiEmptyState>}
               </div>
             </SettingsRow>
           </div>

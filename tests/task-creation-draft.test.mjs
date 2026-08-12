@@ -16,14 +16,12 @@ const tasks = [
   {
     id: "deliverable-one",
     taskType: "deliverable",
-    packageId: "initiative-one",
-    milestoneId: "milestone-one",
+    parentTaskId: "initiative-one",
   },
   {
     id: "child-one",
     taskType: "sub_issue",
-    packageId: "initiative-one",
-    milestoneId: "milestone-one",
+    parentTaskId: "deliverable-one",
   },
 ];
 
@@ -31,16 +29,12 @@ test("Sub-Issue parent selection updates its inherited hierarchy atomically", ()
   const draft = {
     taskType: "sub_issue",
     parentTaskId: "",
-    packageId: "stale-initiative",
-    milestoneId: "stale-milestone",
     title: "Keep this value",
   };
 
   assert.deepEqual(withSubIssueParentHierarchy(draft, tasks, "deliverable-one"), {
     ...draft,
     parentTaskId: "deliverable-one",
-    packageId: "initiative-one",
-    milestoneId: "milestone-one",
   });
 });
 
@@ -48,24 +42,16 @@ test("Sub-Issue hierarchy resolution clears stale context when the parent is una
   const draft = {
     taskType: "sub_issue",
     parentTaskId: "missing-parent",
-    packageId: "stale-initiative",
-    milestoneId: "stale-milestone",
   };
 
-  assert.deepEqual(resolveTaskCreationHierarchy(draft, tasks), {
-    ...draft,
-    packageId: "",
-    milestoneId: "",
-  });
+  assert.deepEqual(resolveTaskCreationHierarchy(draft, tasks), draft);
   assert.equal(taskCreationParent(tasks, "child-one"), null);
 });
 
 test("Deliverable hierarchy remains independently editable", () => {
   const draft = {
     taskType: "deliverable",
-    parentTaskId: "",
-    packageId: "initiative-two",
-    milestoneId: "milestone-independent",
+    parentTaskId: "initiative-two",
   };
 
   assert.equal(resolveTaskCreationHierarchy(draft, tasks), draft);
@@ -86,8 +72,6 @@ test("compact Sub-Issue creation keeps optional work brief fields for the edit f
     description: "Optional context",
     taskType: "sub_issue",
     parentTaskId: "deliverable-one",
-    packageId: "initiative-one",
-    milestoneId: "milestone-one",
     assignee: "founder-one",
     githubRepo: "findmydoc-platform/management",
     relationType: "blocked_by",

@@ -3,7 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { taskRelationsFor } from "@/lib/platform";
-import type { Package, Sprint, Task, TaskRelation } from "@/lib/types";
+import type { Sprint, Task, TaskRelation } from "@/lib/types";
 import { DataOverflow, DataSurface } from "@/shared/molecules/data-surface";
 
 function parseIsoDate(value: string) {
@@ -12,11 +12,7 @@ function parseIsoDate(value: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function packageById(packages: Package[], id: string) {
-  return packages.find((item) => item.id === id);
-}
-
-export function GanttView({ tasks, packages, sprints, relations, onOpenTask }: { tasks: Task[]; packages: Package[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
+export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: Task[]; items: Task[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
   const firstTaskStart = tasks
     .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || "") || parseIsoDate(task.startDate))
     .filter((date): date is Date => Boolean(date))
@@ -55,7 +51,7 @@ export function GanttView({ tasks, packages, sprints, relations, onOpenTask }: {
             const taskEnd = parseIsoDate(sprint?.endDate || "") || parseIsoDate(task.endDate) || parseIsoDate(task.startDate) || taskStart;
             const left = Math.max(0, Math.floor((taskStart.getTime() - start.getTime()) / 86400000));
             const length = Math.max(1, Math.floor((taskEnd.getTime() - taskStart.getTime()) / 86400000) + 1);
-            const pack = packageById(packages, task.packageId);
+            const initiative = items.find((item) => item.taskType === "initiative" && item.id === task.parentTaskId);
             return (
               <div key={task.id} className="relative h-12 border-b border-slate-100" style={{ backgroundImage: "linear-gradient(to right, transparent calc(100% - 1px), #eef2f7 1px)", backgroundSize: `${100 / days.length}% 100%` }}>
                 <TaskReferenceLink
@@ -64,7 +60,7 @@ export function GanttView({ tasks, packages, sprints, relations, onOpenTask }: {
                   showIcon={false}
                   className="absolute top-3 h-6 rounded bg-blue-500 px-2 text-left text-[11px] font-semibold text-white shadow-sm"
                   style={{ left: `${(left / days.length) * 100}%`, width: `${Math.min(100 - (left / days.length) * 100, (length / days.length) * 100)}%` }}
-                  title={`${task.title} · ${pack?.title || "ohne Initiative"}`}
+                  title={`${task.title} · ${initiative?.title || "ohne Initiative"}`}
                   aria-label={`${task.title} · ${length} Tage`}
                 >
                   <span className="block truncate">{length}d</span>

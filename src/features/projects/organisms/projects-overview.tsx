@@ -14,7 +14,7 @@ import type { MilestoneChildCounts } from "@/features/projects/model/milestone-c
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { dateRange, formatDate, initiativeMetaLabel, taskAssigneeLabel } from "@/lib/display";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
-import type { ApprovalDecisionAction, Milestone, Package, PlanningShellState, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, PlanningShellState, Profile, Task } from "@/lib/types";
 import type { ApprovalReasonAction } from "@/lib/approval-decision-policy";
 import { UiBadge, UiButton, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
@@ -28,7 +28,7 @@ const projectsFilterSchema: TableUrlSchema<ProjectsTableFilters> = {
   owner: stringUrlField("Alle"),
   status: stringUrlField("Alle"),
   priority: stringUrlField("Alle"),
-  milestone: stringUrlField("Alle"),
+  epic: stringUrlField("Alle"),
   initiative: stringUrlField("Alle"),
   risk: enumUrlField("all", ["all", "blocked", "critical", "github"] as const),
   from: dateUrlField(),
@@ -37,23 +37,24 @@ const projectsFilterSchema: TableUrlSchema<ProjectsTableFilters> = {
   direction: enumUrlField("asc", ["asc", "desc"] as const),
 };
 
-const milestoneStatusMeta = {
-  planned: { label: "Geplant", tone: "slate" as const },
-  active: { label: "Aktiv", tone: "blue" as const },
-  done: { label: "Erledigt", tone: "emerald" as const },
-};
+function epicStatusMeta(status: string) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "In Arbeit") return { label: normalized, tone: "blue" as const };
+  if (normalized === "Erledigt") return { label: normalized, tone: "emerald" as const };
+  return { label: normalized, tone: "slate" as const };
+}
 
 export function ProjectsOverview({
   data,
   tasks,
   currentProfile,
   canManageInitiatives,
-  canManageMilestones,
+  canManageEpics,
   pending,
-  onCreateMilestone,
-  onDeleteMilestone,
+  onCreateEpic,
+  onDeleteEpic,
   onEditInitiative,
-  onEditMilestone,
+  onEditEpic,
   onOpenTask,
   onDecideInitiative,
   onWithdrawInitiative,
@@ -62,32 +63,34 @@ export function ProjectsOverview({
   tasks: Task[];
   currentProfile?: Profile | null;
   canManageInitiatives: boolean;
-  canManageMilestones: boolean;
+  canManageEpics: boolean;
   pending: boolean;
-  onCreateMilestone: () => void;
-  onDeleteMilestone: (milestone: Milestone, children: MilestoneChildCounts) => void;
-  onEditInitiative: (initiative: Package) => void;
-  onEditMilestone: (milestone: Milestone) => void;
+  onCreateEpic: () => void;
+  onDeleteEpic: (epic: Task, children: MilestoneChildCounts) => void;
+  onEditInitiative: (initiative: Task) => void;
+  onEditEpic: (epic: Task) => void;
   onOpenTask: (taskId: string) => void;
-  onDecideInitiative: (initiative: Package, action: ApprovalDecisionAction, note?: string) => void;
-  onWithdrawInitiative: (initiative: Package, reason: string) => void;
+  onDecideInitiative: (initiative: Task, action: ApprovalDecisionAction, note?: string) => void;
+  onWithdrawInitiative: (initiative: Task, reason: string) => void;
 }) {
-  const [openMilestoneIds, setOpenMilestoneIds] = useState<Set<string>>(new Set());
+  const [openEpicIds, setOpenEpicIds] = useState<Set<string>>(new Set());
   const [openInitiativeIds, setOpenInitiativeIds] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [approvalDecision, setApprovalDecision] = useState<{ initiative: Package; action: ApprovalReasonAction } | null>(null);
-  const [withdrawal, setWithdrawal] = useState<Package | null>(null);
+  const [approvalDecision, setApprovalDecision] = useState<{ initiative: Task; action: ApprovalReasonAction } | null>(null);
+  const [withdrawal, setWithdrawal] = useState<Task | null>(null);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "deliverables", schema: projectsFilterSchema });
   const profileName = (profileId?: string) => data.profiles.find((profile) => profile.id === profileId)?.name || "Nicht gesetzt";
   const filterViewModel = buildProjectsFilterViewModel({ data, tasks, filters });
+  const epics = tasks.filter((item) => item.taskType === "epic");
+  const initiatives = tasks.filter((item) => item.taskType === "initiative");
   const isDirty = JSON.stringify(filters) !== JSON.stringify(DEFAULT_PROJECTS_FILTERS);
   const riskLabels: Record<ProjectsRiskFilter, string> = { all: "Alle Risiken", blocked: "Blockiert", critical: "Kritisch", github: "GitHub fehlt" };
   const activeFilters: ActiveFilter[] = [
     ...(filters.owner !== "Alle" ? [{ id: "owner", label: `Owner: ${profileName(filters.owner)}`, onRemove: () => updateFilters({ owner: "Alle" }) }] : []),
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => updateFilters({ status: "Alle" }) }] : []),
     ...(filters.priority !== "Alle" ? [{ id: "priority", label: `Priorität: ${filters.priority}`, onRemove: () => updateFilters({ priority: "Alle" }) }] : []),
-    ...(filters.milestone !== "Alle" ? [{ id: "milestone", label: `Meilenstein: ${data.milestones.find((milestone) => milestone.id === filters.milestone)?.title || filters.milestone}`, onRemove: () => updateFilters({ milestone: "Alle" }) }] : []),
-    ...(filters.initiative !== "Alle" ? [{ id: "initiative", label: `Initiative: ${data.packages.find((pack) => pack.id === filters.initiative)?.title || filters.initiative}`, onRemove: () => updateFilters({ initiative: "Alle" }) }] : []),
+    ...(filters.epic !== "Alle" ? [{ id: "epic", label: `Epic: ${epics.find((epic) => epic.id === filters.epic)?.title || filters.epic}`, onRemove: () => updateFilters({ epic: "Alle" }) }] : []),
+    ...(filters.initiative !== "Alle" ? [{ id: "initiative", label: `Initiative: ${initiatives.find((initiative) => initiative.id === filters.initiative)?.title || filters.initiative}`, onRemove: () => updateFilters({ initiative: "Alle" }) }] : []),
     ...(filters.risk !== "all" ? [{ id: "risk", label: `Risiko: ${riskLabels[filters.risk]}`, onRemove: () => updateFilters({ risk: "all" }) }] : []),
     ...(filters.from ? [{ id: "from", label: `Ziel ab: ${filters.from}`, onRemove: () => updateFilters({ from: "" }) }] : []),
     ...(filters.to ? [{ id: "to", label: `Ziel bis: ${filters.to}`, onRemove: () => updateFilters({ to: "" }) }] : []),
@@ -96,33 +99,33 @@ export function ProjectsOverview({
   const ownerOptions = [{ value: "Alle", label: "Alle Owner" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((value) => ({ value, label: value === "Alle" ? "Alle Prioritäten" : value }));
-  const milestoneOptions = [{ value: "Alle", label: "Alle Meilensteine" }, ...data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))];
-  const initiativeOptions = [{ value: "Alle", label: "Alle Initiativen" }, ...data.packages.map((pack) => ({ value: pack.id, label: pack.title }))];
+  const epicOptions = [{ value: "Alle", label: "Alle Epics" }, ...epics.map((epic) => ({ value: epic.id, label: epic.title }))];
+  const initiativeOptions = [{ value: "Alle", label: "Alle Initiativen" }, ...initiatives.map((initiative) => ({ value: initiative.id, label: initiative.title }))];
   const riskOptions = (Object.keys(riskLabels) as ProjectsRiskFilter[]).map((value) => ({ value, label: riskLabels[value] }));
-  const pendingInitiatives = data.packages.filter((initiative) => isWithdrawableApprovalStatus(initiative.approvalStatus));
+  const pendingInitiatives = initiatives.filter((initiative) => isWithdrawableApprovalStatus(initiative.approvalStatus));
   const proposedDeliverables = tasks.filter(isProposedDeliverable);
 
   useEffect(() => {
-    const milestoneIds = new Set(data.milestones.map((milestone) => milestone.id));
-    const hasOrphans = data.packages.some((initiative) => !initiative.milestoneId || !milestoneIds.has(initiative.milestoneId));
+    const epicIds = new Set(epics.map((epic) => epic.id));
+    const hasOrphans = initiatives.some((initiative) => !initiative.parentTaskId || !epicIds.has(initiative.parentTaskId));
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setOpenMilestoneIds((current) => {
-        const next = new Set(Array.from(current).filter((id) => milestoneIds.has(id) || id === "without-epic" && hasOrphans));
+      setOpenEpicIds((current) => {
+        const next = new Set(Array.from(current).filter((id) => epicIds.has(id) || id === "without-epic" && hasOrphans));
         return next.size === current.size && Array.from(next).every((id) => current.has(id)) ? current : next;
       });
-      if (filters.milestone !== "Alle" && !milestoneIds.has(filters.milestone)) {
-        updateFilters({ milestone: "Alle" }, "replace");
+      if (filters.epic !== "Alle" && !epicIds.has(filters.epic)) {
+        updateFilters({ epic: "Alle" }, "replace");
       }
     });
     return () => { cancelled = true; };
-  }, [data.milestones, data.packages, filters.milestone, updateFilters]);
+  }, [epics, filters.epic, initiatives, updateFilters]);
 
   return (
     <div className="grid gap-4">
       <FilterToolbar
-        searchLabel="Meilensteine und Deliverables durchsuchen"
+        searchLabel="Epics und Deliverables durchsuchen"
         searchPlaceholder="Initiative, Deliverable oder Bereich suchen"
         query={filters.query}
         onQueryChange={(query) => updateFilters({ query }, "replace")}
@@ -138,7 +141,7 @@ export function ProjectsOverview({
           <FilterField label="Owner"><CustomSelect aria-label="Nach Owner filtern" value={filters.owner} onChange={(owner) => updateFilters({ owner })} className="h-10 text-sm" options={ownerOptions} /></FilterField>
           <FilterField label="Status"><CustomSelect aria-label="Nach Deliverable-Status filtern" value={filters.status} onChange={(status) => updateFilters({ status })} className="h-10 text-sm" options={statusOptions} /></FilterField>
           <FilterField label="Priorität"><CustomSelect aria-label="Nach Deliverable-Priorität filtern" value={filters.priority} onChange={(priority) => updateFilters({ priority })} className="h-10 text-sm" options={priorityOptions} /></FilterField>
-          <FilterField label="Meilenstein"><CustomSelect aria-label="Nach Meilenstein filtern" value={filters.milestone} onChange={(milestone) => updateFilters({ milestone })} className="h-10 text-sm" options={milestoneOptions} /></FilterField>
+          <FilterField label="Epic"><CustomSelect aria-label="Nach Epic filtern" value={filters.epic} onChange={(epic) => updateFilters({ epic })} className="h-10 text-sm" options={epicOptions} /></FilterField>
           <FilterField label="Initiative"><CustomSelect aria-label="Nach Initiative filtern" value={filters.initiative} onChange={(initiative) => updateFilters({ initiative })} className="h-10 text-sm" options={initiativeOptions} /></FilterField>
           <FilterField label="Risiko"><CustomSelect aria-label="Nach Deliverable-Risiko filtern" value={filters.risk} onChange={(risk) => updateFilters({ risk: risk as ProjectsRiskFilter })} className="h-10 text-sm" options={riskOptions} /></FilterField>
           <FilterField label="Zieltermin von"><CustomDatePicker aria-label="Deliverables ab Zieltermin filtern" value={filters.from} onChange={(from) => updateFilters({ from })} className="h-10" /></FilterField>
@@ -148,7 +151,7 @@ export function ProjectsOverview({
       <UiPanel>
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktives Projekt</div>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{data.project.name}</h2>
-        <p className="mt-1 text-sm text-slate-500">Struktur: Epic / Meilenstein → Initiative → Deliverable → Sub-Issue. Sprints sind der Zeitcontainer für Deliverables.</p>
+        <p className="mt-1 text-sm text-slate-500">Struktur: Epic → Initiative → Deliverable → Sub-Issue. Sprints sind der Zeitcontainer für Deliverables.</p>
       </UiPanel>
       <section className="grid gap-3 lg:grid-cols-2">
         <UiPanel>
@@ -186,7 +189,7 @@ export function ProjectsOverview({
             {proposedDeliverables.map((task) => (
               <button key={task.id} type="button" onClick={() => onOpenTask(task.id)} className="rounded-md border border-slate-200 p-3 text-left hover:bg-slate-50">
                 <span className="block font-semibold text-slate-950">{task.title}</span>
-                <span className="mt-1 block text-xs text-slate-500">Revision {task.approvalRevision} · {data.packages.find((pack) => pack.id === task.packageId)?.title || "Ohne Initiative"}</span>
+                <span className="mt-1 block text-xs text-slate-500">Revision {task.approvalRevision} · {initiatives.find((initiative) => initiative.id === task.parentTaskId)?.title || "Ohne Initiative"}</span>
               </button>
             ))}
             {!proposedDeliverables.length && <p className="text-sm text-slate-500">Kein Deliverable wartet auf Freigabe.</p>}
@@ -194,68 +197,71 @@ export function ProjectsOverview({
         </UiPanel>
       </section>
       <section className="grid gap-3">
-        {filterViewModel.hierarchy.map(({ milestone, initiatives: groups, tasks: milestoneTasks }) => {
-          const milestoneKey = milestone.id || "without-epic";
-          const isMilestoneOpen = filtersActive || openMilestoneIds.has(milestoneKey);
-          const blocked = milestoneTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
-          const effort = milestoneTasks.reduce((sum, task) => sum + task.hours, 0);
-          const contentId = `milestone-content-${milestoneKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+        {filterViewModel.hierarchy.map(({ epic, initiatives: groups, tasks: epicTasks }) => {
+          const epicKey = epic?.id || "without-epic";
+          const isEpicOpen = filtersActive || openEpicIds.has(epicKey);
+          const blocked = epicTasks.filter((task) => task.dependsOn || normalizeStatus(task.status) === "Blockiert").length;
+          const effort = epicTasks.reduce((sum, task) => sum + task.hours, 0);
+          const contentId = `epic-content-${epicKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
           const childCounts = {
-            initiatives: data.packages.filter((initiative) => initiative.milestoneId === milestone.id).length,
-            tasks: tasks.filter((task) => task.milestoneId === milestone.id).length,
+            initiatives: initiatives.filter((initiative) => initiative.parentTaskId === epic?.id).length,
+            tasks: epic ? tasks.filter((task) => {
+              const initiative = initiatives.find((candidate) => candidate.id === task.parentTaskId);
+              return initiative?.parentTaskId === epic.id;
+            }).length : 0,
           };
-          const statusMeta = milestoneStatusMeta[milestone.status];
+          const statusMeta = epicStatusMeta(epic?.status || "Offen");
 
           return (
-            <UiPanel key={milestoneKey} as="article" padding="none" className="overflow-hidden">
+            <UiPanel key={epicKey} as="article" padding="none" className="overflow-hidden">
               <div className="flex items-start border-b border-transparent">
                 <button
                   type="button"
-                  onClick={() => setOpenMilestoneIds((current) => toggleSetValue(current, milestoneKey))}
+                  onClick={() => setOpenEpicIds((current) => toggleSetValue(current, epicKey))}
                   className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-4 text-left hover:bg-slate-50 sm:flex-row sm:items-start sm:justify-between"
-                  aria-expanded={isMilestoneOpen}
+                  aria-expanded={isEpicOpen}
                   aria-controls={contentId}
                 >
                   <span className="flex min-w-0 gap-3">
                     <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500">
-                      {isMilestoneOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+                      {isEpicOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
                     </span>
                     <span className="min-w-0">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Epic / Meilenstein</span>
-                      <span className="mt-1 block truncate text-base font-semibold text-slate-950">{milestone.title}</span>
-                      <span className="mt-1 block text-sm leading-6 text-slate-600">{milestone.description}</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">Epic</span>
+                      <span className="mt-1 block truncate text-base font-semibold text-slate-950">{epic?.title || "Ohne Epic"}</span>
+                      <span className="mt-1 block text-sm leading-6 text-slate-600">{epic?.description || "Initiativen ohne zugeordnetes Epic."}</span>
                       <span className="mt-2 flex flex-wrap items-center gap-2">
                         <UiBadge size="xs" tone={statusMeta.tone}>{statusMeta.label}</UiBadge>
                         <span className="text-xs font-medium text-slate-500">
-                          Zieltermin: {milestone.targetDate ? formatDate(milestone.targetDate) : "nicht gesetzt"}
+                          Zieltermin: {epic?.targetDate ? formatDate(epic.targetDate) : "nicht gesetzt"}
                         </span>
                       </span>
                     </span>
                   </span>
                   <span className="grid w-full shrink-0 grid-cols-2 gap-3 text-left text-xs text-slate-500 sm:w-auto sm:grid-cols-4 sm:text-right">
                     <span><span className="block font-semibold text-slate-900">{groups.length}</span> Initiativen</span>
-                    <span><span className="block font-semibold text-slate-900">{milestoneTasks.length}</span> Deliverables</span>
+                    <span><span className="block font-semibold text-slate-900">{epicTasks.length}</span> Deliverables</span>
                     <span><span className="block font-semibold text-slate-900">{blocked}</span> Blockiert</span>
                     <span><span className="block font-semibold text-slate-900">{effort}h</span> Aufwand</span>
                   </span>
                 </button>
-                {milestone.id && canManageMilestones && (
+                {epic && canManageEpics && (
                   <div className="shrink-0 px-3 py-4">
                     <CustomActionMenu
-                      label={`Aktionen für ${milestone.title}`}
-                      triggerAriaLabel={`Aktionen für Meilenstein ${milestone.title}`}
+                      label={`Aktionen für ${epic.title}`}
+                      triggerAriaLabel={`Aktionen für Epic ${epic.title}`}
                       groups={[{
-                        id: "milestone-actions",
+                        id: "epic-actions",
                         items: [
-                          { id: "edit", label: "Bearbeiten", icon: <Pencil size={15} aria-hidden="true" />, onSelect: () => onEditMilestone(milestone) },
-                          { id: "delete", label: "Löschen", tone: "danger", icon: <Trash2 size={15} aria-hidden="true" />, onSelect: () => onDeleteMilestone(milestone, childCounts) },
+                          { id: "edit", label: "Bearbeiten", icon: <Pencil size={15} aria-hidden="true" />, onSelect: () => onEditEpic(epic) },
+                          { id: "delete", label: "Löschen", tone: "danger", icon: <Trash2 size={15} aria-hidden="true" />, onSelect: () => onDeleteEpic(epic, childCounts) },
                         ],
                       }]}
                     />
                   </div>
                 )}
               </div>
-              {isMilestoneOpen && (
+              {isEpicOpen && (
                 <div id={contentId} className="grid gap-3 border-t border-slate-100 bg-slate-50 p-3">
                   {groups.map(({ initiative: pack, tasks: initiativeTasks }) => (
                     <InitiativeTreeItem
@@ -289,11 +295,11 @@ export function ProjectsOverview({
         {!filterViewModel.hierarchy.length && (
           <UiEmptyState>
             {filterViewModel.totalCount ? (
-              "Keine Meilensteine, Initiativen oder Deliverables für diese Filter."
+              "Keine Epics, Initiativen oder Deliverables für diese Filter."
             ) : (
               <span className="grid justify-items-center gap-3">
-                <span>Noch keine Meilensteine vorhanden.</span>
-                {canManageMilestones && <UiButton variant="primary" onClick={onCreateMilestone}>Ersten Meilenstein anlegen</UiButton>}
+                <span>Noch keine Epics vorhanden.</span>
+                {canManageEpics && <UiButton variant="primary" onClick={onCreateEpic}>Erstes Epic anlegen</UiButton>}
               </span>
             )}
           </UiEmptyState>
@@ -347,7 +353,7 @@ function InitiativeTreeItem({
   priorityOptions,
 }: {
   data: PlanningShellState;
-  initiative: Package;
+  initiative: Task;
   tasks: Task[];
   profileName: (profileId?: string) => string;
   isOpen: boolean;
@@ -377,7 +383,7 @@ function InitiativeTreeItem({
             <span className="ml-2 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-800">{initiative.approvalStatus}</span>
             <span className="mt-1 block truncate text-sm font-semibold text-slate-950">{initiative.title}</span>
             <span className="mt-1 block text-xs text-slate-500">Owner: {profileName(initiative.ownerId)}{initiative.targetDate ? ` · Zieltermin: ${formatDate(initiative.targetDate)}` : ""}</span>
-            <span className="mt-2 block text-sm leading-6 text-slate-600">{initiative.goal}</span>
+            <span className="mt-2 block text-sm leading-6 text-slate-600">{initiative.strategy?.goal || initiative.description}</span>
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-2">
@@ -395,11 +401,11 @@ function InitiativeTreeItem({
           <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(420px,2fr)]">
             <div className="grid gap-2">
               <InitiativeRaciList initiative={initiative} profiles={data.profiles} className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600" />
-              {initiative.successCriteria && (
-                <p className="text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-700">Erfolgskriterien:</span> {initiative.successCriteria}</p>
+              {initiative.strategy?.successCriteria && (
+                <p className="text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-700">Erfolgskriterien:</span> {initiative.strategy.successCriteria}</p>
               )}
-              {initiative.scopeConstraints && (
-                <p className="text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-700">Constraints:</span> {initiative.scopeConstraints}</p>
+              {initiative.strategy?.scopeConstraints && (
+                <p className="text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-700">Constraints:</span> {initiative.strategy.scopeConstraints}</p>
               )}
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div className="rounded-md bg-slate-50 p-2"><div className="text-xs text-slate-500">Erledigt</div><div className="font-semibold text-slate-900">{done}</div></div>
@@ -407,7 +413,7 @@ function InitiativeTreeItem({
                 <div className="rounded-md bg-slate-50 p-2"><div className="text-xs text-slate-500">Aufwand</div><div className="font-semibold text-slate-900">{effort}h</div></div>
               </div>
             </div>
-            <DeliverableTable tasks={tasks} totalCount={data.tasks.filter((task) => task.packageId === initiative.id && task.taskType !== "sub_issue").length} onOpenTask={onOpenTask} filters={filters} onFiltersChange={onFiltersChange} ownerOptions={ownerOptions} statusOptions={statusOptions} priorityOptions={priorityOptions} />
+            <DeliverableTable tasks={tasks} totalCount={data.tasks.filter((task) => task.parentTaskId === initiative.id && task.taskType === "deliverable").length} onOpenTask={onOpenTask} filters={filters} onFiltersChange={onFiltersChange} ownerOptions={ownerOptions} statusOptions={statusOptions} priorityOptions={priorityOptions} />
           </div>
         </div>
       )}

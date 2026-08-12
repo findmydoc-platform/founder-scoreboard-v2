@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserApiClient } from "@/lib/browser-api-client";
-import type { AuthenticatedProfile, Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
+import type { AuthenticatedProfile, Profile, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation } from "@/lib/types";
 import { createTaskRequest, reportTaskBlockerRequest, syncTaskToGitHubRequest, updateTaskRequest, withdrawTaskRequest } from "@/features/tasks/model/task-api-client";
 import { buildClientTaskUpdatePatch, taskUpdateRequestPayload } from "@/features/tasks/model/task-mutation-contract";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
@@ -19,8 +19,6 @@ import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 
 type UseTaskDetailWorkflowOptions = {
   task: Task;
-  pack?: Package;
-  packages: Package[];
   sprint?: Sprint;
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
@@ -31,7 +29,6 @@ type UseTaskDetailWorkflowOptions = {
   allTasks: Task[];
   profiles: Profile[];
   sprints: Sprint[];
-  milestones: Milestone[];
   source: "supabase";
   commentImportNotice: string;
   initialCurrentProfile?: AuthenticatedProfile | null;
@@ -39,13 +36,13 @@ type UseTaskDetailWorkflowOptions = {
 
 export function useTaskDetailWorkflow({
   task,
-  packages,
   comments,
   externalComments,
   activities,
   blockers,
   subIssues,
   taskRelations,
+  allTasks,
   profiles,
   source,
   commentImportNotice,
@@ -140,7 +137,7 @@ export function useTaskDetailWorkflow({
 
   const updateTask = (patch: Partial<Task>) => {
     const currentTaskSnapshot = { ...task, ...meta, ...githubState } as Task;
-    const normalized = buildClientTaskUpdatePatch(currentTaskSnapshot, patch, profiles, packages);
+    const normalized = buildClientTaskUpdatePatch(currentTaskSnapshot, patch, profiles, allTasks);
     if (!normalized.ok) {
       setError(normalized.error);
       return;

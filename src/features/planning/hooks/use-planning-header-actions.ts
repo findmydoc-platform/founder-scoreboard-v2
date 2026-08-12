@@ -6,6 +6,7 @@ import type { InitiativeDraft } from "@/features/projects/organisms/initiative-d
 import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
+import { epicPlanningItems } from "@/features/planning/model/planning-app-model";
 import type { PlanningShellState, Profile, Sprint, ViewMode } from "@/lib/types";
 
 export type HeaderAction = {
@@ -65,7 +66,7 @@ export function usePlanningHeaderActions({
   }
 
   if (workspace === "projects" && canManageMilestones(currentProfile?.platformRole)) {
-    const initiativeDisabled = data.milestones.length === 0;
+    const initiativeDisabled = epicPlanningItems(data.tasks).length === 0;
     return [
       {
         id: "new-milestone",

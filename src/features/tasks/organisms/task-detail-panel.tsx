@@ -9,11 +9,11 @@ import { TaskDetailPanelHeader } from "@/features/tasks/molecules/task-detail-pa
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
-import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
 type Props = {
   task: Task;
-  pack?: Package;
+  initiative?: Task;
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
@@ -25,9 +25,7 @@ type Props = {
   blockers: TaskBlocker[];
   subIssues: Task[];
   teamProfiles: Profile[];
-  packages: Package[];
   sprints: Sprint[];
-  milestones: Milestone[];
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;

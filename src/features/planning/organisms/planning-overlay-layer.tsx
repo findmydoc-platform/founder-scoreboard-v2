@@ -88,7 +88,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     saveInitiative,
     saveMilestone,
     deleteMilestone,
-    selectedPackage,
+    selectedInitiative,
     selectedTask,
     selectedTaskActivity,
     selectedTaskBlockers,
@@ -131,7 +131,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
         <TaskDetailPanel
           task={selectedTask}
           previousTask={taskPanelPreviousTask}
-          pack={selectedPackage}
           comments={selectedTaskComments}
           externalComments={selectedTaskExternalComments}
           activities={selectedTaskActivity}
@@ -142,9 +141,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           blockers={selectedTaskBlockers}
           subIssues={selectedTaskSubIssues}
           teamProfiles={data.profiles}
-          packages={data.packages}
           sprints={data.sprints}
-          milestones={data.milestones}
+          initiative={selectedInitiative}
           currentProfile={currentProfile}
           source={source}
           allTasks={data.tasks}
@@ -168,7 +166,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
                 ? "deliverable"
                 : "sub_issue",
             parentTaskId: selectedTask.id,
-            packageId: selectedTask.taskType === "initiative" ? selectedTask.id : selectedTask.packageId,
             assignee: currentProfile?.id || "",
             status: "Offen",
           })}

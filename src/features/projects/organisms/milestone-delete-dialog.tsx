@@ -3,12 +3,12 @@
 import { useId, useState } from "react";
 import { buildMilestoneDeletePolicy, formatMilestoneChildCounts } from "@/features/projects/model/milestone-policy";
 import type { MilestoneChildCounts } from "@/features/projects/model/milestone-contract";
-import type { Milestone } from "@/lib/types";
+import type { Task } from "@/lib/types";
 import { UiButton } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type MilestoneDeleteTarget = {
-  milestone: Milestone;
+  milestone: Task;
   children: MilestoneChildCounts;
 };
 
@@ -19,7 +19,7 @@ export function MilestoneDeleteDialog({
 }: {
   target: MilestoneDeleteTarget;
   onClose: () => void;
-  onConfirm: (milestone: Milestone) => Promise<void>;
+  onConfirm: (milestone: Task) => Promise<void>;
 }) {
   const titleId = useId();
   const descriptionId = useId();

@@ -58,7 +58,7 @@ test("task detail uses a custom Parent control and GitHub replaces the native pa
 
   assert.match(surface, /canReparentSubIssue=\{controller\.permissions\.canReparentSubIssue\}/);
   assert.match(planningSection, /label="Parent-Deliverable"/);
-  assert.match(planningSection, /parentDeliverableOptions\(parentDeliverables, packages\)/);
+  assert.match(planningSection, /parentDeliverableOptions\(allTasks\)/);
   assert.match(planningSection, /Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv/);
   assert.doesNotMatch(planningSection, /<select\b|<option\b/);
   assert.match(customSelect, /role="listbox"/);

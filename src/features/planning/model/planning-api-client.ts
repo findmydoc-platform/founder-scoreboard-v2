@@ -79,7 +79,7 @@ function initiativeMutation(draft: InitiativeDraft, expectedUpdatedAt?: string) 
       ...draft.consultedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "consulted", sortOrder })),
       ...draft.informedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "informed", sortOrder })),
     ],
-    ...(!draft.id ? { parentTaskId: draft.milestoneId, approveNow: draft.approveNow } : {}),
+    ...(!draft.id ? { parentTaskId: draft.parentTaskId, approveNow: draft.approveNow } : {}),
   };
 }
 
@@ -93,7 +93,7 @@ export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: 
   let expectedUpdatedAt = draft.expectedUpdatedAt || "";
   const parentResult = await apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${encodeURIComponent(draft.id)}`, {
     method: "PATCH",
-    json: { expectedUpdatedAt, parentTaskId: draft.milestoneId },
+    json: { expectedUpdatedAt, parentTaskId: draft.parentTaskId },
   });
   if (!parentResult.response.ok) return parentResult;
   expectedUpdatedAt = parentResult.body?.task?.updatedAt || expectedUpdatedAt;

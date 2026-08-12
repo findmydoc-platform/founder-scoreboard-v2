@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Renames internal Planning preference and expansion state to Initiative terminology while preserving the existing database adapter, without adding or materially expanding visible functionality."
+  "reason": "Removes duplicated legacy Package and Milestone UI state in favor of canonical Planning Items while preserving the existing user-visible workflows and database compatibility adapters."
 }

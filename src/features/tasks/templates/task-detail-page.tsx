@@ -15,6 +15,7 @@ import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync
 import { TaskDetailSurface } from "@/features/tasks/organisms/task-detail-surface";
 import { clearTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
+import { initiativeForPlanningItem } from "@/features/planning/model/planning-app-model";
 import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { AuthenticatedProfile, PlanningHeaderData } from "@/lib/types";
@@ -57,7 +58,7 @@ export function TaskDetailPage({
 
   if (!task) return <div className="min-h-screen bg-slate-50" aria-label="Aufgabendetails werden geladen" />;
 
-  const currentPackage = controller.data.packages.find((pack) => pack.id === task.packageId);
+  const currentInitiative = initiativeForPlanningItem(controller.data.tasks, task);
   const selectedRelations = controller.data.taskRelations.filter((relation) => relation.taskId === task.id || relation.relatedTaskId === task.id);
   const githubSyncQueue = projectGitHubSyncQueue(controller.data.tasks, controller.data.taskComments);
   const discardChanges = () => {
@@ -100,7 +101,6 @@ export function TaskDetailPage({
         <TaskDetailSurface
           surface="page"
           task={task}
-          pack={currentPackage}
           comments={controller.data.taskComments.filter((comment) => comment.taskId === task.id)}
           externalComments={controller.data.taskExternalComments.filter((comment) => comment.taskId === task.id)}
           activities={controller.data.taskActivity.filter((activity) => activity.taskId === task.id)}
@@ -108,9 +108,8 @@ export function TaskDetailPage({
           blockers={controller.data.taskBlockers.filter((blocker) => blocker.taskId === task.id)}
           subIssues={controller.data.tasks.filter((item) => item.parentTaskId === task.id)}
           teamProfiles={controller.data.profiles}
-          packages={controller.data.packages}
           sprints={controller.data.sprints}
-          milestones={controller.data.milestones}
+          initiative={currentInitiative}
           allTasks={controller.data.tasks}
           relations={selectedRelations}
           currentProfile={controller.currentProfile}
@@ -134,7 +133,6 @@ export function TaskDetailPage({
                 ? "deliverable"
                 : "sub_issue",
             parentTaskId: task.id,
-            packageId: task.taskType === "initiative" ? task.id : task.packageId,
             assignee: controller.currentProfile?.id || "",
             status: "Offen",
           })}

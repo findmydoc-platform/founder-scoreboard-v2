@@ -16,6 +16,7 @@ import {
 import { allowedGitHubRepositories, defaultGitHubRepository } from "@/lib/github-repositories";
 import { taskAssigneeOptions } from "@/lib/display";
 import type { PlanningShellState, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
+import { initiativePlanningItems } from "@/features/planning/model/planning-app-model";
 import { UiDateField, UiSelectField } from "@/shared/atoms/form-controls";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
@@ -31,8 +32,6 @@ export type NewTaskDraft = {
   evidenceRequired: string;
   taskType: TaskType;
   parentTaskId: string;
-  milestoneId: string;
-  packageId: string;
   sprintId: string;
   assignee: string;
   priority: string;
@@ -57,7 +56,7 @@ export type NewTaskCreateCallbacks = {
 };
 
 type DraftSetter = Dispatch<SetStateAction<NewTaskDraft>>;
-type TaskDialogData = Pick<PlanningShellState, "packages" | "profiles" | "sprints" | "tasks">;
+type TaskDialogData = Pick<PlanningShellState, "profiles" | "sprints" | "tasks">;
 
 function SectionHeading({ children, accent = false }: { children: string; accent?: boolean }) {
   return (
@@ -268,16 +267,16 @@ function DeliverableForm({
   titleError: string;
   titleValidationId: string;
 }) {
-  const selectedInitiative = data.packages.find((pack) => pack.id === (draft.parentTaskId || draft.packageId));
+  const initiatives = initiativePlanningItems(data.tasks);
+  const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
   const initiativeApproved = selectedInitiative?.approvalStatus === "approved";
   const githubHelpId = useId();
 
   const selectInitiative = (parentTaskId: string) => {
-    const nextInitiative = data.packages.find((pack) => pack.id === parentTaskId);
+    const nextInitiative = initiatives.find((initiative) => initiative.id === parentTaskId);
     setDraft((current) => ({
       ...current,
       parentTaskId,
-      packageId: parentTaskId,
       approveNow: nextInitiative?.approvalStatus === "approved" ? current.approveNow : false,
       createGitHubIssue: nextInitiative?.approvalStatus === "approved" ? current.createGitHubIssue : false,
     }));
@@ -334,9 +333,9 @@ function DeliverableForm({
           <SectionHeading>Struktur</SectionHeading>
           <UiSelectField
             label="Initiative"
-            value={draft.parentTaskId || draft.packageId}
+            value={draft.parentTaskId}
             onChange={selectInitiative}
-            options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiativeOptions(data.packages)]}
+            options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...initiativeOptions(initiatives)]}
             aria-label="Initiative"
           />
           {selectedInitiative ? (
@@ -553,7 +552,7 @@ function SubIssueForm({
         label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
         value={draft.parentTaskId}
         onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
-        options={[{ value: "", label: "Deliverable auswählen" }, ...parentDeliverableOptions(data.tasks, data.packages)]}
+        options={[{ value: "", label: "Deliverable auswählen" }, ...parentDeliverableOptions(data.tasks)]}
         aria-label="Übergeordnetes Deliverable, Pflichtfeld"
         aria-required
         data-autofocus
@@ -640,6 +639,7 @@ export function NewTaskDialog({
   canApproveNow?: boolean;
   currentProfileId?: string;
 }) {
+  const initiatives = initiativePlanningItems(data.tasks);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
   const errorSummaryRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -652,8 +652,8 @@ export function NewTaskDialog({
   const [draft, setDraft] = useState<NewTaskDraft>(() => {
     const activeSprint = data.sprints.find((sprint) => sprint.status === "active") || data.sprints[0];
     const fallbackAssignee = currentProfileId || data.profiles[0]?.id || "";
-    const initialPackageId = defaults.parentTaskId || defaults.packageId || data.packages[0]?.id || "";
-    const initialInitiativeApproved = data.packages.find((pack) => pack.id === initialPackageId)?.approvalStatus === "approved";
+    const initialInitiativeId = defaults.parentTaskId || initiatives[0]?.id || "";
+    const initialInitiativeApproved = initiatives.find((initiative) => initiative.id === initialInitiativeId)?.approvalStatus === "approved";
     const initialDraft: NewTaskDraft = {
       creationRequestId: defaults.creationRequestId || globalThis.crypto.randomUUID(),
       title: defaults.title || "",
@@ -664,9 +664,7 @@ export function NewTaskDialog({
       acceptanceCriteria: defaults.acceptanceCriteria || "",
       evidenceRequired: defaults.evidenceRequired || "",
       taskType: initialTaskType,
-      parentTaskId: defaults.parentTaskId || (initialTaskType === "deliverable" ? initialPackageId : ""),
-      milestoneId: "",
-      packageId: initialPackageId,
+      parentTaskId: defaults.parentTaskId || (initialTaskType === "deliverable" ? initialInitiativeId : ""),
       sprintId: defaults.sprintId || "",
       assignee: defaults.assignee || fallbackAssignee,
       priority: defaults.priority || "P2",
@@ -709,8 +707,6 @@ export function NewTaskDialog({
         ? {
             ...initialDraft,
             parentTaskId: "",
-            packageId: "",
-            milestoneId: "",
             priority: "",
             startDate: "",
             endDate: "",
@@ -721,9 +717,7 @@ export function NewTaskDialog({
           }
         : initialTaskType === "initiative"
           ? {
-              ...initialDraft,
-              packageId: "",
-              milestoneId: "",
+            ...initialDraft,
               startDate: "",
               endDate: "",
               deadline: "",
@@ -734,7 +728,7 @@ export function NewTaskDialog({
           : initialDraft;
   });
 
-  const selectedInitiative = data.packages.find((pack) => pack.id === (draft.parentTaskId || draft.packageId));
+  const selectedInitiative = initiatives.find((initiative) => initiative.id === draft.parentTaskId);
   const deliverableNeedsStructure = false;
   const subIssueNeedsParent = draft.taskType === "sub_issue" && !draft.parentTaskId;
   const invalidTitle = draft.title.trim().length < 3;

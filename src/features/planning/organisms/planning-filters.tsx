@@ -3,7 +3,7 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 import { initiativeOptionLabel } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
 import { reviewLabel } from "@/lib/platform";
-import type { Package, Profile, Sprint, Task } from "@/lib/types";
+import type { Profile, Sprint, Task } from "@/lib/types";
 import { FilterField, FilterToolbar, FilterToggleGroup, type ActiveFilter } from "@/shared/molecules/filter-toolbar";
 import { DEFAULT_PLANNING_FILTERS, type PlanningFilters as PlanningFiltersValue } from "@/features/planning/hooks/use-planning-view-state";
 import { PlanningLevelSelect } from "@/features/planning/molecules/planning-level-select";
@@ -16,7 +16,7 @@ type PlanningFiltersProps = {
   planningLevel: PlanningLevel;
   planningParentFilterId: string;
   profiles: Profile[];
-  packages: Package[];
+  initiatives: Task[];
   sprints: Sprint[];
   tasks: Task[];
   workstreams: string[];
@@ -36,7 +36,7 @@ export function PlanningFilters({
   planningLevel,
   planningParentFilterId,
   profiles,
-  packages,
+  initiatives,
   sprints,
   tasks,
   workstreams,
@@ -51,7 +51,7 @@ export function PlanningFilters({
   onPlanningParentFilterChange,
 }: PlanningFiltersProps) {
   const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee;
-  const initiativeName = packages.find((initiative) => initiative.id === filters.initiativeId)?.title || filters.initiativeId;
+  const initiativeName = initiatives.find((initiative) => initiative.id === filters.initiativeId)?.title || filters.initiativeId;
   const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
@@ -175,7 +175,7 @@ export function PlanningFilters({
             value={filters.initiativeId}
             onChange={(initiativeId) => onChange({ ...filters, initiativeId })}
             className="h-10 text-sm"
-            options={[{ value: "Alle", label: "Alle Initiativen" }, ...packages.map((pack) => ({ value: pack.id, label: initiativeOptionLabel(pack) }))]}
+            options={[{ value: "Alle", label: "Alle Initiativen" }, ...initiatives.map((initiative) => ({ value: initiative.id, label: initiativeOptionLabel(initiative) }))]}
           />
         </FilterField> : null}
         {!isStrategicBoard ? <FilterField label="Sprint">

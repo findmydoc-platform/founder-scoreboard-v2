@@ -205,7 +205,7 @@ test("Sub-Issue parent updates keep CAS, activity, and sync state together", asy
   assert.equal(payload.parentTaskId, "deliverable-next");
   assert.equal(payload.packageId, undefined);
   assert.equal(payload.milestoneId, undefined);
-  assert.deepEqual(activityMessages(payload, { parent_task_id: "deliverable-old" }), [
+  assert.deepEqual(activityMessages(payload, { parent_task_id: "deliverable-old", task_type: "sub_issue" }), [
     "Parent-Deliverable geändert: deliverable-old → deliverable-next",
   ]);
 

@@ -1,5 +1,4 @@
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
-import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "@/lib/planning-profile-mappers";
 import type { PlanningShellState, Task } from "@/lib/types";
 
 function modelTasks(model: TaskDetailModel) {
@@ -25,8 +24,6 @@ export function taskDetailModelToPlanningShellState(model: TaskDetailModel): Pla
   return {
     project: model.project,
     profiles: [...model.people],
-    packages: tasks.filter((task) => task.taskType === "initiative").map(mapLegacyPackageFromInitiative),
-    milestones: tasks.filter((task) => task.taskType === "epic").map(mapLegacyMilestoneFromEpic),
     tasks,
     sprints: [...model.sprints],
     sprintCommitments: [],
@@ -56,20 +53,11 @@ export function taskDetailModelToPlanningShellState(model: TaskDetailModel): Pla
 
 export function applyTaskDetailModel(current: PlanningShellState, model: TaskDetailModel): PlanningShellState {
   const replacements = modelTasks(model);
-  const replacementIds = new Set(replacements.map((task) => task.id));
   const selectedId = model.item.id;
   return {
     ...current,
     tasks: replaceTasks(current.tasks, replacements),
     profiles: model.people.length ? [...model.people] : current.profiles,
-    packages: [
-      ...current.packages.filter((item) => !replacementIds.has(item.id)),
-      ...replacements.filter((task) => task.taskType === "initiative").map(mapLegacyPackageFromInitiative),
-    ],
-    milestones: [
-      ...current.milestones.filter((item) => !replacementIds.has(item.id)),
-      ...replacements.filter((task) => task.taskType === "epic").map(mapLegacyMilestoneFromEpic),
-    ],
     sprints: model.sprints.length ? [...model.sprints] : current.sprints,
     taskComments: [...model.discussion.comments, ...current.taskComments.filter((item) => item.taskId !== selectedId)],
     taskExternalComments: [...model.discussion.externalComments, ...current.taskExternalComments.filter((item) => item.taskId !== selectedId)],
@@ -94,4 +82,3 @@ export function taskDetailDegradationMessage(unavailable: readonly TaskDetailUna
     ? `${unavailable.map((area) => unavailableLabels[area]).join(", ")} konnten nicht vollständig geladen werden.`
     : "";
 }
-

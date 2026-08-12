@@ -536,8 +536,6 @@ export type AuditEntry = {
 export type PlanningShellState = {
   project: Project;
   profiles: Profile[];
-  packages: Package[];
-  milestones: Milestone[];
   tasks: Task[];
   sprints: Sprint[];
   sprintCommitments: SprintCommitment[];

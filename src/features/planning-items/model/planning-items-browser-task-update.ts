@@ -412,14 +412,6 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const titleGuard = applyTaskTitleUpdate(update, payload);
   if (!titleGuard.ok) return apiError(titleGuard.error, titleGuard.status);
 
-  if (payload.milestoneId !== undefined) {
-    // Epic is derived from the canonical parent chain.  Accept a matching
-    // legacy value during the transition, but reject a competing hierarchy.
-    if ((payload.milestoneId || "") !== (currentTask.milestone_id || "")) {
-      return apiError("Der Epic-Bezug wird über die Initiative abgeleitet. Ändere stattdessen den Parent.", 400);
-    }
-  }
-
   if (payload.assignee !== undefined || payload.owner !== undefined) {
     const nextAssignee = profileId(payload.assignee || payload.owner);
     if (!nextAssignee) return apiError("Aufgaben brauchen eine Zuständigkeit.", 400);

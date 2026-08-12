@@ -2,7 +2,6 @@ import type { PlanningShellState, TrashRootType } from "@/lib/types";
 
 export type PlanningTrashStateSnapshot = Pick<
   PlanningShellState,
-  | "packages"
   | "tasks"
   | "taskActivity"
   | "taskBlockers"
@@ -29,9 +28,7 @@ function collectTaskTreeIds(tasks: PlanningShellState["tasks"], rootTaskId: stri
 }
 
 function taskIdsForRoot(data: PlanningShellState, rootType: TrashRootType, rootId: string) {
-  if (rootType === "initiative") {
-    return new Set(data.tasks.filter((task) => task.packageId === rootId).map((task) => task.id));
-  }
+  void rootType;
   return collectTaskTreeIds(data.tasks, rootId);
 }
 
@@ -43,7 +40,6 @@ function restoreMissingById<T extends { id: string | number }>(current: T[], rem
 export function removePlanningRootFromData(data: PlanningShellState, rootType: TrashRootType, rootId: string) {
   const taskIds = taskIdsForRoot(data, rootType, rootId);
   const snapshot: PlanningTrashStateSnapshot = {
-    packages: rootType === "initiative" ? data.packages.filter((pack) => pack.id === rootId) : [],
     tasks: data.tasks.filter((task) => taskIds.has(task.id)),
     taskActivity: data.taskActivity.filter((activity) => taskIds.has(activity.taskId)),
     taskBlockers: data.taskBlockers.filter((blocker) => taskIds.has(blocker.taskId)),
@@ -58,7 +54,6 @@ export function removePlanningRootFromData(data: PlanningShellState, rootType: T
   return {
     data: {
       ...data,
-      packages: rootType === "initiative" ? data.packages.filter((pack) => pack.id !== rootId) : data.packages,
       tasks: data.tasks.filter((task) => !taskIds.has(task.id)),
       taskActivity: data.taskActivity.filter((activity) => !taskIds.has(activity.taskId)),
       taskBlockers: data.taskBlockers.filter((blocker) => !taskIds.has(blocker.taskId)),
@@ -77,7 +72,6 @@ export function removePlanningRootFromData(data: PlanningShellState, rootType: T
 export function restorePlanningRootToData(data: PlanningShellState, snapshot: PlanningTrashStateSnapshot): PlanningShellState {
   return {
     ...data,
-    packages: restoreMissingById(data.packages, snapshot.packages),
     tasks: restoreMissingById(data.tasks, snapshot.tasks),
     taskActivity: restoreMissingById(data.taskActivity, snapshot.taskActivity),
     taskBlockers: restoreMissingById(data.taskBlockers, snapshot.taskBlockers),

@@ -84,9 +84,8 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   return [
     payload.assignee !== undefined || payload.owner !== undefined ? "Zuständig" : "",
     payload.priority !== undefined ? "Priorität" : "",
-    payload.packageId !== undefined ? "Initiative" : "",
+    payload.parentTaskId !== undefined ? "Übergeordnetes Planning Item" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
-    payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
     payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
     payload.scorePoints !== undefined || (payload.scoreFinal !== undefined && !isImplicitReviewScoreReset) ? "Score" : "",
   ].filter(Boolean);

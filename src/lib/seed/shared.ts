@@ -1,8 +1,7 @@
-import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "../planning-profile-mappers";
 import type { Package, PlanningShellState, Task } from "../types";
 import seedSource from "./source.json";
 
-type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
+type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "tasks" | "sprints" | "fmdTools" | "meetings">;
 type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "approvalStatus" | "approvalRevision" | "parentApprovalStatus" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee" | "evidenceLinks" | "linkedPullRequests"> & Partial<SeedTaskDefaults> & {
   assigneeId: string;
@@ -172,18 +171,10 @@ export function defineTasks(inputs: SeedTaskInput[]): Task[] {
 }
 
 export const seedTasks = defineTasks(seedTaskDefinitions);
-export const seedPackages = seedTasks
-  .filter((task) => task.taskType === "initiative")
-  .map(mapLegacyPackageFromInitiative);
-export const seedMilestones = seedTasks
-  .filter((task) => task.taskType === "epic")
-  .map(mapLegacyMilestoneFromEpic);
-
 export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningShellState {
   return {
     project: seedProject,
     profiles: seedProfiles,
-    packages: seedPackages,
     tasks,
     sprints: seedSprints,
     sprintCommitments: emptySeedCollections.sprintCommitments,
@@ -191,7 +182,6 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningShellStat
     founderStrikeStates: emptySeedCollections.founderStrikeStates,
     strikeEvents: emptySeedCollections.strikeEvents,
     scoreObjections: emptySeedCollections.scoreObjections,
-    milestones: seedMilestones,
     taskComments: emptySeedCollections.taskComments,
     taskExternalComments: emptySeedCollections.taskExternalComments,
     taskBlockers: emptySeedCollections.taskBlockers,

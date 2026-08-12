@@ -4,12 +4,6 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
 const { applyTaskDetailModel, taskDetailDegradationMessage, taskDetailModelToPlanningShellState } = await loadTranspiledModule(
   "src/features/tasks/model/task-detail-planning-shell-projection.ts",
-  {
-    "@/lib/planning-profile-mappers": {
-      mapLegacyMilestoneFromEpic: (item) => ({ ...item, legacy: "milestone" }),
-      mapLegacyPackageFromInitiative: (item) => ({ ...item, legacy: "package" }),
-    },
-  },
 );
 
 function model() {
@@ -33,8 +27,8 @@ function model() {
 test("task detail compatibility projection contains only the feature model", () => {
   const data = taskDetailModelToPlanningShellState(model());
   assert.deepEqual(data.tasks.map(({ id }) => id), ["target", "epic", "initiative", "child", "related"]);
-  assert.deepEqual(data.milestones.map(({ id }) => id), ["epic"]);
-  assert.deepEqual(data.packages.map(({ id }) => id), ["initiative"]);
+  assert.equal(Object.hasOwn(data, "milestones"), false);
+  assert.equal(Object.hasOwn(data, "packages"), false);
   assert.deepEqual(data.taskComments.map(({ id }) => id), ["new-comment"]);
   assert.deepEqual(data.notificationEvents, []);
 });

@@ -3,8 +3,6 @@ import type { Task, TaskType } from "@/lib/types";
 type TaskCreationHierarchy = {
   taskType: TaskType;
   parentTaskId: string;
-  packageId: string;
-  milestoneId: string;
 };
 
 type TaskCreationRequestDraft = TaskCreationHierarchy & {
@@ -67,13 +65,9 @@ export function withSubIssueParentHierarchy<T extends TaskCreationHierarchy>(
   tasks: Task[],
   parentTaskId: string,
 ): T {
-  const parent = taskCreationParent(tasks, parentTaskId);
-
   return {
     ...draft,
     parentTaskId,
-    packageId: parent?.packageId || "",
-    milestoneId: parent?.milestoneId || "",
   };
 }
 

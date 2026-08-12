@@ -39,13 +39,13 @@ import { TaskCommentThread } from "@/features/tasks/organisms/task-comment-threa
 import { TaskOverviewPanel } from "@/features/tasks/organisms/task-overview-panel";
 import { TaskRelationshipsSection } from "@/features/tasks/organisms/task-relationships-section";
 import { normalizeStatus } from "@/lib/status";
-import type { ApprovalDecisionAction, AuthenticatedProfile, Milestone, Package, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
+import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 import { classNames, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type TaskDetailSurfaceProps = {
   surface?: "page" | "modal";
   task: Task;
-  pack?: Package;
+  initiative?: Task;
   comments: TaskComment[];
   externalComments: TaskExternalComment[];
   activities: TaskActivity[];
@@ -53,9 +53,7 @@ type TaskDetailSurfaceProps = {
   blockers: TaskBlocker[];
   subIssues: Task[];
   teamProfiles: Profile[];
-  packages: Package[];
   sprints: Sprint[];
-  milestones: Milestone[];
   allTasks: Task[];
   relations: TaskRelation[];
   currentProfile?: Pick<AuthenticatedProfile, "id" | "name" | "platformRole"> | null;
@@ -88,7 +86,7 @@ type TaskDetailSurfaceProps = {
 export function TaskDetailSurface({
   surface = "page",
   task,
-  pack,
+  initiative,
   comments,
   externalComments,
   activities,
@@ -96,9 +94,7 @@ export function TaskDetailSurface({
   blockers,
   subIssues,
   teamProfiles,
-  packages,
   sprints,
-  milestones,
   allTasks,
   relations,
   currentProfile = null,
@@ -151,10 +147,10 @@ export function TaskDetailSurface({
   const canCreateDirectChild = directChildType === "sub_issue"
     ? controller.permissions.canCreateSubIssue
     : Boolean(directChildType && controller.permissions.canManageTaskMeta);
-  const currentPackage = packages.find((item) => item.id === (task.taskType === "initiative" ? task.id : task.parentTaskId || task.packageId)) || pack;
+  const currentInitiative = initiative;
   const parentTask = allTasks.find((item) => item.id === task.parentTaskId);
   const relationshipGroups = buildTaskRelationshipRows(task, allTasks, relations);
-  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentPackage, profile: currentProfile, unrestricted: false });
+  const baseRelationshipAccess = taskRelationshipAccess({ task, initiative: currentInitiative, profile: currentProfile, unrestricted: false });
   const relationshipAccess = reviewLocked ? {
     ...baseRelationshipAccess,
     allowedRelationTypes: [],
@@ -164,13 +160,13 @@ export function TaskDetailSurface({
   const profileName = (profileId: string) => teamProfiles.find((profile) => profile.id === profileId)?.name || profileId || "Unbekannt";
   const canApprove = task.taskType === "initiative"
     ? canDecideInitiativeApproval({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
-    : canApproveDeliverableApproval(task, currentPackage, currentProfile);
+    : canApproveDeliverableApproval(task, currentInitiative, currentProfile);
   const canReject = task.taskType === "initiative"
     ? canDecideInitiativeApproval({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
-    : canRejectDeliverableApproval(task, currentPackage, currentProfile);
+    : canRejectDeliverableApproval(task, currentInitiative, currentProfile);
   const canReturnToDraft = task.taskType === "initiative"
     ? canReturnInitiativeForRevision({ approvalStatus: task.approvalStatus || "draft" }, currentProfile)
-    : canReturnDeliverableForRevision(task, currentPackage, currentProfile);
+    : canReturnDeliverableForRevision(task, currentInitiative, currentProfile);
   const canWithdrawTask = !reviewLocked && task.taskType === "deliverable" && canWithdrawPlanningRoot({
     rootType: "deliverable",
     approvalStatus: task.approvalStatus,
@@ -364,8 +360,6 @@ export function TaskDetailSurface({
         profiles={teamProfiles}
         tasks={allTasks}
         sprints={sprints}
-        packages={packages}
-        milestones={milestones}
         currentProfileId={currentProfile?.id || ""}
         loading={detailDataLoading}
         unavailable={detailDataUnavailable}
@@ -385,7 +379,7 @@ export function TaskDetailSurface({
   const operationalHeader = (
     <TaskDetailOperationalHeader
       task={task}
-      initiative={currentPackage}
+      initiative={currentInitiative}
       parentTask={parentTask}
       profiles={teamProfiles}
       subIssues={directChildren}
@@ -435,9 +429,7 @@ export function TaskDetailSurface({
     <>
       <TaskDetailPlanningSection
         task={task}
-        pack={currentPackage}
         teamProfiles={teamProfiles}
-        packages={packages}
         allTasks={allTasks}
         sprints={sprints}
         canManageTaskMeta={controller.permissions.canManageTaskMeta}
