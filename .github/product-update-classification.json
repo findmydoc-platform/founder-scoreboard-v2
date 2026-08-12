@@ -1,4 +1,4 @@
 {
-  "classification": "visual-polish",
-  "reason": "Refines the existing FounderOps navigation layout, grouping, labels, and header without adding a new user workflow."
+  "classification": "maintenance",
+  "reason": "Replaces the existing Task Detail data-loading path without adding or materially expanding visible user functionality."
 }
