@@ -577,6 +577,8 @@ test("reviews live in task detail while legacy review links remain compatible", 
   const relationshipModule = await readFile("src/features/planning-items/model/planning-items-relationships.ts", "utf8");
   const relationshipCommandMigration = await readFile("supabase/migrations/20260812131418_planning_relationship_command_transaction.sql", "utf8");
   const planningTrashApi = await readFile("src/lib/planning-trash-api.ts", "utf8");
+  const planningTrashModule = await readFile("src/features/planning-items/model/planning-items-trash.ts", "utf8");
+  const planningTrashMigration = await readFile("supabase/migrations/20260812150600_planning_trash_command_transaction.sql", "utf8");
   const reviewLock = await readFile("src/lib/task-review-lock.ts", "utf8");
   const taskApiClient = await readFile("src/features/tasks/model/task-api-client.ts", "utf8");
   const reviewMigration = await readFile("supabase/migrations/20260717175618_integrate_reviews_into_tasks.sql", "utf8");
@@ -657,7 +659,10 @@ test("reviews live in task detail while legacy review links remain compatible", 
   assert.match(relationshipCommandMigration, /review_status = 'accepted'/);
   assert.match(reviewLock, /parent_task_id/);
   assert.match(reviewLock, /isReviewStateLocked/);
-  assert.match(planningTrashApi, /isReviewStateLocked\(root\.review_status, root\.score_final\)/);
+  assert.match(planningTrashApi, /createPlanningTrashPlanningItems/);
+  assert.match(planningTrashModule, /isReviewStateLocked\(task\.review_status, task\.score_final\)/);
+  assert.match(planningTrashMigration, /v_root\.review_status = 'requested'/);
+  assert.match(planningTrashMigration, /v_root\.review_status = 'accepted'/);
 });
 
 test("founderops v2.1 computes 20 point sprint scores strikes and objections", async () => {
