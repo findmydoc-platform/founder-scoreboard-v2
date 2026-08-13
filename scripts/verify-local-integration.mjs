@@ -12,6 +12,7 @@ const nextCli = resolve(root, "node_modules/.bin/next");
 const localDevelopmentScript = resolve(root, "scripts/local-development.mjs");
 const seedSourcePath = resolve(root, "src/lib/seed/source.json");
 const appOrigin = "http://127.0.0.1:3012";
+const maintenanceOrigin = "http://127.0.0.1:3013";
 
 function parseEnvFile(content) {
   return Object.fromEntries(content.split(/\r?\n/).flatMap((line) => {
@@ -43,6 +44,43 @@ async function waitForServer(child) {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
   }
   throw new Error("Next.js local integration server did not become ready within 60 seconds.");
+}
+
+async function verifyMaintenanceMode(localEnv) {
+  const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3013"], {
+    cwd: root,
+    env: { ...process.env, ...localEnv, APP_URL: maintenanceOrigin, PLANNING_MAINTENANCE_MODE: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  app.stdout.on("data", (chunk) => { output = `${output}${chunk}`.slice(-4000); });
+  app.stderr.on("data", (chunk) => { output = `${output}${chunk}`.slice(-4000); });
+  try {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      if (app.exitCode !== null) throw new Error("Maintenance integration server stopped before becoming ready.");
+      try {
+        const health = await fetch(`${maintenanceOrigin}/api/health`);
+        if (health.status === 503) break;
+      } catch {}
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+    }
+    for (const [path, init] of [
+      ["/api/health", {}],
+      ["/api/planning-board-data", {}],
+      ["/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+    ]) {
+      const response = await fetch(`${maintenanceOrigin}${path}`, init);
+      assertStatus(response, 503, `Maintenance ${path}`);
+      const body = await response.json();
+      if (body.status !== "maintenance") throw new Error(`Maintenance ${path} did not return the maintenance contract.`);
+    }
+  } catch (error) {
+    if (output.trim()) console.error(output);
+    throw error;
+  } finally {
+    app.kill("SIGTERM");
+  }
 }
 
 function assertStatus(response, expected, label) {
@@ -159,7 +197,7 @@ async function verifyCanonicalPlanningPreferences(status) {
       ["volkan", {}, canonical, {}, null, null],
     );
     const stored = await client.query(
-      "select planning_filters,expanded_item_ids,expanded_package_ids from public.profile_ui_preferences where profile_id=$1",
+      "select planning_filters,expanded_item_ids from public.profile_ui_preferences where profile_id=$1",
       ["volkan"],
     );
     const preference = stored.rows[0];
@@ -167,27 +205,8 @@ async function verifyCanonicalPlanningPreferences(status) {
       throw new Error("Profile settings RPC did not return canonical expanded Planning item IDs.");
     }
     if (JSON.stringify(preference?.planning_filters) !== JSON.stringify(canonical.planning_filters)
-      || JSON.stringify(preference?.expanded_item_ids) !== JSON.stringify(["GC1"])
-      || preference?.expanded_package_ids?.length !== 0) {
-      throw new Error("Profile settings RPC did not isolate canonical Planning preferences from the legacy column.");
-    }
-
-    const legacyResult = await client.query(
-      "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6) as result",
-      ["volkan", {}, {
-        default_workspace: "planning",
-        default_task_view: "board",
-        planning_filters: { owner: "volkan", packageId: "GC1" },
-        expanded_package_ids: ["GC1"],
-      }, {}, null, null],
-    );
-    const normalized = legacyResult.rows[0]?.result?.ui_preference;
-    if (normalized?.planning_filters?.assignee !== "volkan"
-      || normalized?.planning_filters?.initiativeId !== "GC1"
-      || Object.hasOwn(normalized?.planning_filters || {}, "owner")
-      || Object.hasOwn(normalized?.planning_filters || {}, "packageId")
-      || JSON.stringify(normalized?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
-      throw new Error("Profile settings RPC did not normalize the deployed legacy preference payload.");
+      || JSON.stringify(preference?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
+      throw new Error("Profile settings RPC did not persist canonical Planning preferences.");
     }
     await client.query("rollback");
   } catch (error) {
@@ -313,7 +332,7 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
   const issuedTokenIds = [];
   const issueToken = async (allowGitHubSync) => {
     const response = await apiRequest(
-      "/api/team/planning-items/v1/tokens",
+      "/api/team/planning-items/v2/tokens",
       sessionToken,
       "sebastian",
       {
@@ -340,7 +359,7 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
       throw new Error("New Planning API token unexpectedly received the GitHub sync scope by default.");
     }
     const denied = await apiRequest(
-      `/api/team/planning-items/v1/items/${taskId}/github-sync`,
+      `/api/team/planning-items/v2/items/${taskId}/github-sync`,
       defaultToken.token,
       "",
       {
@@ -359,7 +378,7 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
       throw new Error("Planning API token did not receive the explicitly requested GitHub sync scope.");
     }
     const ineligible = await apiRequest(
-      `/api/team/planning-items/v1/items/${taskId}/github-sync`,
+      `/api/team/planning-items/v2/items/${taskId}/github-sync`,
       enabledToken.token,
       "",
       {
@@ -375,7 +394,7 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
   } finally {
     for (const tokenId of issuedTokenIds.reverse()) {
       const response = await apiRequest(
-        `/api/team/planning-items/v1/tokens/${tokenId}`,
+        `/api/team/planning-items/v2/tokens/${tokenId}`,
         sessionToken,
         "sebastian",
         { method: "DELETE" },
@@ -423,7 +442,7 @@ async function verifyEmptyEpicDeleteRoutes(sessionToken) {
   const teamEpic = await createEpic("Team empty Epic delete verification");
   let tokenId = "";
   try {
-    const issued = await apiRequest("/api/team/planning-items/v1/tokens", sessionToken, "", {
+    const issued = await apiRequest("/api/team/planning-items/v2/tokens", sessionToken, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ label: "Local empty Epic delete verification", allowEmptyEpicDeletes: true }),
@@ -435,7 +454,7 @@ async function verifyEmptyEpicDeleteRoutes(sessionToken) {
       throw new Error("Empty Epic delete token issuance returned an incomplete response.");
     }
     const payload = JSON.stringify({ expectedUpdatedAt: teamEpic.updatedAt });
-    const preview = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}/delete/preview`, tokenBody.token, "", {
+    const preview = await apiRequest(`/api/team/planning-items/v2/items/${teamEpic.id}/delete/preview`, tokenBody.token, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: payload,
@@ -452,13 +471,13 @@ async function verifyEmptyEpicDeleteRoutes(sessionToken) {
       headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: payload,
     };
-    const committed = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
+    const committed = await apiRequest(`/api/team/planning-items/v2/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
     assertStatus(committed, 200, "Team empty Epic deletion");
     const committedBody = await committed.json();
     if (committedBody.replayed || committedBody.itemType !== "epic" || committedBody.item?.id !== teamEpic.id) {
       throw new Error("Team empty Epic deletion changed its response shape.");
     }
-    const replayed = await apiRequest(`/api/team/planning-items/v1/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
+    const replayed = await apiRequest(`/api/team/planning-items/v2/items/${teamEpic.id}`, tokenBody.token, "", commitRequest);
     assertStatus(replayed, 200, "Team empty Epic deletion replay");
     const replayedBody = await replayed.json();
     if (!replayedBody.replayed || replayedBody.item?.id !== teamEpic.id) {
@@ -466,7 +485,7 @@ async function verifyEmptyEpicDeleteRoutes(sessionToken) {
     }
   } finally {
     if (tokenId) {
-      const revoked = await apiRequest(`/api/team/planning-items/v1/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
+      const revoked = await apiRequest(`/api/team/planning-items/v2/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
       assertStatus(revoked, 200, "Empty Epic delete token cleanup");
     }
   }
@@ -701,7 +720,7 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
       throw new Error("Browser Sub-Issue reparent changed its response shape.");
     }
 
-    const issued = await apiRequest("/api/team/planning-items/v1/tokens", sessionToken, "", {
+    const issued = await apiRequest("/api/team/planning-items/v2/tokens", sessionToken, "", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label: "Local reparent verification", allowUpdates: true }),
     });
     assertStatus(issued, 200, "Reparent token issuance");
@@ -717,13 +736,13 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
       headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
       body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, parentTaskId: ids.initiativeTwo }),
     };
-    const team = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
+    const team = await apiRequest(`/api/team/planning-items/v2/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
     if (team.status !== 200) throw new Error(`Team Deliverable reparent: expected 200, received ${team.status}: ${await team.text()}`);
     const teamBody = await team.json();
     if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("parentTaskId")) {
       throw new Error("Team Deliverable reparent changed its response shape.");
     }
-    const replay = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
+    const replay = await apiRequest(`/api/team/planning-items/v2/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
     assertStatus(replay, 200, "Team Deliverable reparent replay");
     const replayBody = await replay.json();
     if (!replayBody.replayed || replayBody.item?.parentTaskId !== ids.initiativeTwo) {
@@ -731,7 +750,7 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
     }
   } finally {
     if (tokenId) {
-      const revoked = await apiRequest(`/api/team/planning-items/v1/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
+      const revoked = await apiRequest(`/api/team/planning-items/v2/tokens/${tokenId}`, sessionToken, "", { method: "DELETE" });
       assertStatus(revoked, 200, "Reparent token cleanup");
     }
     await client.query("select set_config('founderops.trash_lifecycle_write', 'on', false)");
@@ -753,10 +772,11 @@ async function main() {
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });
-  execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-items-transaction.mjs")], { cwd: root, stdio: "inherit" });
+  execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-legacy-cutover.mjs"), "--local", "--post-cutover"], { cwd: root, stdio: "inherit" });
   await verifyGitHubProjectRoleBoundary(status, source);
   await verifyUnmappedAuthReadBoundary(status);
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
+  await verifyMaintenanceMode(localEnv);
   const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3012"], {
     cwd: root,
     env: { ...process.env, ...localEnv, APP_URL: appOrigin },

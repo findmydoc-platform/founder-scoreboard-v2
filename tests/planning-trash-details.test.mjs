@@ -232,9 +232,9 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
 
 test("initiative links preserve legacy notification ids through the canonical mapping", async () => {
   const page = await read("src/app/initiatives/[id]/page.tsx");
-  assert.match(page, /planning_item_legacy_ids/);
-  assert.match(page, /\.eq\("source_kind", "package"\)/);
-  assert.match(page, /\.eq\("legacy_id", id\)/);
+  assert.match(page, /planning_item_historical_links/);
+  assert.match(page, /\.eq\("item_type", "initiative"\)/);
+  assert.match(page, /\.eq\("historical_id", id\)/);
   assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });

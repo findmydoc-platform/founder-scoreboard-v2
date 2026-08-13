@@ -39,7 +39,6 @@ try {
     initiative: `approval-initiative-${suffix}`,
     deliverable: `approval-deliverable-${suffix}`,
     locked: `approval-locked-${suffix}`,
-    legacy: `approval-legacy-${suffix}`,
   };
   await client.query(
     "insert into public.profiles (id,name,role,platform_role) values ($1,'Approval CEO','admin','ceo'),($2,'Approval Founder','member','founder'),($3,'Approval Responsible','member','founder')",
@@ -59,16 +58,7 @@ try {
     "insert into public.planning_item_raci_assignments (task_id,profile_id,role,sort_order) values ($1,$2,'accountable',0),($1,$3,'responsible',1)",
     [ids.initiative, ids.ceo, ids.responsible],
   );
-  await client.query(
-    `insert into public.packages (id,project_id,title,goal,owner_id,accountable_profile_id,responsible_profile_ids,approval_status,approval_revision)
-     values ($1,'findmydoc-founder-execution','Legacy Approval Initiative','Legacy compatibility',$2,$2,array[$3],'proposed',1)`,
-    [ids.legacy, ids.ceo, ids.responsible],
-  );
-  await client.query(
-    "insert into public.planning_item_legacy_ids (source_kind,legacy_id,task_id,project_id) values ('package',$1,$2,'findmydoc-founder-execution')",
-    [ids.legacy, ids.initiative],
-  );
-  const prepared = await client.query("select public.prepare_planning_approval_command($1,'initiative',$2) as result", [ids.legacy, ids.ceo]);
+  const prepared = await client.query("select public.prepare_planning_approval_command($1,'initiative',$2) as result", [ids.initiative, ids.ceo]);
   assert.equal(prepared.rows[0]?.result?.task?.id, ids.initiative);
   assert.equal(prepared.rows[0]?.result?.accountableCount, 1);
   assert.equal(prepared.rows[0]?.result?.responsibleCount, 1);
@@ -95,7 +85,7 @@ try {
       has_function_privilege('service_role','public.mutate_planning_approval_command_transaction(text,text,integer,text,text,text)','execute') service_commit`,
   );
   assert.deepEqual(privileges.rows[0], { authenticated_prepare: false, authenticated_commit: false, service_prepare: true, service_commit: true });
-  console.log("Planning approval policy, atomic effects, legacy resolution, and service-only access verified; all data will be rolled back.");
+  console.log("Canonical Planning approval policy, atomic effects, and service-only access verified; all data will be rolled back.");
 } finally {
   await client.query("rollback").catch(() => undefined);
   await client.end();

@@ -533,9 +533,9 @@ async function verifyPlanningItemsRpcs() {
     p_token_hint: "…verify",
     p_allow_updates: false,
   };
-  const tokenV3Params = {
+  const tokenV2Params = {
     ...tokenParams,
-    p_allow_empty_milestone_deletes: false,
+    p_allow_empty_epic_deletes: false,
     p_allow_github_sync: false,
   };
   const authParams = {
@@ -585,8 +585,8 @@ async function verifyPlanningItemsRpcs() {
   ] = await Promise.all([
     supabase.rpc("create_team_planning_items_token", tokenParams),
     anonSupabase.rpc("create_team_planning_items_token", tokenParams),
-    supabase.rpc("create_team_planning_items_token_v3", tokenV3Params),
-    anonSupabase.rpc("create_team_planning_items_token_v3", tokenV3Params),
+    supabase.rpc("create_team_planning_items_token_v2", tokenV2Params),
+    anonSupabase.rpc("create_team_planning_items_token_v2", tokenV2Params),
     supabase.rpc("authenticate_team_planning_items_token", authParams),
     anonSupabase.rpc("authenticate_team_planning_items_token", authParams),
     supabase.rpc("revoke_team_planning_items_token", revokeParams),
@@ -608,7 +608,7 @@ async function verifyPlanningItemsRpcs() {
             : "",
     },
     {
-      name: "create_team_planning_items_token_v3",
+      name: "create_team_planning_items_token_v2",
       ok: tokenV3.error?.code === "P0002" && Boolean(anonTokenV3.error),
       error: tokenV3.error?.code !== "P0002"
         ? tokenV3.error?.message || "token v3 RPC unexpectedly accepted a missing profile"
@@ -659,22 +659,28 @@ async function verifyPlanningItemsRpcs() {
 
 async function verifyApprovalDecisionRpcs() {
   const checks = [
-    ["decide_initiative_approval_transaction", "p_initiative_id"],
-    ["decide_deliverable_approval_transaction", "p_task_id"],
+    ["initiative", "verify-missing-approval-initiative"],
+    ["deliverable", "verify-missing-approval-deliverable"],
   ];
 
-  return Promise.all(checks.map(async ([name, idField]) => {
-    const { error } = await supabase.rpc(name, {
-      [idField]: `verify-missing-approval-item-${Date.now()}`,
-      p_expected_revision: 1,
-      p_action: "return_to_draft",
+  return Promise.all(checks.map(async ([kind, id]) => {
+    const params = {
+      p_item_id: `${id}-${Date.now()}`,
+      p_expected_kind: kind,
       p_actor_profile_id: "",
-      p_note: null,
-    });
+    };
+    const [{ error }, { error: anonError }] = await Promise.all([
+      supabase.rpc("prepare_planning_approval_command", params),
+      anonSupabase.rpc("prepare_planning_approval_command", params),
+    ]);
     return {
-      name,
-      ok: error?.code === "22023",
-      error: error?.code === "22023" ? "" : error?.message || "RPC did not require an approval decision note",
+      name: `prepare_planning_approval_command:${kind}`,
+      ok: error?.code === "22023" && Boolean(anonError),
+      error: error?.code !== "22023"
+        ? error?.message || "approval preparation did not validate its canonical input"
+        : !anonError
+          ? "approval preparation unexpectedly allowed anonymous execution"
+          : "",
     };
   }));
 }
@@ -788,7 +794,7 @@ const result = {
   githubProjectNumber: project.github_project_number,
   profiles: await count("profiles"),
   githubAppConnections: await count("github_app_user_tokens"),
-  packages: await count("packages"),
+  planningItemHistoricalLinks: await count("planning_item_historical_links"),
   tasks: await count("tasks"),
   taskDeletionOperations: await count("task_deletion_operations"),
   dependencies: await count("task_dependencies"),
@@ -817,7 +823,6 @@ const result = {
   meetings: await count("meetings"),
   meetingAttendance: await count("meeting_attendance"),
   events: await count("founder_events"),
-  milestones: await count("milestones"),
   schema: await Promise.all(schemaChecks.map(checkSchema)),
   githubSyncLockRpc: await verifyGitHubSyncLockRpc(),
   profileWriteRpcs: await verifyProfileWriteRpcs(),

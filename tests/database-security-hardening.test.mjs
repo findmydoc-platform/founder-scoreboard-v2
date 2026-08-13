@@ -89,11 +89,20 @@ test("team RLS mirrors mapped app membership and contributor roles", async () =>
 
   assert.equal(matchingMigrations.length, 1);
   const migration = matchingMigrations[0].sql;
+  const cutover = await readFile("supabase/migrations/20260813125245_planning_legacy_big_bang_cutover.sql", "utf8");
+  const hierarchy = migrations.find((candidate) => candidate.name === "unified_planning_hierarchy")?.sql || "";
 
   for (const [policyName, tableName] of mappedTeamReadPolicies) {
-    const policyStatement = migration.match(
+    const sourcePolicyName = policyName === "planning_item_historical_links_select_team"
+      ? "planning_item_legacy_ids_select_team"
+      : policyName;
+    const sourceTableName = tableName === "planning_item_historical_links"
+      ? "planning_item_legacy_ids"
+      : tableName;
+    const policySource = sourcePolicyName === "planning_item_legacy_ids_select_team" ? hierarchy : migration;
+    const policyStatement = policySource.match(
       new RegExp(
-        `alter policy ${policyName}\\s+on public\\.${tableName}[\\s\\S]*?;`,
+        `(?:alter|create) policy ${sourcePolicyName}\\s+on public\\.${sourceTableName}[\\s\\S]*?;`,
         "i",
       ),
     )?.[0];
@@ -103,6 +112,9 @@ test("team RLS mirrors mapped app membership and contributor roles", async () =>
       /using \(public\.current_profile_id\(\) is not null\)/i,
     );
     assert.doesNotMatch(policyStatement, /auth\.uid/i);
+    if (sourcePolicyName !== policyName) {
+      assert.match(cutover, new RegExp(`alter policy ${sourcePolicyName}[\\s\\S]*rename to ${policyName}`, "i"));
+    }
   }
 
   for (const policyName of planningContributorWritePolicies) {

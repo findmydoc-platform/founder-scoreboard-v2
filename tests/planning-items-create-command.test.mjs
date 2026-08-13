@@ -39,8 +39,8 @@ const actor = {
 test("Browser and Team create routes are transport-only adapters", async () => {
   const routes = await Promise.all([
     "src/app/api/tasks/route.ts",
-    "src/app/api/team/planning-items/v1/items/route.ts",
-    "src/app/api/team/planning-items/v1/items/preview/route.ts",
+    "src/app/api/team/planning-items/v2/items/route.ts",
+    "src/app/api/team/planning-items/v2/items/preview/route.ts",
   ].map((path) => readFile(path, "utf8")));
   for (const route of routes) {
     assert.doesNotMatch(route, /\.rpc\(|\.from\(/);
@@ -53,18 +53,18 @@ test("Browser and Team create routes are transport-only adapters", async () => {
   assert.match(teamCreateRoute, /mode: "preview"/);
 });
 
-test("CreateItems canonicalizes all four transport item types", async () => {
+test("CreateItems maps all four canonical transport item types", async () => {
   const create = await loadCreate();
   const command = create.planningItemCreateCommand([
     { itemType: "epic", title: "Epic", description: "Direction", ownerId: "ceo-1", status: "Offen" },
-    { itemType: "initiative", title: "Initiative", ownerId: "ceo-1", milestoneId: "legacy-epic", accountableProfileId: "ceo-1", responsibleProfileIds: ["founder-1"] },
-    { itemType: "deliverable", title: "Deliverable", packageId: "legacy-initiative", ownerId: "founder-1", definitionOfDone: "Done" },
+    { itemType: "initiative", title: "Initiative", ownerId: "ceo-1", parentTaskId: "epic-1", accountableProfileId: "ceo-1", responsibleProfileIds: ["founder-1"] },
+    { itemType: "deliverable", title: "Deliverable", parentTaskId: "initiative-1", ownerId: "founder-1", definitionOfDone: "Done" },
     { itemType: "sub_issue", title: "Sub-Issue", parentTaskId: "deliverable-1", githubRepo: "findmydoc-platform/website" },
   ], "ceo-1");
 
   assert.deepEqual(command.items.map((item) => item.kind), ["epic", "initiative", "deliverable", "sub_issue"]);
-  assert.equal(command.items[1].parentId, "legacy-epic");
-  assert.equal(command.items[2].parentId, "legacy-initiative");
+  assert.equal(command.items[1].parentId, "epic-1");
+  assert.equal(command.items[2].parentId, "initiative-1");
   assert.equal(command.items[3].ownerId, "ceo-1");
   assert.equal(Object.hasOwn(command.items[1], "milestoneId"), false);
   assert.equal(Object.hasOwn(command.items[2], "packageId"), false);
@@ -116,22 +116,16 @@ test("CreateItems rejects empty and oversized batches before a writer", async ()
   assert.equal(rpcCalls, 0);
 });
 
-test("Team v1 replay returns the original receipt without preview or writer effects", async () => {
+test("Team create rejects stored v1 replay receipts before preview or writer effects", async () => {
   const create = await loadCreate();
-  const rawItems = [{ itemType: "milestone", title: "Legacy", description: "Snapshot" }];
-  const responseItems = [{ itemType: "milestone", item: { id: "milestone-v1", title: "Legacy" } }];
-  const requestHash = create.planningItemLegacyCreateHash({
-    items: rawItems,
-    responses: responseItems,
-    actorProfileId: actor.profileId,
-    githubSyncMode: null,
-  });
+  const rawItems = [{ itemType: "epic", title: "Current", description: "Snapshot", ownerId: actor.profileId }];
+  const responseItems = [{ itemType: "epic", item: { id: "epic-v1", title: "Current" } }];
   let rpcCalls = 0;
   let previews = 0;
   const query = {
     select() { return this; },
     eq() { return this; },
-    async maybeSingle() { return { data: { id: "batch-v1", request_hash: requestHash, response_tasks: responseItems, contract_version: 1 }, error: null }; },
+    async maybeSingle() { return { data: { id: "batch-v1", request_hash: "stored-v1", response_tasks: responseItems, contract_version: 1 }, error: null }; },
   };
   const tokenActor = { ...actor, credential: { kind: "planningToken", tokenId: "token-1", scopes: ["write:planning-items:create"] } };
   const result = await create.createTeamCreatePlanningItems({
@@ -147,12 +141,11 @@ test("Team v1 replay returns the original receipt without preview or writer effe
     command: create.planningItemCreateCommand(rawItems, actor.profileId),
     idempotencyKey: "key-1",
   });
-  assert.equal(result.ok, true);
-  assert.equal(result.replayed, true);
-  assert.deepEqual(create.planningCreateTransactionFromResult(result).items, responseItems);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "conflict");
+  assert.equal(result.error.reason, "idempotency");
   assert.equal(previews, 0);
   assert.equal(rpcCalls, 0);
-  assert.deepEqual(result.effects, []);
 });
 
 test("Team create error mapping preserves public authentication and schema statuses", async () => {

@@ -46,7 +46,7 @@ function epic(overrides = {}) {
   };
 }
 
-function fixture({ item = epic(), descendants = [], protectedByLegacy = false, stored = null, rpcResult } = {}) {
+function fixture({ item = epic(), descendants = [], stored = null, rpcResult } = {}) {
   const rpcCalls = [];
   const allTasks = item ? [item, ...descendants] : descendants;
   const descendantIds = new Set();
@@ -72,10 +72,7 @@ function fixture({ item = epic(), descendants = [], protectedByLegacy = false, s
         is(column, value) { filters.set(column, value); return builder; },
         limit() { return builder; },
         async maybeSingle() {
-          if (table === "team_planning_milestone_delete_requests") return { data: stored, error: null };
-          if (table === "planning_item_legacy_ids") {
-            return filters.get("legacy_id") ? { data: null, error: null } : { data: null, error: null };
-          }
+          if (table === "team_planning_item_delete_requests") return { data: stored, error: null };
           if (table === "tasks" && filters.get("id") === item?.id) {
             return { data: columns === "id" ? { id: item.id } : item, error: null };
           }
@@ -84,7 +81,6 @@ function fixture({ item = epic(), descendants = [], protectedByLegacy = false, s
         then(resolve, reject) {
           let data = [];
           if (table === "tasks") data = allTasks;
-          if (table === "planning_item_legacy_ids" && protectedByLegacy) data = [{ task_id: item.id }];
           return Promise.resolve({ data, error: null }).then(resolve, reject);
         },
       };
@@ -92,7 +88,7 @@ function fixture({ item = epic(), descendants = [], protectedByLegacy = false, s
     },
     async rpc(name, params) {
       if (name === "prepare_empty_epic_delete") {
-        return { data: { item, children, legacyProtected: protectedByLegacy }, error: null };
+        return { data: { item, children }, error: null };
       }
       const args = [name, params];
       rpcCalls.push(args);
@@ -129,7 +125,7 @@ test("Browser and Team routes delegate empty Epic policy and writes to PlanningI
   assert.match(preview, /createEmptyEpicDeletePlanningItems/);
   assert.match(preview, /mode: "preview"/);
   assert.doesNotMatch(preview, /loadPlanningItemMilestoneDeletePreview|\.rpc\(/);
-  assert.match(model, /delete_team_planning_milestone_transaction/);
+  assert.match(model, /delete_team_planning_item_transaction/);
   assert.match(model, /delete_empty_epic_with_audit_transaction/);
   assert.match(migration, /select public\.delete_empty_epic_transaction/i);
   assert.match(migration, /insert into public\.audit_log/i);
@@ -183,7 +179,7 @@ test("Preview and commit share policy while commit uses one atomic Browser RPC",
   });
 });
 
-test("non-empty and legacy-protected Epics preview as invalid and never reach a writer", async () => {
+test("non-empty Epics preview as invalid and never reach a writer", async () => {
   const model = await loadModel();
   const source = epic();
   const initiative = {
@@ -198,10 +194,7 @@ test("non-empty and legacy-protected Epics preview as invalid and never reach a 
     task_type: "deliverable",
     trashed_at: null,
   };
-  for (const current of [
-    fixture({ item: source, descendants: [initiative, deliverable] }),
-    fixture({ item: source, protectedByLegacy: true }),
-  ]) {
+  for (const current of [fixture({ item: source, descendants: [initiative, deliverable] })]) {
     const planning = model.createEmptyEpicDeletePlanningItems(current.client);
     const command = model.emptyEpicDeleteCommand(source.id, source.updated_at);
     const preview = await planning.run({ actor, mode: "preview", command });

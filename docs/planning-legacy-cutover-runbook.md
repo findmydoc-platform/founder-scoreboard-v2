@@ -1,6 +1,6 @@
 # Planning Legacy Cutover Runbook
 
-This runbook prepares the destructive Planning Legacy cutover. It does not authorize or apply a production migration. Issue #317 owns the maintenance window, production snapshot, data migration, destructive SQL, deployment, and recovery decision.
+This runbook records the Planning Legacy cutover and its fail-closed data-preservation gates. Issue #317 owns the production rollout and recovery decision.
 
 ## Current safe boundary
 
@@ -10,7 +10,8 @@ This runbook prepares the destructive Planning Legacy cutover. It does not autho
 - `pnpm run verify:planning-legacy-cutover -- --local --ready-to-drop` adds replay-removal gates. It must fail while legacy replay snapshots or the special Epic-delete replay table still contain rows.
 - Historical migrations and `supabase/baseline.sql` remain immutable.
 - `CASCADE`, broad deletes, truncation, and direct production execution are forbidden.
-- Team API v1 remains a compatibility contract. Its deprecated `milestone`, `packageId`, `milestoneId`, token-capability, and delete-error aliases are normalized only at the transport boundary until clients have moved to a separately versioned canonical API.
+- Team API v2 is the only supported contract. V1 routes and aliases are removed in the same release as the schema cutover.
+- Immutable legacy source snapshots retain every former Milestone and Package field independently of canonical item retention.
 
 The verifier checks row and field parity for Milestones/Epics and Packages/Initiatives; parent relationships; approval and trash state; strategy; RACI; derived legacy columns; saved preferences; idempotency contract versions; and legacy replay storage. It prints at most twenty concrete IDs per failed check and exits non-zero on every unknown difference.
 
@@ -20,10 +21,10 @@ All items below must be absent from active application code before the destructi
 
 1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. [x] Browser hierarchy fields `packageId` and `milestoneId` are removed from active create, update, task projections, Backlog state, and local seed data; `parentTaskId` is authoritative. Browser create and update requests use only `ownerId` for responsibility and reject the old `assignee` and `owner` aliases.
-3. [ ] Introduce a separately versioned Team API contract that exposes only canonical Epic and `parentTaskId` forms. Inventory active v1 token owners, migrate every caller, complete the communicated deprecation window, and prove that no active request or replay depends on the v1 aliases. Until then, the v1 adapter must continue normalizing deprecated request aliases and preserving documented response and error aliases.
+3. [x] Team API v2 exposes only canonical Epic and `parentTaskId` forms; v1 routes are removed.
 4. [x] `Package`, `Milestone`, `packages`, and `milestones` in active UI state. Planning, Projects, Gantt, trash, and task-detail surfaces now derive Epic and Initiative state exclusively from canonical Planning Items and `parentTaskId`. Saved Planning filters use `initiativeId` and `expanded_item_ids`; the additive preparation migration preserves existing values before active readers switch. The old column remains unused until #317 drops it.
-5. [ ] Active domain reads from `active_packages`, `packages`, and `milestones` are removed. `planning_item_legacy_ids` remains a compatibility dependency for Team v1 legacy IDs, historical Initiative notification links, immutable stored replays, and the cutover verifier. Migrate those durable IDs and retire the versioned API compatibility path before removing it.
-6. Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts.
+5. [x] Active domain reads from `active_packages`, `packages`, and `milestones` are removed. Historical URL redirects and delete receipts are preserved under canonical names.
+6. [x] Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts are removed.
 
 Compatibility code may remain only in explicitly named transport, durable-link, replay, and migration adapters. Core Planning commands and storage stay canonical. Tests must prove both the canonical core contract and the unchanged versioned compatibility contract.
 
@@ -33,7 +34,7 @@ Production work must use the protected workflow and a provider snapshot. The log
 
 Before the snapshot:
 
-1. Activate the approved maintenance window and freeze Planning writes.
+1. The protected production workflow deploys and verifies a fail-closed maintenance response before applying the migration. This freezes all application reads and writes without a manual approval stop.
 2. Stop new queue claims and wait for claimed Planning projection/lifecycle jobs to settle.
 3. Run the parity preflight in one repeatable-read transaction.
 4. Record counts for every table named by the verifier and for both projection outboxes.
@@ -178,6 +179,6 @@ Go requires all of the following:
 - queue counts and table checksums match the maintenance record;
 - every manifest statement succeeds with `RESTRICT` in staging restored from the production snapshot;
 - focused auth/security tests, migration verification, local integration, test, lint, and build are green;
-- the CEO explicitly approves the exact migration manifest and maintenance window.
+- the migration's in-transaction parity, row-count, and checksum gates pass immediately before removal.
 
-Abort immediately on an unknown ID, row/field difference, unresolved replay, extra dependent object, queue change, checksum mismatch, failed `RESTRICT`, or failed verification. Before destructive SQL, rollback means release the write freeze. After destructive SQL, do not improvise forward fixes: stop application traffic and restore the provider snapshot/full dump according to the approved #317 recovery decision.
+Abort immediately on an unknown ID, row/field difference, unresolved replay, extra dependent object, queue change, checksum mismatch, failed `RESTRICT`, or failed verification. Before destructive SQL, rollback means release the write freeze. After destructive SQL, do not improvise forward fixes: the workflow restores the verified maintenance deployment automatically. Keep it active and restore the provider snapshot/full dump according to the approved #317 recovery decision.

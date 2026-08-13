@@ -10,10 +10,10 @@ export default async function InitiativePage({ params }: Props) {
   const supabase = getServerSupabase();
   const { data } = supabase
     ? await supabase
-      .from("planning_item_legacy_ids")
+      .from("planning_item_historical_links")
       .select("task_id")
-      .eq("source_kind", "package")
-      .eq("legacy_id", id)
+      .eq("item_type", "initiative")
+      .eq("historical_id", id)
       .maybeSingle()
     : { data: null };
   redirect(`/tasks/${encodeURIComponent(data?.task_id || id)}`);

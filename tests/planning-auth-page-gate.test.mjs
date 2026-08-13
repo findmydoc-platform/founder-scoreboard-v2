@@ -17,9 +17,9 @@ test("legacy review detail links redirect into the protected task detail page", 
 test("initiative links resolve legacy ids before redirecting into the protected task detail page", async () => {
   const source = await readFile("src/app/initiatives/[id]/page.tsx", "utf8");
   assert.match(source, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
-  assert.match(source, /planning_item_legacy_ids/);
-  assert.match(source, /\.eq\("source_kind", "package"\)/);
-  assert.match(source, /\.eq\("legacy_id", id\)/);
+  assert.match(source, /planning_item_historical_links/);
+  assert.match(source, /\.eq\("item_type", "initiative"\)/);
+  assert.match(source, /\.eq\("historical_id", id\)/);
   assert.doesNotMatch(source, /requiresSupabaseAuth/);
 });
 

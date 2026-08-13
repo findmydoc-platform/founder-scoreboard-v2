@@ -7,13 +7,11 @@ import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE,
   TEAM_PLANNING_ITEM_CREATE_FIELDS,
-  TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
   TEAM_PLANNING_ITEM_TYPES,
   TEAM_PLANNING_STRATEGIC_STATUSES,
   TEAM_PLANNING_SUB_ISSUE_STATUSES,
   TEAM_PLANNING_TASK_STATUSES,
   isStrategicPlanningItemType,
-  normalizeTeamPlanningItemType,
   parsePlanningItemGitHubSyncCommand,
   parsePlanningItemGitHubSyncMode,
   type PlanningItemGitHubSyncCommand,
@@ -43,12 +41,6 @@ type ParentRow = {
   trashed_at: string | null;
 };
 
-type LegacyIdRow = {
-  source_kind: "milestone" | "package";
-  legacy_id: string;
-  task_id: string;
-};
-
 export type PlanningItemCreateInput = {
   itemType?: unknown;
   title?: unknown;
@@ -60,10 +52,6 @@ export type PlanningItemCreateInput = {
   evidenceRequired?: unknown;
   definitionOfDone?: unknown;
   parentTaskId?: unknown;
-  /** @deprecated Resolves to a canonical Initiative parent. */
-  packageId?: unknown;
-  /** @deprecated Resolves to a canonical Epic parent. */
-  milestoneId?: unknown;
   ownerId?: unknown;
   accountableProfileId?: unknown;
   responsibleProfileIds?: unknown;
@@ -93,10 +81,6 @@ export type PlanningItemCreatePreviewItem = {
   evidenceRequired?: string;
   definitionOfDone?: string;
   parentTaskId?: string;
-  /** Deprecated response compatibility only. */
-  packageId?: string;
-  /** Deprecated response compatibility only. */
-  milestoneId?: string;
   ownerId?: string;
   accountableProfileId?: string;
   responsibleProfileIds?: string[];
@@ -121,7 +105,6 @@ export type PlanningItemCreatePreviewItem = {
 const itemTypes = new Set<TeamPlanningItemType>(TEAM_PLANNING_ITEM_TYPES);
 const inputKeys = new Set<string>([
   ...TEAM_PLANNING_ITEM_CREATE_FIELDS,
-  ...TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
   "githubSync",
 ]);
 const strategicStatuses = new Set<string>(TEAM_PLANNING_STRATEGIC_STATUSES);
@@ -131,12 +114,12 @@ const fieldsByType: Record<TeamPlanningItemType, Set<string>> = {
   epic: new Set(["itemType", "title", "description", "ownerId", "targetDate", "status"]),
   initiative: new Set([
     "itemType", "title", "description", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
-    "parentTaskId", "milestoneId", "ownerId", "accountableProfileId", "responsibleProfileIds",
+    "parentTaskId", "ownerId", "accountableProfileId", "responsibleProfileIds",
     "consultedProfileIds", "informedProfileIds", "priority", "targetDate", "status",
   ]),
   deliverable: new Set([
     "itemType", "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
-    "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "parentTaskId", "packageId", "ownerId",
+    "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "parentTaskId", "ownerId",
     "priority", "workstream", "startDate", "endDate", "deadline", "hours", "githubRepo", "status", "githubSync",
   ]),
   sub_issue: new Set([
@@ -145,20 +128,8 @@ const fieldsByType: Record<TeamPlanningItemType, Set<string>> = {
   ]),
 };
 
-function legacyStatus(value: string) {
-  if (value === "planned") return "Offen";
-  if (value === "active") return "In Arbeit";
-  if (value === "done") return "Erledigt";
-  return value;
-}
-
-function canonicalParentId(candidate: string, parents: Map<string, ParentRow>, legacyIds: Map<string, string>) {
-  if (!candidate) return "";
-  return parents.has(candidate) ? candidate : legacyIds.get(candidate) || candidate;
-}
-
-function normalizedStatus(itemType: TeamPlanningItemType, value: unknown, legacyType: boolean, errors: string[]) {
-  const status = legacyType ? legacyStatus(intakeText(value, 40)) : intakeText(value, 40);
+function normalizedStatus(itemType: TeamPlanningItemType, value: unknown, errors: string[]) {
+  const status = intakeText(value, 40);
   const fallback = "Offen";
   const result = status || fallback;
   const allowed = itemType === "epic" || itemType === "initiative"
@@ -180,18 +151,14 @@ function itemTypeForInput(value: unknown) {
   const requested = intakeText(value, 40);
   return {
     requested,
-    itemType: normalizeTeamPlanningItemType(requested),
-    legacyType: requested === "milestone",
+    itemType: TEAM_PLANNING_ITEM_TYPES.includes(requested as TeamPlanningItemType)
+      ? requested as TeamPlanningItemType
+      : null,
   };
 }
 
-export function planningItemCreateUsesLegacyAliases(item: PlanningItemCreateInput) {
-  return intakeText(item.itemType, 40) === "milestone"
-    || TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.some((field) => Object.hasOwn(item, field));
-}
-
 export function planningItemCreateRequiresOperationalLead(items: PlanningItemCreateInput[]) {
-  return items.some((item) => normalizeTeamPlanningItemType(intakeText(item.itemType, 40)) === "epic");
+  return items.some((item) => intakeText(item.itemType, 40) === "epic");
 }
 
 export function parsePlanningItemCreatePayload(payload: unknown) {
@@ -238,7 +205,6 @@ export function parsePlanningItemCreatePayload(payload: unknown) {
     ok: true as const,
     items: normalizedItems,
     githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null,
-    hasLegacyAliases: normalizedItems.some(planningItemCreateUsesLegacyAliases),
   };
 }
 
@@ -246,26 +212,20 @@ export async function buildPlanningItemCreatePreview(
   items: PlanningItemCreateInput[],
   actor: AuthenticatedProfile,
   supabase: SupabaseServer,
-  allowLegacyReferences = false,
 ) {
-  const legacyIdsQuery = allowLegacyReferences
-    ? supabase.from("planning_item_legacy_ids").select("source_kind,legacy_id,task_id")
-    : Promise.resolve({ data: [], error: null });
-  const [profilesResult, parentsResult, legacyIdsResult] = await Promise.all([
+  const [profilesResult, parentsResult] = await Promise.all([
     supabase.from("profiles").select("id,name"),
     supabase
       .from(ACTIVE_TASKS_TABLE)
       .select("id,task_type,approval_status,trashed_at")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    legacyIdsQuery,
   ]);
-  if (profilesResult.error || parentsResult.error || legacyIdsResult.error) {
+  if (profilesResult.error || parentsResult.error) {
     throw new Error("Planning-Items-Kontext konnte nicht geladen werden.");
   }
 
   const profileIds = new Set((profilesResult.data || []).map((profile) => profile.id));
   const parents = new Map((parentsResult.data || []).map((parent) => [parent.id, parent as ParentRow]));
-  const legacyIds = new Map((legacyIdsResult.data || []).map((row) => [row.legacy_id, (row as LegacyIdRow).task_id]));
 
   return items.map((raw, index): PlanningItemCreatePreviewItem => {
     const errors: string[] = [];
@@ -297,10 +257,7 @@ export async function buildPlanningItemCreatePreview(
       errors.push("Nur CEO oder Deputy können Initiativen vorschlagen.");
     }
 
-    const rawParentId = intakeText(raw.parentTaskId, 120)
-      || (itemType === "initiative" ? intakeText(raw.milestoneId, 120) : "")
-      || (itemType === "deliverable" ? intakeText(raw.packageId, 120) : "");
-    const parentTaskId = canonicalParentId(rawParentId, parents, legacyIds);
+    const parentTaskId = intakeText(raw.parentTaskId, 120);
     const parent = parentTaskId ? parents.get(parentTaskId) : null;
     if (itemType === "epic" && parentTaskId) errors.push("Epic darf keinen Parent haben.");
     if (itemType === "initiative" && parentTaskId && parent?.task_type !== "epic") {
@@ -322,7 +279,7 @@ export async function buildPlanningItemCreatePreview(
     if (raw.targetDate !== undefined && itemType !== "epic" && itemType !== "initiative") {
       errors.push(`targetDate ist für ${itemType} nicht zulässig.`);
     }
-    const status = normalizedStatus(itemType, raw.status, type.legacyType, errors);
+    const status = normalizedStatus(itemType, raw.status, errors);
     const startDate = intakeDate(raw.startDate);
     const endDate = intakeDate(raw.endDate);
     if (startDate && endDate && startDate > endDate) errors.push("Startdatum darf nicht nach dem Enddatum liegen.");
@@ -413,8 +370,6 @@ export function planningItemCreateCommitItem(item: PlanningItemCreatePreviewItem
   delete result.errors;
   delete result.warnings;
   delete result.githubSync;
-  delete result.packageId;
-  delete result.milestoneId;
   return result;
 }
 
@@ -430,145 +385,9 @@ export function planningItemCreateHash(
   return createHash("sha256").update(JSON.stringify(hashInput), "utf8").digest("hex");
 }
 
-type LegacyCreateResponseItem = {
-  itemType?: string;
-  item?: Record<string, unknown>;
-};
-
-function legacyResponseText(
-  response: LegacyCreateResponseItem | undefined,
-  camelKey: string,
-  snakeKey: string,
-) {
-  const item = response?.item;
-  return intakeText(item?.[camelKey] ?? item?.[snakeKey], 120);
-}
-
-function planningItemLegacyCreateCommitItem({
-  raw,
-  index,
-  actorProfileId,
-  response,
-}: {
-  raw: PlanningItemCreateInput;
-  index: number;
-  actorProfileId: string;
-  response?: LegacyCreateResponseItem;
-}) {
-  const itemType = intakeText(raw.itemType, 40);
-  if (!["milestone", "initiative", "deliverable", "sub_issue"].includes(itemType)) return null;
-
-  const title = intakeText(raw.title, 240);
-  if (itemType === "milestone") {
-    return {
-      clientId: `planning-items-create-${index + 1}`,
-      itemType,
-      title,
-      description: intakeText(raw.description, 4_000),
-      targetDate: intakeDate(raw.targetDate),
-      status: intakeText(raw.status, 40) || "planned",
-      approvalStatus: null,
-    };
-  }
-
-  const ownerId = intakeText(raw.ownerId, 120) || (itemType === "sub_issue" ? actorProfileId : "");
-  const requestedGitHubRepo = intakeText(raw.githubRepo, 120);
-  const repository = itemType === "initiative"
-    ? defaultGitHubRepository
-    : resolveTaskGitHubRepository(itemType === "sub_issue" ? "sub_issue" : "deliverable", requestedGitHubRepo);
-  const githubRepo = typeof repository === "string"
-    ? repository
-    : repository.ok ? repository.repository : defaultGitHubRepository;
-  const storedPackageId = legacyResponseText(response, "packageId", "package_id");
-  const storedMilestoneId = legacyResponseText(response, "milestoneId", "milestone_id");
-
-  if (itemType === "sub_issue") {
-    return {
-      clientId: `planning-items-create-${index + 1}`,
-      itemType,
-      title,
-      description: intakeText(raw.description, 4_000),
-      problemStatement: intakeText(raw.problemStatement, 4_000),
-      intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
-      scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
-      acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
-        ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-        : intakeText(raw.acceptanceCriteria, 6_000),
-      evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
-      definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
-      parentTaskId: intakeText(raw.parentTaskId, 120),
-      packageId: storedPackageId,
-      milestoneId: storedMilestoneId,
-      ownerId,
-      githubRepo,
-      approvalStatus: null,
-      scoreRelevant: false,
-    };
-  }
-
-  return {
-    clientId: `planning-items-create-${index + 1}`,
-    itemType,
-    title,
-    description: intakeText(raw.description, 4_000),
-    problemStatement: intakeText(raw.problemStatement, 4_000),
-    intendedOutcome: intakeText(raw.intendedOutcome, 4_000),
-    scopeConstraints: intakeText(raw.scopeConstraints, 4_000),
-    acceptanceCriteria: Array.isArray(raw.acceptanceCriteria)
-      ? raw.acceptanceCriteria.map((value) => intakeText(value, 1_000)).filter(Boolean).join("\n")
-      : intakeText(raw.acceptanceCriteria, 6_000),
-    evidenceRequired: intakeText(raw.evidenceRequired, 4_000),
-    definitionOfDone: intakeText(raw.definitionOfDone, 4_000),
-    parentTaskId: "",
-    packageId: itemType === "initiative" ? "" : intakeText(raw.packageId, 120) || storedPackageId,
-    milestoneId: intakeText(raw.milestoneId, 120) || storedMilestoneId,
-    ownerId,
-    accountableProfileId: intakeText(raw.accountableProfileId, 120) || ownerId,
-    responsibleProfileIds: normalizedTextList(raw.responsibleProfileIds),
-    consultedProfileIds: normalizedTextList(raw.consultedProfileIds),
-    informedProfileIds: normalizedTextList(raw.informedProfileIds),
-    priority: intakePriority(raw.priority),
-    workstream: intakeText(raw.workstream, 120),
-    startDate: intakeDate(raw.startDate),
-    endDate: intakeDate(raw.endDate),
-    deadline: intakeDate(raw.deadline),
-    hours: intakeHours(raw.hours),
-    githubRepo,
-    approvalStatus: "proposed",
-    scoreRelevant: false,
-  };
-}
-
-export function planningItemLegacyCreateHash({
-  items,
-  responses,
-  actorProfileId,
-  githubSyncMode,
-}: {
-  items: PlanningItemCreateInput[];
-  responses: LegacyCreateResponseItem[];
-  actorProfileId: string;
-  githubSyncMode: TeamPlanningItemGitHubSyncMode | null;
-}) {
-  const committedItems = items.map((raw, index) => planningItemLegacyCreateCommitItem({
-    raw,
-    index,
-    actorProfileId,
-    response: responses[index],
-  }));
-  if (committedItems.some((item) => !item)) return null;
-  const githubSyncCommands = items.map((item) => (
-    Object.hasOwn(item, "githubSync") ? item.githubSync as PlanningItemGitHubSyncCommand : null
-  ));
-  const hashInput = githubSyncMode || githubSyncCommands.some(Boolean)
-    ? { items: committedItems, githubSyncMode, githubSyncCommands }
-    : committedItems;
-  return createHash("sha256").update(JSON.stringify(hashInput), "utf8").digest("hex");
-}
-
 export function planningItemCreateGitHubSyncCommands(items: PlanningItemCreateInput[]) {
   return items.map((item) => {
-    const itemType = normalizeTeamPlanningItemType(intakeText(item.itemType, 40));
+    const itemType = itemTypeForInput(item.itemType).itemType;
     return itemType && !isStrategicPlanningItemType(itemType) && Object.hasOwn(item, "githubSync")
       ? item.githubSync as PlanningItemGitHubSyncCommand
       : null;
@@ -576,7 +395,7 @@ export function planningItemCreateGitHubSyncCommands(items: PlanningItemCreateIn
 }
 
 type CreateResponseItem = {
-  itemType: TeamPlanningItemType | "milestone";
+  itemType: TeamPlanningItemType;
   item: Record<string, unknown>;
   githubSync?: PlanningItemGitHubSyncResult;
 };
@@ -611,8 +430,6 @@ type TeamCreateDependencies = Readonly<{
   tokenId: string;
   rawItems: readonly PlanningItemCreateInput[];
   githubSyncMode: TeamPlanningItemGitHubSyncMode | null;
-  allowLegacyReferences?: boolean;
-  minimumReplayContractVersion?: 1 | 2;
   scheduleAfter?: (callback: () => Promise<void>) => void;
   dispatchGitHubProjections?: (
     supabase: PlanningCreateSupabase,
@@ -653,7 +470,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
       const title = intakeText(raw.title, 240);
       const ownerId = intakeText(raw.ownerId, 120) || (kind === "sub_issue" ? actorProfileId : "") || null;
       const statusErrors: string[] = [];
-      const status = normalizedStatus(kind, raw.status, type.legacyType, statusErrors);
+      const status = normalizedStatus(kind, raw.status, statusErrors);
       if (kind === "epic") return {
         kind,
         title,
@@ -668,7 +485,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
         ownerId,
         description: intakeText(raw.description, 4_000),
         status: status as Extract<NewPlanningItem, { kind: "initiative" }>["status"],
-        parentId: intakeText(raw.parentTaskId, 120) || intakeText(raw.milestoneId, 120) || null,
+        parentId: intakeText(raw.parentTaskId, 120) || null,
         strategy: {
           goal: intakeText(raw.intendedOutcome, 4_000) || intakeText(raw.description, 4_000),
           successCriteria: Array.isArray(raw.acceptanceCriteria)
@@ -700,7 +517,7 @@ export function planningItemCreateCommand(items: readonly PlanningItemCreateInpu
         ownerId,
         brief: createBrief(raw),
         status: status as Extract<NewPlanningItem, { kind: "deliverable" }>["status"],
-        parentId: intakeText(raw.parentTaskId, 120) || intakeText(raw.packageId, 120) || null,
+        parentId: intakeText(raw.parentTaskId, 120) || null,
         priority: intakePriority(raw.priority),
         workstream: intakeText(raw.workstream, 120),
         startDate: intakeDate(raw.startDate) || null,
@@ -783,24 +600,13 @@ async function prepareTeamCreate(
     .maybeSingle();
   if (existingRequest.error) return { data: null, error: existingRequest.error };
   const stored = existingRequest.data as StoredCreateRequest | null;
-  if (stored && Number(stored.contract_version || 1) < (dependencies.minimumReplayContractVersion || 1)) {
+  if (stored && Number(stored.contract_version || 1) < 2) {
     return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
-  }
-  if (stored && Number(stored.contract_version || 1) === 1) {
-    const legacyHash = planningItemLegacyCreateHash({
-      items: [...dependencies.rawItems],
-      responses: stored.response_tasks,
-      actorProfileId: request.actor.profileId,
-      githubSyncMode: dependencies.githubSyncMode,
-    });
-    return { data: !legacyHash || legacyHash !== stored.request_hash
-      ? { kind: "error", error: { code: "conflict", reason: "idempotency" } }
-      : { kind: "replay", receipt: replayReceipt({ batchId: stored.id, items: stored.response_tasks, replayed: true }) }, error: null };
   }
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {
     id: request.actor.profileId,
     platformRole: request.actor.platformRole,
-  } as AuthenticatedProfile, dependencies.supabase, dependencies.allowLegacyReferences !== false);
+  } as AuthenticatedProfile, dependencies.supabase);
   dependencies.onPreview?.(preview);
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);
@@ -971,7 +777,6 @@ export type BrowserCreateWriter =
       item: Record<string, unknown>;
       strategy: Record<string, unknown> | null;
       raciAssignments: readonly Record<string, unknown>[];
-      legacyAuditAction?: string;
     }>;
   }>
   | Readonly<{
@@ -1039,7 +844,6 @@ export function createBrowserCreatePlanningItems(dependencies: BrowserCreateDepe
           p_actor_profile_id: invocation.actor.profileId,
           p_request_ip: metadata?.requestIp || null,
           p_user_agent: metadata?.userAgent || null,
-          p_legacy_audit_action: writer.params.legacyAuditAction || null,
         })
         : await dependencies.supabase.rpc("create_planning_task_transaction", {
           p_task_insert: writer.params.taskInsert,

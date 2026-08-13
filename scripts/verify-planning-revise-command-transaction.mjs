@@ -25,10 +25,10 @@ async function revision(taskId) {
   return result.rows[0]?.updated_at;
 }
 
-async function reviseStrategic(taskId, expectedUpdatedAt, patch, actorId, legacyAuditAction = null) {
+async function reviseStrategic(taskId, expectedUpdatedAt, patch, actorId) {
   return client.query(
-    "select public.update_browser_planning_item_transaction($1,$2,$3::jsonb,null,null,$4,null,null,$5) as result",
-    [taskId, expectedUpdatedAt, JSON.stringify(patch), actorId, legacyAuditAction],
+    "select public.update_browser_planning_item_transaction($1,$2,$3::jsonb,null,null,$4,null,null) as result",
+    [taskId, expectedUpdatedAt, JSON.stringify(patch), actorId],
   );
 }
 
@@ -68,9 +68,9 @@ try {
 
   const privileges = await client.query(
     `select
-       has_function_privilege('anon', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text,text)', 'execute') strategic_anon,
-       has_function_privilege('authenticated', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text,text)', 'execute') strategic_authenticated,
-       has_function_privilege('service_role', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text,text)', 'execute') strategic_service,
+       has_function_privilege('anon', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text)', 'execute') strategic_anon,
+       has_function_privilege('authenticated', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text)', 'execute') strategic_authenticated,
+       has_function_privilege('service_role', 'public.update_browser_planning_item_transaction(text,timestamptz,jsonb,jsonb,jsonb,text,text,text)', 'execute') strategic_service,
        has_function_privilege('anon', 'public.update_browser_planning_task_transaction(text,timestamptz,jsonb,boolean,text,boolean,text,text[],jsonb,text)', 'execute') delivery_anon,
        has_function_privilege('authenticated', 'public.update_browser_planning_task_transaction(text,timestamptz,jsonb,boolean,text,boolean,text,text[],jsonb,text)', 'execute') delivery_authenticated,
        has_function_privilege('service_role', 'public.update_browser_planning_task_transaction(text,timestamptz,jsonb,boolean,text,boolean,text,text[],jsonb,text)', 'execute') delivery_service`,
@@ -97,7 +97,7 @@ try {
   await client.query(`
     create function public.${auditTriggerFunction}() returns trigger language plpgsql as $$
     begin
-      if new.action = 'milestone.update' and new.entity_id = '${epicId}' then
+      if new.action = 'planning_item.updated' and new.entity_id = '${epicId}' then
         raise exception using errcode = 'XX000', message = 'injected planning revise audit failure';
       end if;
       return new;
@@ -107,7 +107,7 @@ try {
     before insert on public.audit_log
     for each row execute function public.${auditTriggerFunction}();
   `);
-  await expectCode("XX000", () => reviseStrategic(epicId, epicRollbackRevision, { title: "Must Roll Back Epic" }, ceoId, "milestone.update"));
+  await expectCode("XX000", () => reviseStrategic(epicId, epicRollbackRevision, { title: "Must Roll Back Epic" }, ceoId));
   const epicRollback = await client.query("select title from public.tasks where id = $1", [epicId]);
   assert.equal(epicRollback.rows[0]?.title, "Updated Epic");
 

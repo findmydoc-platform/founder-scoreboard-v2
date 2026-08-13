@@ -55,4 +55,4 @@ For a Sub-Issue, the next explicit GitHub sync replaces the native parent relati
 
 ## Migration compatibility
 
-Existing Milestones are losslessly migrated to Epics and Packages to Initiatives. `planning_item_legacy_ids` preserves legacy identifier mappings. The retained `milestones`, `packages`, `milestone_id`, and `package_id` data is recovery and comparison data only; it is not dual-written. The word `milestone` may still appear in internal compatibility RPC names and legacy API aliases until separately approved cleanup.
+Existing Milestones were losslessly migrated to Epics and Packages to Initiatives. Historical URL redirects remain in `planning_item_historical_links`; the legacy hierarchy tables, derived columns, compatibility RPCs, and Team API v1 are removed.

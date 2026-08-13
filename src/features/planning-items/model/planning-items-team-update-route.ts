@@ -9,7 +9,6 @@ import {
   createEmptyEpicDeletePlanningItems,
   emptyEpicDeleteCommand,
   emptyEpicDeleteError,
-  emptyEpicDeleteHash,
   emptyEpicDeleteTeamItem,
   parseEmptyEpicDeletePayload,
 } from "@/features/planning-items/model/planning-items-empty-epic-delete";
@@ -22,7 +21,6 @@ import {
 import {
   buildPlanningItemUpdatePreview,
   createTeamRevisePlanningItems,
-  mapLegacyPlanningItemDatabaseRow,
   mapPlanningItemDatabaseRow,
   parsePlanningItemPatchPayload,
   planningItemUpdateHash,
@@ -38,10 +36,6 @@ import {
 import {
   dispatchAndLoadPlanningGitHubProjections,
 } from "@/features/planning-items/model/planning-items-github-projection";
-import {
-  teamPlanningItemsV1Contract,
-  type TeamPlanningItemsApiContract,
-} from "@/features/planning-items/model/planning-items-team-api-contract";
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 
 type UpdateTransactionResult = {
@@ -68,7 +62,7 @@ type StoredDeleteRequest = {
 
 type DeleteTransactionResult = {
   replayed?: boolean;
-  itemType?: "epic" | "milestone";
+  itemType?: "epic";
   item?: Record<string, unknown>;
   children?: { initiatives?: number; tasks?: number };
 };
@@ -84,14 +78,11 @@ function updateResponse(
   fallbackItemType: PlanningItemReplayType,
   fallbackChangedFields: string[] = [],
   fallbackSystemEffects: unknown[] = [],
-  contractVersion = 2,
 ) {
   const itemType = transaction.itemType || fallbackItemType;
   const rawItem = transaction.item;
   if (!rawItem || !itemType) throw new Error("Planning-Items-Update lieferte kein Element zurück.");
-  const item = contractVersion === 1 || itemType === "milestone"
-    ? mapLegacyPlanningItemDatabaseRow(itemType, rawItem)
-    : mapPlanningItemDatabaseRow(itemType, rawItem);
+  const item = mapPlanningItemDatabaseRow(itemType, rawItem);
   return planningItemsJson({
     ok: true,
     replayed: Boolean(transaction.replayed),
@@ -107,7 +98,6 @@ function updateResponse(
 export async function handleTeamPlanningItemUpdate(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-  contract: TeamPlanningItemsApiContract = teamPlanningItemsV1Contract,
 ) {
   return handlePlanningItemsRequest(request, "write:planning-items:update", "Planning-Items-Update konnte nicht gespeichert werden.", async (permission) => {
     const { id } = await context.params;
@@ -117,12 +107,9 @@ export async function handleTeamPlanningItemUpdate(
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
     if (!isUuid(idempotencyKey)) return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
 
-    const parsed = parsePlanningItemPatchPayload(
-      await request.json().catch(() => null),
-      { allowLegacyAliases: contract.allowLegacyAliases },
-    );
+    const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    const reparentFields = ["parentTaskId", "packageId", "milestoneId"].filter((field) => Object.hasOwn(parsed.raw, field));
+    const reparentFields = ["parentTaskId"].filter((field) => Object.hasOwn(parsed.raw, field));
     const reparentField = reparentFields[0];
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
@@ -136,16 +123,15 @@ export async function handleTeamPlanningItemUpdate(
       .eq("idempotency_key", idempotencyKey)
       .maybeSingle();
     const storedResponse = (stored: StoredUpdateRequest) => {
-      if (Number(stored.contract_version || 1) < contract.minimumReplayContractVersion) {
+      if (Number(stored.contract_version || 1) < 2) {
         return planningItemsError("Idempotency-Key gehört zu einem älteren API-Vertrag.", 409);
       }
       const itemType = stored.response?.itemType;
       if (!itemType) throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
-      if (!contract.allowLegacyItemIds
-        && String(stored.response?.item?.id || "") !== itemId) {
+      if (String(stored.response?.item?.id || "") !== itemId) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
-      if ((itemType === "epic" || itemType === "milestone") && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
+      if (itemType === "epic" && !["ceo", "deputy"].includes(permission.profile.platformRole)) {
         return planningItemsError("Nur CEO oder Deputy können Epics bearbeiten.", 403);
       }
       const requestHash = stored.response?.commandKind === "changeParent" && reparentField
@@ -166,7 +152,6 @@ export async function handleTeamPlanningItemUpdate(
         itemType,
         [],
         [],
-        Number(stored.contract_version || 1),
       );
     };
     const existingRequest = await loadStoredRequest();
@@ -190,25 +175,22 @@ export async function handleTeamPlanningItemUpdate(
       if (reparentFields.length !== 1 || parsed.presentFields.length !== 1) {
         return planningItemsError("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", 409);
       }
-      if (!contract.allowLegacyItemIds) {
-        const canonicalPreview = await buildPlanningItemUpdatePreview({
-          actor: permission.profile,
-          itemId,
-          parsed,
-          supabase: permission.supabase,
-          allowLegacyReferences: false,
-        });
-        if (!canonicalPreview.ok) {
-          return planningItemsError(canonicalPreview.error, canonicalPreview.status);
-        }
-        if (canonicalPreview.preview.errors.length) {
-          return planningItemsJson({
-            ok: false,
-            error: "Planning-Items-Update enthält ungültige Felder.",
-            errors: canonicalPreview.preview.errors,
-            warnings: canonicalPreview.preview.warnings,
-          }, 400);
-        }
+      const canonicalPreview = await buildPlanningItemUpdatePreview({
+        actor: permission.profile,
+        itemId,
+        parsed,
+        supabase: permission.supabase,
+      });
+      if (!canonicalPreview.ok) {
+        return planningItemsError(canonicalPreview.error, canonicalPreview.status);
+      }
+      if (canonicalPreview.preview.errors.length) {
+        return planningItemsJson({
+          ok: false,
+          error: "Planning-Items-Update enthält ungültige Felder.",
+          errors: canonicalPreview.preview.errors,
+          warnings: canonicalPreview.preview.warnings,
+        }, 400);
       }
       const actor = actorContextFromPlanningTokenAuth({
         ok: true,
@@ -268,7 +250,6 @@ export async function handleTeamPlanningItemUpdate(
       itemId,
       parsed,
       supabase: permission.supabase,
-      allowLegacyReferences: contract.allowLegacyItemIds,
     });
     if (!result.ok) {
       if (result.status === 409) {
@@ -322,16 +303,15 @@ export async function handleTeamPlanningItemUpdate(
       if (reviseResult.error.code === "invalidCommand") return planningItemsJson({ ok: false, error: "Planning-Items-Update enthält ungültige Felder.", errors: reviseResult.error.issues.map((issue) => issue.reason), warnings: preview.warnings }, 400);
       throw new Error("Planning-Items-Update konnte nicht gespeichert werden.");
     }
-    const receipt = teamReviseTransactionFromResult(reviseResult);
-    if (!receipt) throw new Error("Planning-Items-Update lieferte kein Ergebnis zurück.");
-    return updateResponse(request, itemId, receipt.transaction, preview.itemType, preview.changedFields, preview.systemEffects, receipt.contractVersion);
+    const transaction = teamReviseTransactionFromResult(reviseResult);
+    if (!transaction) throw new Error("Planning-Items-Update lieferte kein Ergebnis zurück.");
+    return updateResponse(request, itemId, transaction, preview.itemType, preview.changedFields, preview.systemEffects);
   });
 }
 
 export async function handleTeamPlanningItemDelete(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-  contract: TeamPlanningItemsApiContract = teamPlanningItemsV1Contract,
 ) {
   return handlePlanningItemsRequest(
     request,
@@ -351,41 +331,18 @@ export async function handleTeamPlanningItemDelete(
       const parsed = parseEmptyEpicDeletePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
 
-      const requestHash = emptyEpicDeleteHash({ itemId, expectedUpdatedAt: parsed.expectedUpdatedAt });
-      const legacyReplay = await permission.supabase
-        .from("team_planning_milestone_delete_requests")
+      const replay = await permission.supabase
+        .from("team_planning_item_delete_requests")
         .select("request_hash,response,contract_version")
         .eq("token_id", permission.tokenId)
         .eq("idempotency_key", idempotencyKey)
         .maybeSingle();
-      if (legacyReplay.error) throw Object.assign(new Error(legacyReplay.error.message), { code: legacyReplay.error.code });
-      const stored = legacyReplay.data as StoredDeleteRequest | null;
-      if (stored && Number(stored.contract_version || 1) < contract.minimumReplayContractVersion) {
+      if (replay.error) throw Object.assign(new Error(replay.error.message), { code: replay.error.code });
+      const stored = replay.data as StoredDeleteRequest | null;
+      if (stored && Number(stored.contract_version || 1) < 2) {
         return planningItemsError("Idempotency-Key gehört zu einem älteren API-Vertrag.", 409);
       }
-      if (stored && Number(stored.contract_version || 1) === 1) {
-        if (stored.request_hash !== requestHash) {
-          return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
-        }
-        const transaction = stored.response;
-        if (!transaction?.item || transaction.itemType !== "milestone") {
-          throw new Error("Gespeicherte Planning-Items-Wiederholung ist unvollständig.");
-        }
-        const item = mapLegacyPlanningItemDatabaseRow("milestone", transaction.item);
-        return planningItemsJson({
-          ok: true,
-          replayed: true,
-          itemType: "milestone",
-          item,
-          children: {
-            initiatives: Number(transaction.children?.initiatives || 0),
-            tasks: Number(transaction.children?.tasks || 0),
-          },
-          itemLink: itemLink(request, "milestone", String(item.id || itemId)),
-        });
-      }
-      if (!contract.allowLegacyItemIds && !stored
-        && !await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
+      if (!stored && !await hasCanonicalTeamPlanningItem(permission.supabase, itemId)) {
         return planningItemsError("Planungselement wurde nicht gefunden.", 404);
       }
 
@@ -413,7 +370,7 @@ export async function handleTeamPlanningItemDelete(
       if (!result.ok) {
         const mapped = emptyEpicDeleteError(result.error);
         if (mapped.code && mapped.children) {
-          return planningItemsJson({ ok: false, code: contract.epicNotEmptyCode, error: mapped.message, children: mapped.children }, mapped.status);
+          return planningItemsJson({ ok: false, code: "EPIC_NOT_EMPTY", error: mapped.message, children: mapped.children }, mapped.status);
         }
         if (result.error.code === "notFound") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
         if (result.error.code === "conflict" && result.error.reason === "revision") {

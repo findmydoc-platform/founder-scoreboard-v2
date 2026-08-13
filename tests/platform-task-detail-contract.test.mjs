@@ -154,7 +154,7 @@ test("planning hierarchy treats Sprint as a time container and strategic levels 
   assert.match(migration, /tasks_task_type_check[^]*task_type in \('epic', 'initiative', 'deliverable', 'sub_issue'\)/);
   assert.match(migration, /create table if not exists public\.planning_item_strategy/);
   assert.match(migration, /create table if not exists public\.planning_item_raci_assignments/);
-  assert.match(migration, /create table if not exists public\.planning_item_legacy_ids/);
+  assert.match(migration, /rename to planning_item_historical_links/);
   assert.match(migration, /planning_item_raci_one_accountable_idx/);
   assert.match(migration, /tasks_planning_parent_type_status_sort_idx/);
   assert.match(docs, /Epic[\s\S]*Initiative[\s\S]*Deliverable[\s\S]*Sub-Issue/);

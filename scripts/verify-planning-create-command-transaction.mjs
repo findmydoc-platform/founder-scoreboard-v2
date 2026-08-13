@@ -20,10 +20,10 @@ async function expectCode(code, operation) {
   throw new Error(`Expected ${code}, but planning create succeeded.`);
 }
 
-async function createStrategic(item, actorId, legacyAction = null) {
+async function createStrategic(item, actorId) {
   const result = await client.query(
-    "select public.create_browser_planning_item_transaction($1::jsonb,null,'[]'::jsonb,$2,null,'planning create verifier',$3) as result",
-    [JSON.stringify(item), actorId, legacyAction],
+    "select public.create_browser_planning_item_transaction($1::jsonb,null,'[]'::jsonb,$2,null,'planning create verifier') as result",
+    [JSON.stringify(item), actorId],
   );
   return result.rows[0]?.result;
 }
@@ -46,9 +46,9 @@ try {
 
   const privileges = await client.query(
     `select
-       has_function_privilege('anon', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text,text)', 'execute') anon,
-       has_function_privilege('authenticated', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text,text)', 'execute') authenticated,
-       has_function_privilege('service_role', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text,text)', 'execute') service_role`,
+       has_function_privilege('anon', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text)', 'execute') anon,
+       has_function_privilege('authenticated', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text)', 'execute') authenticated,
+       has_function_privilege('service_role', 'public.create_browser_planning_item_transaction(jsonb,jsonb,jsonb,text,text,text)', 'execute') service_role`,
   );
   assert.deepEqual(privileges.rows[0], { anon: false, authenticated: false, service_role: true });
 
@@ -66,17 +66,16 @@ try {
   await expectCode("P0006", () => createStrategic({ ...baseItem, id: `forbidden-${suffix}` }, founderId));
 
   const successId = `planning-create-success-${suffix}`;
-  const created = await createStrategic({ ...baseItem, id: successId }, ceoId, "milestone.create");
+  const created = await createStrategic({ ...baseItem, id: successId }, ceoId);
   assert.equal(created?.task?.id, successId);
   const successEffects = await client.query(
     `select
        (select count(*)::integer from public.tasks where id = $1) task_count,
        (select count(*)::integer from public.task_activity where task_id = $1) activity_count,
-       (select count(*)::integer from public.audit_log where entity_id = $1 and action = 'planning_item.created') command_audit_count,
-       (select count(*)::integer from public.audit_log where entity_id = $1 and action = 'milestone.create') legacy_audit_count`,
+       (select count(*)::integer from public.audit_log where entity_id = $1 and action = 'planning_item.created') command_audit_count`,
     [successId],
   );
-  assert.deepEqual(successEffects.rows[0], { task_count: 1, activity_count: 1, command_audit_count: 1, legacy_audit_count: 1 });
+  assert.deepEqual(successEffects.rows[0], { task_count: 1, activity_count: 1, command_audit_count: 1 });
 
   const failureId = `planning-create-failure-${suffix}`;
   const triggerFunction = `fail_planning_create_${suffix}`;
@@ -84,7 +83,7 @@ try {
   await client.query(`
     create function public.${triggerFunction}() returns trigger language plpgsql as $$
     begin
-      if new.action = 'milestone.create' and new.entity_id = '${failureId}' then
+      if new.action = 'planning_item.created' and new.entity_id = '${failureId}' then
         raise exception using errcode = 'XX000', message = 'injected planning create audit failure';
       end if;
       return new;
@@ -94,7 +93,7 @@ try {
     before insert on public.audit_log
     for each row execute function public.${triggerFunction}();
   `);
-  await expectCode("XX000", () => createStrategic({ ...baseItem, id: failureId }, ceoId, "milestone.create"));
+  await expectCode("XX000", () => createStrategic({ ...baseItem, id: failureId }, ceoId));
   const failedEffects = await client.query(
     `select
        (select count(*)::integer from public.tasks where id = $1) task_count,

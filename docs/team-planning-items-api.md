@@ -1,8 +1,8 @@
 # FounderOps Planning Items API
 
-The FounderOps Planning Items API exposes the current planning hierarchy through personal tokens. Its active source is `tasks`; Epic, Initiative, Deliverable, and Sub-Issue are all planning-item types in that one model. The API never writes to the retained legacy `milestones` or `packages` tables.
+The FounderOps Planning Items API exposes the current planning hierarchy through personal tokens. Its source is `tasks`; Epic, Initiative, Deliverable, and Sub-Issue are all planning-item types in that one model.
 
-`/api/team/planning-items/v2/*` is the supported contract for new automation. It accepts only current Epic and `parentTaskId` forms. `/v1/*` remains available solely for existing clients that still depend on deprecated aliases.
+`/api/team/planning-items/v2/*` is the supported contract. It accepts only current Epic and `parentTaskId` forms. V1 has been removed.
 
 ```text
 Epic
@@ -48,16 +48,16 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 - `POST /api/team/planning-items/v2/items/{id}/github-sync` — syncs one Deliverable or Sub-Issue.
 - `POST /api/team/planning-items/v2/items/{id}/delete/preview` — checks whether one Epic is empty.
 - `DELETE /api/team/planning-items/v2/items/{id}` — deletes one empty Epic.
-- `GET` and `POST /api/team/planning-items/v1/tokens` — lists or creates the caller’s tokens.
-- `DELETE /api/team/planning-items/v1/tokens/{id}` — revokes one active token.
+- `GET` and `POST /api/team/planning-items/v2/tokens` — lists or creates the caller’s tokens.
+- `DELETE /api/team/planning-items/v2/tokens/{id}` — revokes one active token.
 
-Token scopes are version-neutral. Token management remains session-authorized at the current `/v1/tokens` endpoints; bearer-token planning operations use `/v2`.
+Token management is session-authorized; bearer-token planning operations use the same v2 contract.
 
 ## Context and canonical references
 
 The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. There is no `milestones` collection and no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias.
 
-V2 rejects the deprecated `milestone` item type and the `milestoneId` and `packageId` parent aliases. Path and parent references must use current planning-item IDs; v2 does not resolve retained legacy IDs. It also refuses a replay receipt written under the older response contract, preventing a v1 response from crossing the version boundary.
+V2 rejects the retired `milestone` item type and the `milestoneId` and `packageId` parent fields. Path and parent references must use current planning-item IDs. It also refuses a replay receipt written under the older response contract.
 
 ## Create payload
 
@@ -149,8 +149,8 @@ The preview and delete endpoints require `write:planning-items:delete-empty`, a 
 
 Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and `EPIC_NOT_EMPTY`. The operation never moves, detaches, or deletes children.
 
-## Compatibility window
+## Current contract
 
-The old database tables remain read-only compatibility and recovery data during the transition. They are not a second write path. V1 continues to normalize deprecated request fields and derive response aliases from current projections. V2 and v1 share the same authorization, policy, transaction, projection, and persistence implementation; only their transport contracts differ. Removing the v1 adapters, replay adapter, and special Epic-delete receipt table requires the approved data migration in issue #317.
+The legacy hierarchy tables and v1 transport adapters were removed in the controlled cutover. Historical Initiative links and immutable delete replay receipts remain available under canonical storage names; they are not active planning write paths.
 
-The canonical OpenAPI document is available at `/founderops-team-planning-items-v2-openapi.json`. The compatibility document remains at `/founderops-team-planning-items-openapi.json`.
+The OpenAPI document is available at `/founderops-team-planning-items-v2-openapi.json`.

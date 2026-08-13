@@ -203,6 +203,22 @@ async function preview(actor, target, nextStatus, options = {}) {
   });
 }
 
+test("Planning Item previews compare equivalent timestamp representations semantically", async () => {
+  const target = taskRow();
+  const parsed = updates.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: "2026-07-22T11:30:00.000+02:00",
+    status: "In Arbeit",
+  });
+  assert.equal(parsed.ok, true);
+  const result = await updates.buildPlanningItemUpdatePreview({
+    actor: { id: "owner", name: "Owner", platformRole: "founder" },
+    itemId: target.id,
+    parsed,
+    supabase: supabaseFor(target),
+  });
+  assert.equal(result.ok, true);
+});
+
 test("Planning Items Review preview exposes the complete server-owned transition", async () => {
   const result = await preview({ id: "ceo", name: "CEO", platformRole: "ceo" }, taskRow(), "Review");
 

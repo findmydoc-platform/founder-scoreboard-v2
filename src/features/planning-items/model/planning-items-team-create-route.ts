@@ -16,30 +16,19 @@ import {
   planningItemsError,
   planningItemsJson,
 } from "@/features/planning-items/model/planning-items-route";
-import {
-  canonicalTeamApiError,
-  type TeamPlanningItemsApiContract,
-} from "@/features/planning-items/model/planning-items-team-api-contract";
-
-function parseCreatePayload(payload: unknown, contract: TeamPlanningItemsApiContract) {
-  const parsed = parsePlanningItemCreatePayload(payload);
-  if (!parsed.ok) return parsed;
-  if (!contract.allowLegacyAliases && parsed.hasLegacyAliases) {
-    return { ok: false as const, error: canonicalTeamApiError };
-  }
-  return parsed;
+function parseCreatePayload(payload: unknown) {
+  return parsePlanningItemCreatePayload(payload);
 }
 
 export async function handleTeamPlanningItemsCreatePreview(
   request: NextRequest,
-  contract: TeamPlanningItemsApiContract,
 ) {
   return handlePlanningItemsRequest(
     request,
     "write:planning-items:create",
     "Planning-Items-Erstellung konnte nicht geprüft werden.",
     async (permission) => {
-      const parsed = parseCreatePayload(await request.json().catch(() => null), contract);
+      const parsed = parseCreatePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
       if (parsed.githubSyncMode && !permission.scopes.includes("write:planning-items:github-sync")) {
         return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
@@ -57,8 +46,6 @@ export async function handleTeamPlanningItemsCreatePreview(
         tokenId: permission.tokenId,
         rawItems: parsed.items,
         githubSyncMode: parsed.githubSyncMode,
-        allowLegacyReferences: contract.allowLegacyItemIds,
-        minimumReplayContractVersion: contract.minimumReplayContractVersion,
         onPreview: (preview) => { items = preview; },
       }).run({
         actor: actor.actor,
@@ -72,7 +59,6 @@ export async function handleTeamPlanningItemsCreatePreview(
 
 export async function handleTeamPlanningItemsCreate(
   request: NextRequest,
-  contract: TeamPlanningItemsApiContract,
 ) {
   return handlePlanningItemsRequest(
     request,
@@ -83,7 +69,7 @@ export async function handleTeamPlanningItemsCreate(
       if (!isUuid(idempotencyKey)) {
         return planningItemsError("Gültiger UUID-Idempotency-Key ist erforderlich.", 400);
       }
-      const parsed = parseCreatePayload(await request.json().catch(() => null), contract);
+      const parsed = parseCreatePayload(await request.json().catch(() => null));
       if (!parsed.ok) return planningItemsError(parsed.error, 400);
       if (parsed.githubSyncMode && !permission.scopes.includes("write:planning-items:github-sync")) {
         return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);
@@ -101,8 +87,6 @@ export async function handleTeamPlanningItemsCreate(
         tokenId: permission.tokenId,
         rawItems: parsed.items,
         githubSyncMode: parsed.githubSyncMode,
-        allowLegacyReferences: contract.allowLegacyItemIds,
-        minimumReplayContractVersion: contract.minimumReplayContractVersion,
         scheduleAfter: (callback) => after(callback),
         dispatchGitHubProjections: dispatchAndLoadPlanningGitHubProjections,
         onPreview: (items) => { previewItems = items; },
