@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Preserves existing Planning links and Team API v1 compatibility while making preference rollout and Initiative updates atomic; no new or materially expanded UI functionality."
+  "reason": "Adds the canonical Team Planning Items API v2 and preserves v1 as a compatibility adapter; no new or materially expanded UI functionality."
 }

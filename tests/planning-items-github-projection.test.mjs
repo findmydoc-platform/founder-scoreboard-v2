@@ -113,13 +113,12 @@ test("schema makes enqueue idempotent and orders reconcile with lifecycle delive
 
 test("all public Team sync paths use durable dispatch and never call projection directly", async () => {
   const files = await Promise.all([
-    "src/app/api/team/planning-items/v1/items/route.ts",
+    "src/features/planning-items/model/planning-items-team-create-route.ts",
     "src/features/planning-items/model/planning-items-team-update-route.ts",
-    "src/app/api/team/planning-items/v1/items/[id]/github-sync/route.ts",
+    "src/features/planning-items/model/planning-items-team-github-sync-route.ts",
   ].map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
   for (const source of files) {
     assert.match(source, /dispatchAndLoadPlanningGitHubProjections/);
     assert.doesNotMatch(source, /executePlanningItemGitHubSyncs|preflightPlanningItemGitHubSync/);
   }
 });
-

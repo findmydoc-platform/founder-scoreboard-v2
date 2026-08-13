@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, MousePointerClick, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, MousePointerClick, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { productUpdates, type ProductUpdateDefinition } from "@/features/product-updates/model/product-update-registry";
@@ -151,6 +151,17 @@ export function ProductUpdatesProvider({ profileId }: { profileId: string | null
             </div>
             <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">{activeSlide.title}</h3>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">{activeSlide.description}</p>
+            {activeSlide.link && (
+              <a
+                href={activeSlide.link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 transition hover:text-blue-800 hover:underline"
+              >
+                {activeSlide.link.label}
+                <ExternalLink size={15} aria-hidden="true" />
+              </a>
+            )}
             {activeSlide.updateSummary && (
               <p className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
                 {activeSlide.updateSummary}

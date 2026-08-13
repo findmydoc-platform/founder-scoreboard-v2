@@ -356,7 +356,10 @@ export function planningItemUpdateHash({ itemId, itemType, expectedUpdatedAt, pa
   return createHash("sha256").update(stableJson({ itemId, itemType, expectedUpdatedAt, patch }), "utf8").digest("hex");
 }
 
-export function parsePlanningItemPatchPayload(payload: unknown) {
+export function parsePlanningItemPatchPayload(
+  payload: unknown,
+  options: Readonly<{ allowLegacyAliases?: boolean }> = {},
+) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false as const, error: "PATCH-Payload muss ein Objekt sein." };
   }
@@ -387,11 +390,21 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
   if (!hasGitHubSync && hasMode) return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
   const presentFields = Object.keys(raw).filter((key): key is TeamPlanningItemPatchField => patchFields.has(key));
   const hasLegacyAliases = TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.some((field) => hasOwn(raw, field));
+  if (options.allowLegacyAliases === false && hasLegacyAliases) {
+    return {
+      ok: false as const,
+      error: "Team API v2 akzeptiert nur parentTaskId; milestoneId und packageId sind v1-Kompatibilitätsfelder.",
+    };
+  }
   if (!presentFields.length && !githubSync && !hasLegacyAliases) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
   return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null, hasLegacyAliases };
 }
 
-async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<TargetLoadResult> {
+async function loadTarget(
+  supabase: SupabaseServer,
+  itemId: string,
+  allowLegacyItemIds: boolean,
+): Promise<TargetLoadResult> {
   let canonicalId = itemId;
   let taskResult = await supabase
     .from(ACTIVE_TASKS_TABLE)
@@ -400,7 +413,7 @@ async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<Tar
     .eq("id", canonicalId)
     .maybeSingle();
   if (taskResult.error) throw new Error(taskResult.error.message);
-  if (!taskResult.data) {
+  if (!taskResult.data && allowLegacyItemIds) {
     const legacyResult = await supabase
       .from("planning_item_legacy_ids")
       .select("task_id")
@@ -555,13 +568,20 @@ function buildDbPatch(itemType: TeamPlanningItemType, changedFields: string[], r
   return dbPatch;
 }
 
-export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, supabase }: {
+export async function buildPlanningItemUpdatePreview({
+  actor,
+  itemId,
+  parsed,
+  supabase,
+  allowLegacyReferences = true,
+}: {
   actor: AuthenticatedProfile;
   itemId: string;
   parsed: Extract<ReturnType<typeof parsePlanningItemPatchPayload>, { ok: true }>;
   supabase: SupabaseServer;
+  allowLegacyReferences?: boolean;
 }): Promise<{ ok: true; preview: PlanningItemUpdatePreview } | { ok: false; status: 403 | 404 | 409; error: string }> {
-  const target = await loadTarget(supabase, itemId);
+  const target = await loadTarget(supabase, itemId, allowLegacyReferences);
   if (!target.ok) return target;
   if (String(target.row.updated_at || "") !== parsed.expectedUpdatedAt) {
     return { ok: false, status: 409, error: "Planungselement wurde zwischenzeitlich geändert. Bitte Kontext erneut laden." };
@@ -576,12 +596,15 @@ export async function buildPlanningItemUpdatePreview({ actor, itemId, parsed, su
     errors.push("GitHub-Sync ist für Epic und Initiative nicht verfügbar.");
   }
 
+  const legacyIdsQuery = allowLegacyReferences
+    ? supabase.from("planning_item_legacy_ids").select("legacy_id,task_id")
+    : Promise.resolve({ data: [], error: null });
   const [profilesResult, parentsResult, legacyIdsResult, sprintsResult, raciResult] = await Promise.all([
     supabase.from("profiles").select("id,platform_role"),
     supabase.from(ACTIVE_TASKS_TABLE)
       .select("id,task_type,parent_task_id,owner,assignee,approval_status,review_status,score_final,sprint_id")
       .eq("project_id", FOUNDEROPS_PLANNING_PROJECT_ID),
-    supabase.from("planning_item_legacy_ids").select("legacy_id,task_id"),
+    legacyIdsQuery,
     supabase.from("sprints").select("id,score_locked"),
     supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order"),
   ]);

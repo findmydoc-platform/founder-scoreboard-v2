@@ -13,6 +13,7 @@ export type FeatureTourDefinition = {
   openAccountMenu?: boolean;
   openHelpMenu?: boolean;
   openProfileProcessSettings?: boolean;
+  openProfileApiSettings?: boolean;
   openTaskDetail?: boolean;
   openTaskShare?: boolean;
   productUpdateId?: string;
@@ -36,8 +37,37 @@ export const modalOverlayStackTourId = "modal-overlay-stack-v1";
 export const githubProjectSettingsTourId = "github-project-settings-v1";
 export const taskEvidenceLinksTourId = "task-evidence-links-v1";
 export const unifiedPlanningHierarchyTourId = "unified-planning-hierarchy-v1";
+export const planningApiV2TourId = "planning-api-v2";
 
 export const featureTours = [
+  {
+    id: planningApiV2TourId,
+    productUpdateId: "2026-08-13-planning-api-v2",
+    startWorkspace: "profile",
+    openProfileApiSettings: true,
+    requiredSelectors: ["[data-tour-id='profile-settings-api']", "[data-tour-id='founderops-planning-api-v2']"],
+    steps: [
+      {
+        element: "[data-tour-id='profile-settings-api']",
+        popover: {
+          title: "API-Zugänge öffnen",
+          description: "Hier verwaltest du die persönlichen Tokens, mit denen Skills und Automationen in deinem Namen auf die Planung zugreifen.",
+          side: "right",
+          align: "center",
+        },
+      },
+      {
+        element: "[data-tour-id='founderops-planning-api-v2']",
+        popover: {
+          title: "V2 ist der neue Standard",
+          description: "Neue Integrationen verwenden die aktuelle Planungshierarchie. V1 bleibt nur für die Umstellung bestehen und wird danach entfernt.",
+          side: "bottom",
+          align: "start",
+          doneBtnText: "Verstanden",
+        },
+      },
+    ] satisfies DriveStep[],
+  },
   {
     id: unifiedPlanningHierarchyTourId,
     productUpdateId: "2026-07-30-unified-planning-hierarchy",

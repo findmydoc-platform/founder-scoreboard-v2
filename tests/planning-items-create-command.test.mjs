@@ -46,8 +46,11 @@ test("Browser and Team create routes are transport-only adapters", async () => {
     assert.doesNotMatch(route, /\.rpc\(|\.from\(/);
   }
   assert.match(routes[0], /handleBrowserTaskCreate/);
-  assert.match(routes[1], /createTeamCreatePlanningItems/);
-  assert.match(routes[2], /mode: "preview"/);
+  assert.match(routes[1], /handleTeamPlanningItemsCreate/);
+  assert.match(routes[2], /handleTeamPlanningItemsCreatePreview/);
+  const teamCreateRoute = await readFile("src/features/planning-items/model/planning-items-team-create-route.ts", "utf8");
+  assert.match(teamCreateRoute, /createTeamCreatePlanningItems/);
+  assert.match(teamCreateRoute, /mode: "preview"/);
 });
 
 test("CreateItems canonicalizes all four transport item types", async () => {

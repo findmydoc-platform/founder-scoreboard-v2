@@ -88,6 +88,10 @@ for (const [updateIndex, update] of updates.entries()) {
     if (typeof slide.title !== "string" || !slide.title.trim()) failures.push(`${slideLabel}.title is required.`);
     if (typeof slide.description !== "string" || !slide.description.trim()) failures.push(`${slideLabel}.description is required.`);
     if (typeof slide.description === "string" && slide.description.length > 280) failures.push(`${slideLabel}.description must stay below 280 characters.`);
+    if (slide.link !== undefined) {
+      if (typeof slide.link?.label !== "string" || !slide.link.label.trim()) failures.push(`${slideLabel}.link.label must be a non-empty string.`);
+      if (typeof slide.link?.href !== "string" || !/^https:\/\/github\.com\//.test(slide.link.href)) failures.push(`${slideLabel}.link.href must be a GitHub HTTPS URL.`);
+    }
     if (!slide.image || typeof slide.image.src !== "string" || !slide.image.src.startsWith("/product-updates/")) {
       failures.push(`${slideLabel}.image.src must start with /product-updates/.`);
     } else {

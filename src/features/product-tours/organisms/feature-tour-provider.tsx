@@ -329,6 +329,20 @@ export function FeatureTourProvider({
         }
       }
 
+      if (startingStepIndex === 0 && activeTour.openProfileApiSettings) {
+        if (!(trigger instanceof HTMLElement)) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+        trigger.click();
+        const settings = await waitForElement(activeTour.requiredSelectors[1]);
+        if (!runIsActive()) return;
+        if (!settings) {
+          failTour("Hilfe-Tour konnte nicht vorbereitet werden. Bitte versuche es erneut.");
+          return;
+        }
+      }
+
       const { driver } = await import("driver.js");
       if (!runIsActive()) return;
       let stepTransitionPending = false;

@@ -1,5 +1,30 @@
 [
   {
+    "id": "2026-08-13-planning-api-v2",
+    "releasedAt": "2026-08-13",
+    "expiresAt": "2026-09-12",
+    "featureTourId": "planning-api-v2",
+    "title": "Planungs-API v2 für Skills und Automationen",
+    "summary": "Skills und Automationen arbeiten jetzt mit derselben aktuellen Planungshierarchie wie FounderOps. V1 bleibt nur für die Umstellung verfügbar und wird danach entfernt.",
+    "slides": [
+      {
+        "id": "planning-api-v2-standard",
+        "title": "V2 ist der neue Standard",
+        "description": "Neue Integrationen verwenden nur noch Epic, Initiative, Deliverable und Sub-Issue. V1 dient ausschließlich als Übergang für bestehende Integrationen und wird nach deren Umstellung entfernt.",
+        "link": {
+          "href": "https://github.com/findmydoc-platform/agent-skills/tree/main/skills/founderops-planning-items",
+          "label": "Aktuellen FounderOps-Skill öffnen"
+        },
+        "image": {
+          "src": "/product-updates/2026-08-13-planning-api-v2/planning-api-v2.png",
+          "alt": "FounderOps API-Zugänge mit dem Hinweis, dass die Planungs-API v2 der neue Standard ist",
+          "width": 1440,
+          "height": 900
+        }
+      }
+    ]
+  },
+  {
     "id": "2026-07-30-unified-planning-hierarchy",
     "releasedAt": "2026-07-30",
     "expiresAt": "2026-08-29",
@@ -98,80 +123,6 @@
         "image": {
           "src": "/product-updates/2026-07-21-decision-log/decision-log.png",
           "alt": "Der Decision Log mit Entscheidungstabelle, Handlungsgründen und geöffnetem Detailbereich",
-          "width": 1440,
-          "height": 900
-        }
-      }
-    ]
-  },
-  {
-    "id": "2026-07-21-clear-task-activity",
-    "releasedAt": "2026-07-21",
-    "expiresAt": "2026-08-20",
-    "featureTourId": "task-activity-v1",
-    "title": "Aufgabenaktivität aufgeräumt",
-    "summary": "Kommentare stehen nur noch einmal da. Wichtige Änderungen lassen sich durch eigene Symbole und verständliche Bezeichnungen schneller erfassen.",
-    "slides": [
-      {
-        "id": "clear-activity-timeline",
-        "title": "Kommentare und Änderungen klar getrennt",
-        "description": "Die Aktivität zeigt Kommentare nur als Kommentare. Status, Prüfung, GitHub, Blocker, Abhängigkeiten und Anhänge erhalten passende Symbole und leicht verständliche Bezeichnungen.",
-        "image": {
-          "src": "/product-updates/2026-07-21-clear-task-activity/activity-timeline.png",
-          "alt": "Aufgabenaktivität mit getrennten Kommentaren und unterschiedlich gekennzeichneten Änderungen",
-          "width": 1280,
-          "height": 900
-        }
-      }
-    ]
-  },
-  {
-    "id": "2026-07-21-issue-sharing",
-    "releasedAt": "2026-07-21",
-    "expiresAt": "2026-08-20",
-    "featureTourId": "issue-sharing-v1",
-    "title": "Issues einfacher abstimmen",
-    "summary": "Aus jedem Issue lässt sich jetzt eine vorbereitete, zum Arbeitsstand passende Nachricht für Google Chat mitnehmen.",
-    "slides": [
-      {
-        "id": "share-issue",
-        "title": "Nachricht vorbereiten und selbst senden",
-        "description": "Öffne ein Issue und wähle „Teilen“. Der vorgeschlagene Text unterscheidet zwischen Vorschlag, aktivem Review und allgemeiner Abstimmung. Du kannst ihn anpassen, kopieren und Google Chat öffnen; Chat und Versand wählst du selbst.",
-        "image": {
-          "src": "/product-updates/2026-07-21-issue-sharing/share-issue.png",
-          "alt": "Ein geöffnetes Issue mit dem Teilen-Popover und einer bearbeitbaren Nachricht",
-          "width": 1440,
-          "height": 810
-        }
-      }
-    ]
-  },
-  {
-    "id": "2026-07-21-whats-new-gallery",
-    "releasedAt": "2026-07-21",
-    "expiresAt": "2026-08-20",
-    "featureTourId": "product-updates-v1",
-    "title": "Änderungen auf einen Blick",
-    "summary": "FounderOps erklärt sichtbare Neuerungen jetzt direkt dort, wo du arbeitest.",
-    "slides": [
-      {
-        "id": "automatic-gallery",
-        "title": "Was sich geändert hat",
-        "description": "Nach einer sichtbaren Neuerung öffnet sich einmalig eine kurze Galerie. Ein Bild und wenige Sätze zeigen dir sofort, was neu ist und warum es hilfreich ist.",
-        "image": {
-          "src": "/product-updates/2026-07-21-whats-new-gallery/help-menu.png",
-          "alt": "Das Hilfe-Menü mit dem neuen Eintrag Was ist neu",
-          "width": 1440,
-          "height": 900
-        }
-      },
-      {
-        "id": "guided-tour",
-        "title": "Später jederzeit wieder öffnen",
-        "description": "Solange die Neuigkeit aktuell ist, bleibt sie im Hilfe-Menü erreichbar. Mit „Lass dich leiten“ führt dich eine kurze Klick-Tour direkt zur passenden Stelle.",
-        "image": {
-          "src": "/product-updates/2026-07-21-whats-new-gallery/guided-tour.png",
-          "alt": "Eine kurze Hilfe-Tour zeigt den Eintrag Was ist neu im Hilfe-Menü",
           "width": 1440,
           "height": 900
         }

@@ -260,3 +260,14 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     })),
   };
 }
+
+type PlanningItemsContext = Awaited<ReturnType<typeof buildPlanningItemsContext>>;
+
+export function planningItemsV2Context(context: PlanningItemsContext) {
+  const { milestones: _milestones, ...canonicalContext } = context;
+  void _milestones;
+  return {
+    ...canonicalContext,
+    initiatives: context.items.filter((item) => item.itemType === "initiative"),
+  };
+}

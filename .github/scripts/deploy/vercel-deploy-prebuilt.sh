@@ -4,7 +4,7 @@ set -euo pipefail
 target="${1:-}"
 vercel_cli_version="${VERCEL_CLI_VERSION:-54.1.0}"
 runner_temp="${RUNNER_TEMP:-}"
-max_inspect_attempts="${VERCEL_INSPECT_MAX_ATTEMPTS:-18}"
+max_inspect_attempts="${VERCEL_INSPECT_MAX_ATTEMPTS:-36}"
 inspect_delay_seconds="${VERCEL_INSPECT_DELAY_SECONDS:-10}"
 
 case "${target}" in

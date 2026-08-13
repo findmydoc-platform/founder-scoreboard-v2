@@ -256,7 +256,7 @@ test("replay versioning and package preference translation are additive", async 
   assert.match(createModule, /contract_version/);
   assert.match(updateRoute, /mapLegacyPlanningItemDatabaseRow/);
   assert.match(updateRoute, /contract_version/);
-  assert.match(documentation, /normalized at the transport boundary/);
+  assert.match(documentation, /V1 continues to normalize deprecated request fields/);
 });
 
 test("v1 create replays return the immutable snapshot before canonical preview validation", async () => {
@@ -274,11 +274,12 @@ test("v1 create replays return the immutable snapshot before canonical preview v
     async maybeSingle() { return { data: stored, error: null }; },
   };
   const route = await loadTranspiledModule(
-    "src/app/api/team/planning-items/v1/items/route.ts",
+    "src/features/planning-items/model/planning-items-team-create-route.ts",
     {
       "next/server": { after: () => undefined },
       "@/lib/api-input": { auditRequestMetadata: () => ({}) },
       "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-items-team-api-contract": {},
       "@/features/planning-items/model/planning-actor-context-server": {
         actorContextFromPlanningTokenAuth: () => ({
           ok: true,
@@ -328,9 +329,15 @@ test("v1 create replays return the immutable snapshot before canonical preview v
       "@/features/planning-items/model/planning-items-github-projection": {},
     },
   );
-  const response = await route.POST({
+  const response = await route.handleTeamPlanningItemsCreate({
     headers: { get: () => "idempotency-key" },
     json: async () => ({}),
+  }, {
+    version: "v1",
+    allowLegacyAliases: true,
+    allowLegacyItemIds: true,
+    minimumReplayContractVersion: 1,
+    epicNotEmptyCode: "MILESTONE_NOT_EMPTY",
   });
   assert.equal(response.status, 200);
   assert.equal(response.body.replayed, true);
@@ -371,6 +378,16 @@ test("v1 update and delete replays use legacy response mapping", async () => {
       "next/server": { after: () => undefined },
       "@/lib/api-input": { auditRequestMetadata: () => ({}) },
       "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-items-team-api-contract": {
+        teamPlanningItemsV1Contract: {
+          version: "v1",
+          allowLegacyAliases: true,
+          allowLegacyItemIds: true,
+          minimumReplayContractVersion: 1,
+          epicNotEmptyCode: "MILESTONE_NOT_EMPTY",
+        },
+      },
+      "@/features/planning-items/model/planning-items-team-canonical-item": {},
       "@/features/planning-items/model/planning-actor-context-server": {},
       "@/features/planning-items/model/planning-items-empty-epic-delete": {
         parseEmptyEpicDeletePayload: () => ({ ok: true, expectedUpdatedAt: "2026-07-01T08:00:00.000Z" }),
@@ -440,4 +457,128 @@ test("v1 update and delete replays use legacy response mapping", async () => {
   assert.equal(deleteResponse.body.itemType, "milestone");
   assert.equal(deleteResponse.body.item.mapped, "legacy");
   assert.equal(deleteRpcCalls, 0);
+});
+
+test("v2 replay keeps canonical IDs strict and preserves a successful deleted Epic receipt", async () => {
+  let mode = "update";
+  let runnerCalls = 0;
+  const storedUpdate = {
+    request_hash: "v2-update-hash",
+    contract_version: 2,
+    response: {
+      itemType: "initiative",
+      item: { id: "canonical-initiative", title: "Canonical" },
+      changedFields: ["title"],
+      systemEffects: [],
+    },
+  };
+  const storedDelete = {
+    request_hash: "v2-delete-hash",
+    contract_version: 2,
+    response: {
+      itemType: "epic",
+      item: { id: "canonical-epic", title: "Deleted Epic" },
+      children: { initiatives: 0, tasks: 0 },
+    },
+  };
+  const query = (data) => ({
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data, error: null }; },
+  });
+  const route = await loadTranspiledModule(
+    "src/features/planning-items/model/planning-items-team-update-route.ts",
+    {
+      "next/server": { after: () => undefined },
+      "@/lib/api-input": { auditRequestMetadata: () => ({}) },
+      "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-items-team-api-contract": {
+        teamPlanningItemsV1Contract: {},
+      },
+      "@/features/planning-items/model/planning-items-team-canonical-item": {
+        hasCanonicalTeamPlanningItem: async () => {
+          throw new Error("durable replay must be resolved before active-state lookup");
+        },
+      },
+      "@/features/planning-items/model/planning-actor-context-server": {
+        actorContextFromPlanningTokenAuth: () => ({
+          ok: true,
+          actor: { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token", scopes: [] } },
+        }),
+      },
+      "@/features/planning-items/model/planning-items-empty-epic-delete": {
+        parseEmptyEpicDeletePayload: () => ({ ok: true, expectedUpdatedAt: "2026-08-13T12:00:00.000Z" }),
+        emptyEpicDeleteHash: () => "v2-delete-hash",
+        emptyEpicDeleteCommand: () => ({ kind: "actOnItem", action: { type: "deleteEmptyEpic" } }),
+        createEmptyEpicDeletePlanningItems: () => ({
+          run: async () => {
+            runnerCalls += 1;
+            return { ok: true, status: "committed", replayed: true, items: [], changes: [], effects: [] };
+          },
+        }),
+        emptyEpicDeleteTeamItem: () => ({
+          itemType: "epic",
+          item: storedDelete.response.item,
+          children: storedDelete.response.children,
+        }),
+      },
+      "@/features/planning-items/model/planning-items-reparent": {},
+      "@/features/planning-items/model/planning-item-update": {
+        parsePlanningItemPatchPayload: () => ({
+          ok: true,
+          expectedUpdatedAt: "2026-08-13T12:00:00.000Z",
+          presentFields: ["title"],
+          raw: { title: "Canonical" },
+          githubSync: null,
+          githubSyncMode: null,
+        }),
+      },
+      "@/features/planning-items/model/planning-items-route": {
+        handlePlanningItemsRequest: async (_request, _scope, _message, handler) => handler({
+          tokenId: "token",
+          scopes: [],
+          profile: { id: "ceo", platformRole: "ceo" },
+          supabase: {
+            from: (table) => table === "team_planning_milestone_delete_requests"
+              ? query(mode === "delete" ? storedDelete : null)
+              : query(mode === "update" ? storedUpdate : null),
+          },
+        }),
+        planningItemsError: (error, status) => ({ status, body: { ok: false, error } }),
+        planningItemsJson: (body, status = 200) => ({ status, body }),
+      },
+      "@/features/planning-items/model/planning-items-github-projection": {},
+    },
+  );
+  const contract = {
+    version: "v2",
+    allowLegacyAliases: false,
+    allowLegacyItemIds: false,
+    minimumReplayContractVersion: 2,
+    epicNotEmptyCode: "EPIC_NOT_EMPTY",
+  };
+  const request = {
+    headers: { get: () => "idempotency-key" },
+    json: async () => ({}),
+    nextUrl: { origin: "http://localhost:3000" },
+  };
+
+  const legacyPathReplay = await route.handleTeamPlanningItemUpdate(
+    request,
+    { params: Promise.resolve({ id: "legacy-package" }) },
+    contract,
+  );
+  assert.equal(legacyPathReplay.status, 404);
+  assert.equal(legacyPathReplay.body.error, "Planungselement wurde nicht gefunden.");
+
+  mode = "delete";
+  const deleteReplay = await route.handleTeamPlanningItemDelete(
+    request,
+    { params: Promise.resolve({ id: "canonical-epic" }) },
+    contract,
+  );
+  assert.equal(deleteReplay.status, 200);
+  assert.equal(deleteReplay.body.replayed, true);
+  assert.equal(deleteReplay.body.item.id, "canonical-epic");
+  assert.equal(runnerCalls, 1);
 });

@@ -18,23 +18,39 @@ const publicPaths = [
   "/api/team/planning-items/v1/tokens/{id}",
 ];
 
+const v2PublicPaths = [
+  "/api/team/planning-items/v2/context",
+  "/api/team/planning-items/v2/items/preview",
+  "/api/team/planning-items/v2/items",
+  "/api/team/planning-items/v2/items/{id}/preview",
+  "/api/team/planning-items/v2/items/{id}/delete/preview",
+  "/api/team/planning-items/v2/items/{id}",
+  "/api/team/planning-items/v2/items/{id}/github-sync",
+];
+
 test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and empty Epic DELETE contracts", async () => {
-  const [contract, epicContract, contextRoute, createPreviewRoute, createRoute, createModule, updatePreviewRoute, deletePreviewRoute, updateRoute, updateModule, githubSyncRoute, tokensRoute, tokenRoute, tokenUi, openapi, documentation] = await Promise.all([
+  const [contract, epicContract, contextRoute, createPreviewRoute, createRoute, createHandler, createModule, updatePreviewRoute, deletePreviewRoute, deletePreviewHandler, updateRoute, updateModule, githubSyncRoute, githubSyncHandler, tokensRoute, tokenRoute, tokenUi, openapi, v2Openapi, apiContract, contextModule, documentation] = await Promise.all([
     read("src/features/planning-items/model/planning-items-contract.ts"),
     read("src/features/projects/model/epic-contract.ts"),
     read("src/app/api/team/planning-items/v1/context/route.ts"),
     read("src/app/api/team/planning-items/v1/items/preview/route.ts"),
     read("src/app/api/team/planning-items/v1/items/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-create-route.ts"),
     read("src/features/planning-items/model/planning-items-create.ts"),
     read("src/features/planning-items/model/planning-items-team-update-preview.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-delete-preview-route.ts"),
     read("src/features/planning-items/model/planning-items-team-update-route.ts"),
     read("src/features/planning-items/model/planning-item-update.ts"),
     read("src/app/api/team/planning-items/v1/items/[id]/github-sync/route.ts"),
+    read("src/features/planning-items/model/planning-items-team-github-sync-route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/route.ts"),
     read("src/app/api/team/planning-items/v1/tokens/[id]/route.ts"),
     read("src/features/profile/organisms/profile-planning-items-tokens.tsx"),
     read("public/founderops-team-planning-items-openapi.json"),
+    read("public/founderops-team-planning-items-v2-openapi.json"),
+    read("src/features/planning-items/model/planning-items-team-api-contract.ts"),
+    read("src/features/planning-items/model/planning-items-context.ts"),
     read("docs/team-planning-items-api.md"),
   ]);
 
@@ -45,17 +61,20 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(contract, /"write:planning-items:github-sync"/);
   assert.match(contract, /"epic"/);
   assert.match(contract, /Deprecated Team v1 transport alias/);
-  assert.match(contextRoute, /"read:planning-context"/);
-  assert.match(createPreviewRoute, /"write:planning-items:create"/);
+  assert.match(contextRoute, /teamPlanningItemsV1Contract/);
+  assert.match(createPreviewRoute, /teamPlanningItemsV1Contract/);
   assert.doesNotMatch(createPreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
-  assert.match(createRoute, /createTeamCreatePlanningItems/);
+  assert.match(createRoute, /teamPlanningItemsV1Contract/);
+  assert.match(createHandler, /"write:planning-items:create"/);
+  assert.match(createHandler, /createTeamCreatePlanningItems/);
   assert.match(createModule, /create_team_planning_items_with_projection_transaction/);
   assert.doesNotMatch(createRoute, /\.rpc\(/);
   assert.match(updatePreviewRoute, /"write:planning-items:update"/);
   assert.doesNotMatch(updatePreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
-  assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
-  assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);
-  assert.match(deletePreviewRoute, /mode: "preview"/);
+  assert.match(deletePreviewRoute, /teamPlanningItemsV1Contract/);
+  assert.match(deletePreviewHandler, /"write:planning-items:delete-empty"/);
+  assert.match(deletePreviewHandler, /createEmptyEpicDeletePlanningItems/);
+  assert.match(deletePreviewHandler, /mode: "preview"/);
   assert.match(updateRoute, /createTeamRevisePlanningItems/);
   assert.match(updateModule, /update_team_planning_item_with_projection_transaction/);
   assert.match(updateRoute, /createEmptyEpicDeletePlanningItems/);
@@ -65,11 +84,12 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(updateRoute, /existingRequest/);
   assert.match(updateRoute, /replayCheck/);
   assert.match(updateRoute, /after\(/);
-  assert.match(createRoute, /after\(/);
-  assert.match(githubSyncRoute, /"write:planning-items:github-sync"/);
-  assert.match(githubSyncRoute, /githubSyncMode/);
-  assert.match(githubSyncRoute, /idempotency-key/i);
-  assert.match(githubSyncRoute, /randomUUID/);
+  assert.match(createHandler, /after\(/);
+  assert.match(githubSyncRoute, /teamPlanningItemsV1Contract/);
+  assert.match(githubSyncHandler, /"write:planning-items:github-sync"/);
+  assert.match(githubSyncHandler, /githubSyncMode/);
+  assert.match(githubSyncHandler, /idempotency-key/i);
+  assert.match(githubSyncHandler, /randomUUID/);
   assert.match(tokensRoute, /create_team_planning_items_token_v3/);
   assert.match(tokensRoute, /allowUpdates/);
   assert.match(tokensRoute, /allowEmptyEpicDeletes/);
@@ -86,7 +106,7 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
 
   const document = JSON.parse(openapi);
   assert.equal(document.info.title, "FounderOps Planning Items API");
-  assert.equal(document.info.version, "2.0.0");
+  assert.equal(document.info.version, "1.0.0");
   assert.deepEqual(Object.keys(document.paths), publicPaths);
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.operationId, "updatePlanningItem");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.operationId, "deleteEmptyEpic");
@@ -117,15 +137,127 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowGitHubSync.default, false);
   assert.deepEqual(document.components.schemas.GitHubSyncMode.enum, ["async", "wait"]);
   assert.equal(document.components.schemas.GitHubSyncCommand.properties.createIfMissing.type, "boolean");
+
+  const v2Document = JSON.parse(v2Openapi);
+  assert.equal(v2Document.info.version, "2.0.0");
+  assert.deepEqual(Object.keys(v2Document.paths), v2PublicPaths);
+  assert.deepEqual(v2Document.components.schemas.PlanningItemCreate.properties.itemType.enum, ["epic", "initiative", "deliverable", "sub_issue"]);
+  assert.equal(v2Document.components.schemas.PlanningItemCreate.properties.milestoneId, undefined);
+  assert.equal(v2Document.components.schemas.PlanningItemCreate.properties.packageId, undefined);
+  assert.equal(v2Document.components.schemas.PatchPayload.properties.milestoneId, undefined);
+  assert.equal(v2Document.components.schemas.PatchPayload.properties.packageId, undefined);
+  assert.equal(v2Document.components.schemas.EpicNotEmptyResponse.properties.code.const, "EPIC_NOT_EMPTY");
+  assert.match(apiContract, /allowLegacyAliases: false/);
+  assert.match(apiContract, /allowLegacyItemIds: false/);
+  assert.match(apiContract, /minimumReplayContractVersion: 2/);
+  assert.match(contextModule, /planningItemsV2Context/);
+  assert.match(contextModule, /initiatives: context\.items\.filter/);
   assert.match(documentation, /PATCH processes only properties present/);
   assert.match(documentation, /write:planning-items:delete-empty/);
   assert.match(documentation, /write:planning-items:github-sync/);
   assert.match(documentation, /GitHub projection is intentionally unavailable for Epics and Initiatives/);
   assert.match(documentation, /valid: false/);
-  assert.match(documentation, /normalized at the transport boundary/);
-  assert.match(documentation, /parentTaskId.*canonical hierarchy reference/);
+  assert.match(documentation, /V1 continues to normalize deprecated request fields/);
+  assert.match(documentation, /parentTaskId.*hierarchy reference/);
   assert.match(documentation, /Review, score, Evidence gates, Sprint, repository, or GitHub fields/);
   assert.match(documentation, /Sub-Issues retain their separate four-state status contract/);
+  assert.match(documentation, /\/api\/team\/planning-items\/v2/);
+  assert.match(documentation, /V2 rejects the deprecated `milestone`/);
+  assert.match(documentation, /EPIC_NOT_EMPTY/);
+});
+
+test("v1 create compatibility and v2 canonical create behavior differ at the shared handler", async () => {
+  let runnerCalls = 0;
+  const handler = await loadTranspiledModule(
+    "src/features/planning-items/model/planning-items-team-create-route.ts",
+    {
+      "next/server": { after: () => undefined },
+      "@/lib/api-input": { auditRequestMetadata: () => ({}) },
+      "@/features/planning-items/model/planning-actor-context-server": {
+        actorContextFromPlanningTokenAuth: () => ({
+          ok: true,
+          actor: { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token", scopes: [] } },
+        }),
+      },
+      "@/features/planning-items/model/planning-items-contract": { isUuid: () => true },
+      "@/features/planning-items/model/planning-items-create": {
+        parsePlanningItemCreatePayload: () => ({
+          ok: true,
+          items: [{ itemType: "milestone", title: "Legacy", packageId: "package-1" }],
+          githubSyncMode: null,
+          hasLegacyAliases: true,
+        }),
+        planningItemCreateRequiresOperationalLead: () => true,
+        planningItemCreateCommand: () => ({ kind: "createItems", items: [] }),
+        createTeamCreatePlanningItems: ({ onPreview }) => ({
+          run: async () => {
+            runnerCalls += 1;
+            onPreview?.([{ errors: [] }]);
+            return { ok: true, status: "preview", items: [], changes: [], effects: [] };
+          },
+        }),
+      },
+      "@/features/planning-items/model/planning-items-github-projection": {},
+      "@/features/planning-items/model/planning-items-route": {
+        handlePlanningItemsRequest: async (_request, _scope, _message, callback) => callback({
+          tokenId: "token",
+          scopes: [],
+          profile: { id: "ceo", platformRole: "ceo" },
+          supabase: {},
+        }),
+        planningItemsError: (error, status) => ({ status, body: { ok: false, error } }),
+        planningItemsJson: (body, status = 200) => ({ status, body }),
+      },
+      "@/features/planning-items/model/planning-items-team-api-contract": {
+        canonicalTeamApiError: "canonical v2 only",
+      },
+    },
+  );
+  const request = { json: async () => ({ items: [{ itemType: "milestone" }] }) };
+  const v1 = { version: "v1", allowLegacyAliases: true, allowLegacyItemIds: true, minimumReplayContractVersion: 1 };
+  const v2 = { version: "v2", allowLegacyAliases: false, allowLegacyItemIds: false, minimumReplayContractVersion: 2 };
+
+  const v1Response = await handler.handleTeamPlanningItemsCreatePreview(request, v1);
+  assert.equal(v1Response.status, 200);
+  assert.equal(runnerCalls, 1);
+  const v2Response = await handler.handleTeamPlanningItemsCreatePreview(request, v2);
+  assert.equal(v2Response.status, 400);
+  assert.equal(v2Response.body.error, "canonical v2 only");
+  assert.equal(runnerCalls, 1);
+});
+
+test("v2 context projection removes every v1 alias and derives initiatives from items", async () => {
+  const contextModule = await loadTranspiledModule(
+    "src/features/planning-items/model/planning-items-context.ts",
+    {
+      "@/lib/status": { normalizeStatus: (value) => value, normalizeSubIssueStatus: (value) => value },
+      "@/features/planning-items/model/planning-items-contract": {},
+      "@/features/planning-items/model/supabase-pagination": {},
+      "@/lib/planning-read-model": {},
+    },
+  );
+  const initiative = {
+    id: "initiative-1",
+    itemType: "initiative",
+    strategy: { goal: "Goal", scopeConstraints: "Scope", successCriteria: "Success" },
+  };
+  const projected = contextModule.planningItemsV2Context({
+    actor: { id: "ceo" },
+    constraints: {},
+    profiles: [],
+    items: [initiative, { id: "deliverable-1", itemType: "deliverable" }],
+    epics: [],
+    initiatives: [{ ...initiative, goal: "Compatibility goal" }],
+    tasks: [],
+    milestones: [{ id: "legacy-epic" }],
+    sprints: [],
+  });
+
+  assert.equal(Object.hasOwn(projected, "milestones"), false);
+  assert.deepEqual(projected.initiatives, [initiative]);
+  assert.equal(Object.hasOwn(projected.initiatives[0], "goal"), false);
+  assert.equal(Object.hasOwn(projected.initiatives[0], "successCriteria"), false);
+  assert.equal(projected.initiatives[0].strategy.goal, "Goal");
 });
 
 test("GitHub sync scope migration backfills only active tokens and keeps issuance explicit", async () => {

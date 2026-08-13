@@ -1,0 +1,153 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FounderOps Planning Items API",
+    "version": "2.0.0",
+    "description": "Canonical personal-token API for Epic, Initiative, Deliverable, and Sub-Issue planning items. Deprecated Milestone and package aliases are rejected."
+  },
+  "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
+  "paths": {
+    "/api/team/planning-items/v2/context": {
+      "get": {
+        "operationId": "getPlanningItemsContextV2",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Canonical planning context without legacy aliases", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ContextResponse" } } } } }
+      }
+    },
+    "/api/team/planning-items/v2/items/preview": {
+      "post": {
+        "operationId": "previewPlanningItemsCreateV2",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
+        "responses": { "200": { "description": "Normalized create preview" }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      }
+    },
+    "/api/team/planning-items/v2/items": {
+      "post": {
+        "operationId": "createPlanningItemsV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePayload" } } } },
+        "responses": { "200": { "description": "Created planning items or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v2/items/{id}/preview": {
+      "post": {
+        "operationId": "previewPlanningItemUpdateV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
+        "responses": { "200": { "description": "Normalized partial update preview" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v2/items/{id}/delete/preview": {
+      "post": {
+        "operationId": "previewEmptyEpicDeleteV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
+        "responses": { "200": { "description": "Delete preview", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePreviewResponse" } } } }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/api/team/planning-items/v2/items/{id}": {
+      "patch": {
+        "operationId": "updatePlanningItemV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PatchPayload" } } } },
+        "responses": { "200": { "description": "Updated planning item or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": {
+        "operationId": "deleteEmptyEpicV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DeletePayload" } } } },
+        "responses": { "200": { "description": "Deleted empty Epic or a v2 idempotent replay" }, "409": { "$ref": "#/components/responses/DeleteConflict" } }
+      }
+    },
+    "/api/team/planning-items/v2/items/{id}/github-sync": {
+      "post": {
+        "operationId": "syncPlanningItemToGitHubV2",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GitHubSyncRequest" } } } },
+        "responses": { "200": { "description": "Wait-mode GitHub sync completed" }, "202": { "description": "Async GitHub sync accepted" }, "409": { "description": "The planning item is not eligible for GitHub sync" }, "503": { "description": "GitHub sync is temporarily unavailable" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "BearerAuth": { "type": "http", "scheme": "bearer" } },
+    "parameters": {
+      "ItemId": { "name": "id", "in": "path", "required": true, "description": "Canonical planning item ID. Legacy Milestone and package IDs are not resolved.", "schema": { "type": "string" } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "format": "uuid" } }
+    },
+    "responses": {
+      "BadRequest": { "description": "Invalid canonical request" },
+      "Conflict": { "description": "Stale version, state conflict, or incompatible idempotency replay" },
+      "DeleteConflict": { "description": "The Epic is non-empty, the version is stale, or the idempotency key conflicts", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/EpicNotEmptyResponse" }, { "$ref": "#/components/schemas/ErrorResponse" }] } } } }
+    },
+    "schemas": {
+      "CreatePayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["items"],
+        "description": "githubSyncMode is required exactly when at least one item contains githubSync.",
+        "properties": { "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "items": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/components/schemas/PlanningItemCreate" } } }
+      },
+      "PlanningItemCreate": {
+        "type": "object",
+        "description": "Fields are type-specific. Hierarchy references use parentTaskId. Strategic items do not accept GitHub, Sprint, Review, score, or Evidence fields.",
+        "additionalProperties": false,
+        "required": ["itemType", "title"],
+        "properties": {
+          "itemType": { "type": "string", "enum": ["epic", "initiative", "deliverable", "sub_issue"] },
+          "title": { "type": "string", "minLength": 3, "maxLength": 240 },
+          "description": { "type": "string" }, "problemStatement": { "type": "string" }, "intendedOutcome": { "type": "string" },
+          "scopeConstraints": { "type": "string" }, "acceptanceCriteria": { "$ref": "#/components/schemas/AcceptanceCriteria" },
+          "evidenceRequired": { "type": "string" }, "definitionOfDone": { "type": "string" }, "parentTaskId": { "type": "string" },
+          "ownerId": { "type": "string" }, "accountableProfileId": { "type": "string" }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "priority": { "$ref": "#/components/schemas/Priority" }, "workstream": { "type": "string" }, "startDate": { "type": "string", "format": "date" },
+          "endDate": { "type": "string", "format": "date" }, "deadline": { "type": "string", "format": "date" }, "hours": { "type": "integer", "minimum": 0, "maximum": 200 },
+          "githubRepo": { "type": "string" }, "targetDate": { "type": ["string", "null"], "format": "date" },
+          "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] },
+          "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" }
+        }
+      },
+      "PatchPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedUpdatedAt"],
+        "minProperties": 2,
+        "properties": {
+          "expectedUpdatedAt": { "type": "string", "format": "date-time" }, "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "githubSync": { "$ref": "#/components/schemas/GitHubSyncCommand" },
+          "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
+          "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
+          "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
+          "ownerId": { "type": ["string", "null"] }, "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
+          "priority": { "type": ["string", "null"], "enum": ["P0", "P1", "P2", "P3", "P4", null] }, "workstream": { "type": ["string", "null"] },
+          "startDate": { "type": ["string", "null"], "format": "date" }, "endDate": { "type": ["string", "null"], "format": "date" }, "deadline": { "type": ["string", "null"], "format": "date" },
+          "hours": { "type": ["integer", "null"], "minimum": 0, "maximum": 200 }, "githubRepo": { "type": ["string", "null"] }, "targetDate": { "type": ["string", "null"], "format": "date" },
+          "status": { "oneOf": [{ "$ref": "#/components/schemas/StrategicStatus" }, { "$ref": "#/components/schemas/TaskStatus" }, { "$ref": "#/components/schemas/SubIssueStatus" }] }
+        }
+      },
+      "DeletePayload": { "type": "object", "additionalProperties": false, "required": ["expectedUpdatedAt"], "properties": { "expectedUpdatedAt": { "type": "string", "format": "date-time" } } },
+      "EpicChildCounts": { "type": "object", "additionalProperties": false, "required": ["initiatives", "tasks"], "properties": { "initiatives": { "type": "integer", "minimum": 0 }, "tasks": { "type": "integer", "minimum": 0 } } },
+      "DeletePreviewResponse": { "type": "object", "required": ["ok", "valid", "canDelete", "itemId", "itemType", "currentItem", "children", "warnings"], "properties": { "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" }, "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" }, "code": { "type": ["string", "null"], "enum": ["EPIC_NOT_EMPTY", null] }, "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } } } },
+      "EpicNotEmptyResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "code", "error", "children"], "properties": { "ok": { "const": false }, "code": { "const": "EPIC_NOT_EMPTY" }, "error": { "type": "string" }, "children": { "$ref": "#/components/schemas/EpicChildCounts" } } },
+      "ErrorResponse": { "type": "object", "required": ["ok", "error"], "properties": { "ok": { "const": false }, "error": { "type": "string" } } },
+      "AcceptanceCriteria": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+      "NullableAcceptanceCriteria": { "oneOf": [{ "$ref": "#/components/schemas/AcceptanceCriteria" }, { "type": "null" }] },
+      "ProfileIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+      "Priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3", "P4"] },
+      "StrategicStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"] },
+      "TaskStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"] },
+      "SubIssueStatus": { "type": "string", "enum": ["Offen", "In Arbeit", "Blockiert", "Erledigt"] },
+      "GitHubSyncMode": { "type": "string", "enum": ["async", "wait"] },
+      "GitHubSyncCommand": { "type": "object", "additionalProperties": false, "required": ["createIfMissing"], "properties": { "createIfMissing": { "type": "boolean" } } },
+      "GitHubSyncRequest": { "type": "object", "additionalProperties": false, "required": ["githubSyncMode", "createIfMissing"], "properties": { "githubSyncMode": { "$ref": "#/components/schemas/GitHubSyncMode" }, "createIfMissing": { "type": "boolean" } } },
+      "ContextResponse": { "type": "object", "additionalProperties": false, "required": ["ok", "context"], "properties": { "ok": { "const": true }, "context": { "type": "object", "required": ["actor", "constraints", "profiles", "items", "epics", "initiatives", "tasks", "sprints"], "not": { "required": ["milestones"] } } } }
+    }
+  }
+}
