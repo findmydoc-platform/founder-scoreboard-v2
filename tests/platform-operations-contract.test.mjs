@@ -125,7 +125,7 @@ test("google chat delivery is outbox based and webhook gated", async () => {
   assert.match(notificationRoute, /requireTeamMember/);
   assert.match(notificationTarget, /entityType === "founder_event"/);
   assert.match(notificationTarget, /entityType === "fmd_tool"/);
-  assert.match(notificationTarget, /`\/initiatives\/\$\{encodeURIComponent\(entityId\)\}`/);
+  assert.match(notificationTarget, /`\/tasks\/\$\{encodeURIComponent\(entityId\)\}`/);
   assert.match(notificationTarget, /"meeting", "sprint", "sprint_commitment", "score_objection"/);
   assert.match(inboxUi, /notificationTarget\(event\)\.href/);
   assert.match(ui, /NotificationsOverview/);

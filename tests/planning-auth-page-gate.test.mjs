@@ -14,9 +14,10 @@ test("legacy review detail links redirect into the protected task detail page", 
   assert.doesNotMatch(source, /requiresSupabaseAuth|ReviewDetailPage/);
 });
 
-test("legacy initiative links redirect into the protected task detail page", async () => {
+test("initiative links redirect canonical ids into the protected task detail page", async () => {
   const source = await readFile("src/app/initiatives/[id]/page.tsx", "utf8");
-  assert.match(source, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
+  assert.match(source, /redirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.doesNotMatch(source, /planning_item_legacy_ids|source_kind|legacy_id/);
   assert.doesNotMatch(source, /requiresSupabaseAuth/);
 });
 

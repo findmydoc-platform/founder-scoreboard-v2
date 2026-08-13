@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase, hasSupabaseEnv, requiresSupabaseAuth } from "@/lib/supabase";
 
-const coreTables = ["profiles", "packages", "tasks"] as const;
+const coreTables = ["profiles", "tasks"] as const;
 
 async function coreTablesReachable() {
   const supabase = getServerSupabase();

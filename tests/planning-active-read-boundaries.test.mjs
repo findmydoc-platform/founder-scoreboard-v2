@@ -33,13 +33,13 @@ test("operational planning readers use centralized active views", async () => {
   assert.match(digest, /if \(!task\) continue/);
 });
 
-test("trash detail and mutation writes retain explicit base-table access", async () => {
+test("trash detail and mutation guards use only the canonical planning item table", async () => {
   const [detail, taskRoute] = await Promise.all([
     readFile("src/lib/planning-trash-detail.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
   ]);
   assert.match(detail, /\.from\("tasks"\)/);
-  assert.match(detail, /\.from\("packages"\)/);
+  assert.doesNotMatch(detail, /\.from\("packages"\)|\.from\("milestones"\)|package_id|milestone_id/);
   assert.match(taskRoute, /requireActivePlanningItem/);
   assert.match(taskRoute, /\.from\("tasks"\)/);
 });
