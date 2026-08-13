@@ -2,7 +2,7 @@
 
 The FounderOps Planning Items API exposes the current planning hierarchy through personal tokens. Its active source is `tasks`; Epic, Initiative, Deliverable, and Sub-Issue are all planning-item types in that one model. The API never writes to the retained legacy `milestones` or `packages` tables.
 
-`/api/team/planning-items/v1/items` is the sole supported API contract for automated planning-item creation.
+`/api/team/planning-items/v2/*` is the supported contract for new automation. It accepts only current Epic and `parentTaskId` forms. `/v1/*` remains available solely for existing clients that still depend on deprecated aliases.
 
 ```text
 Epic
@@ -40,22 +40,24 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 
 ## Endpoints
 
-- `GET /api/team/planning-items/v1/context` — reads non-sensitive planning context.
-- `POST /api/team/planning-items/v1/items/preview` — validates one to 30 new items without writing.
-- `POST /api/team/planning-items/v1/items` — creates a complete batch atomically.
-- `POST /api/team/planning-items/v1/items/{id}/preview` — validates and previews a partial update.
-- `PATCH /api/team/planning-items/v1/items/{id}` — commits a partial update.
-- `POST /api/team/planning-items/v1/items/{id}/github-sync` — syncs one Deliverable or Sub-Issue.
-- `POST /api/team/planning-items/v1/items/{id}/delete/preview` — checks whether one Epic is empty.
-- `DELETE /api/team/planning-items/v1/items/{id}` — deletes one empty Epic.
+- `GET /api/team/planning-items/v2/context` — reads non-sensitive canonical planning context.
+- `POST /api/team/planning-items/v2/items/preview` — validates one to 30 new items without writing.
+- `POST /api/team/planning-items/v2/items` — creates a complete batch atomically.
+- `POST /api/team/planning-items/v2/items/{id}/preview` — validates and previews a partial update.
+- `PATCH /api/team/planning-items/v2/items/{id}` — commits a partial update.
+- `POST /api/team/planning-items/v2/items/{id}/github-sync` — syncs one Deliverable or Sub-Issue.
+- `POST /api/team/planning-items/v2/items/{id}/delete/preview` — checks whether one Epic is empty.
+- `DELETE /api/team/planning-items/v2/items/{id}` — deletes one empty Epic.
 - `GET` and `POST /api/team/planning-items/v1/tokens` — lists or creates the caller’s tokens.
 - `DELETE /api/team/planning-items/v1/tokens/{id}` — revokes one active token.
 
+Token scopes are version-neutral. Token management remains session-authorized at the current `/v1/tokens` endpoints; bearer-token planning operations use `/v2`.
+
 ## Context and canonical references
 
-The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every current list uses the same canonical projection. `parentTaskId` is the canonical hierarchy reference, and Initiative strategy is available through the nested `strategy` object.
+The v2 context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every list uses the same canonical projection. `parentTaskId` is the hierarchy reference, and Initiative strategy is available only through the nested `strategy` object. There is no `milestones` collection and no flat Initiative `goal`, `successCriteria`, or strategy-level `scopeConstraints` alias.
 
-Because these endpoints remain version `v1`, existing clients may still send the deprecated `milestone` item type and the `milestoneId` and `packageId` parent aliases. They are normalized at the transport boundary before canonical Planning state is read or written. The response aliases `milestones`, flat Initiative strategy fields, `canIssueEmptyMilestoneDeletes`, and the established `MILESTONE_NOT_EMPTY` conflict code remain available for v1 compatibility. New clients should use only the canonical names.
+V2 rejects the deprecated `milestone` item type and the `milestoneId` and `packageId` parent aliases. Path and parent references must use current planning-item IDs; v2 does not resolve retained legacy IDs. It also refuses a replay receipt written under the older response contract, preventing a v1 response from crossing the version boundary.
 
 ## Create payload
 
@@ -145,10 +147,10 @@ The preview and delete endpoints require `write:planning-items:delete-empty`, a 
 }
 ```
 
-Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and the established v1 code `MILESTONE_NOT_EMPTY`. The operation never moves, detaches, or deletes children.
+Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and `EPIC_NOT_EMPTY`. The operation never moves, detaches, or deletes children.
 
 ## Compatibility window
 
-The old database tables remain read-only compatibility and recovery data during the transition. They are not a second write path. Deprecated v1 request fields are normalized into current commands, while response aliases are derived from current projections. Removing those transport adapters, the replay adapter, and the special Epic-delete receipt table requires a separately versioned API retirement and the approved data migration in issue #317.
+The old database tables remain read-only compatibility and recovery data during the transition. They are not a second write path. V1 continues to normalize deprecated request fields and derive response aliases from current projections. V2 and v1 share the same authorization, policy, transaction, projection, and persistence implementation; only their transport contracts differ. Removing the v1 adapters, replay adapter, and special Epic-delete receipt table requires the approved data migration in issue #317.
 
-The OpenAPI document is available at `/founderops-team-planning-items-openapi.json`.
+The canonical OpenAPI document is available at `/founderops-team-planning-items-v2-openapi.json`. The compatibility document remains at `/founderops-team-planning-items-openapi.json`.

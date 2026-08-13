@@ -114,7 +114,7 @@ test("Browser and Team routes delegate empty Epic policy and writes to PlanningI
   const [browser, team, preview, model, migration, corpus] = await Promise.all([
     readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
-    readFile("src/app/api/team/planning-items/v1/items/[id]/delete/preview/route.ts", "utf8"),
+    readFile("src/features/planning-items/model/planning-items-team-delete-preview-route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-empty-epic-delete.ts", "utf8"),
     readFile("supabase/migrations/20260812125116_authorize_empty_epic_delete_command.sql", "utf8"),
     readSupabaseSchemaContract(),

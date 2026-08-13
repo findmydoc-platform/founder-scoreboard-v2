@@ -611,6 +611,8 @@ type TeamCreateDependencies = Readonly<{
   tokenId: string;
   rawItems: readonly PlanningItemCreateInput[];
   githubSyncMode: TeamPlanningItemGitHubSyncMode | null;
+  allowLegacyReferences?: boolean;
+  minimumReplayContractVersion?: 1 | 2;
   scheduleAfter?: (callback: () => Promise<void>) => void;
   dispatchGitHubProjections?: (
     supabase: PlanningCreateSupabase,
@@ -781,6 +783,9 @@ async function prepareTeamCreate(
     .maybeSingle();
   if (existingRequest.error) return { data: null, error: existingRequest.error };
   const stored = existingRequest.data as StoredCreateRequest | null;
+  if (stored && Number(stored.contract_version || 1) < (dependencies.minimumReplayContractVersion || 1)) {
+    return { data: { kind: "error", error: { code: "conflict", reason: "idempotency" } }, error: null };
+  }
   if (stored && Number(stored.contract_version || 1) === 1) {
     const legacyHash = planningItemLegacyCreateHash({
       items: [...dependencies.rawItems],
@@ -795,7 +800,7 @@ async function prepareTeamCreate(
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {
     id: request.actor.profileId,
     platformRole: request.actor.platformRole,
-  } as AuthenticatedProfile, dependencies.supabase, true);
+  } as AuthenticatedProfile, dependencies.supabase, dependencies.allowLegacyReferences !== false);
   dependencies.onPreview?.(preview);
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);

@@ -88,7 +88,7 @@ let standaloneScope = "";
 let standaloneMode = "accepted";
 let scheduledAfter = null;
 const standaloneRoute = await loadTranspiledModule(
-  "src/app/api/team/planning-items/v1/items/[id]/github-sync/route.ts",
+  "src/features/planning-items/model/planning-items-team-github-sync-route.ts",
   {
     "next/server": {
       after: (callback) => {
@@ -96,6 +96,8 @@ const standaloneRoute = await loadTranspiledModule(
       },
     },
     "@/features/planning-items/model/planning-items-contract": contract,
+    "@/features/planning-items/model/planning-items-team-api-contract": {},
+    "@/features/planning-items/model/planning-items-team-canonical-item": {},
     "@/features/planning-items/model/planning-items-github-sync": {
       loadPlanningItemGitHubSyncTarget: async (_supabase, itemId, command) => ({
         ok: true,
@@ -237,6 +239,7 @@ const update = await loadTranspiledModule(
     "@/lib/status": {},
     "@/features/planning-items/model/planning-items-contract": contract,
     "@/features/planning-items/model/planning-item-normalization": {},
+    "@/features/planning-items/model/planning-items-team-api-contract": {},
   },
 );
 
@@ -306,6 +309,19 @@ test("PATCH permits sync-only commands and keeps mode-command coupling strict", 
     githubSyncMode: "wait",
     title: "No command",
   }).ok, false);
+
+  const v1Alias = update.parsePlanningItemPatchPayload({
+    expectedUpdatedAt,
+    packageId: "legacy-package",
+  });
+  assert.equal(v1Alias.ok, true);
+  assert.equal(v1Alias.hasLegacyAliases, true);
+  const v2Alias = update.parsePlanningItemPatchPayload({
+    expectedUpdatedAt,
+    packageId: "legacy-package",
+  }, { allowLegacyAliases: false });
+  assert.equal(v2Alias.ok, false);
+  assert.match(v2Alias.error, /v2 akzeptiert nur parentTaskId/);
 });
 
 test("create idempotency hash includes GitHub mode and per-item decisions", () => {
@@ -415,14 +431,14 @@ test("wait execution reports local ineligibility before installation-token failu
 test("standalone async sync requires the new scope and returns 202 without an idempotency key", async () => {
   standaloneMode = "accepted";
   scheduledAfter = null;
-  const response = await standaloneRoute.POST({
+  const response = await standaloneRoute.handleTeamPlanningItemGitHubSync({
     json: async () => ({
       githubSyncMode: "async",
       createIfMissing: true,
     }),
   }, {
     params: Promise.resolve({ id: "task-1" }),
-  });
+  }, { allowLegacyItemIds: true });
   const body = await response.json();
 
   assert.equal(standaloneScope, "write:planning-items:github-sync");
@@ -433,14 +449,14 @@ test("standalone async sync requires the new scope and returns 202 without an id
 
 test("standalone wait sync preserves GitHub failure status", async () => {
   standaloneMode = "failed";
-  const response = await standaloneRoute.POST({
+  const response = await standaloneRoute.handleTeamPlanningItemGitHubSync({
     json: async () => ({
       githubSyncMode: "wait",
       createIfMissing: false,
     }),
   }, {
     params: Promise.resolve({ id: "task-1" }),
-  });
+  }, { allowLegacyItemIds: true });
   const body = await response.json();
 
   assert.equal(response.status, 503);

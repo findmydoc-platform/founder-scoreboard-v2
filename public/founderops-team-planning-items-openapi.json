@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "FounderOps Planning Items API",
-    "version": "2.0.0",
-    "description": "Personal-token API for the canonical Epic, Initiative, Deliverable, and Sub-Issue hierarchy. GitHub projection is available only for Deliverables and Sub-Issues; CEO and Deputy may delete an empty Epic."
+    "version": "1.0.0",
+    "description": "Compatibility contract for existing Planning Items clients. New automation must use the canonical v2 document."
   },
   "servers": [{ "url": "https://founder-ops.findmydoc.eu" }],
   "paths": {
