@@ -15,5 +15,14 @@ fi
 
 command=(pnpm dlx "vercel@${vercel_cli_version}" promote "${deployment_url}" --yes --timeout=3m --token="${VERCEL_TOKEN}")
 if [[ -n "${VERCEL_ORG_ID:-}" ]]; then command+=(--scope="${VERCEL_ORG_ID}"); fi
-"${command[@]}"
+
+set +e
+promotion_output="$("${command[@]}" 2>&1)"
+promotion_status=$?
+set -e
+printf '%s\n' "${promotion_output}"
+
+if [[ "${promotion_status}" -ne 0 && "${promotion_output}" != *"already the current production deployment"* ]]; then
+  exit "${promotion_status}"
+fi
 echo "Maintenance deployment restored as production alias."
