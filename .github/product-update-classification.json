@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Adds the canonical Team Planning Items API v2 and preserves v1 as a compatibility adapter; no new or materially expanded UI functionality."
+  "reason": "Removes the retired Team Planning Items API v1 and adds an operational maintenance gate for the database cutover; no new or materially expanded UI functionality."
 }
