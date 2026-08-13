@@ -213,6 +213,8 @@ alter table public.planning_item_historical_links rename column source_kind to i
 alter table public.planning_item_historical_links rename column legacy_id to historical_id;
 alter table public.planning_item_historical_links rename column migrated_at to recorded_at;
 alter table public.planning_item_historical_links add column source_snapshot jsonb;
+alter table public.planning_item_historical_links
+  drop constraint planning_item_legacy_ids_source_kind_check;
 update public.planning_item_historical_links
 set source_snapshot = case item_type
       when 'milestone' then (select to_jsonb(milestone) from public.milestones milestone where milestone.id = historical_id)
@@ -234,8 +236,6 @@ begin
   end if;
 end;
 $$;
-alter table public.planning_item_historical_links
-  drop constraint planning_item_legacy_ids_source_kind_check;
 alter table public.planning_item_historical_links
   add constraint planning_item_historical_links_item_type_check check (item_type in ('epic', 'initiative'));
 comment on table public.planning_item_historical_links is
