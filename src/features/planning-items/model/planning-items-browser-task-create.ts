@@ -65,6 +65,14 @@ type CreateTaskPayload = {
   }>;
 };
 
+const createTaskPayloadFields = new Set<keyof CreateTaskPayload>([
+  "title", "description", "problemStatement", "intendedOutcome", "scopeConstraints",
+  "acceptanceCriteria", "evidenceRequired", "taskType", "parentTaskId", "sprintId",
+  "ownerId", "priority", "status", "workstream", "startDate", "endDate", "deadline",
+  "hours", "definitionOfDone", "creationRequestId", "relationType", "relatedTaskId",
+  "relationNote", "approveNow", "githubRepo", "targetDate", "strategy", "raciAssignments",
+]);
+
 const taskTypes = new Set<TaskType>(["epic", "initiative", "deliverable", "sub_issue"]);
 const priorities = new Set(["P0", "P1", "P2", "P3", "P4"]);
 const relationTypes = new Set<TaskRelationType>(["blocked_by", "blocks", "relates_to"]);
@@ -104,12 +112,8 @@ export async function handleBrowserTaskCreate(request: NextRequest) {
   if (!context.ok) return context.response;
 
   const { payload, permission, supabase } = context;
-  if (Object.hasOwn(payload, "packageId") || Object.hasOwn(payload, "milestoneId")) {
-    return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
-  }
-  if (Object.hasOwn(payload, "assignee") || Object.hasOwn(payload, "owner")) {
-    return apiError("Verwende ownerId für die Zuständigkeit.", 400);
-  }
+  const unknownField = Object.keys(payload).find((field) => !createTaskPayloadFields.has(field as keyof CreateTaskPayload));
+  if (unknownField) return apiError(`Unbekanntes Feld: ${unknownField}.`, 400);
   const requestedType = payload.taskType || "deliverable";
   if (!taskTypes.has(requestedType)) return apiError("Ungültiger Aufgabentyp.", 400);
   const isStrategic = requestedType === "epic" || requestedType === "initiative";

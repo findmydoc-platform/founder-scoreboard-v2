@@ -135,7 +135,7 @@ export async function handleTeamPlanningItemUpdate(
         return planningItemsError("Nur CEO oder Deputy können Epics bearbeiten.", 403);
       }
       const requestHash = stored.response?.commandKind === "changeParent" && reparentField
-        ? planningReparentHash(itemId, parsed.expectedUpdatedAt, String(parsed.raw[reparentField] || "") || null, reparentField)
+        ? planningReparentHash(itemId, parsed.expectedUpdatedAt, String(parsed.raw[reparentField] || "") || null)
         : planningItemUpdateHash({
             itemId,
             itemType,
@@ -203,7 +203,6 @@ export async function handleTeamPlanningItemUpdate(
       const result = await createPlanningReparentPlanningItems(
         permission.supabase,
         "any",
-        reparentField,
         parsed.githubSync,
       ).run({
         actor: actor.actor,

@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Removes the retired Team Planning Items API v1 and adds an operational maintenance gate for the database cutover; no new or materially expanded UI functionality."
+  "reason": "Removes completed Planning cutover scaffolding after the production migration; no new or materially expanded UI functionality."
 }

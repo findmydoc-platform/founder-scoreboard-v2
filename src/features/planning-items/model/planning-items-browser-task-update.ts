@@ -88,6 +88,15 @@ type TaskUpdateTransactionResult = {
   activities?: Array<{ id: number; task_id: string; message: string; created_at: string }>;
 };
 
+const taskUpdatePayloadFields = new Set<keyof TaskUpdatePayload>([
+  "expectedUpdatedAt", "title", "description", "status", "ownerId", "reviewOwnerProfileId",
+  "priority", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria",
+  "evidenceRequired", "definitionOfDone", "startDate", "endDate", "deadline", "dependsOn",
+  "evidenceLink", "evidenceLinks", "note", "reviewStatus", "scorePoints", "scoreFinal",
+  "sprintId", "parentTaskId", "targetDate", "strategy", "raciAssignments", "selfDodChecked",
+  "selfEvidenceChecked", "selfDocumentedChecked", "selfBlockersChecked",
+]);
+
 function strategicText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -111,14 +120,10 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
     return apiError("Aufgabenänderung ist ungültig.", 400);
   }
-  if (Object.hasOwn(rawPayload, "packageId") || Object.hasOwn(rawPayload, "milestoneId")) {
-    return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
-  }
-  if (Object.hasOwn(rawPayload, "assignee") || Object.hasOwn(rawPayload, "owner")) {
-    return apiError("Verwende ownerId für die Zuständigkeit.", 400);
-  }
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
+  const unknownField = Object.keys(rawPayload).find((field) => !taskUpdatePayloadFields.has(field as keyof TaskUpdatePayload));
+  if (unknownField) return apiError(`Unbekanntes Feld: ${unknownField}.`, 400);
   let payload = { ...rawPayload } as TaskUpdatePayload;
   if (isPlanningReviewRequestPayload(rawPayload)) {
     const parsed = parsePlanningReviewRequestPayload(rawPayload);
@@ -460,7 +465,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
 
   if (payload.sprintId !== undefined) {
     const nextSprintId = payload.sprintId || null;
-    const nextPackageId = currentTask.parent_task_id || "";
+    const nextParentId = currentTask.parent_task_id || "";
     const nextAssignee = update.assignee === undefined
       ? currentTask.assignee || ""
       : typeof update.assignee === "string"
@@ -477,11 +482,11 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
         ? update.status
         : "";
     let hasInitiative = false;
-    if (nextPackageId) {
+    if (nextParentId) {
       const { data: initiative, error: initiativeError } = await supabase
         .from(ACTIVE_TASKS_TABLE)
         .select("id,task_type")
-        .eq("id", nextPackageId)
+        .eq("id", nextParentId)
         .maybeSingle();
       if (initiativeError) return apiError(initiativeError.message, 500);
       hasInitiative = initiative?.task_type === "initiative";
@@ -516,7 +521,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       status: nextStatus,
       assignee: nextAssignee,
       owner: nextOwner,
-      parentTaskId: nextPackageId,
+      parentTaskId: nextParentId,
       hasInitiative,
       sprintId: currentTask.sprint_id,
     }, targetSprint, { sourceSprintLocked });

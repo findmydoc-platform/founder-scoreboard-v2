@@ -17,8 +17,6 @@ async function loadModel() {
       title: row.title || "Planning item",
       taskType: row.task_type,
       parentTaskId: row.parent_task_id || "",
-      packageId: row.package_id || "",
-      milestoneId: row.milestone_id || "",
       ownerId: row.owner || "",
       owner: row.owner || "",
       assigneeId: row.assignee || "",
@@ -154,11 +152,11 @@ test("stale referenced parent is a stable conflict and Team commits use one idem
 
   const team = fixture();
   const tokenActor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "planningToken", tokenId: "token-one", scopes: ["write:planning-items:update"] } };
-  const committed = await model.createPlanningReparentPlanningItems(team.client, "any", "packageId").run({
+  const committed = await model.createPlanningReparentPlanningItems(team.client, "any").run({
     actor: tokenActor, mode: "commit", command, idempotencyKey: "00000000-0000-4000-8000-000000000305",
   });
   assert.equal(committed.status, "committed");
   const call = team.calls.find(([name]) => name === "mutate_team_planning_reparent_command_transaction");
-  assert.equal(call[1].p_changed_field, "packageId");
+  assert.equal(call[1].p_changed_field, "parentTaskId");
   assert.match(call[1].p_request_hash, /^[a-f0-9]{64}$/);
 });

@@ -155,7 +155,6 @@ add_env_flag_if_present "APP_URL"
 add_env_flag_if_present "GITHUB_SYNC_OWNER"
 add_env_flag_if_present "GITHUB_SYNC_REPO"
 add_env_flag_if_present "GOOGLE_CHAT_DELIVERY_ENABLED"
-add_env_flag_if_present "PLANNING_MAINTENANCE_MODE"
 
 echo "${label} deployment from Git-metadata-free prebuilt artifact."
 echo "Staging directory: ${staging_dir}"

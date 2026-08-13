@@ -12,7 +12,6 @@ const nextCli = resolve(root, "node_modules/.bin/next");
 const localDevelopmentScript = resolve(root, "scripts/local-development.mjs");
 const seedSourcePath = resolve(root, "src/lib/seed/source.json");
 const appOrigin = "http://127.0.0.1:3012";
-const maintenanceOrigin = "http://127.0.0.1:3013";
 
 function parseEnvFile(content) {
   return Object.fromEntries(content.split(/\r?\n/).flatMap((line) => {
@@ -44,43 +43,6 @@ async function waitForServer(child) {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
   }
   throw new Error("Next.js local integration server did not become ready within 60 seconds.");
-}
-
-async function verifyMaintenanceMode(localEnv) {
-  const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3013"], {
-    cwd: root,
-    env: { ...process.env, ...localEnv, APP_URL: maintenanceOrigin, PLANNING_MAINTENANCE_MODE: "1" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  app.stdout.on("data", (chunk) => { output = `${output}${chunk}`.slice(-4000); });
-  app.stderr.on("data", (chunk) => { output = `${output}${chunk}`.slice(-4000); });
-  try {
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      if (app.exitCode !== null) throw new Error("Maintenance integration server stopped before becoming ready.");
-      try {
-        const health = await fetch(`${maintenanceOrigin}/api/health`);
-        if (health.status === 503) break;
-      } catch {}
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
-    }
-    for (const [path, init] of [
-      ["/api/health", {}],
-      ["/api/planning-board-data", {}],
-      ["/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
-    ]) {
-      const response = await fetch(`${maintenanceOrigin}${path}`, init);
-      assertStatus(response, 503, `Maintenance ${path}`);
-      const body = await response.json();
-      if (body.status !== "maintenance") throw new Error(`Maintenance ${path} did not return the maintenance contract.`);
-    }
-  } catch (error) {
-    if (output.trim()) console.error(output);
-    throw error;
-  } finally {
-    app.kill("SIGTERM");
-  }
 }
 
 function assertStatus(response, expected, label) {
@@ -772,11 +734,10 @@ async function main() {
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });
-  execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-legacy-cutover.mjs"), "--local", "--post-cutover"], { cwd: root, stdio: "inherit" });
+  execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-schema.mjs"), "--local"], { cwd: root, stdio: "inherit" });
   await verifyGitHubProjectRoleBoundary(status, source);
   await verifyUnmappedAuthReadBoundary(status);
   const localEnv = parseEnvFile(readFileSync(resolve(root, ".env.local"), "utf8"));
-  await verifyMaintenanceMode(localEnv);
   const app = spawn(nextCli, ["dev", "--hostname", "127.0.0.1", "--port", "3012"], {
     cwd: root,
     env: { ...process.env, ...localEnv, APP_URL: appOrigin },

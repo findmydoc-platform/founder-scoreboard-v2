@@ -398,8 +398,7 @@ export function emptyEpicDeletePreview(result: Extract<PlanningResult, { ok: tru
     itemId: projected.item.id,
     itemType: "epic" as const,
     expectedUpdatedAt: projected.item.updatedAt,
-    // The established preview contract was built from the narrow Milestone
-    // select, which intentionally did not expose its owner.
+    // Delete previews intentionally omit the owner from their narrow projection.
     currentItem: { ...projected.item, itemType: "epic", ownerId: "" },
     children: projected.children,
     valid: canDelete,
