@@ -47,12 +47,6 @@ test("all high-risk task and initiative mutations use the centralized active gua
     const source = await read(route);
     assert.match(source, /requireActivePlanningItem/, `${route} must fail closed for trash mutations`);
   }
-  for (const route of [
-    "src/features/planning-items/model/planning-items-browser-initiative-update.ts",
-  ]) {
-    const source = await read(route);
-    assert.match(source, /loadCanonicalStrategicItem/, `${route} must use the active canonical item adapter`);
-  }
   const syncProjection = await read("src/lib/github-sync/task-projection.ts");
   assert.match(syncProjection, /requireActivePlanningItem/, "task projection must fail closed for trash mutations");
 
@@ -80,15 +74,12 @@ test("all high-risk task and initiative mutations use the centralized active gua
   assert.match(reviewModule, /task\.trashed/);
   assert.match(reviewMigration, /v_task\.trashed_at is not null/);
 
-  const [approvalTaskRoute, approvalInitiativeRoute, approvalModule, approvalMigration] = await Promise.all([
+  const [approvalTaskRoute, approvalModule, approvalMigration] = await Promise.all([
     read("src/app/api/tasks/[id]/approval/route.ts"),
-    read("src/app/api/initiatives/[id]/approval/route.ts"),
     read("src/features/planning-items/model/planning-items-approval.ts"),
     read("supabase/migrations/20260812140715_planning_approval_command_transaction.sql"),
   ]);
-  for (const route of [approvalTaskRoute, approvalInitiativeRoute]) {
-    assert.match(route, /createPlanningApprovalPlanningItems/);
-  }
+  assert.match(approvalTaskRoute, /createPlanningApprovalPlanningItems/);
   assert.match(approvalModule, /item\.trashed/);
   assert.match(approvalMigration, /v_task\.trashed_at/);
 });
@@ -239,10 +230,12 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
   assert.equal(result.detail.children[0].taskType, "deliverable");
 });
 
-test("initiative links use canonical planning item ids without legacy lookup", async () => {
+test("initiative links preserve legacy notification ids through the canonical mapping", async () => {
   const page = await read("src/app/initiatives/[id]/page.tsx");
-  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
-  assert.doesNotMatch(page, /planning_item_legacy_ids|source_kind|legacy_id/);
+  assert.match(page, /planning_item_legacy_ids/);
+  assert.match(page, /\.eq\("source_kind", "package"\)/);
+  assert.match(page, /\.eq\("legacy_id", id\)/);
+  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
@@ -253,14 +246,14 @@ test("notifications keep rejected initiative details read-only and return revisi
   const commands = await read("src/features/planning/hooks/use-notification-commands.ts");
 
   assert.equal(notificationTarget({ entityType: "task", entityId: "task/1" }).href, "/tasks/task%2F1");
-  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/tasks/initiative%2F1");
+  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
   assert.deepEqual(
     notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),
     { workspace: "backlog", href: "/backlog?backlog.level=initiative" },
   );
   assert.equal(
     notificationTarget({ type: "planning_item.rejected", entityType: "initiative", entityId: "initiative/1" }).href,
-    "/tasks/initiative%2F1",
+    "/initiatives/initiative%2F1",
   );
   assert.doesNotMatch(commands, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(commands, /if \(!task \|\| !taskOverlayWorkspaces\.has\(workspace\)\)/);

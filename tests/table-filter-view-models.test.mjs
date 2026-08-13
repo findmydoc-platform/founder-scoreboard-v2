@@ -33,7 +33,7 @@ test("planning task view model combines fields with AND and quick values with OR
   ];
   const data = { tasks, packages: [{ id: "i1", title: "Launch", goal: "" }], sprints: [{ id: "s1", name: "Sprint 1" }], profiles: [], taskRelations: [], taskBlockers: [] };
   const filters = {
-    query: "", assignee: "Alle", status: "Alle", priority: "P0", packageId: "Alle",
+    query: "", assignee: "Alle", status: "Alle", priority: "P0", initiativeId: "Alle",
     quick: ["mine", "critical"], sprintId: "s1", workstream: "Product", risk: "Alle",
     targetFrom: "", targetTo: "2026-07-31", sort: "priority", direction: "asc",
   };
@@ -108,4 +108,3 @@ test("task table view model applies a stable secondary order", async () => {
   assert.deepEqual(model.rows.map((task) => task.id), ["first", "later"]);
   assert.equal(model.totalCount, 2);
 });
-

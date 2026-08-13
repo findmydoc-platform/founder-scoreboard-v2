@@ -1,5 +1,3 @@
-import type { MilestoneDto } from "@/features/projects/model/milestone-contract";
-
 export type Role = "admin" | "member" | "viewer";
 export type PlatformRole = "ceo" | "founder" | "deputy" | "viewer";
 export type ReviewStatus = "not_requested" | "requested" | "accepted" | "partial" | "changes_requested";
@@ -60,41 +58,6 @@ export type Project = {
   githubProjectNumber: number;
 };
 
-export type Package = {
-  id: string;
-  milestoneId?: string;
-  ownerId?: string;
-  accountableProfileId?: string;
-  responsibleProfileIds?: string[];
-  consultedProfileIds?: string[];
-  informedProfileIds?: string[];
-  title: string;
-  goal: string;
-  priority: string;
-  status?: "planned" | "active" | "done" | "paused";
-  targetDate?: string;
-  successCriteria?: string;
-  scopeConstraints?: string;
-  sortOrder: number;
-  approvalStatus: ApprovalStatus;
-  approvalRevision: number;
-  proposedById?: string;
-  proposedAt?: string;
-  decidedById?: string;
-  decidedAt?: string;
-  decisionNote?: string;
-  trashedAt?: string;
-  trashedById?: string;
-  trashReason?: string;
-  trashCause?: TrashCause;
-  purgeAfter?: string;
-  trashRootType?: TrashRootType;
-  trashRootId?: string;
-  trashRevision?: number;
-};
-
-export type Milestone = MilestoneDto;
-
 export type LinkedPullRequestStatus = "open" | "merged" | "closed";
 
 export type LinkedPullRequest = {
@@ -120,7 +83,6 @@ export type Task = {
   createdById?: string;
   createdBy?: string;
   workstream: string;
-  packageId: string;
   targetDate?: string;
   deadline: string;
   problemStatement?: string;
@@ -142,7 +104,6 @@ export type Task = {
   startDate: string;
   endDate: string;
   sprintId: string;
-  milestoneId?: string;
   reviewStatus: ReviewStatus;
   reviewOwnerProfileId?: string;
   reviewRequestedAt?: string;
@@ -412,7 +373,7 @@ export type PlanningFilterPreferences = {
   status: string;
   priority: string;
   review: string;
-  packageId: string;
+  initiativeId: string;
   quick: string[];
   sprintId: string;
   workstream: string;
@@ -428,7 +389,7 @@ export type ProfileUiPreference = {
   defaultWorkspace: string;
   defaultTaskView: ViewMode;
   planningFilters: PlanningFilterPreferences;
-  expandedPackageIds: string[];
+  expandedInitiativeIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -535,8 +496,6 @@ export type AuditEntry = {
 export type PlanningShellState = {
   project: Project;
   profiles: Profile[];
-  packages: Package[];
-  milestones: Milestone[];
   tasks: Task[];
   sprints: Sprint[];
   sprintCommitments: SprintCommitment[];

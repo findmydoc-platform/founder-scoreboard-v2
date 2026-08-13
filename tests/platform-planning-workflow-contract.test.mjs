@@ -120,7 +120,7 @@ test("planning app controller delegates command domains and stays a thin compose
       matches: [
         /useTaskMutationCommands/,
         /useTaskCollaborationCommands/,
-        /useMilestoneCommands/,
+        /useEpicCommands/,
         /useWeeklyAttendanceCommands/,
         /useSprintCommands/,
         /useNotificationCommands/,

@@ -7,8 +7,6 @@ type TokenListResponse = {
   tokens?: TeamPlanningItemTokenRecord[];
   capabilities?: {
     canIssueEmptyEpicDeletes?: boolean;
-    /** @deprecated API transition alias. */
-    canIssueEmptyMilestoneDeletes?: boolean;
   };
 };
 

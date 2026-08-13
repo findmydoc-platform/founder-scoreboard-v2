@@ -6,27 +6,29 @@ import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import { currentApprovalDecisionReason } from "@/features/planning/model/approval-domain";
-import type { Package, PlanningShellState } from "@/lib/types";
+import type { ApprovalStatus, PlanningShellState } from "@/lib/types";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
 export type InitiativeDraft = {
   id?: string;
+  expectedUpdatedAt?: string;
+  creationRequestId: string;
   title: string;
-  milestoneId: string;
+  parentTaskId: string;
   ownerId: string;
   accountableProfileId: string;
   responsibleProfileIds: string[];
   consultedProfileIds: string[];
   informedProfileIds: string[];
   priority: string;
-  status: NonNullable<Package["status"]>;
+  status: "planned" | "active" | "done" | "paused";
   targetDate: string;
   goal: string;
   successCriteria: string;
   scopeConstraints: string;
   approveNow: boolean;
-  approvalStatus?: Package["approvalStatus"];
+  approvalStatus?: ApprovalStatus;
   approvalRevision?: number;
   decisionNote?: string;
 };
@@ -34,7 +36,7 @@ export type InitiativeDraft = {
 type InitiativeValidationErrors = {
   title: string;
   goal: string;
-  milestoneId: string;
+  parentTaskId: string;
   ownerId: string;
   accountableProfileId: string;
   responsibleProfileIds: string;
@@ -46,7 +48,7 @@ function initiativeValidationErrors(draft: InitiativeDraft): InitiativeValidatio
   return {
     title: draft.title.trim().length >= 3 ? "" : "Der Titel benötigt mindestens 3 Zeichen.",
     goal: draft.goal.trim().length >= 3 ? "" : "Das Ziel benötigt mindestens 3 Zeichen.",
-    milestoneId: draft.milestoneId ? "" : "Bitte ein Epic oder einen Meilenstein wählen.",
+    parentTaskId: draft.parentTaskId ? "" : "Bitte ein Epic wählen.",
     ownerId: draft.ownerId ? "" : "Bitte einen Initiative-Owner wählen.",
     accountableProfileId: draft.accountableProfileId ? "" : "Bitte eine accountable Person wählen.",
     responsibleProfileIds: draft.responsibleProfileIds.length > 0 ? "" : "Bitte mindestens eine responsible Person wählen.",
@@ -72,12 +74,15 @@ export function InitiativeDialog({
   onSave: (draft: InitiativeDraft) => void | Promise<void>;
   canApproveNow?: boolean;
 }) {
-  const activeMilestoneId = data.milestones.find((milestone) => milestone.status === "active")?.id || data.milestones[0]?.id || "";
+  const epics = data.tasks.filter((item) => item.taskType === "epic");
+  const activeEpicId = epics.find((epic) => epic.status === "In Arbeit")?.id || epics[0]?.id || "";
   const defaultOwnerId = defaults.ownerId || data.profiles.find((profile) => profile.platformRole === "founder")?.id || data.profiles[0]?.id || "";
   const [draft, setDraft] = useState<InitiativeDraft>({
     id: defaults.id,
+    expectedUpdatedAt: defaults.expectedUpdatedAt,
+    creationRequestId: defaults.creationRequestId || crypto.randomUUID(),
     title: defaults.title || "",
-    milestoneId: defaults.milestoneId || activeMilestoneId,
+    parentTaskId: defaults.parentTaskId || activeEpicId,
     ownerId: defaultOwnerId,
     accountableProfileId: defaults.accountableProfileId || defaultOwnerId,
     responsibleProfileIds: defaults.responsibleProfileIds?.length ? defaults.responsibleProfileIds : defaultOwnerId ? [defaultOwnerId] : [],
@@ -101,7 +106,7 @@ export function InitiativeDialog({
   const closeBlocked = pending || submitting;
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: closeBlocked });
   const bodyRef = useRef<HTMLDivElement>(null);
-  const milestoneRef = useRef<HTMLDivElement>(null);
+  const epicRef = useRef<HTMLDivElement>(null);
   const ownerRef = useRef<HTMLDivElement>(null);
   const accountableRef = useRef<HTMLDivElement>(null);
   const responsibleRef = useRef<HTMLDivElement>(null);
@@ -113,8 +118,8 @@ export function InitiativeDialog({
   const errorSummaryId = useId();
   const titleErrorId = useId();
   const goalErrorId = useId();
-  const milestoneLabelId = useId();
-  const milestoneErrorId = useId();
+  const epicLabelId = useId();
+  const epicErrorId = useId();
   const ownerLabelId = useId();
   const ownerErrorId = useId();
   const accountableLabelId = useId();
@@ -144,8 +149,8 @@ export function InitiativeDialog({
       ? document.getElementById(titleInputId)
       : errors.goal
         ? document.getElementById(goalInputId)
-        : errors.milestoneId
-          ? milestoneRef.current?.querySelector<HTMLElement>("button")
+        : errors.parentTaskId
+          ? epicRef.current?.querySelector<HTMLElement>("button")
           : errors.ownerId
             ? ownerRef.current?.querySelector<HTMLElement>("button")
             : errors.accountableProfileId
@@ -319,22 +324,22 @@ export function InitiativeDialog({
               <h3 id={`${titleId}-context-group`} className="text-sm font-semibold text-slate-900">Einordnung &amp; Verantwortung</h3>
 
               <div
-                ref={milestoneRef}
-                onBlur={() => touchValidationField("milestoneId")}
+                ref={epicRef}
+                onBlur={() => touchValidationField("parentTaskId")}
                 className="grid gap-1 text-xs font-semibold text-slate-500"
               >
-                <span id={milestoneLabelId}>Epic / Meilenstein *</span>
+                <span id={epicLabelId}>Epic *</span>
                 <CustomSelect
-                  value={draft.milestoneId}
-                  onChange={(value) => setDraft((current) => ({ ...current, milestoneId: value }))}
-                  aria-labelledby={milestoneLabelId}
+                  value={draft.parentTaskId}
+                  onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))}
+                  aria-labelledby={epicLabelId}
                   aria-required
-                  aria-invalid={showValidationError("milestoneId") && Boolean(errors.milestoneId)}
-                  aria-describedby={showValidationError("milestoneId") && errors.milestoneId ? milestoneErrorId : undefined}
+                  aria-invalid={showValidationError("parentTaskId") && Boolean(errors.parentTaskId)}
+                  aria-describedby={showValidationError("parentTaskId") && errors.parentTaskId ? epicErrorId : undefined}
                   className="h-11 text-sm"
-                  options={data.milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))}
+                  options={epics.map((epic) => ({ value: epic.id, label: epic.title }))}
                 />
-                {showValidationError("milestoneId") && errors.milestoneId && <span id={milestoneErrorId} className="font-medium text-red-600">{errors.milestoneId}</span>}
+                {showValidationError("parentTaskId") && errors.parentTaskId && <span id={epicErrorId} className="font-medium text-red-600">{errors.parentTaskId}</span>}
               </div>
 
               <div

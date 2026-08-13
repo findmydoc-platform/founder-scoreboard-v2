@@ -2,7 +2,7 @@ import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { PlanningBootShell } from "@/features/planning/templates/planning-boot-shell";
 import { PlanningAuthGate } from "@/features/planning/molecules/planning-auth-gate";
-import { quickFilters } from "@/features/planning/model/planning-app-model";
+import { initiativePlanningItems, quickFilters } from "@/features/planning/model/planning-app-model";
 import { PlanningFilters } from "@/features/planning/organisms/planning-filters";
 import { PlanningHeader } from "@/features/planning/organisms/planning-header";
 import { PlanningOverlayLayer } from "@/features/planning/organisms/planning-overlay-layer";
@@ -54,7 +54,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
     workspace,
   } = controller;
   const resolvedParentFilterId = planningLevel === "deliverable"
-    ? filters.packageId === "Alle" ? "all" : filters.packageId
+    ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
   const planningLevelTasks = data.tasks.filter((task) => task.taskType === planningLevel);
   const planningVisibleTasks = controller.visibleTasks.filter((task) => (
@@ -65,7 +65,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
     setPlanningLevel(level);
     setFilters({
       ...filters,
-      packageId: "Alle",
+      initiativeId: "Alle",
       ...(level === "deliverable" ? {} : {
         quick: [],
         review: "Alle",
@@ -78,7 +78,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
   };
   const handlePlanningParentFilterChange = (parentId: string) => {
     if (planningLevel === "deliverable") {
-      setFilters({ ...filters, packageId: parentId === "all" ? "Alle" : parentId });
+      setFilters({ ...filters, initiativeId: parentId === "all" ? "Alle" : parentId });
       return;
     }
     setPlanningParentFilterId(parentId);
@@ -159,7 +159,7 @@ export function PlanningAppShell({ authRequired, controller, source, decisionLog
             planningLevel={planningLevel}
             planningParentFilterId={resolvedParentFilterId}
             profiles={data.profiles}
-            packages={data.packages}
+            initiatives={initiativePlanningItems(data.tasks)}
             sprints={data.sprints}
             tasks={data.tasks}
             workstreams={Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}

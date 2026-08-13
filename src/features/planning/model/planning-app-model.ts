@@ -7,7 +7,7 @@ import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, MAX_REVIEW_OBJECTION_WINDOW_HOUR
 import { DEFAULT_GITHUB_PROJECT_NUMBER, DEFAULT_GITHUB_PROJECT_OWNER, validGitHubProjectNumber, validGitHubProjectOwner } from "@/lib/github-project-config";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 export { profileColor } from "@/lib/profile-style";
-import type { Package, PlanningShellState, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
+import type { PlanningShellState, Profile, Sprint, Task, TaskStatus, ViewMode } from "@/lib/types";
 
 type Workspace = AppWorkspace;
 
@@ -34,8 +34,6 @@ export function normalizePlanningShellState(data: PlanningShellState): PlanningS
       githubProjectNumber,
     },
     profiles: data.profiles || [],
-    packages: data.packages || [],
-    milestones: data.milestones || [],
     tasks: data.tasks || [],
     sprints: data.sprints || [],
     sprintCommitments: data.sprintCommitments || [],
@@ -150,8 +148,28 @@ export function transparentDragImage() {
   return image;
 }
 
-export function packageById(packages: Package[], id: string) {
-  return packages.find((item) => item.id === id);
+export function initiativePlanningItems(items: readonly Task[]) {
+  return items.filter((item) => item.taskType === "initiative");
+}
+
+export function epicPlanningItems(items: readonly Task[]) {
+  return items.filter((item) => item.taskType === "epic");
+}
+
+export function planningItemById(items: readonly Task[], id: string) {
+  return items.find((item) => item.id === id);
+}
+
+export function initiativeForPlanningItem(items: readonly Task[], item?: Task | null) {
+  if (!item) return undefined;
+  if (item.taskType === "initiative") return item;
+  const parent = planningItemById(items, item.parentTaskId);
+  if (parent?.taskType === "initiative") return parent;
+  if (parent?.taskType === "deliverable") {
+    const initiative = planningItemById(items, parent.parentTaskId);
+    return initiative?.taskType === "initiative" ? initiative : undefined;
+  }
+  return undefined;
 }
 
 export function futureSprintDrafts(
@@ -272,8 +290,8 @@ export function founderTaskAssignmentGuardMessage() {
   return "Founder können nur den Status ihrer eigenen Aufgaben ändern.";
 }
 
-export function reviewOwnerForTask(task: Pick<Task, "packageId"> & Pick<Partial<Task>, "reviewOwnerProfileId">, packages: Package[]) {
+export function reviewOwnerForTask(task: Pick<Task, "parentTaskId"> & Pick<Partial<Task>, "reviewOwnerProfileId">, items: Task[]) {
   if (task.reviewOwnerProfileId) return task.reviewOwnerProfileId;
-  const initiative = packages.find((item) => item.id === task.packageId);
-  return initiative?.accountableProfileId || initiative?.ownerId || "";
+  const initiative = items.find((item) => item.id === task.parentTaskId && item.taskType === "initiative");
+  return initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative?.ownerId || "";
 }

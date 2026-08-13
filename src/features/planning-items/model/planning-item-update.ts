@@ -17,6 +17,7 @@ import { isSubIssueStatus, normalizeSubIssueStatus } from "@/lib/status";
 import {
   FOUNDEROPS_PLANNING_PROJECT_ID,
   TEAM_PLANNING_ITEM_PATCH_FIELDS,
+  TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
   TEAM_PLANNING_STRATEGIC_STATUSES,
   isStrategicPlanningItemType,
   parsePlanningItemGitHubSyncCommand,
@@ -85,7 +86,10 @@ export type PlanningItemUpdatePreview = {
   githubSyncParentApprovalStatus?: unknown;
 };
 
-const patchFields = new Set<string>(TEAM_PLANNING_ITEM_PATCH_FIELDS);
+const patchFields = new Set<string>([
+  ...TEAM_PLANNING_ITEM_PATCH_FIELDS,
+  ...TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS,
+]);
 const strategicStatuses = new Set<string>(TEAM_PLANNING_STRATEGIC_STATUSES);
 const fieldsByType: Record<TeamPlanningItemType, Set<TeamPlanningItemPatchField>> = {
   epic: new Set(["title", "description", "ownerId", "targetDate", "status"]),
@@ -358,7 +362,12 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
   }
   const raw = payload as UnknownRecord;
   const unknownKey = Object.keys(raw).find((key) => (
-    key !== "expectedUpdatedAt" && key !== "itemType" && key !== "githubSync" && key !== "githubSyncMode" && !patchFields.has(key)
+    key !== "expectedUpdatedAt"
+    && key !== "itemType"
+    && key !== "githubSync"
+    && key !== "githubSyncMode"
+    && !patchFields.has(key)
+    && !TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.includes(key as (typeof TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS)[number])
   ));
   if (unknownKey) return { ok: false as const, error: `PATCH-Payload enthält das unbekannte Feld ${unknownKey}.` };
   if (hasOwn(raw, "itemType")) return { ok: false as const, error: "itemType ist unveränderlich und darf nicht gepatcht werden." };
@@ -377,8 +386,9 @@ export function parsePlanningItemPatchPayload(payload: unknown) {
   if (hasGitHubSync && !githubSyncMode) return { ok: false as const, error: "githubSyncMode muss bei GitHub-Sync async oder wait sein." };
   if (!hasGitHubSync && hasMode) return { ok: false as const, error: "githubSyncMode ist nur zusammen mit githubSync zulässig." };
   const presentFields = Object.keys(raw).filter((key): key is TeamPlanningItemPatchField => patchFields.has(key));
-  if (!presentFields.length && !githubSync) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
-  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null };
+  const hasLegacyAliases = TEAM_PLANNING_ITEM_REPLAY_ALIAS_FIELDS.some((field) => hasOwn(raw, field));
+  if (!presentFields.length && !githubSync && !hasLegacyAliases) return { ok: false as const, error: "PATCH braucht mindestens ein änderbares Feld oder githubSync." };
+  return { ok: true as const, expectedUpdatedAt: raw.expectedUpdatedAt, presentFields, raw, githubSync, githubSyncMode: githubSyncMode as TeamPlanningItemGitHubSyncMode | null, hasLegacyAliases };
 }
 
 async function loadTarget(supabase: SupabaseServer, itemId: string): Promise<TargetLoadResult> {
@@ -488,8 +498,8 @@ function normalizePatch(raw: UnknownRecord, presentFields: TeamPlanningItemPatch
       case "responsibleProfileIds": result = normalizePatchStringList(value); break;
       case "consultedProfileIds":
       case "informedProfileIds": result = normalizePatchStringList(value); break;
-      case "milestoneId":
       case "accountableProfileId":
+      case "milestoneId":
       case "packageId":
       case "parentTaskId":
       case "ownerId": result = normalizePatchId(value); break;
@@ -939,6 +949,7 @@ type BrowserReviseDependencies = Readonly<{
 
 function reviseError(error: unknown): PlanningError {
   const code = error && typeof error === "object" && "code" in error ? String(error.code || "") : "";
+  const message = error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
   if (code === "P0001") return { code: "conflict", reason: "revision" };
   if (code === "P0003") return { code: "conflict", reason: "state", details: { reviseState: "trashed" } };
   if (code === "P0008") return { code: "conflict", reason: "state", details: { reviseState: "parentApproval" } };
@@ -946,6 +957,8 @@ function reviseError(error: unknown): PlanningError {
   if (code === "P0015") return { code: "conflict", reason: "state", details: { reviseState: "sprintLocked" } };
   if (code === "P0002") return { code: "notFound", entity: { kind: "deliverable", id: "" } };
   if (code === "P0006") return { code: "forbidden", reason: "reviseNotAllowed" };
+  if (code === "23503" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "profileNotFound" }] };
+  if (code === "23505" && message.includes("RACI")) return { code: "invalidCommand", issues: [{ path: "command.changes.raciAssignments", reason: "assignmentDuplicated" }] };
   if (code === "22023" || code === "23514") return { code: "invalidCommand", issues: [{ path: "command.changes", reason: "persistenceValidation" }] };
   return { code: "dependencyUnavailable", dependency: "database", retryable: true };
 }

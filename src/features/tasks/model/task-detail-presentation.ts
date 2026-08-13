@@ -238,8 +238,6 @@ export function buildQuickSubIssueCreationDraft({
     evidenceRequired: "",
     taskType: "sub_issue" as const,
     parentTaskId: parent.id,
-    milestoneId: parent.milestoneId || "",
-    packageId: parent.packageId,
     sprintId: "",
     assignee,
     priority: "P2",

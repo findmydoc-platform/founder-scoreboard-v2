@@ -7,7 +7,7 @@ import type { NotificationPreference, Profile, ProfileUiPreference } from "@/lib
 export type OwnProfileSettingsPatch = {
   profilePatch?: Partial<Pick<Profile, "focus" | "color" | "notificationsEnabled">>;
   notificationEvents?: Record<string, boolean>;
-  uiPreferences?: Pick<ProfileUiPreference, "defaultWorkspace" | "defaultTaskView" | "planningFilters" | "expandedPackageIds">;
+  uiPreferences?: Pick<ProfileUiPreference, "defaultWorkspace" | "defaultTaskView" | "planningFilters" | "expandedInitiativeIds">;
 };
 
 function upsertNotificationPreferences(
@@ -48,7 +48,7 @@ function upsertUiPreference(
     defaultWorkspace: patch.defaultWorkspace,
     defaultTaskView: patch.defaultTaskView,
     planningFilters: patch.planningFilters,
-    expandedPackageIds: patch.expandedPackageIds,
+    expandedInitiativeIds: patch.expandedInitiativeIds,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
@@ -106,7 +106,7 @@ export function useOwnProfileSettingsCommands({
             defaultWorkspace: patch.uiPreferences.defaultWorkspace,
             defaultTaskView: patch.uiPreferences.defaultTaskView,
             planningFilters: patch.uiPreferences.planningFilters,
-            expandedPackageIds: patch.uiPreferences.expandedPackageIds,
+            expandedInitiativeIds: patch.uiPreferences.expandedInitiativeIds,
           }
           : undefined,
       });

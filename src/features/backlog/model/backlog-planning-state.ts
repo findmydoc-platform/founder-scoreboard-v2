@@ -17,7 +17,7 @@ export type BacklogPlanningTask = {
   assignee?: string | null;
   ownerId?: string | null;
   owner?: string | null;
-  packageId?: string | null;
+  parentTaskId?: string | null;
   hasInitiative?: boolean;
   sprintId?: string | null;
 };
@@ -59,7 +59,7 @@ export function hasBacklogTaskOwner(task: BacklogPlanningTask) {
 }
 
 export function hasBacklogTaskInitiative(task: BacklogPlanningTask) {
-  return task.hasInitiative ?? hasText(task.packageId);
+  return task.hasInitiative ?? hasText(task.parentTaskId);
 }
 
 export function getBacklogPlanningState(task: BacklogPlanningTask): BacklogPlanningState {

@@ -7,7 +7,7 @@ import { PlanningTaskViewRenderer } from "@/features/planning/organisms/planning
 import { WorkspaceContentSkeleton } from "@/features/planning/templates/workspace-loading-shell";
 import { TaskGitHubSyncQueue } from "@/features/tasks/organisms/task-github-sync-queue";
 import { UiPanel } from "@/shared/atoms/ui-primitives";
-import { canManageMilestones } from "@/features/projects/model/milestone-policy";
+import { canManageEpics } from "@/features/projects/model/epic-policy";
 import type { NotionDecisionLogResult } from "@/lib/notion-decision-log";
 import { isLocalLoginSimulationEnabled } from "@/lib/local-development-auth";
 import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
@@ -72,8 +72,8 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     sendGoogleChatTest,
     setGithubSyncQueueOpen,
     setInitiativeDialogDefaults,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
     setTaskDialogDefaults,
     setSprintPlanningOptions,
     signIn,
@@ -95,7 +95,7 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
     workspace,
   } = controller;
   const canManageSprint = currentProfile?.platformRole === "ceo" || currentProfile?.platformRole === "deputy";
-  const canManageProjectMilestones = canManageMilestones(currentProfile?.platformRole);
+  const canManageProjectEpics = canManageEpics(currentProfile?.platformRole);
   const canManageNotificationsOutbox = !currentProfile || currentProfile.platformRole === "ceo" || currentProfile.platformRole === "deputy";
 
   return (
@@ -113,37 +113,38 @@ export function PlanningWorkspaceRenderer({ controller, source, decisionLogResul
           tasks={data.tasks}
           currentProfile={currentProfile}
           canManageInitiatives={canManageTaskMeta}
-          canManageMilestones={canManageProjectMilestones}
+          canManageEpics={canManageProjectEpics}
           pending={isPending}
-          onCreateMilestone={() => setMilestoneDialogDefaults({})}
-          onEditMilestone={(milestone) => setMilestoneDialogDefaults({
-            id: milestone.id,
-            title: milestone.title,
-            description: milestone.description,
-            targetDate: milestone.targetDate,
-            status: milestone.status,
-            expectedUpdatedAt: milestone.updatedAt,
+          onCreateEpic={() => setEpicDialogDefaults({})}
+          onEditEpic={(epic) => setEpicDialogDefaults({
+            id: epic.id,
+            title: epic.title,
+            description: epic.description,
+            targetDate: epic.targetDate,
+            status: epic.status === "In Arbeit" ? "active" : epic.status === "Erledigt" ? "done" : "planned",
+            expectedUpdatedAt: epic.updatedAt,
           })}
-          onDeleteMilestone={(milestone, children) => setMilestoneDeleteTarget({ milestone, children })}
+          onDeleteEpic={(epic, children) => setEpicDeleteTarget({ epic: epic, children })}
           onOpenTask={openTaskPanel}
           onDecideInitiative={decideInitiativeApproval}
           onWithdrawInitiative={withdrawInitiative}
           onEditInitiative={(initiative) => setInitiativeDialogDefaults({
             id: initiative.id,
+            expectedUpdatedAt: initiative.updatedAt,
             title: initiative.title,
-            milestoneId: initiative.milestoneId || "",
+            parentTaskId: initiative.parentTaskId || "",
             ownerId: initiative.ownerId || "",
-            accountableProfileId: initiative.accountableProfileId || initiative.ownerId || "",
-            responsibleProfileIds: initiative.responsibleProfileIds?.length ? initiative.responsibleProfileIds : initiative.ownerId ? [initiative.ownerId] : [],
-            consultedProfileIds: initiative.consultedProfileIds || [],
-            informedProfileIds: initiative.informedProfileIds || [],
+            accountableProfileId: initiative.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative.ownerId || "",
+            responsibleProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "responsible").map((assignment) => assignment.profileId) || [],
+            consultedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "consulted").map((assignment) => assignment.profileId) || [],
+            informedProfileIds: initiative.raciAssignments?.filter((assignment) => assignment.role === "informed").map((assignment) => assignment.profileId) || [],
             priority: initiative.priority,
-            status: initiative.status || "planned",
+            status: initiative.status === "In Arbeit" ? "active" : initiative.status === "Erledigt" ? "done" : initiative.status === "Pausiert" ? "paused" : "planned",
             targetDate: initiative.targetDate || "",
-            goal: initiative.goal,
-            successCriteria: initiative.successCriteria || "",
-            scopeConstraints: initiative.scopeConstraints || "",
-            approvalStatus: initiative.approvalStatus,
+            goal: initiative.strategy?.goal || initiative.description,
+            successCriteria: initiative.strategy?.successCriteria || "",
+            scopeConstraints: initiative.strategy?.scopeConstraints || "",
+            approvalStatus: initiative.approvalStatus || "proposed",
             approvalRevision: initiative.approvalRevision,
             decisionNote: initiative.decisionNote,
           })}

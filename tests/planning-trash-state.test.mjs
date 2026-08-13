@@ -6,8 +6,6 @@ function planningData() {
   return {
     project: { id: "project" },
     profiles: [],
-    packages: [],
-    milestones: [],
     tasks: [
       { id: "root" },
       { id: "child", parentTaskId: "root" },
@@ -80,17 +78,18 @@ test("planning trash state removes an Initiative and all assigned tasks", async 
     "src/features/planning/model/planning-trash-state.ts",
   );
   const source = planningData();
-  source.packages = [{ id: "initiative" }, { id: "other-initiative" }];
-  source.tasks = source.tasks.map((task) => ({
-    ...task,
-    packageId: task.id === "unrelated" ? "other-initiative" : "initiative",
-  }));
+  source.tasks = [
+    { id: "initiative", taskType: "initiative" },
+    { id: "root", taskType: "deliverable", parentTaskId: "initiative" },
+    { id: "child", taskType: "sub_issue", parentTaskId: "root" },
+    { id: "grandchild", taskType: "sub_issue", parentTaskId: "child" },
+    { id: "other-initiative", taskType: "initiative" },
+    { id: "unrelated", taskType: "deliverable", parentTaskId: "other-initiative" },
+  ];
 
   const withdrawal = removePlanningRootFromData(source, "initiative", "initiative");
-  assert.deepEqual(withdrawal.data.packages.map((pack) => pack.id), ["other-initiative"]);
-  assert.deepEqual(withdrawal.data.tasks.map((task) => task.id), ["unrelated"]);
+  assert.deepEqual(withdrawal.data.tasks.map((task) => task.id), ["other-initiative", "unrelated"]);
 
   const restored = restorePlanningRootToData(withdrawal.data, withdrawal.snapshot);
-  assert.deepEqual(restored.packages.map((pack) => pack.id).sort(), ["initiative", "other-initiative"]);
-  assert.deepEqual(restored.tasks.map((task) => task.id).sort(), ["child", "grandchild", "root", "unrelated"]);
+  assert.deepEqual(restored.tasks.map((task) => task.id).sort(), ["child", "grandchild", "initiative", "other-initiative", "root", "unrelated"]);
 });

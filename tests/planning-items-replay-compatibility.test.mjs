@@ -153,37 +153,86 @@ test("v1 update snapshots keep their former public response shape", async () => 
   );
 });
 
-test("context keeps canonical strategy and the flat v1 initiative projection", async () => {
-  const context = await loadTranspiledModule(
-    "src/features/planning-items/model/planning-items-context.ts",
-    {
-      "@/lib/status": { normalizeStatus: (value) => value, normalizeSubIssueStatus: (value) => value },
-      "@/features/planning-items/model/planning-items-contract": {
-        FOUNDEROPS_PLANNING_PROJECT_ID: "project",
-        TEAM_PLANNING_ITEMS_FORBIDDEN_WRITES: [],
-        TEAM_PLANNING_ITEMS_MAX_BATCH_SIZE: 30,
-        TEAM_PLANNING_ITEM_TYPES: ["epic", "initiative", "deliverable", "sub_issue"],
-      },
-      "@/features/planning-items/model/supabase-pagination": {},
-      "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },
-    },
+test("v1 context derives deprecated collections and fields from canonical items", async () => {
+  const source = await read("src/features/planning-items/model/planning-items-context.ts");
+  assert.match(source, /const initiatives = items[\s\S]*itemType === "initiative"/);
+  assert.match(source, /strategy,/);
+  assert.match(source, /planningItemsInitiativeCompatibilityProjection/);
+  assert.match(source, /milestones: epics\.map/);
+  assert.match(source, /goal: item\.strategy/);
+  assert.match(source, /successCriteria: item\.strategy/);
+  assert.match(source, /itemType: "milestone" as const/);
+});
+
+test("v1 normalizers retain deprecated request aliases at the transport boundary", async () => {
+  const { create, update } = await loadPlanningModels();
+  const legacyCreate = create.parsePlanningItemCreatePayload({
+    items: [
+      { itemType: "milestone", title: "Legacy Epic", ownerId: "ceo" },
+      { itemType: "deliverable", title: "Legacy Deliverable", packageId: "package-legacy" },
+    ],
+  });
+  assert.equal(legacyCreate.ok, true);
+  assert.equal(legacyCreate.hasLegacyAliases, true);
+  assert.deepEqual(create.planningItemCreateCommand(legacyCreate.items, "ceo").items.map((item) => item.kind), ["epic", "deliverable"]);
+
+  const legacyPatch = update.parsePlanningItemPatchPayload({
+    expectedUpdatedAt: "2026-07-30T09:00:00.000Z",
+    milestoneId: "milestone-legacy",
+  });
+  assert.equal(legacyPatch.ok, true);
+  assert.equal(legacyPatch.hasLegacyAliases, true);
+  assert.deepEqual(legacyPatch.presentFields, ["milestoneId"]);
+});
+
+test("Browser strategic writers classify invalid RACI references as input errors", async () => {
+  const { create, update } = await loadPlanningModels();
+  const actor = { profileId: "ceo", platformRole: "ceo", credential: { kind: "session" } };
+  const createCommand = create.planningItemCreateCommand([
+    { itemType: "initiative", title: "Initiative", ownerId: "ceo" },
+  ], actor.profileId);
+  for (const [providerError, reason] of [
+    [{ code: "23503", message: "RACI assignment profile was not found" }, "raciProfileNotFound"],
+    [{ code: "23505", message: "RACI assignment is duplicated" }, "raciAssignmentDuplicated"],
+  ]) {
+    const result = await create.createBrowserCreatePlanningItems({
+      supabase: { rpc: async () => ({ data: null, error: providerError }) },
+      actor,
+      writer: { kind: "strategic", params: { item: {}, strategy: {}, raciAssignments: [] } },
+    }).run({ actor, mode: "commit", command: createCommand });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "invalidCommand");
+    assert.equal(result.error.issues[0].reason, reason);
+  }
+
+  const reviseCommand = update.planningItemReviseCommand(
+    "initiative-1",
+    "initiative",
+    "2026-08-13T08:00:00.000Z",
+    { responsibleProfileIds: ["missing"] },
   );
-  const canonical = {
-    id: "initiative-1",
-    description: "Fallback goal",
-    scopeConstraints: "",
-    strategy: {
-      goal: "Primary goal",
-      successCriteria: "Measured outcome",
-      scopeConstraints: "No migration",
-    },
-  };
-  const projected = context.planningItemsInitiativeCompatibilityProjection(canonical);
-  assert.equal(projected.goal, "Primary goal");
-  assert.equal(projected.successCriteria, "Measured outcome");
-  assert.equal(projected.scopeConstraints, "No migration");
-  assert.deepEqual(projected.strategy, canonical.strategy);
-  assert.equal(Object.hasOwn(canonical, "goal"), false);
+  for (const providerError of [
+    { code: "23503", message: "RACI assignment profile was not found" },
+    { code: "23505", message: "RACI assignment is duplicated" },
+  ]) {
+    const result = await update.createBrowserRevisePlanningItems({
+      supabase: { rpc: async () => ({ data: null, error: providerError }) },
+      actor,
+      writer: {
+        kind: "strategic",
+        params: {
+          taskId: "initiative-1",
+          expectedUpdatedAt: "2026-08-13T08:00:00.000Z",
+          patch: {},
+          strategy: null,
+          raciAssignments: [],
+        },
+      },
+    }).run({ actor, mode: "commit", command: reviseCommand });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "invalidCommand");
+    assert.match(result.error.issues[0].path, /raciAssignments/);
+  }
 });
 
 test("replay versioning and package preference translation are additive", async () => {
@@ -207,7 +256,7 @@ test("replay versioning and package preference translation are additive", async 
   assert.match(createModule, /contract_version/);
   assert.match(updateRoute, /mapLegacyPlanningItemDatabaseRow/);
   assert.match(updateRoute, /contract_version/);
-  assert.match(documentation, /flat `goal`, `successCriteria`, and `scopeConstraints` fields/);
+  assert.match(documentation, /normalized at the transport boundary/);
 });
 
 test("v1 create replays return the immutable snapshot before canonical preview validation", async () => {

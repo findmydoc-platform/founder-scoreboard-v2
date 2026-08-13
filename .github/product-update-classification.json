@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Removes legacy planning reads and redirects active item navigation to canonical task IDs without adding or materially expanding visible functionality."
+  "reason": "Preserves existing Planning links and Team API v1 compatibility while making preference rollout and Initiative updates atomic; no new or materially expanded UI functionality."
 }

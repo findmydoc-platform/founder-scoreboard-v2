@@ -2,61 +2,61 @@ import { ChevronRight } from "lucide-react";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
 import { groupSubIssuesByParent } from "@/features/tasks/model/task-card-presentation";
 import { initiativeMetaLabel } from "@/lib/display";
-import type { Package, Task, TaskBlocker, TaskRelation } from "@/lib/types";
+import type { Task, TaskBlocker, TaskRelation } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
 type TaskStructureViewProps = {
-  packages: Package[];
+  initiatives: Task[];
   visibleTasks: Task[];
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
-  expandedPackages: Record<string, boolean>;
+  expandedInitiatives: Record<string, boolean>;
   ownerColorForTask: (task: Task) => string;
   onOpenTask: (taskId: string) => void;
-  onTogglePackage: (packageId: string) => void;
-  onSetAllPackageCollapse: (collapsed: boolean) => void;
+  onToggleInitiative: (initiativeId: string) => void;
+  onSetAllInitiativeCollapse: (collapsed: boolean) => void;
 };
 
 export function TaskStructureView({
-  packages,
+  initiatives,
   visibleTasks,
   relations,
   allTasks,
   blockers,
-  expandedPackages,
+  expandedInitiatives,
   ownerColorForTask,
   onOpenTask,
-  onTogglePackage,
-  onSetAllPackageCollapse,
+  onToggleInitiative,
+  onSetAllInitiativeCollapse,
 }: TaskStructureViewProps) {
   const subIssuesByParent = groupSubIssuesByParent(allTasks);
 
   return (
     <div className="grid gap-4">
       <div className="flex justify-end gap-2">
-        <UiButton type="button" onClick={() => onSetAllPackageCollapse(true)} size="sm">
+        <UiButton type="button" onClick={() => onSetAllInitiativeCollapse(true)} size="sm">
           Alle einklappen
         </UiButton>
-        <UiButton type="button" onClick={() => onSetAllPackageCollapse(false)} size="sm">
+        <UiButton type="button" onClick={() => onSetAllInitiativeCollapse(false)} size="sm">
           Alle ausklappen
         </UiButton>
       </div>
-      {packages.map((pack) => {
-        const tasks = visibleTasks.filter((task) => task.packageId === pack.id);
-        const expanded = Boolean(expandedPackages[pack.id]);
+      {initiatives.map((initiative) => {
+        const tasks = visibleTasks.filter((task) => task.parentTaskId === initiative.id);
+        const expanded = Boolean(expandedInitiatives[initiative.id]);
         return (
-          <DataSurface key={pack.id}>
+          <DataSurface key={initiative.id}>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-              <button type="button" onClick={() => onTogglePackage(pack.id)} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus:ring-2 focus:ring-blue-100" aria-expanded={expanded}>
+              <button type="button" onClick={() => onToggleInitiative(initiative.id)} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus:ring-2 focus:ring-blue-100" aria-expanded={expanded}>
                 <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500">
                   <ChevronRight size={16} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-xs font-semibold text-blue-700">{initiativeMetaLabel(pack)}</span>
-                  <span className="mt-0.5 block text-base font-semibold text-slate-950">{pack.title}</span>
-                  <span className="mt-1 block text-sm text-slate-500">{pack.goal}</span>
+                  <span className="block text-xs font-semibold text-blue-700">{initiativeMetaLabel(initiative)}</span>
+                  <span className="mt-0.5 block text-base font-semibold text-slate-950">{initiative.title}</span>
+                  <span className="mt-1 block text-sm text-slate-500">{initiative.strategy?.goal || initiative.description}</span>
                 </span>
               </button>
               <UiBadge tone="white" size="md">{tasks.length} Aufgaben</UiBadge>

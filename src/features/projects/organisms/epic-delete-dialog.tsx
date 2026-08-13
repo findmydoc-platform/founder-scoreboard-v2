@@ -1,31 +1,31 @@
 "use client";
 
 import { useId, useState } from "react";
-import { buildMilestoneDeletePolicy, formatMilestoneChildCounts } from "@/features/projects/model/milestone-policy";
-import type { MilestoneChildCounts } from "@/features/projects/model/milestone-contract";
-import type { Milestone } from "@/lib/types";
+import { buildEpicDeletePolicy, formatEpicChildCounts } from "@/features/projects/model/epic-policy";
+import type { EpicChildCounts } from "@/features/projects/model/epic-contract";
+import type { Task } from "@/lib/types";
 import { UiButton } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
-export type MilestoneDeleteTarget = {
-  milestone: Milestone;
-  children: MilestoneChildCounts;
+export type EpicDeleteTarget = {
+  epic: Task;
+  children: EpicChildCounts;
 };
 
-export function MilestoneDeleteDialog({
+export function EpicDeleteDialog({
   target,
   onClose,
   onConfirm,
 }: {
-  target: MilestoneDeleteTarget;
+  target: EpicDeleteTarget;
   onClose: () => void;
-  onConfirm: (milestone: Milestone) => Promise<void>;
+  onConfirm: (epic: Task) => Promise<void>;
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const policy = buildMilestoneDeletePolicy(target.children);
+  const policy = buildEpicDeletePolicy(target.children);
   const dialogRef = useModalDialog<HTMLDivElement>({ open: true, onClose, closeDisabled: pending });
 
   const confirm = async () => {
@@ -33,7 +33,7 @@ export function MilestoneDeleteDialog({
     setPending(true);
     setError("");
     try {
-      await onConfirm(target.milestone);
+      await onConfirm(target.epic);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Der Meilenstein konnte nicht gelöscht werden.");
       setPending(false);
@@ -61,7 +61,7 @@ export function MilestoneDeleteDialog({
           <h2 id={titleId} className="mt-1 text-lg font-semibold text-slate-950">Meilenstein endgültig löschen?</h2>
         </div>
         <div className="grid gap-3 px-5 py-4">
-          <p className="font-semibold text-slate-900">{target.milestone.title}</p>
+          <p className="font-semibold text-slate-900">{target.epic.title}</p>
           {policy.canDelete ? (
             <p id={descriptionId} className="text-sm leading-6 text-slate-600">
               Der leere Meilenstein wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
@@ -69,7 +69,7 @@ export function MilestoneDeleteDialog({
           ) : (
             <div id={descriptionId} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
               <p className="font-semibold">Nur leere Meilensteine können gelöscht werden.</p>
-              <p className="mt-1">Zugeordnet: {formatMilestoneChildCounts(policy.children)}.</p>
+              <p className="mt-1">Zugeordnet: {formatEpicChildCounts(policy.children)}.</p>
             </div>
           )}
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>}

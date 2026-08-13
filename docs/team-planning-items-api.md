@@ -53,9 +53,9 @@ Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
 
 ## Context and canonical references
 
-The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). `parentTaskId` is the only canonical hierarchy reference. The transitional `initiatives` convenience list additionally retains the former flat `goal`, `successCriteria`, and `scopeConstraints` fields. New clients should read the nested `strategy` object from `items` instead.
+The context response provides one canonical `items` list plus convenience lists `epics`, `initiatives`, and `tasks` (Deliverables and Sub-Issues). Every current list uses the same canonical projection. `parentTaskId` is the canonical hierarchy reference, and Initiative strategy is available through the nested `strategy` object.
 
-The retained response field `milestones` and the input type `milestone` are deprecated compatibility aliases. They resolve to an Epic before any validation or write. `milestoneId` and `packageId` are also accepted only during transition and resolve to `parentTaskId`; new clients must use `parentTaskId`.
+Because these endpoints remain version `v1`, existing clients may still send the deprecated `milestone` item type and the `milestoneId` and `packageId` parent aliases. They are normalized at the transport boundary before canonical Planning state is read or written. The response aliases `milestones`, flat Initiative strategy fields, `canIssueEmptyMilestoneDeletes`, and the established `MILESTONE_NOT_EMPTY` conflict code remain available for v1 compatibility. New clients should use only the canonical names.
 
 ## Create payload
 
@@ -145,10 +145,10 @@ The preview and delete endpoints require `write:planning-items:delete-empty`, a 
 }
 ```
 
-Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and code `MILESTONE_NOT_EMPTY` for legacy wire compatibility. The operation never moves, detaches, or deletes children.
+Only an Epic with zero direct Initiative and Deliverable references can be deleted. A non-empty Epic returns `valid: false`, `canDelete: false`, and the established v1 code `MILESTONE_NOT_EMPTY`. The operation never moves, detaches, or deletes children.
 
 ## Compatibility window
 
-The old database tables and legacy HTTP-shaped values remain read-only compatibility and recovery data during the transition. They are not a second write path. New integrations must use canonical types and `parentTaskId`; compatibility aliases will be removed only in a separately approved cleanup.
+The old database tables remain read-only compatibility and recovery data during the transition. They are not a second write path. Deprecated v1 request fields are normalized into current commands, while response aliases are derived from current projections. Removing those transport adapters, the replay adapter, and the special Epic-delete receipt table requires a separately versioned API retirement and the approved data migration in issue #317.
 
 The OpenAPI document is available at `/founderops-team-planning-items-openapi.json`.

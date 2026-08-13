@@ -14,7 +14,7 @@ export function createSupabaseProfileReadModel(supabase: SupabaseClient): Profil
         loadPlanningItemsForReadModel(supabase),
         supabase.from("projects").select("id,name,range_label,review_objection_window_hours,github_project_owner,github_project_number").eq("id", planningProjectId).single(),
         supabase.from("notification_preferences").select("id,profile_id,channel,event_type,enabled").eq("channel", "google_chat").order("profile_id"),
-        supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,created_at,updated_at").order("profile_id"),
+        supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"),
       ]);
       if (!state || projectResult.error || !projectResult.data || notificationPreferenceResult.error || preferenceResult.error) return { status: "unavailable" };
       const preferences = ((preferenceResult.data || []) as DbProfileUiPreference[]).map(mapProfileUiPreference);

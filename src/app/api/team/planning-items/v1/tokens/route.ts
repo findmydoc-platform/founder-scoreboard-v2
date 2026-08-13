@@ -12,7 +12,7 @@ type CreateTokenPayload = {
   label?: unknown;
   allowUpdates?: unknown;
   allowEmptyEpicDeletes?: unknown;
-  /** @deprecated Accepted only while clients move to the Epic terminology. */
+  /** @deprecated Use allowEmptyEpicDeletes. */
   allowEmptyMilestoneDeletes?: unknown;
   allowGitHubSync?: unknown;
 };
@@ -55,8 +55,6 @@ export async function GET(request: NextRequest) {
     ok: true,
     capabilities: {
       canIssueEmptyEpicDeletes,
-      // Deprecated response alias for existing clients. The scope still maps
-      // to empty canonical Epic deletion.
       canIssueEmptyMilestoneDeletes: canIssueEmptyEpicDeletes,
     },
     tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[])

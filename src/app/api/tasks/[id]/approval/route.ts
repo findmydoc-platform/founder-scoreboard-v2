@@ -22,7 +22,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für Freigaben ist nicht konfiguriert.", 503);
   const { id } = await context.params;
-  const result = await createPlanningApprovalPlanningItems(serviceSupabase, "deliverable").run({
+  const { data: item, error: itemError } = await serviceSupabase
+    .from("tasks")
+    .select("task_type")
+    .eq("id", id)
+    .maybeSingle<{ task_type: string }>();
+  if (itemError) return apiError("Freigabe konnte nicht geladen werden.", 500);
+  if (!item || (item.task_type !== "initiative" && item.task_type !== "deliverable")) {
+    return apiError("Planungselement wurde nicht gefunden.", 404);
+  }
+  const result = await createPlanningApprovalPlanningItems(serviceSupabase, item.task_type).run({
     actor: actor.actor,
     mode: "commit",
     command: decidePlanningApprovalCommand(id, {
@@ -32,11 +41,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }),
   });
   if (!result.ok) {
-    const mapped = planningApprovalError(result.error, "Deliverable");
+    const mapped = planningApprovalError(result.error, item.task_type === "initiative" ? "Initiative" : "Deliverable");
     return apiError(mapped.message, mapped.status);
   }
   const task = planningApprovalTaskFromResult(result);
   if (result.status !== "committed" || !task) return apiError("Freigabe konnte nicht gespeichert werden.", 500);
-  const lifecycle = await runPlanningApprovalLifecycle(serviceSupabase, task.id);
+  const lifecycle = item.task_type === "deliverable"
+    ? await runPlanningApprovalLifecycle(serviceSupabase, task.id)
+    : null;
   return NextResponse.json({ ok: true, task, lifecycle });
 }

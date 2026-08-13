@@ -110,7 +110,7 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    const reparentFields = parsed.presentFields.filter((field) => ["parentTaskId", "packageId", "milestoneId"].includes(field));
+    const reparentFields = ["parentTaskId", "packageId", "milestoneId"].filter((field) => Object.hasOwn(parsed.raw, field));
     const reparentField = reparentFields[0];
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
@@ -362,7 +362,7 @@ export async function handleTeamPlanningItemDelete(request: NextRequest, context
       if (!result.ok) {
         const mapped = emptyEpicDeleteError(result.error);
         if (mapped.code && mapped.children) {
-          return planningItemsJson({ ok: false, code: mapped.code, error: mapped.message, children: mapped.children }, mapped.status);
+          return planningItemsJson({ ok: false, code: "MILESTONE_NOT_EMPTY", error: mapped.message, children: mapped.children }, mapped.status);
         }
         if (result.error.code === "notFound") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
         if (result.error.code === "conflict" && result.error.reason === "revision") {

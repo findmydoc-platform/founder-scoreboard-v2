@@ -25,8 +25,7 @@ const subIssueAllowedUpdateFields = new Set([
   "evidenceRequired",
   "definitionOfDone",
   "status",
-  "assignee",
-  "owner",
+  "ownerId",
   "parentTaskId",
 ]);
 
@@ -82,11 +81,10 @@ export function restrictedTaskUpdateFields(payload: TaskUpdatePayload) {
   const isImplicitReviewScoreReset = startsTaskReviewRequest(payload) && payload.scoreFinal === false && payload.scorePoints === undefined;
 
   return [
-    payload.assignee !== undefined || payload.owner !== undefined ? "Zuständig" : "",
+    payload.ownerId !== undefined ? "Zuständig" : "",
     payload.priority !== undefined ? "Priorität" : "",
-    payload.packageId !== undefined ? "Initiative" : "",
+    payload.parentTaskId !== undefined ? "Übergeordnetes Planning Item" : "",
     payload.sprintId !== undefined ? "Sprint" : "",
-    payload.milestoneId !== undefined ? "Epic / Meilenstein" : "",
     payload.startDate !== undefined || payload.endDate !== undefined || payload.deadline !== undefined ? "Zeitraum" : "",
     payload.scorePoints !== undefined || (payload.scoreFinal !== undefined && !isImplicitReviewScoreReset) ? "Score" : "",
   ].filter(Boolean);

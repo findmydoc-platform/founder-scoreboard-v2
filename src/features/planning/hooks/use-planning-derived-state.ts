@@ -17,7 +17,7 @@ type UsePlanningDerivedStateOptions = {
   filters: PlanningFilters;
   planningLevel: PlanningLevel;
   setInitiativeDialogDefaults: PlanningViewState["setInitiativeDialogDefaults"];
-  setMilestoneDialogDefaults: PlanningViewState["setMilestoneDialogDefaults"];
+  setEpicDialogDefaults: PlanningViewState["setEpicDialogDefaults"];
   setTaskDialogDefaults: PlanningViewState["setTaskDialogDefaults"];
   statusGuardTaskId: string | null;
   view: ViewMode;
@@ -30,7 +30,7 @@ export function usePlanningDerivedState({
   filters,
   planningLevel,
   setInitiativeDialogDefaults,
-  setMilestoneDialogDefaults,
+  setEpicDialogDefaults,
   setTaskDialogDefaults,
   statusGuardTaskId,
   view,
@@ -45,7 +45,7 @@ export function usePlanningDerivedState({
     data,
     planningLevel,
     setInitiativeDialogDefaults,
-    setMilestoneDialogDefaults,
+    setEpicDialogDefaults,
     setTaskDialogDefaults,
     view,
     workspace,

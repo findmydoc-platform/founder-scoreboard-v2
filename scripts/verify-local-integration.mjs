@@ -121,9 +121,9 @@ async function verifySeedConvergence(status, source) {
     const expected = {
       profiles: source.profiles.length,
       tools: source.fmdTools.length,
-      tasks: source.epics.length + source.packages.length + source.tasks.length,
+      tasks: source.epics.length + source.initiatives.length + source.tasks.length,
       epics: source.epics.length,
-      initiatives: source.packages.length,
+      initiatives: source.initiatives.length,
       deliverables: source.tasks.filter((task) => (task.taskType || "deliverable") === "deliverable").length,
       sub_issues: source.tasks.filter((task) => task.taskType === "sub_issue").length,
       sprints: source.sprints.length,
@@ -140,6 +140,61 @@ async function verifySeedConvergence(status, source) {
     }
   } finally {
     await verifier.end();
+  }
+}
+
+async function verifyCanonicalPlanningPreferences(status) {
+  const client = new pg.Client({ connectionString: status.DB_URL });
+  await client.connect();
+  try {
+    await client.query("begin");
+    const canonical = {
+      default_workspace: "planning",
+      default_task_view: "board",
+      planning_filters: { assignee: "volkan", initiativeId: "GC1" },
+      expanded_item_ids: ["GC1"],
+    };
+    const result = await client.query(
+      "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6) as result",
+      ["volkan", {}, canonical, {}, null, null],
+    );
+    const stored = await client.query(
+      "select planning_filters,expanded_item_ids,expanded_package_ids from public.profile_ui_preferences where profile_id=$1",
+      ["volkan"],
+    );
+    const preference = stored.rows[0];
+    if (JSON.stringify(result.rows[0]?.result?.ui_preference?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
+      throw new Error("Profile settings RPC did not return canonical expanded Planning item IDs.");
+    }
+    if (JSON.stringify(preference?.planning_filters) !== JSON.stringify(canonical.planning_filters)
+      || JSON.stringify(preference?.expanded_item_ids) !== JSON.stringify(["GC1"])
+      || preference?.expanded_package_ids?.length !== 0) {
+      throw new Error("Profile settings RPC did not isolate canonical Planning preferences from the legacy column.");
+    }
+
+    const legacyResult = await client.query(
+      "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6) as result",
+      ["volkan", {}, {
+        default_workspace: "planning",
+        default_task_view: "board",
+        planning_filters: { owner: "volkan", packageId: "GC1" },
+        expanded_package_ids: ["GC1"],
+      }, {}, null, null],
+    );
+    const normalized = legacyResult.rows[0]?.result?.ui_preference;
+    if (normalized?.planning_filters?.assignee !== "volkan"
+      || normalized?.planning_filters?.initiativeId !== "GC1"
+      || Object.hasOwn(normalized?.planning_filters || {}, "owner")
+      || Object.hasOwn(normalized?.planning_filters || {}, "packageId")
+      || JSON.stringify(normalized?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
+      throw new Error("Profile settings RPC did not normalize the deployed legacy preference payload.");
+    }
+    await client.query("rollback");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
   }
 }
 
@@ -332,32 +387,38 @@ async function verifyPlanningApiGitHubSyncScope(sessionToken, taskId) {
 
 async function verifyEmptyEpicDeleteRoutes(sessionToken) {
   const createEpic = async (title) => {
-    const response = await apiRequest("/api/milestones", sessionToken, "", {
+    const response = await apiRequest("/api/tasks", sessionToken, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, description: "Local integration fixture", status: "planned" }),
+      body: JSON.stringify({
+        taskType: "epic",
+        creationRequestId: randomUUID(),
+        title,
+        description: "Local integration fixture",
+        status: "Offen",
+      }),
     });
     assertStatus(response, 200, `${title} creation`);
     const body = await response.json();
-    if (!body.milestone?.id || !body.milestone?.updatedAt) throw new Error(`${title} creation returned an incomplete response.`);
-    return body.milestone;
+    if (!body.task?.id || !body.task?.updatedAt) throw new Error(`${title} creation returned an incomplete response.`);
+    return body.task;
   };
 
   const browserEpic = await createEpic("Browser empty Epic delete verification");
-  const founderDenied = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "sebastian", {
+  const founderDenied = await apiRequest(`/api/tasks/${browserEpic.id}`, sessionToken, "sebastian", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
   });
   assertStatus(founderDenied, 403, "Founder empty Epic deletion");
-  const browserDelete = await apiRequest(`/api/milestones/${browserEpic.id}`, sessionToken, "", {
+  const browserDelete = await apiRequest(`/api/tasks/${browserEpic.id}`, sessionToken, "", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedUpdatedAt: browserEpic.updatedAt }),
   });
   assertStatus(browserDelete, 200, "Browser empty Epic deletion");
   const browserBody = await browserDelete.json();
-  if (browserBody.milestone?.id !== browserEpic.id) throw new Error("Browser empty Epic deletion changed its response shape.");
+  if (browserBody.task?.id !== browserEpic.id) throw new Error("Browser empty Epic deletion changed its response shape.");
 
   const teamEpic = await createEpic("Team empty Epic delete verification");
   let tokenId = "";
@@ -546,14 +607,14 @@ async function verifyPlanningApprovalRoutes(status, sessionToken) {
       "insert into public.planning_item_raci_assignments (task_id,profile_id,role,sort_order) values ($1,'volkan','accountable',0),($1,'anil','responsible',1)",
       [initiativeId],
     );
-    const initiative = await apiRequest(`/api/initiatives/${initiativeId}/approval`, sessionToken, "", {
+    const initiative = await apiRequest(`/api/tasks/${initiativeId}/approval`, sessionToken, "", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "approve", expectedRevision: 1, note: "" }),
     });
     assertStatus(initiative, 200, "Browser Initiative approval");
     const initiativeBody = await initiative.json();
-    if (!initiativeBody.ok || initiativeBody.initiative?.approvalStatus !== "approved" || initiativeBody.lifecycle !== null) {
+    if (!initiativeBody.ok || initiativeBody.task?.approvalStatus !== "approved" || initiativeBody.lifecycle !== null) {
       throw new Error("Browser Initiative approval changed its response shape.");
     }
     const deliverable = await apiRequest(`/api/tasks/${deliverableId}/approval`, sessionToken, "", {
@@ -604,12 +665,13 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
       [ids.initiativeOne, ids.initiativeTwo],
     );
 
-    const initiative = await apiRequest(`/api/initiatives/${ids.initiativeOne}`, sessionToken, "", {
-      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ milestoneId: ids.epicTwo }),
+    const initiativeRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.initiativeOne])).rows[0]?.revision;
+    const initiative = await apiRequest(`/api/tasks/${ids.initiativeOne}`, sessionToken, "", {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedUpdatedAt: initiativeRevision, parentTaskId: ids.epicTwo }),
     });
     assertStatus(initiative, 200, "Browser Initiative reparent");
     const initiativeBody = await initiative.json();
-    if (!initiativeBody.ok || initiativeBody.initiative?.milestoneId !== ids.epicTwo || initiativeBody.initiative?.approvalStatus !== "proposed") {
+    if (!initiativeBody.ok || initiativeBody.task?.parentTaskId !== ids.epicTwo || initiativeBody.task?.approvalStatus !== "proposed") {
       throw new Error("Browser Initiative reparent changed its response shape.");
     }
     const deliverableRevision = (await client.query("select updated_at::text as revision from public.tasks where id = $1", [ids.deliverableOne])).rows[0]?.revision;
@@ -653,12 +715,12 @@ async function verifyPlanningReparentRoutes(status, sessionToken) {
     const teamRequest = {
       method: "PATCH",
       headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
-      body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, packageId: ids.initiativeTwo }),
+      body: JSON.stringify({ expectedUpdatedAt: teamDeliverableRevision, parentTaskId: ids.initiativeTwo }),
     };
     const team = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
     if (team.status !== 200) throw new Error(`Team Deliverable reparent: expected 200, received ${team.status}: ${await team.text()}`);
     const teamBody = await team.json();
-    if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("packageId")) {
+    if (teamBody.replayed || teamBody.item?.parentTaskId !== ids.initiativeTwo || !teamBody.changedFields?.includes("parentTaskId")) {
       throw new Error("Team Deliverable reparent changed its response shape.");
     }
     const replay = await apiRequest(`/api/team/planning-items/v1/items/${ids.teamDeliverable}`, tokenBody.token, "", teamRequest);
@@ -687,6 +749,7 @@ async function main() {
   const status = localStatus();
   const source = JSON.parse(readFileSync(seedSourcePath, "utf8"));
   await verifySeedConvergence(status, source);
+  await verifyCanonicalPlanningPreferences(status);
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-bulk-sprint-assignment.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-backlog-move-transaction.mjs")], { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "scripts/verify-planning-relationship-transaction.mjs")], { cwd: root, stdio: "inherit" });
@@ -726,7 +789,7 @@ async function main() {
     await verifyPlanningApiGitHubSyncScope(token, source.tasks[0].id);
     await verifyEmptyEpicDeleteRoutes(token);
     await verifyPlanningRelationshipRoutes(token, source.tasks[0].id, source.tasks[1].id);
-    await verifyPlanningReviewRoutes(status, token, source.packages[0].id);
+    await verifyPlanningReviewRoutes(status, token, source.initiatives[0].id);
     await verifyPlanningApprovalRoutes(status, token);
     await verifyPlanningReparentRoutes(status, token);
 
@@ -741,7 +804,7 @@ async function main() {
       assertStatus(response, 200, `${role} planning data`);
       const body = await response.json();
       if (body.currentProfile?.platformRole !== role) throw new Error(`${role} profile override was not applied.`);
-      const expectedPlanningItems = source.epics.length + source.packages.length + source.tasks.length;
+      const expectedPlanningItems = source.epics.length + source.initiatives.length + source.tasks.length;
       if (body.model?.items?.length !== expectedPlanningItems) throw new Error(`${role} did not receive the complete DB seed.`);
     }
 
@@ -765,20 +828,20 @@ async function main() {
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {
-      const response = await apiRequest("/api/milestones", token, profileId, {
+      const response = await apiRequest("/api/tasks", token, profileId, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ taskType: "epic", creationRequestId: randomUUID() }),
       });
-      assertStatus(response, 403, `${profileId} milestone authorization`);
+      assertStatus(response, 403, `${profileId} Epic authorization`);
     }
     for (const profileId of ["", "local-deputy"]) {
-      const response = await apiRequest("/api/milestones", token, profileId, {
+      const response = await apiRequest("/api/tasks", token, profileId, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({ taskType: "epic", creationRequestId: randomUUID() }),
       });
-      assertStatus(response, 400, `${profileId || "ceo"} milestone validation`);
+      assertStatus(response, 400, `${profileId || "ceo"} Epic validation`);
     }
 
     for (const profileId of ["sebastian", "local-viewer"]) {

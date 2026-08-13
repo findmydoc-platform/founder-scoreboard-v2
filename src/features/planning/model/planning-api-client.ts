@@ -1,9 +1,10 @@
 "use client";
 
 import type { BrowserApiClient } from "@/lib/browser-api-client";
-import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, Package, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, TaskFocusItem } from "@/lib/types";
-import type { MilestoneDeleteRequest, MilestoneNotEmptyError, MilestoneResponse } from "@/features/projects/model/milestone-contract";
-import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
+import type { ApprovalDecisionAction, AuthenticatedProfile, FmdTool, FounderEvent, MeetingAttendance, NotificationPreference, PlanningHeaderData, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjectionResolutionInput, Sprint, SprintCommitment, Task, TaskFocusItem } from "@/lib/types";
+import type { EpicNotEmptyError, EpicDeleteRequest } from "@/features/projects/model/epic-contract";
+import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
+import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
 import type { FmdToolDraft, FmdToolMetadataDraft, FmdToolPreviewImageUpload } from "@/features/tools/model/fmd-tools";
 import type { PlanningHeaderSlotKey } from "@/lib/planning-header-data";
 import type { PlanningTaskRevision } from "@/features/planning/model/planning-revision";
@@ -50,47 +51,94 @@ export function requestPlanningHeaderData(apiClient: BrowserApiClient, slots?: r
   return apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, options);
 }
 
-export function saveInitiativeRequest(apiClient: BrowserApiClient, draft: { id?: string }) {
-  return apiClient.requestJson<{ error?: string; initiative?: Package }>(draft.id ? `/api/initiatives/${draft.id}` : "/api/initiatives", {
-    method: draft.id ? "PATCH" : "POST",
-    json: draft,
+function strategicStatus(status: string) {
+  if (status === "active") return "In Arbeit";
+  if (status === "paused") return "Pausiert";
+  if (status === "done") return "Erledigt";
+  return "Offen";
+}
+
+function initiativeMutation(draft: InitiativeDraft, expectedUpdatedAt?: string) {
+  return {
+    ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+    ...(!draft.id ? { taskType: "initiative" as const, creationRequestId: draft.creationRequestId } : {}),
+    title: draft.title,
+    description: draft.goal,
+    ownerId: draft.ownerId,
+    priority: draft.priority,
+    status: strategicStatus(draft.status),
+    targetDate: draft.targetDate,
+    strategy: {
+      goal: draft.goal,
+      successCriteria: draft.successCriteria,
+      scopeConstraints: draft.scopeConstraints,
+    },
+    raciAssignments: [
+      { profileId: draft.accountableProfileId, role: "accountable", sortOrder: 0 },
+      ...draft.responsibleProfileIds.map((profileId, sortOrder) => ({ profileId, role: "responsible", sortOrder })),
+      ...draft.consultedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "consulted", sortOrder })),
+      ...draft.informedProfileIds.map((profileId, sortOrder) => ({ profileId, role: "informed", sortOrder })),
+    ],
+    ...(!draft.id ? { parentTaskId: draft.parentTaskId, approveNow: draft.approveNow } : {}),
+  };
+}
+
+export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: InitiativeDraft) {
+  if (!draft.id) {
+    return apiClient.requestJson<{ error?: string; task?: Task }>("/api/tasks", {
+      method: "POST",
+      json: initiativeMutation(draft),
+    });
+  }
+  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${encodeURIComponent(draft.id)}`, {
+    method: "PATCH",
+    json: {
+      ...initiativeMutation(draft, draft.expectedUpdatedAt || ""),
+      parentTaskId: draft.parentTaskId,
+    },
   });
 }
 
-export function saveMilestoneRequest(apiClient: BrowserApiClient, draft: MilestoneDraft) {
-  const { id, expectedUpdatedAt, ...fields } = draft;
-  return apiClient.requestJson<MilestoneResponse | MilestoneNotEmptyError | { error?: string; code?: string }>(
-    id ? `/api/milestones/${encodeURIComponent(id)}` : "/api/milestones",
+export function saveEpicRequest(apiClient: BrowserApiClient, draft: EpicDraft) {
+  const { id, expectedUpdatedAt } = draft;
+  return apiClient.requestJson<{ task?: Task } | EpicNotEmptyError | { error?: string; code?: string }>(
+    id ? `/api/tasks/${encodeURIComponent(id)}` : "/api/tasks",
     {
       method: id ? "PATCH" : "POST",
-      json: id ? { ...fields, expectedUpdatedAt } : fields,
+      json: {
+        ...(id ? { expectedUpdatedAt } : { taskType: "epic", creationRequestId: draft.creationRequestId }),
+        title: draft.title,
+        description: draft.description,
+        targetDate: draft.targetDate,
+        status: strategicStatus(draft.status),
+      },
     },
   );
 }
 
-export function deleteMilestoneRequest(apiClient: BrowserApiClient, milestoneId: string, payload: MilestoneDeleteRequest) {
-  return apiClient.requestJson<MilestoneResponse | MilestoneNotEmptyError | { error?: string; code?: string }>(
-    `/api/milestones/${encodeURIComponent(milestoneId)}`,
+export function deleteEpicRequest(apiClient: BrowserApiClient, epicId: string, payload: EpicDeleteRequest) {
+  return apiClient.requestJson<{ task?: Partial<Task> & { id: string } } | EpicNotEmptyError | { error?: string; code?: string }>(
+    `/api/tasks/${encodeURIComponent(epicId)}`,
     { method: "DELETE", json: payload },
   );
 }
 
 export function decideInitiativeApprovalRequest(apiClient: BrowserApiClient, initiativeId: string, action: ApprovalDecisionAction, expectedRevision: number, note = "") {
-  return apiClient.requestJson<{ error?: string; initiative?: Package }>(`/api/initiatives/${initiativeId}/approval`, {
+  return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${initiativeId}/approval`, {
     method: "POST",
     json: { action, expectedRevision, note },
   });
 }
 
 export function withdrawInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedRevision: number, reason: string) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/initiatives/${initiativeId}/withdraw`, {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${initiativeId}/withdraw`, {
     method: "POST",
     json: { expectedRevision, reason },
   });
 }
 
 export function restoreInitiativeRequest(apiClient: BrowserApiClient, initiativeId: string, expectedTrashRevision: number) {
-  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/initiatives/${initiativeId}/restore`, {
+  return apiClient.requestJson<{ error?: string; affectedTaskIds?: string[]; trashRevision?: number; eventIds?: Array<string | number> }>(`/api/tasks/${initiativeId}/restore`, {
     method: "POST",
     json: { expectedTrashRevision },
   });

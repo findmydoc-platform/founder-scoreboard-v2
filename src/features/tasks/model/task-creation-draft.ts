@@ -3,8 +3,6 @@ import type { Task, TaskType } from "@/lib/types";
 type TaskCreationHierarchy = {
   taskType: TaskType;
   parentTaskId: string;
-  packageId: string;
-  milestoneId: string;
 };
 
 type TaskCreationRequestDraft = TaskCreationHierarchy & {
@@ -36,8 +34,7 @@ export const SUB_ISSUE_CREATE_REQUEST_FIELDS = [
   "definitionOfDone",
   "taskType",
   "parentTaskId",
-  "assignee",
-  "owner",
+  "ownerId",
   "githubRepo",
   "relationType",
   "relatedTaskId",
@@ -67,13 +64,9 @@ export function withSubIssueParentHierarchy<T extends TaskCreationHierarchy>(
   tasks: Task[],
   parentTaskId: string,
 ): T {
-  const parent = taskCreationParent(tasks, parentTaskId);
-
   return {
     ...draft,
     parentTaskId,
-    packageId: parent?.packageId || "",
-    milestoneId: parent?.milestoneId || "",
   };
 }
 
@@ -83,7 +76,8 @@ export function resolveTaskCreationHierarchy<T extends TaskCreationHierarchy>(dr
 }
 
 export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(draft: T) {
-  if (draft.taskType === "deliverable") return draft;
+  const { assignee, ...canonicalDraft } = draft;
+  if (draft.taskType === "deliverable") return { ...canonicalDraft, ownerId: assignee };
   if (draft.taskType === "epic" || draft.taskType === "initiative") {
     return {
       creationRequestId: draft.creationRequestId,
@@ -91,7 +85,7 @@ export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(d
       description: draft.description,
       taskType: draft.taskType,
       parentTaskId: draft.parentTaskId,
-      assignee: draft.assignee,
+      ownerId: assignee,
       priority: draft.priority,
       status: draft.status,
       targetDate: draft.targetDate,
@@ -108,7 +102,7 @@ export function taskCreationRequestPayload<T extends TaskCreationRequestDraft>(d
     description: draft.description,
     taskType: draft.taskType,
     parentTaskId: draft.parentTaskId,
-    assignee: draft.assignee,
+    ownerId: assignee,
     githubRepo: draft.githubRepo,
     relationType: draft.relationType,
     relatedTaskId: draft.relatedTaskId,

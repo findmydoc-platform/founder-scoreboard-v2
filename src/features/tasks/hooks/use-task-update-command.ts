@@ -65,7 +65,7 @@ export function useTaskUpdateCommand({
     setSaveError("");
     setStatusGuardNotice("");
     setStatusGuardTaskId(null);
-    const normalized = buildClientTaskUpdatePatch(task, patch, data.profiles, data.packages);
+    const normalized = buildClientTaskUpdatePatch(task, patch, data.profiles, data.tasks);
     if (!normalized.ok) {
       setSaveError(normalized.error);
       return Promise.resolve({ ok: false, error: normalized.error, status: 400 });

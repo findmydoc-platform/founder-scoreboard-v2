@@ -1,12 +1,31 @@
-import { mapLegacyMilestoneFromEpic, mapLegacyPackageFromInitiative } from "../planning-profile-mappers";
-import type { Package, PlanningShellState, Task } from "../types";
+import type { PlanningShellState, Task } from "../types";
 import seedSource from "./source.json";
 
-type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "packages" | "tasks" | "sprints" | "fmdTools" | "meetings">;
+type EmptySeedCollections = Omit<PlanningShellState, "project" | "profiles" | "tasks" | "sprints" | "fmdTools" | "meetings">;
 type SeedTaskDefaults = Pick<Task, "status" | "evidenceLink" | "issueNumber" | "issueUrl" | "note" | "watched" | "sprintId" | "reviewStatus" | "scorePoints" | "scoreFinal" | "githubRepo" | "githubIssueNumber" | "githubIssueUrl" | "githubIssueSyncStatus" | "githubIssueLastSyncedAt" | "githubIssueSyncError" | "taskType" | "parentTaskId" | "approvalStatus" | "approvalRevision" | "parentApprovalStatus" | "scoreRelevant">;
 export type SeedTaskInput = Omit<Task, keyof SeedTaskDefaults | "owner" | "assignee" | "evidenceLinks" | "linkedPullRequests"> & Partial<SeedTaskDefaults> & {
   assigneeId: string;
   ownerId?: string;
+};
+
+type SeedInitiative = {
+  id: string;
+  parentTaskId: string;
+  title: string;
+  goal: string;
+  priority: string;
+  ownerId?: string;
+  accountableProfileId?: string;
+  responsibleProfileIds?: string[];
+  consultedProfileIds?: string[];
+  informedProfileIds?: string[];
+  status: Task["status"];
+  targetDate?: string;
+  successCriteria?: string;
+  scopeConstraints?: string;
+  sortOrder: number;
+  approvalStatus?: Task["approvalStatus"];
+  approvalRevision?: number;
 };
 
 type SeedSource = {
@@ -21,7 +40,7 @@ type SeedSource = {
     targetDate?: string;
     sortOrder?: number;
   }>;
-  packages: Package[];
+  initiatives: SeedInitiative[];
   sprints: PlanningShellState["sprints"];
   fmdTools: PlanningShellState["fmdTools"];
   meetings: PlanningShellState["meetings"];
@@ -39,24 +58,17 @@ export const seedFmdTools = source.fmdTools;
 export const seedMeetings = source.meetings;
 export const emptySeedCollections = source.emptyCollections;
 export const taskDefaults = source.taskDefaults;
-function strategyAssignments(pack: Package): NonNullable<Task["raciAssignments"]> {
+function strategyAssignments(initiative: SeedInitiative): NonNullable<Task["raciAssignments"]> {
   const from = (role: NonNullable<Task["raciAssignments"]>[number]["role"], profileIds: string[] = []) => (
     profileIds.map((profileId, sortOrder) => ({ profileId, role, sortOrder }))
   );
 
   return [
-    ...from("accountable", pack.accountableProfileId ? [pack.accountableProfileId] : []),
-    ...from("responsible", pack.responsibleProfileIds),
-    ...from("consulted", pack.consultedProfileIds),
-    ...from("informed", pack.informedProfileIds),
+    ...from("accountable", initiative.accountableProfileId ? [initiative.accountableProfileId] : []),
+    ...from("responsible", initiative.responsibleProfileIds),
+    ...from("consulted", initiative.consultedProfileIds),
+    ...from("informed", initiative.informedProfileIds),
   ];
-}
-
-function packageStatus(status: Package["status"]): Task["status"] {
-  if (status === "active") return "In Arbeit";
-  if (status === "paused") return "Pausiert";
-  if (status === "done") return "Erledigt";
-  return "Offen";
 }
 
 const seedStrategicTaskDefinitions: SeedTaskInput[] = [
@@ -67,7 +79,6 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
     description: epic.description || "",
     priority: "",
     workstream: "",
-    packageId: "",
     deadline: "",
     definitionOfDone: "",
     dependsOn: "",
@@ -95,25 +106,24 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
     parentApprovalStatus: null,
     scoreRelevant: false,
   })),
-  ...source.packages.map((pack) => ({
-    id: pack.id,
-    order: pack.sortOrder,
-    title: pack.title,
-    description: pack.goal || "",
-    priority: pack.priority || "P2",
+  ...source.initiatives.map((initiative) => ({
+    id: initiative.id,
+    order: initiative.sortOrder,
+    title: initiative.title,
+    description: initiative.goal || "",
+    priority: initiative.priority || "P2",
     workstream: "",
-    packageId: "",
     deadline: "",
     definitionOfDone: "",
     dependsOn: "",
     hours: 0,
     startDate: "",
     endDate: "",
-    ownerId: pack.ownerId || "",
-    assigneeId: pack.ownerId || "",
+    ownerId: initiative.ownerId || "",
+    assigneeId: initiative.ownerId || "",
     taskType: "initiative" as const,
-    status: packageStatus(pack.status),
-    targetDate: pack.targetDate || "",
+    status: initiative.status,
+    targetDate: initiative.targetDate || "",
     sprintId: "",
     reviewStatus: "not_requested" as const,
     scorePoints: 0,
@@ -124,15 +134,15 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
     githubIssueSyncStatus: "not_applicable" as const,
     githubIssueLastSyncedAt: "",
     githubIssueSyncError: "",
-    parentTaskId: pack.milestoneId || "",
+    parentTaskId: initiative.parentTaskId,
     strategy: {
-      goal: pack.goal || "",
-      successCriteria: pack.successCriteria || "",
-      scopeConstraints: pack.scopeConstraints || "",
+      goal: initiative.goal || "",
+      successCriteria: initiative.successCriteria || "",
+      scopeConstraints: initiative.scopeConstraints || "",
     },
-    raciAssignments: strategyAssignments(pack),
-    approvalStatus: pack.approvalStatus || "approved",
-    approvalRevision: pack.approvalRevision || 1,
+    raciAssignments: strategyAssignments(initiative),
+    approvalStatus: initiative.approvalStatus || "approved",
+    approvalRevision: initiative.approvalRevision || 1,
     parentApprovalStatus: null,
     scoreRelevant: false,
   })),
@@ -140,10 +150,7 @@ const seedStrategicTaskDefinitions: SeedTaskInput[] = [
 
 export const seedTaskDefinitions = [
   ...seedStrategicTaskDefinitions,
-  ...source.tasks.map((task) => ({
-    ...task,
-    parentTaskId: task.parentTaskId || (task.taskType === "sub_issue" ? "" : task.packageId || ""),
-  })),
+  ...source.tasks,
 ];
 
 const profileNameById = new Map(seedProfiles.map((profile) => [profile.id, profile.name]));
@@ -172,18 +179,10 @@ export function defineTasks(inputs: SeedTaskInput[]): Task[] {
 }
 
 export const seedTasks = defineTasks(seedTaskDefinitions);
-export const seedPackages = seedTasks
-  .filter((task) => task.taskType === "initiative")
-  .map(mapLegacyPackageFromInitiative);
-export const seedMilestones = seedTasks
-  .filter((task) => task.taskType === "epic")
-  .map(mapLegacyMilestoneFromEpic);
-
 export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningShellState {
   return {
     project: seedProject,
     profiles: seedProfiles,
-    packages: seedPackages,
     tasks,
     sprints: seedSprints,
     sprintCommitments: emptySeedCollections.sprintCommitments,
@@ -191,7 +190,6 @@ export function createPlanningSeed(tasks: Task[] = seedTasks): PlanningShellStat
     founderStrikeStates: emptySeedCollections.founderStrikeStates,
     strikeEvents: emptySeedCollections.strikeEvents,
     scoreObjections: emptySeedCollections.scoreObjections,
-    milestones: seedMilestones,
     taskComments: emptySeedCollections.taskComments,
     taskExternalComments: emptySeedCollections.taskExternalComments,
     taskBlockers: emptySeedCollections.taskBlockers,

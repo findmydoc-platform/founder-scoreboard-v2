@@ -2,53 +2,59 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 
-test("project hierarchy search finds milestones and empty initiatives", async () => {
+const mocks = {
+  "@/lib/status": { normalizeStatus: (status) => status },
+  "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
+  "@/lib/platform": { hasGitHubIssue: () => true },
+};
+
+const emptyProjectRelations = { taskBlockers: [], taskRelations: [] };
+
+test("project hierarchy search finds epics and empty initiatives", async () => {
   const { buildProjectsFilterViewModel } = await loadTranspiledModule(
     "src/features/projects/model/projects-filter-view-model.ts",
-    {
-      "@/lib/status": { normalizeStatus: (status) => status },
-      "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
-      "@/lib/platform": { hasGitHubIssue: () => true },
-    },
+    mocks,
   );
-  const data = {
-    milestones: [{
-      id: "milestone-expansion",
+  const tasks = [
+    {
+      id: "epic-expansion",
+      taskType: "epic",
       title: "Expansion 2027",
       description: "New market preparation",
-      targetDate: "",
       status: "planned",
-      sortOrder: 1,
-    }],
-    packages: [{
+      order: 1,
+    },
+    {
       id: "initiative-empty",
-      milestoneId: "milestone-expansion",
+      taskType: "initiative",
+      parentTaskId: "epic-expansion",
       title: "Leere Initiative",
-      goal: "Prepare later",
+      description: "",
+      strategy: { goal: "Prepare later" },
       priority: "P2",
-      sortOrder: 1,
-    }],
-  };
+      order: 1,
+    },
+  ];
 
-  const byMilestone = buildProjectsFilterViewModel({
-    data,
-    tasks: [],
+  const byEpic = buildProjectsFilterViewModel({
+    data: emptyProjectRelations,
+    tasks,
     filters: {
-      query: "Expansion", owner: "Alle", status: "Alle", priority: "Alle", milestone: "Alle",
+      query: "Expansion", owner: "Alle", status: "Alle", priority: "Alle", epic: "Alle",
       initiative: "Alle", risk: "all", from: "", to: "", sort: "title", direction: "asc",
     },
   });
   const byInitiative = buildProjectsFilterViewModel({
-    data,
-    tasks: [],
+    data: emptyProjectRelations,
+    tasks,
     filters: {
-      query: "Leere Initiative", owner: "Alle", status: "Alle", priority: "Alle", milestone: "Alle",
+      query: "Leere Initiative", owner: "Alle", status: "Alle", priority: "Alle", epic: "Alle",
       initiative: "Alle", risk: "all", from: "", to: "", sort: "title", direction: "asc",
     },
   });
 
-  assert.equal(byMilestone.hierarchy[0].milestone.id, "milestone-expansion");
-  assert.equal(byMilestone.hierarchy[0].initiatives[0].initiative.id, "initiative-empty");
+  assert.equal(byEpic.hierarchy[0].epic.id, "epic-expansion");
+  assert.equal(byEpic.hierarchy[0].initiatives[0].initiative.id, "initiative-empty");
   assert.equal(byInitiative.hierarchy[0].initiatives[0].initiative.id, "initiative-empty");
   assert.equal(byInitiative.visibleCount, 2);
   assert.equal(byInitiative.totalCount, 2);
@@ -57,40 +63,30 @@ test("project hierarchy search finds milestones and empty initiatives", async ()
 test("deliverable filters combine with AND and keep table sorting stable", async () => {
   const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await loadTranspiledModule(
     "src/features/projects/model/projects-filter-view-model.ts",
-    {
-      "@/lib/status": { normalizeStatus: (status) => status },
-      "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
-      "@/lib/platform": { hasGitHubIssue: () => true },
-    },
+    mocks,
   );
-  const data = {
-    milestones: [{ id: "m1", title: "Milestone", description: "", targetDate: "", status: "planned", sortOrder: 1 }],
-    packages: [{ id: "i1", milestoneId: "m1", title: "Initiative", goal: "", priority: "P1", sortOrder: 1 }],
-  };
   const tasks = [
-    { id: "later", order: 2, taskType: "deliverable", title: "Same", description: "", packageId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 2, deadline: "2026-07-15" },
-    { id: "first", order: 1, taskType: "deliverable", title: "Same", description: "", packageId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 1, deadline: "2026-07-10" },
-    { id: "other", order: 3, taskType: "deliverable", title: "Other", description: "", packageId: "i1", assigneeId: "p2", assignee: "Bob", status: "Erledigt", priority: "P2", hours: 1, deadline: "2026-07-10" },
+    { id: "e1", taskType: "epic", title: "Epic", description: "", status: "planned", order: 1 },
+    { id: "i1", taskType: "initiative", parentTaskId: "e1", title: "Initiative", description: "", priority: "P1", order: 1 },
+    { id: "later", order: 2, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 2, deadline: "2026-07-15" },
+    { id: "first", order: 1, taskType: "deliverable", title: "Same", description: "", parentTaskId: "i1", assigneeId: "p1", assignee: "Ada", status: "Offen", priority: "P1", hours: 1, deadline: "2026-07-10" },
+    { id: "other", order: 3, taskType: "deliverable", title: "Other", description: "", parentTaskId: "i1", assigneeId: "p2", assignee: "Bob", status: "Erledigt", priority: "P2", hours: 1, deadline: "2026-07-10" },
   ];
   const filters = { ...DEFAULT_PROJECTS_FILTERS, owner: "p1", status: "Offen", priority: "P1", to: "2026-07-31" };
-  const model = buildProjectsFilterViewModel({ data, tasks, filters });
+  const model = buildProjectsFilterViewModel({ data: emptyProjectRelations, tasks, filters });
   assert.deepEqual(model.hierarchy[0].tasks.map((task) => task.id), ["first", "later"]);
   assert.equal(model.totalCount, 5);
-  assert.equal(buildProjectsFilterViewModel({ data, tasks, filters: { ...filters, query: "missing" } }).hierarchy.length, 0);
+  assert.equal(buildProjectsFilterViewModel({ data: emptyProjectRelations, tasks, filters: { ...filters, query: "missing" } }).hierarchy.length, 0);
 });
 
 test("project hierarchy distinguishes true empty data from orphan initiatives", async () => {
   const { buildProjectsFilterViewModel, DEFAULT_PROJECTS_FILTERS } = await loadTranspiledModule(
     "src/features/projects/model/projects-filter-view-model.ts",
-    {
-      "@/lib/status": { normalizeStatus: (status) => status },
-      "@/features/tasks/model/task-attention-signals": { taskHasCriticalAttention: () => false },
-      "@/lib/platform": { hasGitHubIssue: () => true },
-    },
+    mocks,
   );
 
   const empty = buildProjectsFilterViewModel({
-    data: { milestones: [], packages: [] },
+    data: emptyProjectRelations,
     tasks: [],
     filters: DEFAULT_PROJECTS_FILTERS,
   });
@@ -98,17 +94,15 @@ test("project hierarchy distinguishes true empty data from orphan initiatives", 
   assert.equal(empty.totalCount, 0);
 
   const withOrphan = buildProjectsFilterViewModel({
-    data: {
-      milestones: [{ id: "m1", title: "Real", description: "", targetDate: "", status: "planned", sortOrder: 1 }],
-      packages: [
-        { id: "i1", milestoneId: "m1", title: "Assigned", goal: "", priority: "P1", sortOrder: 1 },
-        { id: "i2", milestoneId: "missing", title: "Orphan", goal: "", priority: "P2", sortOrder: 2 },
-      ],
-    },
-    tasks: [],
+    data: emptyProjectRelations,
+    tasks: [
+      { id: "e1", taskType: "epic", title: "Real", description: "", status: "planned", order: 1 },
+      { id: "i1", taskType: "initiative", parentTaskId: "e1", title: "Assigned", description: "", priority: "P1", order: 1 },
+      { id: "i2", taskType: "initiative", parentTaskId: "missing", title: "Orphan", description: "", priority: "P2", order: 2 },
+    ],
     filters: DEFAULT_PROJECTS_FILTERS,
   });
-  assert.deepEqual(withOrphan.hierarchy.map((entry) => entry.milestone.title), ["Real", "Ohne Epic"]);
+  assert.deepEqual(withOrphan.hierarchy.map((entry) => entry.epic?.title || "Ohne Epic"), ["Real", "Ohne Epic"]);
   assert.equal(withOrphan.hierarchy[1].initiatives[0].initiative.id, "i2");
   assert.equal(withOrphan.totalCount, 4);
 });

@@ -37,7 +37,7 @@ function requestMetadata(request: NextRequest) {
 export async function handlePlanningTrashWithdraw(
   request: NextRequest,
   rootId: string,
-  rootType: TrashRootType,
+  expectedRootType?: TrashRootType,
 ) {
   const context = await requireJsonApiContext<PlanningTrashWithdrawPayload>(request, requirePlanningContributor, {});
   if (!context.ok) return context.response;
@@ -52,6 +52,17 @@ export async function handlePlanningTrashWithdraw(
   if (!actor.ok) return apiError("Nur Antragsteller, CEO oder Deputy können dieses Item zurückziehen.", 403);
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
+  const { data: item, error: itemError } = await serviceSupabase
+    .from("tasks")
+    .select("task_type")
+    .eq("id", rootId)
+    .maybeSingle<{ task_type: string }>();
+  if (itemError) return apiError("Planungselement konnte nicht geladen werden.", 500);
+  if (!item || (item.task_type !== "initiative" && item.task_type !== "deliverable")) {
+    return apiError("Planungselement wurde nicht gefunden.", 404);
+  }
+  const rootType = item.task_type;
+  if (expectedRootType && expectedRootType !== rootType) return apiError(`${label(expectedRootType)} wurde nicht gefunden.`, 404);
 
   const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
     actor: actor.actor,
@@ -75,7 +86,7 @@ export async function handlePlanningTrashWithdraw(
 export async function handlePlanningTrashRestore(
   request: NextRequest,
   rootId: string,
-  rootType: TrashRootType,
+  expectedRootType?: TrashRootType,
 ) {
   const context = await requireJsonApiContext<PlanningTrashRestorePayload>(request, requireOperationalLead, {});
   if (!context.ok) return context.response;
@@ -84,6 +95,17 @@ export async function handlePlanningTrashRestore(
   if (!actor.ok) return apiError("Keine Berechtigung für diese Aktion.", 403);
   const serviceSupabase = getServerServiceRoleSupabase();
   if (!serviceSupabase) return apiError("Server-Service für den Papierkorb ist nicht konfiguriert.", 503);
+  const { data: item, error: itemError } = await serviceSupabase
+    .from("tasks")
+    .select("task_type")
+    .eq("id", rootId)
+    .maybeSingle<{ task_type: string }>();
+  if (itemError) return apiError("Planungselement konnte nicht geladen werden.", 500);
+  if (!item || (item.task_type !== "initiative" && item.task_type !== "deliverable")) {
+    return apiError("Planungselement wurde nicht gefunden.", 404);
+  }
+  const rootType = item.task_type;
+  if (expectedRootType && expectedRootType !== rootType) return apiError(`${label(expectedRootType)} wurde nicht gefunden.`, 404);
 
   const result = await createPlanningTrashPlanningItems(serviceSupabase, rootType).run({
     actor: actor.actor,

@@ -47,7 +47,7 @@ test("normal planning reads use the centralized active read models", async () =>
     read("src/features/tasks/server/task-detail-read-model-supabase.ts"),
   ]);
 
-  assert.match(readModel, /ACTIVE_PACKAGES_TABLE = "active_packages"/);
+  assert.doesNotMatch(readModel, /ACTIVE_PACKAGES_TABLE|active_packages/);
   assert.match(readModel, /ACTIVE_TASKS_TABLE = "active_tasks"/);
   for (const source of [workspaceReadSource, backlog, planningContext, planningItemsCreate, taskDetail]) {
     assert.match(source, /ACTIVE_TASKS_TABLE/);

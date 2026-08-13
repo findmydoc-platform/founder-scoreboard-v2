@@ -57,7 +57,11 @@ export function planningReparentHash(itemId: string, expectedRevision: string, p
 
 export function isPlanningTaskReparentPayload(payload: unknown) {
   const row = record(payload);
-  return Boolean(row && (Object.hasOwn(row, "parentTaskId") || Object.hasOwn(row, "packageId")));
+  return Boolean(
+    row
+    && Object.hasOwn(row, "parentTaskId")
+    && Object.keys(row).every((key) => key === "expectedUpdatedAt" || key === "parentTaskId"),
+  );
 }
 
 export function parsePlanningTaskReparentPayload(payload: unknown):
@@ -65,23 +69,11 @@ export function parsePlanningTaskReparentPayload(payload: unknown):
   | Readonly<{ ok: false; error: string; status: number }> {
   const row = record(payload);
   if (!row || !validTimestamp(row.expectedUpdatedAt)) return { ok: false, error: "Aktueller Aufgabenstand ist erforderlich.", status: 400 };
-  const hasParent = Object.hasOwn(row, "parentTaskId");
-  const hasPackage = Object.hasOwn(row, "packageId");
-  if (hasParent && hasPackage) return { ok: false, error: "Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", status: 409 };
-  const supported = new Set(["expectedUpdatedAt", hasPackage ? "packageId" : "parentTaskId"]);
+  const supported = new Set(["expectedUpdatedAt", "parentTaskId"]);
   if (Object.keys(row).some((key) => !supported.has(key))) return { ok: false, error: "Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", status: 409 };
-  const parent = hasPackage ? row.packageId : row.parentTaskId;
+  const parent = row.parentTaskId;
   if (typeof parent !== "string") return { ok: false, error: "Übergeordnete Planungsebene ist ungültig.", status: 400 };
   return { ok: true, value: { expectedUpdatedAt: row.expectedUpdatedAt, parentId: parent.trim() } };
-}
-
-export function parsePlanningInitiativeReparentPayload(payload: unknown):
-  | Readonly<{ ok: true; value: { parentId: string } }>
-  | Readonly<{ ok: false; error: string; status: number }> {
-  const row = record(payload);
-  if (!row || typeof row.milestoneId !== "string") return { ok: false, error: "Initiative-Änderung ist ungültig.", status: 400 };
-  if (Object.keys(row).some((key) => key !== "milestoneId")) return { ok: false, error: "Ändere das Epic separat von weiteren Initiative-Feldern.", status: 409 };
-  return { ok: true, value: { parentId: row.milestoneId.trim() } };
 }
 
 export function changePlanningParentCommand(itemId: string, parentId: string | null, expectedRevision?: string): ActOnItem {
@@ -160,8 +152,7 @@ function decide(actionInput: ReparentAction, state: PlanningReparentState) {
   const projected: Task = {
     ...item.task,
     parentTaskId: parentId,
-    ...(item.kind === "initiative" ? { milestoneId: parentId } : {}),
-    ...(item.kind === "deliverable" ? { packageId: parentId, parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
+    ...(item.kind === "deliverable" ? { parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
     ...(item.kind === "sub_issue" ? { parentApprovalStatus: (state.parent?.approvalStatus || null) as Task["parentApprovalStatus"] } : {}),
   };
   return {

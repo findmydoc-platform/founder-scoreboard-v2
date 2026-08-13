@@ -2,18 +2,19 @@
 
 import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import type { MilestoneStatus } from "@/features/projects/model/milestone-contract";
+import type { EpicStatus } from "@/features/projects/model/epic-contract";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { UiButton, UiField, UiTextArea, UiTextInput } from "@/shared/atoms/ui-primitives";
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 
-export type MilestoneDraft = {
+export type EpicDraft = {
   id?: string;
+  creationRequestId: string;
   title: string;
   description: string;
   targetDate: string;
-  status: MilestoneStatus;
+  status: EpicStatus;
   expectedUpdatedAt?: string;
 };
 
@@ -23,14 +24,14 @@ const statusOptions = [
   { value: "done", label: "Erledigt" },
 ];
 
-export function MilestoneDialog({
+export function EpicDialog({
   defaults,
   onClose,
   onSave,
 }: {
-  defaults: Partial<MilestoneDraft>;
+  defaults: Partial<EpicDraft>;
   onClose: () => void;
-  onSave: (draft: MilestoneDraft) => Promise<void>;
+  onSave: (draft: EpicDraft) => Promise<void>;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -38,8 +39,9 @@ export function MilestoneDialog({
   const targetDateLabelId = useId();
   const statusLabelId = useId();
   const errorRef = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState<MilestoneDraft>({
+  const [draft, setDraft] = useState<EpicDraft>({
     id: defaults.id,
+    creationRequestId: defaults.creationRequestId || crypto.randomUUID(),
     title: defaults.title || "",
     description: defaults.description || "",
     targetDate: defaults.targetDate || "",
@@ -188,7 +190,7 @@ export function MilestoneDialog({
                 <CustomSelect
                   value={draft.status}
                   disabled={pending}
-                  onChange={(status) => setDraft((current) => ({ ...current, status: status as MilestoneStatus }))}
+                  onChange={(status) => setDraft((current) => ({ ...current, status: status as EpicStatus }))}
                   aria-labelledby={statusLabelId}
                   className="h-11 text-sm"
                   options={statusOptions}

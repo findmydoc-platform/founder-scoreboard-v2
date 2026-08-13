@@ -7,7 +7,7 @@ import { TaskCommentComposer } from "@/features/tasks/molecules/task-comment-com
 import { TaskCommentTimeline } from "@/features/tasks/molecules/task-comment-timeline";
 import type { TaskCommentTimelineItem } from "@/features/tasks/molecules/task-comment-timeline";
 import { isUsefulActivity } from "@/features/tasks/model/task-comment-timeline-policy";
-import type { Milestone, Package, Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
+import type { Profile, Sprint, Task, TaskActivity, TaskComment, TaskExternalComment } from "@/lib/types";
 
 type Props = {
   comments: TaskComment[];
@@ -16,8 +16,6 @@ type Props = {
   profiles: Profile[];
   tasks?: Task[];
   sprints?: Sprint[];
-  packages?: Package[];
-  milestones?: Milestone[];
   currentProfileId?: string;
   error?: string;
   loading?: boolean;
@@ -84,8 +82,6 @@ export function TaskCommentThread({
   profiles,
   tasks = [],
   sprints = [],
-  packages = [],
-  milestones = [],
   currentProfileId = "",
   error = "",
   loading = false,
@@ -109,9 +105,7 @@ export function TaskCommentThread({
     ...profiles.map((profile) => [profile.id, profile.name] as const),
     ...tasks.map((task) => [task.id, task.title] as const),
     ...sprints.map((sprint) => [sprint.id, sprint.name] as const),
-    ...packages.map((initiative) => [initiative.id, initiative.title] as const),
-    ...milestones.map((milestone) => [milestone.id, milestone.title] as const),
-  ]), [milestones, packages, profiles, sprints, tasks]);
+  ]), [profiles, sprints, tasks]);
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 p-4">

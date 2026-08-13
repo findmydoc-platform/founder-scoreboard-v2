@@ -8,6 +8,10 @@ const workspacePreferences = await loadTranspiledModule(
   "src/features/planning/model/workspace-preferences.ts",
 );
 
+const planningProfileMappers = await loadTranspiledModule(
+  "src/lib/planning-profile-mappers.ts",
+);
+
 const icon = () => null;
 const workspaceRoutes = await loadTranspiledModule(
   "src/features/planning/model/workspace-routes.ts",
@@ -81,14 +85,14 @@ test("new profiles start with neutral planning defaults instead of current contr
 
   assert.equal(draft.defaultWorkspace, "planning");
   assert.equal(draft.defaultTaskView, "board");
-  assert.deepEqual(draft.expandedPackageIds, []);
+  assert.deepEqual(draft.expandedInitiativeIds, []);
   assert.deepEqual(draft.planningFilters, {
     query: "",
     assignee: "Alle",
     status: "Alle",
     priority: "Alle",
     review: "Alle",
-    packageId: "Alle",
+    initiativeId: "Alle",
     quick: [],
     sprintId: "Alle",
     workstream: "Alle",
@@ -113,14 +117,30 @@ test("saved profile preferences remain intact while legacy workspaces are normal
       defaultWorkspace: "reviews",
       defaultTaskView: "table",
       planningFilters,
-      expandedPackageIds: ["initiative-1"],
+      expandedInitiativeIds: ["initiative-1"],
     },
   });
 
   assert.equal(draft.defaultWorkspace, "planning");
   assert.equal(draft.defaultTaskView, "table");
   assert.deepEqual(draft.planningFilters, planningFilters);
-  assert.deepEqual(draft.expandedPackageIds, ["initiative-1"]);
+  assert.deepEqual(draft.expandedInitiativeIds, ["initiative-1"]);
+});
+
+test("profile preference reads use only canonical planning fields", () => {
+  const preference = planningProfileMappers.mapProfileUiPreference({
+    profile_id: "profile-1",
+    default_workspace: "planning",
+    default_task_view: "board",
+    planning_filters: { assignee: "profile-2", initiativeId: "initiative-current" },
+    expanded_item_ids: ["initiative-1"],
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:00:00.000Z",
+  });
+
+  assert.equal(preference.planningFilters.initiativeId, "initiative-current");
+  assert.equal(preference.planningFilters.assignee, "profile-2");
+  assert.deepEqual(preference.expandedInitiativeIds, ["initiative-1"]);
 });
 
 test("profile settings API delegates workspace validation to the shared workspace contract", async () => {
@@ -129,6 +149,48 @@ test("profile settings API delegates workspace validation to the shared workspac
   assert.match(route, /rootWorkspaceFromPreference\(typeof value === "string" \? value : null\)/);
   assert.doesNotMatch(route, /cleanDefaultWorkspace\(uiPayload\.defaultWorkspace, permission\.profile\?\.platformRole\)/);
   assert.doesNotMatch(route, /allowedWorkspaces/);
+});
+
+test("profile settings API normalizes old and current initiative preference fields", async () => {
+  const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
+
+  assert.match(route, /expandedInitiativeIds: string\[\]/);
+  assert.match(route, /candidate\.initiativeId/);
+  assert.match(route, /expanded_item_ids: cleanInitiativeIds/);
+  assert.match(route, /expandedPackageIds/);
+  assert.match(route, /candidate\.packageId/);
+  assert.match(route, /candidate\.owner/);
+  assert.match(route, /expandedInitiativeIds \?\? uiPayload\.expandedPackageIds/);
+});
+
+test("canonical planning preference migration preserves values before readers switch", async () => {
+  const migration = await readFile(
+    "supabase/migrations/20260812231305_canonical_planning_preferences.sql",
+    "utf8",
+  );
+
+  assert.match(migration, /add column if not exists expanded_item_ids text\[\]/);
+  assert.match(migration, /set expanded_item_ids = expanded_package_ids/);
+  assert.match(migration, /planning_filters - 'packageId'/);
+  assert.match(migration, /planning_filters - 'owner'/);
+  assert.match(migration, /alter column planning_filters set default/);
+  assert.match(migration, /legacy Planning preference fields are not supported/);
+  assert.match(migration, /p_ui_preferences -> 'expanded_item_ids'/);
+  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from/i);
+});
+
+test("rollout compatibility migration accepts old inputs and stores current preference keys", async () => {
+  const migration = await readFile(
+    "supabase/migrations/20260813065427_preserve_planning_cutover_compatibility.sql",
+    "utf8",
+  );
+
+  assert.match(migration, /p_ui_preferences -> 'expanded_package_ids'/);
+  assert.match(migration, /v_filters \? 'packageId'/);
+  assert.match(migration, /v_filters \? 'owner'/);
+  assert.match(migration, /v_filters := v_filters - array\['packageId', 'owner'\]/);
+  assert.match(migration, /expanded_item_ids/);
+  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from public\.profile_ui_preferences/i);
 });
 
 test("profile settings only offer workspaces supported by the persisted default contract", async () => {

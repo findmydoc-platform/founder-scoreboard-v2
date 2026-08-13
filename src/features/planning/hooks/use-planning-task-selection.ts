@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { packageById, sortTasks } from "@/features/planning/model/planning-app-model";
+import { initiativeForPlanningItem, sortTasks } from "@/features/planning/model/planning-app-model";
 import {
   backTaskPanelHistory,
   closeTaskPanelHistory,
@@ -27,7 +27,7 @@ export function usePlanningTaskSelection({
   const [taskPanelHistory, setTaskPanelHistory] = useState<string[]>([]);
   const availableTaskIds = useMemo(() => new Set(data.tasks.map((task) => task.id)), [data.tasks]);
   const selectedTask = data.tasks.find((task) => task.id === selectedTaskId) || null;
-  const selectedPackage = selectedTask ? packageById(data.packages, selectedTask.packageId) : undefined;
+  const selectedInitiative = initiativeForPlanningItem(data.tasks, selectedTask);
   const selectedTaskSubIssues = selectedTask ? sortTasks(data.tasks.filter((task) => task.parentTaskId === selectedTask.id)) : [];
   const selectedTaskComments = selectedTask ? data.taskComments.filter((comment) => comment.taskId === selectedTask.id) : [];
   const selectedTaskExternalComments = selectedTask ? data.taskExternalComments.filter((comment) => comment.taskId === selectedTask.id) : [];
@@ -84,7 +84,7 @@ export function usePlanningTaskSelection({
     backTaskPanel,
     closeTaskPanel,
     openTaskPanel,
-    selectedPackage,
+    selectedInitiative,
     selectedTask,
     selectedTaskActivity,
     selectedTaskBlockers,

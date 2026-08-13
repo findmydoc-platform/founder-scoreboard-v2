@@ -36,7 +36,7 @@ export function notificationTarget(event: NotificationTargetInput): Notification
     }
     return {
       workspace: "planning",
-      href: entityId ? `/tasks/${encodeURIComponent(entityId)}` : "/backlog?backlog.level=initiative",
+      href: entityId ? `/initiatives/${encodeURIComponent(entityId)}` : "/backlog?backlog.level=initiative",
     };
   }
   if (entityType === "fmd_tool") {

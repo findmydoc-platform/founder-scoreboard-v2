@@ -95,7 +95,7 @@ export async function loadPlanningWorkspaceModel(
     supabase.from("task_links").select("id,task_id,type,label,url,position,metadata").order("position").order("id"),
     supabase.from("sprints").select("id,name,status,start_date,end_date,review_due_at,score_locked").order("start_date").order("id"),
     supabase.from("task_relationship_edges").select("id,task_id,related_task_id,relation_type,note,created_by,created_at").order("created_at", { ascending: false }).order("id").limit(500),
-    supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_package_ids,created_at,updated_at").order("profile_id"),
+    supabase.from("profile_ui_preferences").select("profile_id,default_workspace,default_task_view,planning_filters,expanded_item_ids,created_at,updated_at").order("profile_id"),
   ]);
   if (projectResult.error || !projectResult.data || profileResult.error || itemResult.error || strategyResult.error || raciResult.error || linkResult.error || sprintResult.error || relationResult.error || preferenceResult.error) {
     return { status: "unavailable" };

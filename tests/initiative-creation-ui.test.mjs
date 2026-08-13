@@ -6,7 +6,7 @@ import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
 const dialogPath = "src/features/projects/organisms/initiative-dialog.tsx";
 const commandPath = "src/features/projects/hooks/use-initiative-commands.ts";
 
-let saveInitiativeRequest = async () => ({ response: { ok: true }, body: { initiative: null } });
+let saveInitiativeRequest = async () => ({ response: { ok: true }, body: { task: null } });
 
 const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
   "@/features/planning/model/planning-api-client": {
@@ -26,8 +26,9 @@ const { useInitiativeCommands } = await loadTranspiledModule(commandPath, {
 });
 
 const draft = {
+  creationRequestId: "11111111-1111-4111-8111-111111111111",
   title: "Partnerpraxen standardisieren",
-  milestoneId: "milestone-1",
+  parentTaskId: "milestone-1",
   ownerId: "profile-1",
   accountableProfileId: "profile-1",
   responsibleProfileIds: ["profile-1"],
@@ -44,7 +45,7 @@ const draft = {
 
 function commandFixture() {
   let data = {
-    packages: [],
+    tasks: [],
   };
   const dialogDefaults = [];
   const saveErrors = [];
@@ -96,7 +97,7 @@ test("initiative creation keeps authored outcome before classification and respo
   const goal = dialog.indexOf("Zielbild *");
   const constraints = dialog.indexOf("\n                Umfang &amp; Grenzen\n", goal);
   const contextGroup = dialog.indexOf("Einordnung &amp; Verantwortung");
-  const milestone = dialog.indexOf("Epic / Meilenstein *");
+  const milestone = dialog.indexOf("Epic *");
   const accountable = dialog.indexOf("Accountable *");
 
   assert.ok(authoredGroup < goal);
@@ -128,7 +129,7 @@ test("failed Supabase initiative creation keeps the dialog and draft state open"
 
   await assert.rejects(saveInitiative(draft), /Initiative konnte nicht angelegt werden/);
 
-  assert.deepEqual(fixture.getData().packages, []);
+  assert.deepEqual(fixture.getData().tasks, []);
   assert.deepEqual(fixture.dialogDefaults, []);
   assert.equal(fixture.saveErrors.at(-1), "Initiative konnte nicht angelegt werden.");
 });
@@ -137,21 +138,21 @@ test("successful Supabase initiative creation closes only after the server resul
   const savedInitiative = {
     id: "initiative-1",
     ...draft,
-    milestoneId: draft.milestoneId,
+    parentTaskId: draft.parentTaskId,
     approvalStatus: "proposed",
     approvalRevision: 1,
     sortOrder: 1,
   };
   saveInitiativeRequest = async () => ({
     response: { ok: true },
-    body: { initiative: savedInitiative },
+    body: { task: savedInitiative },
   });
   const fixture = commandFixture();
   const { saveInitiative } = useInitiativeCommands(fixture.options);
 
   await saveInitiative(draft);
 
-  assert.deepEqual(fixture.getData().packages, [savedInitiative]);
+  assert.deepEqual(fixture.getData().tasks, [savedInitiative]);
   assert.deepEqual(fixture.dialogDefaults, [null]);
   assert.equal(fixture.saveErrors[0], "");
 });
@@ -167,6 +168,5 @@ test("initiative edit metadata and existing save behavior remain present", async
   assert.match(dialog, /decisionReason/);
   assert.match(dialog, /Initiative bearbeiten/);
   assert.match(dialog, /isEdit\s+\? "Speichern"/);
-  assert.match(commands, /source !== "supabase" \|\| isEdit/);
-  assert.match(commands, /data\.packages\.find\(\(original\) => original\.id === draft\.id\)/);
+  assert.match(commands, /replacePlanningItem\(current\.tasks, body\.task!\)/);
 });

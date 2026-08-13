@@ -47,12 +47,12 @@ const InitiativeDialog = dynamic(
   () => import("@/features/projects/organisms/initiative-dialog").then((module) => module.InitiativeDialog),
   { loading: () => <OverlayLoadingFallback label="Initiativenformular wird geladen …" surface="dialog" /> },
 );
-const MilestoneDialog = dynamic(
-  () => import("@/features/projects/organisms/milestone-dialog").then((module) => module.MilestoneDialog),
+const EpicDialog = dynamic(
+  () => import("@/features/projects/organisms/epic-dialog").then((module) => module.EpicDialog),
   { loading: () => <OverlayLoadingFallback label="Meilensteinformular wird geladen …" surface="dialog" /> },
 );
-const MilestoneDeleteDialog = dynamic(
-  () => import("@/features/projects/organisms/milestone-delete-dialog").then((module) => module.MilestoneDeleteDialog),
+const EpicDeleteDialog = dynamic(
+  () => import("@/features/projects/organisms/epic-delete-dialog").then((module) => module.EpicDeleteDialog),
   { loading: () => <OverlayLoadingFallback label="Löschdialog wird geladen …" surface="dialog" /> },
 );
 const NewTaskDialog = dynamic(
@@ -77,8 +77,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     data,
     importGitHubComments,
     initiativeDialogDefaults,
-    milestoneDeleteTarget,
-    milestoneDialogDefaults,
+    epicDeleteTarget,
+    epicDialogDefaults,
     isPending,
     openTaskPanel,
     reopenReviewTask,
@@ -86,9 +86,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     removeTaskRelation,
     reportTaskBlocker,
     saveInitiative,
-    saveMilestone,
-    deleteMilestone,
-    selectedPackage,
+    saveEpic,
+    deleteEpic,
+    selectedInitiative,
     selectedTask,
     selectedTaskActivity,
     selectedTaskBlockers,
@@ -98,8 +98,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
     selectedTaskExternalComments,
     selectedTaskSubIssues,
     setInitiativeDialogDefaults,
-    setMilestoneDeleteTarget,
-    setMilestoneDialogDefaults,
+    setEpicDeleteTarget,
+    setEpicDialogDefaults,
     setStatusGuardNotice,
     setStatusGuardTaskId,
     setTaskDialogDefaults,
@@ -131,7 +131,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
         <TaskDetailPanel
           task={selectedTask}
           previousTask={taskPanelPreviousTask}
-          pack={selectedPackage}
           comments={selectedTaskComments}
           externalComments={selectedTaskExternalComments}
           activities={selectedTaskActivity}
@@ -142,9 +141,8 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           blockers={selectedTaskBlockers}
           subIssues={selectedTaskSubIssues}
           teamProfiles={data.profiles}
-          packages={data.packages}
           sprints={data.sprints}
-          milestones={data.milestones}
+          initiative={selectedInitiative}
           currentProfile={currentProfile}
           source={source}
           allTasks={data.tasks}
@@ -168,7 +166,6 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
                 ? "deliverable"
                 : "sub_issue",
             parentTaskId: selectedTask.id,
-            packageId: selectedTask.taskType === "initiative" ? selectedTask.id : selectedTask.packageId,
             assignee: currentProfile?.id || "",
             status: "Offen",
           })}
@@ -203,18 +200,18 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
           onSave={saveInitiative}
         />
       )}
-      {milestoneDialogDefaults && (
-        <MilestoneDialog
-          defaults={milestoneDialogDefaults}
-          onClose={() => setMilestoneDialogDefaults(null)}
-          onSave={saveMilestone}
+      {epicDialogDefaults && (
+        <EpicDialog
+          defaults={epicDialogDefaults}
+          onClose={() => setEpicDialogDefaults(null)}
+          onSave={saveEpic}
         />
       )}
-      {milestoneDeleteTarget && (
-        <MilestoneDeleteDialog
-          target={milestoneDeleteTarget}
-          onClose={() => setMilestoneDeleteTarget(null)}
-          onConfirm={deleteMilestone}
+      {epicDeleteTarget && (
+        <EpicDeleteDialog
+          target={epicDeleteTarget}
+          onClose={() => setEpicDeleteTarget(null)}
+          onConfirm={deleteEpic}
         />
       )}
     </>

@@ -12,7 +12,7 @@ export type ProfileSettingsDraft = {
   defaultWorkspace: AppWorkspace;
   defaultTaskView: ViewMode;
   planningFilters: PlanningFilterPreferences;
-  expandedPackageIds: string[];
+  expandedInitiativeIds: string[];
 };
 
 export const profileColorOptions = [
@@ -38,7 +38,7 @@ export function defaultFilters(filters: Partial<PlanningFilterPreferences> = {})
     status: filters.status || "Alle",
     priority: filters.priority || "Alle",
     review: filters.review || "Alle",
-    packageId: filters.packageId || "Alle",
+    initiativeId: filters.initiativeId || "Alle",
     quick: filters.quick || [],
     sprintId: filters.sprintId || "Alle",
     workstream: filters.workstream || "Alle",
@@ -71,14 +71,14 @@ export function buildInitialDraft({
     defaultWorkspace: profileUiPreference?.defaultWorkspace ? normalizedDefaultWorkspace(profileUiPreference.defaultWorkspace) : "planning",
     defaultTaskView: profileUiPreference?.defaultTaskView || "board",
     planningFilters: defaultFilters(profileUiPreference?.planningFilters),
-    expandedPackageIds: profileUiPreference?.expandedPackageIds || [],
+    expandedInitiativeIds: profileUiPreference?.expandedInitiativeIds || [],
   };
 }
 
 export function serializeDraft(draft: ProfileSettingsDraft) {
   return JSON.stringify({
     ...draft,
-    expandedPackageIds: [...draft.expandedPackageIds].sort(),
+    expandedInitiativeIds: [...draft.expandedInitiativeIds].sort(),
     notificationEvents: Object.fromEntries(Object.entries(draft.notificationEvents).sort(([left], [right]) => left.localeCompare(right))),
   });
 }

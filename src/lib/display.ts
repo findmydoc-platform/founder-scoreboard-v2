@@ -1,4 +1,4 @@
-import type { Package, Profile, Task, TaskFocusItem, TaskRelationType } from "./types";
+import type { Profile, Task, TaskFocusItem, TaskRelationType } from "./types";
 
 export const unassignedAssigneeLabel = "Nicht zugeordnet";
 
@@ -60,18 +60,18 @@ export function taskAssigneeOptions(taskType: Task["taskType"], profiles: Profil
   return options;
 }
 
-export function initiativeOptionLabel(initiative: Package) {
+export function initiativeOptionLabel(initiative: Task) {
   return initiative.title;
 }
 
-export function initiativeStatusLabel(status?: Package["status"]) {
-  if (status === "active") return "aktiv";
-  if (status === "done") return "erledigt";
-  if (status === "paused") return "pausiert";
-  return "geplant";
+export function initiativeStatusLabel(status?: string) {
+  if (status === "In Arbeit") return "aktiv";
+  if (status === "Erledigt") return "erledigt";
+  if (status === "Pausiert") return "pausiert";
+  return "offen";
 }
 
-export function initiativeMetaLabel(initiative: Package) {
+export function initiativeMetaLabel(initiative: Task) {
   return `Initiative · ${initiative.priority} · ${initiativeStatusLabel(initiative.status)}`;
 }
 
@@ -86,12 +86,19 @@ export function profileNamesByIds(profiles: Profile[], profileIds?: string[]) {
   return names.length ? names.join(", ") : "Nicht gesetzt";
 }
 
-export function initiativeRaciRows(initiative: Package, profiles: Profile[]) {
+export function initiativeRaciRows(initiative: Task, profiles: Profile[]) {
+  const assignments = initiative.raciAssignments || [];
+  const profileIds = (role: "accountable" | "responsible" | "consulted" | "informed") => assignments
+    .filter((assignment) => assignment.role === role)
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((assignment) => assignment.profileId);
+  const accountable = profileIds("accountable")[0] || initiative.ownerId;
+  const responsible = profileIds("responsible");
   return [
-    { label: "A", title: "Accountable", value: profileNameById(profiles, initiative.accountableProfileId || initiative.ownerId) },
-    { label: "R", title: "Responsible", value: profileNamesByIds(profiles, initiative.responsibleProfileIds?.length ? initiative.responsibleProfileIds : initiative.ownerId ? [initiative.ownerId] : []) },
-    { label: "C", title: "Consulted", value: profileNamesByIds(profiles, initiative.consultedProfileIds) },
-    { label: "I", title: "Informed", value: profileNamesByIds(profiles, initiative.informedProfileIds) },
+    { label: "A", title: "Accountable", value: profileNameById(profiles, accountable) },
+    { label: "R", title: "Responsible", value: profileNamesByIds(profiles, responsible.length ? responsible : initiative.ownerId ? [initiative.ownerId] : []) },
+    { label: "C", title: "Consulted", value: profileNamesByIds(profiles, profileIds("consulted")) },
+    { label: "I", title: "Informed", value: profileNamesByIds(profiles, profileIds("informed")) },
   ];
 }
 

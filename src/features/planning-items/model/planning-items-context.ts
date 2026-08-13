@@ -249,8 +249,8 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     epics,
     initiatives,
     tasks: deliveryItems,
-    // Deprecated response alias. It is derived from Epics and has no storage.
-    milestones: epics.map((epic) => ({ ...epic, itemType: "milestone" })),
+    // Deprecated v1 projection; the source remains the canonical Epic list.
+    milestones: epics.map((epic) => ({ ...epic, itemType: "milestone" as const })),
     sprints: sprints.map((sprint) => ({
       id: sprint.id,
       name: sprint.name,

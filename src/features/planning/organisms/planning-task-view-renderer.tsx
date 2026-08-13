@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
-import { profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
+import { initiativePlanningItems, profileColor, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
 import { strategicPlanningStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import { GanttView } from "@/features/tasks/organisms/gantt-view";
@@ -20,19 +20,19 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     draggedTaskId,
     dropTaskOnStatus,
     endTaskDrag,
-    expandedPackages,
+    expandedInitiatives,
     filters,
     filtersAvailable,
     openTaskPanel,
     planningLevel,
     planningParentFilterId,
     selectedTaskId,
-    setAllPackageCollapse,
+    setAllInitiativeCollapse,
     setDragOverStatus,
     setFilters,
     setTaskDialogDefaults,
     startTaskDrag,
-    togglePackageCollapse,
+    toggleInitiativeCollapse,
     updateTask,
     view,
     visibleTasks,
@@ -42,7 +42,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   // level selector above is the sole strategic planning surface here.
   const planningBoardTasks = visibleTasks.filter((task) => task.taskType === "deliverable" && isTaskPlanningActive(task));
   const parentFilterId = planningLevel === "deliverable"
-    ? filters.packageId === "Alle" ? "all" : filters.packageId
+    ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
   const boardTasks = useMemo(() => {
     return visibleTasks.filter((task) => (
@@ -99,16 +99,16 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
       {view === "structure" && (
         <TaskStructureView
-          packages={data.packages}
+          initiatives={initiativePlanningItems(data.tasks)}
           visibleTasks={planningBoardTasks}
           relations={data.taskRelations}
           allTasks={data.tasks}
           blockers={data.taskBlockers}
-          expandedPackages={expandedPackages}
+          expandedInitiatives={expandedInitiatives}
           ownerColorForTask={(task) => profileColor(data.profiles.find((profile) => profile.id === task.assigneeId || profile.name === task.assignee))}
           onOpenTask={openTaskPanel}
-          onTogglePackage={togglePackageCollapse}
-          onSetAllPackageCollapse={setAllPackageCollapse}
+          onToggleInitiative={toggleInitiativeCollapse}
+          onSetAllInitiativeCollapse={setAllInitiativeCollapse}
         />
       )}
 
@@ -130,7 +130,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       )}
 
       {view === "gantt" && (
-        <GanttView tasks={planningBoardTasks} packages={data.packages} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
+        <GanttView tasks={planningBoardTasks} items={data.tasks} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
       )}
     </>
   );

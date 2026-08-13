@@ -1,11 +1,12 @@
 "use client";
 
 import type { AppWorkspace } from "@/features/planning/organisms/app-sidebar";
-import { canManageMilestones } from "@/features/projects/model/milestone-policy";
+import { canManageEpics } from "@/features/projects/model/epic-policy";
 import type { InitiativeDraft } from "@/features/projects/organisms/initiative-dialog";
-import type { MilestoneDraft } from "@/features/projects/organisms/milestone-dialog";
+import type { EpicDraft } from "@/features/projects/organisms/epic-dialog";
 import type { NewTaskDraft } from "@/features/tasks/organisms/new-task-dialog";
 import { planningLevelCreateLabel, type PlanningLevel } from "@/features/planning/model/planning-level";
+import { epicPlanningItems } from "@/features/planning/model/planning-app-model";
 import type { PlanningShellState, Profile, Sprint, ViewMode } from "@/lib/types";
 
 export type HeaderAction = {
@@ -23,7 +24,7 @@ type UsePlanningHeaderActionsOptions = {
   data: PlanningShellState;
   planningLevel?: PlanningLevel;
   setInitiativeDialogDefaults: (defaults: Partial<InitiativeDraft> | null) => void;
-  setMilestoneDialogDefaults: (defaults: Partial<MilestoneDraft> | null) => void;
+  setEpicDialogDefaults: (defaults: Partial<EpicDraft> | null) => void;
   setTaskDialogDefaults: (defaults: Partial<NewTaskDraft> | null) => void;
   view?: ViewMode;
   workspace: AppWorkspace;
@@ -35,7 +36,7 @@ export function usePlanningHeaderActions({
   data,
   planningLevel = "deliverable",
   setInitiativeDialogDefaults,
-  setMilestoneDialogDefaults,
+  setEpicDialogDefaults,
   setTaskDialogDefaults,
   view = "board",
   workspace,
@@ -64,14 +65,14 @@ export function usePlanningHeaderActions({
     }];
   }
 
-  if (workspace === "projects" && canManageMilestones(currentProfile?.platformRole)) {
-    const initiativeDisabled = data.milestones.length === 0;
+  if (workspace === "projects" && canManageEpics(currentProfile?.platformRole)) {
+    const initiativeDisabled = epicPlanningItems(data.tasks).length === 0;
     return [
       {
-        id: "new-milestone",
+        id: "new-epic",
         label: "Neuer Meilenstein",
         variant: "primary",
-        onClick: () => setMilestoneDialogDefaults({}),
+        onClick: () => setEpicDialogDefaults({}),
       },
       {
         id: "new-initiative",

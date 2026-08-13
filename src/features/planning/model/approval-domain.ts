@@ -1,4 +1,4 @@
-import type { ApprovalDecisionAction, ApprovalStatus, Package, PlanningShellState, Profile, Task } from "@/lib/types";
+import type { ApprovalDecisionAction, ApprovalStatus, PlanningShellState, Profile, Task } from "@/lib/types";
 
 type ApprovalSubject = {
   approvalStatus: ApprovalStatus | null;
@@ -57,20 +57,29 @@ export function isTaskPlanningActive(task: Pick<Task, "taskType" | "approvalStat
     : task.parentApprovalStatus === "approved";
 }
 
-export function canDecideInitiativeApproval(initiative: Pick<Package, "approvalStatus">, profile?: Pick<Profile, "platformRole"> | null) {
+export function canDecideInitiativeApproval(initiative: { approvalStatus: ApprovalStatus | null }, profile?: Pick<Profile, "platformRole"> | null) {
   return initiative.approvalStatus === "proposed"
     && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy");
 }
 
 export function canReturnInitiativeForRevision(
-  initiative: Pick<Package, "approvalStatus">,
+  initiative: { approvalStatus: ApprovalStatus | null },
   profile?: Pick<Profile, "platformRole"> | null,
 ) {
   return initiative.approvalStatus === "proposed"
     && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy");
 }
 
-type DeliverableApprovalInitiative = Pick<Package, "accountableProfileId" | "approvalStatus">;
+type RaciOwnedInitiative = {
+  ownerId?: string;
+  raciAssignments?: Task["raciAssignments"];
+  accountableProfileId?: string;
+};
+type DeliverableApprovalInitiative = RaciOwnedInitiative & { approvalStatus: ApprovalStatus | null };
+
+function accountableProfileId(initiative?: RaciOwnedInitiative) {
+  return initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative?.accountableProfileId || initiative?.ownerId;
+}
 
 function canDecideProposedDeliverable(
   task: Pick<Task, "taskType" | "approvalStatus">,
@@ -79,7 +88,7 @@ function canDecideProposedDeliverable(
 ) {
   return isProposedDeliverable(task)
     && Boolean(initiative)
-    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || initiative?.accountableProfileId === profile?.id);
+    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || accountableProfileId(initiative) === profile?.id);
 }
 
 export function canApproveDeliverableApproval(
@@ -101,12 +110,12 @@ export function canRejectDeliverableApproval(
 
 export function canReturnDeliverableForRevision(
   task: Pick<Task, "taskType" | "approvalStatus">,
-  initiative: Pick<Package, "accountableProfileId"> | undefined,
+  initiative: RaciOwnedInitiative | undefined,
   profile?: Pick<Profile, "id" | "platformRole"> | null,
 ) {
   return task.taskType === "deliverable"
     && task.approvalStatus === "proposed"
-    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || initiative?.accountableProfileId === profile?.id);
+    && (profile?.platformRole === "ceo" || profile?.platformRole === "deputy" || accountableProfileId(initiative) === profile?.id);
 }
 
 export function currentApprovalDecisionReason(

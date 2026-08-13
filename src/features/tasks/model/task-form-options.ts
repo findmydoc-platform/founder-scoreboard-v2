@@ -1,6 +1,6 @@
 import { initiativeOptionLabel, taskAssigneeLabel, taskAssigneeOptions } from "@/lib/display";
 import { taskStatuses } from "@/lib/status";
-import type { Milestone, Package, Profile, Sprint, Task, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
+import type { Profile, Sprint, Task, TaskRelationType, TaskStatus, TaskType } from "@/lib/types";
 import type { CustomSelectOption } from "@/shared/atoms/custom-select";
 
 export const priorityOptions: CustomSelectOption[] = ["P0", "P1", "P2", "P3", "P4"].map((priority) => ({
@@ -26,24 +26,23 @@ export const taskRelationTypeOptions: Array<CustomSelectOption & { value: TaskRe
   { value: "relates_to", label: "Verknüpft mit" },
 ];
 
-export function milestoneOptions(milestones: Milestone[], emptyLabel: string): CustomSelectOption[] {
-  return [{ value: "", label: emptyLabel }, ...milestones.map((milestone) => ({ value: milestone.id, label: milestone.title }))];
-}
-
 export function sprintOptions(sprints: Sprint[]): CustomSelectOption[] {
   return sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }));
 }
 
-export function initiativeOptions(packages: Package[]): CustomSelectOption[] {
-  return packages.map((initiative) => ({ value: initiative.id, label: initiativeOptionLabel(initiative) }));
+export function initiativeOptions(initiatives: Task[]): CustomSelectOption[] {
+  return initiatives.map((initiative) => ({ value: initiative.id, label: initiativeOptionLabel(initiative) }));
 }
 
-export function parentDeliverableOptions(tasks: Task[], packages: Package[]): CustomSelectOption[] {
-  const initiativeById = new Map(packages.map((initiative) => [initiative.id, initiative]));
+export function parentDeliverableOptions(tasks: Task[], legacyInitiatives: Array<{ id: string; title: string }> = []): CustomSelectOption[] {
+  const initiativeById = new Map([
+    ...tasks.filter((item) => item.taskType === "initiative").map((initiative) => [initiative.id, initiative] as const),
+    ...legacyInitiatives.map((initiative) => [initiative.id, initiative] as const),
+  ]);
   return tasks
     .filter((task) => task.taskType === "deliverable")
     .map((task) => {
-      const initiative = initiativeById.get(task.packageId);
+      const initiative = initiativeById.get(task.parentTaskId);
       const approvalHint = task.approvalStatus === "approved" ? "" : " · wartet auf Freigabe";
       return {
         value: task.id,

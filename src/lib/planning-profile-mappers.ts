@@ -1,5 +1,5 @@
-import type { Milestone, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, Task, ViewMode } from "./types";
-import type { DbMilestone, DbPackage, DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-row-types";
+import type { PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ViewMode } from "./types";
+import type { DbProfile, DbProfileFeatureTourAcknowledgement, DbProfileUiPreference } from "./planning-row-types";
 
 const fallbackProfileColors: Record<string, string> = {
   volkan: "#22c55e",
@@ -19,7 +19,7 @@ const defaultPlanningFilters: PlanningFilterPreferences = {
   status: "Alle",
   priority: "Alle",
   review: "Alle",
-  packageId: "Alle",
+  initiativeId: "Alle",
   quick: [],
   sprintId: "Alle",
   workstream: "Alle",
@@ -41,14 +41,14 @@ function filterStringArray(value: unknown) {
 
 function mapPlanningFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & { owner?: unknown };
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
   return {
     query: filterString(candidate.query, defaultPlanningFilters.query),
-    assignee: filterString(candidate.assignee, filterString(candidate.owner, defaultPlanningFilters.assignee)),
+    assignee: filterString(candidate.assignee, defaultPlanningFilters.assignee),
     status: filterString(candidate.status, defaultPlanningFilters.status),
     priority: filterString(candidate.priority, defaultPlanningFilters.priority),
     review: filterString(candidate.review, defaultPlanningFilters.review),
-    packageId: filterString(candidate.packageId, defaultPlanningFilters.packageId),
+    initiativeId: filterString(candidate.initiativeId, defaultPlanningFilters.initiativeId),
     quick: filterStringArray(candidate.quick),
     sprintId: filterString(candidate.sprintId, defaultPlanningFilters.sprintId),
     workstream: filterString(candidate.workstream, defaultPlanningFilters.workstream),
@@ -90,7 +90,7 @@ export function mapProfileUiPreference(row: DbProfileUiPreference): ProfileUiPre
     defaultWorkspace: row.default_workspace === "reviews" ? "planning" : row.default_workspace || "planning",
     defaultTaskView: mapViewMode(row.default_task_view),
     planningFilters: mapPlanningFilters(row.planning_filters),
-    expandedPackageIds: row.expanded_package_ids || [],
+    expandedInitiativeIds: row.expanded_item_ids || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -101,110 +101,6 @@ export function mapProfileFeatureTourAcknowledgement(row: DbProfileFeatureTourAc
     profileId: row.profile_id,
     tourId: row.tour_id,
     seenAt: row.seen_at,
-  };
-}
-
-export function mapPackage(row: DbPackage): Package {
-  const ownerId = row.owner_id || "";
-  return {
-    id: row.id,
-    milestoneId: row.milestone_id || "",
-    ownerId,
-    accountableProfileId: row.accountable_profile_id || ownerId,
-    responsibleProfileIds: row.responsible_profile_ids?.length ? row.responsible_profile_ids : ownerId ? [ownerId] : [],
-    consultedProfileIds: row.consulted_profile_ids || [],
-    informedProfileIds: row.informed_profile_ids || [],
-    title: row.title,
-    goal: row.goal || "",
-    priority: row.priority || "P2",
-    status: row.status || "planned",
-    targetDate: row.target_date || "",
-    successCriteria: row.success_criteria || "",
-    scopeConstraints: row.scope_constraints || "",
-    sortOrder: row.sort_order,
-    approvalStatus: row.approval_status || "approved",
-    approvalRevision: Number(row.approval_revision || 1),
-    proposedById: row.proposed_by || "",
-    proposedAt: row.proposed_at || "",
-    decidedById: row.decided_by || "",
-    decidedAt: row.decided_at || "",
-    decisionNote: row.decision_note || "",
-    trashedAt: row.trashed_at || "",
-    trashedById: row.trashed_by || "",
-    trashReason: row.trash_reason || "",
-    trashCause: row.trash_cause || undefined,
-    purgeAfter: row.purge_after || "",
-    trashRootType: row.trash_root_type || undefined,
-    trashRootId: row.trash_root_id || "",
-    trashRevision: Number(row.trash_revision || 0),
-  };
-}
-
-export function mapMilestone(row: DbMilestone): Milestone {
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description || "",
-    targetDate: row.target_date || "",
-    status: row.status,
-    sortOrder: row.sort_order,
-    updatedAt: row.updated_at || "",
-  };
-}
-
-export function mapLegacyPackageFromInitiative(item: Task): Package {
-  const raci = item.raciAssignments || [];
-  const firstAssignment = (role: "accountable" | "responsible" | "consulted" | "informed") => raci
-    .filter((assignment) => assignment.role === role)
-    .sort((left, right) => left.sortOrder - right.sortOrder)[0]?.profileId || "";
-  const assignments = (role: "accountable" | "responsible" | "consulted" | "informed") => raci
-    .filter((assignment) => assignment.role === role)
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((assignment) => assignment.profileId);
-
-  return {
-    id: item.id,
-    milestoneId: item.parentTaskId,
-    ownerId: item.ownerId,
-    accountableProfileId: firstAssignment("accountable"),
-    responsibleProfileIds: assignments("responsible"),
-    consultedProfileIds: assignments("consulted"),
-    informedProfileIds: assignments("informed"),
-    title: item.title,
-    goal: item.strategy?.goal || item.description,
-    priority: item.priority || "P2",
-    status: item.status === "In Arbeit" ? "active" : item.status === "Erledigt" ? "done" : item.status === "Pausiert" ? "paused" : "planned",
-    targetDate: item.targetDate || "",
-    successCriteria: item.strategy?.successCriteria || "",
-    scopeConstraints: item.strategy?.scopeConstraints || "",
-    sortOrder: item.order,
-    approvalStatus: item.approvalStatus || "proposed",
-    approvalRevision: item.approvalRevision,
-    proposedById: item.proposedById,
-    proposedAt: item.proposedAt,
-    decidedById: item.decidedById,
-    decidedAt: item.decidedAt,
-    decisionNote: item.decisionNote,
-    trashedAt: item.trashedAt,
-    trashedById: item.trashedById,
-    trashReason: item.trashReason,
-    trashCause: item.trashCause,
-    purgeAfter: item.purgeAfter,
-    trashRootType: item.trashRootType,
-    trashRootId: item.trashRootId,
-    trashRevision: item.trashRevision,
-  };
-}
-
-export function mapLegacyMilestoneFromEpic(item: Task): Milestone {
-  return {
-    id: item.id,
-    title: item.title,
-    description: item.description,
-    targetDate: item.targetDate || "",
-    status: item.status === "In Arbeit" ? "active" : item.status === "Erledigt" ? "done" : "planned",
-    sortOrder: item.order,
-    updatedAt: item.updatedAt || "",
   };
 }
 

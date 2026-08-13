@@ -19,15 +19,13 @@ test("operational planning readers use centralized active views", async () => {
     assert.match(source, /ACTIVE_TASKS_TABLE/, `${activeTaskReaders[index]} must use the active task boundary`);
   }
 
-  const initiativeRoute = await readFile("src/features/planning-items/model/planning-items-browser-initiative-route.ts", "utf8");
-  // The legacy Initiative endpoint is a read-only compatibility adapter over
-  // the canonical Initiative-task projection, not the old packages table.
-  assert.match(initiativeRoute, /ACTIVE_PACKAGES_TABLE/);
-  assert.doesNotMatch(initiativeRoute, /\.from\("packages"\)\s*\.select/);
-
   const createTaskRoute = sources[0];
   assert.match(createTaskRoute, /ACTIVE_TASKS_TABLE/);
   assert.doesNotMatch(createTaskRoute, /\.from\("tasks"\)\s*\.select/);
+  assert.doesNotMatch(createTaskRoute, /\.from\("planning_item_legacy_ids"\)|package_id|milestone_id/);
+  assert.match(createTaskRoute, /Object\.hasOwn\(payload, "packageId"\)/);
+  assert.match(createTaskRoute, /Object\.hasOwn\(payload, "assignee"\)/);
+  assert.match(createTaskRoute, /payload\.ownerId/);
 
   const digest = sources[1];
   assert.match(digest, /if \(!task\) continue/);
@@ -42,4 +40,21 @@ test("trash detail and mutation guards use only the canonical planning item tabl
   assert.doesNotMatch(detail, /\.from\("packages"\)|\.from\("milestones"\)|package_id|milestone_id/);
   assert.match(taskRoute, /requireActivePlanningItem/);
   assert.match(taskRoute, /\.from\("tasks"\)/);
+  assert.doesNotMatch(taskRoute, /ACTIVE_PACKAGES_TABLE|active_packages|package_id|milestone_id/);
+  assert.match(taskRoute, /Object\.hasOwn\(rawPayload, "packageId"\)/);
+  assert.match(taskRoute, /Object\.hasOwn\(rawPayload, "assignee"\)/);
+  assert.match(taskRoute, /payload\.ownerId/);
+});
+
+test("active task projections and local fixtures expose only parentTaskId", async () => {
+  const [mapper, taskTypes, seed] = await Promise.all([
+    readFile("src/lib/planning-task-mappers.ts", "utf8"),
+    readFile("src/lib/types.ts", "utf8"),
+    readFile("src/lib/seed/source.json", "utf8"),
+  ]);
+  for (const source of [mapper, taskTypes, seed]) {
+    assert.doesNotMatch(source, /\bpackageId\b|\bmilestoneId\b|\bpackages\b|\bmilestones\b/);
+  }
+  assert.match(mapper, /parentTaskId: row\.parent_task_id/);
+  assert.match(seed, /"initiatives"/);
 });

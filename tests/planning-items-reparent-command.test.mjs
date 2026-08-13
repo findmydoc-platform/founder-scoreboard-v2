@@ -94,16 +94,15 @@ function fixture({
 }
 
 test("browser and Team parent routes delegate exclusively to the PlanningItems action", async () => {
-  const [initiativeRoute, taskRoute, teamRoute, module, migration] = await Promise.all([
-    readFile("src/features/planning-items/model/planning-items-browser-initiative-update.ts", "utf8"),
+  const [taskRoute, teamRoute, module, migration] = await Promise.all([
     readFile("src/features/planning-items/model/planning-items-browser-task-update.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-team-update-route.ts", "utf8"),
     readFile("src/features/planning-items/model/planning-items-reparent.ts", "utf8"),
     readFile("supabase/migrations/20260812142454_planning_reparent_command_transaction.sql", "utf8"),
   ]);
-  for (const route of [initiativeRoute, taskRoute, teamRoute]) assert.match(route, /createPlanningReparentPlanningItems/);
-  assert.doesNotMatch(initiativeRoute, /patch\.parent_task_id|resolveCanonicalStrategicItemId/);
-  assert.doesNotMatch(taskRoute, /reparent_planning_item_transaction|patch\.parent_task_id/);
+  for (const route of [taskRoute, teamRoute]) assert.match(route, /createPlanningReparentPlanningItems/);
+  assert.doesNotMatch(taskRoute, /reparent_planning_item_transaction/);
+  assert.match(taskRoute, /patch\.parent_task_id/);
   assert.match(module, /mutate_planning_reparent_command_transaction/);
   assert.match(module, /mutate_team_planning_reparent_command_transaction/);
   assert.match(migration, /public\.reparent_planning_item_transaction/);

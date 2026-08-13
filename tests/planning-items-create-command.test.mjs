@@ -39,8 +39,6 @@ const actor = {
 test("Browser and Team create routes are transport-only adapters", async () => {
   const routes = await Promise.all([
     "src/app/api/tasks/route.ts",
-    "src/app/api/initiatives/route.ts",
-    "src/app/api/milestones/route.ts",
     "src/app/api/team/planning-items/v1/items/route.ts",
     "src/app/api/team/planning-items/v1/items/preview/route.ts",
   ].map((path) => readFile(path, "utf8")));
@@ -48,10 +46,8 @@ test("Browser and Team create routes are transport-only adapters", async () => {
     assert.doesNotMatch(route, /\.rpc\(|\.from\(/);
   }
   assert.match(routes[0], /handleBrowserTaskCreate/);
-  assert.match(routes[1], /handleBrowserInitiativeCreate/);
-  assert.match(routes[2], /handleBrowserMilestoneCreate/);
-  assert.match(routes[3], /createTeamCreatePlanningItems/);
-  assert.match(routes[4], /mode: "preview"/);
+  assert.match(routes[1], /createTeamCreatePlanningItems/);
+  assert.match(routes[2], /mode: "preview"/);
 });
 
 test("CreateItems canonicalizes all four transport item types", async () => {

@@ -1,4 +1,4 @@
-import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, Milestone, NotificationDelivery, NotificationEvent, NotificationPreference, Package, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskReview } from "./types";
+import type { FmdTool, FounderEvent, Meeting, MeetingAttendance, NotificationDelivery, NotificationEvent, NotificationPreference, PlanningFilterPreferences, Profile, ProfileFeatureTourAcknowledgement, ProfileUiPreference, ScoreObjection, Sprint, SprintCommitment, StrikeEvent, Task, TaskBlocker, TaskComment, TaskExternalComment, TaskFocusItem, TaskRelation, TaskReview } from "./types";
 
 export type DbProfile = {
   id: string;
@@ -18,49 +18,6 @@ export type DbProfile = {
   notifications_enabled: boolean | null;
 };
 
-export type DbPackage = {
-  id: string;
-  milestone_id: string | null;
-  owner_id: string | null;
-  accountable_profile_id: string | null;
-  responsible_profile_ids: string[] | null;
-  consulted_profile_ids: string[] | null;
-  informed_profile_ids: string[] | null;
-  title: string;
-  goal: string | null;
-  priority: string | null;
-  status: Package["status"] | null;
-  target_date: string | null;
-  success_criteria: string | null;
-  scope_constraints: string | null;
-  sort_order: number;
-  approval_status: Package["approvalStatus"] | null;
-  approval_revision: number | null;
-  proposed_by: string | null;
-  proposed_at: string | null;
-  decided_by: string | null;
-  decided_at: string | null;
-  decision_note: string | null;
-  trashed_at: string | null;
-  trashed_by: string | null;
-  trash_reason: string | null;
-  trash_cause: Package["trashCause"] | null;
-  purge_after: string | null;
-  trash_root_type: Package["trashRootType"] | null;
-  trash_root_id: string | null;
-  trash_revision: number;
-};
-
-export type DbMilestone = {
-  id: string;
-  title: string;
-  description: string | null;
-  target_date: string | null;
-  status: Milestone["status"];
-  sort_order: number;
-  updated_at: string | null;
-};
-
 export type DbTask = {
   id: string;
   sort_order: number;
@@ -72,7 +29,6 @@ export type DbTask = {
   assignee: string | null;
   created_by: string | null;
   workstream: string | null;
-  package_id: string | null;
   target_date: string | null;
   deadline: string | null;
   problem_statement: string | null;
@@ -90,7 +46,6 @@ export type DbTask = {
   start_date: string | null;
   end_date: string | null;
   sprint_id: string | null;
-  milestone_id: string | null;
   review_status: Task["reviewStatus"] | null;
   review_owner_profile_id: string | null;
   review_requested_at: string | null;
@@ -171,7 +126,6 @@ export const taskRowColumns = [
   "assignee",
   "created_by",
   "workstream",
-  "package_id",
   "target_date",
   "deadline",
   "problem_statement",
@@ -189,7 +143,6 @@ export const taskRowColumns = [
   "start_date",
   "end_date",
   "sprint_id",
-  "milestone_id",
   "review_status",
   "review_owner_profile_id",
   "review_requested_at",
@@ -454,7 +407,7 @@ export type DbProfileUiPreference = {
   default_workspace: string | null;
   default_task_view: ProfileUiPreference["defaultTaskView"] | null;
   planning_filters: Partial<PlanningFilterPreferences> | null;
-  expanded_package_ids: string[] | null;
+  expanded_item_ids: string[] | null;
   created_at: string;
   updated_at: string;
 };

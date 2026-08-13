@@ -6,6 +6,7 @@ import {
   createTaskDragPreview,
   founderCompletedTaskGuardMessage,
   founderTaskAssignmentGuardMessage,
+  initiativePlanningItems,
   transparentDragImage,
 } from "@/features/planning/model/planning-app-model";
 import { normalizeStatus } from "@/lib/status";
@@ -25,7 +26,7 @@ export function usePlanningBoardState({
   setStatusGuardTaskId,
   updateTask,
 }: UsePlanningBoardStateOptions) {
-  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
+  const [expandedInitiatives, setExpandedInitiatives] = useState<Record<string, boolean>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
@@ -82,16 +83,16 @@ export function usePlanningBoardState({
     setDragOverStatus(null);
   };
 
-  const togglePackageCollapse = (packageId: string) => {
-    setExpandedPackages((current) => ({ ...current, [packageId]: !current[packageId] }));
+  const toggleInitiativeCollapse = (initiativeId: string) => {
+    setExpandedInitiatives((current) => ({ ...current, [initiativeId]: !current[initiativeId] }));
   };
 
-  const setAllPackageCollapse = (collapsed: boolean) => {
-    setExpandedPackages(Object.fromEntries(data.packages.map((pack) => [pack.id, !collapsed])));
+  const setAllInitiativeCollapse = (collapsed: boolean) => {
+    setExpandedInitiatives(Object.fromEntries(initiativePlanningItems(data.tasks).map((initiative) => [initiative.id, !collapsed])));
   };
 
-  const setExpandedPackageIds = (packageIds: string[]) => {
-    setExpandedPackages(Object.fromEntries(packageIds.map((packageId) => [packageId, true])));
+  const setExpandedInitiativeIds = (initiativeIds: string[]) => {
+    setExpandedInitiatives(Object.fromEntries(initiativeIds.map((initiativeId) => [initiativeId, true])));
   };
 
   return {
@@ -99,11 +100,11 @@ export function usePlanningBoardState({
     draggedTaskId,
     dropTaskOnStatus,
     endTaskDrag,
-    expandedPackages,
-    setAllPackageCollapse,
+    expandedInitiatives,
+    setAllInitiativeCollapse,
     setDragOverStatus,
-    setExpandedPackageIds,
+    setExpandedInitiativeIds,
     startTaskDrag,
-    togglePackageCollapse,
+    toggleInitiativeCollapse,
   };
 }

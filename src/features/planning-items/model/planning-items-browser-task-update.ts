@@ -52,13 +52,21 @@ import {
 } from "@/features/backlog/model/backlog-planning-state";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { auditRequestMetadata } from "@/lib/api-input";
-import { ACTIVE_PACKAGES_TABLE, ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
+import { ACTIVE_TASKS_TABLE } from "@/lib/planning-read-model";
 import { requireActivePlanningItem } from "@/lib/planning-trash-mutation-guard";
 import type { Task } from "@/lib/types";
 import { hasReviewLockedTaskChanges, isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
 import { normalizeEvidenceLinkList } from "@/features/tasks/model/task-evidence-links";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { mapTaskRow, type TaskRowForMapping } from "@/lib/planning-task-mappers";
+import { requireJsonApiContext } from "@/lib/api-response";
+import { requireOperationalLead } from "@/lib/authz";
+import {
+  createEmptyEpicDeletePlanningItems,
+  emptyEpicDeleteCommand,
+  emptyEpicDeleteError,
+  parseEmptyEpicDeletePayload,
+} from "@/features/planning-items/model/planning-items-empty-epic-delete";
 
 type TaskUpdateTransactionResult = {
   parentApprovalStatus?: Task["parentApprovalStatus"];
@@ -73,8 +81,6 @@ type TaskUpdateTransactionResult = {
     decision_note?: string | null;
     sprint_id?: string | null;
     score_relevant?: boolean | null;
-    package_id?: string | null;
-    milestone_id?: string | null;
     parent_task_id?: string | null;
     github_issue_sync_status?: Task["githubIssueSyncStatus"] | null;
     github_issue_sync_error?: string | null;
@@ -104,6 +110,12 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const rawPayload = await request.json() as unknown;
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
     return apiError("Aufgabenänderung ist ungültig.", 400);
+  }
+  if (Object.hasOwn(rawPayload, "packageId") || Object.hasOwn(rawPayload, "milestoneId")) {
+    return apiError("Verwende parentTaskId für die übergeordnete Planungsebene.", 400);
+  }
+  if (Object.hasOwn(rawPayload, "assignee") || Object.hasOwn(rawPayload, "owner")) {
+    return apiError("Verwende ownerId für die Zuständigkeit.", 400);
   }
   const githubSyncStatusGuard = rejectClientGitHubSyncStatusUpdate(rawPayload);
   if (!githubSyncStatusGuard.ok) return apiError(githubSyncStatusGuard.error, githubSyncStatusGuard.status);
@@ -163,8 +175,6 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       task: {
         id,
         parentTaskId: task.parentTaskId || "",
-        packageId: task.packageId || "",
-        milestoneId: task.milestoneId || "",
         parentApprovalStatus: task.parentApprovalStatus ?? null,
         approvalStatus: task.approvalStatus ?? null,
         approvalRevision: Number(task.approvalRevision || 1),
@@ -185,7 +195,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   let sprintAssignmentNoop = false;
   const { data: currentTask } = await supabase
     .from("tasks")
-    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,milestone_id,package_id,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
+    .select("id,title,description,task_type,approval_status,approval_revision,assignee,owner,status,review_status,review_owner_profile_id,review_requested_at,score_final,priority,sprint_id,score_relevant,parent_task_id,start_date,end_date,deadline,evidence_link,target_date,updated_at")
     .eq("id", id)
     .single();
   if (!currentTask) {
@@ -205,12 +215,16 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       return apiError("Nur CEO, Deputy oder der Initiative-Owner können diese Initiative ändern.", 403);
     }
     const allowedFields = new Set([
-      "expectedUpdatedAt", "title", "description", "status", "assignee", "owner", "priority",
-      "targetDate", "strategy", "raciAssignments",
+      "expectedUpdatedAt", "title", "description", "status", "ownerId", "priority",
+      "targetDate", "parentTaskId", "strategy", "raciAssignments",
     ]);
     const unsupportedField = Object.keys(rawPayload).find((field) => !allowedFields.has(field));
     if (unsupportedField) return apiError(`Das Feld ${unsupportedField} ist für strategische Planungselemente nicht zulässig.`, 400);
-    if (!isOperationalLead && (payload.assignee !== undefined || payload.owner !== undefined || payload.raciAssignments !== undefined)) {
+    if (!isOperationalLead && (
+      payload.parentTaskId !== undefined
+      || payload.ownerId !== undefined
+      || payload.raciAssignments !== undefined
+    )) {
       return apiError("Parent, Owner und RACI können nur von CEO oder Deputy geändert werden.", 403);
     }
     if (payload.status !== undefined && !allowedPlanningItemStatuses(currentTask.task_type).includes(payload.status as never)) {
@@ -238,13 +252,19 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     if (payload.description !== undefined) patch.description = strategicText(payload.description, 4_000) || null;
     if (payload.status !== undefined) patch.status = payload.status;
     if (payload.priority !== undefined) patch.priority = payload.priority;
-    if (payload.assignee !== undefined || payload.owner !== undefined) {
-      const assignee = profileId(payload.assignee || payload.owner);
+    if (payload.ownerId !== undefined) {
+      const assignee = profileId(payload.ownerId);
       if (!assignee) return apiError("Planungselemente brauchen eine Zuständigkeit.", 400);
       patch.assignee = assignee;
       patch.owner = assignee;
     }
     if (payload.targetDate !== undefined) patch.target_date = targetDate;
+    if (payload.parentTaskId !== undefined) {
+      if (currentTask.task_type !== "initiative") {
+        return apiError("Epics haben keine übergeordnete Planungsebene.", 400);
+      }
+      patch.parent_task_id = profileId(payload.parentTaskId) || null;
+    }
     const strategy = payload.strategy === undefined ? null : {
       goal: strategicText(payload.strategy.goal, 4_000),
       successCriteria: strategicText(payload.strategy.successCriteria, 6_000),
@@ -255,6 +275,18 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       role: assignment.role,
       sortOrder: Number.isInteger(assignment.sortOrder) && (assignment.sortOrder || 0) >= 0 ? assignment.sortOrder : index,
     }));
+    const [existingStrategyResult, existingRaciResult, profileResult] = await Promise.all([
+      currentTask.task_type === "initiative"
+        ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      currentTask.task_type === "initiative"
+        ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
+        : Promise.resolve({ data: [], error: null }),
+      supabase.from("profiles").select("id,name"),
+    ]);
+    if (existingStrategyResult.error || existingRaciResult.error || profileResult.error) {
+      return apiError("Planungselement konnte nicht vollständig geladen werden.", 500);
+    }
     const result = await createBrowserRevisePlanningItems({
       supabase,
       actor: reviseActor.actor,
@@ -280,22 +312,29 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     const transaction = browserReviseTransactionFromResult(result) as { task?: TaskRowForMapping } | null;
     if (!transaction?.task) return apiError("Planungselement konnte nicht gespeichert werden.", 500);
     const updated = transaction.task;
-    const [strategyResult, raciResult, profileResult] = await Promise.all([
-      currentTask.task_type === "initiative"
-        ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      currentTask.task_type === "initiative"
-        ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
-        : Promise.resolve({ data: [] }),
-      supabase.from("profiles").select("id,name"),
-    ]);
     const profileNames = new Map((profileResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+    const resultingStrategy = strategy
+      ? {
+          task_id: id,
+          goal: String(strategy.goal || ""),
+          success_criteria: String(strategy.successCriteria || ""),
+          scope_constraints: String(strategy.scopeConstraints || ""),
+        }
+      : existingStrategyResult.data || undefined;
+    const resultingRaciAssignments = raciAssignments
+      ? raciAssignments.map((assignment) => ({
+          task_id: id,
+          profile_id: String(assignment.profileId || ""),
+          role: assignment.role,
+          sort_order: Number(assignment.sortOrder || 0),
+        }))
+      : existingRaciResult.data || [];
     return NextResponse.json({
       ok: true,
       activities: [],
       task: mapTaskRow(updated, profileNames, {
-        strategy: strategyResult.data || undefined,
-        raciAssignments: raciResult.data || [],
+        strategy: resultingStrategy,
+        raciAssignments: resultingRaciAssignments,
       }),
     });
   }
@@ -406,16 +445,8 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   const titleGuard = applyTaskTitleUpdate(update, payload);
   if (!titleGuard.ok) return apiError(titleGuard.error, titleGuard.status);
 
-  if (payload.milestoneId !== undefined) {
-    // Epic is derived from the canonical parent chain.  Accept a matching
-    // legacy value during the transition, but reject a competing hierarchy.
-    if ((payload.milestoneId || "") !== (currentTask.milestone_id || "")) {
-      return apiError("Der Epic-Bezug wird über die Initiative abgeleitet. Ändere stattdessen den Parent.", 400);
-    }
-  }
-
-  if (payload.assignee !== undefined || payload.owner !== undefined) {
-    const nextAssignee = profileId(payload.assignee || payload.owner);
+  if (payload.ownerId !== undefined) {
+    const nextAssignee = profileId(payload.ownerId);
     if (!nextAssignee) return apiError("Aufgaben brauchen eine Zuständigkeit.", 400);
     update.assignee = nextAssignee || null;
     update.owner = nextAssignee || null;
@@ -448,12 +479,12 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     let hasInitiative = false;
     if (nextPackageId) {
       const { data: initiative, error: initiativeError } = await supabase
-        .from(ACTIVE_PACKAGES_TABLE)
-        .select("id")
+        .from(ACTIVE_TASKS_TABLE)
+        .select("id,task_type")
         .eq("id", nextPackageId)
         .maybeSingle();
       if (initiativeError) return apiError(initiativeError.message, 500);
-      hasInitiative = Boolean(initiative);
+      hasInitiative = initiative?.task_type === "initiative";
     }
 
     let targetSprint: { id: string; scoreLocked: boolean } | null = null;
@@ -485,7 +516,7 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       status: nextStatus,
       assignee: nextAssignee,
       owner: nextOwner,
-      packageId: nextPackageId,
+      parentTaskId: nextPackageId,
       hasInitiative,
       sprintId: currentTask.sprint_id,
     }, targetSprint, { sourceSprintLocked });
@@ -614,6 +645,39 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
   });
 }
 
-export async function handleBrowserTaskDelete() {
-  return apiError("Direktes Löschen ist nicht mehr verfügbar. Nutze den Papierkorb-Workflow.", 410);
+export async function handleBrowserTaskDelete(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const apiContext = await requireJsonApiContext<unknown>(request, requireOperationalLead, null);
+  if (!apiContext.ok) return apiContext.response;
+  const parsed = parseEmptyEpicDeletePayload(apiContext.payload);
+  if (!parsed.ok) return apiError(parsed.error, 400);
+  const actor = actorContextFromSessionAuth({ ok: true, profile: apiContext.permission.profile });
+  if (!actor.ok) return apiError("Nur CEO oder Deputy können Epics löschen.", 403);
+  const { id } = await context.params;
+  const metadata = auditRequestMetadata(request);
+  const result = await createEmptyEpicDeletePlanningItems(apiContext.supabase).run({
+    actor: actor.actor,
+    mode: "commit",
+    command: emptyEpicDeleteCommand(id.trim(), parsed.expectedUpdatedAt),
+    requestMetadata: {
+      requestIp: metadata.request_ip || undefined,
+      userAgent: metadata.user_agent || undefined,
+    },
+  });
+  if (!result.ok) {
+    const mapped = emptyEpicDeleteError(result.error);
+    if (mapped.code && mapped.children) {
+      return NextResponse.json({ code: mapped.code, error: mapped.message, children: mapped.children }, { status: mapped.status });
+    }
+    if (result.error.code === "notFound") return apiError("Epic wurde nicht gefunden.", 404);
+    if (result.error.code === "conflict" && result.error.reason === "revision") {
+      return apiError("Epic wurde zwischenzeitlich geändert. Bitte neu laden.", 409);
+    }
+    return apiError(mapped.message, mapped.status);
+  }
+  const item = result.items[0];
+  if (!item || item.kind !== "epic") return apiError("Epic konnte nicht gelöscht werden.", 500);
+  return NextResponse.json({ ok: true, task: { id: item.id, taskType: "epic", updatedAt: item.updatedAt } });
 }

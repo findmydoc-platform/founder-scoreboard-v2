@@ -1,12 +1,12 @@
 import { isOperationalLeadRole } from "@/lib/platform";
-import type { Package, Profile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
+import type { Profile, Task, TaskRelation, TaskRelationType } from "@/lib/types";
 
 const allRelationTypes: TaskRelationType[] = ["blocked_by", "blocks", "relates_to"];
 const founderManageableTaskTypes = new Set<Task["taskType"]>(["deliverable", "sub_issue"]);
 
 type RelationshipProfile = Pick<Profile, "id" | "name" | "platformRole">;
 type RelationshipTask = Pick<Task, "id" | "taskType" | "assignee" | "assigneeId" | "owner" | "ownerId">;
-type RelationshipInitiative = Pick<Package, "accountableProfileId" | "ownerId">;
+type RelationshipInitiative = Pick<Task, "ownerId" | "raciAssignments">;
 
 function taskOwnedByProfile(task: RelationshipTask, profile: RelationshipProfile) {
   return [task.assigneeId, task.assignee, task.ownerId, task.owner]
@@ -15,7 +15,7 @@ function taskOwnedByProfile(task: RelationshipTask, profile: RelationshipProfile
 }
 
 function taskAccountableToProfile(initiative: RelationshipInitiative | undefined, profile: RelationshipProfile) {
-  const accountableProfileId = initiative?.accountableProfileId || initiative?.ownerId || "";
+  const accountableProfileId = initiative?.raciAssignments?.find((assignment) => assignment.role === "accountable")?.profileId || initiative?.ownerId || "";
   return accountableProfileId === profile.id;
 }
 
