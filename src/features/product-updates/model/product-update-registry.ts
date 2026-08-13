@@ -11,6 +11,10 @@ export type ProductUpdateSlide = {
   description: string;
   id: string;
   image: ProductUpdateImage;
+  link?: {
+    href: string;
+    label: string;
+  };
   title: string;
 };
 

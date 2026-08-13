@@ -26,6 +26,11 @@ export function ProfilePlanningItemsTokens({
       title="Team-Planungs-API"
       description="Erstelle persönliche Tokens für die Team-Planungs-API. Sie lesen den Planungskontext und führen freigegebene Aktionen in deinem Namen aus. Bestehende Elemente und GitHub bleiben ohne ausdrückliche Freigabe unveränderbar."
     >
+      <div className="border-b border-blue-100 bg-blue-50 px-5 py-4" data-tour-id="founderops-planning-api-v2">
+        <UiNotice tone="info">
+          Planungs-API v2 ist der neue Standard für Skills und Automationen. V1 bleibt nur während der Umstellung bestehender Integrationen verfügbar und wird danach entfernt.
+        </UiNotice>
+      </div>
       {source !== "supabase" ? (
         <div className="px-5 py-5">
           <UiNotice tone="warning">Planning-API-Tokens sind nur mit aktiver Supabase-Session verfügbar.</UiNotice>

@@ -39,17 +39,23 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   const validationWorkflow = await readFile(".github/workflows/dependency-validation.yml", "utf8");
   const verifier = await readFile("scripts/verify-product-updates.mjs", "utf8");
 
-  assert.ok(updates.length > 0);
+  assert.equal(updates.length, 6);
   assert.ok(updates.every((update) => update.slides.length > 0));
   assert.ok(updates.every((update) => update.expiresAt && update.featureTourId));
   assert.ok(updates.every((update) => update.slides.every((slide) => slide.featureTourId === undefined)));
   assert.ok(updates.flatMap((update) => update.slides).every((slide) => slide.image?.src.startsWith("/product-updates/") && slide.image.alt));
+  const planningApiUpdate = updates.find((update) => update.id === "2026-08-13-planning-api-v2");
+  assert.equal(
+    planningApiUpdate?.slides[0]?.link?.href,
+    "https://github.com/findmydoc-platform/agent-skills/tree/main/skills/founderops-planning-items",
+  );
   assert.match(tours, /product-updates-v1/);
   assert.match(tours, /issue-sharing-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-whats-new-gallery"/);
   assert.match(tours, /task-activity-v1/);
   assert.match(tours, /productUpdateId: "2026-07-21-clear-task-activity"/);
   assert.match(tours, /productUpdateId: "2026-07-21-issue-sharing"/);
+  assert.match(tours, /productUpdateId: "2026-08-13-planning-api-v2"/);
   assert.match(tours, /Vorschlag, Review oder allgemeinen Abstimmungsbedarf/);
   assert.match(tours, /task-share-trigger/);
   assert.match(tours, /task-share-popover/);
@@ -62,6 +68,7 @@ test("product update releases require screenshots, expiry, and dedicated tours",
   assert.match(verifier, /New or expanded production UI changes require both a product update registry change and a current screenshot/);
   assert.match(verifier, /expiresAt must be 1 to 60 days after releasedAt/);
   assert.match(verifier, /has no dedicated Driver\.js tour linked through productUpdateId/);
+  assert.match(verifier, /link\.href must be a GitHub HTTPS URL/);
 });
 
 test("product update diff classification excludes removal-only UI maintenance", () => {
