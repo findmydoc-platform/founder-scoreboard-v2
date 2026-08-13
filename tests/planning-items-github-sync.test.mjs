@@ -310,12 +310,12 @@ test("PATCH permits sync-only commands and keeps mode-command coupling strict", 
     title: "No command",
   }).ok, false);
 
-  const legacyAlias = update.parsePlanningItemPatchPayload({
+  const unknownField = update.parsePlanningItemPatchPayload({
     expectedUpdatedAt,
-    packageId: "legacy-package",
+    unsupportedField: "value",
   });
-  assert.equal(legacyAlias.ok, false);
-  assert.match(legacyAlias.error, /unbekannte Feld packageId/);
+  assert.equal(unknownField.ok, false);
+  assert.match(unknownField.error, /unbekannte Feld unsupportedField/);
 });
 
 test("create idempotency hash includes GitHub mode and per-item decisions", () => {

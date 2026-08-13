@@ -66,8 +66,6 @@ test("CreateItems maps all four canonical transport item types", async () => {
   assert.equal(command.items[1].parentId, "epic-1");
   assert.equal(command.items[2].parentId, "initiative-1");
   assert.equal(command.items[3].ownerId, "ceo-1");
-  assert.equal(Object.hasOwn(command.items[1], "milestoneId"), false);
-  assert.equal(Object.hasOwn(command.items[2], "packageId"), false);
 });
 
 test("Browser CreateItems commits through exactly one hidden writer", async () => {

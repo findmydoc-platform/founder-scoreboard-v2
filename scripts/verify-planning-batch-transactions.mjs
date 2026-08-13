@@ -1,25 +1,16 @@
 import pg from "pg";
-import { loadLocalEnv } from "./lib/env.mjs";
-
-await loadLocalEnv();
-
-const password = process.env.SUPABASE_DB_PASSWORD;
-const host = process.env.SUPABASE_DB_HOST || "db.wmccchyodlljkkytebwg.supabase.co";
+const password = process.env.SUPABASE_DB_PASSWORD || "postgres";
+const host = process.env.SUPABASE_DB_HOST || "127.0.0.1";
 const user = process.env.SUPABASE_DB_USER || "postgres";
 const database = process.env.SUPABASE_DB_NAME || "postgres";
 
-if (!password) {
-  console.error("Missing SUPABASE_DB_PASSWORD.");
-  process.exit(1);
-}
-
 const client = new pg.Client({
   host,
-  port: 5432,
+  port: Number(process.env.SUPABASE_DB_PORT || 54322),
   user,
   password,
   database,
-  ssl: { rejectUnauthorized: false },
+  ssl: process.env.SUPABASE_DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
 const suffix = Date.now();

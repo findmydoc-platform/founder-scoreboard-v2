@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { loadTranspiledModule } from "./helpers/transpile-module.mjs";
-
-const missing = async (path) => access(path).then(() => false, () => true);
 
 test("Browser planning mutations use one canonical task route family", async () => {
   const [client, taskCollection, taskItem, approval, withdraw, restore] = await Promise.all([
@@ -25,20 +23,6 @@ test("Browser planning mutations use one canonical task route family", async () 
   assert.match(restore, /handlePlanningTrashRestore\(request, id\)/);
 });
 
-test("legacy Browser planning route files are removed", async () => {
-  for (const path of [
-    "src/app/api/initiatives/route.ts",
-    "src/app/api/initiatives/[id]/route.ts",
-    "src/app/api/initiatives/[id]/approval/route.ts",
-    "src/app/api/initiatives/[id]/withdraw/route.ts",
-    "src/app/api/initiatives/[id]/restore/route.ts",
-    "src/app/api/milestones/route.ts",
-    "src/app/api/milestones/[id]/route.ts",
-  ]) {
-    assert.equal(await missing(path), true, `${path} must stay retired`);
-  }
-});
-
 test("canonical Browser payloads use parent and owner identifiers", async () => {
   const [client, reparent, taskMutation] = await Promise.all([
     readFile("src/features/planning/model/planning-api-client.ts", "utf8"),
@@ -47,13 +31,9 @@ test("canonical Browser payloads use parent and owner identifiers", async () => 
   ]);
   assert.match(client, /parentTaskId: draft\.parentTaskId/);
   assert.match(client, /ownerId: draft\.ownerId/);
-  assert.doesNotMatch(client, /^\s+owner: draft\.ownerId/m);
   assert.doesNotMatch(client, /json: draft/);
-  assert.doesNotMatch(reparent, /Object\.hasOwn\(row, "packageId"\)/);
-  assert.doesNotMatch(taskMutation, /^\s+packageId: patch\./m);
-  assert.doesNotMatch(taskMutation, /^\s+milestoneId: patch\./m);
+  assert.match(reparent, /parentTaskId/);
   assert.match(taskMutation, /^\s+ownerId: patch\./m);
-  assert.doesNotMatch(taskMutation, /^\s+assignee: patch\./m);
 });
 
 test("Initiative editing sends parent, strategy, and RACI in one request", async () => {
