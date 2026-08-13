@@ -44,17 +44,15 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(contract, /"write:planning-items:delete-empty"/);
   assert.match(contract, /"write:planning-items:github-sync"/);
   assert.match(contract, /"epic"/);
-  assert.match(contract, /Stored v1 receipts only/);
+  assert.match(contract, /Deprecated Team v1 transport alias/);
   assert.match(contextRoute, /"read:planning-context"/);
   assert.match(createPreviewRoute, /"write:planning-items:create"/);
-  assert.match(createPreviewRoute, /parsed\.hasLegacyAliases/);
-  assert.match(createPreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
+  assert.doesNotMatch(createPreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
   assert.match(createRoute, /createTeamCreatePlanningItems/);
   assert.match(createModule, /create_team_planning_items_with_projection_transaction/);
   assert.doesNotMatch(createRoute, /\.rpc\(/);
   assert.match(updatePreviewRoute, /"write:planning-items:update"/);
-  assert.match(updatePreviewRoute, /parsed\.hasLegacyAliases/);
-  assert.match(updatePreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
+  assert.doesNotMatch(updatePreviewRoute, /Legacy-Aliase sind nicht mehr zulässig/);
   assert.match(deletePreviewRoute, /"write:planning-items:delete-empty"/);
   assert.match(deletePreviewRoute, /createEmptyEpicDeletePlanningItems/);
   assert.match(deletePreviewRoute, /mode: "preview"/);
@@ -75,7 +73,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(tokensRoute, /create_team_planning_items_token_v3/);
   assert.match(tokensRoute, /allowUpdates/);
   assert.match(tokensRoute, /allowEmptyEpicDeletes/);
-  assert.doesNotMatch(tokensRoute, /allowEmptyMilestoneDeletes/);
+  assert.match(tokensRoute, /allowEmptyMilestoneDeletes/);
+  assert.match(tokensRoute, /canIssueEmptyMilestoneDeletes/);
   assert.match(tokensRoute, /allowGitHubSync/);
   assert.match(tokensRoute, /Nur CEO oder Deputy/);
   assert.match(tokensRoute, /!payload \|\| typeof payload !== "object" \|\| Array\.isArray\(payload\)/);
@@ -99,11 +98,11 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].patch.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.paths["/api/team/planning-items/v1/items/{id}"].delete.parameters[1].$ref, "#/components/parameters/IdempotencyKey");
   assert.equal(document.components.schemas.PlanningItemCreate.properties.itemType.enum[0], "epic");
-  assert.deepEqual(document.components.schemas.PlanningItemCreate.properties.itemType.enum, ["epic", "initiative", "deliverable", "sub_issue"]);
-  assert.equal(Object.hasOwn(document.components.schemas.PlanningItemCreate.properties, "packageId"), false);
-  assert.equal(Object.hasOwn(document.components.schemas.PlanningItemCreate.properties, "milestoneId"), false);
-  assert.equal(Object.hasOwn(document.components.schemas.PatchPayload.properties, "packageId"), false);
-  assert.equal(Object.hasOwn(document.components.schemas.PatchPayload.properties, "milestoneId"), false);
+  assert.deepEqual(document.components.schemas.PlanningItemCreate.properties.itemType.enum, ["epic", "initiative", "deliverable", "sub_issue", "milestone"]);
+  assert.equal(document.components.schemas.PlanningItemCreate.properties.packageId.deprecated, true);
+  assert.equal(document.components.schemas.PlanningItemCreate.properties.milestoneId.deprecated, true);
+  assert.equal(document.components.schemas.PatchPayload.properties.packageId.deprecated, true);
+  assert.equal(document.components.schemas.PatchPayload.properties.milestoneId.deprecated, true);
   assert.deepEqual(document.components.schemas.StrategicStatus.enum, ["Offen", "In Arbeit", "Pausiert", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.TaskStatus.enum, ["Offen", "In Arbeit", "Review", "Nacharbeit", "Blockiert", "Erledigt"]);
   assert.deepEqual(document.components.schemas.SubIssueStatus.enum, ["Offen", "In Arbeit", "Blockiert", "Erledigt"]);
@@ -113,7 +112,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
     { $ref: "#/components/schemas/SubIssueStatus" },
   ]);
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyEpicDeletes.default, false);
-  assert.equal(Object.hasOwn(document.components.schemas.CreateTokenPayload.properties, "allowEmptyMilestoneDeletes"), false);
+  assert.equal(document.components.schemas.CreateTokenPayload.properties.allowEmptyMilestoneDeletes.deprecated, true);
+  assert.equal(document.components.schemas.EpicNotEmptyResponse.properties.code.const, "MILESTONE_NOT_EMPTY");
   assert.equal(document.components.schemas.CreateTokenPayload.properties.allowGitHubSync.default, false);
   assert.deepEqual(document.components.schemas.GitHubSyncMode.enum, ["async", "wait"]);
   assert.equal(document.components.schemas.GitHubSyncCommand.properties.createIfMissing.type, "boolean");
@@ -122,8 +122,8 @@ test("Planning Items API exposes the canonical hierarchy, GitHub boundary, and e
   assert.match(documentation, /write:planning-items:github-sync/);
   assert.match(documentation, /GitHub projection is intentionally unavailable for Epics and Initiatives/);
   assert.match(documentation, /valid: false/);
-  assert.match(documentation, /immutable stored idempotency receipt/);
-  assert.match(documentation, /parentTaskId.*only hierarchy reference/);
+  assert.match(documentation, /normalized at the transport boundary/);
+  assert.match(documentation, /parentTaskId.*canonical hierarchy reference/);
   assert.match(documentation, /Review, score, Evidence gates, Sprint, repository, or GitHub fields/);
   assert.match(documentation, /Sub-Issues retain their separate four-state status contract/);
 });

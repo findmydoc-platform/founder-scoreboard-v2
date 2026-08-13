@@ -230,10 +230,12 @@ test("canonical trashed Initiatives retain strategy, RACI, parent, and direct ch
   assert.equal(result.detail.children[0].taskType, "deliverable");
 });
 
-test("initiative links use canonical planning item ids without legacy lookup", async () => {
+test("initiative links preserve legacy notification ids through the canonical mapping", async () => {
   const page = await read("src/app/initiatives/[id]/page.tsx");
-  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(id\)\}`\)/);
-  assert.doesNotMatch(page, /planning_item_legacy_ids|source_kind|legacy_id/);
+  assert.match(page, /planning_item_legacy_ids/);
+  assert.match(page, /\.eq\("source_kind", "package"\)/);
+  assert.match(page, /\.eq\("legacy_id", id\)/);
+  assert.match(page, /redirect\(`\/tasks\/\$\{encodeURIComponent\(data\?\.task_id \|\| id\)\}`\)/);
   assert.doesNotMatch(page, /requirePlanningContributor|requireOperationalLead|requireCEO/);
 });
 
@@ -244,14 +246,14 @@ test("notifications keep rejected initiative details read-only and return revisi
   const commands = await read("src/features/planning/hooks/use-notification-commands.ts");
 
   assert.equal(notificationTarget({ entityType: "task", entityId: "task/1" }).href, "/tasks/task%2F1");
-  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/tasks/initiative%2F1");
+  assert.equal(notificationTarget({ entityType: "initiative", entityId: "initiative/1" }).href, "/initiatives/initiative%2F1");
   assert.deepEqual(
     notificationTarget({ type: "planning_item.returned", entityType: "initiative", entityId: "initiative/1" }),
     { workspace: "backlog", href: "/backlog?backlog.level=initiative" },
   );
   assert.equal(
     notificationTarget({ type: "planning_item.rejected", entityType: "initiative", entityId: "initiative/1" }).href,
-    "/tasks/initiative%2F1",
+    "/initiatives/initiative%2F1",
   );
   assert.doesNotMatch(commands, /Die verknüpfte Aufgabe wurde nicht gefunden/);
   assert.match(commands, /if \(!task \|\| !taskOverlayWorkspaces\.has\(workspace\)\)/);

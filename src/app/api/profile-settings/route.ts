@@ -11,8 +11,9 @@ import type { PlanningFilterPreferences, ViewMode } from "@/lib/types";
 type UiPreferencesPayload = Partial<{
   defaultWorkspace: string;
   defaultTaskView: ViewMode;
-  planningFilters: Partial<PlanningFilterPreferences>;
+  planningFilters: Partial<PlanningFilterPreferences> & { owner?: unknown; packageId?: unknown };
   expandedInitiativeIds: string[];
+  expandedPackageIds: string[];
 }>;
 
 type ProfileSettingsPayload = Partial<{
@@ -83,14 +84,25 @@ function cleanBoolean(value: unknown) {
 
 function cleanFilters(value: unknown): PlanningFilterPreferences {
   if (!value || typeof value !== "object") return defaultPlanningFilters;
-  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>>;
+  const candidate = value as Partial<Record<keyof PlanningFilterPreferences, unknown>> & {
+    owner?: unknown;
+    packageId?: unknown;
+  };
   return {
     query: typeof candidate.query === "string" ? candidate.query.slice(0, 120) : defaultPlanningFilters.query,
-    assignee: typeof candidate.assignee === "string" ? candidate.assignee.slice(0, 120) : defaultPlanningFilters.assignee,
+    assignee: typeof candidate.assignee === "string"
+      ? candidate.assignee.slice(0, 120)
+      : typeof candidate.owner === "string"
+        ? candidate.owner.slice(0, 120)
+        : defaultPlanningFilters.assignee,
     status: typeof candidate.status === "string" ? candidate.status.slice(0, 80) : defaultPlanningFilters.status,
     priority: typeof candidate.priority === "string" ? candidate.priority.slice(0, 20) : defaultPlanningFilters.priority,
     review: typeof candidate.review === "string" ? candidate.review.slice(0, 40) : defaultPlanningFilters.review,
-    initiativeId: typeof candidate.initiativeId === "string" ? candidate.initiativeId.slice(0, 160) : defaultPlanningFilters.initiativeId,
+    initiativeId: typeof candidate.initiativeId === "string"
+      ? candidate.initiativeId.slice(0, 160)
+      : typeof candidate.packageId === "string"
+        ? candidate.packageId.slice(0, 160)
+        : defaultPlanningFilters.initiativeId,
     quick: Array.isArray(candidate.quick)
       ? candidate.quick.filter((item): item is string => typeof item === "string").map((item) => item.slice(0, 80)).slice(0, 12)
       : typeof candidate.quick === "string" && candidate.quick
@@ -148,13 +160,6 @@ export async function PATCH(request: NextRequest) {
       return apiError("UI-Einstellungen sind ungültig.", 400);
     }
     const uiPayload = payload.uiPreferences;
-    if (
-      uiPayload.planningFilters
-      && typeof uiPayload.planningFilters === "object"
-      && (Object.hasOwn(uiPayload.planningFilters, "owner") || Object.hasOwn(uiPayload.planningFilters, "packageId"))
-    ) {
-      return apiError("Verwende assignee und initiativeId für Planning-Filter.", 400);
-    }
     const defaultWorkspace = cleanDefaultWorkspace(uiPayload.defaultWorkspace);
     const defaultTaskView = allowedTaskViews.has(uiPayload.defaultTaskView as ViewMode)
       ? uiPayload.defaultTaskView as ViewMode
@@ -163,7 +168,9 @@ export async function PATCH(request: NextRequest) {
       default_workspace: defaultWorkspace,
       default_task_view: defaultTaskView,
       planning_filters: cleanFilters(uiPayload.planningFilters),
-      expanded_item_ids: cleanInitiativeIds(uiPayload.expandedInitiativeIds),
+      expanded_item_ids: cleanInitiativeIds(
+        uiPayload.expandedInitiativeIds ?? uiPayload.expandedPackageIds,
+      ),
     };
   }
 

@@ -51,6 +51,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return planningItemsJson({
         ok: true,
         ...preview,
+        code: preview.code ? "MILESTONE_NOT_EMPTY" : null,
       });
     },
   );

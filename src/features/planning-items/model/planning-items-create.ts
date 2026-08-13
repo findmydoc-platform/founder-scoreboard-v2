@@ -623,6 +623,10 @@ function invalidCreate(reason: string, path = "command.items"): PlanningError {
   return { code: "invalidCommand", issues: [{ path, reason }] };
 }
 
+function providerErrorMessage(error: unknown) {
+  return error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
+}
+
 function createBrief(raw: PlanningItemCreateInput) {
   return {
     description: intakeText(raw.description, 4_000),
@@ -788,13 +792,10 @@ async function prepareTeamCreate(
       ? { kind: "error", error: { code: "conflict", reason: "idempotency" } }
       : { kind: "replay", receipt: replayReceipt({ batchId: stored.id, items: stored.response_tasks, replayed: true }) }, error: null };
   }
-  if (!stored && dependencies.rawItems.some(planningItemCreateUsesLegacyAliases)) {
-    return { data: { kind: "error", error: invalidCreate("legacyAliasRetired") }, error: null };
-  }
   const preview = await buildPlanningItemCreatePreview([...dependencies.rawItems], {
     id: request.actor.profileId,
     platformRole: request.actor.platformRole,
-  } as AuthenticatedProfile, dependencies.supabase, Boolean(stored));
+  } as AuthenticatedProfile, dependencies.supabase, true);
   dependencies.onPreview?.(preview);
   const githubSyncCommands = planningItemCreateGitHubSyncCommands([...dependencies.rawItems]);
   const requestHash = planningItemCreateHash(preview, dependencies.githubSyncMode, githubSyncCommands);
@@ -1050,7 +1051,10 @@ export function createBrowserCreatePlanningItems(dependencies: BrowserCreateDepe
         });
       if (result.error) {
         const provider = result.error as { code?: string };
+        const providerMessage = providerErrorMessage(result.error);
         if (provider.code === "P0006") return { ok: false, error: { code: "forbidden", reason: "createRequiresOperationalLead" } };
+        if (provider.code === "23503" && providerMessage.includes("RACI")) return { ok: false, error: invalidCreate("raciProfileNotFound") };
+        if (provider.code === "23505" && providerMessage.includes("RACI")) return { ok: false, error: invalidCreate("raciAssignmentDuplicated") };
         if (provider.code === "P0003" || provider.code === "23505") return { ok: false, error: { code: "conflict", reason: provider.code === "P0003" ? "idempotency" : "state" } };
         if (provider.code === "P0002") return { ok: false, error: { code: "notFound", entity: { kind: "relationship", id: writer.kind === "delivery" ? writer.params.relatedTaskId || "" : "" } } };
         if (provider.code === "22023" || provider.code === "23514") return { ok: false, error: invalidCreate("persistenceValidation") };

@@ -22,9 +22,6 @@ export async function handleTeamPlanningItemUpdatePreview(request: NextRequest, 
 
     const parsed = parsePlanningItemPatchPayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    if (parsed.hasLegacyAliases) {
-      return planningItemsError("Legacy-Aliase sind nicht mehr zulässig. Verwende parentTaskId.", 400);
-    }
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
       return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);

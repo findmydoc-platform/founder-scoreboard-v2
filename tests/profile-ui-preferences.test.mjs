@@ -151,15 +151,16 @@ test("profile settings API delegates workspace validation to the shared workspac
   assert.doesNotMatch(route, /allowedWorkspaces/);
 });
 
-test("profile settings API accepts only canonical initiative preference fields", async () => {
+test("profile settings API normalizes old and current initiative preference fields", async () => {
   const route = await readFile("src/app/api/profile-settings/route.ts", "utf8");
 
   assert.match(route, /expandedInitiativeIds: string\[\]/);
   assert.match(route, /candidate\.initiativeId/);
   assert.match(route, /expanded_item_ids: cleanInitiativeIds/);
-  assert.match(route, /Object\.hasOwn\(uiPayload\.planningFilters, "packageId"\)/);
-  assert.match(route, /Object\.hasOwn\(uiPayload\.planningFilters, "owner"\)/);
-  assert.doesNotMatch(route, /expandedPackageIds|expanded_package_ids|candidate\.packageId|candidate\.owner/);
+  assert.match(route, /expandedPackageIds/);
+  assert.match(route, /candidate\.packageId/);
+  assert.match(route, /candidate\.owner/);
+  assert.match(route, /expandedInitiativeIds \?\? uiPayload\.expandedPackageIds/);
 });
 
 test("canonical planning preference migration preserves values before readers switch", async () => {
@@ -176,6 +177,20 @@ test("canonical planning preference migration preserves values before readers sw
   assert.match(migration, /legacy Planning preference fields are not supported/);
   assert.match(migration, /p_ui_preferences -> 'expanded_item_ids'/);
   assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from/i);
+});
+
+test("rollout compatibility migration accepts old inputs and stores current preference keys", async () => {
+  const migration = await readFile(
+    "supabase/migrations/20260813065427_preserve_planning_cutover_compatibility.sql",
+    "utf8",
+  );
+
+  assert.match(migration, /p_ui_preferences -> 'expanded_package_ids'/);
+  assert.match(migration, /v_filters \? 'packageId'/);
+  assert.match(migration, /v_filters \? 'owner'/);
+  assert.match(migration, /v_filters := v_filters - array\['packageId', 'owner'\]/);
+  assert.match(migration, /expanded_item_ids/);
+  assert.doesNotMatch(migration, /drop column|drop table|truncate|delete from public\.profile_ui_preferences/i);
 });
 
 test("profile settings only offer workspaces supported by the persisted default contract", async () => {

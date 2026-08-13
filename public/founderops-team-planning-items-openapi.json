@@ -143,11 +143,12 @@
         "additionalProperties": false,
         "required": ["itemType", "title"],
         "properties": {
-          "itemType": { "type": "string", "enum": ["epic", "initiative", "deliverable", "sub_issue"] },
+          "itemType": { "type": "string", "enum": ["epic", "initiative", "deliverable", "sub_issue", "milestone"], "description": "milestone is a deprecated v1 input alias for epic." },
           "title": { "type": "string", "minLength": 3, "maxLength": 240 },
           "description": { "type": "string" }, "problemStatement": { "type": "string" }, "intendedOutcome": { "type": "string" },
           "scopeConstraints": { "type": "string" }, "acceptanceCriteria": { "$ref": "#/components/schemas/AcceptanceCriteria" },
           "evidenceRequired": { "type": "string" }, "definitionOfDone": { "type": "string" }, "parentTaskId": { "type": "string" },
+          "packageId": { "type": "string", "deprecated": true, "description": "Deprecated v1 alias for a Deliverable parentTaskId." }, "milestoneId": { "type": "string", "deprecated": true, "description": "Deprecated v1 alias for an Initiative parentTaskId." },
           "ownerId": { "type": "string" },
           "accountableProfileId": { "type": "string" }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
@@ -169,6 +170,7 @@
           "title": { "type": ["string", "null"] }, "description": { "type": ["string", "null"] }, "problemStatement": { "type": ["string", "null"] },
           "intendedOutcome": { "type": ["string", "null"] }, "scopeConstraints": { "type": ["string", "null"] }, "acceptanceCriteria": { "$ref": "#/components/schemas/NullableAcceptanceCriteria" },
           "evidenceRequired": { "type": ["string", "null"] }, "definitionOfDone": { "type": ["string", "null"] }, "parentTaskId": { "type": ["string", "null"] },
+          "packageId": { "type": ["string", "null"], "deprecated": true, "description": "Deprecated v1 alias for a Deliverable parentTaskId." }, "milestoneId": { "type": ["string", "null"], "deprecated": true, "description": "Deprecated v1 alias for an Initiative parentTaskId." },
           "ownerId": { "type": ["string", "null"] },
           "accountableProfileId": { "type": ["string", "null"] }, "responsibleProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
           "consultedProfileIds": { "$ref": "#/components/schemas/ProfileIds" }, "informedProfileIds": { "$ref": "#/components/schemas/ProfileIds" },
@@ -208,7 +210,7 @@
           "ok": { "const": true }, "valid": { "type": "boolean" }, "canDelete": { "type": "boolean" },
           "itemId": { "type": "string" }, "itemType": { "const": "epic" }, "currentItem": { "type": "object" },
           "children": { "$ref": "#/components/schemas/EpicChildCounts" },
-          "code": { "type": ["string", "null"], "enum": ["EPIC_NOT_EMPTY", null] },
+          "code": { "type": ["string", "null"], "enum": ["MILESTONE_NOT_EMPTY", null] },
           "error": { "type": "string" }, "warnings": { "type": "array", "items": { "type": "string" } }
         }
       },
@@ -217,7 +219,7 @@
         "additionalProperties": false,
         "required": ["ok", "code", "error", "children"],
         "properties": {
-          "ok": { "const": false }, "code": { "const": "EPIC_NOT_EMPTY" }, "error": { "type": "string" },
+          "ok": { "const": false }, "code": { "const": "MILESTONE_NOT_EMPTY" }, "error": { "type": "string" },
           "children": { "$ref": "#/components/schemas/EpicChildCounts" }
         }
       },
@@ -256,7 +258,7 @@
           { "type": "object", "required": ["status", "code", "error", "retryable"], "properties": { "status": { "type": "string", "enum": ["notEligible", "failed"] }, "code": { "type": "string" }, "error": { "type": "string" }, "retryable": { "type": "boolean" } } }
         ]
       },
-      "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false }, "allowEmptyEpicDeletes": { "type": "boolean", "default": false, "description": "CEO and Deputy only; adds write:planning-items:delete-empty." }, "allowGitHubSync": { "type": "boolean", "default": false, "description": "Adds write:planning-items:github-sync for Deliverables and Sub-Issues only." } } },
+      "CreateTokenPayload": { "type": "object", "additionalProperties": false, "required": ["label"], "properties": { "label": { "type": "string", "maxLength": 80 }, "allowUpdates": { "type": "boolean", "default": false }, "allowEmptyEpicDeletes": { "type": "boolean", "default": false, "description": "CEO and Deputy only; adds write:planning-items:delete-empty." }, "allowEmptyMilestoneDeletes": { "type": "boolean", "default": false, "deprecated": true, "description": "Deprecated v1 alias for allowEmptyEpicDeletes." }, "allowGitHubSync": { "type": "boolean", "default": false, "description": "Adds write:planning-items:github-sync for Deliverables and Sub-Issues only." } } },
       "ContextResponse": { "type": "object", "properties": { "ok": { "const": true }, "context": { "type": "object" } }, "required": ["ok", "context"] }
     }
   }

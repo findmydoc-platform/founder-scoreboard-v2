@@ -1,4 +1,4 @@
 {
   "classification": "maintenance",
-  "reason": "Renames active Planning and Projects UI contracts from legacy Milestone identifiers to Epic identifiers without changing user-visible workflows."
+  "reason": "Preserves existing Planning links and Team API v1 compatibility while making preference rollout and Initiative updates atomic; no new or materially expanded UI functionality."
 }

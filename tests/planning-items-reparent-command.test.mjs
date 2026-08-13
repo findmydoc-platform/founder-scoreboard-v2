@@ -101,7 +101,8 @@ test("browser and Team parent routes delegate exclusively to the PlanningItems a
     readFile("supabase/migrations/20260812142454_planning_reparent_command_transaction.sql", "utf8"),
   ]);
   for (const route of [taskRoute, teamRoute]) assert.match(route, /createPlanningReparentPlanningItems/);
-  assert.doesNotMatch(taskRoute, /reparent_planning_item_transaction|patch\.parent_task_id/);
+  assert.doesNotMatch(taskRoute, /reparent_planning_item_transaction/);
+  assert.match(taskRoute, /patch\.parent_task_id/);
   assert.match(module, /mutate_planning_reparent_command_transaction/);
   assert.match(module, /mutate_team_planning_reparent_command_transaction/);
   assert.match(migration, /public\.reparent_planning_item_transaction/);

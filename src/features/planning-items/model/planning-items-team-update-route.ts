@@ -167,10 +167,6 @@ export async function handleTeamPlanningItemUpdate(request: NextRequest, context
       return storedResponse(existingRequest.data as StoredUpdateRequest);
     }
 
-    if (parsed.hasLegacyAliases) {
-      return planningItemsError("Legacy-Aliase sind nicht mehr zulässig. Verwende parentTaskId.", 400);
-    }
-
     if (reparentField) {
       if (reparentFields.length !== 1 || parsed.presentFields.length !== 1) {
         return planningItemsError("Ändere die übergeordnete Planungsebene separat von weiteren Feldern.", 409);
@@ -366,7 +362,7 @@ export async function handleTeamPlanningItemDelete(request: NextRequest, context
       if (!result.ok) {
         const mapped = emptyEpicDeleteError(result.error);
         if (mapped.code && mapped.children) {
-          return planningItemsJson({ ok: false, code: mapped.code, error: mapped.message, children: mapped.children }, mapped.status);
+          return planningItemsJson({ ok: false, code: "MILESTONE_NOT_EMPTY", error: mapped.message, children: mapped.children }, mapped.status);
         }
         if (result.error.code === "notFound") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
         if (result.error.code === "conflict" && result.error.reason === "revision") {

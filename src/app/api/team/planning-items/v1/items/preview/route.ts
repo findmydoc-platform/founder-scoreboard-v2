@@ -12,9 +12,6 @@ export async function POST(request: NextRequest) {
   return handlePlanningItemsRequest(request, "write:planning-items:create", "Planning-Items-Erstellung konnte nicht geprüft werden.", async (permission) => {
     const parsed = parsePlanningItemCreatePayload(await request.json().catch(() => null));
     if (!parsed.ok) return planningItemsError(parsed.error, 400);
-    if (parsed.hasLegacyAliases) {
-      return planningItemsError("Legacy-Aliase sind nicht mehr zulässig. Verwende itemType epic und parentTaskId.", 400);
-    }
     if (parsed.githubSyncMode
       && !permission.scopes.includes("write:planning-items:github-sync")) {
       return planningItemsError("Planning-API-Token hat nicht den erforderlichen GitHub-Sync-Scope.", 403);

@@ -172,23 +172,23 @@ async function verifyCanonicalPlanningPreferences(status) {
       throw new Error("Profile settings RPC did not isolate canonical Planning preferences from the legacy column.");
     }
 
-    await client.query("savepoint legacy_preferences");
-    try {
-      await client.query(
-        "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6)",
-        ["volkan", {}, {
-          default_workspace: "planning",
-          default_task_view: "board",
-          planning_filters: { owner: "volkan", packageId: "GC1" },
-          expanded_package_ids: ["GC1"],
-        }, {}, null, null],
-      );
-      throw new Error("Profile settings RPC accepted legacy Planning preference fields.");
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("Profile settings RPC accepted")) throw error;
-      if (error?.code !== "22023") throw error;
+    const legacyResult = await client.query(
+      "select public.update_profile_settings_transaction($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6) as result",
+      ["volkan", {}, {
+        default_workspace: "planning",
+        default_task_view: "board",
+        planning_filters: { owner: "volkan", packageId: "GC1" },
+        expanded_package_ids: ["GC1"],
+      }, {}, null, null],
+    );
+    const normalized = legacyResult.rows[0]?.result?.ui_preference;
+    if (normalized?.planning_filters?.assignee !== "volkan"
+      || normalized?.planning_filters?.initiativeId !== "GC1"
+      || Object.hasOwn(normalized?.planning_filters || {}, "owner")
+      || Object.hasOwn(normalized?.planning_filters || {}, "packageId")
+      || JSON.stringify(normalized?.expanded_item_ids) !== JSON.stringify(["GC1"])) {
+      throw new Error("Profile settings RPC did not normalize the deployed legacy preference payload.");
     }
-    await client.query("rollback to savepoint legacy_preferences");
     await client.query("rollback");
   } catch (error) {
     await client.query("rollback");

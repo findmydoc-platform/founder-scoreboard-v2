@@ -57,7 +57,11 @@ export function planningReparentHash(itemId: string, expectedRevision: string, p
 
 export function isPlanningTaskReparentPayload(payload: unknown) {
   const row = record(payload);
-  return Boolean(row && Object.hasOwn(row, "parentTaskId"));
+  return Boolean(
+    row
+    && Object.hasOwn(row, "parentTaskId")
+    && Object.keys(row).every((key) => key === "expectedUpdatedAt" || key === "parentTaskId"),
+  );
 }
 
 export function parsePlanningTaskReparentPayload(payload: unknown):

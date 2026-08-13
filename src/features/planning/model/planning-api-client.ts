@@ -90,16 +90,12 @@ export async function saveInitiativeRequest(apiClient: BrowserApiClient, draft: 
       json: initiativeMutation(draft),
     });
   }
-  let expectedUpdatedAt = draft.expectedUpdatedAt || "";
-  const parentResult = await apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${encodeURIComponent(draft.id)}`, {
-    method: "PATCH",
-    json: { expectedUpdatedAt, parentTaskId: draft.parentTaskId },
-  });
-  if (!parentResult.response.ok) return parentResult;
-  expectedUpdatedAt = parentResult.body?.task?.updatedAt || expectedUpdatedAt;
   return apiClient.requestJson<{ error?: string; task?: Task }>(`/api/tasks/${encodeURIComponent(draft.id)}`, {
     method: "PATCH",
-    json: initiativeMutation(draft, expectedUpdatedAt),
+    json: {
+      ...initiativeMutation(draft, draft.expectedUpdatedAt || ""),
+      parentTaskId: draft.parentTaskId,
+    },
   });
 }
 

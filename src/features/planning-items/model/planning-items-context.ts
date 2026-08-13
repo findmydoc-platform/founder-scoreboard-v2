@@ -115,6 +115,25 @@ function raciFor(rows: RaciRow[] = []) {
     .map((row) => ({ profileId: row.profile_id, role: row.role, sortOrder: row.sort_order }));
 }
 
+export function planningItemsInitiativeCompatibilityProjection<
+  T extends {
+    description: string;
+    scopeConstraints: string;
+    strategy?: {
+      goal: string;
+      successCriteria: string;
+      scopeConstraints: string;
+    };
+  },
+>(item: T) {
+  return {
+    ...item,
+    goal: item.strategy?.goal || item.description,
+    successCriteria: item.strategy?.successCriteria || "",
+    scopeConstraints: item.strategy?.scopeConstraints || item.scopeConstraints,
+  };
+}
+
 export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
   const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
@@ -211,7 +230,8 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
 
   const epics = items.filter((item) => item.itemType === "epic");
   const initiatives = items
-    .filter((item) => item.itemType === "initiative");
+    .filter((item) => item.itemType === "initiative")
+    .map(planningItemsInitiativeCompatibilityProjection);
   const deliveryItems = items.filter((item) => item.itemType === "deliverable" || item.itemType === "sub_issue");
 
   return {
@@ -229,6 +249,8 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     epics,
     initiatives,
     tasks: deliveryItems,
+    // Deprecated v1 projection; the source remains the canonical Epic list.
+    milestones: epics.map((epic) => ({ ...epic, itemType: "milestone" as const })),
     sprints: sprints.map((sprint) => ({
       id: sprint.id,
       name: sprint.name,

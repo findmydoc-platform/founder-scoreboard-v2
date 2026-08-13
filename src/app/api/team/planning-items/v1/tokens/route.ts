@@ -12,6 +12,8 @@ type CreateTokenPayload = {
   label?: unknown;
   allowUpdates?: unknown;
   allowEmptyEpicDeletes?: unknown;
+  /** @deprecated Use allowEmptyEpicDeletes. */
+  allowEmptyMilestoneDeletes?: unknown;
   allowGitHubSync?: unknown;
 };
 
@@ -53,6 +55,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     capabilities: {
       canIssueEmptyEpicDeletes,
+      canIssueEmptyMilestoneDeletes: canIssueEmptyEpicDeletes,
     },
     tokens: ([...(activeResult.data || []), ...(historyResult.data || [])] as TokenRecordRow[])
       .map(mapTeamPlanningItemsTokenRecord)
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
     "label",
     "allowUpdates",
     "allowEmptyEpicDeletes",
+    "allowEmptyMilestoneDeletes",
     "allowGitHubSync",
   ].includes(key));
   if (unknownField) return apiError(`Token-Payload enthält das unbekannte Feld ${unknownField}.`, 400);
@@ -90,10 +94,18 @@ export async function POST(request: NextRequest) {
   if (payload.allowEmptyEpicDeletes !== undefined && typeof payload.allowEmptyEpicDeletes !== "boolean") {
     return apiError("allowEmptyEpicDeletes muss wahr oder falsch sein.", 400);
   }
+  if (payload.allowEmptyMilestoneDeletes !== undefined && typeof payload.allowEmptyMilestoneDeletes !== "boolean") {
+    return apiError("allowEmptyMilestoneDeletes muss wahr oder falsch sein.", 400);
+  }
   if (payload.allowGitHubSync !== undefined && typeof payload.allowGitHubSync !== "boolean") {
     return apiError("allowGitHubSync muss wahr oder falsch sein.", 400);
   }
-  const allowEmptyEpicDeletes = payload.allowEmptyEpicDeletes;
+  if (payload.allowEmptyEpicDeletes !== undefined
+    && payload.allowEmptyMilestoneDeletes !== undefined
+    && payload.allowEmptyEpicDeletes !== payload.allowEmptyMilestoneDeletes) {
+    return apiError("allowEmptyEpicDeletes und allowEmptyMilestoneDeletes widersprechen sich.", 400);
+  }
+  const allowEmptyEpicDeletes = payload.allowEmptyEpicDeletes ?? payload.allowEmptyMilestoneDeletes;
   const canIssueEmptyEpicDeletes = permission.profile?.platformRole === "ceo"
     || permission.profile?.platformRole === "deputy";
   if (allowEmptyEpicDeletes === true && !canIssueEmptyEpicDeletes) {

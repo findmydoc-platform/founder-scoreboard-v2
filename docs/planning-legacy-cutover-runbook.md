@@ -10,6 +10,7 @@ This runbook prepares the destructive Planning Legacy cutover. It does not autho
 - `pnpm run verify:planning-legacy-cutover -- --local --ready-to-drop` adds replay-removal gates. It must fail while legacy replay snapshots or the special Epic-delete replay table still contain rows.
 - Historical migrations and `supabase/baseline.sql` remain immutable.
 - `CASCADE`, broad deletes, truncation, and direct production execution are forbidden.
+- Team API v1 remains a compatibility contract. Its deprecated `milestone`, `packageId`, `milestoneId`, token-capability, and delete-error aliases are normalized only at the transport boundary until clients have moved to a separately versioned canonical API.
 
 The verifier checks row and field parity for Milestones/Epics and Packages/Initiatives; parent relationships; approval and trash state; strategy; RACI; derived legacy columns; saved preferences; idempotency contract versions; and legacy replay storage. It prints at most twenty concrete IDs per failed check and exits non-zero on every unknown difference.
 
@@ -19,12 +20,12 @@ All items below must be absent from active application code before the destructi
 
 1. [x] `/api/milestones` and legacy Initiative HTTP response/request shapes.
 2. [x] Browser hierarchy fields `packageId` and `milestoneId` are removed from active create, update, task projections, Backlog state, and local seed data; `parentTaskId` is authoritative. Browser create and update requests use only `ownerId` for responsibility and reject the old `assignee` and `owner` aliases.
-3. [x] New Team v1 context, create, update, token, delete-error, and OpenAPI contracts expose only canonical Epic and `parentTaskId` forms. Legacy-shaped commit payloads are parsed only after an idempotency key is present and can return only an exact immutable stored receipt; they cannot create or update state. Removing the replay-only parser, response mapper, compatibility hashes, and special Epic-delete receipt table remains blocked on the #317 receipt migration and replay proof.
+3. [ ] Introduce a separately versioned Team API contract that exposes only canonical Epic and `parentTaskId` forms. Inventory active v1 token owners, migrate every caller, complete the communicated deprecation window, and prove that no active request or replay depends on the v1 aliases. Until then, the v1 adapter must continue normalizing deprecated request aliases and preserving documented response and error aliases.
 4. [x] `Package`, `Milestone`, `packages`, and `milestones` in active UI state. Planning, Projects, Gantt, trash, and task-detail surfaces now derive Epic and Initiative state exclusively from canonical Planning Items and `parentTaskId`. Saved Planning filters use `initiativeId` and `expanded_item_ids`; the additive preparation migration preserves existing values before active readers switch. The old column remains unused until #317 drops it.
-5. [x] Active application reads from `active_packages`, `packages`, and `milestones` are removed. `planning_item_legacy_ids` is read only by the isolated stored-replay adapter and the cutover verifier; removing it remains blocked on #317 replay migration.
+5. [ ] Active domain reads from `active_packages`, `packages`, and `milestones` are removed. `planning_item_legacy_ids` remains a compatibility dependency for Team v1 legacy IDs, historical Initiative notification links, immutable stored replays, and the cutover verifier. Migrate those durable IDs and retire the versioned API compatibility path before removing it.
 6. Writes to `tasks.package_id`, `tasks.milestone_id`, and special Milestone-delete receipts.
 
-Compatibility code may remain only in the cutover migration and this runbook. Tests must prove the canonical contract instead of preserving the retired contract.
+Compatibility code may remain only in explicitly named transport, durable-link, replay, and migration adapters. Core Planning commands and storage stay canonical. Tests must prove both the canonical core contract and the unchanged versioned compatibility contract.
 
 ## Snapshot and restore drill
 
@@ -149,7 +150,7 @@ alter table public.profile_ui_preferences
   drop column expanded_package_ids restrict;
 ```
 
-The preparatory migration `20260812231305_canonical_planning_preferences.sql` adds and populates `expanded_item_ids`, moves the `planning_filters.packageId` value to `initiativeId`, moves `owner` to `assignee`, and preserves unknown filter keys. #317 only removes the now-unused legacy column.
+The preparatory migration `20260812231305_canonical_planning_preferences.sql` adds and populates `expanded_item_ids`, moves the `planning_filters.packageId` value to `initiativeId`, moves `owner` to `assignee`, and preserves unknown filter keys. `20260813065427_preserve_planning_cutover_compatibility.sql` keeps old and current application versions interoperable during rollout while storing only canonical preference keys. #317 only removes the legacy column after the old application contract can no longer write it.
 
 ### F. Remove legacy root tables last
 
@@ -171,6 +172,8 @@ drop table public.milestones restrict;
 Go requires all of the following:
 
 - application-reference scan is zero outside historical migrations and this runbook;
+- the separately versioned Team API is live, all known clients have migrated, the v1 deprecation window is complete, and request/replay evidence shows no remaining legacy-alias dependency;
+- historical Initiative notification targets and legacy-ID receipts have been migrated and replay-tested against canonical IDs;
 - parity and ready-to-drop preflights pass on the frozen source and restored snapshot;
 - queue counts and table checksums match the maintenance record;
 - every manifest statement succeeds with `RESTRICT` in staging restored from the production snapshot;

@@ -216,11 +216,15 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     }
     const allowedFields = new Set([
       "expectedUpdatedAt", "title", "description", "status", "ownerId", "priority",
-      "targetDate", "strategy", "raciAssignments",
+      "targetDate", "parentTaskId", "strategy", "raciAssignments",
     ]);
     const unsupportedField = Object.keys(rawPayload).find((field) => !allowedFields.has(field));
     if (unsupportedField) return apiError(`Das Feld ${unsupportedField} ist für strategische Planungselemente nicht zulässig.`, 400);
-    if (!isOperationalLead && (payload.ownerId !== undefined || payload.raciAssignments !== undefined)) {
+    if (!isOperationalLead && (
+      payload.parentTaskId !== undefined
+      || payload.ownerId !== undefined
+      || payload.raciAssignments !== undefined
+    )) {
       return apiError("Parent, Owner und RACI können nur von CEO oder Deputy geändert werden.", 403);
     }
     if (payload.status !== undefined && !allowedPlanningItemStatuses(currentTask.task_type).includes(payload.status as never)) {
@@ -255,6 +259,12 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       patch.owner = assignee;
     }
     if (payload.targetDate !== undefined) patch.target_date = targetDate;
+    if (payload.parentTaskId !== undefined) {
+      if (currentTask.task_type !== "initiative") {
+        return apiError("Epics haben keine übergeordnete Planungsebene.", 400);
+      }
+      patch.parent_task_id = profileId(payload.parentTaskId) || null;
+    }
     const strategy = payload.strategy === undefined ? null : {
       goal: strategicText(payload.strategy.goal, 4_000),
       successCriteria: strategicText(payload.strategy.successCriteria, 6_000),
@@ -265,6 +275,18 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
       role: assignment.role,
       sortOrder: Number.isInteger(assignment.sortOrder) && (assignment.sortOrder || 0) >= 0 ? assignment.sortOrder : index,
     }));
+    const [existingStrategyResult, existingRaciResult, profileResult] = await Promise.all([
+      currentTask.task_type === "initiative"
+        ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      currentTask.task_type === "initiative"
+        ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
+        : Promise.resolve({ data: [], error: null }),
+      supabase.from("profiles").select("id,name"),
+    ]);
+    if (existingStrategyResult.error || existingRaciResult.error || profileResult.error) {
+      return apiError("Planungselement konnte nicht vollständig geladen werden.", 500);
+    }
     const result = await createBrowserRevisePlanningItems({
       supabase,
       actor: reviseActor.actor,
@@ -290,22 +312,29 @@ export async function handleBrowserTaskUpdate(request: NextRequest, context: { p
     const transaction = browserReviseTransactionFromResult(result) as { task?: TaskRowForMapping } | null;
     if (!transaction?.task) return apiError("Planungselement konnte nicht gespeichert werden.", 500);
     const updated = transaction.task;
-    const [strategyResult, raciResult, profileResult] = await Promise.all([
-      currentTask.task_type === "initiative"
-        ? supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").eq("task_id", id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      currentTask.task_type === "initiative"
-        ? supabase.from("planning_item_raci_assignments").select("task_id,profile_id,role,sort_order").eq("task_id", id).order("sort_order")
-        : Promise.resolve({ data: [] }),
-      supabase.from("profiles").select("id,name"),
-    ]);
     const profileNames = new Map((profileResult.data || []).map((profile: { id: string; name: string }) => [profile.id, profile.name]));
+    const resultingStrategy = strategy
+      ? {
+          task_id: id,
+          goal: String(strategy.goal || ""),
+          success_criteria: String(strategy.successCriteria || ""),
+          scope_constraints: String(strategy.scopeConstraints || ""),
+        }
+      : existingStrategyResult.data || undefined;
+    const resultingRaciAssignments = raciAssignments
+      ? raciAssignments.map((assignment) => ({
+          task_id: id,
+          profile_id: String(assignment.profileId || ""),
+          role: assignment.role,
+          sort_order: Number(assignment.sortOrder || 0),
+        }))
+      : existingRaciResult.data || [];
     return NextResponse.json({
       ok: true,
       activities: [],
       task: mapTaskRow(updated, profileNames, {
-        strategy: strategyResult.data || undefined,
-        raciAssignments: raciResult.data || [],
+        strategy: resultingStrategy,
+        raciAssignments: resultingRaciAssignments,
       }),
     });
   }
